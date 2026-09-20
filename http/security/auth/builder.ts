@@ -12,7 +12,9 @@ import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import {
   SCHEME_CONFIG,
   applyScheme,
+  credentialsConfigSchema,
   refresh,
+  validated,
   type AuthConfig,
   type SchemeConfigSpec,
   type SchemeKind,
@@ -330,12 +332,18 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   #buildSchemes(): void {
     for (const registration of this.#registrations) {
       const configured = this.#config?.schemes?.[registration.name] ?? {}
+      const where = `authentication scheme "${registration.name}"`
 
       switch (registration.kind) {
         case 'jwt': {
           const builder = new JWTAuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(builder, SCHEME_CONFIG.jwt as SchemeConfigSpec<JWTAuthenticationOptionsBuilder>, configured)
+          applyScheme(
+            builder,
+            SCHEME_CONFIG.jwt as SchemeConfigSpec<JWTAuthenticationOptionsBuilder>,
+            configured,
+            where,
+          )
 
           this.#describe(registration.name, { kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
           this.#schemes.set(registration.name, new JWTAuthenticationHandler(registration.name, builder.build()))
@@ -345,7 +353,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         case 'basic': {
           const builder = new BasicAuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(builder, SCHEME_CONFIG.basic as SchemeConfigSpec<BasicAuthenticationOptionsBuilder>, configured)
+          applyScheme(
+            builder,
+            SCHEME_CONFIG.basic as SchemeConfigSpec<BasicAuthenticationOptionsBuilder>,
+            configured,
+            where,
+          )
 
           this.#describe(registration.name, { kind: 'http', scheme: 'basic' })
           this.#schemes.set(registration.name, new BasicAuthenticationHandler(registration.name, builder.build()))
@@ -355,7 +368,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         case 'cookie': {
           const builder = new CookieAuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(builder, SCHEME_CONFIG.cookie as SchemeConfigSpec<CookieAuthenticationOptionsBuilder>, configured)
+          applyScheme(
+            builder,
+            SCHEME_CONFIG.cookie as SchemeConfigSpec<CookieAuthenticationOptionsBuilder>,
+            configured,
+            where,
+          )
           const resolved = builder.build()
 
           this.#describe(registration.name, { kind: 'apiKey', in: 'cookie', name: resolved.cookieName })
@@ -370,6 +388,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
             builder,
             SCHEME_CONFIG.opaque as SchemeConfigSpec<OpaqueTokenAuthenticationOptionsBuilder>,
             configured,
+            where,
           )
           const resolved = builder.build()
 
@@ -385,7 +404,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         case 'oidc': {
           const builder = new OIDCAuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(builder, SCHEME_CONFIG.oidc as SchemeConfigSpec<OIDCAuthenticationOptionsBuilder>, configured)
+          applyScheme(
+            builder,
+            SCHEME_CONFIG.oidc as SchemeConfigSpec<OIDCAuthenticationOptionsBuilder>,
+            configured,
+            where,
+          )
 
           const options = builder.build(registration.name)
           const handler = new OIDCAuthenticationHandler(registration.name, options)
@@ -413,7 +437,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         case 'github': {
           const builder = new OAuth2AuthenticationOptionsBuilder()
           registration.configure(builder as never)
-          applyScheme(builder, SCHEME_CONFIG.oauth as SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder>, configured)
+          applyScheme(
+            builder,
+            SCHEME_CONFIG.oauth as SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder>,
+            configured,
+            where,
+          )
 
           // Raw options, not `build(name)`: the handler constructor is the single resolution point, so
           // resolving here as well would validate and default the options twice. The github preset supplies
@@ -448,12 +477,13 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     if (this.#refreshConfigure !== undefined) {
       const builder = new RefreshTokenOptionsBuilder()
       this.#refreshConfigure(builder)
-      applyScheme(builder, refresh, this.#config?.refresh ?? {})
+      applyScheme(builder, refresh, this.#config?.refresh ?? {}, 'refresh tokens')
       this.#refresh = builder.build()
     }
 
     if (this.#credentials !== undefined && this.#config?.credentials !== undefined) {
-      this.#credentials = { ...this.#credentials, ...stripUndefined(this.#config.credentials) }
+      const configured = validated({ schema: credentialsConfigSchema }, this.#config.credentials, 'credentials')
+      this.#credentials = { ...this.#credentials, ...stripUndefined(configured) }
     }
   }
 

@@ -1,4 +1,5 @@
 import { JWTService } from '@caffeinejs/http'
+import { SignJWT } from 'jose'
 
 import type { JWTOptionsBuilder } from './builders.js'
 
@@ -16,6 +17,22 @@ const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIEN
 /** Configures a JWT bearer scheme that accepts what {@link bearer} mints. */
 export function localJWT(j: JWTOptionsBuilder): JWTOptionsBuilder {
   return j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE)
+}
+
+/**
+ * A correctly signed token for the right issuer and audience that never expires, minted with `jose` directly
+ * because no issuer worth the name would hand one out.
+ */
+export async function bearerWithoutExpiry(subject: string): Promise<string> {
+  const token = await new SignJWT({})
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(subject)
+    .setIssuer(ISSUER)
+    .setAudience(AUDIENCE)
+    .setIssuedAt()
+    .sign(new TextEncoder().encode(SECRET))
+
+  return `Bearer ${token}`
 }
 
 /** An `Authorization` header value for `subject`, carrying `claims` next to it. */

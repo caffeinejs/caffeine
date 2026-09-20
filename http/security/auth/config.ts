@@ -1,8 +1,10 @@
 import { $t } from '@caffeinejs/std'
 import type { ConfigSchema } from '@caffeinejs/std/config'
+import { validateSchema, type AnySchema } from '@caffeinejs/std/schema'
 
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
+import { ErrAuthConfiguration } from './errors.js'
 import type { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import type { OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
 import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
@@ -53,8 +55,12 @@ export const refreshConfigSchema = $t.Object({
 /**
  * The shape of the authentication block, with `schemes` left open.
  *
- * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. An
- * application wanting a scheme's options validated declares that scheme precisely instead:
+ * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. Each
+ * scheme's block is still validated, against its kind's schema, when the scheme is built: a key the kind does not
+ * have, or a value its option does not take, fails `ready()`.
+ *
+ * Declaring a scheme precisely moves that check to where the configuration loads, which is also what a reload
+ * goes through:
  *
  * ```ts
  * $t.Object({ schemes: $t.Object({ Bearer: SCHEME_SCHEMAS.jwt }) })
@@ -92,15 +98,53 @@ export interface SchemeConfigSpec<B> {
  *
  * Order is what makes a builder call a *default*: the callback sets code values first, and whatever
  * configuration resolved is applied over them. A key the tree does not carry leaves the code value alone.
+ *
+ * The values are validated against the kind's own schema first, which is also what converts them. The
+ * application's schema may leave a scheme's keys open — the exported {@link authConfigSchema} does — and an
+ * environment variable is text: `"false"` handed to a boolean option as it arrived would turn the option on.
+ *
+ * @param where - What is being configured, for the error: `authentication scheme "jwt"`.
+ * @throws ErrAuthConfiguration for a key the kind does not have, or a value its option does not take. A misspelt
+ * key that was dropped instead would leave the check the operator believed was on never running.
  */
-export function applyScheme<B>(builder: B, spec: SchemeConfigSpec<B>, values: Record<string, unknown>): void {
-  for (const [key, value] of Object.entries(values)) {
-    if (value === undefined) {
-      continue
+export function applyScheme<B>(
+  builder: B,
+  spec: SchemeConfigSpec<B>,
+  values: Record<string, unknown>,
+  where: string,
+): void {
+  for (const [key, value] of Object.entries(validated(spec, values, where))) {
+    if (value !== undefined) {
+      spec.appliers[key]!(builder, value as never)
     }
-
-    spec.appliers[key]?.(builder, value as never)
   }
+}
+
+/** The configured values as the kind's schema types them. See {@link applyScheme}. */
+export function validated<B>(
+  spec: Pick<SchemeConfigSpec<B>, 'schema'> & { appliers?: SchemeAppliers<B> },
+  values: Record<string, unknown>,
+  where: string,
+): Record<string, unknown> {
+  const known = Object.keys(spec.appliers ?? (spec.schema as { properties?: object }).properties ?? {})
+  const present = Object.entries(values).filter(([, value]) => value !== undefined)
+
+  const unknown = present.map(([key]) => key).filter(key => !known.includes(key))
+  if (unknown.length > 0) {
+    throw new ErrAuthConfiguration(
+      `Cannot configure ${where}: ${unknown.map(key => `"${key}"`).join(', ')} is not an option of it ` +
+        `(options: ${known.map(key => `"${key}"`).join(', ')})`,
+    )
+  }
+
+  const result = validateSchema(spec.schema as AnySchema, Object.fromEntries(present), { decode: true })
+  if (!result.ok) {
+    throw new ErrAuthConfiguration(
+      `Cannot configure ${where}: ${result.issues.map(issue => `${issue.path}: ${issue.message}`).join('; ')}`,
+    )
+  }
+
+  return result.value as Record<string, unknown>
 }
 
 const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto', 'redirect', 'status'])

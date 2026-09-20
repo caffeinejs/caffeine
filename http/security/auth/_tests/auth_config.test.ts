@@ -256,4 +256,58 @@ describe('authentication configuration', () => {
 
     await app.close()
   })
+
+  // The schema the package exports for the block leaves each scheme's keys open, so nothing upstream converts what
+  // an environment variable carries. The scheme's own schema does, when the values are applied.
+  describe('under the exported schema, which leaves the scheme keys open', () => {
+    const openSchema = $t.Object({ auth: $t.Object({ ...authConfigSchema.properties }, { default: {} }) })
+    const kOpenConfig = token<InferConfig<typeof openSchema>>(Symbol('app.config.open'))
+
+    function appFrom(values: Record<string, string>) {
+      const conf = newConfiguration(openSchema, kOpenConfig).source(env(values)).build()
+
+      return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf }).authentication(
+        (a, c) => a.config(c.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
+      )
+    }
+
+    // "false" is a non-empty string, and a non-empty string is true.
+    it('turns a boolean option off when the variable says false', async () => {
+      const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'false' })
+      await app.ready()
+
+      const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
+
+      expect(res.status).toBe(401)
+      expect(res.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"')
+    })
+
+    it('leaves it on when the variable says true', async () => {
+      const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'true' })
+      await app.ready()
+
+      const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
+
+      expect(res.headers.get('www-authenticate')).toMatch(/error_description=/)
+    })
+
+    // A misspelt key used to be dropped, so the audience check the operator believed was on never ran.
+    it('refuses to start on a key the scheme does not have, and names the ones it has', async () => {
+      const app = appFrom({ AUTH__SCHEMES__JWT__AUDIANCE: 'someone-else' })
+
+      await expect(app.ready()).rejects.toMatchObject({
+        code: 'ERR_AUTH_CONFIGURATION',
+        message: expect.stringMatching(/authentication scheme "jwt".*"audiance" is not an option.*"audience"/),
+      })
+    })
+
+    it('refuses to start on a value the option does not take', async () => {
+      const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'maybe' })
+
+      await expect(app.ready()).rejects.toMatchObject({
+        code: 'ERR_AUTH_CONFIGURATION',
+        message: expect.stringContaining('includeErrorDetails'),
+      })
+    })
+  })
 })

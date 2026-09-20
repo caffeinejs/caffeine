@@ -10,6 +10,7 @@ import { Browser, type BrowserResponse } from './internal/browser/index.js'
 import type { JWTOptionsBuilder } from './internal/builders.js'
 import { OAUTH_SERVER, clientCredentialsToken, oauthServerUp } from './internal/spring/index.js'
 import { required } from './internal/strict.js'
+import { bearer, bearerWithoutExpiry, localJWT } from './internal/tokens.js'
 
 /**
  * The application as a resource server: it issues nothing, and accepts the RS256 access tokens a real
@@ -191,3 +192,84 @@ describe.skipIf(!up)('JWT bearer as a resource server for Spring-issued tokens',
     })
   })
 })
+
+describe('JWT bearer, whoever issued the token', () => {
+  let running: RunningApp
+
+  const get = (path: string, authorization: string): Promise<BrowserResponse> =>
+    new Browser().xhr(`${running.origin}${path}`, { headers: { authorization } })
+
+  beforeAll(async () => {
+    running = await startApp(app =>
+      app
+        .authentication(auth => auth.addJWTBearer(localJWT))
+        .mount(
+          newRouter('/whoami')
+            .authorize({})
+            .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
+        )
+        .mount(
+          newRouter('/admin')
+            .authorize({ roles: ['admin'] })
+            .get('/', () => ({ ok: true })),
+        ),
+    )
+  })
+
+  afterAll(() => running.close())
+
+  // Signed, and for this issuer and audience — and good forever, so a copy of it never stops working.
+  it('refuses a token that carries no expiry', async () => {
+    const response = await get('/whoami', await bearerWithoutExpiry('alice'))
+
+    expect(response.status).toBe(401)
+    expect(response.headers['www-authenticate']).toMatch(/^Bearer error="invalid_token"/)
+  })
+
+  it('tells a caller whose token is good and not enough that the scope is what is missing', async () => {
+    const response = await get('/admin', await bearer('alice', { roles: ['user'] }))
+
+    expect(response.status).toBe(403)
+    expect(response.headers['www-authenticate']).toBe('Bearer error="insufficient_scope"')
+  })
+
+  // What the challenge describes is the token the caller sent. Why this server could not check it is nobody's
+  // business outside it.
+  it('says nothing about a failure that is the server’s own', async () => {
+    const broken = await startApp(app =>
+      app
+        .authentication(auth =>
+          auth.addJWTBearer(j =>
+            localJWT(j)
+              .algorithm('RS256')
+              .keyResolver(() => Promise.reject(new Error('connect ECONNREFUSED 10.1.2.3:443 "jwks.internal"'))),
+          ),
+        )
+        .mount(
+          newRouter('/whoami')
+            .authorize({})
+            .get('/', () => ({ ok: true })),
+        ),
+    )
+
+    try {
+      const token = await clientCredentialsTokenLike()
+      const response = await new Browser().xhr(`${broken.origin}/whoami`, { headers: { authorization: token } })
+
+      expect(response.status).toBe(401)
+      expect(response.headers['www-authenticate']).toBe('Bearer error="invalid_token"')
+    } finally {
+      await broken.close()
+    }
+  })
+})
+
+/** Any well-formed RS256-looking token: the resolver fails before a signature is ever looked at. */
+async function clientCredentialsTokenLike(): Promise<string> {
+  const header = Buffer.from(JSON.stringify({ alg: 'RS256', kid: 'k1' })).toString('base64url')
+  const payload = Buffer.from(JSON.stringify({ sub: 'alice', exp: Math.floor(Date.now() / 1000) + 300 })).toString(
+    'base64url',
+  )
+
+  return `Bearer ${header}.${payload}.${Buffer.from('signature').toString('base64url')}`
+}

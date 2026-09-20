@@ -126,6 +126,33 @@ describe('an application that must not start', () => {
     expect(String((error as Error).message)).toMatch(/an "issuer" is required/)
   })
 
+  // RFC 7518 §3.2: an HMAC key shorter than the hash it feeds can be searched for offline, and whoever finds it
+  // signs any identity they like.
+  it('configures a JWT scheme whose HMAC secret is shorter than the hash', async () => {
+    const error = await refusal(app =>
+      app.authentication(auth => auth.addJWTBearer(j => j.secret('short-secret').issuer('i').audience('a'))),
+    )
+
+    expect(String((error as Error).message)).toMatch(/at least 32 bytes/)
+  })
+
+  // Left to a default, the algorithm would be HS256 — and a resolver handing back a public key as bytes would
+  // then verify a token anyone signed with that public key.
+  it('configures a JWT key resolver and names no algorithm', async () => {
+    const error = await refusal(app =>
+      app.authentication(auth =>
+        auth.addJWTBearer(j =>
+          j
+            .keyResolver(() => new Uint8Array(32))
+            .issuer('i')
+            .audience('a'),
+        ),
+      ),
+    )
+
+    expect(String((error as Error).message)).toMatch(/"algorithm" is required/)
+  })
+
   it('configures a cookie scheme whose secret is too short to derive a key from', async () => {
     const error = await refusal(app => app.authentication(auth => auth.addCookie(c => c.sessionSecret('too-short'))))
 

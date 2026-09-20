@@ -1,4 +1,4 @@
-import type { JWTPayload } from 'jose'
+import { errors, type JWTPayload } from 'jose'
 
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
@@ -13,13 +13,11 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
   readonly #name: string
   readonly #jwt: JWTService
 
-  constructor(name: string, options: JWTAuthenticationOptions, jwt?: JWTService) {
+  constructor(name: string, options: JWTAuthenticationOptions) {
     super(options)
 
     this.#name = name
-    // The builder injects a shared, DI-bound service (verify + sign); fall back to building one from
-    // the options for direct construction.
-    this.#jwt = jwt ?? buildService(options)
+    this.#jwt = buildService(options)
   }
 
   /** The JWTService this scheme verifies (and signs) with. Shared via DI, see `jwtServiceKey`. */
@@ -60,6 +58,9 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
    * Nothing is invented: the parameters appear only when this scheme actually failed in this request, which
    * is what `previous` carries. A caller who presented no credential at all gets the bare challenge, since
    * there is no token to fault — and so does a caller who challenges without having authenticated.
+   *
+   * The description is about the token and nothing else. A failure that is this server's own — a key set that
+   * could not be fetched, a claim mapper that threw — is answered `invalid_token` with no description.
    */
   override async challenge(
     ctx: Context,
@@ -81,22 +82,51 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
     const parameters = [`error="invalid_token"`]
     // `!== false`, not `=== true`: the builder defaults this on, but a handler constructed directly leaves
     // it undefined, and the two paths must not disagree about what the default is.
-    if (this.options.includeErrorDetails !== false) {
-      // Quoted-string per RFC 9110 §5.6.4: a message may carry quotes or backslashes, and an unescaped
-      // one would terminate the parameter early and produce a header the client parses as something else.
-      parameters.push(`error_description="${error.message.replace(/[\\"]/g, '\\$&')}"`)
+    const description = this.options.includeErrorDetails !== false ? describeTokenFault(error) : undefined
+    if (description !== undefined) {
+      parameters.push(`error_description="${description}"`)
     }
 
     return `Bearer ${parameters.join(', ')}`
   }
 
+  /** Answers 403 with RFC 6750 §3.1 `insufficient_scope`: the token was good, and it is not enough. */
   override async forbid(ctx: Context): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }
 
-    ctx.status(403)
+    ctx.status(403).appendHeader('WWW-Authenticate', 'Bearer error="insufficient_scope"')
   }
+}
+
+/** The jose failures that say something about the token the caller sent, as opposed to this server's own trouble. */
+const TOKEN_FAULTS: ReadonlySet<string> = new Set([
+  'ERR_JWT_EXPIRED',
+  'ERR_JWT_CLAIM_VALIDATION_FAILED',
+  'ERR_JWT_INVALID',
+  'ERR_JWS_INVALID',
+  'ERR_JWS_SIGNATURE_VERIFICATION_FAILED',
+  'ERR_JOSE_ALG_NOT_ALLOWED',
+  'ERR_JWKS_NO_MATCHING_KEY',
+])
+
+/**
+ * The `error_description` for a rejected token, or `undefined` when the failure is not the token's.
+ *
+ * jose's own messages are fixed text about a claim or a signature. Anything else that was caught along the way —
+ * a network error from a key resolver, whatever a claim mapper threw — would hand an unauthenticated caller a look
+ * inside the server.
+ *
+ * RFC 6750 §3 admits no `"` and no `\` in the value, escaped or not, and nothing outside printable ASCII.
+ */
+function describeTokenFault(error: Error): string | undefined {
+  if (!(error instanceof errors.JOSEError) || !TOKEN_FAULTS.has(error.code)) {
+    return undefined
+  }
+
+  // oxlint-disable-next-line no-control-regex -- everything outside the RFC's character set is the point
+  return error.message.replace(/"/g, "'").replace(/[^\x20-\x21\x23-\x5B\x5D-\x7E]/g, '')
 }
 
 function buildService(options: JWTAuthenticationOptions): JWTService {

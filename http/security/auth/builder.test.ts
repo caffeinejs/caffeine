@@ -6,6 +6,9 @@ import { AuthenticationBuilder } from './builder.js'
 import { BaseAuthenticationHandler, type AuthenticationHandler } from './handler.js'
 import { AuthenticateResult } from './ticket.js'
 
+// Long enough for HS256: a JWT scheme refuses a secret shorter than the hash it feeds.
+const SECRET = 'builder-test-secret-of-at-least-32-bytes'
+
 function makeKit(): FeatureConfigureKit {
   const internal = vi.fn()
   const toValue = vi.fn().mockReturnValue({ internal })
@@ -29,9 +32,7 @@ describe('AuthenticationBuilder[kFeatureConfigure]()', () => {
   it('throws when multiple strategies are registered and no default scheme is set', () => {
     const validate = vi.fn()
     const builder = new AuthenticationBuilder()
-    builder
-      .addBasic(o => o.validate(validate))
-      .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
+    builder.addBasic(o => o.validate(validate)).addJWTBearer(o => o.secret(SECRET).allowAnyIssuer().allowAnyAudience())
 
     expect(() => builder[kFeatureConfigure](null as unknown as FeatureConfigureKit)).toThrow(
       'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
@@ -56,7 +57,7 @@ describe('AuthenticationBuilder[kFeatureConfigure]()', () => {
     const builder = new AuthenticationBuilder()
     builder
       .addBasic(o => o.validate(vi.fn()))
-      .addJWTBearer(o => o.secret('secret').allowAnyIssuer().allowAnyAudience())
+      .addJWTBearer(o => o.secret(SECRET).allowAnyIssuer().allowAnyAudience())
       .default('Basic')
 
     expect(builder[kFeatureConfigure](makeKit())).toBeUndefined()
@@ -85,7 +86,7 @@ describe('AuthenticationBuilder[kFeatureConfigure]()', () => {
     ['a built-in scheme and a forward', (b: AuthenticationBuilder) => b.forward('api', () => 'api')],
   ])('throws when a name is registered twice: %s', (_label, again) => {
     const builder = new AuthenticationBuilder().addJWTBearer('api', o =>
-      o.secret('secret').allowAnyIssuer().allowAnyAudience(),
+      o.secret(SECRET).allowAnyIssuer().allowAnyAudience(),
     )
 
     expect(() => again(builder)).toThrow(/a scheme is already registered under the name "api"/)
