@@ -23,8 +23,8 @@ export const GITHUB_SESSION_COOKIE_NAME = 'petstore_gh_session'
 /**
  * What a browser address-bar request looks like.
  *
- * The GitHub challenge redirects a navigation and answers everything else 401 with the same URL in
- * `location`, because a redirect to github.com is something only a browser can follow. Any test that expects
+ * The GitHub challenge redirects a navigation and answers everything else 401 with, in `location`, the route
+ * that starts a sign-in, because a redirect to github.com is something only a browser can follow. Any test that expects
  * the 302 has to say it is a navigation.
  */
 export const NAVIGATION = { 'sec-fetch-mode': 'navigate' }

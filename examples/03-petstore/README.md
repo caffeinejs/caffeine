@@ -88,8 +88,8 @@ and Basic credentials do not authenticate the API — which is what makes the sp
 
 The two schemes also challenge differently, because they are obtained differently. Basic answers `401` with
 `WWW-Authenticate: Basic`, and the browser prompts. GitHub is a round trip to github.com that ends in a
-session cookie, so it answers `302` to a **browser navigation** and `401` — carrying the same URL in
-`location` — to anything else. A redirect an API client cannot follow is worse than useless: `fetch` follows
+session cookie, so it answers `302` to a **browser navigation** and `401` — naming in `location` the route of
+this application that starts the sign-in — to anything else. A redirect an API client cannot follow is worse than useless: `fetch` follows
 it itself, lands on github.com, which sends no CORS headers, and the caller sees a network error rather than
 "you are not signed in". `.challengeMode('redirect' | 'status')` overrides the choice.
 
@@ -113,7 +113,7 @@ curl -u admin:admin123 localhost:3000/openapi.json       # 200
 # curl does not look like a navigation, so it gets a 401 naming where to sign in:
 curl -i -X POST localhost:3000/pets \
   -H 'content-type: application/json' \
-  -d '{"species":"DOG","name":"Buddy","ageMonths":24,"price":"150.00"}'   # 401 + location: github.com
+  -d '{"species":"DOG","name":"Buddy","ageMonths":24,"price":"150.00"}'   # 401 + location: /login/github/callback/login
 
 # Ask for HTML and you get the redirect a browser would have followed:
 curl -i -H 'accept: text/html' localhost:3000/users/1                     # 302 → github.com

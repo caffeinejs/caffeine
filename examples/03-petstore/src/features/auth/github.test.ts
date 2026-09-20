@@ -146,13 +146,15 @@ describe('authentication wiring', () => {
   // lands cross-origin on a host that sends no CORS headers, and the caller sees a network error instead of
   // "you are not signed in". So an API caller gets a 401 naming the same URL — which is also what makes the
   // documentation UI's "Try it" show a readable failure rather than a CORS wall.
-  it('answers an API caller 401, with the authorization URL in location', async () => {
+  it('answers an API caller 401, with where to send a browser in location', async () => {
     const res = await app.fetch('/me', {
       headers: { accept: 'application/json' },
     })
 
     expect(res.status).toBe(401)
-    expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
+    expect(res.headers.get('location')).toMatch(/\/login\/github\/callback\/login\?returnTo=%2Fme$/)
+    // Nothing is started for a caller that cannot go there: the round trip begins when a browser does.
+    expect(res.headers.get('set-cookie')).toBeNull()
   })
 
   it('authenticates /me with a GitHub session', async () => {
