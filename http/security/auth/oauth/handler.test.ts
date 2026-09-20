@@ -103,75 +103,20 @@ describe('OAuth2AuthenticationHandler', () => {
 
   // A signed-out page that polls an API is challenged on every poll. A state cookie per challenge, each good for
   // ten minutes, outgrows the request headers a server accepts, and then every request to the origin is refused,
-  // the sign-in page included.
-  describe('challenge() — the flows a browser has under way', () => {
-    it('hands a challenge answered with a status the flow the last one started', async () => {
+  // the sign-in page included. So a flow starts when a browser navigates, and at no other time.
+  describe('challenge() — when a sign-in starts', () => {
+    it('starts nothing for a caller that cannot be redirected, and tells it where to send the browser', async () => {
       const handler = new OAuth2AuthenticationHandler(SCHEME, options())
 
-      const first = makeCtx({ headers: XHR })
-      await handler.challenge(first.ctx)
-
-      const again = makeCtx({ headers: XHR, cookies: cookiesSetBy(first) })
-      await handler.challenge(again.ctx)
-
-      expect(Object.keys(cookiesSetBy(first))).toHaveLength(1)
-      expect(cookiesSetBy(again)).toEqual({})
-      expect(loginURL(again).toString()).toBe(loginURL(first).toString())
-    })
-
-    it('holds one state cookie however often a signed-out page polls', async () => {
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      let jar: Record<string, string> = {}
       for (let poll = 0; poll < 50; poll++) {
-        const mocks = makeCtx({ headers: XHR, cookies: jar })
+        const mocks = makeCtx({ headers: XHR, url: '/api/me?x=1' })
         await handler.challenge(mocks.ctx)
-        jar = { ...jar, ...cookiesSetBy(mocks) }
+
+        expect(mocks.cookie).not.toHaveBeenCalled()
+        expect((mocks.body.mock.calls[0] as [{ loginURL: string }])[0].loginURL).toBe(
+          `https://app.example.com/auth/provider/login?returnTo=${encodeURIComponent('/api/me?x=1')}`,
+        )
       }
-
-      expect(Object.keys(jar)).toHaveLength(1)
-    })
-
-    // The flow handed out again has to be one the callback would still complete.
-    it('completes a sign-in through a flow that was handed out more than once', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(async (url: string) => ({
-          ok: true,
-          status: 200,
-          json: () => Promise.resolve(url.endsWith('/token') ? { access_token: 'at' } : { id: 7 }),
-        })),
-      )
-
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const first = makeCtx({ headers: XHR })
-      await handler.challenge(first.ctx)
-      const again = makeCtx({ headers: XHR, cookies: cookiesSetBy(first) })
-      await handler.challenge(again.ctx)
-
-      const callback = makeCtx({
-        cookies: cookiesSetBy(first),
-        query: { code: 'c', state: loginURL(again).searchParams.get('state')! },
-      })
-      await handler.processCallback(callback.ctx)
-
-      expect(callback.redirect).toHaveBeenCalledWith('/api/me', 302)
-    })
-
-    // A navigation's state rides a redirect the browser follows, never a body a script reads. Handing it to the
-    // next poll would put it in one.
-    it('never hands the flow of a navigation to a challenge answered with a status', async () => {
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const navigation = makeCtx({ headers: NAVIGATION })
-      await handler.challenge(navigation.ctx)
-
-      const poll = makeCtx({ headers: XHR, cookies: cookiesSetBy(navigation) })
-      await handler.challenge(poll.ctx)
-
-      expect(Object.keys(cookiesSetBy(poll))).toHaveLength(1)
-      expect(loginURL(poll).searchParams.get('state')).not.toBe(loginURL(navigation).searchParams.get('state'))
     })
 
     it('starts a flow of its own for every navigation, so two tabs can both sign in', async () => {
@@ -186,61 +131,7 @@ describe('OAuth2AuthenticationHandler', () => {
       expect(loginURL(second).searchParams.get('state')).not.toBe(loginURL(first).searchParams.get('state'))
     })
 
-    // The flow remembers where to send the user afterwards, so it only stands in for a challenge of the same URL.
-    it('does not hand out a flow that returns somewhere else', async () => {
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const first = makeCtx({ headers: XHR, url: '/api/me' })
-      await handler.challenge(first.ctx)
-      const other = makeCtx({ headers: XHR, url: '/api/orders', cookies: cookiesSetBy(first) })
-      await handler.challenge(other.ctx)
-
-      const [name] = Object.keys(cookiesSetBy(other))
-      const state = await decodeState(cookiesSetBy(other)[name], SESSION_SECRET, SCHEME)
-      expect(state.returnTo).toBe('/api/orders')
-    })
-
-    it('does not hand out a flow with too little of its ten minutes left to sign in with', async () => {
-      vi.useFakeTimers({ toFake: ['Date'] })
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const first = makeCtx({ headers: XHR })
-      await handler.challenge(first.ctx)
-
-      vi.setSystemTime(Date.now() + 7 * 60_000)
-      const stillGood = makeCtx({ headers: XHR, cookies: cookiesSetBy(first) })
-      await handler.challenge(stillGood.ctx)
-      expect(cookiesSetBy(stillGood)).toEqual({})
-
-      vi.setSystemTime(Date.now() + 2 * 60_000)
-      const tooLate = makeCtx({ headers: XHR, cookies: cookiesSetBy(first) })
-      await handler.challenge(tooLate.ctx)
-      expect(Object.keys(cookiesSetBy(tooLate))).toHaveLength(1)
-    })
-
-    it('does not hand out a flow started against another provider', async () => {
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const poll = makeCtx({
-        headers: XHR,
-        cookies: { [`${STATE_COOKIE}.st`]: await sealed({ reusable: true, issuer: 'https://elsewhere.example.com' }) },
-      })
-      await handler.challenge(poll.ctx)
-
-      expect(loginURL(poll).searchParams.get('state')).not.toBe('st')
-    })
-
-    it('starts a new flow past a state cookie it cannot open', async () => {
-      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
-
-      const poll = makeCtx({ headers: XHR, cookies: { [`${STATE_COOKIE}.junk`]: 'not-a-sealed-state' } })
-      await handler.challenge(poll.ctx)
-
-      expect(Object.keys(cookiesSetBy(poll))).toHaveLength(1)
-      expect(loginURL(poll).searchParams.get('state')).not.toBe('junk')
-    })
-
-    // The backstop for what reuse does not cover: tab after tab of navigations, each with a flow of its own.
+    // The backstop for tab after tab of navigations, each with a flow of its own.
     it('clears the flows nobody finished once a browser holds eight of them', async () => {
       const handler = new OAuth2AuthenticationHandler(SCHEME, options())
 
@@ -270,6 +161,71 @@ describe('OAuth2AuthenticationHandler', () => {
       await handler.challenge(mocks.ctx)
 
       expect(mocks.deleteCookie).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('startSignIn() — the route a script sends the browser to', () => {
+    it('starts a flow that comes back to where the query says, whoever is asking', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
+      const mocks = makeCtx({ headers: XHR, query: { returnTo: '/reports?tab=2' } })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [status] = (mocks.redirect.mock.calls[0] as [string, number]).slice(1)
+      expect(status).toBe(302)
+      expect(loginURL(mocks).origin).toBe(PROVIDER)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect(await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).toMatchObject({
+        state: loginURL(mocks).searchParams.get('state'),
+        returnTo: '/reports?tab=2',
+      })
+    })
+
+    // The query string is anybody's to write, in a link mailed to the user for one.
+    it.each(['https://evil.example/steal', '//evil.example/steal', '/\\evil.example', undefined])(
+      'comes back to the default path when asked for %s',
+      async returnTo => {
+        const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+        const mocks = makeCtx({ query: returnTo === undefined ? {} : { returnTo } })
+
+        await handler.startSignIn(mocks.ctx)
+
+        const [name] = Object.keys(cookiesSetBy(mocks))
+        expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/home')
+      },
+    )
+
+    it('completes through the callback', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => ({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(url.endsWith('/token') ? { access_token: 'at' } : { id: 7 }),
+        })),
+      )
+
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
+      const started = makeCtx({ query: { returnTo: '/api/me' } })
+      await handler.startSignIn(started.ctx)
+
+      const callback = makeCtx({
+        cookies: cookiesSetBy(started),
+        query: { code: 'c', state: loginURL(started).searchParams.get('state')! },
+      })
+      await handler.processCallback(callback.ctx)
+
+      expect(callback.redirect).toHaveBeenCalledWith('/api/me', 302)
+    })
+
+    it('takes the path it is told to, and refuses one that is not a path here or is the callback itself', () => {
+      expect(new OAuth2AuthenticationHandler(SCHEME, options()).loginPath).toBe('/auth/provider/login')
+      expect(new OAuth2AuthenticationHandler(SCHEME, options({ loginPath: '/sign-in' })).loginPath).toBe('/sign-in')
+
+      for (const loginPath of ['https://evil.example/login', '//evil.example', 'login', '/auth/provider']) {
+        expect(() => new OAuth2AuthenticationHandler(SCHEME, options({ loginPath }))).toThrow(/loginPath/)
+      }
     })
   })
 

@@ -20,10 +20,12 @@ import type { Context } from '../../../context.js'
  */
 export interface OAuthCallbackHandler {
   readonly callbackPath: string
+  readonly loginPath: string
   readonly schemeName: string
   readonly sessionCookieName: string
   readonly stateCookieName: string
   processCallback(ctx: Context): Promise<void>
+  startSignIn(ctx: Context): Promise<void>
 }
 
 export interface OIDCHandlerEntry {

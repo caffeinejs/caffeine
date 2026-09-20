@@ -46,7 +46,7 @@ when there is one — it has no `@Authorize` anyone could have forgotten — exc
 (`request.is404`, where a SPA shell is served from), the path prefixes the application listed in
 `fallbackPolicy(policy, { except })`, and a route whose config carries `kAuthenticationExempt`. That marker makes
 the gate return before authenticating at all, so `request.user` stays `null` on such a route. The health probes
-and the OAuth callback routes set it. A first-party plugin whose route must answer before anyone is signed in sets
+and the OAuth callback and sign-in routes set it. A first-party plugin whose route must answer before anyone is signed in sets
 it too; do not reach for `ServerOwnedPaths` for that, which says "the server answers here", not "anyone may ask".
 
 A route naming several schemes is challenged by each in the order named, each **appending** its

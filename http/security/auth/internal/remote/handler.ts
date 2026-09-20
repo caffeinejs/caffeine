@@ -6,7 +6,7 @@ import { BaseAuthenticationHandler } from '../../handler.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
 import { noStore } from '../no_store.js'
 import { challengeHeaders, type ChallengeMode, isSafeReturnPath, shouldRedirectChallenge } from './config.js'
-import { ErrOAuthCallback, ErrOAuthSession } from './errors.js'
+import { ErrOAuthCallback, ErrOAuthConfiguration, ErrOAuthSession } from './errors.js'
 import { redactPii } from './pii.js'
 import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
 import {
@@ -64,9 +64,6 @@ export type RemoteChallengeMode = ChallengeMode
 /** Sign-ins a browser may have under way at once for one strategy. One more clears the rest before it starts. */
 const MAX_OUTSTANDING_FLOWS = 8
 
-/** A flow with less than this left of its lifetime is not handed out again: nobody signs in that fast. */
-const REUSABLE_FLOW_MIN_SECONDS_LEFT = 120
-
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
   clientID: string
@@ -85,6 +82,14 @@ export interface RemoteAuthenticationOptions {
   httpTimeoutMs: number
   showPii: boolean
   challengeMode: RemoteChallengeMode
+
+  /**
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   *
+   * A challenge that cannot redirect — a script's request — answers `401` with this URL as `loginURL`, carrying
+   * where to come back to as `returnTo`. Sending the browser there is what begins the round trip to the provider.
+   */
+  loginPath?: string
 
   ticketStore?: RemoteAuthenticationTicketStore
   /**
@@ -114,11 +119,19 @@ export abstract class RemoteAuthenticationHandler<
 > extends BaseAuthenticationHandler<O> {
   protected readonly name: string
   readonly #callbackPath: string
+  readonly #loginPath: string
 
   constructor(name: string, options: O) {
     super(options)
     this.name = name
     this.#callbackPath = new URL(options.callbackURL).pathname
+    this.#loginPath = options.loginPath ?? `${this.#callbackPath.replace(/\/$/, '')}/login`
+
+    if (!isSafeReturnPath(this.#loginPath) || this.#loginPath === this.#callbackPath) {
+      throw new ErrOAuthConfiguration(
+        `Cannot configure "${name}": loginPath "${this.#loginPath}" must be a path on this origin other than the callback's`,
+      )
+    }
   }
 
   /** The strategy name this handler was registered under. */
@@ -128,6 +141,11 @@ export abstract class RemoteAuthenticationHandler<
 
   get callbackPath(): string {
     return this.#callbackPath
+  }
+
+  /** The path of the route that starts a sign-in. See {@link RemoteAuthenticationOptions.loginPath}. */
+  get loginPath(): string {
+    return this.#loginPath
   }
 
   /** Exposed so startup can reject two strategies writing the same cookie. */
@@ -249,30 +267,112 @@ export abstract class RemoteAuthenticationHandler<
     return ticket.session
   }
 
+  /**
+   * Sends a navigation to the provider, and answers anything else `401` with where a navigation should go.
+   *
+   * A redirect to the provider is something only a navigation can follow, so a script is told to send the browser
+   * to {@link loginPath} instead. Nothing is started for it: an authorization round trip, and the state cookie that
+   * carries it, begin when a browser actually goes there. A page that polls while signed out is therefore
+   * challenged as often as it likes at no cost, and without the provider being asked anything.
+   */
   override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+    // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
+    // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
+    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
+    const returnTo = properties?.redirectURI ?? ctx.req.url
+
+    noStore(ctx)
+
+    if (this.options.onChallenge === undefined && !this.#redirects(ctx)) {
+      const loginURL = this.#loginURL(returnTo)
+
+      // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
+      // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
+      // is a hint — browsers follow it only on a 3xx — which is exactly the intent.
+      //
+      // The URL also goes in the body, and the header is exposed to cross-origin readers: `Location` is not
+      // CORS-safelisted, so a page served from another origin than its API could not read it otherwise.
+      ctx
+        .status(401)
+        .header('location', loginURL)
+        .header('access-control-expose-headers', 'location')
+        .body({ error: 'authentication_required', loginURL })
+      return
+    }
+
+    const authorizationURL = await this.#startFlow(ctx, returnTo)
+
+    // The hook runs only after state, PKCE and the state cookie are in place, so overriding
+    // the response can never bypass the flow's security machinery.
+    if (this.options.onChallenge) {
+      return this.options.onChallenge(ctx, authorizationURL)
+    }
+
+    ctx.redirect(authorizationURL, 302)
+  }
+
+  /**
+   * Answers {@link loginPath}: starts a sign-in and sends the browser to the provider.
+   *
+   * `returnTo` on the query string is where the user lands afterwards. It is anybody's to write, so one that would
+   * leave this origin is dropped in favour of `defaultRedirectPath`.
+   */
+  async startSignIn(ctx: Context): Promise<void> {
+    const requested = ctx.req.query('returnTo')
+    const returnTo =
+      requested !== undefined && isSafeReturnPath(requested) ? requested : this.options.defaultRedirectPath
+
+    noStore(ctx)
+    ctx.redirect(await this.#startFlow(ctx, returnTo), 302)
+  }
+
+  /** Where a script is told to send the browser: this origin's {@link loginPath}, absolute so another origin can use it. */
+  #loginURL(returnTo: string): string {
+    const url = new URL(this.#loginPath, this.options.callbackURL)
+    if (isSafeReturnPath(returnTo)) {
+      url.searchParams.set('returnTo', returnTo)
+    }
+
+    return url.toString()
+  }
+
+  /** Mints the state of a new authorization round trip, sets the cookie that carries it, and builds the URL it rides in. */
+  async #startFlow(ctx: Context, returnTo: string): Promise<string> {
     const [issuer, endpoint, pkceMethod] = await Promise.all([
       this.resolveIssuer(),
       this.resolveAuthorizationEndpoint(),
       this.resolvePKCEMethod(),
     ])
 
-    // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
-    // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
-    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
-    const returnTo = properties?.redirectURI ?? ctx.req.url
+    const state = randomBytes(16).toString('base64url')
+    const nonce = randomBytes(16).toString('base64url')
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = pkceMethod === 'S256' ? generateCodeChallenge(codeVerifier) : codeVerifier
 
-    // A challenge answered with a status may well be ignored by whoever receives it, and one that is polling gets
-    // a challenge per poll. So such a challenge hands out the flow the last one started, while it is still unspent.
-    const answeredWithStatus = this.options.onChallenge === undefined && !this.#redirects(ctx)
-    const flow =
-      (answeredWithStatus ? await this.#unspentFlow(ctx, issuer, returnTo) : undefined) ??
-      (await this.#startFlow(ctx, { issuer, pkceMethod, returnTo, reusable: answeredWithStatus }))
+    // Every tab that navigates here starts a flow of its own, so that two tabs can both sign in, and their cookies
+    // add up. A cookie too many gets every request to the origin refused for its headers, the sign-in page
+    // included. Past a handful the old ones are flows nobody is going to finish.
+    const outstanding = this.#stateCookieNames(ctx)
+    if (outstanding.length >= MAX_OUTSTANDING_FLOWS) {
+      for (const name of outstanding) {
+        ctx.deleteCookie(name, this.cookieOpts())
+      }
+    }
 
-    const { state, nonce } = flow
-    const codeChallenge = pkceMethod === 'S256' ? generateCodeChallenge(flow.codeVerifier) : flow.codeVerifier
-
-    // The response sets the state cookie and, whichever way it is answered, carries the URL the state rides in.
-    noStore(ctx)
+    const sealed = await encodeState(
+      {
+        state,
+        nonce,
+        codeVerifier,
+        pkceMethod: pkceMethod === 'none' ? 'S256' : pkceMethod,
+        returnTo,
+        scheme: this.name,
+        issuer,
+      },
+      this.options.sessionSecret,
+      this.name,
+    )
+    ctx.cookie(this.#stateCookieNameFor(state), sealed, this.cookieOpts(STATE_TTL_SECONDS))
 
     const authURL = new URL(endpoint)
     authURL.searchParams.set('client_id', this.options.clientID)
@@ -298,91 +398,7 @@ export abstract class RemoteAuthenticationHandler<
 
     await this.#applyRedirectHook(ctx, authURL)
 
-    // The hook runs only after state, PKCE and the state cookie are in place, so overriding
-    // the response can never bypass the flow's security machinery.
-    const authorizationURL = authURL.toString()
-    if (this.options.onChallenge) {
-      return this.options.onChallenge(ctx, authorizationURL)
-    }
-
-    if (this.#redirects(ctx)) {
-      ctx.redirect(authorizationURL, 302)
-      return
-    }
-
-    // The state cookie is on this response, or already in the browser from the challenge this one repeats, so a
-    // caller that sends the browser to the URL completes the flow — nothing is discarded by answering with a
-    // status instead of a redirect.
-    //
-    // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
-    // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
-    // is a hint — browsers follow it only on a 3xx — which is exactly the intent.
-    //
-    // The URL also goes in the body, and the header is exposed to cross-origin readers. `Location` is not
-    // CORS-safelisted, so a SPA served from a different origin than its API — the exact deployment this
-    // mode exists for — received a 401 it could not read the URL out of. The body is the reliable channel
-    // and the header stays for callers already reading it.
-    ctx
-      .status(401)
-      .header('location', authorizationURL)
-      .header('access-control-expose-headers', 'location')
-      .body({ error: 'authentication_required', loginURL: authorizationURL })
-  }
-
-  /** Mints the state of a new authorization round trip and sets the cookie that carries it. */
-  async #startFlow(
-    ctx: Context,
-    flow: { issuer: string; pkceMethod: 'S256' | 'plain' | 'none'; returnTo: string; reusable: boolean },
-  ): Promise<RemoteAuthenticationState> {
-    const state: RemoteAuthenticationState = {
-      state: randomBytes(16).toString('base64url'),
-      nonce: randomBytes(16).toString('base64url'),
-      codeVerifier: generateCodeVerifier(),
-      pkceMethod: flow.pkceMethod === 'none' ? 'S256' : flow.pkceMethod,
-      returnTo: flow.returnTo,
-      scheme: this.name,
-      issuer: flow.issuer,
-      ...(flow.reusable ? { reusable: true } : {}),
-    }
-
-    // Every tab that is challenged starts a flow of its own, so their cookies add up, and a cookie too many gets
-    // every request to the origin refused for its headers, the sign-in page included. Past a handful the old ones
-    // are flows nobody is going to finish.
-    const outstanding = this.#stateCookieNames(ctx)
-    if (outstanding.length >= MAX_OUTSTANDING_FLOWS) {
-      for (const name of outstanding) {
-        ctx.deleteCookie(name, this.cookieOpts())
-      }
-    }
-
-    const sealed = await encodeState(state, this.options.sessionSecret, this.name)
-    ctx.cookie(this.#stateCookieNameFor(state.state), sealed, this.cookieOpts(STATE_TTL_SECONDS))
-
-    return state
-  }
-
-  /**
-   * The flow an earlier status-answered challenge started for this browser, when it can still be finished: same
-   * provider, same destination, and enough of its ten minutes left for someone to sign in.
-   */
-  async #unspentFlow(ctx: Context, issuer: string, returnTo: string): Promise<RemoteAuthenticationState | undefined> {
-    const now = Math.floor(Date.now() / 1000)
-
-    for (const name of this.#stateCookieNames(ctx)) {
-      let stored: RemoteAuthenticationState
-      try {
-        stored = await decodeState(ctx.req.cookie(name)!, this.options.sessionSecret, this.name)
-      } catch {
-        continue
-      }
-
-      const fresh = stored.exp !== undefined && stored.exp - now > REUSABLE_FLOW_MIN_SECONDS_LEFT
-      if (stored.reusable === true && fresh && stored.issuer === issuer && stored.returnTo === returnTo) {
-        return stored
-      }
-    }
-
-    return undefined
+    return authURL.toString()
   }
 
   /** The names of the state cookies of this strategy the request carries. */

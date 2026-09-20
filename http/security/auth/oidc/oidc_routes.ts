@@ -20,13 +20,14 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
 }
 
 /**
- * Registers the callback routes and validates their paths do not collide with controller routes.
+ * Registers each strategy's callback and sign-in routes and validates their paths do not collide with controller
+ * routes.
  *
- * A callback is where an identity provider sends a user who is not signed in yet, so it is marked
- * {@link kAuthenticationExempt}: no fallback policy may stand in front of it.
+ * Both are where a user who is not signed in yet arrives — sent back by the identity provider, or on the way to
+ * it — so they are marked {@link kAuthenticationExempt}: no fallback policy may stand in front of them.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
-  const callbackPaths = new Set(oidc.handlers.map(({ callbackPath }) => callbackPath))
+  const ownPaths = new Set(oidc.handlers.flatMap(({ callbackPath, handler }) => [callbackPath, handler.loginPath]))
   const namedByRoutes = new Set<string>()
 
   // Compiled routes register after the callback routes, so each is checked as it registers.
@@ -36,9 +37,9 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
       return
     }
 
-    if (callbackPaths.has(route.url)) {
+    if (ownPaths.has(route.url)) {
       throw new Error(
-        `Cannot start application: OIDC callbackPath "${route.url}" conflicts with a registered controller route`,
+        `Cannot start application: the OIDC callback or login path "${route.url}" conflicts with a registered controller route`,
       )
     }
 
@@ -69,6 +70,14 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
       )
     }
   })
+
+  for (const { handler } of oidc.handlers) {
+    // A failure here — the provider cannot be reached — goes to the application-wide error handler, which answers
+    // with the error's public message.
+    server.get(handler.loginPath, { config: { [kAuthenticationExempt]: true } }, async req => {
+      await handler.startSignIn(req.httpContext)
+    })
+  }
 
   for (const { callbackPath, handler } of oidc.handlers) {
     server.get(callbackPath, { config: { [kAuthenticationExempt]: true } }, async (req, reply) => {

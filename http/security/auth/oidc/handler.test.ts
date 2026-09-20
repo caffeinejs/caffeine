@@ -306,26 +306,45 @@ describe('OIDCAuthenticationHandler', () => {
       const authorizationURL = (header: ReturnType<typeof vi.fn>) =>
         (header.mock.calls.find(([name]) => name === 'location') as [string, string] | undefined)?.[1]
 
-      it('answers 401 with the authorization URL when the caller is not a navigation', async () => {
+      // Where to send the browser, on this origin and absolute, so a page served from another origin can use it.
+      it('answers 401 with the sign-in URL of this origin when the caller is not a navigation', async () => {
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
-        const { ctx, redirect, status, header } = makeCtx({ headers: { accept: 'application/json' } })
+        const { ctx, redirect, status, header } = makeCtx({
+          url: '/reports?tab=1',
+          headers: { accept: 'application/json' },
+        })
 
         await handler.challenge(ctx)
 
         expect(redirect).not.toHaveBeenCalled()
         expect(status).toHaveBeenCalledWith(401)
-        expect(authorizationURL(header)).toContain(`${ISSUER}/auth`)
+        expect(authorizationURL(header)).toBe(
+          `https://app.example.com${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/reports?tab=1')}`,
+        )
       })
 
-      // The 401 carries the state cookie too, so a caller that sends the browser to the returned URL
-      // completes the same flow. Nothing about the round trip is discarded by not redirecting.
-      it('still sets the state cookie on the 401', async () => {
+      // A page that polls while signed out is challenged on every poll. A state cookie each, good for ten minutes,
+      // outgrows the request headers a server accepts; and a provider that is down has nothing to do with saying 401.
+      it('starts nothing for a 401: no state cookie, and the provider is not asked', async () => {
+        const fetched = vi.fn()
+        vi.stubGlobal('fetch', fetched)
+
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
         const { ctx, cookie } = makeCtx({ headers: {} })
 
         await handler.challenge(ctx)
 
-        expect((cookie.mock.calls[0] as [string])[0]).toMatch(/^__oidc_state\./)
+        expect(cookie).not.toHaveBeenCalled()
+        expect(fetched).not.toHaveBeenCalled()
+      })
+
+      it('leaves a way back that would leave this origin out of the sign-in URL', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, header } = makeCtx({ headers: {} })
+
+        await handler.challenge(ctx, { redirectURI: '//evil.example/steal' })
+
+        expect(authorizationURL(header)).toBe(`https://app.example.com${CALLBACK_PATH}/login`)
       })
 
       it('redirects a caller that asks for HTML, for browsers that send no sec-fetch headers', async () => {
@@ -383,7 +402,7 @@ describe('OIDCAuthenticationHandler', () => {
 
       // `Location` is not CORS-safelisted, so a SPA on another origin than its API — the deployment
       // `status` exists for — could not read the URL out of the header it was returned in.
-      it('puts the authorization URL in the body, not only the Location header', async () => {
+      it('puts the sign-in URL in the body, not only the Location header', async () => {
         const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ challengeMode: 'status' }))
         const { ctx, body, header } = makeCtx({ headers: {} })
 
@@ -391,7 +410,9 @@ describe('OIDCAuthenticationHandler', () => {
 
         const [payload] = body.mock.calls[0] as [{ error: string; loginURL: string }]
         expect(payload.error).toBe('authentication_required')
-        expect(payload.loginURL).toContain(`${ISSUER}/auth`)
+        expect(payload.loginURL).toBe(
+          `https://app.example.com${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/dashboard')}`,
+        )
         expect(header).toHaveBeenCalledWith('access-control-expose-headers', 'location')
       })
 

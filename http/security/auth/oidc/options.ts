@@ -117,6 +117,13 @@ export interface ResolvedOIDCAuthenticationOptions {
    */
   showPii: boolean
   challengeMode: RemoteChallengeMode
+  /**
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   *
+   * A challenge that cannot redirect answers `401` with this URL as `loginURL`. Nothing is started until a browser
+   * goes there.
+   */
+  loginPath?: string
 
   /**
    * Post-mapping claim surgery.
@@ -558,6 +565,12 @@ export class OIDCAuthenticationOptionsBuilder {
   /** How an unauthenticated request is challenged. See {@link RemoteChallengeMode}. */
   challengeMode(mode: RemoteChallengeMode): this {
     this.#options.challengeMode = mode
+    return this
+  }
+
+  /** The path of the route that starts a sign-in. `<callback path>/login` unless set. */
+  loginPath(path: string): this {
+    this.#options.loginPath = path
     return this
   }
 

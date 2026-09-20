@@ -170,14 +170,14 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       expect(authorize.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/oidc/callback`)
     })
 
-    // Every challenge used to set a state cookie good for ten minutes, the ones answered 401 included. A signed-out
-    // page polling an API collected them until the request headers outgrew what the server accepts, and from then on
-    // every request to the origin was refused — the sign-in page too.
+    // A state cookie per challenge, each good for ten minutes, outgrows the request headers a server accepts, and
+    // from then on every request to the origin is refused — the sign-in page too. A signed-out page polling an API
+    // got there in minutes. So a sign-in starts when a browser navigates, and at no other time.
     describe('a browser that is challenged over and over', () => {
       const stateCookies = async (browser: Browser) =>
         (await browser.cookies(ORIGIN)).filter(cookie => cookie.key.includes('_state'))
 
-      it('holds one state cookie however often a signed-out page polls, and can still sign in', async () => {
+      it('holds no state cookie however often a signed-out page polls, and can still sign in', async () => {
         const browser = new Browser()
 
         const loginURLs = new Set<string>()
@@ -187,17 +187,15 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
           loginURLs.add(challenge.json<{ loginURL: string }>().loginURL)
         }
 
-        expect(await stateCookies(browser)).toHaveLength(1)
-        expect(loginURLs.size).toBe(1)
+        expect(await stateCookies(browser)).toEqual([])
+        expect([...loginURLs]).toEqual([`${ORIGIN}/oidc/callback/login?returnTo=${encodeURIComponent('/me')}`])
 
-        // The URL every one of those polls handed out still completes a sign-in.
         const [loginURL] = loginURLs
         const home = await springLogin(browser, await browser.navigate(loginURL), 'alice', 'wonderland')
         expect(home.url).toBe(`${ORIGIN}/me`)
         expect(home.status).toBe(200)
       })
 
-      // Making room by clearing what is outstanding would end this sign-in from another tab.
       it('does not let a polling tab end a sign-in under way in another', async () => {
         const browser = new Browser()
         const providerLogin = await browser.navigate(`${ORIGIN}/me`)
@@ -211,7 +209,23 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
         expect(home.status).toBe(200)
       })
 
-      // A navigation always starts a flow of its own, so that two tabs can both sign in. What bounds those is a cap.
+      // Two tabs of one page are told the same URL, and each navigation of it is a sign-in of its own.
+      it('lets two tabs both finish a sign-in they were sent to by the same URL', async () => {
+        const browser = new Browser()
+        const { loginURL } = (await browser.xhr(`${ORIGIN}/me`)).json<{ loginURL: string }>()
+
+        const firstTab = await browser.navigate(loginURL)
+        const secondTab = await browser.navigate(loginURL)
+        expect(await stateCookies(browser)).toHaveLength(2)
+
+        expect((await springLogin(browser, firstTab, 'alice', 'wonderland')).url).toBe(`${ORIGIN}/me`)
+        // The provider remembers the user by now, so the second tab's round trip needs no form.
+        const second = await browser.navigate(secondTab.hops.find(hop => hop.url.includes('/oauth2/authorize'))!.url)
+        expect(second.url).toBe(`${ORIGIN}/me`)
+        expect(second.status).toBe(200)
+      })
+
+      // A navigation always starts a flow of its own. What bounds those is a cap.
       it('keeps the flows of tab after tab of navigations to a handful, and can still sign in', async () => {
         const browser = new Browser()
 
@@ -223,6 +237,17 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
         const home = await signIn(browser, `${ORIGIN}/me`)
         expect(home.status).toBe(200)
       })
+
+      // The way back rides a query string, which is anybody's to write.
+      it('comes back to the default path from a sign-in URL that asks for another origin', async () => {
+        const browser = new Browser()
+        const start = `${ORIGIN}/oidc/callback/login?returnTo=${encodeURIComponent('//evil.example/steal')}`
+
+        const home = await springLogin(browser, await browser.navigate(start), 'alice', 'wonderland')
+
+        expect(new URL(home.url).origin).toBe(ORIGIN)
+        expect(home.hops.every(hop => !(hop.location ?? '').includes('evil.example'))).toBe(true)
+      })
     })
 
     it('returns to a deep link with its query intact', async () => {
@@ -232,7 +257,7 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       expect(home.json()).toEqual({ year: '2026', tab: 'summary' })
     })
 
-    it('answers a script 401 with the login URL instead of a redirect it could not follow', async () => {
+    it('answers a script 401 with where to send the browser, instead of a redirect it could not follow', async () => {
       const browser = new Browser()
 
       const challenge = await browser.xhr(`${ORIGIN}/me`)
@@ -240,11 +265,15 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       expect(challenge.status).toBe(401)
       const body = challenge.json<{ error: string; loginURL: string }>()
       expect(body.error).toBe('authentication_required')
-      expect(body.loginURL).toContain(`${OAUTH_SERVER}/oauth2/authorize`)
+      expect(body.loginURL).toBe(`${ORIGIN}/oidc/callback/login?returnTo=${encodeURIComponent('/me')}`)
       expect(challenge.headers.location).toBe(body.loginURL)
 
-      // The state cookie rode on the 401, so sending the browser to that URL completes the same flow.
-      const home = await springLogin(browser, await browser.navigate(body.loginURL), 'alice', 'wonderland')
+      // Going there is what starts the sign-in, and it ends where the script was refused.
+      const login = await browser.navigate(body.loginURL)
+      expect(login.hops[0]).toMatchObject({ url: body.loginURL, status: 302 })
+      expect(login.hops[0].location).toContain(`${OAUTH_SERVER}/oauth2/authorize`)
+
+      const home = await springLogin(browser, login, 'alice', 'wonderland')
 
       expect(home.url).toBe(`${ORIGIN}/me`)
       expect(home.status).toBe(200)
