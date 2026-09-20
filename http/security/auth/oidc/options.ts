@@ -2,6 +2,7 @@ import type { JWTVerifyGetKey } from 'jose'
 
 import type { Context } from '../../../context.js'
 import type { Claim } from '../../index.js'
+import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
   cookieName,
@@ -25,15 +26,6 @@ const REQUIRED_SCOPE = 'openid'
 const DEFAULT_SCOPES = [REQUIRED_SCOPE]
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
-
-/**
- * How the client authenticates to the token endpoint.
- *
- * `auto` reads `token_endpoint_auth_methods_supported` from discovery, preferring
- * `client_secret_basic` — RFC 6749 §2.3.1 requires servers to support it and calls
- * credentials-in-the-body "NOT RECOMMENDED".
- */
-export type TokenEndpointAuthMethod = 'client_secret_basic' | 'client_secret_post'
 
 /** Raw tokens from the token endpoint, handed to `onTokenValidated`. */
 export interface OIDCTokens {
@@ -108,6 +100,9 @@ export interface ResolvedOIDCAuthenticationOptions {
    *
    * Providers rotate endpoints and change advertised capabilities; caching for the process
    * lifetime means a handler can keep using an endpoint the issuer has retired.
+   *
+   * When the provider cannot be reached for a refresh, the document in hand keeps being used and the fetch is
+   * tried again half a minute later. A document that was fetched and refused fails the request instead.
    */
   discoveryCacheTtlSeconds: number
   /** `auto` negotiates from discovery, preferring `client_secret_basic`. */
@@ -240,6 +235,12 @@ export interface ResolvedOIDCAuthenticationOptions {
    * Store them server-side here if the application needs them.
    */
   onTokenValidated?: (ctx: Context, idTokenPayload: Record<string, unknown>, tokens: OIDCTokens) => Promise<void> | void
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /**
    * Shapes the challenge response. Receives the fully built authorization URL — state,

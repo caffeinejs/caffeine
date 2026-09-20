@@ -139,9 +139,13 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(privateKey)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          return {
+            ok: true,
+            json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+          }
         }
         return { ok: false, status: 404 }
       }),
@@ -434,6 +438,7 @@ describe('ticket key generation', () => {
               .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
               .setIssuer(ISSUER)
               .setAudience(CLIENT_ID)
+              .setIssuedAt()
               .setExpirationTime('1h')
               .sign(pair.privateKey)
             return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -498,6 +503,7 @@ describe('RemoteAuthenticationTicket shape', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(pair.privateKey)
           return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -576,9 +582,13 @@ describe('RP-initiated logout', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(privateKey)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          return {
+            ok: true,
+            json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+          }
         }
         return { ok: false, status: 404 }
       }),

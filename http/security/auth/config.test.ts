@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { SCHEME_CONFIG, applyScheme, validated } from './config.js'
+import { SCHEME_CONFIG, SCHEME_SCHEMAS, applyScheme, validated } from './config.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
 
 /**
@@ -49,5 +49,30 @@ describe('applyScheme', () => {
 
   it('applies nothing when the tree carries nothing for the scheme', () => {
     expect(validated(SCHEME_CONFIG.basic, {}, 'authentication scheme "Basic"')).toEqual({})
+  })
+
+  // A key in the schema with no setter validates and then goes nowhere, which reads as configured and is not.
+  it.each(Object.keys(SCHEME_CONFIG) as Array<keyof typeof SCHEME_CONFIG>)(
+    'has a setter for every key the %s schema declares',
+    kind => {
+      const declared = Object.keys(SCHEME_SCHEMAS[kind].properties)
+
+      expect(Object.keys(SCHEME_CONFIG[kind].appliers).toSorted()).toEqual(declared.toSorted())
+    },
+  )
+
+  // Plain OAuth 2.0 has no discovery document to negotiate from, so `auto` is OpenID Connect's alone.
+  it('takes a token endpoint authentication method for OAuth 2.0, but has nothing to pick one from', () => {
+    const where = 'authentication scheme "GitHub"'
+
+    expect(validated(SCHEME_CONFIG.oauth, { tokenEndpointAuthMethod: 'client_secret_basic' }, where)).toEqual({
+      tokenEndpointAuthMethod: 'client_secret_basic',
+    })
+    expect(() => validated(SCHEME_CONFIG.oauth, { tokenEndpointAuthMethod: 'auto' }, where)).toThrow(
+      /tokenEndpointAuthMethod/,
+    )
+    expect(validated(SCHEME_CONFIG.oidc, { tokenEndpointAuthMethod: 'auto' }, where)).toEqual({
+      tokenEndpointAuthMethod: 'auto',
+    })
   })
 })

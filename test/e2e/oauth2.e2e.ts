@@ -6,6 +6,7 @@ import { Browser, type Page } from './internal/browser/index.js'
 import type { OAuth2OptionsBuilder } from './internal/builders.js'
 import { OAUTH_SERVER, oauthServerUp, springLogin } from './internal/spring/index.js'
 import { required } from './internal/strict.js'
+import { startStubProvider } from './internal/stub_provider.js'
 
 // The redirect URI registered for the client in test/services/oauthserver, so the port is not negotiable.
 const PORT = 9999
@@ -131,6 +132,38 @@ describe.skipIf(!up)('OAuth 2.0 sign-in against Spring Authorization Server', ()
     )
   })
 
+  // RFC 6749 §2.3.1 prefers the Authorization header to credentials in the body, and has the client form-urlencode
+  // both halves before they are base64-encoded. This client takes the header only, and its secret holds a `+`,
+  // which a server decodes as a space when it arrives unencoded.
+  describe('with a client that takes its credentials as HTTP Basic only', () => {
+    const basicOnly = (o: OAuth2OptionsBuilder) =>
+      o.clientID('caffeine-oauth2-basic').clientSecret('caffeine+oauth2/basic:secret%')
+
+    it('signs in once told to send them that way', async () => {
+      await withApp(
+        o => basicOnly(o).tokenEndpointAuthMethod('client_secret_basic'),
+        async () => {
+          const home = await signIn(new Browser(), `${ORIGIN}/me`)
+
+          expect(home.url).toBe(`${ORIGIN}/me`)
+          expect(home.json()).toEqual({ sub: 'alice' })
+        },
+      )
+    })
+
+    it('fails cleanly while they still travel in the body', async () => {
+      await withApp(basicOnly, async () => {
+        const browser = new Browser()
+        const failed = await signIn(browser, `${ORIGIN}/me`)
+
+        expect(failed.url).toContain(`${ORIGIN}/oauth2/callback`)
+        expect(failed.status).toBe(400)
+        expect(failed.json()).toEqual({ error: 'Authentication failed', statusCode: 400 })
+        expect((await browser.xhr(`${ORIGIN}/me`)).status).toBe(401)
+      })
+    })
+  })
+
   it('sends PKCE by default, and fails cleanly against a client that demands it when told not to', async () => {
     await withApp(
       o => o,
@@ -158,5 +191,44 @@ describe.skipIf(!up)('OAuth 2.0 sign-in against Spring Authorization Server', ()
         expect(await browser.cookieLike(ORIGIN, '_session')).toBeUndefined()
       },
     )
+  })
+})
+
+// GitHub identifies a user by a number. The subject claim used to keep the provider's type, so nothing that asks
+// for a `sub` that is a string — a refresh token, remember-me, `hasClaim('sub', '583231')` — recognised the user.
+describe('OAuth 2.0 sign-in with a provider whose user identifier is a number', () => {
+  it('carries the subject as a string', async () => {
+    const provider = await startStubProvider({ id: 583231, login: 'octocat' })
+
+    const running = await startApp(
+      app =>
+        app
+          .authentication(auth =>
+            auth.addOAuth2(SCHEME, o =>
+              o
+                .clientID('stub-client')
+                .clientSecret('stub-secret')
+                .sessionSecret(SESSION_SECRET)
+                .callbackURL(`${ORIGIN}/oauth2/callback`)
+                .authorizationEndpoint(`${provider.origin}/authorize`)
+                .tokenEndpoint(`${provider.origin}/token`)
+                .userInfoEndpoint(`${provider.origin}/userinfo`)
+                .subjectClaim('id')
+                .mapClaims({ login: 'login' }),
+            ),
+          )
+          .mount(routes()),
+      { port: PORT },
+    )
+
+    try {
+      const home = await new Browser().navigate(`${ORIGIN}/me`)
+
+      expect(home.url).toBe(`${ORIGIN}/me`)
+      expect(home.json()).toEqual({ sub: '583231', login: 'octocat' })
+    } finally {
+      await running.close()
+      await provider.close()
+    }
   })
 })

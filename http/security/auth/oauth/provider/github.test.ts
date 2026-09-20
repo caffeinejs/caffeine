@@ -134,7 +134,10 @@ describe('GitHub OAuth2 sign-in', () => {
     const result = await handler.authenticate(makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx)
 
     expect(result.succeeded).toBe(true)
-    expect(result.ticket!.principal.findFirst('sub')?.value).toBe(4242)
+    // GitHub numbers its users. A number in the claim fails every reader of `sub` that takes a string: a refresh
+    // token's subject, a remember-me series, `hasClaim('sub', '4242')`.
+    expect(result.ticket!.principal.findFirst('sub')?.value).toBe('4242')
+    expect(result.ticket!.principal.hasClaim('sub', '4242')).toBe(true)
     expect(result.ticket!.principal.findFirst('login')?.value).toBe('octocat')
   })
 
@@ -339,6 +342,41 @@ describe('GitHub email enrichment', () => {
     await signIn(new OAuth2AuthenticationHandler(SCHEME, baseOptions()))
 
     expect(seen.some(s => s.url === GITHUB_ENDPOINTS.emailsEndpoint)).toBe(false)
+  })
+
+  // Asking for the email is not a reason to lose the application's own enrichment, and an application that looks
+  // a user up by email needs the one this found.
+  it("runs the application's own enrichment too, after the email is in", async () => {
+    stubGithub({ emails: [{ email: 'octocat@example.com', primary: true, verified: true }] })
+
+    const enrichUserInfo = vi.fn((userInfo: Record<string, unknown>, _tokens: { accessToken?: string }) => ({
+      ...userInfo,
+      name: `${String(userInfo.email)} looked up`,
+    }))
+
+    const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions({ includeEmail: true, enrichUserInfo }))
+    const { cookieValue } = await signIn(handler)
+
+    expect(enrichUserInfo).toHaveBeenCalledOnce()
+    expect(enrichUserInfo.mock.calls[0][0]).toMatchObject({ id: 4242, email: 'octocat@example.com' })
+    expect(enrichUserInfo.mock.calls[0][1]).toMatchObject({ accessToken: 'gho_test' })
+
+    const result = await handler.authenticate(makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx)
+    expect(result.ticket!.principal.findFirst('email')?.value).toBe('octocat@example.com')
+    expect(result.ticket!.principal.findFirst('name')?.value).toBe('octocat@example.com looked up')
+  })
+
+  it("runs the application's own enrichment alone when the email was not asked for", async () => {
+    const seen = stubGithub()
+    const enrichUserInfo = vi.fn((userInfo: Record<string, unknown>) => ({ ...userInfo, name: 'Enriched' }))
+
+    const handler = new OAuth2AuthenticationHandler(SCHEME, baseOptions({ enrichUserInfo }))
+    const { cookieValue } = await signIn(handler)
+
+    expect(seen.some(s => s.url === GITHUB_ENDPOINTS.emailsEndpoint)).toBe(false)
+
+    const result = await handler.authenticate(makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx)
+    expect(result.ticket!.principal.findFirst('name')?.value).toBe('Enriched')
   })
 
   /**

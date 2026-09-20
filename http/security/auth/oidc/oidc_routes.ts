@@ -77,6 +77,17 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
         // Diagnostic detail (state, nonce, signature, token exchange) stays in the logs: every
         // failure mode must look identical to a client probing the callback.
         req.log.error({ err: e }, 'OIDC callback failed')
+
+        // The strategy's `onFail` has run by now and may have answered, usually by sending the user to a page that
+        // says the sign-in did not work. What it answered stands, whether it sent it or left a redirect to be sent.
+        if (reply.sent) {
+          return reply
+        }
+
+        if (reply.statusCode >= 300 && reply.statusCode < 400) {
+          return reply.send()
+        }
+
         const status = isOIDCError(e) ? e.statusCode : 400
         const error = isOIDCError(e) ? e.publicMessage : 'Authentication failed'
         return reply.status(status).send({ error, statusCode: status })

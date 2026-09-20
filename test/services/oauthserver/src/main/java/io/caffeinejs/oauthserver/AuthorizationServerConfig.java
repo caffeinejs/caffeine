@@ -176,6 +176,20 @@ public class AuthorizationServerConfig {
                 .clientSettings(clientSettings)
                 .build();
 
+        // Takes its credentials in the Authorization header only, and its secret holds what RFC 6749 §2.3.1 has a
+        // client form-urlencode before it is base64-encoded: sent as it is, the `+` would arrive here as a space.
+        RegisteredClient basicOnlyClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("caffeine-oauth2-basic")
+                .clientSecret("{noop}caffeine+oauth2/basic:secret%")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("http://localhost:9999/oauth2/callback")
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL)
+                .clientSettings(clientSettings)
+                .build();
+
         RegisteredClient apiClient = serviceClient("caffeine-api", Duration.ofMinutes(5));
         // Short enough for a spec to outlive the token it was just given.
         RegisteredClient shortLivedClient = serviceClient("caffeine-api-short", Duration.ofSeconds(2));
@@ -183,7 +197,7 @@ public class AuthorizationServerConfig {
         RegisteredClient otherClient = serviceClient("caffeine-other", Duration.ofMinutes(5));
 
         return new InMemoryRegisteredClientRepository(
-                oidcClient, oauth2Client, apiClient, shortLivedClient, otherClient);
+                oidcClient, oauth2Client, basicOnlyClient, apiClient, shortLivedClient, otherClient);
     }
 
     /** A client that signs in as itself, `<clientId>-secret` being its secret. */

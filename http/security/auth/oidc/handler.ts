@@ -3,6 +3,7 @@ import type { JWTVerifyGetKey } from 'jose'
 
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
+import { basicAuthHeader, type TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationIdentity } from '../internal/remote/handler.js'
 import { redactPii, redactPiiList } from '../internal/remote/pii.js'
@@ -15,16 +16,14 @@ import { fetchDiscovery } from './discovery.js'
 import type { OIDCDiscoveryDocument } from './discovery.js'
 import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 import { resolveOIDCOptions } from './options.js'
-import type {
-  OIDCAuthenticationOptions,
-  OIDCTokens,
-  ResolvedOIDCAuthenticationOptions,
-  TokenEndpointAuthMethod,
-} from './options.js'
+import type { OIDCAuthenticationOptions, OIDCTokens, ResolvedOIDCAuthenticationOptions } from './options.js'
 
 /**
  * id_tokens are signed with the provider's asymmetric key — never accept a symmetric alg.
  */
+/** How long a refresh of the discovery document that failed is left alone before it is tried again. */
+const DISCOVERY_RETRY_MS = 30_000
+
 const ID_TOKEN_ALGORITHMS = ['RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512', 'PS256', 'PS384', 'PS512']
 
 export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<ResolvedOIDCAuthenticationOptions> {
@@ -33,6 +32,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   #jwks: JWTVerifyGetKey | undefined
   #tokenAuthMethod: TokenEndpointAuthMethod | undefined
   #discoveryFetchedAt = 0
+  #discoveryRetryAt = 0
   #inflight: Promise<OIDCDiscoveryDocument> | undefined
 
   constructor(name: string, options: OIDCAuthenticationOptions) {
@@ -135,6 +135,9 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
         audience: this.options.clientID,
         algorithms: ID_TOKEN_ALGORITHMS,
         clockTolerance: this.options.clockToleranceSeconds,
+        // OIDC Core §2: both are REQUIRED. jose checks a time claim only when there is one, so an id_token without
+        // `exp` would otherwise be good forever.
+        requiredClaims: ['exp', 'iat'],
       })
       payload = p as Record<string, unknown>
       alg = protectedHeader.alg
@@ -177,17 +180,15 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       }
     }
 
-    // OIDC Core §3.1.3.7 steps 4-5: with multiple audiences, azp identifies the party the
-    // token was issued for and must be this client.
-    if (Array.isArray(payload.aud) && payload.aud.length > 1) {
-      if (typeof payload.azp !== 'string') {
-        throw this.callbackFailure('id_token has multiple audiences but no azp claim')
-      }
-      if (payload.azp !== this.options.clientID) {
-        throw this.callbackFailure(
-          'id_token azp does not match clientID' + ` (azp ${redactPii('azp', payload.azp, showPii)})`,
-        )
-      }
+    // OIDC Core §3.1.3.7 steps 4-5: with multiple audiences an azp is required, and whenever one is present it
+    // names the party the token was issued to, which has to be this client.
+    if (Array.isArray(payload.aud) && payload.aud.length > 1 && typeof payload.azp !== 'string') {
+      throw this.callbackFailure('id_token has multiple audiences but no azp claim')
+    }
+    if (payload.azp !== undefined && payload.azp !== this.options.clientID) {
+      throw this.callbackFailure(
+        'id_token azp does not match clientID' + ` (azp ${redactPii('azp', payload.azp, showPii)})`,
+      )
     }
 
     // OIDC Core §3.1.3.8: OPTIONAL for the code flow, enforced whenever the provider
@@ -377,6 +378,17 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       throw this.callbackFailure(detail)
     }
 
+    // OIDC Core §3.1.3.3: the token type is Bearer, compared case-insensitively. Anything else is a credential this
+    // handler would go on to present, at the UserInfo endpoint, in a way it was not issued to be presented.
+    const tokenType: unknown = tokenResponse.token_type
+    if (tokenResponse.access_token !== undefined && !(typeof tokenType === 'string' && /^bearer$/i.test(tokenType))) {
+      throw this.callbackFailure(
+        typeof tokenType === 'string'
+          ? `token endpoint returned an access token of type "${tokenType}"`
+          : 'token endpoint returned an access token without a token_type',
+      )
+    }
+
     return {
       idToken: tokenResponse.id_token,
       accessToken: tokenResponse.access_token,
@@ -427,13 +439,37 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    * two concurrent entries could have one read a field the other had just cleared.
    */
   #resolveDiscovery(): Promise<OIDCDiscoveryDocument> {
-    if (this.#discovery && !this.#discoveryIsStale()) {
+    if (this.#discovery && (!this.#discoveryIsStale() || Date.now() < this.#discoveryRetryAt)) {
       return Promise.resolve(this.#discovery)
     }
 
-    return (this.#inflight ??= this.#fetchDiscovery().finally(() => {
+    return (this.#inflight ??= this.#refreshDiscovery().finally(() => {
       this.#inflight = undefined
     }))
+  }
+
+  /**
+   * Fetches the document again, and goes on with the one in hand when the provider cannot be asked.
+   *
+   * A document that was good an hour ago is a far better guide than none: endpoints move rarely, and a provider
+   * whose discovery endpoint is briefly down is otherwise a sign-in outage here. The next attempt waits a little,
+   * so a provider that is struggling is not asked again by every request.
+   *
+   * Only an outage is ridden out. A document that was fetched and then refused — another issuer, no usable PKCE
+   * method, a plain-http endpoint — fails the request: that is a provider saying something new, not saying nothing.
+   */
+  async #refreshDiscovery(): Promise<OIDCDiscoveryDocument> {
+    try {
+      return await this.#fetchDiscovery()
+    } catch (e) {
+      if (this.#discovery === undefined || !(e instanceof ErrOIDCDiscovery && e.unreachable)) {
+        throw e
+      }
+
+      this.#discoveryRetryAt = Date.now() + DISCOVERY_RETRY_MS
+
+      return this.#discovery
+    }
   }
 
   async #fetchDiscovery(): Promise<OIDCDiscoveryDocument> {
@@ -496,29 +532,9 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
 
   #resolveJwks(jwksURI: string): JWTVerifyGetKey {
     return (this.#jwks ??=
-      this.options.jwksResolver?.(jwksURI) ?? (createRemoteJWKSet(new URL(jwksURI)) as JWTVerifyGetKey))
+      this.options.jwksResolver?.(jwksURI) ??
+      (createRemoteJWKSet(new URL(jwksURI), { timeoutDuration: this.options.httpTimeoutMs }) as JWTVerifyGetKey))
   }
-}
-
-/**
- * Encodes a value with the `application/x-www-form-urlencoded` serializer.
- *
- * Uses `URLSearchParams` rather than `encodeURIComponent`, which leaves `!~'()` unencoded
- * and would produce credentials a strict authorization server rejects.
- */
-function formURLEncode(value: string): string {
-  return new URLSearchParams({ v: value }).toString().slice(2)
-}
-
-/**
- * Builds the HTTP Basic credentials for token endpoint client authentication.
- *
- * RFC 6749 §2.3.1 requires both the client id and secret to be form-urlencoded *before*
- * being joined and base64-encoded.
- */
-function basicAuthHeader(clientID: string, clientSecret: string): string {
-  const credentials = `${formURLEncode(clientID)}:${formURLEncode(clientSecret)}`
-  return `Basic ${Buffer.from(credentials).toString('base64')}`
 }
 
 function mapClaims(payload: Record<string, unknown>): Claim[] {

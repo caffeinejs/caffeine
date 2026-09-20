@@ -1,3 +1,4 @@
+export { type TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 export { type RemoteChallengeMode } from '../internal/remote/handler.js'
 export { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from '../internal/remote/pkce.js'
 export {
@@ -38,7 +39,6 @@ export {
   type ResolvedOIDCAuthenticationOptions,
   resolveOIDCOptions,
   sanitizeSchemeName,
-  type TokenEndpointAuthMethod,
 } from './options.js'
 export { GOOGLE_ISSUER, googleOIDCPreset } from './provider/google.js'
 

@@ -1,5 +1,6 @@
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
+import { basicAuthHeader } from '../internal/remote/client_auth.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationIdentity, RemoteAuthenticationTokens } from '../internal/remote/handler.js'
@@ -86,11 +87,17 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
       grant_type: 'authorization_code',
       code,
       redirect_uri: this.options.callbackURL,
-      client_id: this.options.clientID,
-      client_secret: this.options.clientSecret,
     })
     if (this.options.usePKCE) {
       body.set('code_verifier', stored.codeVerifier)
+    }
+
+    const authorization: Record<string, string> = {}
+    if (this.options.tokenEndpointAuthMethod === 'client_secret_basic') {
+      authorization.Authorization = basicAuthHeader(this.options.clientID, this.options.clientSecret)
+    } else {
+      body.set('client_id', this.options.clientID)
+      body.set('client_secret', this.options.clientSecret)
     }
 
     let response: Response
@@ -106,6 +113,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
           // unparseable body.
           'Content-Type': 'application/x-www-form-urlencoded',
           Accept: 'application/json',
+          ...authorization,
         },
         body,
         signal: AbortSignal.timeout(this.options.httpTimeoutMs),
@@ -170,7 +178,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
     const issuer = new URL(this.options.authorizationEndpoint).origin
     const claims = this.options.claimMapper
       ? this.options.claimMapper(userInfo)
-      : defaultMapClaims(userInfo, issuer, this.options.claimActions?.map)
+      : defaultMapClaims(userInfo, issuer, this.options.subjectClaim, this.options.claimActions?.map)
 
     // Applied to a custom mapper's output too: it is an explicit "do not persist these" from
     // the caller, and a mapper that happens to emit them is not consent.
@@ -199,6 +207,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
 function defaultMapClaims(
   userInfo: Record<string, unknown>,
   issuer: string,
+  subjectField: string,
   map: Record<string, string> = {},
 ): Claim[] {
   const claims: Claim[] = []
@@ -210,7 +219,10 @@ function defaultMapClaims(
     if (value === undefined || value === null || typeof value === 'object') {
       continue
     }
-    claims.push(new Claim(claimType, value, issuer))
+    // The identifier is a string wherever it is read: on the ticket, as the subject of a refresh token or a
+    // remember-me series, in `hasClaim('sub', id)`. A provider that numbers its users would otherwise put a number
+    // in the claim and a string everywhere else.
+    claims.push(new Claim(claimType, field === subjectField ? String(value) : value, issuer))
   }
 
   return claims

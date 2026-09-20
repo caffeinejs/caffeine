@@ -61,6 +61,12 @@ export interface RemoteAuthenticationIdentity {
  */
 export type RemoteChallengeMode = ChallengeMode
 
+/** Sign-ins a browser may have under way at once for one strategy. One more clears the rest before it starts. */
+const MAX_OUTSTANDING_FLOWS = 8
+
+/** A flow with less than this left of its lifetime is not handed out again: nobody signs in that fast. */
+const REUSABLE_FLOW_MIN_SECONDS_LEFT = 120
+
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
   clientID: string
@@ -81,6 +87,12 @@ export interface RemoteAuthenticationOptions {
   challengeMode: RemoteChallengeMode
 
   ticketStore?: RemoteAuthenticationTicketStore
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
@@ -244,30 +256,21 @@ export abstract class RemoteAuthenticationHandler<
       this.resolvePKCEMethod(),
     ])
 
-    const codeVerifier = generateCodeVerifier()
-    const codeChallenge = pkceMethod === 'S256' ? generateCodeChallenge(codeVerifier) : codeVerifier
+    // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
+    // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
+    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
+    const returnTo = properties?.redirectURI ?? ctx.req.url
 
-    const state = randomBytes(16).toString('base64url')
-    const nonce = randomBytes(16).toString('base64url')
+    // A challenge answered with a status may well be ignored by whoever receives it, and one that is polling gets
+    // a challenge per poll. So such a challenge hands out the flow the last one started, while it is still unspent.
+    const answeredWithStatus = this.options.onChallenge === undefined && !this.#redirects(ctx)
+    const flow =
+      (answeredWithStatus ? await this.#unspentFlow(ctx, issuer, returnTo) : undefined) ??
+      (await this.#startFlow(ctx, { issuer, pkceMethod, returnTo, reusable: answeredWithStatus }))
 
-    const stateCookie = await encodeState(
-      {
-        state,
-        nonce,
-        codeVerifier,
-        pkceMethod: pkceMethod === 'none' ? 'S256' : pkceMethod,
-        // An explicit destination from the caller wins over the URL the challenge interrupted — that is
-        // what `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent.
-        // Both are re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
-        returnTo: properties?.redirectURI ?? ctx.req.url,
-        scheme: this.name,
-        issuer,
-      },
-      this.options.sessionSecret,
-      this.name,
-    )
+    const { state, nonce } = flow
+    const codeChallenge = pkceMethod === 'S256' ? generateCodeChallenge(flow.codeVerifier) : flow.codeVerifier
 
-    ctx.cookie(this.#stateCookieNameFor(state), stateCookie, this.cookieOpts(STATE_TTL_SECONDS))
     // The response sets the state cookie and, whichever way it is answered, carries the URL the state rides in.
     noStore(ctx)
 
@@ -307,8 +310,9 @@ export abstract class RemoteAuthenticationHandler<
       return
     }
 
-    // The state cookie was set above and is on this response too, so a caller that sends the browser to the
-    // URL completes the same flow — nothing is discarded by answering with a status instead of a redirect.
+    // The state cookie is on this response, or already in the browser from the challenge this one repeats, so a
+    // caller that sends the browser to the URL completes the flow — nothing is discarded by answering with a
+    // status instead of a redirect.
     //
     // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
     // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
@@ -323,6 +327,69 @@ export abstract class RemoteAuthenticationHandler<
       .header('location', authorizationURL)
       .header('access-control-expose-headers', 'location')
       .body({ error: 'authentication_required', loginURL: authorizationURL })
+  }
+
+  /** Mints the state of a new authorization round trip and sets the cookie that carries it. */
+  async #startFlow(
+    ctx: Context,
+    flow: { issuer: string; pkceMethod: 'S256' | 'plain' | 'none'; returnTo: string; reusable: boolean },
+  ): Promise<RemoteAuthenticationState> {
+    const state: RemoteAuthenticationState = {
+      state: randomBytes(16).toString('base64url'),
+      nonce: randomBytes(16).toString('base64url'),
+      codeVerifier: generateCodeVerifier(),
+      pkceMethod: flow.pkceMethod === 'none' ? 'S256' : flow.pkceMethod,
+      returnTo: flow.returnTo,
+      scheme: this.name,
+      issuer: flow.issuer,
+      ...(flow.reusable ? { reusable: true } : {}),
+    }
+
+    // Every tab that is challenged starts a flow of its own, so their cookies add up, and a cookie too many gets
+    // every request to the origin refused for its headers, the sign-in page included. Past a handful the old ones
+    // are flows nobody is going to finish.
+    const outstanding = this.#stateCookieNames(ctx)
+    if (outstanding.length >= MAX_OUTSTANDING_FLOWS) {
+      for (const name of outstanding) {
+        ctx.deleteCookie(name, this.cookieOpts())
+      }
+    }
+
+    const sealed = await encodeState(state, this.options.sessionSecret, this.name)
+    ctx.cookie(this.#stateCookieNameFor(state.state), sealed, this.cookieOpts(STATE_TTL_SECONDS))
+
+    return state
+  }
+
+  /**
+   * The flow an earlier status-answered challenge started for this browser, when it can still be finished: same
+   * provider, same destination, and enough of its ten minutes left for someone to sign in.
+   */
+  async #unspentFlow(ctx: Context, issuer: string, returnTo: string): Promise<RemoteAuthenticationState | undefined> {
+    const now = Math.floor(Date.now() / 1000)
+
+    for (const name of this.#stateCookieNames(ctx)) {
+      let stored: RemoteAuthenticationState
+      try {
+        stored = await decodeState(ctx.req.cookie(name)!, this.options.sessionSecret, this.name)
+      } catch {
+        continue
+      }
+
+      const fresh = stored.exp !== undefined && stored.exp - now > REUSABLE_FLOW_MIN_SECONDS_LEFT
+      if (stored.reusable === true && fresh && stored.issuer === issuer && stored.returnTo === returnTo) {
+        return stored
+      }
+    }
+
+    return undefined
+  }
+
+  /** The names of the state cookies of this strategy the request carries. */
+  #stateCookieNames(ctx: Context): string[] {
+    const prefix = `${this.options.stateCookieName}.`
+
+    return Object.keys(ctx.req.cookie() ?? {}).filter(name => name.startsWith(prefix))
   }
 
   /**
@@ -490,39 +557,41 @@ export abstract class RemoteAuthenticationHandler<
     const code = ctx.req.query('code')
     const stateParam = ctx.req.query('state')
 
-    // RFC 6749 §4.1.2.1: a denied or failed authorization comes back as an error redirect,
-    // not an absent code. Report what the provider actually said.
-    const error = ctx.req.query('error')
-    if (error) {
-      // error_description is provider-authored free text of unconstrained content — it can
-      // name the user or the reason they were denied — so it is treated as PII.
-      const description = ctx.req.query('error_description')
-      const detail =
-        description === undefined ? '' : `: ${redactPii('error_description', description, this.options.showPii)}`
-      throw this.callbackFailure(`provider returned "${error}"${detail}`)
-    }
-
-    if (!code) {
-      throw this.callbackFailure('missing code parameter')
-    }
-
     // The cookie is named after the flow's own state, so the parameter is what says which of possibly
     // several concurrent flows this callback belongs to. Validated as base64url first: it is
     // attacker-controlled and composes a cookie name, and nothing outside the set this handler mints can
     // identify a real flow anyway.
-    if (stateParam === undefined || !/^[A-Za-z0-9_-]+$/.test(stateParam)) {
-      throw this.callbackFailure('missing or malformed state parameter')
-    }
+    const stateCookieName =
+      stateParam !== undefined && /^[A-Za-z0-9_-]+$/.test(stateParam) ? this.#stateCookieNameFor(stateParam) : undefined
 
-    const stateCookieName = this.#stateCookieNameFor(stateParam)
-    const stateCookie = ctx.req.cookie(stateCookieName)
-    if (!stateCookie) {
-      throw this.callbackFailure('missing state cookie')
-    }
-
-    // Cleared on every path out of here, not just the successful one. A failed callback used to leave a
-    // live state cookie for the rest of its 600s TTL, so a flow that already failed stayed replayable.
+    // Cleared on every path out of here, the provider's own refusal included: a flow that came back is over,
+    // whichever way it went, and its cookie would otherwise stay good for the rest of its ten minutes.
     try {
+      // RFC 6749 §4.1.2.1: a denied or failed authorization comes back as an error redirect,
+      // not an absent code. Report what the provider actually said.
+      const error = ctx.req.query('error')
+      if (error) {
+        // error_description is provider-authored free text of unconstrained content — it can
+        // name the user or the reason they were denied — so it is treated as PII.
+        const description = ctx.req.query('error_description')
+        const detail =
+          description === undefined ? '' : `: ${redactPii('error_description', description, this.options.showPii)}`
+        throw this.callbackFailure(`provider returned "${errorCode(error)}"${detail}`)
+      }
+
+      if (stateParam === undefined || stateCookieName === undefined) {
+        throw this.callbackFailure('missing or malformed state parameter')
+      }
+
+      if (!code) {
+        throw this.callbackFailure('missing code parameter')
+      }
+
+      const stateCookie = ctx.req.cookie(stateCookieName)
+      if (!stateCookie) {
+        throw this.callbackFailure('missing state cookie')
+      }
+
       let stored: RemoteAuthenticationState
       try {
         stored = await decodeState(stateCookie, this.options.sessionSecret, this.name)
@@ -543,7 +612,9 @@ export abstract class RemoteAuthenticationHandler<
 
       await this.#completeCallback(ctx, code, stored)
     } finally {
-      ctx.deleteCookie(stateCookieName, this.cookieOpts())
+      if (stateCookieName !== undefined) {
+        ctx.deleteCookie(stateCookieName, this.cookieOpts())
+      }
     }
   }
 
@@ -618,4 +689,14 @@ export abstract class RemoteAuthenticationHandler<
       ...(maxAge !== undefined ? { maxAge } : {}),
     }
   }
+}
+
+/**
+ * The `error` of an authorization response, fit to be written to a log.
+ *
+ * It arrives on a URL anyone can craft. RFC 6749 §4.1.2.1 confines it to printable ASCII without `"` and `\`;
+ * anything else — a line break that would forge a log entry, most of all — says nothing a provider sent.
+ */
+function errorCode(error: string): string {
+  return /^[\x20-\x21\x23-\x5B\x5D-\x7E]{1,64}$/.test(error) ? error : '(malformed error code)'
 }

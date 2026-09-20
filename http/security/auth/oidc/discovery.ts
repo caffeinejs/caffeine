@@ -40,18 +40,24 @@ export async function fetchDiscovery(
     // Without a deadline a hung provider pins the request for as long as it likes.
     response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   } catch (e) {
-    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}": ${(e as Error).message}`)
+    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}": ${(e as Error).message}`, {
+      unreachable: true,
+    })
   }
 
   if (!response.ok) {
-    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}" returned ${response.status}`)
+    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}" returned ${response.status}`, {
+      unreachable: true,
+    })
   }
 
   let body: unknown
   try {
     body = await response.json()
   } catch (e) {
-    throw new ErrOIDCDiscovery(`Cannot parse OIDC discovery document: "${url}": ${(e as Error).message}`)
+    throw new ErrOIDCDiscovery(`Cannot parse OIDC discovery document: "${url}": ${(e as Error).message}`, {
+      unreachable: true,
+    })
   }
 
   // Every field access below assumes an object. A body of literal `null`, an array, or a

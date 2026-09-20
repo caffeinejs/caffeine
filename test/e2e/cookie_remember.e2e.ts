@@ -5,7 +5,6 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import {
   AuthenticationService,
   AuthenticationTicket,
-  Claim,
   type CredentialUser,
   CredentialsService,
   PasswordHasher,

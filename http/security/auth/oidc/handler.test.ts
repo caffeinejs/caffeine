@@ -574,6 +574,7 @@ describe('OIDCAuthenticationHandler', () => {
         .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
         .setIssuer(ISSUER)
         .setAudience(CLIENT_ID)
+        .setIssuedAt()
         .setExpirationTime('1h')
         .sign(privateKey)
     }
@@ -591,7 +592,10 @@ describe('OIDCAuthenticationHandler', () => {
           }
           if (opts?.method === 'POST') {
             const idToken = await signIDToken(nonce, extraClaims)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+            return {
+              ok: true,
+              json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+            }
           }
           return { ok: false, status: 404 }
         }),
@@ -787,7 +791,10 @@ describe('OIDCAuthenticationHandler', () => {
             }
             if (opts?.method === 'POST') {
               const idToken = await signIDToken(nonce)
-              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+              return {
+                ok: true,
+                json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+              }
             }
             return { ok: false, status: 404 }
           }),
@@ -989,6 +996,119 @@ describe('OIDCAuthenticationHandler', () => {
         issuer = 'https://attacker.example.com'
         await expect(handler.challenge(makeCtx().ctx)).rejects.toThrow('does not match the configured issuer')
       })
+
+      // A provider whose discovery endpoint is down for a minute is otherwise a sign-in outage here, although
+      // everything needed to sign a user in is already in hand.
+      describe('when the provider cannot be asked again', () => {
+        function providerThatGoesDown(failure: () => unknown) {
+          const provider = { down: false, asked: 0 }
+
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async (url: string) => {
+              if (typeof url === 'string' && url.includes('.well-known')) {
+                provider.asked++
+                if (provider.down) {
+                  return failure()
+                }
+                return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+              }
+              return { ok: false, status: 404 }
+            }),
+          )
+
+          return provider
+        }
+
+        const outages: Array<[string, () => unknown]> = [
+          ['is unreachable', () => Promise.reject(new Error('connect ECONNREFUSED 10.0.0.7:443'))],
+          ['answers with an error status', () => ({ ok: false, status: 503 })],
+          [
+            'answers with a page that is not JSON',
+            () => ({ ok: true, json: () => Promise.reject(new Error('<html>')) }),
+          ],
+        ]
+
+        it.each(outages)('goes on with the document in hand when the provider %s', async (_, failure) => {
+          const provider = providerThatGoesDown(failure)
+          const handler = new OIDCAuthenticationHandler(
+            'OIDC',
+            makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
+          )
+
+          await handler.challenge(makeCtx().ctx)
+          provider.down = true
+
+          const { ctx, redirect } = makeCtx()
+          await expect(handler.challenge(ctx)).resolves.toBeUndefined()
+          expect((redirect.mock.calls[0] as [string])[0]).toContain(`${ISSUER}/auth`)
+        })
+
+        it('has nothing to go on with when the very first fetch fails', async () => {
+          const provider = providerThatGoesDown(() => ({ ok: false, status: 503 }))
+          provider.down = true
+
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+
+          await expect(handler.challenge(makeCtx().ctx)).rejects.toMatchObject({
+            code: 'ERR_OIDC_DISCOVERY',
+            unreachable: true,
+          })
+        })
+
+        // Every request would otherwise wait out the timeout of a provider that is not answering.
+        it('leaves a provider that is down alone for a while before asking again', async () => {
+          vi.useFakeTimers({ toFake: ['Date'] })
+
+          try {
+            const provider = providerThatGoesDown(() => ({ ok: false, status: 503 }))
+            const handler = new OIDCAuthenticationHandler(
+              'OIDC',
+              makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
+            )
+
+            await handler.challenge(makeCtx().ctx)
+            provider.down = true
+
+            await handler.challenge(makeCtx().ctx)
+            await handler.challenge(makeCtx().ctx)
+            await handler.challenge(makeCtx().ctx)
+            expect(provider.asked).toBe(2)
+
+            vi.setSystemTime(Date.now() + 31_000)
+            await handler.challenge(makeCtx().ctx)
+            expect(provider.asked).toBe(3)
+
+            provider.down = false
+            vi.setSystemTime(Date.now() + 31_000)
+            await handler.challenge(makeCtx().ctx)
+            expect(provider.asked).toBe(4)
+          } finally {
+            vi.useRealTimers()
+          }
+        })
+
+        // A document that arrived and was refused is the provider saying something new, not saying nothing.
+        it('does not ride out a document that was fetched and refused', async () => {
+          let pkce = ['S256']
+          vi.stubGlobal(
+            'fetch',
+            vi.fn(async () => ({
+              ok: true,
+              json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, code_challenge_methods_supported: pkce }),
+            })),
+          )
+
+          const handler = new OIDCAuthenticationHandler(
+            'OIDC',
+            makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
+          )
+          await handler.challenge(makeCtx().ctx)
+
+          pkce = ['plain']
+          await expect(handler.challenge(makeCtx().ctx)).rejects.toThrow(/PKCE/)
+        })
+      })
     })
 
     /**
@@ -1032,6 +1152,7 @@ describe('OIDCAuthenticationHandler', () => {
           .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
           .setIssuer(ISSUER)
           .setAudience('a-different-client')
+          .setIssuedAt()
           .setExpirationTime('1h')
           .sign(privateKey)
 
@@ -1050,6 +1171,7 @@ describe('OIDCAuthenticationHandler', () => {
           .setProtectedHeader({ alg: 'HS256' })
           .setIssuer(ISSUER)
           .setAudience(CLIENT_ID)
+          .setIssuedAt()
           .setExpirationTime('1h')
           .sign(secret)
 
@@ -1058,6 +1180,79 @@ describe('OIDCAuthenticationHandler', () => {
         const resolver = (async () => secret) as unknown as JWTVerifyGetKey
 
         await expect(callbackWithToken(symmetric, nonce, resolver)).rejects.toThrow('id_token validation failed')
+      })
+
+      // OIDC Core §2 requires both. A time claim is only checked when there is one, so a token without `exp` is
+      // otherwise good forever.
+      it('rejects an id_token that never expires', async () => {
+        const nonce = 'no-exp'
+        const eternal = await new SignJWT({ sub: 'user123', nonce })
+          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+          .setIssuer(ISSUER)
+          .setAudience(CLIENT_ID)
+          .setIssuedAt()
+          .sign(privateKey)
+
+        await expect(callbackWithToken(eternal, nonce)).rejects.toThrow(/id_token validation failed.*"exp"/)
+      })
+
+      it('rejects an id_token that does not say when it was issued', async () => {
+        const nonce = 'no-iat'
+        const undated = await new SignJWT({ sub: 'user123', nonce })
+          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+          .setIssuer(ISSUER)
+          .setAudience(CLIENT_ID)
+          .setExpirationTime('1h')
+          .sign(privateKey)
+
+        await expect(callbackWithToken(undated, nonce)).rejects.toThrow(/id_token validation failed.*"iat"/)
+      })
+    })
+
+    // OIDC Core §3.1.3.3. The access token goes on to be presented at the UserInfo endpoint as a bearer token,
+    // which is not how a token of another type was issued to be used.
+    describe('token_type', () => {
+      async function callbackWithTokenType(tokenType: string | undefined) {
+        const nonce = 'token-type'
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string, opts?: RequestInit) => {
+            if (typeof url === 'string' && url.includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              return {
+                ok: true,
+                json: async () => ({
+                  id_token: await signIDToken(nonce),
+                  access_token: 'at',
+                  ...(tokenType === undefined ? {} : { token_type: tokenType }),
+                }),
+              }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
+
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+        const { ctx } = makeCtx({
+          cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
+          query: { code: 'c', state: 'st' },
+        })
+        return handler.processCallback(ctx)
+      }
+
+      it.each(['Bearer', 'bearer', 'BEARER'])('accepts %s, compared without regard to case', async tokenType => {
+        await expect(callbackWithTokenType(tokenType)).resolves.toBeUndefined()
+      })
+
+      it.each(['mac', 'DPoP', 'bearer-ish'])('refuses an access token of type %s', async tokenType => {
+        await expect(callbackWithTokenType(tokenType)).rejects.toThrow(`an access token of type "${tokenType}"`)
+      })
+
+      // RFC 6749 §5.1 requires it, so a response without one is not something to guess about.
+      it('refuses an access token that comes without a type', async () => {
+        await expect(callbackWithTokenType(undefined)).rejects.toThrow('an access token without a token_type')
       })
     })
 
@@ -1246,7 +1441,10 @@ describe('OIDCAuthenticationHandler', () => {
             }
             if (opts?.method === 'POST') {
               const idToken = await signIDToken(nonce)
-              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+              return {
+                ok: true,
+                json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+              }
             }
             return { ok: false, status: 404 }
           }),
@@ -1730,7 +1928,11 @@ describe('OIDCAuthenticationHandler', () => {
             }
             if (opts?.method === 'POST') {
               const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('a-different-token', 'RS256') })
-              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
+              return {
+                ok: true,
+                json: () =>
+                  Promise.resolve({ id_token: idToken, access_token: 'the-access-token', token_type: 'Bearer' }),
+              }
             }
             return { ok: false, status: 404 }
           }),
@@ -1756,7 +1958,11 @@ describe('OIDCAuthenticationHandler', () => {
             }
             if (opts?.method === 'POST') {
               const idToken = await signIDToken(nonce, { at_hash: accessTokenHash('the-access-token', 'RS256') })
-              return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'the-access-token' }) }
+              return {
+                ok: true,
+                json: () =>
+                  Promise.resolve({ id_token: idToken, access_token: 'the-access-token', token_type: 'Bearer' }),
+              }
             }
             return { ok: false, status: 404 }
           }),
@@ -1937,6 +2143,7 @@ describe('OIDCAuthenticationHandler', () => {
                 .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
                 .setIssuer(ISSUER)
                 .setAudience(CLIENT_ID)
+                .setIssuedAt()
                 .setExpirationTime('1h')
                 .sign(privateKey)
               return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -2005,6 +2212,7 @@ describe('OIDCAuthenticationHandler', () => {
                 .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
                 .setIssuer(ISSUER)
                 .setAudience(CLIENT_ID)
+                .setIssuedAt()
                 .setExpirationTime('1h')
                 .sign(privateKey)
               return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -2040,6 +2248,7 @@ describe('OIDCAuthenticationHandler', () => {
                 .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
                 .setIssuer(ISSUER)
                 .setAudience(aud)
+                .setIssuedAt()
                 .setExpirationTime('1h')
                 .sign(privateKey)
               return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -2066,6 +2275,16 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('accepts multiple audiences when azp matches this client', async () => {
         await expect(callbackWithAudience([CLIENT_ID, 'other'], CLIENT_ID)).resolves.toBeUndefined()
+      })
+
+      // OIDC Core §3.1.3.7 step 5: verified whenever it is present. The audience check alone passes a token the
+      // provider says it issued to someone else.
+      it('rejects a single audience whose azp is another client', async () => {
+        await expect(callbackWithAudience([CLIENT_ID], 'other')).rejects.toThrow('azp does not match clientID')
+      })
+
+      it('accepts a single audience whose azp is this client', async () => {
+        await expect(callbackWithAudience([CLIENT_ID], CLIENT_ID)).resolves.toBeUndefined()
       })
     })
 

@@ -15,6 +15,14 @@ export interface RemoteAuthenticationState {
    */
   scheme: string
   issuer: string
+  /**
+   * Set on a state minted for a challenge answered with a status, which a caller may well ignore. Such a flow is
+   * handed out again to the next challenge of the kind instead of minting another: a signed-out page polling an API
+   * is challenged on every poll, and a cookie per poll outgrows what a server accepts in request headers.
+   */
+  reusable?: boolean
+  /** When the sealed state expires, epoch seconds. Written by the seal, present on a state that was read back. */
+  exp?: number
 }
 
 /** The authorization round-trip must complete within this window. */

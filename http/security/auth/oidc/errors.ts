@@ -18,9 +18,16 @@ export class ErrOIDCConfiguration extends RemoteAuthenticationError {
  * ErrOIDCDiscovery is thrown when the provider discovery document cannot be fetched or is invalid.
  */
 export class ErrOIDCDiscovery extends RemoteAuthenticationError {
-  constructor(message: string) {
+  /**
+   * Whether the provider could not be asked at all — unreachable, answering with an error status, or with a body
+   * that is not JSON — as opposed to having answered with a document that was refused.
+   */
+  readonly unreachable: boolean
+
+  constructor(message: string, options?: { unreachable?: boolean }) {
     super(message, 'ERR_OIDC_DISCOVERY', 502, 'Authentication provider is unavailable')
     this.name = 'ErrOIDCDiscovery'
+    this.unreachable = options?.unreachable ?? false
   }
 }
 

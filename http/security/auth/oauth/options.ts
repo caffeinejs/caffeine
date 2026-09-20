@@ -1,5 +1,6 @@
 import type { Context } from '../../../context.js'
 import type { Claim } from '../../index.js'
+import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
   cookieName,
@@ -27,6 +28,7 @@ type DefaultedKey =
   | 'challengeMode'
   | 'usePKCE'
   | 'subjectClaim'
+  | 'tokenEndpointAuthMethod'
 
 /**
  * A plain OAuth 2.0 strategy, for providers that do not implement OpenID Connect.
@@ -76,6 +78,14 @@ export interface ResolvedOAuth2AuthenticationOptions {
    */
   subjectClaim: string
 
+  /**
+   * How the client authenticates to the token endpoint. `client_secret_post` by default.
+   *
+   * Set `client_secret_basic` for a provider that accepts it: RFC 6749 §2.3.1 recommends against sending the
+   * secret in the request body. With no discovery document, nothing here can tell which one a provider takes.
+   */
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod
+
   /** Extra headers on the token request. Some providers require `Accept: application/json`. */
   tokenRequestHeaders?: Record<string, string>
   /** Extra headers on the user info request. Some providers require a `User-Agent`. */
@@ -106,6 +116,12 @@ export interface ResolvedOAuth2AuthenticationOptions {
     userInfo: Record<string, unknown>,
     tokens: RemoteAuthenticationTokens,
   ) => Promise<void> | void
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
@@ -200,6 +216,7 @@ export function resolveOAuth2Options(
     showPii: input.showPii ?? false,
     challengeMode: input.challengeMode ?? 'auto',
     usePKCE: input.usePKCE ?? true,
+    tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? 'client_secret_post',
   }
 }
 
@@ -301,6 +318,12 @@ export class OAuth2AuthenticationOptionsBuilder {
   /** Which user info field is the stable identifier. Must not be user-renameable. */
   subjectClaim(field: string): this {
     this.#options.subjectClaim = field
+    return this
+  }
+
+  /** How the client authenticates to the token endpoint. `client_secret_basic` for a provider that accepts it. */
+  tokenEndpointAuthMethod(method: TokenEndpointAuthMethod): this {
+    this.#options.tokenEndpointAuthMethod = method
     return this
   }
 

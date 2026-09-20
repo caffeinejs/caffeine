@@ -170,6 +170,61 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       expect(authorize.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/oidc/callback`)
     })
 
+    // Every challenge used to set a state cookie good for ten minutes, the ones answered 401 included. A signed-out
+    // page polling an API collected them until the request headers outgrew what the server accepts, and from then on
+    // every request to the origin was refused — the sign-in page too.
+    describe('a browser that is challenged over and over', () => {
+      const stateCookies = async (browser: Browser) =>
+        (await browser.cookies(ORIGIN)).filter(cookie => cookie.key.includes('_state'))
+
+      it('holds one state cookie however often a signed-out page polls, and can still sign in', async () => {
+        const browser = new Browser()
+
+        const loginURLs = new Set<string>()
+        for (let poll = 0; poll < 40; poll++) {
+          const challenge = await browser.xhr(`${ORIGIN}/me`)
+          expect(challenge.status).toBe(401)
+          loginURLs.add(challenge.json<{ loginURL: string }>().loginURL)
+        }
+
+        expect(await stateCookies(browser)).toHaveLength(1)
+        expect(loginURLs.size).toBe(1)
+
+        // The URL every one of those polls handed out still completes a sign-in.
+        const [loginURL] = loginURLs
+        const home = await springLogin(browser, await browser.navigate(loginURL), 'alice', 'wonderland')
+        expect(home.url).toBe(`${ORIGIN}/me`)
+        expect(home.status).toBe(200)
+      })
+
+      // Making room by clearing what is outstanding would end this sign-in from another tab.
+      it('does not let a polling tab end a sign-in under way in another', async () => {
+        const browser = new Browser()
+        const providerLogin = await browser.navigate(`${ORIGIN}/me`)
+
+        for (let poll = 0; poll < 40; poll++) {
+          expect((await browser.xhr(`${ORIGIN}/reports/2026`)).status).toBe(401)
+        }
+
+        const home = await springLogin(browser, providerLogin, 'alice', 'wonderland')
+        expect(home.url).toBe(`${ORIGIN}/me`)
+        expect(home.status).toBe(200)
+      })
+
+      // A navigation always starts a flow of its own, so that two tabs can both sign in. What bounds those is a cap.
+      it('keeps the flows of tab after tab of navigations to a handful, and can still sign in', async () => {
+        const browser = new Browser()
+
+        for (let tab = 0; tab < 20; tab++) {
+          await browser.navigate(`${ORIGIN}/me`)
+          expect((await stateCookies(browser)).length).toBeLessThanOrEqual(8)
+        }
+
+        const home = await signIn(browser, `${ORIGIN}/me`)
+        expect(home.status).toBe(200)
+      })
+    })
+
     it('returns to a deep link with its query intact', async () => {
       const home = await signIn(new Browser(), `${ORIGIN}/reports/2026?tab=summary`)
 
@@ -388,14 +443,18 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
 
         // Nobody is sent to a provider whose identity could not be established.
         expect(page.hops).toHaveLength(1)
-        expect(page.status).toBeGreaterThanOrEqual(500)
+        expect(page.status).toBe(502)
+
+        // And nobody outside is told why: what went wrong names the issuer this deployment is configured with,
+        // and with a provider that is down it would name the address it could not be reached at.
+        expect(page.json()).toMatchObject({ statusCode: 502, message: 'Authentication provider is unavailable' })
+        expect(page.text()).not.toContain('not-the-issuer')
+        expect(page.text()).not.toContain('localhost:9000')
       } finally {
         await running.close()
       }
     })
   })
-
-  it.todo('answers a failed challenge with the public message only, never the configured issuer')
 
   // Everything is gated, the callback included unless it is exempt — and it is where the provider sends a user
   // who is, by definition, not signed in yet.

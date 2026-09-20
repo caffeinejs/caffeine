@@ -118,6 +118,7 @@ describe('OIDC integration', () => {
         .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
         .setIssuer(ISSUER)
         .setAudience(CLIENT_ID)
+        .setIssuedAt()
         .setExpirationTime('1h')
         .sign(privateKey)
     }
@@ -128,7 +129,10 @@ describe('OIDC integration', () => {
         vi.fn(async (_url: string, opts?: RequestInit) => {
           if (opts?.method === 'POST') {
             const idToken = await signIDToken(nonce)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+            return {
+              ok: true,
+              json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+            }
           }
           return { ok: false, status: 404 }
         }),
