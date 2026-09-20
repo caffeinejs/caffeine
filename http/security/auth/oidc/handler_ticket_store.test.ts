@@ -82,6 +82,7 @@ function makeCtx(
   const deleteCookie = vi.fn().mockReturnThis()
   const redirect = vi.fn().mockReturnThis()
   const status = vi.fn().mockReturnThis()
+  const header = vi.fn().mockReturnThis()
 
   const ctx = {
     req: {
@@ -94,9 +95,10 @@ function makeCtx(
     deleteCookie,
     redirect,
     status,
+    header,
   } as unknown as Context
 
-  return { ctx, cookie, deleteCookie, redirect, status }
+  return { ctx, cookie, deleteCookie, redirect, status, header }
 }
 
 const DISCOVERY_DOCUMENT = {

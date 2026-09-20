@@ -69,8 +69,8 @@ describe('cookie key separation', () => {
   it('seals the session under a key the state purpose cannot open', async () => {
     const token = await encodeSession(claimsToSession(PII_CLAIMS, 'Google'), SECRET, SCHEME, 3600)
 
-    await expect(jwtDecrypt(token, key('oidc-state+jwt'))).rejects.toThrow()
-    await expect(jwtDecrypt(token, key('oidc-session+jwt'))).resolves.toBeDefined()
+    await expect(jwtDecrypt(token, await key('oidc-state+jwt'))).rejects.toThrow()
+    await expect(jwtDecrypt(token, await key('oidc-session+jwt'))).resolves.toBeDefined()
   })
 
   it('seals state under a key the session purpose cannot open', async () => {
@@ -80,8 +80,8 @@ describe('cookie key separation', () => {
       SCHEME,
     )
 
-    await expect(jwtDecrypt(token, key('oidc-session+jwt'))).rejects.toThrow()
-    await expect(jwtDecrypt(token, key('oidc-state+jwt'))).resolves.toBeDefined()
+    await expect(jwtDecrypt(token, await key('oidc-session+jwt'))).rejects.toThrow()
+    await expect(jwtDecrypt(token, await key('oidc-state+jwt'))).resolves.toBeDefined()
   })
 
   it('hides the PKCE code_verifier carried by the state cookie', async () => {

@@ -5,8 +5,13 @@ import {
   Identity,
   OpaqueTokenStore,
   Principal,
+  RefreshTokenStore,
+  RememberMeTokenStore,
   type RemoteAuthenticationTicket,
   type RemoteAuthenticationTicketStore,
+  type SeriesTokenRecord,
+  type SeriesTokenRotation,
+  type SeriesTokenStore,
 } from '@caffeinejs/http'
 import { createClient } from '@redis/client'
 
@@ -129,4 +134,131 @@ export class RedisOpaqueTokenStore extends OpaqueTokenStore {
   #key(token: string): string {
     return `${this.#prefix}:opaque:${digest(token)}`
   }
+}
+
+/**
+ * The swap `SeriesTokenStore.rotate` asks for, as one script: Redis runs it to the end before anything else, so
+ * of all the requests presenting one token exactly one sees it as current.
+ *
+ * KEYS[1] the series. ARGV: expected hash, new hash, rotatedAt, expiresAt.
+ */
+const ROTATE = `
+local current = redis.call('HGET', KEYS[1], 'tokenHash')
+if current == false or current ~= ARGV[1] then
+  return 0
+end
+redis.call('HSET', KEYS[1], 'tokenHash', ARGV[2], 'previousTokenHash', ARGV[1], 'rotatedAt', ARGV[3], 'expiresAt', ARGV[4])
+redis.call('EXPIREAT', KEYS[1], ARGV[4])
+return 1
+`
+
+/** Rotating credentials in Redis: a hash per series that expires by itself, and a set of series per subject. */
+class RedisSeriesTokens implements Pick<
+  SeriesTokenStore,
+  'create' | 'findBySeries' | 'rotate' | 'remove' | 'removeBySubject'
+> {
+  readonly #redis: RedisClient
+  readonly #prefix: string
+
+  constructor(redis: RedisClient, prefix: string) {
+    this.#redis = redis
+    this.#prefix = prefix
+  }
+
+  async create(record: SeriesTokenRecord): Promise<void> {
+    const key = this.#series(record.series)
+
+    await this.#redis
+      .multi()
+      .hSet(key, {
+        series: record.series,
+        subject: record.subject,
+        tokenHash: record.tokenHash,
+        expiresAt: String(record.expiresAt),
+        createdAt: String(record.createdAt),
+      })
+      .expireAt(key, record.expiresAt)
+      .sAdd(this.#subject(record.subject), record.series)
+      .exec()
+  }
+
+  async findBySeries(series: string): Promise<SeriesTokenRecord | null> {
+    const stored = await this.#redis.hGetAll(this.#series(series))
+    if (stored.series === undefined) {
+      return null
+    }
+
+    return {
+      series: stored.series,
+      subject: stored.subject,
+      tokenHash: stored.tokenHash,
+      expiresAt: Number(stored.expiresAt),
+      createdAt: Number(stored.createdAt),
+      previousTokenHash: stored.previousTokenHash,
+      rotatedAt: stored.rotatedAt === undefined ? undefined : Number(stored.rotatedAt),
+    }
+  }
+
+  async rotate(series: string, expectedTokenHash: string, rotation: SeriesTokenRotation): Promise<boolean> {
+    const swapped = await this.#redis.eval(ROTATE, {
+      keys: [this.#series(series)],
+      arguments: [expectedTokenHash, rotation.tokenHash, String(rotation.rotatedAt), String(rotation.expiresAt)],
+    })
+
+    return swapped === 1
+  }
+
+  async remove(series: string): Promise<void> {
+    await this.#redis.del(this.#series(series))
+  }
+
+  async removeBySubject(subject: string): Promise<void> {
+    const index = this.#subject(subject)
+    const all = await this.#redis.sMembers(index)
+
+    await this.#redis.del([index, ...all.map(series => this.#series(series))])
+  }
+
+  #series(series: string): string {
+    return `${this.#prefix}:series:${series}`
+  }
+
+  #subject(subject: string): string {
+    return `${this.#prefix}:subject:${subject}`
+  }
+}
+
+// One implementation behind both: the two base classes exist so an application can bind a store for each, and a
+// class extends only one of them.
+
+export class RedisRememberMeTokenStore extends RememberMeTokenStore {
+  readonly #tokens: RedisSeriesTokens
+
+  constructor(redis: RedisClient, prefix: string) {
+    super()
+    this.#tokens = new RedisSeriesTokens(redis, `${prefix}:remember`)
+  }
+
+  create = (record: SeriesTokenRecord) => this.#tokens.create(record)
+  findBySeries = (series: string) => this.#tokens.findBySeries(series)
+  rotate = (series: string, expected: string, rotation: SeriesTokenRotation) =>
+    this.#tokens.rotate(series, expected, rotation)
+  remove = (series: string) => this.#tokens.remove(series)
+  removeBySubject = (subject: string) => this.#tokens.removeBySubject(subject)
+}
+
+export class RedisRefreshTokenStore extends RefreshTokenStore {
+  readonly #tokens: RedisSeriesTokens
+
+  constructor(redis: RedisClient, prefix: string) {
+    super()
+    this.#tokens = new RedisSeriesTokens(redis, `${prefix}:refresh`)
+  }
+
+  create = (record: SeriesTokenRecord) => this.#tokens.create(record)
+  findBySeries = (series: string) => this.#tokens.findBySeries(series)
+  rotate = (series: string, expected: string, rotation: SeriesTokenRotation) =>
+    this.#tokens.rotate(series, expected, rotation)
+  remove = (series: string) => this.#tokens.remove(series)
+  removeBySubject = (subject: string) => this.#tokens.removeBySubject(subject)
 }

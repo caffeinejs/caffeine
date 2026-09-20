@@ -2,7 +2,13 @@ import type { JWTPayload } from 'jose'
 
 import { ErrHTTPUnauthorized } from '../../../error/http.js'
 import type { Principal } from '../../index.js'
-import { formatToken, hashToken, newSeries, newToken, parseToken, tokenMatches } from '../internal/series_token.js'
+import {
+  newSeriesToken,
+  parseToken,
+  readSeriesToken,
+  rotateSeriesToken,
+  type SeriesTokenPolicy,
+} from '../internal/series_token.js'
 import { JWTService } from '../jwt/jwt_service.js'
 import type { RefreshPrincipalResolver, RefreshTokenOptions } from './refresh_options.js'
 import type { RefreshTokenStore } from './refresh_token_store.js'
@@ -30,15 +36,15 @@ const DEFAULT_REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60
 /**
  * Bearer refresh-token grant: issues an access JWT paired with a durable, server-side, rotating
  * refresh token, and exchanges a refresh token for a fresh pair. Transport-agnostic — the caller
- * decides how the tokens travel (JSON body, header). Reuses the series+token model (rotate on use,
- * detect replay of a stale token as theft) shared with the cookie remember-me guard.
+ * decides how the tokens travel (JSON body, header). Shares the series+token model with the cookie scheme's
+ * remember-me: rotate on use, and take a token spent twice for what it is.
  */
 export class RefreshTokenService {
   readonly #jwt: JWTService
   readonly #store: RefreshTokenStore
   readonly #resolve: RefreshPrincipalResolver
   readonly #accessTTL: string | number
-  readonly #refreshTTLSeconds: number
+  readonly #policy: SeriesTokenPolicy
   readonly #claims: (principal: Principal) => JWTPayload
 
   constructor(jwt: JWTService, store: RefreshTokenStore, options: RefreshTokenOptions) {
@@ -46,66 +52,64 @@ export class RefreshTokenService {
     this.#store = store
     this.#resolve = options.resolve
     this.#accessTTL = options.accessTTL ?? DEFAULT_ACCESS_TTL
-    this.#refreshTTLSeconds = options.refreshTTL != null ? toSeconds(options.refreshTTL) : DEFAULT_REFRESH_TTL_SECONDS
     this.#claims = options.claims ?? defaultClaims
+    this.#policy = {
+      idleSeconds: options.refreshTTL != null ? toSeconds(options.refreshTTL) : DEFAULT_REFRESH_TTL_SECONDS,
+      absoluteSeconds: options.absoluteTTL != null ? toSeconds(options.absoluteTTL) : undefined,
+      // Strict single use (RFC 9700 §4.14.2). A request that lost the race has no new refresh token to be handed,
+      // so there is nothing a grace window could give it.
+      graceSeconds: 0,
+    }
   }
 
   /** Mint a fresh access + refresh pair for an authenticated principal (login / guest issuance). */
   async issue(principal: Principal): Promise<RefreshTokenPair> {
     const subject = subjectOf(principal)
-    const series = newSeries()
-    const token = newToken()
-    const expiresAt = nowSeconds() + this.#refreshTTLSeconds
-
-    await this.#store.create({ series, subject, tokenHash: hashToken(token), expiresAt })
     const accessToken = await this.#jwt.sign(this.#claims(principal), { subject, expiresIn: this.#accessTTL })
 
-    return { accessToken, refreshToken: formatToken(series, token), expiresIn: this.#accessTTL }
+    const { record, token } = newSeriesToken(subject, this.#policy)
+    await this.#store.create(record)
+
+    return { accessToken, refreshToken: token, expiresIn: this.#accessTTL }
   }
 
   /**
-   * Exchange a refresh token for a new pair: verifies + rotates the stored token, reloads the principal
-   * via the resolver, and re-signs the access JWT. Rejects (and revokes the series) on a stale-token
-   * replay (theft), an expired/unknown series, or a resolver that returns null.
+   * Exchanges a refresh token for a new pair: reloads the principal through the resolver, signs the access JWT,
+   * and only then spends the refresh token.
+   *
+   * A refresh token is good once. Presented a second time — by a thief, or by the client it was stolen from —
+   * it revokes the whole family, the pair handed out in between included, so both have to sign in again.
+   *
+   * @throws ErrRefreshTokenRejected for a malformed, unknown, expired or replayed token, and when the resolver no
+   * longer knows the subject. The message never says which.
    */
   async refresh(refreshToken: string): Promise<RefreshTokenPair> {
-    const parsed = parseToken(refreshToken)
-    if (!parsed) {
+    const reading = await readSeriesToken(this.#store, refreshToken, this.#policy)
+    if (reading.status !== 'current') {
       throw new ErrRefreshTokenRejected()
     }
 
-    const record = await this.#store.findBySeries(parsed.series)
-    if (!record) {
-      throw new ErrRefreshTokenRejected()
-    }
-
-    if (record.expiresAt <= nowSeconds()) {
-      await this.#store.remove(parsed.series)
-      throw new ErrRefreshTokenRejected()
-    }
-
-    // A live series presented with the wrong token means a stale/stolen token was replayed: revoke the
-    // whole series so neither the thief nor the victim can use it again.
-    if (!tokenMatches(parsed.token, record.tokenHash)) {
-      await this.#store.remove(parsed.series)
-      throw new ErrRefreshTokenRejected()
-    }
+    const { record } = reading
 
     const principal = await this.#resolve(record.subject, record)
     if (!principal) {
-      await this.#store.remove(parsed.series)
+      await this.#store.remove(record.series)
       throw new ErrRefreshTokenRejected()
     }
 
-    const nextToken = newToken()
-    const expiresAt = nowSeconds() + this.#refreshTTLSeconds
-    await this.#store.updateToken(parsed.series, hashToken(nextToken), expiresAt)
+    // Signed before the token is spent: a failure here must not leave the client holding a token that was rotated
+    // away and nothing to replace it with.
     const accessToken = await this.#jwt.sign(this.#claims(principal), {
       subject: record.subject,
       expiresIn: this.#accessTTL,
     })
 
-    return { accessToken, refreshToken: formatToken(parsed.series, nextToken), expiresIn: this.#accessTTL }
+    const rotated = await rotateSeriesToken(this.#store, refreshToken, record, this.#policy)
+    if (rotated.status !== 'rotated') {
+      throw new ErrRefreshTokenRejected()
+    }
+
+    return { accessToken, refreshToken: rotated.token, expiresIn: this.#accessTTL }
   }
 
   /** Revoke a single refresh credential (sign-out of one device). */
@@ -131,17 +135,21 @@ function subjectOf(principal: Principal): string {
   return sub
 }
 
+/** Every claim as `type: value`, a type that appears more than once becoming the list of its values. */
 function defaultClaims(principal: Principal): JWTPayload {
   const payload: JWTPayload = {}
+
   for (const claim of principal.claims()) {
-    payload[claim.type] = claim.value
+    if (!(claim.type in payload)) {
+      payload[claim.type] = claim.value
+      continue
+    }
+
+    const current = payload[claim.type]
+    payload[claim.type] = Array.isArray(current) ? [...(current as unknown[]), claim.value] : [current, claim.value]
   }
 
   return payload
-}
-
-function nowSeconds(): number {
-  return Math.floor(Date.now() / 1000)
 }
 
 // Duration → seconds for the store's absolute `expiresAt`. `jose` parses the access-token duration on

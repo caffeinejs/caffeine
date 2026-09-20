@@ -7,6 +7,10 @@ import { CookieAuthenticationHandler } from './cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie_options.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
+
+// A cookie is cleared with the attributes it was set with: a browser refuses a `__Host-` or `__Secure-` cookie
+// that arrives without `Secure`, the clearing one included.
+const CLEARED_WITH = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' }
 const EIGHT_HOURS = 8 * 60 * 60
 const THIRTY_DAYS = 30 * 24 * 60 * 60
 
@@ -76,12 +80,36 @@ describe('CookieAuthenticationHandler', () => {
       expect(result.ticket!.principal.isInRole('admin')).toBe(true)
     })
 
-    it('returns none for a tampered cookie', async () => {
+    // A cookie was presented and it did not open: a failure, not an absent credential. It is cleared, since it
+    // will never open, and the application is told.
+    it('fails on a tampered cookie, clears it, and reports it', async () => {
       const { value } = await sealedFor(false)
-      const { ctx } = makeCtx(`${value.slice(0, -3)}xyz`)
-      const result = await makeHandler().authenticate(ctx)
+      const { ctx, deleteCookie } = makeCtx(`${value.slice(0, -3)}xyz`)
+      const onFail = vi.fn()
+      const options = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET).onFail(onFail).build()
+
+      const result = await new CookieAuthenticationHandler('Cookie', options).authenticate(ctx)
+
       expect(result.succeeded).toBe(false)
-      expect(result.error).toBeUndefined()
+      expect(result.error).toBeInstanceOf(Error)
+      expect(onFail).toHaveBeenCalledWith(ctx, result.error)
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', CLEARED_WITH)
+    })
+
+    // The application could not say whether the session still stands. That is its failure to surface, not a reason
+    // to treat a good cookie as a forged one and sign the user out without a word.
+    it('lets an error thrown by validatePrincipal through, and leaves the cookie alone', async () => {
+      const { value } = await sealedFor(false)
+      const { ctx, deleteCookie } = makeCtx(value)
+      const options = new CookieAuthenticationOptionsBuilder()
+        .sessionSecret(SECRET)
+        .validatePrincipal(() => Promise.reject(new Error('the user store is unreachable')))
+        .build()
+
+      await expect(new CookieAuthenticationHandler('Cookie', options).authenticate(ctx)).rejects.toThrow(
+        'the user store is unreachable',
+      )
+      expect(deleteCookie).not.toHaveBeenCalled()
     })
   })
 
@@ -110,7 +138,7 @@ describe('CookieAuthenticationHandler', () => {
     it('clears the session cookie', async () => {
       const { ctx, deleteCookie } = makeCtx()
       await makeHandler().revoke(ctx)
-      expect(deleteCookie).toHaveBeenCalledWith('caf.session', { path: '/' })
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', CLEARED_WITH)
     })
   })
 
@@ -250,7 +278,7 @@ describe('CookieAuthenticationHandler', () => {
 
       const result = await handler.authenticate(ctx)
       expect(result.succeeded).toBe(false)
-      expect(deleteCookie).toHaveBeenCalledWith('caf.session', { path: '/' })
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', CLEARED_WITH)
     })
 
     it('lets the hook swap in a refreshed principal', async () => {

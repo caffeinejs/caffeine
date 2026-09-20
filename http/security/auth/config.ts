@@ -50,6 +50,7 @@ const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number(
 export const refreshConfigSchema = $t.Object({
   accessTTL: $t.Optional(ttl()),
   refreshTTL: $t.Optional(ttl()),
+  absoluteTTL: $t.Optional(ttl()),
 })
 
 /**
@@ -200,6 +201,7 @@ const cookieSchemeSchema = $t.Object({
   rememberMe: $t.Optional($t.Boolean()),
   rememberMeCookieName: $t.Optional($t.String()),
   rememberMeRotationGraceSeconds: $t.Optional($t.Number()),
+  rememberMeAbsoluteMaxAge: $t.Optional($t.Number()),
   challengeMode: $t.Optional(challengeMode()),
   loginPath: $t.Optional($t.String()),
   accessDeniedPath: $t.Optional($t.String()),
@@ -220,6 +222,7 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
     rememberMe: (b, v: boolean) => b.rememberMe(v),
     rememberMeCookieName: (b, v: string) => b.rememberMeCookieName(v),
     rememberMeRotationGraceSeconds: (b, v: number) => b.rememberMeRotationGraceSeconds(v),
+    rememberMeAbsoluteMaxAge: (b, v: number) => b.rememberMeAbsoluteMaxAge(v),
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
     loginPath: (b, v: string) => b.loginPath(v),
     accessDeniedPath: (b, v: string) => b.accessDeniedPath(v),
@@ -399,5 +402,6 @@ export const refresh: SchemeConfigSpec<RefreshTokenOptionsBuilder> = {
   appliers: {
     accessTTL: (b, v: string | number) => b.accessTTL(v),
     refreshTTL: (b, v: string | number) => b.refreshTTL(v),
+    absoluteTTL: (b, v: string | number) => b.absoluteTTL(v),
   },
 }

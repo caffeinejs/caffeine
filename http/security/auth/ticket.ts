@@ -1,16 +1,8 @@
 import type { Principal } from '../index.js'
 
 /**
- * State that travels with a sign-in, a challenge, or a sign-out.
- *
- * The caller frequently knows something about the operation that the handler cannot work out for itself.
- * Where to send the user after they sign in, whether this session should outlive the browser, when it
- * should expire regardless.
- *
- * The interface has always accepted a `properties` bag on `challenge`/`forbid`/`revoke`, but nothing read
- * it — every handler narrowed the parameter away — so the only way to express "come back to /reports after
- * login" was to reimplement the challenge. The fields below are the ones handlers actually honour;
- * anything else belongs in {@link items}.
+ * What the caller of a sign-in or a challenge knows and the handler cannot work out for itself: where to send the
+ * user afterwards, whether the session should outlive the browser.
  */
 export interface AuthenticationProperties {
   /**
@@ -22,14 +14,11 @@ export interface AuthenticationProperties {
    * shape of an open redirect.
    */
   redirectURI?: string
-  /** Whether the session should survive the browser closing. Cookie schemes write a `Max-Age` when set. */
+  /**
+   * Whether the session should survive the browser closing. The cookie scheme writes a `Max-Age` when set, or
+   * issues a durable remember-me credential when it has a store for one.
+   */
   isPersistent?: boolean
-  /** Absolute expiry for the issued session, overriding the scheme's configured lifetime. */
-  expiresUTC?: Date
-  /** Whether the session may be refreshed/slid forward. */
-  allowRefresh?: boolean
-  /** Arbitrary caller state, round-tripped verbatim. */
-  items?: Record<string, string>
 }
 
 export class AuthenticationTicket {

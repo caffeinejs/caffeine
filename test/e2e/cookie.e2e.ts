@@ -33,6 +33,9 @@ const users = new Map<string, CredentialUser>()
 /** Subjects the application no longer accepts, which `validatePrincipal` consults on every request. */
 const revoked = new Set<string>()
 
+/** Set while the application cannot tell whether a session still stands, as when its user store is down. */
+let outage = false
+
 class Users extends UserProvider {
   findByIdentifier(identifier: string): CredentialUser | null {
     return users.get(identifier) ?? null
@@ -117,9 +120,13 @@ describe('cookie session behind a credentials login', () => {
                   .secure(false)
                   .loginPath('/login')
                   .accessDeniedPath('/denied')
-                  .validatePrincipal((_ctx, principal) =>
-                    revoked.has(String(principal.findFirst('sub')?.value)) ? null : principal,
-                  ),
+                  .validatePrincipal((_ctx, principal) => {
+                    if (outage) {
+                      throw new Error('the user store is unreachable')
+                    }
+
+                    return revoked.has(String(principal.findFirst('sub')?.value)) ? null : principal
+                  }),
               )
               .addCredentials(),
           )
@@ -234,6 +241,32 @@ describe('cookie session behind a credentials login', () => {
     }
   })
 
+  // Not being able to tell is not the same as the answer being no. It used to be taken for a forged cookie, so an
+  // outage signed everybody out without a word.
+  it('answers with a server error while it cannot tell whether a session stands, and keeps the session', async () => {
+    const browser = new Browser()
+    await login(browser, 'alice', 'wonderland')
+
+    outage = true
+    try {
+      expect((await browser.xhr(`${origin}/private`)).status).toBe(500)
+      expect(await browser.cookie(origin, SESSION_COOKIE)).toBeDefined()
+    } finally {
+      outage = false
+    }
+
+    expect((await browser.xhr(`${origin}/private`)).status).toBe(200)
+  })
+
+  it('tells every cache to keep its hands off a response that sets, clears or asks for a session', async () => {
+    const browser = new Browser()
+
+    expect((await browser.navigate(`${origin}/private`)).hops[0].headers['cache-control']).toBe('no-store')
+    expect((await browser.xhr(`${origin}/private`)).headers['cache-control']).toBe('no-store')
+    expect((await login(browser, 'alice', 'wonderland')).headers['cache-control']).toBe('no-store')
+    expect((await browser.postJSON(`${origin}/auth/logout`, {})).headers['cache-control']).toBe('no-store')
+  })
+
   it('treats a tampered cookie as no session at all, never as a server error', async () => {
     const browser = new Browser()
     await login(browser, 'alice', 'wonderland')
@@ -265,5 +298,59 @@ describe('cookie session behind a credentials login', () => {
     await login(browser, 'alice', 'wonderland')
 
     expect((await browser.navigate(`${origin}/admin`)).status).toBe(200)
+  })
+})
+
+// A browser refuses a `__Host-` cookie that arrives without `Secure`, and that goes for the one that clears it.
+// Cleared with `Path` alone, it stayed where it was, and signing out did nothing.
+describe('a session cookie with the __Host- prefix', () => {
+  const NAME = '__Host-session'
+
+  it('is cleared at sign-out with the attributes it was set with, so the browser lets it go', async () => {
+    const container = new CaffeineIoC()
+    container.bind(Users, t => t.toSelf().extends())
+    container.bind(PasswordHasher, t => t.toValue(hasher))
+    users.set('alice', { id: 'alice', passwordHash: await hasher.hash('wonderland') })
+
+    const running = await startApp(
+      app =>
+        app
+          .authentication(auth =>
+            auth.addCookie(c => c.sessionSecret(SESSION_SECRET).cookieName(NAME)).addCredentials(),
+          )
+          .mount(routes()),
+      { container },
+    )
+
+    try {
+      const client = new Browser()
+      const signedIn = await client.postJSON(`${running.origin}/auth/login`, {
+        identifier: 'alice',
+        password: 'wonderland',
+      })
+      const set = signedIn.headersDistinct['set-cookie']!.find(line => line.startsWith(`${NAME}=`))!
+
+      const signedOut = await client.xhr(`${running.origin}/auth/logout`, {
+        method: 'POST',
+        headers: { cookie: set.split(';', 1)[0], 'content-type': 'application/json' },
+        body: '{}',
+      })
+      const cleared = signedOut.headersDistinct['set-cookie']!.find(line => line.startsWith(`${NAME}=`))!
+
+      expect(cleared).toMatch(/;\s*Secure/i)
+      expect(cleared).toMatch(/;\s*Path=\//i)
+
+      // The browser's own verdict. The specs talk plain http, where such a cookie cannot exist, so the two lines
+      // are replayed to a jar as the https origin a real deployment would be.
+      const https = 'https://localhost/'
+      const jar = new Browser()
+      await jar.setCookieLine(https, set)
+      expect(await jar.cookie(https, NAME)).toBeDefined()
+
+      await jar.setCookieLine(https, cleared)
+      expect(await jar.cookie(https, NAME)).toBeUndefined()
+    } finally {
+      await running.close()
+    }
   })
 })

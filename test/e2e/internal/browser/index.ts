@@ -43,6 +43,7 @@ export interface Hop {
   readonly url: string
   readonly status: number
   readonly location: string | undefined
+  readonly headers: IncomingHttpHeaders
 }
 
 export interface Page extends BrowserResponse {
@@ -129,6 +130,14 @@ export class Browser {
     await this.#jar.setCookie(cookie.toString(), url)
   }
 
+  /**
+   * Hands the jar one `Set-Cookie` line as if `url` had sent it, and lets the jar decide what to do with it. A line
+   * the jar refuses changes nothing, which is what a browser does with it too.
+   */
+  async setCookieLine(url: string, line: string): Promise<void> {
+    await this.#jar.setCookie(line, url, { ignoreError: true })
+  }
+
   /** Rewrites the value of a cookie the jar holds, leaving every attribute as the server set it. */
   async tamperCookie(url: string, name: string, change: (value: string) => string): Promise<void> {
     const cookie = await this.#held(url, name)
@@ -162,7 +171,7 @@ export class Browser {
       const response = await this.#send(current, options)
       const location = response.headers.location
 
-      hops.push({ url: current, status: response.status, location })
+      hops.push({ url: current, status: response.status, location, headers: response.headers })
 
       if (!REDIRECTS.has(response.status) || location === undefined) {
         return Object.assign(response, { hops })

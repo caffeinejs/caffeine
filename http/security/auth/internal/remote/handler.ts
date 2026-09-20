@@ -4,6 +4,7 @@ import type { Context } from '../../../../context.js'
 import { Claim, Identity, Principal } from '../../../index.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
+import { noStore } from '../no_store.js'
 import { challengeHeaders, type ChallengeMode, isSafeReturnPath, shouldRedirectChallenge } from './config.js'
 import { ErrOAuthCallback, ErrOAuthSession } from './errors.js'
 import { redactPii } from './pii.js'
@@ -267,6 +268,8 @@ export abstract class RemoteAuthenticationHandler<
     )
 
     ctx.cookie(this.#stateCookieNameFor(state), stateCookie, this.cookieOpts(STATE_TTL_SECONDS))
+    // The response sets the state cookie and, whichever way it is answered, carries the URL the state rides in.
+    noStore(ctx)
 
     const authURL = new URL(endpoint)
     authURL.searchParams.set('client_id', this.options.clientID)
@@ -430,6 +433,7 @@ export abstract class RemoteAuthenticationHandler<
       }
     } finally {
       ctx.deleteCookie(this.options.sessionCookieName, this.cookieOpts())
+      noStore(ctx)
     }
   }
 
@@ -602,6 +606,7 @@ export abstract class RemoteAuthenticationHandler<
     }
 
     ctx.cookie(this.options.sessionCookieName, cookieValue, this.cookieOpts(ttl))
+    noStore(ctx)
   }
 
   protected cookieOpts(maxAge?: number): Record<string, unknown> {

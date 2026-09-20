@@ -4,12 +4,25 @@ import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { buildCredentialPrincipal, type UserProvider } from '../credentials/index.js'
 import { BaseAuthenticationHandler } from '../handler.js'
+import { noStore } from '../internal/no_store.js'
 import { challengeHeaders, isSafeReturnPath, shouldRedirectChallenge } from '../internal/remote/config.js'
+import {
+  newSeriesToken,
+  parseToken,
+  readSeriesToken,
+  rotateSeriesToken,
+  type SeriesTokenPolicy,
+} from '../internal/series_token.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
-import { formatRemember, hashToken, newSeries, newToken, parseRemember, tokenMatches } from './_remember.js'
 import { sealSession, unsealSession } from './_session_cookie.js'
 import type { CookieAuthenticationOptions } from './cookie_options.js'
-import type { RememberMeRecord, RememberMeTokenStore } from './remember_me_token_store.js'
+import type { RememberMeTokenStore } from './remember_me_token_store.js'
+
+/**
+ * The claim a principal carries when the session was restored from a remember-me credential instead of a
+ * sign-in. A route that must not accept that — a change of password, a payment — asks for its absence.
+ */
+export const REMEMBERED_CLAIM = 'remembered'
 
 interface SealedClaim {
   type: string
@@ -61,27 +74,42 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   async authenticate(ctx: Context): Promise<AuthenticateResult> {
     const raw = ctx.req.cookie(this.options.cookieName!)
+    let unreadable: Error | undefined
+
     if (raw) {
+      let fromCookie: Principal | undefined
+
+      // Only the unsealing is guarded. `validatePrincipal` runs outside it: when the application cannot tell
+      // whether a session still stands — its store is down — that is an error to surface, not a reason to treat
+      // a good cookie as a forged one and quietly sign the user out.
       try {
-        const principal = await this.#validate(ctx, await this.#principalFromCookie(raw))
+        fromCookie = await this.#principalFromCookie(raw)
+      } catch (e) {
+        unreadable = e as Error
+      }
+
+      if (fromCookie !== undefined) {
+        const principal = await this.#validate(ctx, fromCookie)
         if (principal) {
           return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
         }
 
         // The hook rejected the session. Clear the cookie so the browser stops presenting a credential
-        // that will never be accepted again, then fall through as if none had been sent.
-        ctx.deleteCookie(this.options.cookieName!, { path: this.options.path })
+        // that will never be accepted again, then go on as if none had been sent.
+        this.#clearSessionCookie(ctx)
         return AuthenticateResult.none()
-      } catch {
-        // Expired or tampered session cookie: fall through to the remember-me path (if any).
       }
+
+      // Expired, tampered with, or sealed under another secret: it will never be accepted, so it goes too.
+      this.#clearSessionCookie(ctx)
+      await this.options.onFail?.(ctx, unreadable!)
     }
 
     if (this.#durable()) {
       return this.#refreshFromRemember(ctx)
     }
 
-    return AuthenticateResult.none()
+    return unreadable === undefined ? AuthenticateResult.none() : AuthenticateResult.fail(unreadable)
   }
 
   /**
@@ -120,15 +148,15 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   override async revoke(ctx: Context): Promise<void> {
-    ctx.deleteCookie(this.options.cookieName!, { path: this.options.path })
+    this.#clearSessionCookie(ctx)
 
     if (this.#durable()) {
       const rawRemember = ctx.req.cookie(this.options.rememberMeCookieName!)
-      const parsed = rawRemember ? parseRemember(rawRemember) : null
+      const parsed = rawRemember ? parseToken(rawRemember) : null
       if (parsed) {
         await this.#rememberStore!.get().remove(parsed.series)
       }
-      ctx.deleteCookie(this.options.rememberMeCookieName!, { path: this.options.path })
+      this.#clearRememberCookie(ctx)
     }
   }
 
@@ -151,6 +179,8 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     }
 
     const location = this.#loginLocation(ctx, properties)
+    noStore(ctx)
+
     // `?? 'auto'` rather than `!`: the builder defaults it, but a directly-constructed handler leaves it
     // undefined and the two paths must not disagree about the default.
     if (shouldRedirectChallenge(this.options.challengeMode ?? 'auto', challengeHeaders(ctx))) {
@@ -234,86 +264,71 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
     ctx.cookie(this.options.cookieName!, sealed, this.#cookieOpts(persistent ? ttl : undefined))
+    noStore(ctx)
   }
 
   // --- durable remember-me --------------------------------------------------
 
   async #issueRemember(ctx: Context, principal: Principal): Promise<void> {
-    // Coercing a missing `sub` to '' used to mint a record no `findById` could ever resolve, and whose
-    // `removeBySubject('')` would either revoke nothing or revoke every other subjectless record. The
-    // refresh-token grant already refuses the same principal for the same reason.
+    // Coercing a missing `sub` to '' would mint a record no `findById` could ever resolve, and whose
+    // `removeBySubject('')` would either revoke nothing or revoke every other subjectless record.
     const sub = principal.findFirst('sub')?.value
     if (typeof sub !== 'string' || sub.length === 0) {
       throw new Error('Cannot issue a remember-me credential: principal has no "sub" claim')
     }
 
-    const subject = sub
-    const series = newSeries()
-    const token = newToken()
-    const expiresAt = this.#now() + this.options.rememberMeMaxAge!
-    await this.#rememberStore!.get().create({ series, subject, tokenHash: hashToken(token), expiresAt })
-    this.#setRememberCookie(ctx, series, token)
+    const { record, token } = newSeriesToken(sub, this.#rememberPolicy())
+    await this.#rememberStore!.get().create(record)
+    this.#setRememberCookie(ctx, token)
   }
 
+  /**
+   * Restores a session from the remember-me credential: reloads the user, and spends the token.
+   *
+   * A request that lost the rotation to a sibling presenting the same token — a browser sends a page's requests in
+   * parallel, each with the cookie as it stood when the batch began — is let through inside the grace window
+   * without a token of its own; the sibling's response carries the new one. Outside the window the same token was
+   * spent twice, which is what a stolen copy looks like: the series is revoked and everyone signs in again.
+   */
   async #refreshFromRemember(ctx: Context): Promise<AuthenticateResult> {
-    const rawRemember = ctx.req.cookie(this.options.rememberMeCookieName!)
-    if (!rawRemember) {
-      return AuthenticateResult.none()
-    }
-
-    const parsed = parseRemember(rawRemember)
-    if (!parsed) {
-      this.#clearRememberCookie(ctx)
+    const presented = ctx.req.cookie(this.options.rememberMeCookieName!)
+    if (!presented) {
       return AuthenticateResult.none()
     }
 
     const store = this.#rememberStore!.get()
-    const record = await store.findBySeries(parsed.series)
-    if (!record) {
-      this.#clearRememberCookie(ctx)
-      return AuthenticateResult.none()
+    const policy = this.#rememberPolicy()
+
+    const reading = await readSeriesToken(store, presented, policy)
+    if (reading.status === 'rejected') {
+      return this.#rememberRefused(ctx, reading.reason)
     }
 
-    if (record.expiresAt <= this.#now()) {
-      await store.remove(parsed.series)
-      this.#clearRememberCookie(ctx)
-      return AuthenticateResult.none()
-    }
-
-    // A token that is neither current nor within the rotation grace window is a replay: the series is
-    // known, so someone holds a copy of a credential that was already spent. Invalidate the series and
-    // force the legitimate holder to re-authenticate too — that is the point of the detection.
-    const current = tokenMatches(parsed.token, record.tokenHash)
-    const superseded = !current && this.#withinRotationGrace(parsed.token, record)
-    if (!current && !superseded) {
-      await store.remove(parsed.series)
-      this.#clearRememberCookie(ctx)
-      return AuthenticateResult.none()
-    }
-
-    const user = await this.#userProvider!.get().findById(record.subject)
+    const user = await this.#userProvider!.get().findById(reading.record.subject)
     if (!user) {
-      await store.remove(parsed.series)
-      this.#clearRememberCookie(ctx)
-      return AuthenticateResult.none()
+      await store.remove(reading.record.series)
+      return this.#rememberRefused(ctx, 'unknown')
     }
 
-    const principal = buildCredentialPrincipal(user, { scheme: this.#name, roleClaimType: this.options.roleClaimType })
+    const remembered = buildCredentialPrincipal(user, { scheme: this.#name, roleClaimType: this.options.roleClaimType })
+    remembered.identities[0].addClaim(new Claim(REMEMBERED_CLAIM, true, ''))
 
-    // Rotate the token (single-use) and extend expiry — but only for the request holding the current
-    // token. A superseded-but-in-grace token belongs to a request that raced the one which already
-    // rotated; rotating again would spend a second token on its behalf and hand the browser a cookie
-    // whose ordering against the winner's is undefined. Leave both the record and the cookie alone and
-    // let the winner's response carry the new token.
-    if (current) {
-      const rotated = newToken()
-      await store.updateToken(parsed.series, {
-        tokenHash: hashToken(rotated),
-        previousTokenHash: record.tokenHash,
-        rotatedAt: this.#now(),
-        expiresAt: this.#now() + this.options.rememberMeMaxAge!,
-      })
-      this.#setRememberCookie(ctx, parsed.series, rotated)
+    // The same say the application has over a session cookie: a user it no longer accepts is not remembered back in.
+    const principal = await this.#validate(ctx, remembered)
+    if (!principal) {
+      await store.remove(reading.record.series)
+      return this.#rememberRefused(ctx, 'unknown')
+    }
+
+    if (reading.status === 'current') {
+      const rotated = await rotateSeriesToken(store, presented, reading.record, policy)
+      if (rotated.status === 'rejected') {
+        return this.#rememberRefused(ctx, rotated.reason)
+      }
+
+      if (rotated.status === 'rotated') {
+        this.#setRememberCookie(ctx, rotated.token)
+      }
     }
 
     await this.#writeSessionCookie(ctx, principal, this.options.maxAge!, false)
@@ -321,48 +336,38 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
   }
 
-  /**
-   * Whether a superseded token is recent enough to be a raced in-flight request rather than a replay.
-   *
-   * Both halves must hold: the token has to match the hash this series most recently rotated away from,
-   * and that rotation has to be inside the window. A store that does not persist the rotation fields
-   * fails this check and falls through to theft detection — the conservative direction.
-   */
-  #withinRotationGrace(token: string, record: RememberMeRecord): boolean {
-    const grace = this.options.rememberMeRotationGraceSeconds!
+  async #rememberRefused(ctx: Context, reason: string): Promise<AuthenticateResult> {
+    this.#clearRememberCookie(ctx)
 
-    // `0` is an off switch, not a zero-width window. `#now()` has second granularity, so a plain
-    // `elapsed > grace` would still admit a replay landing in the same second as the rotation it
-    // superseded — which is exactly the replay an operator choosing strict single-use is asking to catch.
-    if (grace <= 0) {
-      return false
-    }
+    const error = new Error(`Remember-me credential refused: ${reason}`)
+    await this.options.onFail?.(ctx, error)
 
-    if (record.previousTokenHash === undefined || record.rotatedAt === undefined) {
-      return false
-    }
-
-    if (this.#now() - record.rotatedAt > grace) {
-      return false
-    }
-
-    return tokenMatches(token, record.previousTokenHash)
+    return AuthenticateResult.fail(error)
   }
 
-  #setRememberCookie(ctx: Context, series: string, token: string): void {
-    ctx.cookie(
-      this.options.rememberMeCookieName!,
-      formatRemember(series, token),
-      this.#cookieOpts(this.options.rememberMeMaxAge),
-    )
+  #rememberPolicy(): SeriesTokenPolicy {
+    return {
+      idleSeconds: this.options.rememberMeMaxAge!,
+      absoluteSeconds: this.options.rememberMeAbsoluteMaxAge,
+      graceSeconds: this.options.rememberMeRotationGraceSeconds!,
+    }
+  }
+
+  #setRememberCookie(ctx: Context, token: string): void {
+    ctx.cookie(this.options.rememberMeCookieName!, token, this.#cookieOpts(this.options.rememberMeMaxAge))
+    noStore(ctx)
+  }
+
+  // A cookie is cleared with the attributes it was set with. A browser refuses a `__Host-` or `__Secure-` cookie
+  // that arrives without `Secure` — the clearing one included, so signing out would leave it in place.
+  #clearSessionCookie(ctx: Context): void {
+    ctx.deleteCookie(this.options.cookieName!, this.#cookieOpts())
+    noStore(ctx)
   }
 
   #clearRememberCookie(ctx: Context): void {
-    ctx.deleteCookie(this.options.rememberMeCookieName!, { path: this.options.path })
-  }
-
-  #now(): number {
-    return Math.floor(Date.now() / 1000)
+    ctx.deleteCookie(this.options.rememberMeCookieName!, this.#cookieOpts())
+    noStore(ctx)
   }
 
   #cookieOpts(maxAge?: number): Record<string, unknown> {

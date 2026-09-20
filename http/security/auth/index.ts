@@ -7,8 +7,7 @@ export {
   type CookieAuthenticationOptions,
   CookieAuthenticationOptionsBuilder,
   type CookieSameSite,
-  type RememberMeRecord,
-  type RememberMeRotation,
+  REMEMBERED_CLAIM,
   RememberMeTokenStore,
 } from './cookie/index.js'
 export {
@@ -61,10 +60,10 @@ export {
   type RefreshTokenOptions,
   RefreshTokenOptionsBuilder,
   type RefreshTokenPair,
-  type RefreshTokenRecord,
   RefreshTokenService,
   RefreshTokenStore,
 } from './refresh/index.js'
 export { AuthenticationSchemeProvider } from './scheme_provider.js'
+export { type SeriesTokenRecord, type SeriesTokenRotation, SeriesTokenStore } from './internal/series_token.js'
 export { AuthenticationService } from './service.js'
 export { AuthenticateResult, AuthenticationTicket } from './ticket.js'

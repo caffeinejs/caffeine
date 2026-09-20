@@ -56,7 +56,7 @@ describe('ForwardAuthenticationHandler', () => {
       // The delegate is the scheme that produced the result, so it is the one that can name the reason it
       // rejected the credential. Forwarding stops that at the door if it drops the argument.
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { items: { realm: 'test' } }
+      const props = { redirectURI: '/after-challenge' }
       const previous = AuthenticateResult.fail(new Error('expired'))
 
       await forward.challenge(ctx, props, previous)
@@ -68,7 +68,7 @@ describe('ForwardAuthenticationHandler', () => {
   describe('forbid()', () => {
     it('delegates to the resolved handler, passing properties', async () => {
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { items: { reason: 'access denied' } }
+      const props = { redirectURI: '/after-forbid' }
 
       await forward.forbid(ctx, props)
 
@@ -90,7 +90,7 @@ describe('ForwardAuthenticationHandler', () => {
   describe('revoke()', () => {
     it('delegates to the resolved handler, passing properties', async () => {
       const { forward, handler } = setup((_ctx, s) => s)
-      const props = { items: { token: 'abc' } }
+      const props = { redirectURI: '/after-revoke' }
 
       await forward.revoke(ctx, props)
 

@@ -16,10 +16,10 @@ import {
   PasswordHasher,
   Post,
   Args,
-  type RememberMeRecord,
-  type RememberMeRotation,
   RememberMeTokenStore,
   ScryptPasswordHasher,
+  type SeriesTokenRecord,
+  type SeriesTokenRotation,
   UserProvider,
   createWebApplication,
   fastifyAdapterFactory,
@@ -44,23 +44,24 @@ class TestUserProvider extends UserProvider {
 }
 
 class InMemoryRememberStore extends RememberMeTokenStore {
-  readonly records = new Map<string, RememberMeRecord>()
+  readonly records = new Map<string, SeriesTokenRecord>()
   rotations = 0
-  create(record: RememberMeRecord): void {
+  create(record: SeriesTokenRecord): void {
     this.records.set(record.series, { ...record })
   }
-  findBySeries(series: string): RememberMeRecord | null {
-    return this.records.get(series) ?? null
-  }
-  updateToken(series: string, rotation: RememberMeRotation): void {
-    this.rotations++
+  findBySeries(series: string): SeriesTokenRecord | null {
     const r = this.records.get(series)
-    if (r) {
-      r.tokenHash = rotation.tokenHash
-      r.previousTokenHash = rotation.previousTokenHash
-      r.rotatedAt = rotation.rotatedAt
-      r.expiresAt = rotation.expiresAt
+    return r === undefined ? null : { ...r }
+  }
+  rotate(series: string, expectedTokenHash: string, rotation: SeriesTokenRotation): boolean {
+    const r = this.records.get(series)
+    if (r === undefined || r.tokenHash !== expectedTokenHash) {
+      return false
     }
+
+    this.rotations++
+    Object.assign(r, rotation)
+    return true
   }
 
   remove(series: string): void {

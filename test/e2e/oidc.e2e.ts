@@ -142,6 +142,22 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       expect(home.json()).toEqual({ sub: 'alice', email: 'alice@example.com' })
     })
 
+    // Every one of these sets a session or state cookie, or carries the URL the state rides in. A shared cache
+    // that kept one would hand a session, or a sign-in round trip, to the next caller of the URL.
+    it('tells every cache to keep its hands off the challenge, the callback and the sign-out', async () => {
+      const browser = new Browser()
+
+      const login = await browser.navigate(`${ORIGIN}/me`)
+      expect(login.hops[0].headers['cache-control']).toBe('no-store')
+      expect((await new Browser().xhr(`${ORIGIN}/me`)).headers['cache-control']).toBe('no-store')
+
+      const home = await springLogin(browser, login, 'alice', 'wonderland')
+      const callback = home.hops.find(hop => hop.url.startsWith(`${ORIGIN}/oidc/callback`))!
+      expect(callback.headers['cache-control']).toBe('no-store')
+
+      expect((await browser.postJSON(`${ORIGIN}/logout`, {})).headers['cache-control']).toBe('no-store')
+    })
+
     it('sends PKCE, state and nonce on the authorization request', async () => {
       const login = await new Browser().navigate(`${ORIGIN}/me`)
       const authorize = new URL(login.hops[0].location!)
