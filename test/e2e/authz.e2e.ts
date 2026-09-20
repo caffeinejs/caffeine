@@ -228,6 +228,7 @@ function programmatic() {
       .authorize({ roles: ['manager'] })
       .handler(ok),
     newRouter('/claim').authorize({ policy: 'engineering' }).get('/', ok),
+    newRouter('/groups').authorize({ policy: 'on-call' }).get('/', ok),
     // Two declarations on one chain.
     newRouter('/stacked')
       .get('/')
@@ -331,6 +332,13 @@ const MATRIX: Array<[string, string, Record<string, string>, Partial<Record<Call
     { anonymous: 401, manager: 403, admin: 403, adminManager: 200 },
   ],
   ['router: a claim policy', '/p/claim', {}, { anonymous: 401, user: 403, manager: 200 }],
+  // A token carries `groups` as a list, as identity providers send it. The policy asks for one of its members.
+  [
+    'router: a claim policy asked of a claim that holds a list',
+    '/p/groups',
+    {},
+    { anonymous: 401, user: 403, manager: 200, admin: 200, adminManager: 403 },
+  ],
   [
     'router: two declarations on one route',
     '/p/stacked',
@@ -362,10 +370,10 @@ describe('what an authorization declaration means to each caller', () => {
   beforeAll(async () => {
     credentials = {
       anonymous: undefined,
-      user: await bearer('user', { roles: ['user'], dept: 'sales' }),
-      manager: await bearer('manager', { roles: ['manager'], dept: 'eng' }),
-      admin: await bearer('admin', { roles: ['admin'], dept: 'sales' }),
-      adminManager: await bearer('admin-manager', { roles: ['admin', 'manager'], dept: 'eng' }),
+      user: await bearer('user', { roles: ['user'], dept: 'sales', groups: ['sales', 'emea'] }),
+      manager: await bearer('manager', { roles: ['manager'], dept: 'eng', groups: ['eng', 'on-call'] }),
+      admin: await bearer('admin', { roles: ['admin'], dept: 'sales', groups: 'on-call' }),
+      adminManager: await bearer('admin-manager', { roles: ['admin', 'manager'], dept: 'eng', groups: [] }),
     }
 
     running = await startApp(app =>
@@ -374,6 +382,7 @@ describe('what an authorization declaration means to each caller', () => {
         .authorization(authz =>
           authz
             .addPolicy('engineering', p => p.requireAuthenticated().claim('dept', 'eng'))
+            .addPolicy('on-call', p => p.requireAuthenticated().claim('groups', 'on-call'))
             .addPolicy('internal', p => p.assert(ctx => ctx.req.header('x-internal') === 'yes'))
             .addPolicy('owner', p => p.resource<Doc>((user, doc) => doc.owner === user.findFirst('sub')?.value))
             .requireAuthenticatedByDefault(),

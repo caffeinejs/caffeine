@@ -1,9 +1,8 @@
-import { Claim, newRouter } from '@caffeinejs/http'
+import { Claim, type OAuth2AuthenticationOptionsBuilder, newRouter } from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'
 import { Browser, type Page } from './internal/browser/index.js'
-import type { OAuth2OptionsBuilder } from './internal/builders.js'
 import { OAUTH_SERVER, oauthServerUp, springLogin } from './internal/spring/index.js'
 import { required } from './internal/strict.js'
 import { startStubProvider } from './internal/stub_provider.js'
@@ -15,7 +14,7 @@ const SESSION_SECRET = 'spring-oauth2-e2e-session-secret-32!'
 
 const SCHEME = 'spring-oauth2'
 
-function spring(o: OAuth2OptionsBuilder): OAuth2OptionsBuilder {
+function spring(o: OAuth2AuthenticationOptionsBuilder): OAuth2AuthenticationOptionsBuilder {
   return o
     .clientID('caffeine-oauth2')
     .clientSecret('caffeine-oauth2-secret')
@@ -47,7 +46,10 @@ async function signIn(browser: Browser, url: string, username = 'alice', passwor
 }
 
 /** Starts an application for one case and closes it whatever the case does: every one needs the same port. */
-async function withApp(configure: (o: OAuth2OptionsBuilder) => unknown, run: () => Promise<void>): Promise<void> {
+async function withApp(
+  configure: (o: OAuth2AuthenticationOptionsBuilder) => unknown,
+  run: () => Promise<void>,
+): Promise<void> {
   const running = await startApp(
     app => app.authentication(auth => auth.addOAuth2(SCHEME, o => configure(spring(o)))).mount(routes()),
     { port: PORT },
@@ -136,7 +138,7 @@ describe.skipIf(!up)('OAuth 2.0 sign-in against Spring Authorization Server', ()
   // both halves before they are base64-encoded. This client takes the header only, and its secret holds a `+`,
   // which a server decodes as a space when it arrives unencoded.
   describe('with a client that takes its credentials as HTTP Basic only', () => {
-    const basicOnly = (o: OAuth2OptionsBuilder) =>
+    const basicOnly = (o: OAuth2AuthenticationOptionsBuilder) =>
       o.clientID('caffeine-oauth2-basic').clientSecret('caffeine+oauth2/basic:secret%')
 
     it('signs in once told to send them that way', async () => {

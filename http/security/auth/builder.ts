@@ -550,6 +550,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     for (const keyOrHandler of this.#schemes.values()) {
       if (keyOrHandler instanceof ForwardAuthenticationHandler) {
         keyOrHandler.setSchemeProvider(schemeProvider)
+        keyOrHandler.setService(service)
       }
 
       // Resolve each opaque-token store to a Provider and inject it. Reading the raw registration

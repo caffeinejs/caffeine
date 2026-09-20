@@ -1,7 +1,5 @@
-import { JWTService } from '@caffeinejs/http'
+import { type JWTAuthenticationOptionsBuilder, JWTService } from '@caffeinejs/http'
 import { SignJWT } from 'jose'
-
-import type { JWTOptionsBuilder } from './builders.js'
 
 /**
  * Locally minted HS256 access tokens, for the specs whose subject is authorization rather than where a token
@@ -15,7 +13,7 @@ const AUDIENCE = 'e2e-api'
 const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIENCE, expiresIn: '5m' })
 
 /** Configures a JWT bearer scheme that accepts what {@link bearer} mints. */
-export function localJWT(j: JWTOptionsBuilder): JWTOptionsBuilder {
+export function localJWT(j: JWTAuthenticationOptionsBuilder): JWTAuthenticationOptionsBuilder {
   return j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE)
 }
 

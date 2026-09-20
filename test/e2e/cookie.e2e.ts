@@ -8,6 +8,7 @@ import {
   PasswordHasher,
   ScryptPasswordHasher,
   UserProvider,
+  isSafeReturnPath,
   newRouter,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -64,6 +65,20 @@ function routes() {
 
       await auth.persist(ctx, SCHEME, new AuthenticationTicket(principal, SCHEME, { isPersistent: body.rememberMe }))
       return { ok: true }
+    })
+    // The login page's own form. `returnUrl` came in on the query string of that page, so it is anybody's to write:
+    // the scheme only ever puts a safe one there, and a link mailed to the user puts whatever it likes.
+    .post('/auth/form-login', async (ctx, { auth, credentials }) => {
+      const form = ctx.req.body() as { identifier: string; password: string; returnUrl?: string }
+      const principal = await credentials.attempt(form.identifier, form.password)
+
+      if (principal === null) {
+        ctx.redirect('/login?failed=1', 303)
+        return
+      }
+
+      await auth.persist(ctx, SCHEME, new AuthenticationTicket(principal, SCHEME))
+      ctx.redirect(form.returnUrl !== undefined && isSafeReturnPath(form.returnUrl) ? form.returnUrl : '/private', 303)
     })
     .post('/auth/logout', async (ctx, { auth }) => {
       await auth.revoke(ctx, SCHEME)
@@ -215,6 +230,29 @@ describe('cookie session behind a credentials login', () => {
     const page = await new Browser().navigate(`${origin}/go?to=${encodeURIComponent('/private?tab=2')}`)
 
     expect(page.hops[0].location).toBe(`/login?returnUrl=${encodeURIComponent('/private?tab=2')}`)
+  })
+
+  // The other half of the way back: the login form is what finally sends the browser there.
+  it('lets a login form follow a way back on this origin, and no other', async () => {
+    const submit = (returnUrl: string) =>
+      new Browser().submit(`${origin}/auth/form-login`, { identifier: 'alice', password: 'wonderland', returnUrl })
+
+    const back = await submit('/private?tab=3')
+    expect(back.hops[0]).toMatchObject({ status: 303, location: '/private?tab=3' })
+    expect(back.url).toBe(`${origin}/private?tab=3`)
+    expect(back.json()).toEqual({ sub: 'alice' })
+
+    for (const elsewhere of [
+      'https://evil.example/steal',
+      '//evil.example/steal',
+      '/\\evil.example/steal',
+      '/\t/evil.example',
+    ]) {
+      const page = await submit(elsewhere)
+
+      expect(page.hops[0]).toMatchObject({ status: 303, location: '/private' })
+      expect(page.url).toBe(`${origin}/private`)
+    }
   })
 
   it('signs out by clearing the cookie', async () => {

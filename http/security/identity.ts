@@ -83,16 +83,18 @@ export class Principal {
     return this.#identities.flatMap(i => i.claims.filter(c => c.type === type))
   }
 
+  /**
+   * Whether any identity holds a claim of `type` — and, given a `value`, one whose value is it.
+   *
+   * A claim whose value is a list holds each of its members: a token carries `groups: ['eng', 'on-call']` as one
+   * claim, and `hasClaim('groups', 'on-call')` is true of it.
+   */
   hasClaim(type: string, value?: unknown): boolean {
-    return this.#identities.some(i => i.claims.some(c => c.type === type && (value === undefined || c.value === value)))
+    return this.#identities.some(i => i.claims.some(c => c.type === type && (value === undefined || holds(c, value))))
   }
 
   isInRole(role: string): boolean {
-    return this.#identities.some(i =>
-      i.claims.some(
-        c => c.type === i.roleClaimType && (Array.isArray(c.value) ? c.value.includes(role) : c.value === role),
-      ),
-    )
+    return this.#identities.some(i => i.claims.some(c => c.type === i.roleClaimType && holds(c, role)))
   }
 
   claims(type?: string): readonly Claim[] {
@@ -106,6 +108,10 @@ export class Principal {
   addIdentity(identity: Identity): void {
     this.#identities.push(identity)
   }
+}
+
+function holds(claim: Claim, value: unknown): boolean {
+  return Array.isArray(claim.value) ? claim.value.includes(value) : claim.value === value
 }
 
 /**

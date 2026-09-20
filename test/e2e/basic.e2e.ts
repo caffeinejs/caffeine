@@ -47,11 +47,12 @@ describe('HTTP Basic authentication', () => {
 
   afterAll(() => running.close())
 
-  it('challenges with the realm when no credentials are sent', async () => {
+  // RFC 7617 §2.1: credentials are read as UTF-8 here, and a client only knows to send them so when told.
+  it('challenges with the realm, and says credentials are read as UTF-8, when none are sent', async () => {
     const response = await get()
 
     expect(response.status).toBe(401)
-    expect(response.headers['www-authenticate']).toBe('Basic realm="Docs"')
+    expect(response.headers['www-authenticate']).toBe('Basic realm="Docs", charset="UTF-8"')
   })
 
   it('accepts valid credentials', async () => {
@@ -91,6 +92,43 @@ describe('HTTP Basic authentication', () => {
     const response = await get(authorization)
 
     expect(response.status).toBe(401)
-    expect(response.headers['www-authenticate']).toBe('Basic realm="Docs"')
+    expect(response.headers['www-authenticate']).toBe('Basic realm="Docs", charset="UTF-8"')
+  })
+})
+
+// The realm is a quoted-string (RFC 9110 §5.6.4). Written into the header as it is, a quote in it ends the value
+// early for whoever parses the challenge, and a line break makes Node refuse to send the response at all.
+describe('HTTP Basic authentication with a realm that needs quoting', () => {
+  const challengeFor = async (realm: string): Promise<BrowserResponse> => {
+    const running = await startApp(app =>
+      app
+        .authentication(auth => auth.addBasic(b => b.realm(realm).validate(() => null)))
+        .mount(
+          newRouter('/docs')
+            .authorize({})
+            .get('/', () => ({ ok: true })),
+        ),
+    )
+
+    try {
+      return await new Browser().xhr(`${running.origin}/docs`)
+    } finally {
+      await running.close()
+    }
+  }
+
+  it('escapes a quote and a backslash', async () => {
+    const response = await challengeFor('Finance "Q3" \\ EMEA')
+
+    expect(response.status).toBe(401)
+    expect(response.headers['www-authenticate']).toBe('Basic realm="Finance \\"Q3\\" \\\\ EMEA", charset="UTF-8"')
+  })
+
+  it('still challenges when the realm holds what no header can carry', async () => {
+    const response = await challengeFor('Docs\r\nX-Injected: yes \u{1F512}')
+
+    expect(response.status).toBe(401)
+    expect(response.headers['x-injected']).toBeUndefined()
+    expect(response.headers['www-authenticate']).toBe('Basic realm="DocsX-Injected: yes ", charset="UTF-8"')
   })
 })

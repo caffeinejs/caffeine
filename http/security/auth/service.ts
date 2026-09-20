@@ -4,6 +4,7 @@ import type { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import { AuthenticationState, type SchemeAuthentication } from './authentication_state.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
+import { ForwardAuthenticationHandler } from './forward/forward.js'
 import type { AuthenticationHandler } from './handler.js'
 import type { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from './ticket.js'
@@ -45,8 +46,9 @@ export class AuthenticationService {
     const handler = this.#handlerFor(scheme).get()
     const result = await handler.authenticate(ctx)
 
+    // What a forwarding scheme hands back is what the scheme it picked decided, which came through here already.
     const mapped =
-      result.succeeded && this.#mapper !== undefined
+      result.succeeded && this.#mapper !== undefined && !(handler instanceof ForwardAuthenticationHandler)
         ? AuthenticateResult.success(
             new AuthenticationTicket(
               await this.#mapper.get()(ctx, result.ticket!.principal),

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import {
   AuthenticationSchemeProvider,
   AuthenticationService,
+  type OAuth2AuthenticationOptionsBuilder,
   type OIDCAuthenticationHandler,
   type OIDCAuthenticationOptionsBuilder,
   newRouter,
@@ -11,7 +12,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
 import { Browser, type Page } from './internal/browser/index.js'
-import type { OAuth2OptionsBuilder } from './internal/builders.js'
 import { reachable } from './internal/redis/index.js'
 import { REDIS_URL, RedisTicketStore, connectRedis, type RedisClient } from './internal/redis/stores.js'
 import { OAUTH_SERVER, oauthServerUp, springLogin } from './internal/spring/index.js'
@@ -39,7 +39,7 @@ function springOIDC(o: OIDCAuthenticationOptionsBuilder): OIDCAuthenticationOpti
     .scopes('openid', 'profile', 'email')
 }
 
-function springOAuth2(o: OAuth2OptionsBuilder): OAuth2OptionsBuilder {
+function springOAuth2(o: OAuth2AuthenticationOptionsBuilder): OAuth2AuthenticationOptionsBuilder {
   return o
     .clientID('caffeine-oauth2')
     .clientSecret('caffeine-oauth2-secret')

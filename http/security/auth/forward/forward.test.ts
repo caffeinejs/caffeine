@@ -1,12 +1,19 @@
-import { describe, it, expect, vi } from 'vitest'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
+import { Identity, Principal } from '../../index.js'
 import { ErrAuthSchemeNotFound } from '../errors.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
-import { AuthenticateResult, type AuthenticationTicket } from '../ticket.js'
+import { AuthenticationService } from '../service.js'
+import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import { ForwardAuthenticationHandler } from './forward.js'
 
-const ctx = {} as unknown as Context
+// One per test: what a scheme decided is remembered on the request.
+let ctx: Context
+
+beforeEach(() => {
+  ctx = {} as unknown as Context
+})
 
 function makeDelegate() {
   return {
@@ -32,10 +39,17 @@ function setup(
   handler = makeDelegate(),
 ) {
   const provider = makeProvider(defaultScheme, handler)
-  const forward = new ForwardAuthenticationHandler(selector)
+  const forward = wired(new ForwardAuthenticationHandler(selector), provider)
 
-  forward.setSchemeProvider(provider)
   return { forward, provider, handler }
+}
+
+/** Wires a forwarding scheme the way the authentication builder does. */
+function wired(forward: ForwardAuthenticationHandler, provider: AuthenticationSchemeProvider) {
+  forward.setSchemeProvider(provider)
+  forward.setService(new AuthenticationService(provider))
+
+  return forward
 }
 
 describe('ForwardAuthenticationHandler', () => {
@@ -103,9 +117,7 @@ describe('ForwardAuthenticationHandler', () => {
       const customHandler = makeDelegate()
       const selector = vi.fn().mockReturnValue('Custom')
       const provider = makeProvider('Bearer', customHandler)
-      const forward = new ForwardAuthenticationHandler(selector)
-
-      forward.setSchemeProvider(provider)
+      const forward = wired(new ForwardAuthenticationHandler(selector), provider)
 
       await forward.authenticate(ctx)
 
@@ -128,11 +140,117 @@ describe('ForwardAuthenticationHandler', () => {
 
     it('throws when no handler is registered for the selected scheme', async () => {
       const provider = makeProvider('Bearer', undefined)
-      const forward = new ForwardAuthenticationHandler((_ctx, s) => s)
-
-      forward.setSchemeProvider(provider)
+      const forward = wired(new ForwardAuthenticationHandler((_ctx, s) => s), provider)
 
       await expect(forward.authenticate(ctx)).rejects.toThrow(ErrAuthSchemeNotFound)
+    })
+  })
+
+  // Reading a credential can spend it — a remember-me token rotates when it is read — so the scheme that was
+  // picked runs once for a request, however the request reaches it.
+  describe('the scheme it picked, within one request', () => {
+    function application(mapper?: (ctx: Context, principal: Principal) => Principal) {
+      const target = makeDelegate()
+      target.authenticate.mockImplementation(async () =>
+        AuthenticateResult.success(
+          new AuthenticationTicket(new Principal(true, new Identity('Cookie', true)), 'Cookie'),
+        ),
+      )
+
+      const forward = new ForwardAuthenticationHandler(() => 'Cookie')
+      const handlers: Record<string, unknown> = { Forward: forward, Cookie: target }
+      const provider = {
+        defaultAuthenticateScheme: 'Forward',
+        schemeFor: (name: string) => (name in handlers ? { get: () => handlers[name] } : undefined),
+        schemeNames: Object.keys(handlers),
+      } as unknown as AuthenticationSchemeProvider
+      const service = new AuthenticationService(provider, mapper === undefined ? undefined : { get: () => mapper })
+
+      forward.setSchemeProvider(provider)
+      forward.setService(service)
+
+      return { service, target }
+    }
+
+    it('runs once whether it is reached through the forward, by name, or both', async () => {
+      const { service, target } = application()
+
+      const viaForward = await service.authenticate(ctx, 'Forward')
+      const byName = await service.authenticate(ctx, 'Cookie')
+
+      expect(target.authenticate).toHaveBeenCalledOnce()
+      expect(byName).toBe(viaForward)
+    })
+
+    it('runs once when both reach it at the same moment', async () => {
+      const { service, target } = application()
+
+      await Promise.all([service.authenticate(ctx, 'Cookie'), service.authenticate(ctx, 'Forward')])
+
+      expect(target.authenticate).toHaveBeenCalledOnce()
+    })
+
+    // The forward hands back what the scheme it picked decided, which has been through the mapper once already.
+    it('maps the principal once', async () => {
+      const mapper = vi.fn((_ctx: Context, principal: Principal) => principal)
+      const { service } = application(mapper)
+
+      await service.authenticate(ctx, 'Forward')
+
+      expect(mapper).toHaveBeenCalledOnce()
+    })
+
+    it('remembers what was decided under both names, so a challenge can say why', async () => {
+      const { service } = application()
+
+      await service.authenticate(ctx, 'Forward')
+
+      expect(service.resultFor(ctx, 'Forward')).toBe(service.resultFor(ctx, 'Cookie'))
+      expect(service.resultFor(ctx, 'Forward')?.ticket?.scheme).toBe('Cookie')
+    })
+  })
+
+  // A selector often reads the request: a header, a query parameter naming the provider. One that can be talked
+  // into naming a forwarding scheme would wait on its own answer, and the request with it, for ever.
+  describe('a selector that names a forwarding scheme', () => {
+    function loop(selected: string) {
+      const first = new ForwardAuthenticationHandler(() => selected)
+      const second = new ForwardAuthenticationHandler(() => 'First')
+      const handlers: Record<string, unknown> = { First: first, Second: second }
+      const provider = {
+        defaultAuthenticateScheme: 'First',
+        schemeFor: (name: string) => (name in handlers ? { get: () => handlers[name] } : undefined),
+        schemeNames: Object.keys(handlers),
+      } as unknown as AuthenticationSchemeProvider
+      const service = new AuthenticationService(provider)
+
+      for (const forward of [first, second]) {
+        forward.setSchemeProvider(provider)
+        forward.setService(service)
+      }
+
+      return { service, first }
+    }
+
+    it('is refused when it names itself', async () => {
+      const { service } = loop('First')
+
+      await expect(service.authenticate(ctx, 'First')).rejects.toMatchObject({
+        code: 'ERR_AUTH_CONFIGURATION',
+        message: expect.stringContaining('"First", which forwards as well'),
+      })
+    })
+
+    it('is refused when it names another that would send it back', async () => {
+      const { service } = loop('Second')
+
+      await expect(service.authenticate(ctx, 'First')).rejects.toThrow(/"Second", which forwards as well/)
+    })
+
+    it('is refused on the way to a challenge too', async () => {
+      const { first } = loop('First')
+
+      await expect(first.challenge(ctx)).rejects.toThrow(/forwards as well/)
     })
   })
 })

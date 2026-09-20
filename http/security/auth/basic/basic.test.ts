@@ -116,6 +116,22 @@ describe('BasicAuthenticationHandler', () => {
       expect(result.error).toBe(error)
     })
 
+    // A hook that throws used to be caught by the handler and called again, this time with its own error.
+    it('calls onFail once when onFail itself throws, and lets its error out', async () => {
+      const hookFailure = new Error('audit log is down')
+      const onFail = vi.fn().mockRejectedValue(hookFailure)
+      const { ctx } = makeCtx(`Basic ${encode('alice', 'bad')}`)
+
+      const attempt = new BasicAuthenticationHandler('Basic', {
+        validate: vi.fn().mockResolvedValue(null),
+        onFail,
+      }).authenticate(ctx)
+
+      await expect(attempt).rejects.toBe(hookFailure)
+      expect(onFail).toHaveBeenCalledOnce()
+      expect(onFail.mock.calls[0][1]).toMatchObject({ message: 'Invalid credentials' })
+    })
+
     it('does not call onFail when header is absent', async () => {
       const onFail = vi.fn()
       const { ctx } = makeCtx(undefined)
@@ -129,12 +145,13 @@ describe('BasicAuthenticationHandler', () => {
   })
 
   describe('challenge()', () => {
-    it('sets status 401 and WWW-Authenticate: Basic realm="" by default', async () => {
+    it('sets status 401 and WWW-Authenticate: Basic with an empty realm by default', async () => {
       const { ctx, status, header } = makeCtx()
       await makeHandler().challenge(ctx)
 
       expect(status).toHaveBeenCalledWith(401)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm=""')
+      // RFC 7617 §2 requires the parameter, so an unset realm is sent empty rather than left out.
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="", charset="UTF-8"')
     })
 
     it('includes the configured realm in WWW-Authenticate', async () => {
@@ -144,7 +161,7 @@ describe('BasicAuthenticationHandler', () => {
         realm: 'My App',
       }).challenge(ctx)
 
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="My App"')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Basic realm="My App", charset="UTF-8"')
     })
 
     it('delegates to onChallenge and skips default behaviour', async () => {

@@ -1,13 +1,12 @@
 import { createHmac, createPublicKey, type JsonWebKeyInput } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { newRouter } from '@caffeinejs/http'
+import { type JWTAuthenticationOptionsBuilder, newRouter } from '@caffeinejs/http'
 import { createRemoteJWKSet } from 'jose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
 import { Browser, type BrowserResponse } from './internal/browser/index.js'
-import type { JWTOptionsBuilder } from './internal/builders.js'
 import { OAUTH_SERVER, clientCredentialsToken, oauthServerUp } from './internal/spring/index.js'
 import { required } from './internal/strict.js'
 import { bearer, bearerWithoutExpiry, localJWT } from './internal/tokens.js'
@@ -23,7 +22,7 @@ const OTHER = 'caffeine-other'
 
 const JWKS_URI = `${OAUTH_SERVER}/oauth2/jwks`
 
-function resourceServer(j: JWTOptionsBuilder, issuer = OAUTH_SERVER): JWTOptionsBuilder {
+function resourceServer(j: JWTAuthenticationOptionsBuilder, issuer = OAUTH_SERVER): JWTAuthenticationOptionsBuilder {
   const jwks = createRemoteJWKSet(new URL(JWKS_URI))
 
   return j

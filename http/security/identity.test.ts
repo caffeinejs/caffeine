@@ -97,6 +97,22 @@ describe('Principal', () => {
     expect(principal().hasClaim('nope')).toBe(false)
   })
 
+  // A token carries `groups` as one claim holding a list, which is how identity providers send it. A policy that
+  // asks for a member could never be satisfied while only `isInRole` looked inside one.
+  it('hasClaim finds a member of a claim that holds a list', () => {
+    const p = new Principal(true, [
+      new Identity('a', true, [claim('groups', ['eng', 'on-call']), claim('dept', 'eng')]),
+    ])
+
+    expect(p.hasClaim('groups', 'on-call')).toBe(true)
+    expect(p.hasClaim('groups', 'sales')).toBe(false)
+    expect(p.hasClaim('groups')).toBe(true)
+    // Membership, not containment: a list is not a member of itself, and a scalar still compares as one.
+    expect(p.hasClaim('groups', ['eng', 'on-call'])).toBe(false)
+    expect(p.hasClaim('dept', 'eng')).toBe(true)
+    expect(p.hasClaim('dept', 'e')).toBe(false)
+  })
+
   it('isInRole reads a scalar and an array role claim', () => {
     const scalar = new Principal(true, [new Identity('a', true, [claim('roles', 'admin')])])
 

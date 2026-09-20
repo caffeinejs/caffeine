@@ -4,6 +4,7 @@ import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
+import { challenge } from '../internal/challenge.js'
 import { REGISTERED_CLAIMS } from '../registered_claims.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 import type { JWTAuthenticationOptions } from './jwt_options.js'
@@ -76,18 +77,14 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
 
   #challengeHeader(error: Error | undefined): string {
     if (error === undefined) {
-      return 'Bearer'
+      return challenge('Bearer')
     }
 
-    const parameters = [`error="invalid_token"`]
     // `!== false`, not `=== true`: the builder defaults this on, but a handler constructed directly leaves
     // it undefined, and the two paths must not disagree about what the default is.
     const description = this.options.includeErrorDetails !== false ? describeTokenFault(error) : undefined
-    if (description !== undefined) {
-      parameters.push(`error_description="${description}"`)
-    }
 
-    return `Bearer ${parameters.join(', ')}`
+    return challenge('Bearer', { error: 'invalid_token', error_description: description })
   }
 
   /** Answers 403 with RFC 6750 §3.1 `insufficient_scope`: the token was good, and it is not enough. */
@@ -96,7 +93,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
       return this.options.onForbid(ctx)
     }
 
-    ctx.status(403).appendHeader('WWW-Authenticate', 'Bearer error="insufficient_scope"')
+    ctx.status(403).appendHeader('WWW-Authenticate', challenge('Bearer', { error: 'insufficient_scope' }))
   }
 }
 
@@ -125,7 +122,6 @@ function describeTokenFault(error: Error): string | undefined {
     return undefined
   }
 
-  // oxlint-disable-next-line no-control-regex -- everything outside the RFC's character set is the point
   return error.message.replace(/"/g, "'").replace(/[^\x20-\x21\x23-\x5B\x5D-\x7E]/g, '')
 }
 

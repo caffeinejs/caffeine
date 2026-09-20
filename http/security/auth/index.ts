@@ -1,5 +1,9 @@
 export { AuthenticationState, SchemeAuthentication } from './authentication_state.js'
-export { BasicAuthenticationHandler, type BasicAuthenticationOptions } from './basic/index.js'
+export {
+  BasicAuthenticationHandler,
+  type BasicAuthenticationOptions,
+  BasicAuthenticationOptionsBuilder,
+} from './basic/index.js'
 export { AuthenticationBuilder } from './builder.js'
 export { authConfigSchema, SCHEME_SCHEMAS, type AuthConfig } from './config.js'
 export {
@@ -28,7 +32,13 @@ export {
   ErrAuthSchemeNotFound,
 } from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
-export { JWTAuthenticationHandler, type JWTAuthenticationOptions, jwtServiceKey } from './jwt/index.js'
+export { isSafeReturnPath } from './internal/remote/config.js'
+export {
+  JWTAuthenticationHandler,
+  type JWTAuthenticationOptions,
+  JWTAuthenticationOptionsBuilder,
+  jwtServiceKey,
+} from './jwt/index.js'
 export {
   type JWTKeyContext,
   type JWTKeyResolver,
@@ -38,6 +48,11 @@ export {
   type JWTSignOptions,
 } from './jwt/index.js'
 export { kAuthenticationExempt, kAuthSchemeDescriptors } from './keys.js'
+export {
+  OAuth2AuthenticationHandler,
+  type OAuth2AuthenticationOptions,
+  OAuth2AuthenticationOptionsBuilder,
+} from './oauth/index.js'
 export {
   googleOIDCPreset,
   OIDCAuthenticationHandler,

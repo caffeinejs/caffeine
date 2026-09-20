@@ -214,7 +214,7 @@ describe('the challenge of a route that names several schemes', () => {
     const response = await app.fetch('/named')
 
     expect(response.status).toBe(401)
-    expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", Bearer')
+    expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8", Bearer')
   })
 
   it('stops at the scheme that answers with a redirect, instead of turning it back into a 401', async () => {
@@ -233,7 +233,7 @@ describe('the challenge of a route that names several schemes', () => {
     const response = await app.fetch('/named', { headers: { accept: 'text/html', 'sec-fetch-mode': 'navigate' } })
 
     expect(response.status).toBe(302)
-    expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs"')
+    expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8"')
   })
 })
 

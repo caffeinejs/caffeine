@@ -66,12 +66,23 @@ describe.skipIf(!up)('opaque bearer tokens held in Redis', () => {
     expect((await get(bearer, '/admin', `Bearer ${await store.issue('bob', ['user'], 60)}`)).status).toBe(403)
   })
 
-  it('challenges when no token, or one the store never issued, is sent', async () => {
+  // RFC 6750 §3: a bare challenge for a caller that sent nothing, `invalid_token` for one whose token was refused,
+  // so a client can tell "sign in" from "this token is no good any more".
+  it('challenges when no token is sent, and says the token is invalid when it sent one the store never issued', async () => {
     const none = await get(bearer, '/whoami')
     expect(none.status).toBe(401)
-    expect(none.headers['www-authenticate']).toMatch(/^Bearer/)
+    expect(none.headers['www-authenticate']).toBe('Bearer realm="api"')
 
-    expect((await get(bearer, '/whoami', 'Bearer never-issued')).status).toBe(401)
+    const unknown = await get(bearer, '/whoami', 'Bearer never-issued')
+    expect(unknown.status).toBe(401)
+    expect(unknown.headers['www-authenticate']).toBe('Bearer realm="api", error="invalid_token"')
+  })
+
+  it('says the token is not enough when it is good and the route asks for more', async () => {
+    const response = await get(bearer, '/admin', `Bearer ${await store.issue('bob', ['user'], 60)}`)
+
+    expect(response.status).toBe(403)
+    expect(response.headers['www-authenticate']).toBe('Bearer realm="api", error="insufficient_scope"')
   })
 
   it('stops accepting a token the moment it is revoked', async () => {
@@ -109,8 +120,9 @@ describe.skipIf(!up)('opaque bearer tokens held in Redis', () => {
 
     expect((await get(custom, '/whoami', `Token ${token}`)).status).toBe(200)
 
+    // No realm was configured, so none is advertised — not an empty one.
     const wrongScheme = await get(custom, '/whoami', `Bearer ${token}`)
     expect(wrongScheme.status).toBe(401)
-    expect(wrongScheme.headers['www-authenticate']).toMatch(/^Token/)
+    expect(wrongScheme.headers['www-authenticate']).toBe('Token')
   })
 })

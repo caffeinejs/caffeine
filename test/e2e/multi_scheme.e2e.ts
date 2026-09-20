@@ -1,5 +1,6 @@
 import {
   AuthenticateResult,
+  AuthenticationService,
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
@@ -145,15 +146,118 @@ describe('routes that name their authentication schemes', () => {
     const response = await get('/either-header')
 
     expect(response.status).toBe(401)
-    expect(response.headersDistinct['www-authenticate']).toEqual(['Basic realm="Reports"', 'Bearer'])
+    expect(response.headersDistinct['www-authenticate']).toEqual(['Basic realm="Reports", charset="UTF-8"', 'Bearer'])
   })
 
   it('challenges with a scheme the route names, not with the application default', async () => {
     const response = await get('/reports')
 
     expect(response.status).toBe(401)
-    expect(response.headers['www-authenticate']).toContain('Basic realm="Reports"')
+    expect(response.headers['www-authenticate']).toContain('Basic realm="Reports", charset="UTF-8"')
 
     expect((await get('/default')).headers['www-authenticate']).toBe('Bearer')
+  })
+})
+
+// A default scheme that only picks another one, per request. What it picked is a scheme like any other, so a handler
+// may ask for it by name as well, and then the same request reaches it twice: once through the default, once by name.
+describe('a default scheme that forwards to the one a request calls for', () => {
+  class CountingAPIKeyHandler extends APIKeyHandler {
+    runs = 0
+
+    override authenticate(ctx: Context): Promise<AuthenticateResult> {
+      this.runs++
+      return super.authenticate(ctx)
+    }
+  }
+
+  const apiKeys = new CountingAPIKeyHandler()
+  let running: RunningApp
+
+  const get = (path: string, headers: Record<string, string> = {}): Promise<BrowserResponse> =>
+    new Browser().xhr(`${running.origin}${path}`, { headers })
+
+  const subject = (ctx: Context) => ({ sub: ctx.user.findFirst('sub')?.value })
+
+  beforeAll(async () => {
+    running = await startApp(app =>
+      app
+        .authentication(auth =>
+          auth
+            .addJWTBearer(localJWT)
+            .addStrategy('APIKey', apiKeys)
+            .forward('PerCaller', ctx => (ctx.req.header('x-api-key') === undefined ? 'Bearer' : 'APIKey'))
+            .default('PerCaller'),
+        )
+        .mount(newRouter('/default').authorize({}).get('/', subject))
+        .mount(
+          newRouter('/asks-again')
+            .authorize({})
+            .inject({ auth: AuthenticationService })
+            .get('/', async (ctx, { auth }) => ({
+              sub: (await auth.authenticate(ctx, 'APIKey')).ticket?.principal.findFirst('sub')?.value,
+            })),
+        ),
+    )
+  })
+
+  afterAll(() => running.close())
+
+  it('authenticates each caller with the scheme picked for it', async () => {
+    const viaToken = await get('/default', { authorization: await bearer('alice') })
+    expect(viaToken.status).toBe(200)
+    expect(viaToken.json()).toEqual({ sub: 'alice' })
+
+    const viaKey = await get('/default', { 'x-api-key': 'key-of-the-partner' })
+    expect(viaKey.status).toBe(200)
+    expect(viaKey.json()).toEqual({ sub: 'partner' })
+
+    expect((await get('/default')).status).toBe(401)
+  })
+
+  // Reading a credential can spend it: a remember-me token rotates when it is read, and the second read of one
+  // request would present the token the first had just retired.
+  it('runs the scheme it picked once for a request that also reaches it by name', async () => {
+    const before = apiKeys.runs
+
+    const response = await get('/asks-again', { 'x-api-key': 'key-of-the-partner' })
+
+    expect(response.status).toBe(200)
+    expect(response.json()).toEqual({ sub: 'partner' })
+    expect(apiKeys.runs - before).toBe(1)
+  })
+})
+
+// A selector often reads the request — a header, a query parameter naming the provider. One that can be talked
+// into naming the forwarding scheme itself used to send the request round in circles for ever, and with it the
+// whole process.
+describe('a forwarding scheme told to forward to itself', () => {
+  it('fails the request at once', async () => {
+    const running = await startApp(app =>
+      app
+        .authentication(auth =>
+          auth
+            .addJWTBearer(localJWT)
+            .forward('PerCaller', ctx => ctx.req.header('x-scheme') ?? 'Bearer')
+            .default('PerCaller'),
+        )
+        .mount(
+          newRouter('/default')
+            .authorize({})
+            .get('/', () => ({ ok: true })),
+        ),
+    )
+
+    try {
+      const browser = new Browser()
+
+      expect((await browser.xhr(`${running.origin}/default`, { headers: { 'x-scheme': 'PerCaller' } })).status).toBe(
+        500,
+      )
+      expect((await browser.xhr(`${running.origin}/default`, { headers: { 'x-scheme': 'Nope' } })).status).toBe(500)
+      expect((await browser.xhr(`${running.origin}/default`)).status).toBe(401)
+    } finally {
+      await running.close()
+    }
   })
 })
