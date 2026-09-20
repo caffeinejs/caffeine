@@ -65,6 +65,9 @@ jobs:
       - name: Type Check
         run: npm run test:typecheck
 
+      - name: CLI Tests
+        run: npm test -w @caffeinejs/cli
+
       - name: Memory Leak Test
         run: npm run test:memory
 
