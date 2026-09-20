@@ -18,7 +18,7 @@ Throw `ErrHTTPNotFound` (and other `ErrHTTP*` types) from handlers. Do not inven
 
 ## Identity
 
-`IoC` stays stylized (`CaffeineIoC`). Acronyms stay one case: `HTTPClient`, `clientID`, `parseJSON` — not `HttpClient` / `clientId` / `parseJson`.
+`IoC` stays stylized (`CaffeineIoC`). Acronyms stay one case: `HTTPClient`, `clientID`, `parseJSON` — not `HttpClient` / `clientId` / `parseJson`. Configuration keys are the exception: they are spelled the way an environment variable folds, so `CLIENT_ID` sets `clientId`, which `clientID(...)` is called with.
 
 ## Composition
 

@@ -74,4 +74,43 @@ describe('authentication options set from the environment', () => {
     expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
     expect(error?.message).toContain('includeErrorDetails')
   })
+
+  // The client id is what a deployment most often sets this way, and `CLIENT_ID` folds to `clientId`: the key has
+  // to be spelled the way the variable folds, or the variable never reaches the option.
+  it('takes an OAuth 2.0 client id and callback URL from the variables a deployment would write', async () => {
+    const running = await startApp(
+      app =>
+        app.authentication((auth, c) =>
+          auth.config(c.auth).addOAuth2('oauth', o =>
+            o
+              .clientID('code-client')
+              .clientSecret('code-client-secret')
+              .sessionSecret('e2e-session-secret-at-least-32-chars!!')
+              .authorizationEndpoint('https://provider.invalid/authorize')
+              .tokenEndpoint('https://provider.invalid/token')
+              .userInfoEndpoint('https://provider.invalid/userinfo')
+              .callbackURL('http://localhost/auth/callback'),
+          ),
+        ),
+      {
+        config: configuredFrom({
+          AUTH__SCHEMES__OAUTH__CLIENT_ID: 'env-client',
+          AUTH__SCHEMES__OAUTH__CALLBACK_URL: 'http://localhost/signin/callback',
+        }),
+      },
+    )
+
+    try {
+      // `xhr` does not follow the redirect, so the URL the browser would be sent to is there to read.
+      const response = await new Browser().xhr(`${running.origin}/signin/callback/login`)
+      expect(response.status).toBe(302)
+
+      const authorization = new URL(String(response.headers.location))
+      expect(authorization.origin).toBe('https://provider.invalid')
+      expect(authorization.searchParams.get('client_id')).toBe('env-client')
+      expect(authorization.searchParams.get('redirect_uri')).toBe('http://localhost/signin/callback')
+    } finally {
+      await running.close()
+    }
+  })
 })

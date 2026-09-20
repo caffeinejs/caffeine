@@ -27,6 +27,10 @@ export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth
  * capitalized (`Bearer`, `Basic`, `Cookie`, `OpaqueToken`), so name the scheme explicitly —
  * `addJWTBearer('jwt', ...)` — wherever an environment variable has to reach it. A file or an inline source
  * addresses a capitalized name as written.
+ *
+ * **Every key is spelled the way its environment variable folds**, so `CLIENT_ID` sets `clientId` and
+ * `CALLBACK_URL` sets `callbackUrl`. That is not always the spelling of the builder method the key feeds:
+ * `clientId` is what `clientID(...)` is called with.
  */
 export interface AuthConfig {
   defaultAuthenticateScheme?: string
@@ -48,9 +52,9 @@ export const credentialsConfigSchema = $t.Object({
 const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
 
 export const refreshConfigSchema = $t.Object({
-  accessTTL: $t.Optional(ttl()),
-  refreshTTL: $t.Optional(ttl()),
-  absoluteTTL: $t.Optional(ttl()),
+  accessTtl: $t.Optional(ttl()),
+  refreshTtl: $t.Optional(ttl()),
+  absoluteTtl: $t.Optional(ttl()),
 })
 
 /**
@@ -205,7 +209,7 @@ const cookieSchemeSchema = $t.Object({
   challengeMode: $t.Optional(challengeMode()),
   loginPath: $t.Optional($t.String()),
   accessDeniedPath: $t.Optional($t.String()),
-  returnURLParameter: $t.Optional($t.String()),
+  returnUrlParameter: $t.Optional($t.String()),
   maxAge: $t.Optional($t.Number()),
   rememberMeMaxAge: $t.Optional($t.Number()),
   secure: $t.Optional($t.Boolean()),
@@ -226,7 +230,7 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
     loginPath: (b, v: string) => b.loginPath(v),
     accessDeniedPath: (b, v: string) => b.accessDeniedPath(v),
-    returnURLParameter: (b, v: string) => b.returnURLParameter(v),
+    returnUrlParameter: (b, v: string) => b.returnURLParameter(v),
     maxAge: (b, v: number) => b.maxAge(v),
     rememberMeMaxAge: (b, v: number) => b.rememberMeMaxAge(v),
     secure: (b, v: boolean) => b.secure(v),
@@ -237,16 +241,16 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
 }
 
 const oidcSchemeSchema = $t.Object({
-  clientID: $t.Optional($t.String()),
+  clientId: $t.Optional($t.String()),
   clientSecret: $t.Optional($t.String()),
   sessionSecret: $t.Optional($t.String()),
-  discoveryURL: $t.Optional($t.String()),
+  discoveryUrl: $t.Optional($t.String()),
   issuer: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
-  jwksURI: $t.Optional($t.String()),
-  callbackURL: $t.Optional($t.String()),
+  jwksUri: $t.Optional($t.String()),
+  callbackUrl: $t.Optional($t.String()),
   defaultRedirectPath: $t.Optional($t.String()),
   scopes: $t.Optional($t.Array($t.String())),
   sessionCookieName: $t.Optional($t.String()),
@@ -254,7 +258,7 @@ const oidcSchemeSchema = $t.Object({
   stateCookieName: $t.Optional($t.String()),
   secureCookie: $t.Optional($t.Boolean()),
   roleClaimType: $t.Optional($t.String()),
-  allowPlainPKCE: $t.Optional($t.Boolean()),
+  allowPlainPkce: $t.Optional($t.Boolean()),
   clockToleranceSeconds: $t.Optional($t.Number()),
   httpTimeoutMs: $t.Optional($t.Number()),
   discoveryCacheTtlSeconds: $t.Optional($t.Number()),
@@ -264,7 +268,7 @@ const oidcSchemeSchema = $t.Object({
   loginPath: $t.Optional($t.String()),
   getClaimsFromUserInfoEndpoint: $t.Optional($t.Boolean()),
   saveTokens: $t.Optional($t.Boolean()),
-  postLogoutRedirectURI: $t.Optional($t.String()),
+  postLogoutRedirectUri: $t.Optional($t.String()),
   endSessionEndpoint: $t.Optional($t.String()),
   prompt: $t.Optional($t.UnionEnum(['none', 'login', 'consent', 'select_account'])),
   loginHint: $t.Optional($t.String()),
@@ -276,16 +280,16 @@ const oidcSchemeSchema = $t.Object({
 const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
   schema: oidcSchemeSchema,
   appliers: {
-    clientID: (b, v: string) => b.clientID(v),
+    clientId: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
     sessionSecret: (b, v: string) => b.sessionSecret(v),
-    discoveryURL: (b, v: string) => b.discoveryURL(v),
+    discoveryUrl: (b, v: string) => b.discoveryURL(v),
     issuer: (b, v: string) => b.issuer(v),
     authorizationEndpoint: (b, v: string) => b.authorizationEndpoint(v),
     tokenEndpoint: (b, v: string) => b.tokenEndpoint(v),
     userInfoEndpoint: (b, v: string) => b.userInfoEndpoint(v),
-    jwksURI: (b, v: string) => b.jwksURI(v),
-    callbackURL: (b, v: string) => b.callbackURL(v),
+    jwksUri: (b, v: string) => b.jwksURI(v),
+    callbackUrl: (b, v: string) => b.callbackURL(v),
     defaultRedirectPath: (b, v: string) => b.defaultRedirectPath(v),
     scopes: (b, v: string[]) => b.scopes(...v),
     sessionCookieName: (b, v: string) => b.sessionCookieName(v),
@@ -293,7 +297,7 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
     stateCookieName: (b, v: string) => b.stateCookieName(v),
     secureCookie: (b, v: boolean) => b.secureCookie(v),
     roleClaimType: (b, v: string) => b.roleClaimType(v),
-    allowPlainPKCE: (b, v: boolean) => b.allowPlainPKCE(v),
+    allowPlainPkce: (b, v: boolean) => b.allowPlainPKCE(v),
     clockToleranceSeconds: (b, v: number) => b.clockToleranceSeconds(v),
     httpTimeoutMs: (b, v: number) => b.httpTimeoutMs(v),
     discoveryCacheTtlSeconds: (b, v: number) => b.discoveryCacheTtlSeconds(v),
@@ -304,7 +308,7 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
     loginPath: (b, v: string) => b.loginPath(v),
     getClaimsFromUserInfoEndpoint: (b, v: boolean) => b.getClaimsFromUserInfoEndpoint(v),
     saveTokens: (b, v: boolean) => b.saveTokens(v),
-    postLogoutRedirectURI: (b, v: string) => b.postLogoutRedirectURI(v),
+    postLogoutRedirectUri: (b, v: string) => b.postLogoutRedirectURI(v),
     endSessionEndpoint: (b, v: string) => b.endSessionEndpoint(v),
     prompt: (b, v: 'none' | 'login' | 'consent' | 'select_account') => b.prompt(v),
     loginHint: (b, v: string) => b.loginHint(v),
@@ -315,13 +319,13 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
 }
 
 const oauthSchemeSchema = $t.Object({
-  clientID: $t.Optional($t.String()),
+  clientId: $t.Optional($t.String()),
   clientSecret: $t.Optional($t.String()),
   sessionSecret: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
-  callbackURL: $t.Optional($t.String()),
+  callbackUrl: $t.Optional($t.String()),
   defaultRedirectPath: $t.Optional($t.String()),
   scopes: $t.Optional($t.Array($t.String())),
   sessionCookieName: $t.Optional($t.String()),
@@ -333,7 +337,7 @@ const oauthSchemeSchema = $t.Object({
   showPii: $t.Optional($t.Boolean()),
   challengeMode: $t.Optional(challengeMode()),
   loginPath: $t.Optional($t.String()),
-  usePKCE: $t.Optional($t.Boolean()),
+  usePkce: $t.Optional($t.Boolean()),
   subjectClaim: $t.Optional($t.String()),
   tokenEndpointAuthMethod: $t.Optional($t.UnionEnum(['client_secret_basic', 'client_secret_post'])),
   tokenRequestHeaders: $t.Optional($t.Record($t.String(), $t.String())),
@@ -344,13 +348,13 @@ const oauthSchemeSchema = $t.Object({
 const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
   schema: oauthSchemeSchema,
   appliers: {
-    clientID: (b, v: string) => b.clientID(v),
+    clientId: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
     sessionSecret: (b, v: string) => b.sessionSecret(v),
     authorizationEndpoint: (b, v: string) => b.authorizationEndpoint(v),
     tokenEndpoint: (b, v: string) => b.tokenEndpoint(v),
     userInfoEndpoint: (b, v: string) => b.userInfoEndpoint(v),
-    callbackURL: (b, v: string) => b.callbackURL(v),
+    callbackUrl: (b, v: string) => b.callbackURL(v),
     defaultRedirectPath: (b, v: string) => b.defaultRedirectPath(v),
     scopes: (b, v: string[]) => b.scopes(...v),
     sessionCookieName: (b, v: string) => b.sessionCookieName(v),
@@ -362,7 +366,7 @@ const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
     showPii: (b, v: boolean) => b.showPii(v),
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
     loginPath: (b, v: string) => b.loginPath(v),
-    usePKCE: (b, v: boolean) => b.usePKCE(v),
+    usePkce: (b, v: boolean) => b.usePKCE(v),
     subjectClaim: (b, v: string) => b.subjectClaim(v),
     tokenEndpointAuthMethod: (b, v: 'client_secret_basic' | 'client_secret_post') => b.tokenEndpointAuthMethod(v),
     tokenRequestHeaders: (b, v: Record<string, string>) => b.tokenRequestHeaders(v),
@@ -406,8 +410,8 @@ export const SCHEME_CONFIG = {
 export const refresh: SchemeConfigSpec<RefreshTokenOptionsBuilder> = {
   schema: refreshConfigSchema as ConfigSchema<Record<string, unknown>>,
   appliers: {
-    accessTTL: (b, v: string | number) => b.accessTTL(v),
-    refreshTTL: (b, v: string | number) => b.refreshTTL(v),
-    absoluteTTL: (b, v: string | number) => b.absoluteTTL(v),
+    accessTtl: (b, v: string | number) => b.accessTTL(v),
+    refreshTtl: (b, v: string | number) => b.refreshTTL(v),
+    absoluteTtl: (b, v: string | number) => b.absoluteTTL(v),
   },
 }

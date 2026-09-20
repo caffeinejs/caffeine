@@ -42,8 +42,8 @@ describe('applyScheme', () => {
   })
 
   it('refuses a value the option does not take, naming the option', () => {
-    expect(() => validated(SCHEME_CONFIG.oidc, { allowPlainPKCE: 'perhaps' }, 'authentication scheme "sso"')).toThrow(
-      /Cannot configure authentication scheme "sso": allowPlainPKCE/,
+    expect(() => validated(SCHEME_CONFIG.oidc, { allowPlainPkce: 'perhaps' }, 'authentication scheme "sso"')).toThrow(
+      /Cannot configure authentication scheme "sso": allowPlainPkce/,
     )
   })
 
