@@ -137,7 +137,9 @@ function subjectOf(principal: Principal): string {
 
 /** Every claim as `type: value`, a type that appears more than once becoming the list of its values. */
 function defaultClaims(principal: Principal): JWTPayload {
-  const payload: JWTPayload = {}
+  // Nothing inherited: a claim typed `constructor` has not appeared before just because every object has one, and
+  // one typed `__proto__` is a key like any other.
+  const payload = Object.create(null) as JWTPayload
 
   for (const claim of principal.claims()) {
     if (!(claim.type in payload)) {

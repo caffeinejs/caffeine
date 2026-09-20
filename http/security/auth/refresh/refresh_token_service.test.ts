@@ -209,4 +209,38 @@ describe('RefreshTokenService', () => {
 
     expect((await jwt.verify(accessToken)).roles).toEqual(['admin', 'ops'])
   })
+
+  it('issue: keeps every value of a claim type that appears three times', async () => {
+    const { service } = make()
+    const groups = new Principal(
+      true,
+      new Identity('test', true, [
+        new Claim('sub', 'u1', ''),
+        new Claim('groups', 'eng', ''),
+        new Claim('groups', 'ops', ''),
+        new Claim('groups', 'on-call', ''),
+      ]),
+    )
+
+    const { accessToken } = await service.issue(groups)
+
+    expect((await jwt.verify(accessToken)).groups).toEqual(['eng', 'ops', 'on-call'])
+  })
+
+  // Claim types come from wherever the principal did — an identity provider's token, a directory. One that is
+  // also the name of something every object inherits has appeared once, not twice: what is inherited is not a claim.
+  it.each(['constructor', 'toString', 'hasOwnProperty', '__proto__'])(
+    'issue: carries a claim typed "%s" as the single value it is',
+    async type => {
+      const { service } = make()
+      const odd = new Principal(
+        true,
+        new Identity('test', true, [new Claim('sub', 'u1', ''), new Claim(type, 'x', '')]),
+      )
+
+      const { accessToken } = await service.issue(odd)
+
+      expect((await jwt.verify(accessToken))[type]).toBe('x')
+    },
+  )
 })

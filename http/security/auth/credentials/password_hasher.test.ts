@@ -101,4 +101,23 @@ describe('ScryptPasswordHasher', () => {
     expect(derivations()).toEqual([expect.objectContaining({ N: 1024, r: 8, p: 3 })])
     expect(hasher.needsRehash(encoded)).toBe(true)
   })
+
+  // scrypt takes a cost that is a power of two and refuses any other at once, before doing any work. A record
+  // holding such a cost is as unreadable as one holding none, and has to be as slow to refuse.
+  it.each([3, 1000, 1025])('reads a cost of %i as no cost at all, since it is not a power of two', async N => {
+    expect(await hasher.verify('x', `$scrypt$n=${N},r=8,p=1$c2FsdHNhbHQ=$aGFzaGhhc2g=`)).toBe(false)
+
+    expect(derivations()).toEqual([expect.objectContaining({ N: 1024, r: 8, p: 3 })])
+  })
+
+  // Some parameters pass every check here and are still refused by scrypt, which wants the cost below 2^(16r).
+  // Whatever it refuses, the refusal must not be the fast way out.
+  it('does the work of a verification when scrypt itself refuses the stored parameters', async () => {
+    expect(await hasher.verify('x', '$scrypt$n=65536,r=1,p=1$c2FsdHNhbHQ=$aGFzaGhhc2g=')).toBe(false)
+
+    expect(derivations()).toEqual([
+      expect.objectContaining({ N: 65536, r: 1, p: 1 }),
+      expect.objectContaining({ N: 1024, r: 8, p: 3 }),
+    ])
+  })
 })

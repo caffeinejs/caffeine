@@ -57,8 +57,9 @@ const DECOY_SALT = Buffer.alloc(SALT_BYTES)
  * settings the hash was created under, and {@link needsRehash} can detect stale ones. Comparison is
  * constant-time via `timingSafeEqual`.
  *
- * A stored hash that cannot be read — empty, malformed, or carrying parameters out of all proportion — is refused
- * after one derivation with this hasher's own settings, so that it takes about as long as refusing a wrong password.
+ * A stored hash that cannot be read — empty, malformed, or carrying parameters out of all proportion or that scrypt
+ * does not take — is refused after one derivation with this hasher's own settings, so that it takes about as long as
+ * refusing a wrong password.
  */
 export class ScryptPasswordHasher extends PasswordHasher {
   readonly #params: ScryptParams
@@ -78,8 +79,7 @@ export class ScryptPasswordHasher extends PasswordHasher {
   async verify(password: string, encoded: string): Promise<boolean> {
     const parsed = this.#parse(encoded)
     if (parsed === null) {
-      await this.#derive(password, DECOY_SALT, this.#params).catch(() => undefined)
-      return false
+      return this.#refuseSlowly(password)
     }
 
     const { params, salt, hash } = parsed
@@ -87,10 +87,19 @@ export class ScryptPasswordHasher extends PasswordHasher {
     try {
       derived = await this.#derive(password, salt, params)
     } catch {
-      return false
+      // scrypt refuses parameters it does not like before doing any work, so this is the fast way out unless the
+      // work is done here.
+      return this.#refuseSlowly(password)
     }
 
     return derived.length === hash.length && timingSafeEqual(derived, hash)
+  }
+
+  /** Refuses after one derivation with this hasher's own settings, which is what refusing a wrong password costs. */
+  async #refuseSlowly(password: string): Promise<false> {
+    await this.#derive(password, DECOY_SALT, this.#params).catch(() => undefined)
+
+    return false
   }
 
   needsRehash(encoded: string): boolean {
@@ -144,6 +153,12 @@ export class ScryptPasswordHasher extends PasswordHasher {
 
     const [N, r, p] = [Number(paramMatch[1]), Number(paramMatch[2]), Number(paramMatch[3])]
     if (N < 2 || r < 1 || p < 1 || p > MAX_P || 128 * N * r > MAX_MEMORY_BYTES) {
+      return null
+    }
+
+    // The cost is a power of two or scrypt refuses it. Tested after the bound on memory, which is what keeps N
+    // within the 32 bits the test works on.
+    if ((N & (N - 1)) !== 0) {
       return null
     }
 
