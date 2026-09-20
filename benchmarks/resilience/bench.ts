@@ -7,7 +7,7 @@ import {
   retry as cockatielRetry,
   wrap,
 } from 'cockatiel'
-import { bench, group, run } from 'mitata'
+import { bench, group, run, summary } from 'mitata'
 import CircuitBreaker from 'opossum'
 
 // The protected operation does no work, so every nanosecond measured is the strategy's own overhead.
@@ -30,68 +30,74 @@ const opossumBreaker = (): CircuitBreaker<[], number> => {
 }
 
 group('breaker, success path', () => {
-  const runWithBreaker = caffeineBreaker()
-  const composed = compose(caffeineBreaker())
-  const cockatiel = cockatielBreakerPolicy()
-  const opossum = opossumBreaker()
+  summary(() => {
+    const runWithBreaker = caffeineBreaker()
+    const composed = compose(caffeineBreaker())
+    const cockatiel = cockatielBreakerPolicy()
+    const opossum = opossumBreaker()
 
-  bench('success: raw call', async () => {
-    await op()
-  })
-  bench('success: runWith(op, breaker)', async () => {
-    await runWith(op, runWithBreaker)
-  })
-  bench('success: compose(breaker)', async () => {
-    await composed(op)
-  })
-  bench('success: cockatiel breaker', async () => {
-    await cockatiel.execute(op)
-  })
-  bench('success: opossum breaker', async () => {
-    await opossum.fire()
+    bench('success: raw call', async () => {
+      await op()
+    })
+    bench('success: runWith(op, breaker)', async () => {
+      await runWith(op, runWithBreaker)
+    })
+    bench('success: compose(breaker)', async () => {
+      await composed(op)
+    })
+    bench('success: cockatiel breaker', async () => {
+      await cockatiel.execute(op)
+    })
+    bench('success: opossum breaker', async () => {
+      await opossum.fire()
+    })
   })
 })
 
 group('retry + breaker, success path', () => {
-  const retries = caffeineRetry()
-  const breaker = caffeineBreaker()
-  const composed = compose(caffeineRetry(), caffeineBreaker())
-  const cockatiel = wrap(cockatielRetryPolicy(), cockatielBreakerPolicy())
+  summary(() => {
+    const retries = caffeineRetry()
+    const breaker = caffeineBreaker()
+    const composed = compose(caffeineRetry(), caffeineBreaker())
+    const cockatiel = wrap(cockatielRetryPolicy(), cockatielBreakerPolicy())
 
-  bench('retry+breaker: runWith(op, retries, breaker)', async () => {
-    await runWith(op, retries, breaker)
-  })
-  bench('retry+breaker: compose(retries, breaker)', async () => {
-    await composed(op)
-  })
-  bench('retry+breaker: cockatiel wrap(retry, breaker)', async () => {
-    await cockatiel.execute(op)
+    bench('retry+breaker: runWith(op, retries, breaker)', async () => {
+      await runWith(op, retries, breaker)
+    })
+    bench('retry+breaker: compose(retries, breaker)', async () => {
+      await composed(op)
+    })
+    bench('retry+breaker: cockatiel wrap(retry, breaker)', async () => {
+      await cockatiel.execute(op)
+    })
   })
 })
 
 group('breaker open, rejection path', () => {
-  const caffeine = caffeineBreaker()
-  caffeine.forceOpen()
-  const composed = compose(caffeine)
-  const stackCapturing = circuitBreaker({ name: 'bench', captureStackTrace: true })
-  stackCapturing.forceOpen()
-  const withStack = compose(stackCapturing)
-  const cockatiel = cockatielBreakerPolicy()
-  cockatiel.isolate()
-  const opossum = opossumBreaker()
-  opossum.open()
+  summary(() => {
+    const caffeine = caffeineBreaker()
+    caffeine.forceOpen()
+    const composed = compose(caffeine)
+    const stackCapturing = circuitBreaker({ name: 'bench', captureStackTrace: true })
+    stackCapturing.forceOpen()
+    const withStack = compose(stackCapturing)
+    const cockatiel = cockatielBreakerPolicy()
+    cockatiel.isolate()
+    const opossum = opossumBreaker()
+    opossum.open()
 
-  bench('open: compose(breaker)', async () => {
-    await composed(op).catch(ignore)
-  })
-  bench('open: compose(breaker), captureStackTrace', async () => {
-    await withStack(op).catch(ignore)
-  })
-  bench('open: cockatiel breaker', async () => {
-    await cockatiel.execute(op).catch(ignore)
-  })
-  bench('open: opossum breaker', async () => {
-    await opossum.fire().catch(ignore)
+    bench('open: compose(breaker)', async () => {
+      await composed(op).catch(ignore)
+    })
+    bench('open: compose(breaker), captureStackTrace', async () => {
+      await withStack(op).catch(ignore)
+    })
+    bench('open: cockatiel breaker', async () => {
+      await cockatiel.execute(op).catch(ignore)
+    })
+    bench('open: opossum breaker', async () => {
+      await opossum.fire().catch(ignore)
+    })
   })
 })
 
@@ -107,67 +113,46 @@ const flaky = async (): Promise<number> => {
 }
 
 group('failure path, breaker closed', () => {
-  const runWithBreaker = circuitBreaker({ name: 'bench', failureRateThreshold: 100 })
-  const composed = compose(circuitBreaker({ name: 'bench', failureRateThreshold: 100 }))
-  const cockatiel = cockatielBreaker(handleAll, { halfOpenAfter: 60_000, breaker: new ConsecutiveBreaker(1e9) })
-  const opossum = new CircuitBreaker(flaky, { timeout: false, errorThresholdPercentage: 100, resetTimeout: 60_000 })
-  opossumBreakers.push(opossum)
+  summary(() => {
+    const runWithBreaker = circuitBreaker({ name: 'bench', failureRateThreshold: 100 })
+    const composed = compose(circuitBreaker({ name: 'bench', failureRateThreshold: 100 }))
+    const cockatiel = cockatielBreaker(handleAll, { halfOpenAfter: 60_000, breaker: new ConsecutiveBreaker(1e9) })
+    const opossum = new CircuitBreaker(flaky, { timeout: false, errorThresholdPercentage: 100, resetTimeout: 60_000 })
+    opossumBreakers.push(opossum)
 
-  bench('failure: runWith(op, breaker)', async () => {
-    await runWith(flaky, runWithBreaker).catch(ignore)
-  })
-  bench('failure: compose(breaker)', async () => {
-    await composed(flaky).catch(ignore)
-  })
-  bench('failure: cockatiel breaker', async () => {
-    await cockatiel.execute(flaky).catch(ignore)
-  })
-  bench('failure: opossum breaker', async () => {
-    await opossum.fire().catch(ignore)
+    bench('failure: runWith(op, breaker)', async () => {
+      await runWith(flaky, runWithBreaker).catch(ignore)
+    })
+    bench('failure: compose(breaker)', async () => {
+      await composed(flaky).catch(ignore)
+    })
+    bench('failure: cockatiel breaker', async () => {
+      await cockatiel.execute(flaky).catch(ignore)
+    })
+    bench('failure: opossum breaker', async () => {
+      await opossum.fire().catch(ignore)
+    })
   })
 })
 
 group('breaker, with a success listener', () => {
-  const plain = compose(caffeineBreaker())
-  const observed = caffeineBreaker()
-  observed.on('success', () => undefined)
-  const listened = compose(observed)
+  summary(() => {
+    const plain = compose(caffeineBreaker())
+    const observed = caffeineBreaker()
+    observed.on('success', () => undefined)
+    const listened = compose(observed)
 
-  bench('listener: compose(breaker), no listener', async () => {
-    await plain(op)
-  })
-  bench('listener: compose(breaker), one success listener', async () => {
-    await listened(op)
+    bench('listener: compose(breaker), no listener', async () => {
+      await plain(op)
+    })
+    bench('listener: compose(breaker), one success listener', async () => {
+      await listened(op)
+    })
   })
 })
 
-const { benchmarks } = await run({ colors: process.stdout.isTTY === true })
+await run({ colors: process.stdout.isTTY === true })
 
 for (const breaker of opossumBreakers) {
   breaker.shutdown()
 }
-
-const fmtNs = (ns: number): string => {
-  if (ns < 1_000) {
-    return `${ns.toFixed(2)} ns`
-  }
-  if (ns < 1_000_000) {
-    return `${(ns / 1_000).toFixed(2)} µs`
-  }
-  return `${(ns / 1_000_000).toFixed(2)} ms`
-}
-
-const entries = benchmarks
-  .flatMap(t => t.runs)
-  .filter(r => r.stats != null)
-  .map(r => ({ name: r.name, avg: r.stats!.avg }))
-  .sort((a, b) => a.avg - b.avg)
-
-const maxName = Math.max(...entries.map(e => e.name.length))
-
-console.log('\n--- sorted fastest → slowest ---')
-entries.forEach((e, i) => {
-  const rank = String(i + 1).padStart(2)
-  const name = e.name.padEnd(maxName)
-  console.log(`${rank}. ${name}  ${fmtNs(e.avg)}`)
-})

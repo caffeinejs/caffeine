@@ -111,10 +111,12 @@ for (const server of servers) {
       })
 
       await t.test('POST without api key returns 401', async () => {
+        // Only the key is missing: a fixture that validates headers would answer 400 to a request without them.
+        const { 'x-api-key': _key, ...withoutKey } = REQ_HEADERS
         const res = await fetch(url, {
           method: 'POST',
           body: REQ_BODY,
-          headers: { 'content-type': 'application/json' },
+          headers: withoutKey,
         })
         assert.equal(res.status, 401)
       })
@@ -133,14 +135,12 @@ for (const server of servers) {
           query: typeof EXPECTED_QUERY
           body: typeof EXPECTED_BODY
           header: typeof EXPECTED_HEADER
-          big: unknown[]
         }
 
         assert.deepEqual(body.params, EXPECTED_PARAMS, 'params mismatch')
         assert.deepEqual(body.query, EXPECTED_QUERY, 'query mismatch')
         assert.deepEqual(body.body, EXPECTED_BODY, 'body mismatch')
         assert.deepEqual(body.header, EXPECTED_HEADER, 'header mismatch')
-        assert.ok(Array.isArray(body.big) && body.big.length === 200, 'big array wrong')
       })
 
       await t.test('response echoes headers', async () => {

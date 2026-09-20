@@ -10,11 +10,15 @@ on:
         type: choice
         options:
           - aspect
+          - config-read
+          - config-reload
           - di
           - di-compare
+          - di-compile
           - di-perf
           - fastify
           - helloworld
+          - memory
           - mixedscopes
           - authn
           - startup
@@ -48,7 +52,7 @@ jobs:
       - name: Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: latest
+          bun-version: '1.3.14'
 
       - name: Install
         run: npm ci --ignore-scripts
@@ -58,13 +62,20 @@ jobs:
           npm run build
           npm run build -w @caffeinejs/benchmarks
 
+      - name: Fixture tests
+        run: npm run test:fixtures -w @caffeinejs/benchmarks
+
       - name: Benchmark
+        # An explicit shell turns on pipefail: without it tee's exit code hides a benchmark that failed.
+        shell: bash
         run: npm run bench:${{ inputs.benchmark }} -w @caffeinejs/benchmarks | tee /tmp/bench-output.txt
 
       - name: Summary
         if: always()
         run: |
           echo "## Benchmark: \`${{ inputs.benchmark }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Shared runner: compare rows within this run, not numbers across runs." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           cat /tmp/bench-output.txt >> $GITHUB_STEP_SUMMARY

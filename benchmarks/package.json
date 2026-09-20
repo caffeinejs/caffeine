@@ -21,8 +21,8 @@
     "bench:fastify": "node --import=tsx fastify/bench.ts",
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
     "bench:authn": "node --import=tsx authn/bench.ts",
-    "bench:testing": "node --import=tsx testing/bench.ts",
-    "bench:aspect": "node --import=tsx aspect/bench.ts",
+    "bench:testing": "node --expose-gc --import=tsx testing/bench.ts",
+    "bench:aspect": "node --expose-gc --import=tsx aspect/bench.ts",
     "bench:resilience": "node --expose-gc --import=tsx resilience/bench.ts",
     "bench:config-read": "node --expose-gc --import=tsx config/read.bench.ts",
     "bench:config-reload": "node --expose-gc --import=tsx config/reload.bench.ts",
@@ -37,7 +37,8 @@
     "test:fastify": "node --import=tsx fastify/test.ts",
     "test:authn": "node --import=tsx authn/test.ts",
     "test:testing": "node --import=tsx testing/test.ts",
-    "bench:profile": "node --import=tsx profiling/run.ts"
+    "test:mixedscopes": "node --import=tsx mixedscopes/test.ts",
+    "test:fixtures": "npm run test:request && npm run test:fastify && npm run test:authn && npm run test:mixedscopes && npm run test:testing"
   },
   "dependencies": {
     "@adonisjs/application": "^9.1.0",
@@ -65,8 +66,6 @@
     "@trpc/server": "^11.0.0",
     "ajv": "^8.20.0",
     "awilix": "^13.0.3",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
     "cockatiel": "^4.0.0",
     "elysia": "^1.4.30",
     "express": "^5.0.0",

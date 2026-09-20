@@ -1,232 +1,45 @@
-import { spawn, type ChildProcess } from 'node:child_process'
-import { access } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import autocannon from 'autocannon'
-
-import { printMachineInfo } from '../machine-info.js'
+import { runLoadBenchmark, type ServerConfig } from '../load-harness.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
-const BASE_URL = `http://127.0.0.1:${PORT}/`
 
-interface ServerConfig {
-  name: string
-  cmd: string
-  args: string[]
-  builtPath?: string
-  url?: string
-  env?: NodeJS.ProcessEnv
-}
+const source = (dir: string, file: string): Pick<ServerConfig, 'args'> => ({ args: [resolve(__dirname, dir, file)] })
 
-interface BenchResult {
-  name: string
-  reqPerSec: number
-  latencyMs: number
-  throughputMBs: number
+const built = (dir: string, file: string): Pick<ServerConfig, 'args' | 'builtPath'> => {
+  const path = resolve(__dirname, '..', 'dist', 'helloworld', dir, file)
+  return { args: [path], builtPath: path }
 }
 
 const servers: ServerConfig[] = [
-  {
-    name: 'fastify',
-    cmd: 'node',
-    args: [resolve(__dirname, 'fastify', 'fastify.js')],
-  },
-  {
-    name: 'express',
-    cmd: 'node',
-    args: [resolve(__dirname, 'express', 'express.js')],
-  },
-  {
-    name: 'nestjs',
-    cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js')],
-    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'nestjs', 'nestjs.js'),
-  },
-  {
-    name: 'elysia',
-    cmd: 'node',
-    args: [resolve(__dirname, 'elysia', 'elysia.js')],
-  },
-  {
-    name: 'hono',
-    cmd: 'node',
-    args: [resolve(__dirname, 'hono', 'hono.js')],
-  },
-  {
-    name: 'node:http',
-    cmd: 'node',
-    args: [resolve(__dirname, 'node-http', 'node-http.js')],
-  },
-  {
-    name: 'adonisjs',
-    cmd: 'node',
-    args: [resolve(__dirname, 'adonisjs', 'adonisjs.js')],
-  },
-  {
-    name: 'trpc',
-    cmd: 'node',
-    args: [resolve(__dirname, 'trpc', 'trpc.js')],
-    url: `http://127.0.0.1:${PORT}/hello`,
-  },
-  {
-    name: 'caffeine',
-    cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js')],
-    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine', 'caffeine.js'),
-  },
+  { name: 'fastify', port: PORT, ...source('fastify', 'fastify.js') },
+  { name: 'express', port: PORT, ...source('express', 'express.js') },
+  { name: 'nestjs', port: PORT, ...built('nestjs', 'nestjs.js') },
+  { name: 'elysia', port: PORT, ...source('elysia', 'elysia.js') },
+  { name: 'hono', port: PORT, ...source('hono', 'hono.js') },
+  { name: 'node:http', port: PORT, ...source('node-http', 'node-http.js') },
+  { name: 'adonisjs', port: PORT, ...source('adonisjs', 'adonisjs.js') },
+  { name: 'trpc', port: PORT, path: '/hello', readyPath: '/hello', ...source('trpc', 'trpc.js') },
+  { name: 'caffeine', port: PORT, ...built('caffeine', 'caffeine.js') },
   // The same route declared programmatically. Paired with the one above it is the only honest read on what the
   // fluent router costs: everything else about the two processes is identical.
-  {
-    name: 'caffeine-router',
-    cmd: 'node',
-    args: [resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine-router', 'caffeine-router.js')],
-    builtPath: resolve(__dirname, '..', 'dist', 'helloworld', 'caffeine-router', 'caffeine-router.js'),
-  },
+  { name: 'caffeine-router', port: PORT, ...built('caffeine-router', 'caffeine-router.js') },
 ]
 
-const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 10_000
-
-async function waitForReady(url: string, timeoutMs = READY_TIMEOUT): Promise<void> {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const res = await fetch(url)
-      if (res.ok) {
-        return
-      }
-    } catch {
-      // not ready yet
-    }
-    await new Promise(r => setTimeout(r, 100))
-  }
-  throw new Error(`Server on port ${PORT} did not become ready within ${timeoutMs}ms`)
-}
-
-async function killProcess(child: ChildProcess): Promise<void> {
-  return new Promise(resolve => {
-    child.kill('SIGTERM')
-    const forceKill = setTimeout(() => child.kill('SIGKILL'), 2000)
-    child.once('exit', () => {
-      clearTimeout(forceKill)
-      resolve()
-    })
-  })
-}
-
-async function clearPort(port: number): Promise<void> {
-  const { execSync } = await import('node:child_process')
-  try {
-    const pids = execSync(`lsof -ti:${port}`, { encoding: 'utf8' }).trim()
-    if (pids) {
-      execSync(`kill -9 ${pids.split('\n').join(' ')}`, { stdio: 'ignore' })
-      await new Promise(r => setTimeout(r, 200))
-    }
-  } catch {
-    // port is free or lsof not available
-  }
-}
-
-let activeChild: import('node:child_process').ChildProcess | null = null
-
-function shutdown(): void {
-  if (activeChild) {
-    activeChild.kill('SIGTERM')
-    setTimeout(() => activeChild?.kill('SIGKILL'), 2000).unref()
-  }
-  process.exit(1)
-}
-
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
-
-async function runServer(server: ServerConfig): Promise<BenchResult> {
-  if (server.builtPath) {
-    try {
-      await access(server.builtPath)
-    } catch {
-      throw new Error(
-        `Compiled output not found at: ${server.builtPath}\n` + `Run: npm run build -w @caffeinejs/benchmarks`,
-      )
-    }
-  }
-
-  await clearPort(PORT)
-
-  const serverUrl = server.url ?? BASE_URL
-
-  const child = spawn(server.cmd, server.args, {
-    env: { ...process.env, PORT: String(PORT), ...server.env },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  })
-
-  activeChild = child
-  child.on('error', err => {
-    throw err
-  })
-
-  await waitForReady(serverUrl)
-
-  await autocannon({ url: serverUrl, connections: 100, duration: 5, pipelining: 10 })
-
-  const result = await autocannon({ url: serverUrl, connections: 100, duration: 15, pipelining: 10 })
-
-  activeChild = null
-  await killProcess(child)
-  await new Promise(r => setTimeout(r, 500))
-
-  return {
-    name: server.name,
-    reqPerSec: result.requests.average,
-    latencyMs: result.latency.average,
-    throughputMBs: result.throughput.average / 1_048_576,
-  }
-}
-
-function printTable(results: BenchResult[]): void {
-  const c1 = 14,
-    c2 = 14,
-    c3 = 19,
-    c4 = 23
-  const line = `${'-'.repeat(c1)}+-${'-'.repeat(c2)}+-${'-'.repeat(c3)}+-${'-'.repeat(c4 - 2)}`
-  const header =
-    'Framework'.padEnd(c1) +
-    '| ' +
-    'Req/sec avg'.padEnd(c2) +
-    '| ' +
-    'Latency avg (ms)'.padEnd(c3) +
-    '| ' +
-    'Throughput (MB/s)'
-
-  console.log(`\n${header}\n${line}`)
-
-  for (const r of results) {
-    const row =
-      r.name.padEnd(c1) +
-      '| ' +
-      r.reqPerSec.toLocaleString().padStart(c2 - 1) +
-      ' | ' +
-      r.latencyMs.toFixed(2).padStart(c3 - 1) +
-      ' | ' +
-      r.throughputMBs.toFixed(2).padStart(c4 - 3)
-    console.log(row)
-  }
-
-  console.log()
-}
-
-const results: BenchResult[] = []
-
-for (const server of servers) {
-  if (process.env.CI !== 'true') {
-    console.log(`Benchmarking ${server.name}...`)
-  }
-
-  results.push(await runServer(server))
-}
-
-results.sort((a, b) => b.reqPerSec - a.reqPerSec)
-
-printMachineInfo()
-printTable(results)
+await runLoadBenchmark({
+  servers,
+  readyPath: '/',
+  request: { path: '/' },
+  versions: [
+    'fastify',
+    'express',
+    '@nestjs/core',
+    'elysia',
+    'hono',
+    '@adonisjs/http-server',
+    '@trpc/server',
+    '@caffeinejs/http',
+  ],
+})

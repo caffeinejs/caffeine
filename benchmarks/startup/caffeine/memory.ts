@@ -12,6 +12,8 @@ import './payment/payment.controller.js'
 const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
 await app.ready()
 
+// Twice: the first pass can leave objects that only become unreachable once finalizers have run.
+global.gc!()
 global.gc!()
 process.stdout.write(JSON.stringify(process.memoryUsage()))
 

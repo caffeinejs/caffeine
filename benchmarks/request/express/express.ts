@@ -1,7 +1,30 @@
+import { Ajv } from 'ajv'
 import express, { type NextFunction, type Request, type Response } from 'express'
 
 const PORT = parseInt(process.env.PORT ?? '3027', 10)
 const app = express()
+
+interface Data {
+  text: string
+  num: number
+  bool: boolean
+}
+
+const schema = {
+  type: 'object',
+  required: ['text', 'num', 'bool'],
+  properties: {
+    text: { type: 'string' },
+    num: { type: 'number' },
+    bool: { type: 'boolean' },
+  },
+}
+
+// Coercion writes the typed value back into the validated object, as the Fastify fixture's validation does.
+const ajv = new Ajv({ coerceTypes: true })
+const validateParams = ajv.compile<Data>(schema)
+const validateQuery = ajv.compile<Data>(schema)
+const validateBody = ajv.compile<Data>(schema)
 
 app.disable('x-powered-by')
 app.disable('etag')
@@ -24,18 +47,24 @@ app.post(
     next()
   },
   (req: Request, res: Response) => {
-    const p = req.params as { text: string; num: string; bool: string }
-    const q = req.query as { text: string; num: string; bool: string }
+    // Read once: Express builds `req.query` on every access, so a second read would lose the coerced values.
+    const p: unknown = req.params
+    const q: unknown = req.query
+    const b: unknown = req.body
     const h = req.headers
-    const b = (req.body ?? {}) as { text: string; num: number; bool: boolean }
+
+    if (!validateParams(p) || !validateQuery(q) || !validateBody(b)) {
+      res.status(400).json({ error: 'Bad Request' })
+      return
+    }
 
     res.header('text', h.text as string)
     res.header('num', h.num as string)
     res.header('bool', h.bool as string)
 
     res.json({
-      params: { text: p.text, num: Number(p.num), bool: p.bool === 'true' },
-      query: { text: q.text, num: Number(q.num), bool: q.bool === 'true' },
+      params: { text: p.text, num: p.num, bool: p.bool },
+      query: { text: q.text, num: q.num, bool: q.bool },
       body: { text: b.text, num: b.num, bool: b.bool },
     })
   },

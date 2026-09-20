@@ -1,5 +1,36 @@
 import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+// Read from disk rather than resolved: several of these packages do not export their package.json.
+function installedVersion(pkg: string): string {
+  for (const root of [__dirname, resolve(__dirname, '..')]) {
+    try {
+      const manifest = JSON.parse(readFileSync(resolve(root, 'node_modules', pkg, 'package.json'), 'utf8')) as {
+        version: string
+      }
+      return manifest.version
+    } catch {
+      // not installed at this level
+    }
+  }
+  return 'not found'
+}
+
+export function printVersions(packages: string[]): void {
+  if (packages.length === 0) {
+    return
+  }
+  console.log('\nVersions:')
+  const width = Math.max(...packages.map(p => p.length))
+  for (const pkg of packages) {
+    console.log(`  ${pkg.padEnd(width)}  ${installedVersion(pkg)}`)
+  }
+}
 
 export function printMachineInfo(opts?: { runtime?: 'node' | 'bun' }): void {
   const cpus = os.cpus()

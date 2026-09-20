@@ -9,6 +9,8 @@ import { AppModule } from './app.module.js'
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
 await app.init()
 
+// Twice: the first pass can leave objects that only become unreachable once finalizers have run.
+global.gc!()
 global.gc!()
 process.stdout.write(JSON.stringify(process.memoryUsage()))
 

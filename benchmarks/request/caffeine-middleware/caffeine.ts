@@ -1,4 +1,3 @@
-import { Injectable } from '@caffeinejs/di'
 import {
   Controller,
   Get,
@@ -9,10 +8,6 @@ import {
   $p,
   fastifyAdapterFactory,
   FastifyContext,
-  Guard,
-  ErrHTTPUnauthorized,
-  GuardInput,
-  UseGuards,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
@@ -39,17 +34,6 @@ const responseSchema = {
   }),
 }
 
-@Injectable()
-class ApiKeyGuard implements Guard {
-  guard(input: GuardInput): boolean {
-    if (input.context.req.header('x-api-key') !== 'benchmark') {
-      throw new ErrHTTPUnauthorized()
-    }
-
-    return true
-  }
-}
-
 @Controller('')
 class AppController {
   @Get('/health')
@@ -60,7 +44,6 @@ class AppController {
   @Post('/api/test/:text/:num/:bool')
   @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
-  @UseGuards(ApiKeyGuard)
   helloWorld(
     ctx: FastifyContext,
     params: DataSchema,
@@ -84,10 +67,18 @@ void [AppController]
 
 const server = fastify({ logger: false })
 
+server.addHook('preHandler', (req, reply, done) => {
+  if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
+    reply.code(401).send({ error: 'Unauthorized' })
+    return
+  }
+  done()
+})
+
 const app = createWebApplication(fastifyAdapterFactory(server))
 
-// The same two hooks the `caffeine` fixture registers directly on Fastify, expressed as middlewares. The
-// work is identical; the delta against that fixture is the pipeline's overhead and nothing else.
+// The request-id hook the `caffeine` fixture registers directly on Fastify, expressed as a middleware. It is the
+// one difference between the two fixtures, so the delta against that one is the pipeline's overhead alone.
 app.use((ctx, next) => {
   ctx.header('x-request-id', Math.random().toString(36).slice(2))
   return next()

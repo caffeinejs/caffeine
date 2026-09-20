@@ -3,6 +3,8 @@ import { Elysia, t } from 'elysia'
 
 const PORT = parseInt(process.env.PORT ?? '3024', 10)
 
+const data = t.Object({ text: t.String(), num: t.Number(), bool: t.Boolean() })
+
 new Elysia({ adapter: node(), aot: true })
   .get('/health', () => ({ ok: true }))
   .onRequest(({ set }) => {
@@ -35,7 +37,8 @@ new Elysia({ adapter: node(), aot: true })
       },
       params: t.Object({ text: t.String(), num: t.Numeric(), bool: t.BooleanString() }),
       query: t.Object({ text: t.String(), num: t.Numeric(), bool: t.BooleanString() }),
-      body: t.Object({ text: t.String(), num: t.Number(), bool: t.Boolean() }),
+      body: data,
+      response: { 200: t.Object({ params: data, query: data, body: data }), 401: t.Object({ error: t.String() }) },
     },
   )
   .listen({ port: PORT, hostname: '0.0.0.0' })

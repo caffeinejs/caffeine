@@ -16,33 +16,36 @@ import {
   Query,
   Res,
   Scope,
+  SerializeOptions,
+  StandardSchemaSerializerInterceptor,
+  StandardSchemaValidationPipe,
   UnauthorizedException,
   UseGuards,
   UseInterceptors,
-  ValidationPipe,
 } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
 import { FastifyAdapter, NestFastifyApplication } from '@nestjs/platform-fastify'
-import { Transform, Type } from 'class-transformer'
-import { IsBoolean, IsInt, IsNotEmpty, IsString } from 'class-validator'
 import { FastifyReply } from 'fastify'
 import { Observable } from 'rxjs'
+import { z } from 'zod'
 
 const PORT = parseInt(process.env.PORT ?? '3031', 10)
 
-class Schema {
-  @IsString()
-  @IsNotEmpty()
-  text!: string
+// The validation and serialization of the request benchmark's Nest fixture, so the two differ by the
+// request-scoped dependency and nothing else.
+const schema = z.object({
+  text: z.string(),
+  num: z.coerce.number().int(),
+  bool: z.preprocess(v => v === 'true' || v === true, z.boolean()),
+})
+type Schema = z.infer<typeof schema>
 
-  @IsInt()
-  @Type(() => Number)
-  num!: number
-
-  @IsBoolean()
-  @Transform(({ value }: { value: unknown }) => value === 'true' || value === true)
-  bool!: boolean
-}
+const responseSchema = z.object({
+  params: schema,
+  query: schema,
+  body: schema,
+  header: schema,
+})
 
 @Injectable()
 class RequestIdInterceptor implements NestInterceptor {
@@ -100,27 +103,30 @@ class TestController {
 
   @Post('/api/test/:text/:num/:bool')
   @UseGuards(new ApiKeyGuard())
+  @UseInterceptors(StandardSchemaSerializerInterceptor)
+  @SerializeOptions({ schema: responseSchema })
   @HttpCode(200)
   test(
-    @Param() params: Schema,
-    @Query() query: Schema,
-    @Body() body: Schema,
-    @Headers('text') hText: string,
-    @Headers('num') hNum: string,
-    @Headers('bool') hBool: string,
+    @Param({ schema }) params: Schema,
+    @Query({ schema }) query: Schema,
+    @Body({ schema }) body: Schema,
+    @Headers() headers: Record<string, string>,
     @Res({ passthrough: true }) res: FastifyReply,
   ) {
     this.logger.log('request')
 
-    res.header('text', hText)
-    res.header('num', hNum)
-    res.header('bool', hBool)
+    // @Headers() takes no schema, so the headers the caffeine fixture validates are parsed here.
+    const header = schema.parse(headers)
+
+    res.header('text', header.text)
+    res.header('num', header.num.toString())
+    res.header('bool', header.bool.toString())
 
     return {
       params: { text: params.text, num: params.num, bool: params.bool },
       query: { text: query.text, num: query.num, bool: query.bool },
       body: { text: body.text, num: body.num, bool: body.bool },
-      header: { text: hText, num: parseInt(hNum, 10), bool: hBool === 'true' },
+      header: { text: header.text, num: header.num, bool: header.bool },
     }
   }
 }
@@ -132,6 +138,6 @@ class TestController {
 class AppModule {}
 
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
-app.useGlobalPipes(new ValidationPipe({ transform: true }))
+app.useGlobalPipes(new StandardSchemaValidationPipe())
 
 await app.listen(PORT, '0.0.0.0')

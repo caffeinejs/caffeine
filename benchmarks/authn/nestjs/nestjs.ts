@@ -17,7 +17,7 @@ import { AuthGuard, PassportModule, PassportStrategy } from '@nestjs/passport'
 import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import { ExtractJwt, Strategy } from 'passport-jwt'
 
-import { ROLE, SECRET } from '../shared.js'
+import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
 
 const PORT = parseInt(process.env.PORT ?? '3041', 10)
 
@@ -35,6 +35,8 @@ class JwtStrategy extends PassportStrategy(Strategy) {
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
       secretOrKey: SECRET,
+      issuer: ISSUER,
+      audience: AUDIENCE,
     })
   }
 
@@ -85,7 +87,7 @@ class AppController {
     PassportModule,
     JwtModule.register({
       secret: SECRET,
-      signOptions: { expiresIn: '1h' },
+      signOptions: { expiresIn: '1h', issuer: ISSUER, audience: AUDIENCE },
     }),
   ],
   controllers: [AppController],

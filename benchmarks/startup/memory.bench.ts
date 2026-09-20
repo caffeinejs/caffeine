@@ -25,7 +25,8 @@ function sample(script: string): MemUsage {
   if (result.status !== 0) {
     throw new Error(`Worker exited with code ${result.status}:\n${result.stderr}`)
   }
-  return JSON.parse(result.stdout) as MemUsage
+  // The last line: an application may log to stdout while it starts.
+  return JSON.parse(result.stdout.trimEnd().split('\n').at(-1)!) as MemUsage
 }
 
 function collect(script: string, n: number): MemUsage[] {
@@ -55,12 +56,21 @@ function kb(bytes: number): string {
   return (bytes / 1024).toFixed(0) + ' KB'
 }
 
-const baselineSample = spawnSync(
-  NODE,
-  ['--expose-gc', '-e', 'global.gc();process.stdout.write(JSON.stringify(process.memoryUsage()))'],
-  { encoding: 'utf8' },
-)
-const baseline = JSON.parse(baselineSample.stdout) as MemUsage
+// An empty process, sampled the same way and as often as the applications it is subtracted from.
+const BASELINE_SCRIPT = 'global.gc();global.gc();process.stdout.write(JSON.stringify(process.memoryUsage()))'
+
+function sampleBaseline(): MemUsage {
+  const result = spawnSync(NODE, ['--expose-gc', '-e', BASELINE_SCRIPT], { encoding: 'utf8' })
+  if (result.error) {
+    throw result.error
+  }
+  if (result.status !== 0) {
+    throw new Error(`Baseline worker exited with code ${result.status}:\n${result.stderr}`)
+  }
+  return JSON.parse(result.stdout) as MemUsage
+}
+
+const baseline = summarize(Array.from({ length: N }, sampleBaseline))
 
 console.log(`Collecting ${N} samples each (subprocess per sample)...`)
 const caffeineSamples = collect(`${DIST}/caffeine/memory.js`, N)

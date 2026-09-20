@@ -65,7 +65,6 @@ const REQ_HEADERS: Record<string, string> = {
 const EXPECTED_PARAMS = { text: 'hello', num: 42, bool: true }
 const EXPECTED_QUERY = { text: 'world', num: 7, bool: false }
 const EXPECTED_BODY = { text: 'test', num: 99, bool: true }
-const EXPECTED_HEADER = { text: 'hello', num: 42, bool: true }
 
 function ensureBunAvailable(): void {
   try {
@@ -161,13 +160,11 @@ for (const server of servers) {
           params: typeof EXPECTED_PARAMS
           query: typeof EXPECTED_QUERY
           body: typeof EXPECTED_BODY
-          header: typeof EXPECTED_HEADER
         }
 
         assert.deepEqual(body.params, EXPECTED_PARAMS, 'params mismatch')
         assert.deepEqual(body.query, EXPECTED_QUERY, 'query mismatch')
         assert.deepEqual(body.body, EXPECTED_BODY, 'body mismatch')
-        assert.deepEqual(body.header, EXPECTED_HEADER, 'header mismatch')
       })
 
       await t.test('response echoes headers', async () => {

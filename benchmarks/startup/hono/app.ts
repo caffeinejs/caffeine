@@ -57,6 +57,8 @@ app.route('/orders', createOrderRouter(orderCtrl))
 app.route('/payments', createPaymentRouter(paymentCtrl))
 
 const server = serve({ fetch: app.fetch, port: 3011, hostname: '127.0.0.1' }, () => {
-  process.stdout.write(`start: ${(performance.now() - started).toFixed(3)}ms\n`)
+  // performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.
+  const listening = performance.now()
+  process.stdout.write(`start: ${listening.toFixed(3)}ms\nbootstrap: ${(listening - started).toFixed(3)}ms\n`)
   server.close(() => process.exit(0))
 })

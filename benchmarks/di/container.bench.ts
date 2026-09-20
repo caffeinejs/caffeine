@@ -17,7 +17,7 @@ import {
   Scopes,
   token,
 } from '@caffeinejs/di'
-import { bench, do_not_optimize, group, run } from 'mitata'
+import { bench, do_not_optimize, group, run, summary } from 'mitata'
 
 const kDbURL = token<string>(Symbol('db_url'))
 
@@ -360,69 +360,50 @@ await di.init()
 
 const provideHolder = di.get(ProvideHolder)
 
+// Every case binds into a container built for that iteration, outside the timed region, with keys made up front.
+// One shared container would grow by a binding per iteration, so each case would run against whatever the ones
+// before it left behind, and the key's construction would be timed along with the bind.
 const kBindSym = token<number>(Symbol('bind_sym'))
-const diForBindings = new CaffeineIoC()
-let bindSeq = 0
-
-group('resolutions', () => {
-  bench('class simple', () => di.get(Simple))
-  bench('class ctor deps', () => di.get(Root))
-  bench('class ctor deps tr', () => di.get(RootTransient))
-  bench('class ctor props', () => di.get(RootWithProps))
-  bench('class ctor 2 props', () => di.get(RootWith2Props))
-  bench('class ctor method', () => di.get(RootWithMethodInjection))
-  bench('class ctor method props', () => di.get(RootWithAll))
-  bench('many', () => di.getMany(kLog))
-  bench('optional miss', () => di.getBinding(Maybe))
-  bench('abstract', () => di.get(Act))
-  bench('primary', () => di.get(kNotification))
-  bench('class destructuring', () => di.get(DestructuringRoot))
-  bench('bean - string value', () => di.get(kDbURL))
-  bench('ordered', () => di.get(OrderedRoot))
-  bench('mapped', () => di.get(MappedRoot))
-  bench('provide', () => di.get(ProvideRoot))
-  // do_not_optimize: the resolved instance is otherwise unused and V8 eliminates the whole call.
-  bench('provide get()', () => do_not_optimize(provideHolder.db.get()))
-  bench('allOf provide', () => di.get(AllOfProvideRoot))
-  bench('defer', () => di.get(DeferRoot))
-})
+const kBindStr = token<number>('bind_str')
+const kBindFactory = token<number>('bind_factory')
+const emptyContainer = (): CaffeineIoC => new CaffeineIoC({ decorators: false })
 
 group('bindings', () => {
-  bench('toValue str key', () => diForBindings.bind(token<number>(`bk_${bindSeq++}`), t => t.toValue(bindSeq)))
-  bench('toValue sym key', () => diForBindings.bind(kBindSym, t => t.toValue(bindSeq)))
-  bench('toSelf', () => diForBindings.bind(Undecorated, t => t.toSelf()))
-  bench('toFactory', () => diForBindings.bind(token<number>(`bf_${bindSeq++}`), t => t.toFactory(() => bindSeq)))
-  // A chain with modifiers, which is what production binding code actually looks like. The other cases in this
-  // group configure nothing, so they do not show what a multi-step chain costs.
-  bench('toSelf chained', () =>
-    diForBindings.bind(Undecorated, t =>
-      t.toSelf().lifetime(Scopes.SINGLETON).names(`n_${bindSeq++}`).lazy().internal(),
-    ))
+  summary(() => {
+    bench('toValue str key', function* () {
+      yield {
+        [0]: emptyContainer,
+        bench: (c: CaffeineIoC) => c.bind(kBindStr, t => t.toValue(1)),
+      }
+    })
+    bench('toValue sym key', function* () {
+      yield {
+        [0]: emptyContainer,
+        bench: (c: CaffeineIoC) => c.bind(kBindSym, t => t.toValue(1)),
+      }
+    })
+    bench('toSelf', function* () {
+      yield {
+        [0]: emptyContainer,
+        bench: (c: CaffeineIoC) => c.bind(Undecorated, t => t.toSelf()),
+      }
+    })
+    bench('toFactory', function* () {
+      yield {
+        [0]: emptyContainer,
+        bench: (c: CaffeineIoC) => c.bind(kBindFactory, t => t.toFactory(() => 1)),
+      }
+    })
+    // A chain with modifiers, which is what production binding code actually looks like. The other cases in this
+    // group configure nothing, so they do not show what a multi-step chain costs.
+    bench('toSelf chained', function* () {
+      yield {
+        [0]: emptyContainer,
+        bench: (c: CaffeineIoC) =>
+          c.bind(Undecorated, t => t.toSelf().lifetime(Scopes.SINGLETON).names('chained').lazy().internal()),
+      }
+    })
+  })
 })
 
-const { benchmarks } = await run()
-
-const fmtNs = (ns: number): string => {
-  if (ns < 1_000) {
-    return `${ns.toFixed(2)} ns`
-  }
-  if (ns < 1_000_000) {
-    return `${(ns / 1_000).toFixed(2)} µs`
-  }
-  return `${(ns / 1_000_000).toFixed(2)} ms`
-}
-
-const entries = benchmarks
-  .flatMap(t => t.runs)
-  .filter(r => r.stats != null)
-  .map(r => ({ name: r.name, avg: r.stats!.avg }))
-  .sort((a, b) => a.avg - b.avg)
-
-const maxName = Math.max(...entries.map(e => e.name.length))
-
-console.log('\n--- sorted fastest → slowest ---')
-entries.forEach((e, i) => {
-  const rank = String(i + 1).padStart(2)
-  const name = e.name.padEnd(maxName)
-  console.log(`${rank}. ${name}  ${fmtNs(e.avg)}`)
-})
+await run()

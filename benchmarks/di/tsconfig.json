@@ -8,6 +8,7 @@
   },
   "include": [
     "container.bench.ts",
+    "compile.bench.ts",
     "compare_third_parties.bench.ts",
     "perf_compare.bench.ts",
     "testdata/di.ts",

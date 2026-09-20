@@ -1,5 +1,5 @@
 import { $aop, Aspect, CaffeineIoC, Injectable, Order, type JoinPoint, type MethodAspect } from '@caffeinejs/di'
-import { bench, group, run } from 'mitata'
+import { bench, do_not_optimize, group, run, summary } from 'mitata'
 
 @Injectable()
 class Plain {
@@ -75,38 +75,18 @@ const withBefore = di.get(WithBeforeAspect)
 const withAround = di.get(WithAroundAspect)
 const withStacked = di.get(WithStackedAspects)
 
+// Bounded, so the argument stays a small integer for every case: an unbounded counter shared by the four would
+// hand the later ones heap numbers. The result is consumed, or V8 inlines `plain.add` and drops the call.
 let n = 0
+const next = (): number => (n = (n + 1) & 0xffff)
 
 group('method calls', () => {
-  bench('plain', () => plain.add(n++, n))
-  bench('aspect: before', () => withBefore.add(n++, n))
-  bench('aspect: around', () => withAround.add(n++, n))
-  bench('aspect: stacked x2', () => withStacked.add(n++, n))
+  summary(() => {
+    bench('plain', () => do_not_optimize(plain.add(next(), 1)))
+    bench('aspect: before', () => do_not_optimize(withBefore.add(next(), 1)))
+    bench('aspect: around', () => do_not_optimize(withAround.add(next(), 1)))
+    bench('aspect: stacked x2', () => do_not_optimize(withStacked.add(next(), 1)))
+  })
 })
 
-const { benchmarks } = await run({ colors: process.stdout.isTTY === true })
-
-const fmtNs = (ns: number): string => {
-  if (ns < 1_000) {
-    return `${ns.toFixed(2)} ns`
-  }
-  if (ns < 1_000_000) {
-    return `${(ns / 1_000).toFixed(2)} µs`
-  }
-  return `${(ns / 1_000_000).toFixed(2)} ms`
-}
-
-const entries = benchmarks
-  .flatMap(t => t.runs)
-  .filter(r => r.stats != null)
-  .map(r => ({ name: r.name, avg: r.stats!.avg }))
-  .sort((a, b) => a.avg - b.avg)
-
-const maxName = Math.max(...entries.map(e => e.name.length))
-
-console.log('\n--- sorted fastest → slowest ---')
-entries.forEach((e, i) => {
-  const rank = String(i + 1).padStart(2)
-  const name = e.name.padEnd(maxName)
-  console.log(`${rank}. ${name}  ${fmtNs(e.avg)}`)
-})
+await run({ colors: process.stdout.isTTY === true })

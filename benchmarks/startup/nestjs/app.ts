@@ -7,6 +7,8 @@ import { AppModule } from './app.module.js'
 const started = performance.now()
 const app = await NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter(), { logger: false })
 await app.listen(3012, '127.0.0.1')
-process.stdout.write(`start: ${(performance.now() - started).toFixed(3)}ms\n`)
+// performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.
+const listening = performance.now()
+process.stdout.write(`start: ${listening.toFixed(3)}ms\nbootstrap: ${(listening - started).toFixed(3)}ms\n`)
 await app.close()
 process.exit(0)
