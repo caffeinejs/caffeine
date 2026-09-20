@@ -29,6 +29,11 @@ make check          # full quality gate
 
 Docs-only changes (`*.md` and nothing else) need `make lint-markdown`, not `make check`.
 
+End-to-end tests are not part of `make check`. `make test-e2e` needs Docker: it starts the services under
+`test/services/`, runs `test/e2e/`, and stops them. A spec whose service is down skips. CI runs the `E2E` job
+with `CAFFEINE_E2E_STRICT=1`, which fails such a spec instead. The OIDC and OAuth2 specs are not part of the
+CI run yet.
+
 ## Commit conventions
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/).

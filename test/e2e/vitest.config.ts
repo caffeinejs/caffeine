@@ -6,7 +6,8 @@ import { defineConfig } from 'vitest/config'
 // Opt-in e2e project (not in the root vitest projects list). Runs the OIDC/OAuth2 flows against
 // the dockerized Spring Authorization Server (test/services/oauthserver), distlock against the
 // dockerized Redis and Valkey (test/services/redis), and configuration against the dockerized Spring
-// Cloud Config Server (test/services/configserver). Specs skip when their service is not up.
+// Cloud Config Server (test/services/configserver). Specs skip when their service is not up, unless
+// CAFFEINE_E2E_STRICT=1, which fails them instead.
 export default defineConfig({
   plugins: [
     swc.vite({
