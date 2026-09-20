@@ -216,7 +216,12 @@ describe('the challenge of a route that names several schemes', () => {
             .addBasic(b => b.realm('Docs').validate(() => null))
             .addJWTBearer(j => j.secret(secret).issuer('issuer').audience('audience'))
             .addCookie(c => c.sessionSecret(secret).secure(false).loginPath('/login'))
-            .addOpaqueToken('Key', o => o.scheme('ApiKey').realm('Keys').store({ validate: () => null }))
+            .addOpaqueToken('Key', o =>
+              o
+                .scheme('ApiKey')
+                .realm('Keys')
+                .store({ validate: () => null }),
+            )
             .default('Bearer'),
         )
         .mount(newRouter('/named').authorize({ schemes }).get('/', ok)),

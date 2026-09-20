@@ -152,7 +152,9 @@ describe('JWTService — the strength of a symmetric secret', () => {
 
     const short = await imported(16)
     expect(() => new JWTService({ publicKey: short, algorithm: 'HS256' })).toThrow(/at least 32 bytes, got 16/)
-    expect(() => new JWTService({ privateKey: short, publicKey: short, algorithm: 'HS256' })).toThrow(/at least 32 bytes/)
+    expect(() => new JWTService({ privateKey: short, publicKey: short, algorithm: 'HS256' })).toThrow(
+      /at least 32 bytes/,
+    )
 
     const long = await imported(32)
     expect(() => new JWTService({ publicKey: long, algorithm: 'HS256' })).not.toThrow()

@@ -154,16 +154,18 @@ describe('authentication options set from the tree', () => {
         config: configured({ schemes: { oauth: { loginPath: '/start' } } }),
       })
         .authentication((a, c) =>
-          a.config(c.auth).addOAuth2('oauth', o =>
-            o
-              .clientID(provider.clientID)
-              .clientSecret(provider.clientSecret)
-              .sessionSecret(SESSION_SECRET)
-              .authorizationEndpoint(provider.authorizationEndpoint)
-              .tokenEndpoint(provider.tokenEndpoint)
-              .userInfoEndpoint(provider.userInfoEndpoint)
-              .callbackURL(provider.callbackURL),
-          ),
+          a
+            .config(c.auth)
+            .addOAuth2('oauth', o =>
+              o
+                .clientID(provider.clientID)
+                .clientSecret(provider.clientSecret)
+                .sessionSecret(SESSION_SECRET)
+                .authorizationEndpoint(provider.authorizationEndpoint)
+                .tokenEndpoint(provider.tokenEndpoint)
+                .userInfoEndpoint(provider.userInfoEndpoint)
+                .callbackURL(provider.callbackURL),
+            ),
         )
         .mount(protectedRoute)
       await app.ready()
@@ -189,15 +191,17 @@ describe('authentication options set from the tree', () => {
         config: configured({ schemes: { oidc: { loginPath: '/oidc/start' } } }),
       })
         .authentication((a, c) =>
-          a.config(c.auth).addOIDC('oidc', o =>
-            o
-              .clientID(provider.clientID)
-              .clientSecret(provider.clientSecret)
-              .sessionSecret(SESSION_SECRET)
-              .issuer('https://provider.test')
-              .discoveryURL('https://provider.test/.well-known/openid-configuration')
-              .callbackURL(provider.callbackURL),
-          ),
+          a
+            .config(c.auth)
+            .addOIDC('oidc', o =>
+              o
+                .clientID(provider.clientID)
+                .clientSecret(provider.clientSecret)
+                .sessionSecret(SESSION_SECRET)
+                .issuer('https://provider.test')
+                .discoveryURL('https://provider.test/.well-known/openid-configuration')
+                .callbackURL(provider.callbackURL),
+            ),
         )
         .mount(protectedRoute)
       await app.ready()
@@ -232,17 +236,19 @@ describe('authentication options set from the tree', () => {
     const app = createWebApplication(fastifyAdapterFactory(server()), {
       config: configured({ schemes: { oauth: { tokenEndpointAuthMethod: 'client_secret_basic' } } }),
     }).authentication((a, c) =>
-      a.config(c.auth).addOAuth2('oauth', o =>
-        o
-          .clientID(provider.clientID)
-          .clientSecret(provider.clientSecret)
-          .sessionSecret(SESSION_SECRET)
-          .authorizationEndpoint(provider.authorizationEndpoint)
-          .tokenEndpoint(provider.tokenEndpoint)
-          .userInfoEndpoint(provider.userInfoEndpoint)
-          .subjectClaim('id')
-          .callbackURL(provider.callbackURL),
-      ),
+      a
+        .config(c.auth)
+        .addOAuth2('oauth', o =>
+          o
+            .clientID(provider.clientID)
+            .clientSecret(provider.clientSecret)
+            .sessionSecret(SESSION_SECRET)
+            .authorizationEndpoint(provider.authorizationEndpoint)
+            .tokenEndpoint(provider.tokenEndpoint)
+            .userInfoEndpoint(provider.userInfoEndpoint)
+            .subjectClaim('id')
+            .callbackURL(provider.callbackURL),
+        ),
     )
     await app.ready()
 

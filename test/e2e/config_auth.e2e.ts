@@ -81,16 +81,18 @@ describe('authentication options set from the environment', () => {
     const running = await startApp(
       app =>
         app.authentication((auth, c) =>
-          auth.config(c.auth).addOAuth2('oauth', o =>
-            o
-              .clientID('code-client')
-              .clientSecret('code-client-secret')
-              .sessionSecret('e2e-session-secret-at-least-32-chars!!')
-              .authorizationEndpoint('https://provider.invalid/authorize')
-              .tokenEndpoint('https://provider.invalid/token')
-              .userInfoEndpoint('https://provider.invalid/userinfo')
-              .callbackURL('http://localhost/auth/callback'),
-          ),
+          auth
+            .config(c.auth)
+            .addOAuth2('oauth', o =>
+              o
+                .clientID('code-client')
+                .clientSecret('code-client-secret')
+                .sessionSecret('e2e-session-secret-at-least-32-chars!!')
+                .authorizationEndpoint('https://provider.invalid/authorize')
+                .tokenEndpoint('https://provider.invalid/token')
+                .userInfoEndpoint('https://provider.invalid/userinfo')
+                .callbackURL('http://localhost/auth/callback'),
+            ),
         ),
       {
         config: configuredFrom({

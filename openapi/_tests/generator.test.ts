@@ -356,7 +356,9 @@ describe('security', () => {
   // A scope list means every scope in it. A `roles` list means any role in it, and several lists mean one role
   // of each, so the document has to say it with alternatives or it states a stricter rule than the one enforced.
   describe('roles, where the scheme has scopes', () => {
-    const flows = { authorizationCode: { authorizationURL: 'https://idp.test/authorize', tokenURL: 'https://idp.test/token' } }
+    const flows = {
+      authorizationCode: { authorizationURL: 'https://idp.test/authorize', tokenURL: 'https://idp.test/token' },
+    }
     const withScopes = new Map([
       ['OAuth', { kind: 'oauth2' as const, flows }],
       ['Bearer', { kind: 'http' as const, scheme: 'bearer' }],

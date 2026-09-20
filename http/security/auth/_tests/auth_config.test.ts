@@ -326,16 +326,18 @@ describe('authentication configuration', () => {
       server.register(FastifyCookie)
 
       const app = createWebApplication(fastifyAdapterFactory(server), { config: conf }).authentication((a, c) =>
-        a.config(c.auth).addOAuth2('oauth', o =>
-          o
-            .clientID('code-client')
-            .clientSecret('code-client-secret')
-            .sessionSecret('a-perfectly-long-session-secret-value!!')
-            .authorizationEndpoint('https://provider.test/authorize')
-            .tokenEndpoint('https://provider.test/token')
-            .userInfoEndpoint('https://provider.test/userinfo')
-            .callbackURL('https://app.test/auth/callback'),
-        ),
+        a
+          .config(c.auth)
+          .addOAuth2('oauth', o =>
+            o
+              .clientID('code-client')
+              .clientSecret('code-client-secret')
+              .sessionSecret('a-perfectly-long-session-secret-value!!')
+              .authorizationEndpoint('https://provider.test/authorize')
+              .tokenEndpoint('https://provider.test/token')
+              .userInfoEndpoint('https://provider.test/userinfo')
+              .callbackURL('https://app.test/auth/callback'),
+          ),
       )
 
       await app.ready()
