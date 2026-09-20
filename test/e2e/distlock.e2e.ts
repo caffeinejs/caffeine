@@ -18,6 +18,7 @@ import { createClient } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { reachable } from './internal/redis/index.js'
+import { required } from './internal/strict.js'
 
 // Every server the suite runs against. Adding a server is adding a row; the cases below run once per row.
 const SERVERS = [
@@ -26,7 +27,9 @@ const SERVERS = [
 ]
 
 // Probed once, up front, so a row whose server is down skips on its own and the others still run.
-const targets = await Promise.all(SERVERS.map(async server => ({ ...server, up: await reachable(server.url) })))
+const targets = await Promise.all(
+  SERVERS.map(async server => ({ ...server, up: required(server.name, await reachable(server.url)) })),
+)
 
 const newClient = (url: string) => createClient({ url })
 type Client = ReturnType<typeof newClient>

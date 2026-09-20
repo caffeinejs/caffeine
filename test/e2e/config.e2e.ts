@@ -24,6 +24,7 @@ import {
   removeServerFiles,
   writeServerFile,
 } from './internal/configserver/index.js'
+import { required } from './internal/strict.js'
 
 const APP = 'e2e-web'
 const WAIT = { timeout: 10_000, interval: 100 }
@@ -126,7 +127,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
   }).mount(routes)
 }
 
-const up = await configServerServesRuntime()
+const up = required('configserver', await configServerServesRuntime())
 
 describe.skipIf(!up)('a web application configured from a config server and five other sources', () => {
   // A source written at run time. It says when it changed, and the store loads it again by itself.

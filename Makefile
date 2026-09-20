@@ -130,11 +130,21 @@ oauthserver-up: ## spin up the Spring Authorization Server locally (Docker)
 oauthserver-down: ## stop the Spring Authorization Server
 	@docker compose -f test/services/oauthserver/docker-compose.yml down
 
+.PHONY: redis-up
+redis-up: ## spin up Redis and Valkey locally (Docker)
+	@docker compose -f test/services/redis/docker-compose.yml up -d --wait
+	@echo "redis and valkey are up"
+
+.PHONY: redis-down
+redis-down: ## stop Redis and Valkey
+	@docker compose -f test/services/redis/docker-compose.yml down
+
 .PHONY: test-e2e
-test-e2e: oauthserver-up configserver-up ## run the e2e against a real Spring Authorization Server and Config Server
+test-e2e: oauthserver-up configserver-up redis-up ## run the e2e against a real Spring Authorization Server, Config Server, Redis and Valkey
 	@npm run test:e2e; status=$$?; \
 		docker compose -f test/services/oauthserver/docker-compose.yml down; \
 		docker compose -f test/services/configserver/docker-compose.yml down; \
+		docker compose -f test/services/redis/docker-compose.yml down; \
 		exit $$status
 
 .PHONY: kafka-up
