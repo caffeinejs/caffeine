@@ -53,13 +53,6 @@ describe('CredentialsService', () => {
     expect(principal!.identities[0].authenticationType).toBe('Password')
   })
 
-  it('verifyCredentials is an alias of attempt', async () => {
-    const passwordHash = await hasher.hash('secret')
-    const svc = new CredentialsService(providerFor({ id: 'u1', passwordHash }), hasher)
-    expect(await svc.verifyCredentials('alice', 'secret')).not.toBeNull()
-    expect(await svc.verifyCredentials('alice', 'bad')).toBeNull()
-  })
-
   // Login is the only moment the plaintext is in hand, so it is the only moment a stored hash can be
   // upgraded. Without this, raising the scrypt cost left every existing user on the old parameters.
   describe('attemptWithRehash', () => {

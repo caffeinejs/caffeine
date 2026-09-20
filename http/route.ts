@@ -8,7 +8,7 @@ import type { ErrorHandler } from './error/error.js'
 import type { CompiledGuard } from './guards/compile.js'
 import type { RouteDetail, RouteGroupDetail } from './routing/detail.js'
 import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'
-import { BodyMode, RouteAuthzOptions } from './routing/spec.js'
+import { BodyMode, RouteAuthz } from './routing/spec.js'
 import { AuthzRouteService } from './security/authz/index.js'
 
 /** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
@@ -105,7 +105,8 @@ export interface Route<R = FastifyRequest> {
 
 export interface RouteAuthorization {
   hasProtection: boolean
-  options?: RouteAuthzOptions
+  /** Everything declared for the route, its groups included. Absent when no level declared anything. */
+  options?: RouteAuthz
   authorizer?: AuthzRouteService
 
   /**
@@ -115,7 +116,7 @@ export interface RouteAuthorization {
    * Resolved while the route is compiled, so a reader — the OpenAPI generator, most of all — describes what
    * the route really requires without having to find the authentication feature and ask it what the default
    * is. It says nothing about whether the route is gated: {@link hasProtection} and
-   * {@link RouteAuthzOptions.allowAnonymous} answer that, and a route may name schemes without being gated.
+   * {@link RouteAuthz.allowAnonymous} answer that, and a route may name schemes without being gated.
    */
   schemes: readonly string[]
 }

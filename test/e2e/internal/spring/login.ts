@@ -1,12 +1,12 @@
+import type { Browser, Page } from '../browser/index.js'
+
 /**
- * Helpers to drive the Spring Authorization Server (test/services/oauthserver) over real HTTP from the
- * OIDC/OAuth2 e2e specs. Spring authenticates the user with a form-login page, so the
- * authorization-code flow is scripted here: GET the authorize URL, follow to /login, scrape the
- * CSRF token, POST credentials, then follow the saved-request redirects until the client callback
- * (…/callback?code=…&state=…) is reached.
+ * Helpers to drive the Spring Authorization Server (test/services/oauthserver) from the authentication e2e specs.
+ * Spring authenticates the user with a form-login page, so a sign-in is a navigation that stops there, a form
+ * post, and the redirects that follow it back to the application.
  */
 
-const OAUTH_SERVER = 'http://localhost:9000'
+export const OAUTH_SERVER = 'http://localhost:9000'
 
 /** True when the dockerized authorization server is reachable; specs skip when it is not. */
 export async function oauthServerUp(): Promise<boolean> {
@@ -18,95 +18,43 @@ export async function oauthServerUp(): Promise<boolean> {
   }
 }
 
-class CookieJar {
-  readonly #jar = new Map<string, string>()
-
-  absorb(res: Response): void {
-    for (const cookie of res.headers.getSetCookie()) {
-      const pair = cookie.split(';', 1)[0]
-      const eq = pair.indexOf('=')
-      if (eq > 0) {
-        this.#jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1))
-      }
-    }
-  }
-
-  header(): string {
-    return [...this.#jar].map(([name, value]) => `${name}=${value}`).join('; ')
-  }
-}
-
 /**
- * Performs Spring's form login for an authorization request and returns the final redirect to the
- * client callback. `callbackOrigin` is the caffeine callback base (e.g. http://localhost:9999) —
- * the loop stops once a redirect points there.
+ * Signs in on Spring's login page and follows the saved authorization request back to the application.
+ *
+ * @param page - Where a navigation to a protected URL stopped. It has to be Spring's login form.
+ * @throws Error when `page` is not the login form, which means the challenge never reached the provider.
  */
-export async function springLogin(
-  authorizeUrl: string,
-  username: string,
-  password: string,
-  callbackOrigin: string,
-): Promise<string> {
-  const jar = new CookieJar()
-
-  // Authorize while unauthenticated → 302 to the login page.
-  let res = await fetch(authorizeUrl, { headers: { accept: 'text/html', cookie: jar.header() }, redirect: 'manual' })
-  jar.absorb(res)
-  let location = res.headers.get('location')
-  if (!location) {
-    throw new Error(`Expected a redirect to the login page, got status ${res.status}`)
+export async function springLogin(browser: Browser, page: Page, username: string, password: string): Promise<Page> {
+  if (page.status !== 200 || !page.url.startsWith(`${OAUTH_SERVER}/login`)) {
+    throw new Error(
+      `Expected Spring's login page, got ${page.status} at ${page.url} (hops: ${page.hops.map(hop => `${hop.status} ${hop.url}`).join(' -> ')})`,
+    )
   }
 
-  // Fetch the login page for its CSRF token.
-  const loginUrl = new URL(location, OAUTH_SERVER).toString()
-  res = await fetch(loginUrl, { headers: { cookie: jar.header() } })
-  jar.absorb(res)
-  const csrf = /name="_csrf"[^>]*value="([^"]+)"/.exec(await res.text())?.[1]
-  if (!csrf) {
+  const csrf = /name="_csrf"[^>]*value="([^"]+)"/.exec(page.text())?.[1]
+  if (csrf === undefined) {
     throw new Error('CSRF token not found on the Spring login page')
   }
 
-  // Post credentials.
-  res = await fetch(loginUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: jar.header() },
-    body: new URLSearchParams({ username, password, _csrf: csrf }).toString(),
-    redirect: 'manual',
-  })
-  jar.absorb(res)
-  location = res.headers.get('location')
-  if (!location) {
-    throw new Error(`Login POST did not redirect (status ${res.status}) — bad credentials?`)
-  }
-
-  // Follow the saved authorization request through to the client callback.
-  for (let hop = 0; hop < 6; hop++) {
-    const next = new URL(location, OAUTH_SERVER).toString()
-    if (next.startsWith(callbackOrigin)) {
-      return next
-    }
-    res = await fetch(next, { headers: { accept: 'text/html', cookie: jar.header() }, redirect: 'manual' })
-    jar.absorb(res)
-    const loc = res.headers.get('location')
-    if (!loc) {
-      throw new Error(`Authorization flow stalled at ${next} (status ${res.status})`)
-    }
-    location = loc
-  }
-  throw new Error('Authorization flow did not reach the client callback')
+  return browser.submit(page.url, { username, password, _csrf: csrf })
 }
 
-/** Returns the first `name=value` Set-Cookie whose name contains `nameIncludes` and has a value. */
-export function pickCookie(res: Response, nameIncludes: string): string {
-  for (const cookie of res.headers.getSetCookie()) {
-    const pair = cookie.split(';', 1)[0]
-    const eq = pair.indexOf('=')
-    if (eq <= 0) {
-      continue
-    }
-    if (pair.slice(0, eq).includes(nameIncludes) && pair.slice(eq + 1).length > 0) {
-      return pair
-    }
+/** An access token from the `client_credentials` grant, the way a service calling a resource server gets one. */
+export async function clientCredentialsToken(clientID: string, clientSecret: string, scope: string): Promise<string> {
+  const response = await fetch(`${OAUTH_SERVER}/oauth2/token`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      authorization: `Basic ${Buffer.from(`${clientID}:${clientSecret}`).toString('base64')}`,
+    },
+    body: new URLSearchParams({ grant_type: 'client_credentials', scope }),
+    signal: AbortSignal.timeout(5000),
+  })
+
+  const body = (await response.json()) as { access_token?: string; error?: string }
+  if (!response.ok || body.access_token === undefined) {
+    throw new Error(`Cannot get a client_credentials token for "${clientID}": ${response.status} ${body.error ?? ''}`)
   }
-  throw new Error(`No Set-Cookie matching "${nameIncludes}" in the response`)
+
+  return body.access_token
 }

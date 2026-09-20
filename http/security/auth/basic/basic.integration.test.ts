@@ -68,7 +68,7 @@ describe('BasicAuthenticationHandler (application)', () => {
 
     const res = await app.fetch('/basic-challenge')
     expect(res.status).toBe(401)
-    expect(res.headers.get('WWW-Authenticate')).toBe('Basic realm="My App"')
+    expect(res.headers.get('WWW-Authenticate')).toBe('Basic realm="My App", charset="UTF-8"')
   })
 
   it('returns 401 when validate rejects the credentials', async () => {

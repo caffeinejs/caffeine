@@ -82,6 +82,7 @@ function makeCtx(
   const deleteCookie = vi.fn().mockReturnThis()
   const redirect = vi.fn().mockReturnThis()
   const status = vi.fn().mockReturnThis()
+  const header = vi.fn().mockReturnThis()
 
   const ctx = {
     req: {
@@ -94,9 +95,10 @@ function makeCtx(
     deleteCookie,
     redirect,
     status,
+    header,
   } as unknown as Context
 
-  return { ctx, cookie, deleteCookie, redirect, status }
+  return { ctx, cookie, deleteCookie, redirect, status, header }
 }
 
 const DISCOVERY_DOCUMENT = {
@@ -137,9 +139,13 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(privateKey)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          return {
+            ok: true,
+            json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+          }
         }
         return { ok: false, status: 404 }
       }),
@@ -432,6 +438,7 @@ describe('ticket key generation', () => {
               .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
               .setIssuer(ISSUER)
               .setAudience(CLIENT_ID)
+              .setIssuedAt()
               .setExpirationTime('1h')
               .sign(pair.privateKey)
             return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -496,6 +503,7 @@ describe('RemoteAuthenticationTicket shape', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(pair.privateKey)
           return { ok: true, json: () => Promise.resolve({ id_token: idToken }) }
@@ -574,9 +582,13 @@ describe('RP-initiated logout', () => {
             .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
             .setIssuer(ISSUER)
             .setAudience(CLIENT_ID)
+            .setIssuedAt()
             .setExpirationTime('1h')
             .sign(privateKey)
-          return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+          return {
+            ok: true,
+            json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+          }
         }
         return { ok: false, status: 404 }
       }),
@@ -627,7 +639,7 @@ describe('RP-initiated logout', () => {
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     const url = new URL(redirect.mock.calls[0][0] as string)
     expect(url.origin + url.pathname).toBe(END_SESSION)
@@ -654,7 +666,7 @@ describe('RP-initiated logout', () => {
     expect(store.tickets.size).toBe(1)
 
     const { ctx, deleteCookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     expect(store.tickets.size).toBe(0)
     expect(deleteCookie).toHaveBeenCalledWith('__oidc_session', expect.any(Object))
@@ -674,7 +686,7 @@ describe('RP-initiated logout', () => {
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     const url = new URL(redirect.mock.calls[0][0] as string)
     // Omitted rather than faked: sending some other session's token would be worse.
@@ -692,7 +704,7 @@ describe('RP-initiated logout', () => {
     )
     await signIn(handler, 'n', { end_session_endpoint: undefined })
 
-    await expect(handler.signOutRedirect(makeCtx().ctx)).rejects.toThrow('advertises no end_session_endpoint')
+    await expect(handler.signOut(makeCtx().ctx)).rejects.toThrow('advertises no end_session_endpoint')
   })
 
   /**
@@ -723,7 +735,7 @@ describe('RP-initiated logout', () => {
     )
 
     const { ctx, redirect, deleteCookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     expect(store.tickets.size).toBe(0)
     expect(deleteCookie).toHaveBeenCalledWith('__oidc_session', expect.any(Object))
@@ -744,7 +756,7 @@ describe('RP-initiated logout', () => {
     // Revoke runs before the endpoint is resolved, so the ticket is gone even though the call
     // ultimately rejects for want of an end_session_endpoint.
     const { ctx } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await expect(handler.signOutRedirect(ctx)).rejects.toThrow('advertises no end_session_endpoint')
+    await expect(handler.signOut(ctx)).rejects.toThrow('advertises no end_session_endpoint')
     expect(store.tickets.size).toBe(0)
   })
 })

@@ -16,6 +16,8 @@ export interface GithubPresetOptions {
    * GitHub returns `email: null` from `/user` unless the user made it public, so without this
    * a GitHub sign-in usually yields no email at all. Off by default: it costs an extra request
    * and needs the `user:email` scope.
+   *
+   * An `enrichUserInfo` of the application's own still runs, after this one, with the email filled in.
    */
   includeEmail?: boolean
   /** Sent on every GitHub API call. GitHub rejects requests without one. */
@@ -82,13 +84,18 @@ export function githubOAuth2Preset(opts: GithubInput & GithubPresetOptions): OAu
       'User-Agent': userAgent,
       ...rest.tokenRequestHeaders,
     },
+    // The caller's own enrichment runs second, so it sees the email this one found.
     enrichUserInfo: includeEmail
-      ? async (userInfo, tokens) => ({
-          ...userInfo,
-          email:
-            userInfo.email ??
-            (await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS)),
-        })
+      ? async (userInfo, tokens) => {
+          const withEmail = {
+            ...userInfo,
+            email:
+              userInfo.email ??
+              (await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS)),
+          }
+
+          return rest.enrichUserInfo === undefined ? withEmail : rest.enrichUserInfo(withEmail, tokens)
+        }
       : rest.enrichUserInfo,
   }
 }

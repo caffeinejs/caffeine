@@ -21,7 +21,7 @@ export interface RouteGroupSpec<R> {
   header?: Map<string, string | string[]>
   bodyLimit?: number
   timeout?: number
-  authz?: RouteAuthzOptions
+  authz?: RouteAuthz
   config?: Map<string, unknown>
   options?: Map<string, unknown>
   detail?: RouteGroupDetail
@@ -50,7 +50,7 @@ export interface RouteSpec<R> {
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
-  authz?: RouteAuthzOptions
+  authz?: RouteAuthz
   config?: Map<string, unknown>
   options?: Map<string, unknown>
   detail?: RouteDetail
@@ -66,9 +66,35 @@ export interface RouteSpec<R> {
  */
 export type BodyMode = 'buffer' | 'stream'
 
+/** One authorization declaration, as `@Authorize`, `@Roles`, `@AllowAnonymous` or `.authorize(...)` hands it over. */
 export interface RouteAuthzOptions {
   allowAnonymous?: boolean
   policy?: string | string[]
   schemes?: string[]
   roles?: string[]
+}
+
+/**
+ * What a group or a route declared about authorization: every {@link RouteAuthzOptions} made on it, folded into one.
+ *
+ * Declarations add up and none replaces another. A route may carry several — `@Roles` next to `@Authorize`, a
+ * chain calling `.authorize(...)` twice — and a route sits inside a group that may sit inside others. `foldAuthz`
+ * combines the declarations of one level and `mergeAuthz` combines levels.
+ */
+export interface RouteAuthz {
+  /**
+   * The level was declared public. It opens what declares nothing below it, and a more specific level that
+   * declares protection of its own is protected all the same.
+   */
+  allowAnonymous: boolean
+  /**
+   * A declaration named no requirement of its own — a bare `@Authorize()`, or one naming only schemes — which is
+   * what asks for the policy the application set as the decorator's default.
+   */
+  defaultPolicy: boolean
+  /** Named policies. Every one of them has to pass. */
+  policies: readonly string[]
+  /** One entry per `roles` declaration: any role of an entry satisfies that entry, and every entry has to be satisfied. */
+  roleGroups: ReadonlyArray<readonly string[]>
+  schemes?: readonly string[]
 }

@@ -169,17 +169,48 @@ export function deriveSecurity(
   // Roles become scopes only where the scheme has a scope concept. On an http or apiKey scheme a scope list
   // is meaningless — the specification requires it to be empty — so the roles are dropped here and remain
   // visible in the operation's description instead.
-  const roles = authz.options?.roles ?? []
+  //
+  // A scope list means every scope in it, while a `roles` list means any role in it. A scheme with scopes is
+  // therefore offered once per way of satisfying the route, which is one role out of each list.
+  const alternatives = roleAlternatives(authz.options?.roleGroups ?? [])
 
-  return resolved.map(name => ({ [name]: scopesFor(schemes?.[name], roles) }))
+  return resolved.flatMap(name =>
+    hasScopes(schemes?.[name]) ? alternatives.map(roles => ({ [name]: roles })) : [{ [name]: [] }],
+  )
 }
 
-function scopesFor(scheme: SecuritySchemeObject | undefined, roles: string[]): string[] {
-  if (scheme === undefined) {
-    return []
+function hasScopes(scheme: SecuritySchemeObject | undefined): boolean {
+  return scheme?.type === 'oauth2' || scheme?.type === 'openIdConnect'
+}
+
+/**
+ * Every way of taking one role out of each group. With no group there is one way, which takes no role.
+ *
+ * A group with nothing in it is skipped. It would otherwise leave no way at all, and a requirement list that
+ * comes out empty is how the specification spells "no security".
+ */
+function roleAlternatives(groups: ReadonlyArray<readonly string[]>): string[][] {
+  let alternatives: string[][] = [[]]
+
+  for (const group of groups) {
+    if (group.length > 0) {
+      alternatives = alternatives.flatMap(taken => group.map(role => (taken.includes(role) ? taken : [...taken, role])))
+    }
   }
 
-  return scheme.type === 'oauth2' || scheme.type === 'openIdConnect' ? roles : []
+  // Two groups that share a role reach the same set by different routes.
+  const seen = new Set<string>()
+
+  return alternatives.filter(roles => {
+    const key = roles.toSorted().join('\n')
+    if (seen.has(key)) {
+      return false
+    }
+
+    seen.add(key)
+
+    return true
+  })
 }
 
 /**
@@ -196,13 +227,16 @@ export function authorizationNote(route: Route<unknown>): string | undefined {
 
   const parts: string[] = []
 
-  if (options.roles?.length) {
-    parts.push(`roles: ${options.roles.join(', ')}`)
+  // Any role of a group will do, and every group has to be satisfied.
+  const groups = options.roleGroups.map(roles => roles.join(' or '))
+  if (groups.length === 1) {
+    parts.push(`roles: ${groups[0]}`)
+  } else if (groups.length > 1) {
+    parts.push(`roles: ${groups.map(group => `(${group})`).join(' and ')}`)
   }
 
-  const policies = options.policy === undefined ? [] : Array.isArray(options.policy) ? options.policy : [options.policy]
-  if (policies.length > 0) {
-    parts.push(`policy: ${policies.join(', ')}`)
+  if (options.policies.length > 0) {
+    parts.push(`policy: ${options.policies.join(', ')}`)
   }
 
   return parts.length === 0 ? undefined : `Requires ${parts.join('; ')}.`

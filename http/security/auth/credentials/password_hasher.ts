@@ -11,7 +11,13 @@ export abstract class PasswordHasher {
   /** Hash a plaintext password into a self-describing encoded string (salt + params embedded). */
   abstract hash(password: string): Promise<string>
 
-  /** Verify a plaintext password against an encoded hash. Malformed input returns `false`, never throws. */
+  /**
+   * Verify a plaintext password against an encoded hash. Malformed input returns `false`, never throws.
+   *
+   * An implementation should take about as long over a hash it cannot read as over one it can. An account with no
+   * usable password — one that only ever signs in through a provider — is otherwise told apart from the rest by how
+   * quickly it is refused.
+   */
   abstract verify(password: string, encoded: string): Promise<boolean>
 
   /** Whether an encoded hash was produced with parameters weaker than this hasher's current settings. */
@@ -23,14 +29,25 @@ export interface ScryptParams {
   N: number
   /** Block size. Default 8. */
   r: number
-  /** Parallelization. Default 1. */
+  /** Parallelization. Default 3. */
   p: number
   /** Derived key length in bytes. Default 32. */
   keylen: number
 }
 
-const DEFAULT_PARAMS: ScryptParams = { N: 32768, r: 8, p: 1, keylen: 32 }
+// One of the configurations OWASP lists as equivalent to its scrypt minimum (N=2^17, r=8, p=1): the same work for
+// an attacker, a quarter of the memory per hash, which is what bounds how many sign-ins a process can take at once.
+const DEFAULT_PARAMS: ScryptParams = { N: 32768, r: 8, p: 3, keylen: 32 }
 const SALT_BYTES = 16
+
+// The parameters of a stored hash are read back from storage, and whoever can write there could otherwise make one
+// sign-in attempt allocate without limit. These are well past anything a deployment would choose.
+const MAX_MEMORY_BYTES = 512 * 1024 * 1024
+const MAX_P = 16
+const MAX_KEYLEN = 128
+
+// Salt for the derivation made over a hash that cannot be read. Its value is of no consequence.
+const DECOY_SALT = Buffer.alloc(SALT_BYTES)
 
 /**
  * Default {@link PasswordHasher}, built on Node's `scrypt` — no external dependency.
@@ -39,6 +56,10 @@ const SALT_BYTES = 16
  * Because the parameters and salt travel with the hash, {@link verify} re-derives with the exact
  * settings the hash was created under, and {@link needsRehash} can detect stale ones. Comparison is
  * constant-time via `timingSafeEqual`.
+ *
+ * A stored hash that cannot be read — empty, malformed, or carrying parameters out of all proportion or that scrypt
+ * does not take — is refused after one derivation with this hasher's own settings, so that it takes about as long as
+ * refusing a wrong password.
  */
 export class ScryptPasswordHasher extends PasswordHasher {
   readonly #params: ScryptParams
@@ -58,7 +79,7 @@ export class ScryptPasswordHasher extends PasswordHasher {
   async verify(password: string, encoded: string): Promise<boolean> {
     const parsed = this.#parse(encoded)
     if (parsed === null) {
-      return false
+      return this.#refuseSlowly(password)
     }
 
     const { params, salt, hash } = parsed
@@ -66,10 +87,19 @@ export class ScryptPasswordHasher extends PasswordHasher {
     try {
       derived = await this.#derive(password, salt, params)
     } catch {
-      return false
+      // scrypt refuses parameters it does not like before doing any work, so this is the fast way out unless the
+      // work is done here.
+      return this.#refuseSlowly(password)
     }
 
     return derived.length === hash.length && timingSafeEqual(derived, hash)
+  }
+
+  /** Refuses after one derivation with this hasher's own settings, which is what refusing a wrong password costs. */
+  async #refuseSlowly(password: string): Promise<false> {
+    await this.#derive(password, DECOY_SALT, this.#params).catch(() => undefined)
+
+    return false
   }
 
   needsRehash(encoded: string): boolean {
@@ -117,19 +147,21 @@ export class ScryptPasswordHasher extends PasswordHasher {
 
     const salt = Buffer.from(parts[3], 'base64')
     const hash = Buffer.from(parts[4], 'base64')
-    if (salt.length === 0 || hash.length === 0) {
+    if (salt.length === 0 || hash.length === 0 || hash.length > MAX_KEYLEN) {
       return null
     }
 
-    return {
-      params: {
-        N: Number(paramMatch[1]),
-        r: Number(paramMatch[2]),
-        p: Number(paramMatch[3]),
-        keylen: hash.length,
-      },
-      salt,
-      hash,
+    const [N, r, p] = [Number(paramMatch[1]), Number(paramMatch[2]), Number(paramMatch[3])]
+    if (N < 2 || r < 1 || p < 1 || p > MAX_P || 128 * N * r > MAX_MEMORY_BYTES) {
+      return null
     }
+
+    // The cost is a power of two or scrypt refuses it. Tested after the bound on memory, which is what keeps N
+    // within the 32 bits the test works on.
+    if ((N & (N - 1)) !== 0) {
+      return null
+    }
+
+    return { params: { N, r, p, keylen: hash.length }, salt, hash }
   }
 }

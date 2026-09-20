@@ -4,28 +4,32 @@ import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import type { CredentialUser } from '../credentials/index.js'
 import { UserProvider } from '../credentials/index.js'
+import { parseToken, type SeriesTokenRecord, type SeriesTokenRotation } from '../internal/series_token.js'
 import { AuthenticationTicket } from '../ticket.js'
-import { parseRemember } from './_remember.js'
-import { CookieAuthenticationHandler } from './cookie.js'
+import { CookieAuthenticationHandler, REMEMBERED_CLAIM } from './cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie_options.js'
-import { RememberMeTokenStore, type RememberMeRecord, type RememberMeRotation } from './remember_me_token_store.js'
+import { RememberMeTokenStore } from './remember_me_token_store.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 
 class FakeStore extends RememberMeTokenStore {
-  readonly map = new Map<string, RememberMeRecord>()
-  create = vi.fn((r: RememberMeRecord) => {
+  readonly map = new Map<string, SeriesTokenRecord>()
+  create = vi.fn((r: SeriesTokenRecord) => {
     this.map.set(r.series, { ...r })
   })
-  findBySeries = vi.fn((s: string) => this.map.get(s) ?? null)
-  updateToken = vi.fn((s: string, rotation: RememberMeRotation) => {
+  findBySeries = vi.fn((s: string) => {
     const r = this.map.get(s)
-    if (r) {
-      r.tokenHash = rotation.tokenHash
-      r.previousTokenHash = rotation.previousTokenHash
-      r.rotatedAt = rotation.rotatedAt
-      r.expiresAt = rotation.expiresAt
+    return r === undefined ? null : { ...r }
+  })
+  // The swap the contract asks for: only while the token is still the one that was read.
+  rotate = vi.fn((s: string, expectedTokenHash: string, rotation: SeriesTokenRotation) => {
+    const r = this.map.get(s)
+    if (r === undefined || r.tokenHash !== expectedTokenHash) {
+      return false
     }
+
+    Object.assign(r, rotation)
+    return true
   })
 
   remove = vi.fn((s: string) => {
@@ -67,10 +71,12 @@ function makeCtx(initial: Record<string, string> = {}) {
   return { ctx, jar, setCookie, deleteCookie }
 }
 
-function makeHandler() {
+function makeHandler(configure: (options: CookieAuthenticationOptionsBuilder) => unknown = () => undefined) {
   const store = new FakeStore()
   const userProvider = new FakeUserProvider()
-  const options = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET).rememberMe().build()
+  const builder = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET).rememberMe()
+  configure(builder)
+  const options = builder.build()
   const handler = new CookieAuthenticationHandler('Cookie', options)
   handler.setRememberDeps({ get: () => store }, { get: () => userProvider })
   return { handler, store, userProvider }
@@ -95,7 +101,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     expect(jar[REMEMBER]).toBeDefined()
     expect(jar[SESSION]).toBeDefined()
     // remember cookie value maps to the stored series
-    expect(store.map.has(parseRemember(jar[REMEMBER])!.series)).toBe(true)
+    expect(store.map.has(parseToken(jar[REMEMBER])!.series)).toBe(true)
   })
 
   it('persist(rememberMe:false) sets only a session cookie, no remember record', async () => {
@@ -126,7 +132,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const signIn = makeCtx()
     await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const rememberBefore = signIn.jar[REMEMBER]
-    const seriesBefore = parseRemember(rememberBefore)!
+    const seriesBefore = parseToken(rememberBefore)!
 
     const { ctx, jar } = makeCtx({ [REMEMBER]: rememberBefore })
     const result = await handler.authenticate(ctx)
@@ -135,12 +141,12 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     expect(result.ticket!.principal.findFirst('sub')?.value).toBe('u1')
     expect(result.ticket!.principal.isInRole('admin')).toBe(true) // reloaded via findById
     expect(userProvider.findById).toHaveBeenCalledWith('u1')
-    expect(store.updateToken).toHaveBeenCalledOnce()
+    expect(store.rotate).toHaveBeenCalledOnce()
     // rotated: new remember cookie, same series, different token
     const rememberAfter = jar[REMEMBER]
     expect(rememberAfter).toBeDefined()
     expect(rememberAfter).not.toBe(rememberBefore)
-    expect(parseRemember(rememberAfter!)!.series).toBe(seriesBefore.series)
+    expect(parseToken(rememberAfter!)!.series).toBe(seriesBefore.series)
     // a fresh session cookie was established
     expect(jar[SESSION]).toBeDefined()
   })
@@ -149,7 +155,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const { handler, store } = makeHandler()
     const signIn = makeCtx()
     await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
-    const series = parseRemember(signIn.jar[REMEMBER])!.series
+    const series = parseToken(signIn.jar[REMEMBER])!.series
 
     const { ctx, jar } = makeCtx({ [REMEMBER]: `${series}:forged-token` })
     const result = await handler.authenticate(ctx)
@@ -165,7 +171,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const signIn = makeCtx()
     await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
     const remember = signIn.jar[REMEMBER]
-    const series = parseRemember(remember)!.series
+    const series = parseToken(remember)!.series
     store.map.get(series)!.expiresAt = Math.floor(Date.now() / 1000) - 10 // expire it
 
     const result = await handler.authenticate(makeCtx({ [REMEMBER]: remember }).ctx)
@@ -183,13 +189,106 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const { handler, store } = makeHandler()
     const signIn = makeCtx()
     await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
-    const series = parseRemember(signIn.jar[REMEMBER])!.series
+    const series = parseToken(signIn.jar[REMEMBER])!.series
 
     const { ctx, deleteCookie } = makeCtx({ [SESSION]: signIn.jar[SESSION], [REMEMBER]: signIn.jar[REMEMBER] })
     await handler.revoke(ctx)
 
     expect(store.remove).toHaveBeenCalledWith(series)
-    expect(deleteCookie).toHaveBeenCalledWith(SESSION, { path: '/' })
-    expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, { path: '/' })
+    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' }
+    expect(deleteCookie).toHaveBeenCalledWith(SESSION, clearedWith)
+    expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, clearedWith)
+  })
+
+  /** Signs in with remember-me and hands back the remember cookie alone, as a browser holds it once the session one expired. */
+  async function remembered(handler: CookieAuthenticationHandler): Promise<string> {
+    const signIn = makeCtx()
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
+
+    return signIn.jar[REMEMBER]
+  }
+
+  // A route that must not take a remembered session for a fresh sign-in — a change of password — asks for the
+  // claim's absence.
+  it('marks a session restored from remember-me, and only that one', async () => {
+    const { handler } = makeHandler()
+    const restored = makeCtx({ [REMEMBER]: await remembered(handler) })
+
+    const result = await handler.authenticate(restored.ctx)
+
+    expect(result.ticket!.principal.hasClaim(REMEMBERED_CLAIM, true)).toBe(true)
+    expect(principal().hasClaim(REMEMBERED_CLAIM)).toBe(false)
+
+    // The mark rides in the session cookie it minted, so it holds for the requests that follow too.
+    const next = await handler.authenticate(makeCtx({ [SESSION]: restored.jar[SESSION] }).ctx)
+    expect(next.ticket!.principal.hasClaim(REMEMBERED_CLAIM, true)).toBe(true)
+  })
+
+  // The say the application has over a session cookie, it has here too: a user it no longer accepts is not
+  // remembered back in.
+  it('asks validatePrincipal before restoring a session, and revokes the series when it says no', async () => {
+    const validate = vi.fn().mockReturnValue(null)
+    const { handler, store } = makeHandler(o => o.validatePrincipal(validate))
+    const remember = await remembered(handler)
+    const { ctx, jar } = makeCtx({ [REMEMBER]: remember })
+
+    const result = await handler.authenticate(ctx)
+
+    expect(validate).toHaveBeenCalledOnce()
+    expect(result.succeeded).toBe(false)
+    expect(store.map.has(parseToken(remember)!.series)).toBe(false)
+    expect(jar[SESSION]).toBeUndefined()
+    expect(jar[REMEMBER]).toBeUndefined()
+  })
+
+  it('reports a refused credential to onFail', async () => {
+    const onFail = vi.fn()
+    const { handler } = makeHandler(o => o.onFail(onFail))
+    const remember = await remembered(handler)
+    const { ctx } = makeCtx({ [REMEMBER]: `${parseToken(remember)!.series}:not-the-token` })
+
+    await handler.authenticate(ctx)
+
+    expect(onFail).toHaveBeenCalledWith(ctx, expect.objectContaining({ message: expect.stringContaining('replayed') }))
+  })
+
+  // A browser sends a page's requests in parallel, every one with the cookie as it stood when the batch began.
+  it('restores the session for a request that lost the rotation to a sibling, without rotating again', async () => {
+    const { handler, store } = makeHandler()
+    const remember = await remembered(handler)
+
+    const winner = makeCtx({ [REMEMBER]: remember })
+    const sibling = makeCtx({ [REMEMBER]: remember })
+    const [first, second] = await Promise.all([handler.authenticate(winner.ctx), handler.authenticate(sibling.ctx)])
+
+    expect(first.succeeded).toBe(true)
+    expect(second.succeeded).toBe(true)
+    expect(store.rotate.mock.results.filter(result => result.value === true)).toHaveLength(1)
+
+    // Exactly one of the two responses carries a new remember cookie, and it is the one that works next.
+    const rotatedTo = [winner.jar[REMEMBER], sibling.jar[REMEMBER]].filter(value => value !== remember)
+    expect(rotatedTo).toHaveLength(1)
+    expect((await handler.authenticate(makeCtx({ [REMEMBER]: rotatedTo[0] }).ctx)).succeeded).toBe(true)
+  })
+
+  // Pushed back by every use, the idle lifetime by itself lets a browser that keeps coming back stay remembered
+  // for good.
+  it('stops remembering once the absolute lifetime is reached, however recently it was used', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const { handler, store } = makeHandler(o => o.rememberMeMaxAge(3600).rememberMeAbsoluteMaxAge(5000))
+      let remember = await remembered(handler)
+
+      vi.setSystemTime(Date.now() + 3000_000)
+      const used = makeCtx({ [REMEMBER]: remember })
+      expect((await handler.authenticate(used.ctx)).succeeded).toBe(true)
+      remember = used.jar[REMEMBER]
+
+      vi.setSystemTime(Date.now() + 2500_000)
+      expect((await handler.authenticate(makeCtx({ [REMEMBER]: remember }).ctx)).succeeded).toBe(false)
+      expect(store.map.size).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

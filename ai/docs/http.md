@@ -123,6 +123,31 @@ const one = owner.get('/:id').handler(find)
 export const petsRouter = blend(all, one)
 ```
 
+## Authorization declarations
+
+`@Authorize` / `@Roles` / `@AllowAnonymous` and the routers' `.authorize({ ... })` are one mechanism, and
+declarations **add up**: none replaces another, on one route or across the levels above it.
+
+- One `roles` list is satisfied by **any** of its roles; separate declarations are **each** required.
+  `@Roles('admin', 'manager')` is "admin or manager"; `@Roles('admin')` next to `@Roles('manager')`, or on the
+  controller and on the method, is "both". Every policy named, at any level, has to pass.
+- A router nested in another adds to what its parent declared. It can never widen it.
+- A bare `@Authorize()` asks for the default policy (an authenticated caller) and keeps applying when a more
+  specific level names a policy of its own. Naming only `schemes` is bare too: schemes pick who authenticates.
+- `@AllowAnonymous` / `{ allowAnonymous: true }` opens what declares nothing below it. The most specific
+  declaration wins: a method with `@Authorize` inside a public controller is protected, and a method with
+  `@AllowAnonymous` inside a protected controller is public.
+- `authz.requireAuthenticatedByDefault()` (or `fallbackPolicy(...)`) gates every route that declares nothing —
+  the ones a plugin registered straight on Fastify included. Open under it: a route declared public, the health
+  probes, OAuth callbacks, a URL no route matches (404), the prefixes in `{ except: ['/assets/'] }`, and a plain
+  Fastify route registered with `config: { [kAuthenticationExempt]: true }`.
+- A route naming several `schemes` advertises every one of them on a 401. A custom handler adds its challenge with
+  `ctx.appendHeader('WWW-Authenticate', ...)`, not `ctx.header(...)`, which would replace the others'.
+- A policy must hold at least one requirement. `addPolicy('x', p => {})` fails at start-up
+  (`ERR_AUTHZ_POLICY_EMPTY`): it would be satisfied by every caller, anonymous included.
+- A policy only asks what it says. `p.assert(...)` alone admits an anonymous caller that satisfies it; add
+  `p.requireAuthenticated()` when an identity is part of the rule.
+
 ## Typed client — `@caffeinejs/brewer`
 
 The front-end half of the same types. No codegen, no schema file: the server's type _is_ the client's contract.

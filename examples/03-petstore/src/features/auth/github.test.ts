@@ -94,17 +94,12 @@ describe('authentication wiring', () => {
       name: unknown
     }
     expect(body.authenticated).toBe(true)
-    expect(body.sub).toBe(4242)
+    expect(body.sub).toBe('4242')
     expect(body.name).toBe('The Octocat')
 
-    // 4. Re-hitting /login/github while signed in must redirect to the dashboard, not re-challenge
-    // GitHub — otherwise the post-callback return to this route loops forever.
-    const relogin = await app.fetch('/login/github', {
-      headers: { cookie: `petstore_gh_session=${sessionCookie}` },
-    })
-    expect(relogin.status).toBe(302)
-    expect(relogin.headers.get('location')).toBe('/dashboard')
-    expect(relogin.headers.get('location')).not.toContain('github.com')
+    // 4. The callback came back to the dashboard, not to the route that started the sign-in — coming back
+    // there would start another one, for ever.
+    expect(callback.headers.get('location')).toBe('/dashboard')
 
     // 5. The dashboard renders the signed-in identity as HTML.
     const dash = await app.fetch('/dashboard', {
@@ -114,13 +109,24 @@ describe('authentication wiring', () => {
     expect(dash.headers.get('content-type')).toContain('text/html')
     const dashHtml = await dash.text()
     expect(dashHtml).toContain('The Octocat')
-    expect(dashHtml).toContain('/logout')
+    expect(dashHtml).toContain('<form method="post" action="/logout">')
 
-    // 6. Logout clears the session cookie and returns home.
+    // 6. Signing out is a POST. A GET that changes state is any other site's to trigger, so there is none.
+    const viaLink = await app.fetch('/logout', { headers: { cookie: `petstore_gh_session=${sessionCookie}` } })
+    expect(viaLink.status).toBe(404)
+
+    // A form posted from another site arrives without the `SameSite=Lax` session cookie. It signs nobody out:
+    // no cookie is cleared on the say-so of a caller who is nobody here.
+    const crossSite = await app.fetch('/logout', { method: 'POST' })
+    expect(crossSite.status).toBe(303)
+    expect(crossSite.headers.get('set-cookie')).toBeNull()
+
+    // 7. The user's own sign-out clears the session cookie and returns home with a GET.
     const logout = await app.fetch('/logout', {
+      method: 'POST',
       headers: { cookie: `petstore_gh_session=${sessionCookie}` },
     })
-    expect(logout.status).toBe(302)
+    expect(logout.status).toBe(303)
     expect(logout.headers.get('location')).toBe('/')
     expect(setCookie(logout, 'petstore_gh_session')).toBe('')
   })
@@ -146,13 +152,15 @@ describe('authentication wiring', () => {
   // lands cross-origin on a host that sends no CORS headers, and the caller sees a network error instead of
   // "you are not signed in". So an API caller gets a 401 naming the same URL — which is also what makes the
   // documentation UI's "Try it" show a readable failure rather than a CORS wall.
-  it('answers an API caller 401, with the authorization URL in location', async () => {
+  it('answers an API caller 401, with where to send a browser in location', async () => {
     const res = await app.fetch('/me', {
       headers: { accept: 'application/json' },
     })
 
     expect(res.status).toBe(401)
-    expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
+    expect(res.headers.get('location')).toMatch(/\/login\/github\?returnTo=%2Fme$/)
+    // Nothing is started for a caller that cannot go there: the round trip begins when a browser does.
+    expect(res.headers.get('set-cookie')).toBeNull()
   })
 
   it('authenticates /me with a GitHub session', async () => {
@@ -168,7 +176,7 @@ describe('authentication wiring', () => {
       name: unknown
     }
     expect(body.authenticated).toBe(true)
-    expect(body.sub).toBe(4242)
+    expect(body.sub).toBe('4242')
     expect(body.name).toBe('The Octocat')
   })
 })

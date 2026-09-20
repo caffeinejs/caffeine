@@ -1,7 +1,9 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { isOIDCError, type OIDCMeta } from './index.js'
+import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
+import { kAuthenticationExempt } from '../keys.js'
+import type { OIDCMeta } from './index.js'
 
 /**
  * Registers the OIDC/OAuth2 callback routes.
@@ -18,15 +20,14 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
 }
 
 /**
- * Registers the callback routes, validates their paths do not collide with controller routes, and asserts
- * `@fastify/cookie` is present at start-up.
+ * Registers each strategy's callback and sign-in routes and validates their paths do not collide with controller
+ * routes.
  *
- * The cookie check is hand-rolled rather than declared as a Fastify plugin `decorators` requirement on
- * purpose: Fastify's assertion names the missing decorator (`cookies`), while this one names the package
- * the user has to install and register.
+ * Both are where a user who is not signed in yet arrives — sent back by the identity provider, or on the way to
+ * it — so they are marked {@link kAuthenticationExempt}: no fallback policy may stand in front of them.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
-  const callbackPaths = new Set(oidc.handlers.map(({ callbackPath }) => callbackPath))
+  const ownPaths = new Set(oidc.handlers.flatMap(({ callbackPath, handler }) => [callbackPath, handler.loginPath]))
   const namedByRoutes = new Set<string>()
 
   // Compiled routes register after the callback routes, so each is checked as it registers.
@@ -36,9 +37,9 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
       return
     }
 
-    if (callbackPaths.has(route.url)) {
+    if (ownPaths.has(route.url)) {
       throw new Error(
-        `Cannot start application: OIDC callbackPath "${route.url}" conflicts with a registered controller route`,
+        `Cannot start application: the OIDC callback or login path "${route.url}" conflicts with a registered controller route`,
       )
     }
 
@@ -68,22 +69,37 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
         },
       )
     }
-
-    if (!server.hasRequestDecorator('cookies')) {
-      throw new Error('Cannot start application: OIDC authentication requires @fastify/cookie to be registered')
-    }
   })
 
+  for (const { handler } of oidc.handlers) {
+    // A failure here — the provider cannot be reached — goes to the application-wide error handler, which answers
+    // with the error's public message.
+    server.get(handler.loginPath, { config: { [kAuthenticationExempt]: true } }, async req => {
+      await handler.startSignIn(req.httpContext)
+    })
+  }
+
   for (const { callbackPath, handler } of oidc.handlers) {
-    server.get(callbackPath, async (req, reply) => {
+    server.get(callbackPath, { config: { [kAuthenticationExempt]: true } }, async (req, reply) => {
       try {
         await handler.processCallback(req.httpContext)
       } catch (e) {
         // Diagnostic detail (state, nonce, signature, token exchange) stays in the logs: every
         // failure mode must look identical to a client probing the callback.
         req.log.error({ err: e }, 'OIDC callback failed')
-        const status = isOIDCError(e) ? e.statusCode : 400
-        const error = isOIDCError(e) ? e.publicMessage : 'Authentication failed'
+
+        // The strategy's `onFail` has run by now and may have answered, usually by sending the user to a page that
+        // says the sign-in did not work. What it answered stands, whether it sent it or left a redirect to be sent.
+        if (reply.sent) {
+          return reply
+        }
+
+        if (reply.statusCode >= 300 && reply.statusCode < 400) {
+          return reply.send()
+        }
+
+        const status = isRemoteAuthenticationError(e) ? e.statusCode : 400
+        const error = isRemoteAuthenticationError(e) ? e.publicMessage : 'Authentication failed'
         return reply.status(status).send({ error, statusCode: status })
       }
     })

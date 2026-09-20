@@ -98,8 +98,9 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
             ),
         )
         // GitHub OAuth 2.0 browser login, and the application default: every route that does not name a
-        // scheme authenticates with it. The callback route is auto-registered from callbackURL. includeEmail
-        // fetches the verified primary email (adds the user:email scope).
+        // scheme authenticates with it. Two routes come with it: the callback, from callbackURL, and the one
+        // that starts a sign-in, at loginPath. includeEmail fetches the verified primary email (adds the
+        // user:email scope).
         .addGithub(
           'GitHub',
           o =>
@@ -111,13 +112,17 @@ export function buildApp(container: Container, serverOpts: FastifyServerOptions 
               .sessionCookieName(GITHUB_SESSION_COOKIE)
               .stateCookieName('petstore_gh_state')
               .defaultRedirectPath('/dashboard')
-              // Seal only the fields the app uses. GitHub's /user returns ~30 fields (many long *_url
-              // strings); the default mapper copies them all, and the sealed session cookie then exceeds
-              // the browser's ~4096-byte per-cookie limit, so the browser silently drops it — leaving
-              // every post-login request unauthenticated and looping back into the OAuth challenge.
+              // Where the homepage's "Sign in" button points, and what a 401 names in `location`: going there
+              // starts the round trip to GitHub and comes back to `returnTo`, or to the dashboard without one.
+              .loginPath('/login/github')
+              // Nothing of GitHub's /user body becomes a claim unless it is named, and a role least of all: the
+              // body is unsigned, and much of it is whatever the user typed into their profile. Granting a role
+              // therefore takes a mapper, which also replaces the preset's own mapping — so it names the few
+              // fields the app renders, and keeps the sealed session cookie well under a browser's ~4 KB.
               .claimMapper(u => {
                 const claims = [
-                  new Claim('sub', u.id, GITHUB_ISSUER), // stable numeric id (subjectClaim stays 'id')
+                  // GitHub's id is a number; a subject is a string wherever it is read.
+                  new Claim('sub', String(u.id), GITHUB_ISSUER),
                   new Claim('login', u.login, GITHUB_ISSUER),
                   new Claim('name', u.name ?? u.login, GITHUB_ISSUER),
                 ]

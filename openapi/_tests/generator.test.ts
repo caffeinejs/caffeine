@@ -1,10 +1,11 @@
-import { $p } from '@caffeinejs/http'
+import { $p, type Route } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIOperationConflict } from '../errors.js'
 import { generateDocument } from '../generate/generator.js'
+import { deriveSecurity } from '../generate/security.js'
 import type { OperationObject } from '../spec/spec.js'
 import { fixtureOptions, fixtureRoute, fixtureRouter } from './_fixtures.js'
 
@@ -350,6 +351,91 @@ describe('security', () => {
     const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes })
 
     expect(operationAt(document, '/pets', 'post')?.description).toContain('write:pets')
+  })
+
+  // A scope list means every scope in it. A `roles` list means any role in it, and several lists mean one role
+  // of each, so the document has to say it with alternatives or it states a stricter rule than the one enforced.
+  describe('roles, where the scheme has scopes', () => {
+    const flows = {
+      authorizationCode: { authorizationURL: 'https://idp.test/authorize', tokenURL: 'https://idp.test/token' },
+    }
+    const withScopes = new Map([
+      ['OAuth', { kind: 'oauth2' as const, flows }],
+      ['Bearer', { kind: 'http' as const, scheme: 'bearer' }],
+    ])
+
+    const securityOf = (...declarations: Array<{ schemes?: string[]; roles?: string[]; policy?: string }>) => {
+      const route = fixtureRoute('POST', '/', 'create')
+      for (const declaration of declarations) {
+        route.authorize(declaration)
+      }
+
+      const router = fixtureRouter('/pets', r => r.routes([route]))
+      const document = generateDocument({ routeGroups: [router], options: fixtureOptions(), schemes: withScopes })
+
+      return operationAt(document, '/pets', 'post')
+    }
+
+    it('offers each role of one list as an alternative, not all of them at once', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin', 'manager'] })
+
+      expect(operation?.security).toEqual([{ OAuth: ['admin'] }, { OAuth: ['manager'] }])
+    })
+
+    it('asks for one role of every list when there are several', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin', 'manager'] }, { roles: ['auditor'] })
+
+      expect(operation?.security).toEqual([{ OAuth: ['admin', 'auditor'] }, { OAuth: ['manager', 'auditor'] }])
+      expect(operation?.description).toContain('Requires roles: (admin or manager) and (auditor).')
+    })
+
+    it('names a role once when two lists share it', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin'] }, { roles: ['admin', 'auditor'] })
+
+      expect(operation?.security).toEqual([{ OAuth: ['admin'] }, { OAuth: ['admin', 'auditor'] }])
+    })
+
+    // A controller and a method can name the same pair in a different order, and two ways of taking one role
+    // out of each then arrive at the same set. Listed twice, it reads as two distinct ways in.
+    it('names a requirement once when two lists reach the same set', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin', 'manager'] }, { roles: ['manager', 'admin'] })
+
+      expect(operation?.security).toEqual([
+        { OAuth: ['admin', 'manager'] },
+        { OAuth: ['admin'] },
+        { OAuth: ['manager'] },
+      ])
+    })
+
+    it('asks for the scheme alone when no role was named', () => {
+      expect(securityOf({ schemes: ['OAuth'] })?.security).toEqual([{ OAuth: [] }])
+    })
+
+    it('keeps the roles out of a scheme that has no scopes, next to one that has', () => {
+      const operation = securityOf({ schemes: ['OAuth', 'Bearer'], roles: ['admin', 'manager'] })
+
+      expect(operation?.security).toEqual([{ OAuth: ['admin'] }, { OAuth: ['manager'] }, { Bearer: [] }])
+    })
+
+    // An empty requirement list is how the specification spells "no security". A declaration assembled by hand
+    // with a roles list that has nothing in it must not turn a guarded route into a public one on paper.
+    it('never documents a guarded route as public because a roles list came out empty', () => {
+      const route = {
+        authorization: {
+          hasProtection: true,
+          schemes: ['OAuth'],
+          options: { allowAnonymous: false, defaultPolicy: false, policies: [], roleGroups: [[]] },
+        },
+      } as unknown as Route<unknown>
+
+      expect(deriveSecurity(route, { OAuth: { type: 'oauth2', flows: {} } })).toEqual([{ OAuth: [] }])
+    })
+
+    it('describes one list without brackets, and the policies after the roles', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin', 'manager'], policy: 'adults-only' })
+
+      expect(operation?.description).toContain('Requires roles: admin or manager; policy: adults-only.')
+    })
   })
 })
 

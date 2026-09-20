@@ -1,5 +1,6 @@
 import type { Context } from '../../../context.js'
 import type { Claim } from '../../index.js'
+import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
   cookieName,
@@ -27,6 +28,7 @@ type DefaultedKey =
   | 'challengeMode'
   | 'usePKCE'
   | 'subjectClaim'
+  | 'tokenEndpointAuthMethod'
 
 /**
  * A plain OAuth 2.0 strategy, for providers that do not implement OpenID Connect.
@@ -59,6 +61,13 @@ export interface ResolvedOAuth2AuthenticationOptions {
   httpTimeoutMs: number
   showPii: boolean
   challengeMode: RemoteChallengeMode
+  /**
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   *
+   * A challenge that cannot redirect answers `401` with this URL as `loginURL`. Nothing is started until a browser
+   * goes there.
+   */
+  loginPath?: string
 
   /**
    * Sends PKCE on the authorization request. On by default, S256 only.
@@ -75,6 +84,14 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * therefore unsuitable, while its numeric `id` is stable.
    */
   subjectClaim: string
+
+  /**
+   * How the client authenticates to the token endpoint. `client_secret_post` by default.
+   *
+   * Set `client_secret_basic` for a provider that accepts it: RFC 6749 §2.3.1 recommends against sending the
+   * secret in the request body. With no discovery document, nothing here can tell which one a provider takes.
+   */
+  tokenEndpointAuthMethod: TokenEndpointAuthMethod
 
   /** Extra headers on the token request. Some providers require `Accept: application/json`. */
   tokenRequestHeaders?: Record<string, string>
@@ -106,8 +123,23 @@ export interface ResolvedOAuth2AuthenticationOptions {
     userInfo: Record<string, unknown>,
     tokens: RemoteAuthenticationTokens,
   ) => Promise<void> | void
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
+  /**
+   * Shapes the challenge response, and receives where the browser should go next.
+   *
+   * A navigation receives the authorization URL, with state, PKCE and the state cookie already in place, so
+   * the flow stays correct no matter what the hook does. Anything else receives this origin's
+   * {@link loginPath} and starts no authorization round trip: a script cannot follow a redirect to the
+   * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
+   * URL in a shape of your own.
+   */
+  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   /** Full override of claim construction. `claimActions.remove` still applies afterwards. */
   claimMapper?: (userInfo: Record<string, unknown>) => Claim[]
@@ -200,6 +232,7 @@ export function resolveOAuth2Options(
     showPii: input.showPii ?? false,
     challengeMode: input.challengeMode ?? 'auto',
     usePKCE: input.usePKCE ?? true,
+    tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? 'client_secret_post',
   }
 }
 
@@ -292,6 +325,12 @@ export class OAuth2AuthenticationOptionsBuilder {
     return this
   }
 
+  /** The path of the route that starts a sign-in. `<callback path>/login` unless set. */
+  loginPath(path: string): this {
+    this.#options.loginPath = path
+    return this
+  }
+
   /** Off only for a provider that rejects the PKCE parameters outright. */
   usePKCE(use: boolean): this {
     this.#options.usePKCE = use
@@ -301,6 +340,12 @@ export class OAuth2AuthenticationOptionsBuilder {
   /** Which user info field is the stable identifier. Must not be user-renameable. */
   subjectClaim(field: string): this {
     this.#options.subjectClaim = field
+    return this
+  }
+
+  /** How the client authenticates to the token endpoint. `client_secret_basic` for a provider that accepts it. */
+  tokenEndpointAuthMethod(method: TokenEndpointAuthMethod): this {
+    this.#options.tokenEndpointAuthMethod = method
     return this
   }
 

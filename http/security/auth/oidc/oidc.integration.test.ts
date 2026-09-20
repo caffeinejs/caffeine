@@ -118,6 +118,7 @@ describe('OIDC integration', () => {
         .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
         .setIssuer(ISSUER)
         .setAudience(CLIENT_ID)
+        .setIssuedAt()
         .setExpirationTime('1h')
         .sign(privateKey)
     }
@@ -128,7 +129,10 @@ describe('OIDC integration', () => {
         vi.fn(async (_url: string, opts?: RequestInit) => {
           if (opts?.method === 'POST') {
             const idToken = await signIDToken(nonce)
-            return { ok: true, json: () => Promise.resolve({ id_token: idToken, access_token: 'at' }) }
+            return {
+              ok: true,
+              json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+            }
           }
           return { ok: false, status: 404 }
         }),
@@ -291,10 +295,20 @@ describe('OIDC integration', () => {
     const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
 
     expect(res.status).toBe(401)
-    expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
-    // The state cookie rides on the 401, so sending the browser to that URL completes the same flow. It is
-    // named per flow — `<base>.<state>` — so concurrent sign-ins get a cookie each instead of overwriting.
-    expect(res.headers.get('set-cookie')).toMatch(/oidc_Google_state\.[A-Za-z0-9_-]+=/)
+    expect(res.headers.get('location')).toBe(
+      `https://oidc-app.example.com${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/oidc-int-xhr')}`,
+    )
+    // Nothing is started for a caller that cannot follow it there.
+    expect(res.headers.get('set-cookie')).toBeNull()
+
+    // Sending the browser to that URL is what starts the sign-in: a state cookie named per flow —
+    // `<base>.<state>` — and the way to the provider. No policy stands in front of the route.
+    const start = await app.fetch(`${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/oidc-int-xhr')}`)
+
+    expect(start.status).toBe(302)
+    expect(start.headers.get('location')).toContain(`${ISSUER}/auth`)
+    expect(start.headers.get('set-cookie')).toMatch(/oidc_Google_state\.[A-Za-z0-9_-]+=/)
+    expect(start.headers.get('cache-control')).toContain('no-store')
   })
 
   it('@Authorize({ roles }) + matching role → 200', async () => {

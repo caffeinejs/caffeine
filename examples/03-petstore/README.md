@@ -88,10 +88,13 @@ and Basic credentials do not authenticate the API — which is what makes the sp
 
 The two schemes also challenge differently, because they are obtained differently. Basic answers `401` with
 `WWW-Authenticate: Basic`, and the browser prompts. GitHub is a round trip to github.com that ends in a
-session cookie, so it answers `302` to a **browser navigation** and `401` — carrying the same URL in
-`location` — to anything else. A redirect an API client cannot follow is worse than useless: `fetch` follows
-it itself, lands on github.com, which sends no CORS headers, and the caller sees a network error rather than
-"you are not signed in". `.challengeMode('redirect' | 'status')` overrides the choice.
+session cookie, so it answers `302` to a **browser navigation** and `401` to anything else. The `401` names, in
+`location` and as `loginURL` in the body, the route of this application that starts the sign-in:
+`/login/github`, the scheme's `loginPath`, with where to come back to as `returnTo`. Nothing is started for a
+caller that cannot go there, so a page that polls while signed out costs nothing. A redirect an API client cannot
+follow is worse than useless: `fetch` follows it itself, lands on github.com, which sends no CORS headers, and
+the caller sees a network error rather than "you are not signed in". `.challengeMode('redirect' | 'status')`
+overrides the choice.
 
 That is also why the Scalar UI shows GitHub as a **cookie** scheme with no "Authorize" button, and why the
 document's `servers` entry is the relative `/`. The sign-in cannot happen inside the documentation page —
@@ -113,7 +116,7 @@ curl -u admin:admin123 localhost:3000/openapi.json       # 200
 # curl does not look like a navigation, so it gets a 401 naming where to sign in:
 curl -i -X POST localhost:3000/pets \
   -H 'content-type: application/json' \
-  -d '{"species":"DOG","name":"Buddy","ageMonths":24,"price":"150.00"}'   # 401 + location: github.com
+  -d '{"species":"DOG","name":"Buddy","ageMonths":24,"price":"150.00"}'   # 401 + location: /login/github?returnTo=%2Fpets
 
 # Ask for HTML and you get the redirect a browser would have followed:
 curl -i -H 'accept: text/html' localhost:3000/users/1                     # 302 → github.com

@@ -3,7 +3,12 @@ import { Scopes } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { RouteGroup } from '../../route.js'
-import { ErrAuthorizationRequired } from './errors.js'
+import {
+  ErrAuthorizationRequired,
+  ErrAuthzFallbackExcept,
+  ErrAuthzPolicyEmpty,
+  ErrAuthzRequirementHandlerDuplicate,
+} from './errors.js'
 import { AuthenticatedUserHandler, AssertionHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from './keys.js'
 import { AuthzPolicy, AuthzRequirement, AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
@@ -18,6 +23,23 @@ export interface AuthorizationOptions {
    * open.
    */
   fallbackPolicy?: AuthzPolicy
+  /** Path prefixes of routes registered straight on the server that the fallback policy leaves open. */
+  fallbackExcept?: readonly string[]
+}
+
+export interface FallbackPolicyOptions {
+  /**
+   * Path prefixes the fallback policy leaves open, for routes a plugin registered straight on the server —
+   * `/assets/` for the static files a login page loads. A route the application's own router compiled opts out
+   * with `@AllowAnonymous` instead, and is not affected by this list.
+   *
+   * Matched against the path the route was registered under, never against the URL of the request, so no spelling
+   * of a URL reaches a route on another route's exemption.
+   *
+   * A prefix is made of whole segments, with or without its trailing slash: `/assets` leaves `/assets` and
+   * `/assets/app.js` open, and `/assets-old` guarded.
+   */
+  except?: readonly string[]
 }
 
 export class AuthorizationBuilder implements Feature {
@@ -28,7 +50,9 @@ export class AuthorizationBuilder implements Feature {
   #authzDecoratorPolicy: AuthzPolicy = new PolicyBuilder().requireAuthenticated().build()
 
   #fallbackPolicy: AuthzPolicy | undefined
+  #fallbackExcept: readonly string[] = []
 
+  /** @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller. */
   addPolicy(policy: AuthzPolicy): this
   addPolicy(name: string, configure: (builder: PolicyBuilder) => void): this
   addPolicy(nameOrPolicy: string | AuthzPolicy, configure?: (builder: PolicyBuilder) => void): this {
@@ -36,35 +60,36 @@ export class AuthorizationBuilder implements Feature {
       const builder = new PolicyBuilder()
       configure?.(builder)
 
-      this.#policies.set(nameOrPolicy, builder.build(nameOrPolicy))
+      this.#policies.set(nameOrPolicy, requirements(builder.build(nameOrPolicy), nameOrPolicy))
 
       return this
     }
 
-    this.#policies.set(nameOrPolicy.name, nameOrPolicy)
-
-    return this
-  }
-
-  authorizeDecoratorDefaultPolicy(policy: AuthzPolicy): this
-  authorizeDecoratorDefaultPolicy(configure: (builder: PolicyBuilder) => void): this
-  authorizeDecoratorDefaultPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
-    if (typeof policyOrConfigure === 'function') {
-      const builder = new PolicyBuilder()
-      policyOrConfigure(builder)
-
-      this.#authzDecoratorPolicy = builder.build()
-
-      return this
-    }
-
-    this.#authzDecoratorPolicy = policyOrConfigure
+    this.#policies.set(nameOrPolicy.name, requirements(nameOrPolicy, nameOrPolicy.name))
 
     return this
   }
 
   /**
-   * Gates every route that carries no `@Authorize` / `@Roles` of its own.
+   * What a bare `@Authorize` means. Requires an authenticated user unless set.
+   *
+   * @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller.
+   */
+  authorizeDecoratorDefaultPolicy(policy: AuthzPolicy): this
+  authorizeDecoratorDefaultPolicy(configure: (builder: PolicyBuilder) => void): this
+  authorizeDecoratorDefaultPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
+    this.#authzDecoratorPolicy = requirements(built(policyOrConfigure), 'authorizeDecoratorDefaultPolicy')
+
+    return this
+  }
+
+  /**
+   * Gates every route that carries no `@Authorize` / `@Roles` of its own — the ones a plugin registered straight
+   * on the server included, since there is no decorator on those for anyone to forget.
+   *
+   * What stays open under it: a route declared public, a health probe, the callback an OAuth strategy receives
+   * its redirect on, a route carrying `kAuthenticationExempt`, the prefixes listed in
+   * {@link FallbackPolicyOptions.except}, and a URL no route matches, which is answered 404 as it always was.
    *
    * Off by default, because turning it on changes what an *undecorated* route means and that has to be a
    * deliberate posture rather than something a dependency bump introduces. Turning it on is the difference
@@ -74,27 +99,30 @@ export class AuthorizationBuilder implements Feature {
    *
    * It does not affect decorated routes: those already state their own rule, and a bare `@Authorize`
    * continues to mean {@link authorizeDecoratorDefaultPolicy}.
+   *
+   * @throws ErrAuthzPolicyEmpty when the policy has no requirement, which would allow every caller.
    */
-  fallbackPolicy(policy: AuthzPolicy): this
-  fallbackPolicy(configure: (builder: PolicyBuilder) => void): this
-  fallbackPolicy(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): this {
-    if (typeof policyOrConfigure === 'function') {
-      const builder = new PolicyBuilder()
-      policyOrConfigure(builder)
-
-      this.#fallbackPolicy = builder.build()
-
-      return this
+  fallbackPolicy(policy: AuthzPolicy, options?: FallbackPolicyOptions): this
+  fallbackPolicy(configure: (builder: PolicyBuilder) => void, options?: FallbackPolicyOptions): this
+  fallbackPolicy(
+    policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void),
+    options: FallbackPolicyOptions = {},
+  ): this {
+    const except = options.except ?? []
+    const relative = except.find(prefix => !prefix.startsWith('/'))
+    if (relative !== undefined) {
+      throw new ErrAuthzFallbackExcept(relative)
     }
 
-    this.#fallbackPolicy = policyOrConfigure
+    this.#fallbackPolicy = requirements(built(policyOrConfigure), 'fallbackPolicy')
+    this.#fallbackExcept = [...except]
 
     return this
   }
 
   /** Shorthand for the common posture: every undecorated route requires an authenticated user. */
-  requireAuthenticatedByDefault(): this {
-    return this.fallbackPolicy(p => p.requireAuthenticated())
+  requireAuthenticatedByDefault(options?: FallbackPolicyOptions): this {
+    return this.fallbackPolicy(p => p.requireAuthenticated(), options)
   }
 
   [kFeatureConfigure](kit: FeatureConfigureKit): void {
@@ -122,6 +150,7 @@ export class AuthorizationBuilder implements Feature {
         .toValue({
           authorizeDecoratorDefaultPolicy: this.#authzDecoratorPolicy,
           fallbackPolicy: this.#fallbackPolicy,
+          fallbackExcept: this.#fallbackExcept,
         })
         .lifetime(Scopes.SINGLETON)
         .internal(),
@@ -130,9 +159,17 @@ export class AuthorizationBuilder implements Feature {
     kit.container.bind(kAuthzHandlers, t =>
       t
         .toFactory(ctx => {
-          const handlers = ctx.container.getMany(AuthzRequirementHandler)
+          const handlers = new Map<string, AuthzRequirementHandler<AuthzRequirement>>()
 
-          return new Map(handlers.map(h => [h.kind, h]))
+          for (const handler of ctx.container.getMany(AuthzRequirementHandler)) {
+            if (handlers.has(handler.kind)) {
+              throw new ErrAuthzRequirementHandlerDuplicate(handler.kind)
+            }
+
+            handlers.set(handler.kind, handler)
+          }
+
+          return handlers
         })
         .lifetime(Scopes.SINGLETON)
         .internal(),
@@ -149,6 +186,26 @@ export class AuthorizationBuilder implements Feature {
         .internal(),
     )
   }
+}
+
+function built(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): AuthzPolicy {
+  if (typeof policyOrConfigure !== 'function') {
+    return policyOrConfigure
+  }
+
+  const builder = new PolicyBuilder()
+  policyOrConfigure(builder)
+
+  return builder.build()
+}
+
+/** The policy itself, once it is known to hold at least one requirement. */
+function requirements(policy: AuthzPolicy, name: string): AuthzPolicy {
+  if (policy.requirements.length === 0) {
+    throw new ErrAuthzPolicyEmpty(name)
+  }
+
+  return policy
 }
 
 /**

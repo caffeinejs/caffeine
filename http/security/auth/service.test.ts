@@ -3,10 +3,10 @@ import { beforeEach, describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../context.js'
 import { Claim, Identity, Principal } from '../index.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
-import type { AuthenticationHandler } from './handler.js'
+import { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
-import { AuthenticateResult, AuthenticationTicket } from './ticket.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from './ticket.js'
 
 // A fresh one per test: the per-request authentication record lives on the context now, so a context
 // shared between tests would carry one test's memoised result into the next.
@@ -41,6 +41,7 @@ function makeHandler(result: AuthenticateResult): AuthenticationHandler {
     forbid: vi.fn().mockResolvedValue(undefined),
     persist: vi.fn().mockResolvedValue(undefined),
     revoke: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -353,6 +354,54 @@ describe('AuthenticationCoordinator', () => {
       const coordinator = new AuthenticationService(makeProvider({}))
 
       expect(() => coordinator.revoke(ctx, 'Bearer')).toThrow('Bearer')
+    })
+  })
+
+  // `revoke` ends the session here. `signOut` is the scheme's to widen: an OpenID Connect scheme also leaves the
+  // provider, and answers the request to do it.
+  describe('signOut()', () => {
+    it('asks the named scheme to sign out, not merely to revoke', async () => {
+      const handler = makeHandler(AuthenticateResult.none())
+      const props = {}
+      const coordinator = new AuthenticationService(makeProvider({ SSO: handler }))
+
+      await coordinator.signOut(ctx, 'SSO', props)
+
+      expect(handler.signOut).toHaveBeenCalledWith(ctx, props)
+      expect(handler.revoke).not.toHaveBeenCalled()
+    })
+
+    it('signs out of the default scheme when none is named', async () => {
+      const handler = makeHandler(AuthenticateResult.none())
+      const coordinator = new AuthenticationService(makeProvider({ Cookie: handler }, 'Cookie'))
+
+      await coordinator.signOut(ctx)
+
+      expect(handler.signOut).toHaveBeenCalledOnce()
+    })
+
+    it('revokes, and nothing more, for a scheme with nowhere else to sign out of', async () => {
+      class Local extends BaseAuthenticationHandler<object> {
+        revoked = vi.fn()
+
+        authenticate = () => Promise.resolve(AuthenticateResult.none())
+
+        override revoke(context: Context, properties?: AuthenticationProperties): Promise<void> {
+          this.revoked(context, properties)
+          return Promise.resolve()
+        }
+      }
+
+      const handler = new Local({})
+      const props = { redirectURI: '/bye' }
+
+      await new AuthenticationService(makeProvider({ Local: handler })).signOut(ctx, 'Local', props)
+
+      expect(handler.revoked).toHaveBeenCalledWith(ctx, props)
+    })
+
+    it('throws when scheme is not found', () => {
+      expect(() => new AuthenticationService(makeProvider({})).signOut(ctx, 'SSO')).toThrow('SSO')
     })
   })
 })

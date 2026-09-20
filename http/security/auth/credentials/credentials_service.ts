@@ -62,9 +62,8 @@ export class CredentialsService {
    * hasher's — the moment a password can be transparently upgraded, because it is the only point at which
    * the plaintext is in hand.
    *
-   * {@link PasswordHasher} already implements `needsRehash`; nothing called it, so raising the scrypt
-   * cost meant either leaving every existing user on the old parameters forever or forcing a reset. A
-   * login endpoint acting on this re-hashes and persists:
+   * A login endpoint acting on it re-hashes and persists, which is how a raised hashing cost reaches the users
+   * who already have a password:
    *
    * ```ts
    * const result = await creds.attemptWithRehash(email, password)
@@ -95,10 +94,5 @@ export class CredentialsService {
       userID: user.id,
       needsRehash: this.#hasher.needsRehash(user.passwordHash),
     }
-  }
-
-  /** Alias of {@link attempt}. */
-  verifyCredentials(identifier: string, password: string): Promise<Principal | null> {
-    return this.attempt(identifier, password)
   }
 }

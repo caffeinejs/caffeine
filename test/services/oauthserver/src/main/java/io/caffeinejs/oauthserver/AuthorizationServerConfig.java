@@ -4,7 +4,9 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -39,7 +41,9 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configuration.OAuth2AuthorizationServerConfiguration;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2AuthorizationServerConfigurer;
 import org.springframework.security.oauth2.server.authorization.settings.AuthorizationServerSettings;
+import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.token.JwtEncodingContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenCustomizer;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
@@ -48,31 +52,46 @@ import org.springframework.security.web.authentication.LoginUrlAuthenticationEnt
 import org.springframework.security.web.util.matcher.MediaTypeRequestMatcher;
 
 /**
- * Authorization server for the @caffeinejs/http OIDC + OAuth2 e2e tests. Two confidential
- * clients with PKCE, no consent screen, plus an in-memory user. email/name are injected into
- * the id_token so caffeine has identity claims to assert (authN) and gate on (authZ).
+ * Authorization server for the @caffeinejs/http authentication e2e tests.
+ *
+ * Two confidential authorization-code clients with PKCE and no consent screen, for the OIDC and the
+ * plain OAuth 2.0 sign-in. Two in-memory users who differ in their roles, so authorization has
+ * something to refuse. Three client_credentials clients, for caffeine acting as a resource server:
+ * the API's own, one whose tokens expire in seconds, and one whose tokens are minted for another
+ * audience.
  */
 @Configuration
 @EnableWebSecurity
 public class AuthorizationServerConfig {
 
     private static final String ISSUER = "http://localhost:9000";
-    private static final String TEST_EMAIL = "alice@example.com";
-    private static final String TEST_NAME = "Alice Liddell";
-    private static final List<String> TEST_ROLES = List.of("admin", "user");
 
-    /** Builds the /userinfo response for the single test user, including the `roles` claim. */
+    /** What the server knows about a user beyond the password. */
+    private record Profile(String email, String name, List<String> roles) {}
+
+    private static final Map<String, Profile> PROFILES = Map.of(
+            "alice", new Profile("alice@example.com", "Alice Liddell", List.of("admin", "user")),
+            "bob", new Profile("bob@example.com", "Bob Builder", List.of("user")));
+
+    /** Roles stamped on a client_credentials access token, where the subject is the client itself. */
+    private static final List<String> SERVICE_ROLES = List.of("service");
+
+    /**
+     * Builds the /userinfo response, including the non-standard `roles` claim.
+     *
+     * The same list the id_token carries. caffeine's plain OAuth 2.0 strategy maps user info through an
+     * allowlist and refuses to rename a field into the role claim, so its e2e reads this with a claimMapper.
+     */
     private static final Function<OidcUserInfoAuthenticationContext, OidcUserInfo> USER_INFO_MAPPER = context -> {
         OidcUserInfoAuthenticationToken authentication = context.getAuthentication();
         JwtAuthenticationToken principal = (JwtAuthenticationToken) authentication.getPrincipal();
+        String subject = principal.getToken().getSubject();
+        Profile profile = PROFILES.get(subject);
         return OidcUserInfo.builder()
-                .subject(principal.getToken().getSubject())
-                .email(TEST_EMAIL)
-                .name(TEST_NAME)
-                // Scalar, not an array: caffeine's OAuth2 userinfo mapper skips object/array claim
-                // values by design, so a role list would be dropped. (The OIDC path reads the
-                // id_token directly and does accept the array form used there.)
-                .claim("roles", "admin")
+                .subject(subject)
+                .email(profile.email())
+                .name(profile.name())
+                .claim("roles", profile.roles())
                 .build();
     };
 
@@ -113,7 +132,11 @@ public class AuthorizationServerConfig {
                 .password("{noop}wonderland")
                 .roles("USER")
                 .build();
-        return new InMemoryUserDetailsManager(alice);
+        UserDetails bob = User.withUsername("bob")
+                .password("{noop}builder")
+                .roles("USER")
+                .build();
+        return new InMemoryUserDetailsManager(alice, bob);
     }
 
     @Bean
@@ -131,6 +154,8 @@ public class AuthorizationServerConfig {
                 .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
                 .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
                 .redirectUri("http://localhost:9999/oidc/callback")
+                // RP-initiated logout returns here; an unregistered value is refused.
+                .postLogoutRedirectUri("http://localhost:9999/signed-out")
                 .scope(OidcScopes.OPENID)
                 .scope(OidcScopes.PROFILE)
                 .scope(OidcScopes.EMAIL)
@@ -151,17 +176,57 @@ public class AuthorizationServerConfig {
                 .clientSettings(clientSettings)
                 .build();
 
-        return new InMemoryRegisteredClientRepository(oidcClient, oauth2Client);
+        // Takes its credentials in the Authorization header only, and its secret holds what RFC 6749 §2.3.1 has a
+        // client form-urlencode before it is base64-encoded: sent as it is, the `+` would arrive here as a space.
+        RegisteredClient basicOnlyClient = RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId("caffeine-oauth2-basic")
+                .clientSecret("{noop}caffeine+oauth2/basic:secret%")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+                .redirectUri("http://localhost:9999/oauth2/callback")
+                .scope(OidcScopes.OPENID)
+                .scope(OidcScopes.PROFILE)
+                .scope(OidcScopes.EMAIL)
+                .clientSettings(clientSettings)
+                .build();
+
+        RegisteredClient apiClient = serviceClient("caffeine-api", Duration.ofMinutes(5));
+        // Short enough for a spec to outlive the token it was just given.
+        RegisteredClient shortLivedClient = serviceClient("caffeine-api-short", Duration.ofSeconds(2));
+        // Its tokens carry its own id as the audience, which is not the API's.
+        RegisteredClient otherClient = serviceClient("caffeine-other", Duration.ofMinutes(5));
+
+        return new InMemoryRegisteredClientRepository(
+                oidcClient, oauth2Client, basicOnlyClient, apiClient, shortLivedClient, otherClient);
     }
 
-    /** Adds email + name + roles to the id_token; Spring's userinfo endpoint mirrors those claims. */
+    /** A client that signs in as itself, `<clientId>-secret` being its secret. */
+    private static RegisteredClient serviceClient(String clientId, Duration accessTokenTimeToLive) {
+        return RegisteredClient.withId(UUID.randomUUID().toString())
+                .clientId(clientId)
+                .clientSecret("{noop}" + clientId + "-secret")
+                .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+                .authorizationGrantType(AuthorizationGrantType.CLIENT_CREDENTIALS)
+                .scope("api.read")
+                .tokenSettings(TokenSettings.builder().accessTokenTimeToLive(accessTokenTimeToLive).build())
+                .build();
+    }
+
+    /**
+     * Adds email + name + roles to the id_token of the user who signed in, and roles to the access token
+     * of a client that signed in as itself.
+     */
     @Bean
     public OAuth2TokenCustomizer<JwtEncodingContext> tokenCustomizer() {
         return context -> {
             if (OidcParameterNames.ID_TOKEN.equals(context.getTokenType().getValue())) {
-                context.getClaims().claim("email", TEST_EMAIL);
-                context.getClaims().claim("name", TEST_NAME);
-                context.getClaims().claim("roles", TEST_ROLES);
+                Profile profile = PROFILES.get(context.getPrincipal().getName());
+                context.getClaims().claim("email", profile.email());
+                context.getClaims().claim("name", profile.name());
+                context.getClaims().claim("roles", profile.roles());
+            } else if (OAuth2TokenType.ACCESS_TOKEN.equals(context.getTokenType())
+                    && AuthorizationGrantType.CLIENT_CREDENTIALS.equals(context.getAuthorizationGrantType())) {
+                context.getClaims().claim("roles", SERVICE_ROLES);
             }
         };
     }

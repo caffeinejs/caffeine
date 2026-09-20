@@ -374,6 +374,7 @@ Exceptions:
 2. **External / interop names** keep the upstream spelling: Node (`IncomingHttpHeaders`, `executionAsyncId`), WebCrypto (`JsonWebKey`), inspector/CDP (`CallFrameId`), fast-check (`fc.webUrl`), ESLint (`messageId`), JS built-ins (`toJSON`).
 3. **Wire / protocol tokens** stay as the spec writes them (`HttpOnly`, `client_id`, `redirect_uri`). Surrounding TS identifiers still follow this file (`redirectURI`).
 4. **A substring is not an acronym** — `Identity`, `Identifier`, `Candidate`, `Validate`, `Hidden`. Never rewrite them.
+5. **Configuration keys** are spelled the way an environment variable folds: `clientId`, `callbackUrl`, `accessTtl`. `EnvConfigSource` turns `CLIENT_ID` into `clientId`, and only `CLIENT_I_D` would reach `clientID`. The TS identifier a key feeds still follows this file: the key `clientId` is applied with `clientID(...)`.
 
 ## Decorators
 

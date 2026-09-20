@@ -1,5 +1,5 @@
 import { Context } from '../../context.js'
-import { RouteAuthzOptions } from '../../routing/spec.js'
+import type { RouteAuthz } from '../../routing/spec.js'
 import { Principal } from '../index.js'
 import { AuthorizationOptions } from './authz.js'
 import { ErrAuthzPolicyNotFound, ErrAuthzRequirementHandlerNotFound } from './errors.js'
@@ -56,100 +56,97 @@ export function newPolicyEvaluator(
     compiled[i] = [requirement, handler]
   }
 
-  return async (ctx: Context, user: Principal, resource?: unknown) => {
-    for (const [requirement, handler] of compiled) {
-      const result = await handler.handle(ctx, user, requirement, resource)
+  const failed = (requirement: AuthzRequirement, result: AuthzPolicyResult): AuthzResult => ({
+    ok: false,
+    failedRequirement: requirement,
+    failedPolicy: policy.name,
+    reason: result.reason,
+  })
+
+  // Fail-fast: the first requirement that is not met ends the evaluation. Most requirements answer at once, so
+  // the evaluation only becomes a promise at the first one that does not.
+  const evaluate = (
+    ctx: Context,
+    user: Principal,
+    resource: unknown,
+    from: number,
+  ): AuthzResult | Promise<AuthzResult> => {
+    for (let i = from; i < compiled.length; i++) {
+      const [requirement, handler] = compiled[i]
+      const result = handler.handle(ctx, user, requirement, resource)
+
+      if (result instanceof Promise) {
+        return result.then(settled =>
+          settled.ok ? evaluate(ctx, user, resource, i + 1) : failed(requirement, settled),
+        )
+      }
+
       if (!result.ok) {
-        // Fail-fast: upon first failure,
-        // stop executing and return the result immediately.
-        return { ok: false, failedRequirement: requirement, failedPolicy: policy.name, reason: result.reason }
+        return failed(requirement, result)
       }
     }
 
-    return { ok: true }
+    return ALLOWED
   }
+
+  return (ctx, user, resource) => evaluate(ctx, user, resource, 0)
 }
+
+const ALLOWED: AuthzResult = Object.freeze({ ok: true })
 
 /**
  * Compiles the authorization a route actually runs, or `undefined` when it runs none.
  *
- * `routerOptions` / `routeOptions` are `undefined` when that level carried no decorator at all, which is
- * distinct from a decorator that named nothing: the first is a route nobody said anything about, and is
- * what {@link AuthorizationOptions.fallbackPolicy} exists to cover.
+ * @param authz - Everything declared for the route, its groups included, as `mergeAuthz` combined it. `undefined`
+ * means nothing was declared at any level, which is what {@link AuthorizationOptions.fallbackPolicy} covers.
+ * @throws ErrAuthzPolicyNotFound when a declaration names a policy that was never registered.
  */
 export function compileRoutePolicy(
   options: AuthorizationOptions,
   evaluators: Map<string, PolicyEvaluator>,
   handlers: Map<string, AuthzRequirementHandler<AuthzRequirement>>,
-  routerOptions?: RouteAuthzOptions,
-  routeOptions?: RouteAuthzOptions,
+  authz?: RouteAuthz,
 ): AuthzRouteService | undefined {
-  const anonymous = routerOptions?.allowAnonymous === true || routeOptions?.allowAnonymous === true
-
-  if (anonymous) {
-    return undefined
-  }
-
-  // Nothing anywhere declared an opinion about this route. Without a fallback that means "open", which is
-  // the default when no fallback is set. With one, the route is gated exactly
-  // as if it carried a bare `@Authorize` — the point being that forgetting the decorator can no longer be
-  // the difference between a protected endpoint and a public one.
-  if (routerOptions === undefined && routeOptions === undefined) {
+  if (authz === undefined) {
     return options.fallbackPolicy === undefined
       ? undefined
       : new AuthzRouteService([newPolicyEvaluator(options.fallbackPolicy, handlers)])
   }
 
-  const routerPolicies = normalizePolicy(routerOptions?.policy)
-  const routePolicies = normalizePolicy(routeOptions?.policy)
-
-  // `schemes` is deliberately not part of this test. It selects *which* scheme authenticates and issues the
-  // challenge; it states no requirement of its own, and nothing below turns it into one. Counting it here made
-  // `@Authorize({ schemes: [...] })` skip the default policy and then compile to an empty one — so naming a
-  // scheme, which reads as tightening the rule, silently let every anonymous request through.
-  const routerEmpty = !routerPolicies.length && !routerOptions?.roles?.length
-  const routeEmpty = !routePolicies.length && !routeOptions?.roles?.length
-
-  if (routerEmpty && routeEmpty) {
-    return new AuthzRouteService([newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers)])
+  if (authz.allowAnonymous) {
+    return undefined
   }
 
-  const policyNames = new Set<string>()
-  for (const name of routerPolicies) {
-    policyNames.add(name)
-  }
-  for (const name of routePolicies) {
-    policyNames.add(name)
+  const evals: PolicyEvaluator[] = []
+
+  // Naming schemes states no requirement: it selects which scheme authenticates and challenges. So a declaration
+  // naming only schemes asks for the default policy, the same as a bare one — it must never compile to nothing.
+  if (authz.defaultPolicy) {
+    evals.push(newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers))
   }
 
-  const evals = new Array<PolicyEvaluator>()
-  for (const name of policyNames) {
-    const e = evaluators.get(name)
-    if (!e) {
+  for (const name of authz.policies) {
+    const evaluator = evaluators.get(name)
+    if (evaluator === undefined) {
       throw new ErrAuthzPolicyNotFound(name, [...evaluators.keys()])
     }
 
-    evals.push(e)
+    evals.push(evaluator)
   }
 
-  const builder = new PolicyBuilder()
+  if (authz.roleGroups.length > 0) {
+    const builder = new PolicyBuilder()
+    for (const roles of authz.roleGroups) {
+      builder.role(...roles)
+    }
 
-  if (routerOptions?.roles && routerOptions.roles.length > 0) {
-    builder.role(...routerOptions.roles)
-  }
-  if (routeOptions?.roles && routeOptions.roles.length > 0) {
-    builder.role(...routeOptions.roles)
+    evals.push(newPolicyEvaluator(builder.build(), handlers))
   }
 
-  evals.push(newPolicyEvaluator(builder.build(), handlers))
+  // A protected route that would run nothing is a declaration assembled by hand and wrongly: fail closed.
+  if (evals.length === 0) {
+    evals.push(newPolicyEvaluator(options.authorizeDecoratorDefaultPolicy, handlers))
+  }
 
   return new AuthzRouteService(evals)
-}
-
-function normalizePolicy(policy: string | string[] | undefined): string[] {
-  if (policy == null) {
-    return []
-  }
-
-  return Array.isArray(policy) ? policy : [policy]
 }

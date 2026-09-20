@@ -8,3 +8,5 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      # The JVM takes its time on a cold runner; a failed probe in here does not count against the retries.
+      start_period: 60s

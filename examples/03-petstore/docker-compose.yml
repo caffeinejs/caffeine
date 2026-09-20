@@ -27,7 +27,6 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://petstore:petstore@postgres:5432/petstore?schema=public
-      PETSTORE_JWT_SECRET: petstore-dev-secret
       PETSTORE_SERVER__PORT: 3000
     ports:
       - '3000:3000'

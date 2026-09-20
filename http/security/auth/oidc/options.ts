@@ -2,6 +2,7 @@ import type { JWTVerifyGetKey } from 'jose'
 
 import type { Context } from '../../../context.js'
 import type { Claim } from '../../index.js'
+import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
   cookieName,
@@ -25,15 +26,6 @@ const REQUIRED_SCOPE = 'openid'
 const DEFAULT_SCOPES = [REQUIRED_SCOPE]
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
-
-/**
- * How the client authenticates to the token endpoint.
- *
- * `auto` reads `token_endpoint_auth_methods_supported` from discovery, preferring
- * `client_secret_basic` — RFC 6749 §2.3.1 requires servers to support it and calls
- * credentials-in-the-body "NOT RECOMMENDED".
- */
-export type TokenEndpointAuthMethod = 'client_secret_basic' | 'client_secret_post'
 
 /** Raw tokens from the token endpoint, handed to `onTokenValidated`. */
 export interface OIDCTokens {
@@ -108,6 +100,9 @@ export interface ResolvedOIDCAuthenticationOptions {
    *
    * Providers rotate endpoints and change advertised capabilities; caching for the process
    * lifetime means a handler can keep using an endpoint the issuer has retired.
+   *
+   * When the provider cannot be reached for a refresh, the document in hand keeps being used and the fetch is
+   * tried again half a minute later. A document that was fetched and refused fails the request instead.
    */
   discoveryCacheTtlSeconds: number
   /** `auto` negotiates from discovery, preferring `client_secret_basic`. */
@@ -117,11 +112,18 @@ export interface ResolvedOIDCAuthenticationOptions {
    *
    * Scoped to this strategy rather than a process-wide static. Off by
    * default: error messages carry a redaction notice instead of claim values. Turning it on
-   * affects only the logged `message` — `OIDCError.publicMessage`, all the client can see,
+   * affects only the logged `message` — `RemoteAuthenticationError.publicMessage`, all the client can see,
    * never carries user data either way.
    */
   showPii: boolean
   challengeMode: RemoteChallengeMode
+  /**
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   *
+   * A challenge that cannot redirect answers `401` with this URL as `loginURL`. Nothing is started until a browser
+   * goes there.
+   */
+  loginPath?: string
 
   /**
    * Post-mapping claim surgery.
@@ -156,7 +158,7 @@ export interface ResolvedOIDCAuthenticationOptions {
   /**
    * Keeps the provider's tokens on the server-side ticket.
    *
-   * Required for `signOutRedirect()`, which needs the id_token as `id_token_hint`. Refusing to
+   * Required for `signOut()`, which needs the id_token as `id_token_hint`. Refusing to
    * configure without a `ticketStore` is deliberate: the alternative home for the tokens is the
    * session cookie, and a refresh token is a long-lived credential that does not belong in
    * something the client holds.
@@ -240,14 +242,23 @@ export interface ResolvedOIDCAuthenticationOptions {
    * Store them server-side here if the application needs them.
    */
   onTokenValidated?: (ctx: Context, idTokenPayload: Record<string, unknown>, tokens: OIDCTokens) => Promise<void> | void
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /**
-   * Shapes the challenge response. Receives the fully built authorization URL — state,
-   * nonce and PKCE have already been generated and the state cookie already set, so the
-   * flow stays correct no matter what the hook does. Use it to return `401` with the
-   * login URL for SPA clients instead of the default `302`.
+   * Shapes the challenge response, and receives where the browser should go next.
+   *
+   * A navigation receives the authorization URL, with state, nonce, PKCE and the state cookie already in
+   * place, so the flow stays correct no matter what the hook does. Anything else receives this origin's
+   * {@link loginPath} and starts no authorization round trip: a script cannot follow a redirect to the
+   * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
+   * URL in a shape of your own.
    */
-  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
+  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
   onForbid?: (ctx: Context) => Promise<void> | void
   claimMapper?: (idTokenPayload: Record<string, unknown>) => Claim[]
 
@@ -560,6 +571,12 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
+  /** The path of the route that starts a sign-in. `<callback path>/login` unless set. */
+  loginPath(path: string): this {
+    this.#options.loginPath = path
+    return this
+  }
+
   /**
    * Supplements the id_token with a UserInfo call. The id_token stays authoritative on any overlap.
    */
@@ -578,7 +595,7 @@ export class OIDCAuthenticationOptionsBuilder {
    * Keeps the provider's tokens on the server-side ticket.
    *
    * Requires a `ticketStore`; configuring without one is an error rather than a silent
-   * downgrade. Needed for `signOutRedirect()`.
+   * downgrade. Needed for `signOut()`.
    */
   saveTokens(save = true): this {
     this.#options.saveTokens = save
@@ -666,13 +683,3 @@ export class OIDCAuthenticationOptionsBuilder {
     return resolveOIDCOptions(this.#options as OIDCAuthenticationOptions, scheme)
   }
 }
-
-// The generic halves of this module now live in the shared OAuth core; re-exported so callers
-// and tests keep one import site for the option surface.
-export {
-  assertSecureEndpoint,
-  defaultSecureCookie,
-  isSafeReturnPath,
-  MIN_SESSION_SECRET_LENGTH,
-  sanitizeSchemeName,
-} from '../internal/remote/config.js'

@@ -121,14 +121,15 @@ jobs:
       - name: Services
         run: |
           docker compose -f test/services/configserver/docker-compose.yml up --build --wait --wait-timeout 300
+          docker compose -f test/services/oauthserver/docker-compose.yml up --build --wait --wait-timeout 300
           docker compose -f test/services/redis/docker-compose.yml up --wait --wait-timeout 120
 
-      # The OIDC and OAuth2 specs are left out until they pass; their server is not started here.
       - name: E2E
-        run: npm run test:e2e -- config.e2e distlock.e2e
+        run: npm run test:e2e
 
       - name: Service Logs
         if: ${{ failure() }}
         run: |
           docker compose -f test/services/configserver/docker-compose.yml logs
+          docker compose -f test/services/oauthserver/docker-compose.yml logs
           docker compose -f test/services/redis/docker-compose.yml logs

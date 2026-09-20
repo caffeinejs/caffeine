@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
+import { AuthenticateResult } from '../ticket.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque.js'
 import { OpaqueTokenStore } from './opaque_token_store.js'
 
@@ -13,11 +14,12 @@ function makePrincipal(sub: string): Principal {
 
 function makeCtx(authHeader?: string) {
   const status = vi.fn().mockReturnThis()
+  // A challenge is appended: a route naming several schemes advertises each of them.
   const header = vi.fn().mockReturnThis()
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    header,
+    appendHeader: header,
   } as unknown as Context
   return { ctx, status, header }
 }
@@ -104,6 +106,19 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       expect(onFail).toHaveBeenCalledWith(ctx, error)
     })
 
+    // A hook that throws used to be caught by the handler and called again, this time with its own error.
+    it('calls onFail once when onFail itself throws, and lets its error out', async () => {
+      const hookFailure = new Error('audit log is down')
+      const onFail = vi.fn().mockRejectedValue(hookFailure)
+      const { ctx } = makeCtx('Bearer unknown')
+
+      const attempt = makeHandler(storeReturning(null), { onFail }).authenticate(ctx)
+
+      await expect(attempt).rejects.toBe(hookFailure)
+      expect(onFail).toHaveBeenCalledOnce()
+      expect(onFail.mock.calls[0][1]).toMatchObject({ message: 'Invalid token' })
+    })
+
     it('does not call onFail when the header is absent', async () => {
       const onFail = vi.fn()
       const { ctx } = makeCtx(undefined)
@@ -123,13 +138,68 @@ describe('OpaqueTokenAuthenticationHandler', () => {
     })
   })
 
+  // The keyword goes out as it is in every challenge. One that is not an RFC 9110 token — a space, a line break — makes
+  // a header the server refuses to send, so each request that should be challenged is answered 500 instead. It also
+  // matches no `Authorization` header anyone could send, so the scheme would authenticate nobody.
+  describe('the scheme keyword', () => {
+    it.each(['', 'My Token', 'Token\r\nX-Injected: 1', 'Tökén', 'Token,', '"Token"'])(
+      'is refused when the scheme is built, not when a request is challenged: %j',
+      scheme => {
+        expect(() => makeHandler(storeReturning(null), { scheme })).toThrow(
+          expect.objectContaining({ code: 'ERR_AUTH_CONFIGURATION' }),
+        )
+      },
+    )
+
+    it.each(['Bearer', 'Token', 'ApiKey', 'X-Custom.Scheme_1'])('is accepted when it is a token: %s', scheme => {
+      expect(() => makeHandler(storeReturning(null), { scheme })).not.toThrow()
+    })
+  })
+
   describe('challenge()', () => {
-    it('sets status 401 and WWW-Authenticate: Bearer realm="" by default', async () => {
+    // RFC 6750 §3 makes the realm optional, and an empty one names nothing.
+    it('sets status 401 and a bare WWW-Authenticate: Bearer when no realm is configured', async () => {
       const { ctx, status, header } = makeCtx()
       await makeHandler(storeReturning(null)).challenge(ctx)
 
       expect(status).toHaveBeenCalledWith(401)
-      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm=""')
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer')
+    })
+
+    // A client that reads `invalid_token` refreshes or signs in again; one that reads a bare challenge has no way
+    // to tell its token was the problem.
+    it('says the token is invalid when this request presented one that was refused', async () => {
+      const { ctx, header } = makeCtx()
+      const refused = AuthenticateResult.fail(new Error('Invalid token'))
+
+      await makeHandler(storeReturning(null), { realm: 'api' }).challenge(ctx, undefined, refused)
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="invalid_token"')
+    })
+
+    it('faults no token when none was presented', async () => {
+      const { ctx, header } = makeCtx()
+
+      await makeHandler(storeReturning(null), { realm: 'api' }).challenge(ctx, undefined, AuthenticateResult.none())
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api"')
+    })
+
+    // `error` is a parameter RFC 6750 registers for Bearer. Another keyword has none to say it with.
+    it('invents no parameter for a keyword other than Bearer', async () => {
+      const { ctx, header } = makeCtx()
+      const refused = AuthenticateResult.fail(new Error('Invalid token'))
+
+      await makeHandler(storeReturning(null), { scheme: 'Token' }).challenge(ctx, undefined, refused)
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Token')
+    })
+
+    it('writes the realm as a quoted-string', async () => {
+      const { ctx, header } = makeCtx()
+      await makeHandler(storeReturning(null), { realm: 'The "API"' }).challenge(ctx)
+
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="The \\"API\\""')
     })
 
     it('includes the configured realm and scheme', async () => {
@@ -155,6 +225,17 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       await makeHandler(storeReturning(null)).forbid(ctx)
 
       expect(status).toHaveBeenCalledWith(403)
+    })
+
+    // RFC 6750 §3.1: the token was good, and it is not enough for this resource.
+    it('says the token is not enough, under the Bearer keyword only', async () => {
+      const bearer = makeCtx()
+      await makeHandler(storeReturning(null), { realm: 'api' }).forbid(bearer.ctx)
+      expect(bearer.header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer realm="api", error="insufficient_scope"')
+
+      const custom = makeCtx()
+      await makeHandler(storeReturning(null), { scheme: 'Token' }).forbid(custom.ctx)
+      expect(custom.header).not.toHaveBeenCalled()
     })
 
     it('delegates to onForbid and skips default behaviour', async () => {

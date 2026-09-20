@@ -1,8 +1,10 @@
 import { $t } from '@caffeinejs/std'
 import type { ConfigSchema } from '@caffeinejs/std/config'
+import { validateSchema, type AnySchema } from '@caffeinejs/std/schema'
 
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
+import { ErrAuthConfiguration } from './errors.js'
 import type { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import type { OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
 import type { OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
@@ -25,6 +27,10 @@ export type SchemeKind = 'jwt' | 'basic' | 'cookie' | 'opaque' | 'oidc' | 'oauth
  * capitalized (`Bearer`, `Basic`, `Cookie`, `OpaqueToken`), so name the scheme explicitly —
  * `addJWTBearer('jwt', ...)` — wherever an environment variable has to reach it. A file or an inline source
  * addresses a capitalized name as written.
+ *
+ * **Every key is spelled the way its environment variable folds**, so `CLIENT_ID` sets `clientId` and
+ * `CALLBACK_URL` sets `callbackUrl`. That is not always the spelling of the builder method the key feeds:
+ * `clientId` is what `clientID(...)` is called with.
  */
 export interface AuthConfig {
   defaultAuthenticateScheme?: string
@@ -46,15 +52,20 @@ export const credentialsConfigSchema = $t.Object({
 const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
 
 export const refreshConfigSchema = $t.Object({
-  accessTTL: $t.Optional(ttl()),
-  refreshTTL: $t.Optional(ttl()),
+  accessTtl: $t.Optional(ttl()),
+  refreshTtl: $t.Optional(ttl()),
+  absoluteTtl: $t.Optional(ttl()),
 })
 
 /**
  * The shape of the authentication block, with `schemes` left open.
  *
- * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. An
- * application wanting a scheme's options validated declares that scheme precisely instead:
+ * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. Each
+ * scheme's block is still validated, against its kind's schema, when the scheme is built: a key the kind does not
+ * have, or a value its option does not take, fails `ready()`.
+ *
+ * Declaring a scheme precisely moves that check to where the configuration loads, which is also what a reload
+ * goes through:
  *
  * ```ts
  * $t.Object({ schemes: $t.Object({ Bearer: SCHEME_SCHEMAS.jwt }) })
@@ -92,15 +103,53 @@ export interface SchemeConfigSpec<B> {
  *
  * Order is what makes a builder call a *default*: the callback sets code values first, and whatever
  * configuration resolved is applied over them. A key the tree does not carry leaves the code value alone.
+ *
+ * The values are validated against the kind's own schema first, which is also what converts them. The
+ * application's schema may leave a scheme's keys open — the exported {@link authConfigSchema} does — and an
+ * environment variable is text: `"false"` handed to a boolean option as it arrived would turn the option on.
+ *
+ * @param where - What is being configured, for the error: `authentication scheme "jwt"`.
+ * @throws ErrAuthConfiguration for a key the kind does not have, or a value its option does not take. A misspelt
+ * key that was dropped instead would leave the check the operator believed was on never running.
  */
-export function applyScheme<B>(builder: B, spec: SchemeConfigSpec<B>, values: Record<string, unknown>): void {
-  for (const [key, value] of Object.entries(values)) {
-    if (value === undefined) {
-      continue
+export function applyScheme<B>(
+  builder: B,
+  spec: SchemeConfigSpec<B>,
+  values: Record<string, unknown>,
+  where: string,
+): void {
+  for (const [key, value] of Object.entries(validated(spec, values, where))) {
+    if (value !== undefined) {
+      spec.appliers[key]!(builder, value as never)
     }
-
-    spec.appliers[key]?.(builder, value as never)
   }
+}
+
+/** The configured values as the kind's schema types them. See {@link applyScheme}. */
+export function validated<B>(
+  spec: Pick<SchemeConfigSpec<B>, 'schema'> & { appliers?: SchemeAppliers<B> },
+  values: Record<string, unknown>,
+  where: string,
+): Record<string, unknown> {
+  const known = Object.keys(spec.appliers ?? (spec.schema as { properties?: object }).properties ?? {})
+  const present = Object.entries(values).filter(([, value]) => value !== undefined)
+
+  const unknown = present.map(([key]) => key).filter(key => !known.includes(key))
+  if (unknown.length > 0) {
+    throw new ErrAuthConfiguration(
+      `Cannot configure ${where}: ${unknown.map(key => `"${key}"`).join(', ')} is not an option of it ` +
+        `(options: ${known.map(key => `"${key}"`).join(', ')})`,
+    )
+  }
+
+  const result = validateSchema(spec.schema as AnySchema, Object.fromEntries(present), { decode: true })
+  if (!result.ok) {
+    throw new ErrAuthConfiguration(
+      `Cannot configure ${where}: ${result.issues.map(issue => `${issue.path}: ${issue.message}`).join('; ')}`,
+    )
+  }
+
+  return result.value as Record<string, unknown>
 }
 
 const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto', 'redirect', 'status'])
@@ -156,10 +205,11 @@ const cookieSchemeSchema = $t.Object({
   rememberMe: $t.Optional($t.Boolean()),
   rememberMeCookieName: $t.Optional($t.String()),
   rememberMeRotationGraceSeconds: $t.Optional($t.Number()),
+  rememberMeAbsoluteMaxAge: $t.Optional($t.Number()),
   challengeMode: $t.Optional(challengeMode()),
   loginPath: $t.Optional($t.String()),
   accessDeniedPath: $t.Optional($t.String()),
-  returnURLParameter: $t.Optional($t.String()),
+  returnUrlParameter: $t.Optional($t.String()),
   maxAge: $t.Optional($t.Number()),
   rememberMeMaxAge: $t.Optional($t.Number()),
   secure: $t.Optional($t.Boolean()),
@@ -176,10 +226,11 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
     rememberMe: (b, v: boolean) => b.rememberMe(v),
     rememberMeCookieName: (b, v: string) => b.rememberMeCookieName(v),
     rememberMeRotationGraceSeconds: (b, v: number) => b.rememberMeRotationGraceSeconds(v),
+    rememberMeAbsoluteMaxAge: (b, v: number) => b.rememberMeAbsoluteMaxAge(v),
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
     loginPath: (b, v: string) => b.loginPath(v),
     accessDeniedPath: (b, v: string) => b.accessDeniedPath(v),
-    returnURLParameter: (b, v: string) => b.returnURLParameter(v),
+    returnUrlParameter: (b, v: string) => b.returnURLParameter(v),
     maxAge: (b, v: number) => b.maxAge(v),
     rememberMeMaxAge: (b, v: number) => b.rememberMeMaxAge(v),
     secure: (b, v: boolean) => b.secure(v),
@@ -190,16 +241,16 @@ const cookie: SchemeConfigSpec<CookieAuthenticationOptionsBuilder> = {
 }
 
 const oidcSchemeSchema = $t.Object({
-  clientID: $t.Optional($t.String()),
+  clientId: $t.Optional($t.String()),
   clientSecret: $t.Optional($t.String()),
   sessionSecret: $t.Optional($t.String()),
-  discoveryURL: $t.Optional($t.String()),
+  discoveryUrl: $t.Optional($t.String()),
   issuer: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
-  jwksURI: $t.Optional($t.String()),
-  callbackURL: $t.Optional($t.String()),
+  jwksUri: $t.Optional($t.String()),
+  callbackUrl: $t.Optional($t.String()),
   defaultRedirectPath: $t.Optional($t.String()),
   scopes: $t.Optional($t.Array($t.String())),
   sessionCookieName: $t.Optional($t.String()),
@@ -207,16 +258,17 @@ const oidcSchemeSchema = $t.Object({
   stateCookieName: $t.Optional($t.String()),
   secureCookie: $t.Optional($t.Boolean()),
   roleClaimType: $t.Optional($t.String()),
-  allowPlainPKCE: $t.Optional($t.Boolean()),
+  allowPlainPkce: $t.Optional($t.Boolean()),
   clockToleranceSeconds: $t.Optional($t.Number()),
   httpTimeoutMs: $t.Optional($t.Number()),
   discoveryCacheTtlSeconds: $t.Optional($t.Number()),
   tokenEndpointAuthMethod: $t.Optional($t.UnionEnum(['auto', 'client_secret_basic', 'client_secret_post'])),
   showPii: $t.Optional($t.Boolean()),
   challengeMode: $t.Optional(challengeMode()),
+  loginPath: $t.Optional($t.String()),
   getClaimsFromUserInfoEndpoint: $t.Optional($t.Boolean()),
   saveTokens: $t.Optional($t.Boolean()),
-  postLogoutRedirectURI: $t.Optional($t.String()),
+  postLogoutRedirectUri: $t.Optional($t.String()),
   endSessionEndpoint: $t.Optional($t.String()),
   prompt: $t.Optional($t.UnionEnum(['none', 'login', 'consent', 'select_account'])),
   loginHint: $t.Optional($t.String()),
@@ -228,16 +280,16 @@ const oidcSchemeSchema = $t.Object({
 const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
   schema: oidcSchemeSchema,
   appliers: {
-    clientID: (b, v: string) => b.clientID(v),
+    clientId: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
     sessionSecret: (b, v: string) => b.sessionSecret(v),
-    discoveryURL: (b, v: string) => b.discoveryURL(v),
+    discoveryUrl: (b, v: string) => b.discoveryURL(v),
     issuer: (b, v: string) => b.issuer(v),
     authorizationEndpoint: (b, v: string) => b.authorizationEndpoint(v),
     tokenEndpoint: (b, v: string) => b.tokenEndpoint(v),
     userInfoEndpoint: (b, v: string) => b.userInfoEndpoint(v),
-    jwksURI: (b, v: string) => b.jwksURI(v),
-    callbackURL: (b, v: string) => b.callbackURL(v),
+    jwksUri: (b, v: string) => b.jwksURI(v),
+    callbackUrl: (b, v: string) => b.callbackURL(v),
     defaultRedirectPath: (b, v: string) => b.defaultRedirectPath(v),
     scopes: (b, v: string[]) => b.scopes(...v),
     sessionCookieName: (b, v: string) => b.sessionCookieName(v),
@@ -245,7 +297,7 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
     stateCookieName: (b, v: string) => b.stateCookieName(v),
     secureCookie: (b, v: boolean) => b.secureCookie(v),
     roleClaimType: (b, v: string) => b.roleClaimType(v),
-    allowPlainPKCE: (b, v: boolean) => b.allowPlainPKCE(v),
+    allowPlainPkce: (b, v: boolean) => b.allowPlainPKCE(v),
     clockToleranceSeconds: (b, v: number) => b.clockToleranceSeconds(v),
     httpTimeoutMs: (b, v: number) => b.httpTimeoutMs(v),
     discoveryCacheTtlSeconds: (b, v: number) => b.discoveryCacheTtlSeconds(v),
@@ -253,9 +305,10 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
       b.tokenEndpointAuthMethod(v),
     showPii: (b, v: boolean) => b.showPii(v),
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
+    loginPath: (b, v: string) => b.loginPath(v),
     getClaimsFromUserInfoEndpoint: (b, v: boolean) => b.getClaimsFromUserInfoEndpoint(v),
     saveTokens: (b, v: boolean) => b.saveTokens(v),
-    postLogoutRedirectURI: (b, v: string) => b.postLogoutRedirectURI(v),
+    postLogoutRedirectUri: (b, v: string) => b.postLogoutRedirectURI(v),
     endSessionEndpoint: (b, v: string) => b.endSessionEndpoint(v),
     prompt: (b, v: 'none' | 'login' | 'consent' | 'select_account') => b.prompt(v),
     loginHint: (b, v: string) => b.loginHint(v),
@@ -266,13 +319,13 @@ const oidc: SchemeConfigSpec<OIDCAuthenticationOptionsBuilder> = {
 }
 
 const oauthSchemeSchema = $t.Object({
-  clientID: $t.Optional($t.String()),
+  clientId: $t.Optional($t.String()),
   clientSecret: $t.Optional($t.String()),
   sessionSecret: $t.Optional($t.String()),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
-  callbackURL: $t.Optional($t.String()),
+  callbackUrl: $t.Optional($t.String()),
   defaultRedirectPath: $t.Optional($t.String()),
   scopes: $t.Optional($t.Array($t.String())),
   sessionCookieName: $t.Optional($t.String()),
@@ -283,8 +336,10 @@ const oauthSchemeSchema = $t.Object({
   httpTimeoutMs: $t.Optional($t.Number()),
   showPii: $t.Optional($t.Boolean()),
   challengeMode: $t.Optional(challengeMode()),
-  usePKCE: $t.Optional($t.Boolean()),
+  loginPath: $t.Optional($t.String()),
+  usePkce: $t.Optional($t.Boolean()),
   subjectClaim: $t.Optional($t.String()),
+  tokenEndpointAuthMethod: $t.Optional($t.UnionEnum(['client_secret_basic', 'client_secret_post'])),
   tokenRequestHeaders: $t.Optional($t.Record($t.String(), $t.String())),
   userInfoHeaders: $t.Optional($t.Record($t.String(), $t.String())),
   mapClaims: $t.Optional($t.Record($t.String(), $t.String())),
@@ -293,13 +348,13 @@ const oauthSchemeSchema = $t.Object({
 const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
   schema: oauthSchemeSchema,
   appliers: {
-    clientID: (b, v: string) => b.clientID(v),
+    clientId: (b, v: string) => b.clientID(v),
     clientSecret: (b, v: string) => b.clientSecret(v),
     sessionSecret: (b, v: string) => b.sessionSecret(v),
     authorizationEndpoint: (b, v: string) => b.authorizationEndpoint(v),
     tokenEndpoint: (b, v: string) => b.tokenEndpoint(v),
     userInfoEndpoint: (b, v: string) => b.userInfoEndpoint(v),
-    callbackURL: (b, v: string) => b.callbackURL(v),
+    callbackUrl: (b, v: string) => b.callbackURL(v),
     defaultRedirectPath: (b, v: string) => b.defaultRedirectPath(v),
     scopes: (b, v: string[]) => b.scopes(...v),
     sessionCookieName: (b, v: string) => b.sessionCookieName(v),
@@ -310,8 +365,10 @@ const oauth: SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder> = {
     httpTimeoutMs: (b, v: number) => b.httpTimeoutMs(v),
     showPii: (b, v: boolean) => b.showPii(v),
     challengeMode: (b, v: 'auto' | 'redirect' | 'status') => b.challengeMode(v),
-    usePKCE: (b, v: boolean) => b.usePKCE(v),
+    loginPath: (b, v: string) => b.loginPath(v),
+    usePkce: (b, v: boolean) => b.usePKCE(v),
     subjectClaim: (b, v: string) => b.subjectClaim(v),
+    tokenEndpointAuthMethod: (b, v: 'client_secret_basic' | 'client_secret_post') => b.tokenEndpointAuthMethod(v),
     tokenRequestHeaders: (b, v: Record<string, string>) => b.tokenRequestHeaders(v),
     userInfoHeaders: (b, v: Record<string, string>) => b.userInfoHeaders(v),
     mapClaims: (b, v: Record<string, string>) => b.mapClaims(v),
@@ -340,20 +397,21 @@ export const SCHEME_SCHEMAS = {
   github: oauthSchemeSchema,
 } as const
 
-export const SCHEME_CONFIG: { readonly [K in SchemeKind]: SchemeConfigSpec<never> } = {
-  jwt: jwt as SchemeConfigSpec<never>,
-  basic: basic as SchemeConfigSpec<never>,
-  cookie: cookie as SchemeConfigSpec<never>,
-  opaque: opaque as SchemeConfigSpec<never>,
-  oidc: oidc as SchemeConfigSpec<never>,
-  oauth: oauth as SchemeConfigSpec<never>,
-  github: oauth as SchemeConfigSpec<never>,
-}
+export const SCHEME_CONFIG = {
+  jwt,
+  basic,
+  cookie,
+  opaque,
+  oidc,
+  oauth,
+  github: oauth,
+} satisfies { readonly [K in SchemeKind]: SchemeConfigSpec<never> }
 
 export const refresh: SchemeConfigSpec<RefreshTokenOptionsBuilder> = {
   schema: refreshConfigSchema as ConfigSchema<Record<string, unknown>>,
   appliers: {
-    accessTTL: (b, v: string | number) => b.accessTTL(v),
-    refreshTTL: (b, v: string | number) => b.refreshTTL(v),
+    accessTtl: (b, v: string | number) => b.accessTTL(v),
+    refreshTtl: (b, v: string | number) => b.refreshTTL(v),
+    absoluteTtl: (b, v: string | number) => b.absoluteTTL(v),
   },
 }

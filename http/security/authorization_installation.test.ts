@@ -45,7 +45,8 @@ describe('authorization installation', () => {
     void [StandaloneController]
 
     const app = createWebApplication(fastifyAdapterFactory(fastify()))
-    app.authorization(authz => authz.addPolicy('Noop', () => {}))
+    // Never named by a route: the policy is only there so `.authorization(...)` has something to install.
+    app.authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated()))
     await app.ready()
 
     const res = await app.fetch('/authz-standalone')

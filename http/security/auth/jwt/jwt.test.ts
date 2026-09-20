@@ -12,11 +12,12 @@ const secretBytes = new TextEncoder().encode(SECRET)
 
 function makeCtx(authHeader?: string) {
   const status = vi.fn().mockReturnThis()
+  // A challenge is appended: a route naming several schemes advertises each of them.
   const header = vi.fn().mockReturnThis()
   const ctx = {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
-    header,
+    appendHeader: header,
   } as unknown as Context
   return { ctx, status, header }
 }
@@ -250,12 +251,14 @@ describe('JWTAuthenticationHandler', () => {
   })
 
   describe('forbid()', () => {
-    it('sets status 403 by default', async () => {
-      const { ctx, status } = makeCtx()
+    // RFC 6750 §3.1: the token was good and it is not enough, which a client handles differently from a bad one.
+    it('sets status 403 and says the scope is what is missing', async () => {
+      const { ctx, status, header } = makeCtx()
 
       await makeHandler().forbid(ctx)
 
       expect(status).toHaveBeenCalledWith(403)
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="insufficient_scope"')
     })
 
     it('calls custom onForbid and skips the default behaviour', async () => {
@@ -281,6 +284,60 @@ describe('JWTAuthenticationHandler', () => {
       const [, value] = header.mock.calls.at(-1) as [string, string]
       expect(value).toMatch(/^Bearer error="invalid_token"/)
       expect(value).toMatch(/error_description=".+"/)
+    })
+
+    // RFC 6750 §3 admits no double quote and no backslash in the value, escaped or not. jose quotes the claim it
+    // faults, so the description used to carry `\"exp\"`.
+    it('describes the fault in the characters the RFC admits', async () => {
+      const handler = makeHandler()
+      const { ctx, header } = makeCtx(`Bearer ${await signExpired({ sub: 'u1' })}`)
+
+      await handler.challenge(ctx, undefined, await handler.authenticate(ctx))
+
+      const [, value] = header.mock.calls.at(-1) as [string, string]
+      const description = /error_description="([^"]*)"$/.exec(value)?.[1]
+
+      expect(description).toContain("'exp'")
+      // oxlint-disable-next-line no-control-regex -- the RFC's character set, spelt out
+      expect(description).toMatch(/^[\x20-\x21\x23-\x5B\x5D-\x7E]+$/)
+    })
+
+    // What is described is the token. A failure of this server's own — a key set that could not be fetched, a
+    // hook that threw — used to have its message handed to an unauthenticated caller, internal addresses and all.
+    it.each([
+      [
+        'a key resolver that failed',
+        { keyResolver: () => Promise.reject(new Error('connect ECONNREFUSED 10.1.2.3:443')) },
+      ],
+      [
+        'a claim mapper that threw',
+        {
+          claimMapper: () => {
+            throw new Error('users table is locked')
+          },
+        },
+      ],
+      [
+        'a validation hook that threw',
+        {
+          onTokenValidated: () => {
+            throw new Error('ldap://directory.internal timed out')
+          },
+        },
+      ],
+    ])('says invalid_token and nothing more for %s', async (_label, fault) => {
+      const { keyResolver, ...options } = fault as { keyResolver?: never }
+      const handler = new JWTAuthenticationHandler('Bearer', {
+        ...options,
+        serviceOptions: keyResolver === undefined ? { secret: SECRET } : { keyResolver, algorithm: 'HS256' },
+      })
+      const { ctx, header } = makeCtx(`Bearer ${await sign({ sub: 'u1' })}`)
+
+      const result = await handler.authenticate(ctx)
+      await handler.challenge(ctx, undefined, result)
+
+      expect(result.succeeded).toBe(false)
+      expect(header).toHaveBeenCalledWith('WWW-Authenticate', 'Bearer error="invalid_token"')
     })
 
     it('stays a bare challenge when no credential was presented', async () => {

@@ -16,10 +16,10 @@ import {
   PasswordHasher,
   Post,
   Args,
-  type RememberMeRecord,
-  type RememberMeRotation,
   RememberMeTokenStore,
   ScryptPasswordHasher,
+  type SeriesTokenRecord,
+  type SeriesTokenRotation,
   UserProvider,
   createWebApplication,
   fastifyAdapterFactory,
@@ -33,34 +33,38 @@ function alice(): CredentialUser {
   return { id: 'alice', passwordHash: ALICE_HASH, claims: [new Claim('roles', 'admin', '')] }
 }
 
+/** Whether the account still exists. A remember-me credential outlives its sign-in by weeks, and an account may not. */
+let aliceDeleted = false
+
 class TestUserProvider extends UserProvider {
   findByIdentifier(identifier: string): CredentialUser | null {
-    return identifier === 'alice' ? alice() : null
+    return identifier === 'alice' && !aliceDeleted ? alice() : null
   }
 
   override findById(id: string): CredentialUser | null {
-    return id === 'alice' ? alice() : null
+    return id === 'alice' && !aliceDeleted ? alice() : null
   }
 }
 
 class InMemoryRememberStore extends RememberMeTokenStore {
-  readonly records = new Map<string, RememberMeRecord>()
+  readonly records = new Map<string, SeriesTokenRecord>()
   rotations = 0
-  create(record: RememberMeRecord): void {
+  create(record: SeriesTokenRecord): void {
     this.records.set(record.series, { ...record })
   }
-  findBySeries(series: string): RememberMeRecord | null {
-    return this.records.get(series) ?? null
-  }
-  updateToken(series: string, rotation: RememberMeRotation): void {
-    this.rotations++
+  findBySeries(series: string): SeriesTokenRecord | null {
     const r = this.records.get(series)
-    if (r) {
-      r.tokenHash = rotation.tokenHash
-      r.previousTokenHash = rotation.previousTokenHash
-      r.rotatedAt = rotation.rotatedAt
-      r.expiresAt = rotation.expiresAt
+    return r === undefined ? null : { ...r }
+  }
+  rotate(series: string, expectedTokenHash: string, rotation: SeriesTokenRotation): boolean {
+    const r = this.records.get(series)
+    if (r === undefined || r.tokenHash !== expectedTokenHash) {
+      return false
     }
+
+    this.rotations++
+    Object.assign(r, rotation)
+    return true
   }
 
   remove(series: string): void {
@@ -388,5 +392,66 @@ describe('durable remember-me (server-side revocable)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  /** The `Set-Cookie` line that clears `name`, if the response carries one. */
+  function cleared(res: Response, name: string): string | undefined {
+    return res.headers.getSetCookie().find(line => line.startsWith(`${name}=;`))
+  }
+
+  // The credential is good for thirty days and says nothing about the account, which is looked up again each
+  // time. An account deleted in between is not signed back in by a cookie issued while it existed.
+  it('does not remember back in a user who no longer exists, and revokes the credential', async () => {
+    const { app, store } = await buildDurableApp()
+    const c = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))
+
+    aliceDeleted = true
+    try {
+      const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+
+      expect(me.status).toBe(401)
+      expect(store.records.size).toBe(0)
+      expect(cleared(me, 'caf.remember')).toBeDefined()
+      expect(cookiesFrom(me)['caf.session']).toBeUndefined()
+    } finally {
+      aliceDeleted = false
+    }
+  })
+
+  // Two requests present the same token and the store lets one of them rotate. With no grace window the other
+  // has spent a token that was already spent, which is what a stolen copy looks like: nobody keeps the series.
+  it('takes a rotation lost to another request, outside any grace, for a replay', async () => {
+    const { app, store } = await buildDurableApp(0)
+    const c = cookiesFrom(await login(app, { email: 'alice', password: 's3cret', rememberMe: true }))
+
+    // The other request wins between this one's read and its swap.
+    store.rotate = (series: string) => {
+      Object.assign(store.records.get(series)!, { tokenHash: 'rotated-by-the-other-request' })
+      return false
+    }
+
+    const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+
+    expect(me.status).toBe(401)
+    expect(store.records.size).toBe(0)
+    expect(cleared(me, 'caf.remember')).toBeDefined()
+    expect(cookiesFrom(me)['caf.session']).toBeUndefined()
+  })
+
+  // Signing out is about the browser that asked. One that holds no remember-me cookie has no series to revoke,
+  // and the credential another browser of the same user holds is not its to take away.
+  it('signs out a browser that holds no remember-me cookie without touching the series of another', async () => {
+    const { app, store } = await buildDurableApp()
+    await login(app, { email: 'alice', password: 's3cret', rememberMe: true })
+    const here = cookiesFrom(await login(app, { email: 'alice', password: 's3cret' }))
+
+    const out = await app.fetch('/auth/logout', {
+      method: 'POST',
+      headers: { cookie: `caf.session=${here['caf.session']}` },
+    })
+
+    expect(out.status).toBe(200)
+    expect(cleared(out, 'caf.session')).toBeDefined()
+    expect(store.records.size).toBe(1)
   })
 })

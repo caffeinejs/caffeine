@@ -5,7 +5,8 @@ import { Claim } from '../../index.js'
 import { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
 
 export interface JWTAuthenticationOptions {
-  secret: string | Uint8Array | CryptoKey
+  /** A symmetric secret, or an asymmetric public key to verify with. Absent with a key pair or a key resolver. */
+  secret?: string | Uint8Array | CryptoKey
   jwtOptions?: JWTVerifyOptions
   roleClaimType?: string
   /**
@@ -32,7 +33,6 @@ export class JWTAuthenticationOptionsBuilder {
   // these over the service defaults, and a key present with an `undefined` value *erases* the default
   // instead of deferring to it.
   readonly #options: JWTAuthenticationOptions = {
-    secret: '',
     jwtOptions: {
       algorithms: ['HS256'],
     },

@@ -6,7 +6,7 @@ import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
 import { ErrCaffeineWebApplication } from './common.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from './error.js'
-import { ErrHTTP, httpErrorBody } from './http.js'
+import { ErrHTTP, httpErrorBody, statusErrorBody } from './http.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
@@ -84,6 +84,13 @@ export function installGlobalErrorHandler(
       return reply.send(body)
     }
 
+    // Its message is detail for the log: an issuer, the address a provider could not be reached at.
+    if (hasPublicMessage(err)) {
+      request.log[err.statusCode >= 500 ? 'error' : 'info']({ err }, err.message)
+
+      return reply.status(err.statusCode).send(statusErrorBody(err.statusCode, err.code, err.publicMessage))
+    }
+
     request.log.error({ err }, err.message)
 
     return defaultErrorHandler(error, request, reply)
@@ -143,6 +150,23 @@ export function installRouteGroupErrorHandler(
 
     return globalErrorHandler(error, req, reply)
   })
+}
+
+/** An error that names what a client may be told, apart from the `message` written for whoever reads the log. */
+interface ErrorWithPublicMessage extends Error {
+  statusCode: number
+  code: string
+  publicMessage: string
+}
+
+function hasPublicMessage(err: Error): err is ErrorWithPublicMessage {
+  const candidate = err as Partial<ErrorWithPublicMessage>
+
+  return (
+    typeof candidate.publicMessage === 'string' &&
+    typeof candidate.code === 'string' &&
+    typeof candidate.statusCode === 'number'
+  )
 }
 
 function respond(ctx: FastifyContext, result: unknown): unknown {

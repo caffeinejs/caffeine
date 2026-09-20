@@ -3,6 +3,7 @@ import { type Container } from '@caffeinejs/di'
 import { type FastifyContext } from './fastify_context.js'
 import { type CatchByMap, type Route, type RouteGroup } from './route.js'
 import { type RouteGroupBuilder } from './routing/builder.js'
+import { type kAuthenticationExempt } from './security/auth/keys.js'
 import { type AuthzRouteService } from './security/authz/route_service.js'
 import { type Principal } from './security/identity.js'
 import { Keys } from './symbols.js'
@@ -24,6 +25,9 @@ declare module 'fastify' {
   }
 
   interface FastifyContextConfig {
+    /** Set on a route the authentication gate must leave alone. See {@link kAuthenticationExempt}. */
+    [kAuthenticationExempt]?: boolean
+
     /**
      * What Caffeine compiled for the route. Present on every route the framework registers and absent on one
      * registered straight on Fastify, so a plugin's `onRoute` hook tells them apart by it.

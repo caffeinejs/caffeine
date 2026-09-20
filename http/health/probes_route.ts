@@ -1,8 +1,8 @@
-import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
+import { kAuthenticationExempt } from '../security/auth/keys.js'
 import { ErrHealthConfiguration } from './errors.js'
-import { kHealthRoute } from './keys.js'
 import type { HealthOptions } from './options.js'
 import type { ProbeEndpoint, ProbeQuery, ProbeResponse } from './probes.js'
 
@@ -14,10 +14,9 @@ interface ProbeRequestQuery {
 /**
  * Mounts the three probes on the root server, before any controller is registered.
  *
- * The probes stay out of the request pipeline, and that is deliberate: the adapter builds no `httpContext`
- * for a route marked with {@link kHealthRoute}, and every middleware group skips a request that has none. So
- * no authentication middleware can reach a probe, no "allow anonymous" annotation is needed, and no
- * misconfigured guard can make the kubelet see a 401.
+ * The probes are marked {@link kAuthenticationExempt}, so the authentication gate does not run for them: a
+ * fallback policy cannot make the kubelet see a 401, and an authentication scheme that is failing cannot make it
+ * see a 500.
  */
 export function installHealthProbes(server: FastifyInstance, options: HealthOptions, probes: ProbeEndpoint): void {
   const paths = options.paths
@@ -32,9 +31,7 @@ function mount(server: FastifyInstance, path: string, handle: (query: ProbeQuery
   server.route({
     method: ['GET', 'HEAD'],
     url: path,
-    // Fastify types the route config as a string-keyed bag; the marker is a symbol so it cannot collide with a
-    // user's own config key.
-    config: { [kHealthRoute]: true } as unknown as FastifyContextConfig,
+    config: { [kAuthenticationExempt]: true },
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const response = await handle(probeQuery(request.query as ProbeRequestQuery))
 

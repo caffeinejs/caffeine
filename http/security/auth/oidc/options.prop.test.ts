@@ -5,10 +5,9 @@ import {
   assertSecureEndpoint,
   defaultSecureCookie,
   isSafeReturnPath,
-  resolveOIDCOptions,
   sanitizeSchemeName,
-} from './options.js'
-import type { OIDCAuthenticationOptions } from './options.js'
+} from '../internal/remote/config.js'
+import { resolveOIDCOptions, type OIDCAuthenticationOptions } from './options.js'
 
 /** Cookie defaults and derived keys are namespaced by strategy. */
 const SCHEME = 'OIDC'

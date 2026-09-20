@@ -13,7 +13,8 @@ import {
   Args,
   Post,
   Principal,
-  type RefreshTokenRecord,
+  type SeriesTokenRecord,
+  type SeriesTokenRotation,
   RefreshTokenService,
   RefreshTokenStore,
   createWebApplication,
@@ -32,19 +33,22 @@ function alicePrincipal(): Principal {
 }
 
 class InMemoryRefreshStore extends RefreshTokenStore {
-  readonly records = new Map<string, RefreshTokenRecord>()
-  create(record: RefreshTokenRecord): void {
+  readonly records = new Map<string, SeriesTokenRecord>()
+  create(record: SeriesTokenRecord): void {
     this.records.set(record.series, { ...record })
   }
-  findBySeries(series: string): RefreshTokenRecord | null {
-    return this.records.get(series) ?? null
-  }
-  updateToken(series: string, tokenHash: string, expiresAt: number): void {
+  findBySeries(series: string): SeriesTokenRecord | null {
     const r = this.records.get(series)
-    if (r) {
-      r.tokenHash = tokenHash
-      r.expiresAt = expiresAt
+    return r === undefined ? null : { ...r }
+  }
+  rotate(series: string, expectedTokenHash: string, rotation: SeriesTokenRotation): boolean {
+    const r = this.records.get(series)
+    if (r === undefined || r.tokenHash !== expectedTokenHash) {
+      return false
     }
+
+    Object.assign(r, rotation)
+    return true
   }
 
   remove(series: string): void {

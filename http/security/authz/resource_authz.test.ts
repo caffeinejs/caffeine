@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
-import { Claim, Identity, Principal, newAnonymousUser } from '../index.js'
+import { Claim, Identity, Principal, anonymousUser } from '../index.js'
 import { AuthenticatedUserHandler, ResourceHandler } from './handlers.js'
 import { AuthzRequirement, AuthzRequirementHandler, PolicyEvaluator, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
@@ -44,17 +44,22 @@ describe('resource-based authorization', () => {
     expect(await authz.denies(ctxFor(makeUser('u1')), 'CanEditOrder', order)).toBe(false)
   })
 
-  it('throws ErrHTTPForbidden for a non-owner, naming the policy and reason', async () => {
-    const promise = authz.authorize(ctxFor(makeUser('someone-else')), 'CanEditOrder', order)
-    await expect(promise).rejects.toBeInstanceOf(ErrHTTPForbidden)
-    await expect(promise).rejects.toThrow(/CanEditOrder.*Resource authorization failed/)
+  // The message is what the client reads, so it says nothing about how the rules are laid out. The policy that
+  // refused and its reason are kept for whoever reads the log.
+  it('throws ErrHTTPForbidden for a non-owner, keeping the policy and the reason off the message', async () => {
+    const error = await authz.authorize(ctxFor(makeUser('someone-else')), 'CanEditOrder', order).catch(e => e)
+
+    expect(error).toBeInstanceOf(ErrHTTPForbidden)
+    expect(error.message).toBe('Forbidden')
+    expect(String(error.cause.message)).toMatch(/CanEditOrder.*Resource authorization failed/)
     expect(await authz.allows(ctxFor(makeUser('someone-else')), 'CanEditOrder', order)).toBe(false)
   })
 
   it('fails the authenticated requirement first for an anonymous user', async () => {
-    await expect(authz.authorize(ctxFor(newAnonymousUser()), 'CanEditOrder', order)).rejects.toThrow(
-      /CanEditOrder.*not authenticated/,
-    )
+    const error = await authz.authorize(ctxFor(anonymousUser()), 'CanEditOrder', order).catch(e => e)
+
+    expect(error).toBeInstanceOf(ErrHTTPForbidden)
+    expect(String(error.cause.message)).toMatch(/CanEditOrder.*not authenticated/)
   })
 
   it('passes the loaded resource through to the requirement', async () => {

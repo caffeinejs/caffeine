@@ -1,6 +1,7 @@
 import type { Context } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
+import { challenge } from '../internal/challenge.js'
 import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import type { BasicAuthenticationOptions } from './basic_options.js'
 
@@ -18,12 +19,8 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
       return AuthenticateResult.none()
     }
 
-    let decoded: string
-    try {
-      decoded = Buffer.from(encoded, 'base64').toString('utf-8')
-    } catch (e) {
-      return AuthenticateResult.fail(e as Error)
-    }
+    // Decoding never throws: what is not base64 comes out as text with no colon in it, or as credentials nobody has.
+    const decoded = Buffer.from(encoded, 'base64').toString('utf-8')
 
     const sep = decoded.indexOf(':')
     if (sep === -1) {
@@ -33,19 +30,22 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
     const username = decoded.slice(0, sep)
     const password = decoded.slice(sep + 1)
 
+    let failure: Error
     try {
       const principal = await this.options.validate(ctx, username, password)
-      if (!principal) {
-        const err = new Error('Invalid credentials')
-        await this.options.onFail?.(ctx, err)
-        return AuthenticateResult.fail(err)
+      if (principal) {
+        return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
       }
 
-      return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
+      failure = new Error('Invalid credentials')
     } catch (e) {
-      await this.options.onFail?.(ctx, e as Error)
-      return AuthenticateResult.fail(e as Error)
+      failure = e as Error
     }
+
+    // Outside the `try`, so a hook that throws is not handed its own error to be called a second time with.
+    await this.options.onFail?.(ctx, failure)
+
+    return AuthenticateResult.fail(failure)
   }
 
   override async challenge(ctx: Context): Promise<void> {
@@ -53,7 +53,11 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
       return this.options.onChallenge(ctx)
     }
 
-    ctx.status(401).header('WWW-Authenticate', `Basic realm="${this.options.realm ?? ''}"`)
+    // RFC 7617 §2 requires the realm, so an unset one is sent empty. §2.1: credentials are decoded as UTF-8 above,
+    // and a client only knows to encode them so when the challenge says it.
+    ctx
+      .status(401)
+      .appendHeader('WWW-Authenticate', challenge('Basic', { realm: this.options.realm ?? '', charset: 'UTF-8' }))
   }
 
   override async forbid(ctx: Context): Promise<void> {

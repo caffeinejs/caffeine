@@ -1,78 +1,32 @@
-import { hkdfSync } from 'node:crypto'
-
-import { EncryptJWT, jwtDecrypt } from 'jose'
+import { sealJWT, sealingKey, unsealJWT } from '../sealed_jwt.js'
 
 /**
- * Explicit media type carried in the JOSE `typ` header of every OIDC cookie.
+ * What a cookie of the OAuth-family strategies is for, carried as the token's `typ` and folded into its key.
  *
- * RFC 8725 §3.11 ("Use Explicit Typing"). Combined with the per-purpose key derivation
- * below, one cookie can never stand in for the other: the wrong purpose fails at the key
- * before the claim check even runs.
+ * Two axes of separation. Purpose means a token sealed as state cannot be opened as a session even if the `typ`
+ * check were bypassed: the wrong purpose fails at the key before the claim check runs. Strategy means two handlers
+ * sharing one `sessionSecret` cannot read each other's cookies at all, so a session minted by one identity
+ * provider is inert at the other. The builder refuses two schemes under one name, which is what keeps this
+ * namespace unique across protocols without the protocol appearing in it.
  */
 export type OIDCTokenPurpose = 'oidc-state+jwt' | 'oidc-session+jwt' | 'oidc-ticket+jwt'
 
-/**
- * Both cookies are encrypted, not merely signed.
- *
- * A JWS leaves its payload base64url-readable by anyone holding the cookie, which for the
- * session cookie means user claims — email, name, birthdate — in cleartext in the browser
- * jar and in anything that captures request headers. `dir` + `A256GCM` is AEAD, so this
- * provides confidentiality *and* integrity and replaces the signature outright.
- */
-const ALG = 'dir'
-const ENC = 'A256GCM'
+const info = (purpose: OIDCTokenPurpose, scheme: string) => `caffeine:oidc:${purpose}:${scheme}`
 
-/**
- * Derives an independent 256-bit key per cookie purpose *and* strategy from the secret.
- *
- * Two axes of separation. Purpose means a token sealed as state cannot be opened as a
- * session even if the `typ` check were bypassed. Strategy means two handlers sharing one
- * `sessionSecret` — the common case, since it usually comes from one environment variable —
- * cannot read each other's cookies at all, so a session minted by one identity provider is
- * inert at the other. The builder rejects two OAuth strategies sharing a name, which is what
- * keeps this namespace unique across protocols without the protocol appearing in the info.
- *
- * Memoised: the inputs are fixed for a handler's lifetime, so `authenticate()` — which runs
- * on every request that carries a session cookie — must not re-run HKDF each time. The cache
- * is keyed by the full derivation input, so distinct secrets never collide, and the derived
- * key is returned directly; callers treat it as read-only.
- */
-const keyCache = new Map<string, Uint8Array>()
-
-export function keyFor(secret: string, purpose: OIDCTokenPurpose, scheme: string): Uint8Array {
-  const info = `caffeine:oidc:${purpose}:${scheme}`
-  // JSON-encoded rather than joined with a delimiter: `secret` and `scheme` are caller-controlled
-  // strings, and a plain separator could let two distinct inputs collide onto the same entry if
-  // either one contained it.
-  const cacheKey = JSON.stringify([secret, info])
-  let derived = keyCache.get(cacheKey)
-  if (derived === undefined) {
-    derived = new Uint8Array(hkdfSync('sha256', secret, '', info, 32))
-    keyCache.set(cacheKey, derived)
-  }
-  return derived
+export function keyFor(secret: string, purpose: OIDCTokenPurpose, scheme: string): Promise<CryptoKey> {
+  return sealingKey(secret, info(purpose, scheme))
 }
 
-export async function sealCookie(
+export function sealCookie(
   payload: Record<string, unknown>,
   purpose: OIDCTokenPurpose,
   secret: string,
   scheme: string,
   ttlSeconds: number,
 ): Promise<string> {
-  return new EncryptJWT(payload)
-    .setProtectedHeader({ alg: ALG, enc: ENC, typ: purpose })
-    .setIssuedAt()
-    .setExpirationTime(`${ttlSeconds}s`)
-    .encrypt(keyFor(secret, purpose, scheme))
+  return sealJWT(payload, purpose, secret, info(purpose, scheme), ttlSeconds)
 }
 
-export async function unsealCookie<T>(
-  cookie: string,
-  purpose: OIDCTokenPurpose,
-  secret: string,
-  scheme: string,
-): Promise<T> {
-  const { payload } = await jwtDecrypt(cookie, keyFor(secret, purpose, scheme), { typ: purpose })
-  return payload as unknown as T
+export function unsealCookie<T>(cookie: string, purpose: OIDCTokenPurpose, secret: string, scheme: string): Promise<T> {
+  return unsealJWT<T>(cookie, purpose, secret, info(purpose, scheme))
 }

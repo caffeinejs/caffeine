@@ -18,6 +18,11 @@ export interface CookieAuthenticationOptions {
   /** Remember-me cookie name (durable mode). Default `'caf.remember'`. */
   rememberMeCookieName?: string
   /**
+   * How long a durable remember-me credential may live from the sign-in that issued it, in seconds, however often
+   * it is used. Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
+   */
+  rememberMeAbsoluteMaxAge?: number
+  /**
    * How long a just-rotated remember-me token stays acceptable, in seconds. Default 60.
    *
    * Rotation is single-use, so a superseded token normally means theft. But a browser fires requests in
@@ -59,9 +64,21 @@ export interface CookieAuthenticationOptions {
   validatePrincipal?: (ctx: Context, principal: Principal) => Promise<Principal | null> | Principal | null
   /** Overrides the default 403 on an authorization failure. Takes precedence over {@link accessDeniedPath}. */
   onForbid?: (ctx: Context) => Promise<void> | void
+  /**
+   * Told about a session cookie that was presented and could not be read — expired, tampered with, sealed under
+   * another secret — and about a remember-me credential that was refused. The request goes on unauthenticated
+   * either way; this is what makes it observable.
+   */
+  onFail?: (ctx: Context, error: Error) => Promise<void> | void
   /** Absolute session lifetime, in seconds, for a non-persistent (session) cookie. Default 8 hours. */
   maxAge?: number
-  /** Absolute lifetime, in seconds, for a persistent (remember-me) cookie. Default 30 days. */
+  /**
+   * How long remember-me lasts, in seconds. Default 30 days.
+   *
+   * Without the durable store it is the lifetime of the persistent session cookie, fixed at sign-in. With it, it is
+   * how long the credential stays good after it was last used: every use pushes it back, so it is not a limit on
+   * the whole — {@link rememberMeAbsoluteMaxAge} is.
+   */
   rememberMeMaxAge?: number
   /** `Secure` cookie flag. Default `true`. */
   secure?: boolean
@@ -97,6 +114,12 @@ export class CookieAuthenticationOptionsBuilder {
 
   rememberMeCookieName(name: string): this {
     this.#options.rememberMeCookieName = name
+    return this
+  }
+
+  /** Caps how long a remember-me credential lives from sign-in, however often it is used. Unset: no limit. */
+  rememberMeAbsoluteMaxAge(seconds: number): this {
+    this.#options.rememberMeAbsoluteMaxAge = seconds
     return this
   }
 
@@ -137,6 +160,11 @@ export class CookieAuthenticationOptionsBuilder {
 
   onForbid(onForbid: NonNullable<CookieAuthenticationOptions['onForbid']>): this {
     this.#options.onForbid = onForbid
+    return this
+  }
+
+  onFail(onFail: NonNullable<CookieAuthenticationOptions['onFail']>): this {
+    this.#options.onFail = onFail
     return this
   }
 
@@ -194,6 +222,7 @@ export class CookieAuthenticationOptionsBuilder {
       cookieName: this.#options.cookieName ?? 'caf.session',
       rememberMe: this.#options.rememberMe ?? false,
       rememberMeCookieName: this.#options.rememberMeCookieName ?? 'caf.remember',
+      rememberMeAbsoluteMaxAge: this.#options.rememberMeAbsoluteMaxAge,
       rememberMeRotationGraceSeconds: this.#options.rememberMeRotationGraceSeconds ?? 60,
       loginPath: this.#options.loginPath,
       challengeMode: this.#options.challengeMode ?? 'auto',
@@ -201,6 +230,7 @@ export class CookieAuthenticationOptionsBuilder {
       returnURLParameter: this.#options.returnURLParameter ?? 'returnUrl',
       validatePrincipal: this.#options.validatePrincipal,
       onForbid: this.#options.onForbid,
+      onFail: this.#options.onFail,
       maxAge: this.#options.maxAge ?? EIGHT_HOURS,
       rememberMeMaxAge: this.#options.rememberMeMaxAge ?? THIRTY_DAYS,
       secure: this.#options.secure ?? true,
