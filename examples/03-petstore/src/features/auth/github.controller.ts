@@ -1,4 +1,4 @@
-import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get } from '@caffeinejs/http'
+import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get, Post } from '@caffeinejs/http'
 import { APIGroup } from '@caffeinejs/openapi'
 import { View } from '@caffeinejs/view'
 
@@ -44,14 +44,22 @@ export class GithubAuthController {
 
   // Signs the user out and returns home. Anonymous so signing out never 401s.
   //
+  // A POST, from the dashboard's form: a GET that changes state is any other site's to trigger, with a link or
+  // an image. A form posted from another site arrives without the session cookie, which is `SameSite=Lax`, so
+  // that caller is nobody here — and nobody is signed out, rather than the cookie being cleared on its say-so.
+  //
   // `signOut` ends the session everywhere the scheme reaches. For GitHub that is here: OAuth 2.0 has no
   // end-session endpoint, so the request is still this handler's to answer. Under an OpenID Connect scheme the
   // same call would send the browser to the provider, and the redirect below would go.
-  @Get('/logout', p => [p.context()])
+  @Post('/logout', p => [p.context()])
   @AllowAnonymous()
   async logout(ctx: Context) {
-    await this.auth.signOut(ctx, 'GitHub')
-    ctx.redirect('/')
+    if (ctx.user.authenticated) {
+      await this.auth.signOut(ctx, 'GitHub')
+    }
+
+    // 303, so the browser fetches the homepage with a GET instead of posting again.
+    ctx.redirect('/', 303)
   }
 
   // Machine-readable principal for API clients. Accepts either scheme.

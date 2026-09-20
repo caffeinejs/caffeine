@@ -109,13 +109,24 @@ describe('authentication wiring', () => {
     expect(dash.headers.get('content-type')).toContain('text/html')
     const dashHtml = await dash.text()
     expect(dashHtml).toContain('The Octocat')
-    expect(dashHtml).toContain('/logout')
+    expect(dashHtml).toContain('<form method="post" action="/logout">')
 
-    // 6. Logout clears the session cookie and returns home.
+    // 6. Signing out is a POST. A GET that changes state is any other site's to trigger, so there is none.
+    const viaLink = await app.fetch('/logout', { headers: { cookie: `petstore_gh_session=${sessionCookie}` } })
+    expect(viaLink.status).toBe(404)
+
+    // A form posted from another site arrives without the `SameSite=Lax` session cookie. It signs nobody out:
+    // no cookie is cleared on the say-so of a caller who is nobody here.
+    const crossSite = await app.fetch('/logout', { method: 'POST' })
+    expect(crossSite.status).toBe(303)
+    expect(crossSite.headers.get('set-cookie')).toBeNull()
+
+    // 7. The user's own sign-out clears the session cookie and returns home with a GET.
     const logout = await app.fetch('/logout', {
+      method: 'POST',
       headers: { cookie: `petstore_gh_session=${sessionCookie}` },
     })
-    expect(logout.status).toBe(302)
+    expect(logout.status).toBe(303)
     expect(logout.headers.get('location')).toBe('/')
     expect(setCookie(logout, 'petstore_gh_session')).toBe('')
   })

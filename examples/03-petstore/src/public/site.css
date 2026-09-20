@@ -42,7 +42,7 @@ footer {
 }
 
 /* Buttons (shared by landing + dashboard) */
-a.btn {
+.btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -51,11 +51,11 @@ a.btn {
   border-radius: 0.5rem;
   font-weight: 600;
 }
-a.btn.github {
+.btn.github {
   background: #24292f;
   color: #fff;
 }
-a.btn.github:hover {
+.btn.github:hover {
   background: #1b1f24;
 }
 
@@ -87,15 +87,22 @@ th {
   margin-top: 1.5rem;
   flex-wrap: wrap;
 }
-.actions a.btn {
+.actions form {
+  display: contents;
+}
+button.btn {
+  font: inherit;
+  cursor: pointer;
+}
+.actions .btn {
   border: 1px solid rgba(127, 127, 127, 0.35);
 }
-.actions a.btn.primary {
+.actions .btn.primary {
   background: #24292f;
   color: #fff;
   border-color: #24292f;
 }
-.actions a.btn.primary:hover {
+.actions .btn.primary:hover {
   background: #1b1f24;
 }
 
