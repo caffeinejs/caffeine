@@ -216,6 +216,7 @@ describe('the challenge of a route that names several schemes', () => {
             .addBasic(b => b.realm('Docs').validate(() => null))
             .addJWTBearer(j => j.secret(secret).issuer('issuer').audience('audience'))
             .addCookie(c => c.sessionSecret(secret).secure(false).loginPath('/login'))
+            .addOpaqueToken('Key', o => o.scheme('ApiKey').realm('Keys').store({ validate: () => null }))
             .default('Bearer'),
         )
         .mount(newRouter('/named').authorize({ schemes }).get('/', ok)),
@@ -231,6 +232,18 @@ describe('the challenge of a route that names several schemes', () => {
 
     expect(response.status).toBe(401)
     expect(response.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8", Bearer')
+  })
+
+  // The third value is appended to a header that already holds two, which is no longer a string to add to.
+  it('loses none of them when there are more than two', async () => {
+    const app = await build(['Basic', 'Bearer', 'Key'])
+
+    const response = await app.fetch('/named')
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('www-authenticate')).toBe(
+      'Basic realm="Docs", charset="UTF-8", Bearer, ApiKey realm="Keys"',
+    )
   })
 
   it('stops at the scheme that answers with a redirect, instead of turning it back into a 401', async () => {

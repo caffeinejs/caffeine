@@ -703,6 +703,75 @@ describe('OIDCAuthenticationHandler', () => {
       })
     })
 
+    // Every other test here hands the handler its keys. A deployment hands it none: the keys are the ones the
+    // provider publishes at `jwks_uri`, and that is the path a forged id_token has to get past.
+    describe('with no key resolver of its own', () => {
+      /** The provider, its key set included. `published` is what `jwks_uri` answers with. */
+      function provider(nonce: string, signingKey: CryptoKey, published: CryptoKey): { jwksFetches: () => number } {
+        let jwksFetches = 0
+
+        vi.stubGlobal(
+          'fetch',
+          vi.fn(async (url: string | URL, opts?: RequestInit) => {
+            // Asked first: the key set lives under `.well-known` too, where the discovery document is matched.
+            if (String(url) === DISCOVERY_DOCUMENT.jwks_uri) {
+              jwksFetches++
+              const jwk = await exportJWK(published)
+              return new Response(JSON.stringify({ keys: [{ ...jwk, kid: 'k1', use: 'sig', alg: 'RS256' }] }), {
+                status: 200,
+                headers: { 'content-type': 'application/json' },
+              })
+            }
+            if (String(url).includes('.well-known')) {
+              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+            }
+            if (opts?.method === 'POST') {
+              const idToken = await new SignJWT({ sub: 'user123', nonce })
+                .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+                .setIssuer(ISSUER)
+                .setAudience(CLIENT_ID)
+                .setIssuedAt()
+                .setExpirationTime('1h')
+                .sign(signingKey)
+              return {
+                ok: true,
+                json: () => Promise.resolve({ id_token: idToken, access_token: 'at', token_type: 'Bearer' }),
+              }
+            }
+            return { ok: false, status: 404 }
+          }),
+        )
+
+        return { jwksFetches: () => jwksFetches }
+      }
+
+      async function callback(nonce: string) {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx } = makeCtx({
+          cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
+          query: { code: 'c', state: 'st' },
+        })
+
+        return handler.processCallback(ctx)
+      }
+
+      it('accepts an id_token signed with a key the provider publishes at jwks_uri', async () => {
+        const pair = await generateKeyPair('RS256')
+        const { jwksFetches } = provider('published-key', pair.privateKey, pair.publicKey)
+
+        await expect(callback('published-key')).resolves.toBeUndefined()
+        expect(jwksFetches()).toBe(1)
+      })
+
+      it('refuses an id_token signed with a key the provider does not publish', async () => {
+        const providers = await generateKeyPair('RS256')
+        const forgers = await generateKeyPair('RS256')
+        provider('forged', forgers.privateKey, providers.publicKey)
+
+        await expect(callback('forged')).rejects.toThrow(/signature verification failed/)
+      })
+    })
+
     describe('RFC 9207 iss validation', () => {
       it('rejects an iss that is not the provider issuer', async () => {
         const nonce = 'iss-nonce'
