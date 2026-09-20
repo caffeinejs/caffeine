@@ -56,6 +56,17 @@ describe('run_guards', () => {
     await expect(run([instance(() => Promise.resolve(undefined as unknown as boolean))])).resolves.toBeInstanceOf(Error)
   })
 
+  it('allows a GuardResult built with ok()', async () => {
+    await expect(run([instance(() => GuardResult.ok())])).resolves.toBeUndefined()
+  })
+
+  it('denies a GuardResult built with deny(reason), and answers with the reason', async () => {
+    const err = await run([instance(() => GuardResult.deny('token expired'))])
+
+    expect(err).toBeInstanceOf(ErrHTTPForbidden)
+    expect(err?.message).toBe('token expired')
+  })
+
   it('falls back to the default message when the denial names no reason', async () => {
     const err = await run([instance(() => GuardResult.deny(''))])
 
