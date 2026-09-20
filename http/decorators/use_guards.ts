@@ -9,7 +9,8 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  *
  * Guards are referenced by class or by a name given with `@Named`, and are resolved through the
  * container. Execution order is global (`.guards(g => g.global(...))`), then controller, then method.
- * All must allow the request; the first denial wins.
+ * All must allow the request; the first denial wins. A guard listed more than once for a route runs once,
+ * at its first position.
  *
  * @param guards - Guard classes, or `@Named` identifiers of Guard classes. At least one is required.
  */

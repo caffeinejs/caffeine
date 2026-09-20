@@ -25,8 +25,8 @@ export type GuardContext<C extends Context = Context> = Omit<C, 'req'> & {
 
 export interface GuardTarget {
   /** The class that declared the route, when a class did. A route declared without one leaves it undefined. */
-  clazz?: Ctor<unknown>
-  handler: string | symbol
+  readonly clazz?: Ctor<unknown>
+  readonly handler: string | symbol
 }
 
 export interface GuardInput {
@@ -35,7 +35,7 @@ export interface GuardInput {
 }
 
 /**
- * A request predicate resolved from the container and run on Fastify `onRequest`.
+ * A request predicate resolved from the container and run before the request body is read.
  *
  * Return `true` (or `{ ok: true }`) to continue. Return `false` or `{ ok: false, reason }` to deny
  * with 403. Throw `ErrHTTPUnauthorized` (or any other `ErrHTTP`) for a different status — those go

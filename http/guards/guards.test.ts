@@ -1,4 +1,5 @@
 import {
+  CaffeineIoC,
   ErrInvalidDecorator,
   Injectable,
   Lifetime,
@@ -7,7 +8,7 @@ import {
   getMetadataOverride,
   token,
 } from '@caffeinejs/di'
-import fastify, { type FastifyContextConfig, type RouteOptions } from 'fastify'
+import fastify, { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
 import {
@@ -22,6 +23,7 @@ import {
   Identity,
   Post,
   Principal,
+  Router,
   UseGuards,
   createWebApplication,
   fastifyAdapterFactory,
@@ -255,6 +257,14 @@ describe('use_guards', () => {
   }
 
   @Injectable()
+  class AsyncFirstGuard implements Guard {
+    guard(): Promise<boolean> {
+      order.push('async')
+      return Promise.resolve(true)
+    }
+  }
+
+  @Injectable()
   class OrderedDenyGuard implements Guard {
     guard(): boolean {
       order.push('deny')
@@ -270,12 +280,30 @@ describe('use_guards', () => {
     }
   }
 
+  @Injectable()
+  class RepeatedGuard implements Guard {
+    guard(): boolean {
+      order.push('repeated')
+      return true
+    }
+  }
+
   @UseGuards(ControllerGuard)
   @Controller('/use-guards')
   class UseGuardsController {
     @UseGuards(MethodGuard)
     @Get('/both')
     both() {
+      return { ok: true }
+    }
+  }
+
+  @UseGuards(RepeatedGuard)
+  @Controller('/use-guards-repeated')
+  class UseGuardsRepeatedController {
+    @UseGuards(RepeatedGuard, MethodGuard)
+    @Get('/')
+    once() {
       return { ok: true }
     }
   }
@@ -287,6 +315,12 @@ describe('use_guards', () => {
     multi() {
       return { ok: true }
     }
+
+    @UseGuards(AsyncFirstGuard, OrderedDenyGuard, UnreachedGuard)
+    @Get('/after-async')
+    afterAsync() {
+      return { ok: true }
+    }
   }
 
   void [
@@ -294,10 +328,13 @@ describe('use_guards', () => {
     ControllerGuard,
     MethodGuard,
     FirstGuard,
+    AsyncFirstGuard,
     OrderedDenyGuard,
     UnreachedGuard,
+    RepeatedGuard,
     UseGuardsController,
     UseGuardsMultiController,
+    UseGuardsRepeatedController,
   ]
 
   it('runs global, then controller, then method', async () => {
@@ -322,6 +359,32 @@ describe('use_guards', () => {
     const res = await app.fetch('/use-guards-multi/multi')
     expect(res.status).toBe(403)
     expect(order).toEqual(['first', 'deny'])
+
+    await app.close()
+  })
+
+  it('runs a guard listed at several levels once, at its first position', async () => {
+    order.length = 0
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
+      g.global(RepeatedGuard),
+    )
+    await app.ready()
+
+    const res = await app.fetch('/use-guards-repeated')
+    expect(res.status).toBe(200)
+    expect(order).toEqual(['repeated', 'method'])
+
+    await app.close()
+  })
+
+  it('carries on to the next guard after an async one, and still stops at the first denial', async () => {
+    order.length = 0
+    const app = buildApp()
+    await app.ready()
+
+    const res = await app.fetch('/use-guards-multi/after-async')
+    expect(res.status).toBe(403)
+    expect(order).toEqual(['async', 'deny'])
 
     await app.close()
   })
@@ -394,12 +457,42 @@ describe('builder', () => {
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
-  it('rejects a InjectionToken that is not a Guard at start-up', async () => {
+  it('rejects an InjectionToken that is not a Guard at start-up', async () => {
     const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
       g.global(NotAGuard as never),
     )
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+  })
+
+  it('accepts an abstract key bound to a factory, whose prototype carries no "guard" method', async () => {
+    abstract class AuditGuard implements Guard {
+      abstract guard(): boolean
+    }
+
+    class DenyingAudit extends AuditGuard {
+      guard(): boolean {
+        return false
+      }
+    }
+
+    // Declared on a router rather than a controller: a `@Controller` would register globally and the rest of
+    // the file builds containers this binding is absent from.
+    const container = new CaffeineIoC()
+    container.bind(AuditGuard, t => t.toFactory(() => new DenyingAudit()))
+
+    const router = new Router('/abstract-guard').guards([AuditGuard])
+    router.get('/').handler(() => ({ ok: true }))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).mount(
+      router,
+    ) as WebApplication
+    await app.ready()
+
+    const res = await app.fetch('/abstract-guard')
+    expect(res.status).toBe(403)
+
+    await app.close()
   })
 })
 
@@ -422,6 +515,13 @@ describe('denial', () => {
   class UnauthorizedGuard implements Guard {
     guard(): never {
       throw new ErrHTTPUnauthorized()
+    }
+  }
+
+  @Injectable()
+  class FaultyGuard implements Guard {
+    guard(): Promise<boolean> {
+      return Promise.reject()
     }
   }
 
@@ -452,11 +552,17 @@ describe('denial', () => {
     byThrow() {
       return { ok: true }
     }
+
+    @UseGuards(FaultyGuard)
+    @Get('/faulty')
+    byFault() {
+      return { ok: true }
+    }
   }
 
-  void [FalseGuard, ReasonGuard, UnauthorizedGuard, UnauthorizedCatch, DenialController]
+  void [FalseGuard, ReasonGuard, UnauthorizedGuard, FaultyGuard, UnauthorizedCatch, DenialController]
 
-  it('renders the Nest-similar 403 envelope for boolean false', async () => {
+  it('renders the default 403 envelope for boolean false', async () => {
     const built = buildApp()
     await built.ready()
 
@@ -472,7 +578,7 @@ describe('denial', () => {
     await built.close()
   })
 
-  it('adds reason on GuardResult denial and keeps the stable message', async () => {
+  it('uses the GuardResult reason as the 403 message', async () => {
     const built = buildApp()
     await built.ready()
 
@@ -495,6 +601,16 @@ describe('denial', () => {
     const res = await built.fetch('/denial/401')
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ caught: true, message: 'Unauthorized' })
+
+    await built.close()
+  })
+
+  it('does not serve the route when a guard fails without a reason', async () => {
+    const built = buildApp()
+    await built.ready()
+
+    const res = await built.fetch('/denial/faulty')
+    expect(res.status).toBe(500)
 
     await built.close()
   })
@@ -629,12 +745,12 @@ describe('authorization', () => {
   @Injectable()
   class RolesGuard implements Guard {
     guard(input: GuardInput): boolean {
-      const cfg = input.context.routeConfig as FastifyContextConfig
-      const required = getMetadataOverride<Role[]>(
-        cfg.$caffeine?.target as Function,
-        kRoles,
-        cfg.$caffeine?.handler as string | symbol,
-      )
+      const clazz = input.target.clazz
+      if (clazz === undefined) {
+        return true
+      }
+
+      const required = getMetadataOverride<Role[]>(clazz, kRoles, input.target.handler)
 
       if (required === undefined) {
         return true

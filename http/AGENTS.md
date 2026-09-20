@@ -103,9 +103,12 @@ Everything that belongs to the server library behind an adapter is named once, i
 (`fastify_types.ts`) is Fastify's. `Adapter<T>`, `WebApplication<T>`, `Router<…, T>` and `Context<V, C, T>` read
 their server-specific types off it. A newly found one becomes a member there, never another type parameter.
 
-`adapter_types.ts`, `adapter_extension.ts`, `setup_context.ts`, `context.ts`, `middleware/pipeline.ts` and
-`middleware/middleware.ts` import nothing from `fastify`. Fastify's side lives in `fastify_*.ts`,
-`middleware/fastify.ts` and the adapter.
+`adapter_types.ts`, `adapter_extension.ts`, `setup_context.ts`, `context.ts`, `middleware/pipeline.ts`,
+`middleware/middleware.ts` and every `guards/` file but one — `guard.ts`, `compile.ts`, `builder.ts`,
+`keys.ts` and the chain runner `_run.ts` — import nothing from `fastify`. Fastify's side lives in
+`fastify_*.ts`, `middleware/fastify.ts`, `guards/fastify.ts` and the adapter. Guards are attached by
+`guards/fastify.ts` alone: it reads `request.httpContext` and hands the chain to `runGuards`, which knows
+only `GuardContext`.
 
 `AdapterRegistry` is augmentable and holds every adapter in the compilation; the Fastify entry is declared in
 `fastify_types.ts`. What is written without knowing its adapter is typed against all of them: `@Use(...)` takes

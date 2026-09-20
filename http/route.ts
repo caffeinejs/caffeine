@@ -99,7 +99,7 @@ export interface Route<R = FastifyRequest> {
    */
   detail?: RouteDetail
   catchBy?: CatchByMap
-  guards?: CompiledGuard[]
+  guards?: readonly CompiledGuard[]
   authorization: RouteAuthorization
 }
 
