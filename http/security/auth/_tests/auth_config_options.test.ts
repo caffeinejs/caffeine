@@ -217,6 +217,214 @@ describe('authentication options set from the tree', () => {
     })
   })
 
+  /**
+   * A deployment names its provider in the tree because the provider differs per environment. The wrong
+   * `client_id` runs the flow under a registration that is not this application's, and the wrong `redirect_uri`
+   * has the authorization code delivered to a URL it does not serve.
+   */
+  describe('an OpenID Connect provider the tree names', () => {
+    const DISCOVERY_URL = 'https://provider.test/.well-known/openid-configuration'
+    const ISSUER = 'https://provider.test'
+    const discovery = {
+      issuer: ISSUER,
+      authorization_endpoint: `${ISSUER}/authorize`,
+      token_endpoint: `${ISSUER}/token`,
+      jwks_uri: `${ISSUER}/jwks`,
+      // The downgrade alone, so the provider cannot be reached at all without `allowPlainPkce`.
+      code_challenge_methods_supported: ['plain'],
+    }
+
+    const asNavigation = { headers: { 'sec-fetch-mode': 'navigate' }, redirect: 'manual' as const }
+
+    const protectedRoute = newRouter('/reports')
+      .authorize({})
+      .get('/', () => ({ ok: true }))
+
+    function discovered() {
+      const fetched = vi.fn((url: string) => {
+        if (url === DISCOVERY_URL) {
+          return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(discovery) })
+        }
+
+        return Promise.reject(new Error(`the provider was asked for ${url}`))
+      })
+      vi.stubGlobal('fetch', fetched)
+
+      return fetched
+    }
+
+    const appWith = (oidc: Record<string, unknown>) =>
+      createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
+        .authentication((a, c) =>
+          a
+            .config(c.auth)
+            .addOIDC('oidc', o => o.clientSecret(provider.clientSecret).sessionSecret(SESSION_SECRET).issuer(ISSUER)),
+        )
+        .mount(protectedRoute)
+
+    it('asks that provider, under that client, to come back to that callback', async () => {
+      const fetched = discovered()
+      const app = appWith({
+        clientId: 'from-tree',
+        discoveryUrl: DISCOVERY_URL,
+        callbackUrl: 'https://app.test/signin/back',
+        allowPlainPkce: true,
+      })
+      await app.ready()
+
+      const challenged = await app.fetch('/reports', asNavigation)
+      expect(challenged.status).toBe(302)
+
+      const authorization = new URL(challenged.headers.get('location')!)
+      expect(authorization.origin + authorization.pathname).toBe(`${ISSUER}/authorize`)
+      expect(authorization.searchParams.get('client_id')).toBe('from-tree')
+      expect(authorization.searchParams.get('redirect_uri')).toBe('https://app.test/signin/back')
+
+      // The document that named the endpoint was fetched from the URL the tree gave, and from nowhere else.
+      expect(fetched.mock.calls.map(([url]) => url)).toEqual([DISCOVERY_URL])
+
+      await app.close()
+    })
+
+    // Plain PKCE gives up the protection a code interception attack is stopped by, so it is taken only where
+    // an operator asked for it. Applied to nothing, the application would accept the downgrade unasked.
+    it('takes the plain PKCE downgrade only where the tree asked for it', async () => {
+      discovered()
+      const app = appWith({
+        clientId: 'from-tree',
+        discoveryUrl: DISCOVERY_URL,
+        callbackUrl: 'https://app.test/signin/back',
+        allowPlainPkce: true,
+      })
+      await app.ready()
+
+      const challenged = await app.fetch('/reports', asNavigation)
+      expect(new URL(challenged.headers.get('location')!).searchParams.get('code_challenge_method')).toBe('plain')
+
+      await app.close()
+
+      discovered()
+      const strict = appWith({
+        clientId: 'from-tree',
+        discoveryUrl: DISCOVERY_URL,
+        callbackUrl: 'https://app.test/signin/back',
+      })
+      await strict.ready()
+
+      const refused = await strict.fetch('/reports', asNavigation)
+      expect(refused.status).toBe(500)
+      expect(refused.headers.get('location')).toBeNull()
+
+      await strict.close()
+    })
+
+    // Without discovery the JWKS URI is the only place the keys that id_tokens are verified against come from,
+    // and the options refuse to resolve without it rather than leave a scheme that cannot verify anything.
+    it('completes a hand-assembled provider that has no discovery document', async () => {
+      const manual = (oidc: Record<string, unknown>) =>
+        createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
+          .authentication((a, c) =>
+            a
+              .config(c.auth)
+              .addOIDC('oidc', o =>
+                o
+                  .clientID('code-client')
+                  .clientSecret(provider.clientSecret)
+                  .sessionSecret(SESSION_SECRET)
+                  .issuer(ISSUER)
+                  .authorizationEndpoint(`${ISSUER}/authorize`)
+                  .tokenEndpoint(`${ISSUER}/token`)
+                  .callbackURL('https://app.test/signin/back'),
+              ),
+          )
+          .mount(protectedRoute)
+
+      await expect(manual({}).ready()).rejects.toThrow(/provide discoveryURL or all of/)
+
+      const app = manual({ jwksUri: `${ISSUER}/jwks` })
+      await app.ready()
+
+      // And it is the JWKS URI it completed, not some other endpoint: the authorization request still goes to
+      // the endpoint the code named.
+      const challenged = await app.fetch('/reports', asNavigation)
+      const authorization = new URL(challenged.headers.get('location')!)
+      expect(authorization.origin + authorization.pathname).toBe(`${ISSUER}/authorize`)
+
+      await app.close()
+    })
+
+    // The provider validates this against the registration and refuses to return the user anywhere else, so an
+    // application whose configured value never arrives strands every sign-out on the provider's own page.
+    it('asks the provider to return the user to `postLogoutRedirectUri` after a sign-out', async () => {
+      const app = createWebApplication(fastifyAdapterFactory(server()), {
+        config: configured({ schemes: { oidc: { postLogoutRedirectUri: 'https://app.test/signed-out' } } }),
+      })
+        .authentication((a, c) =>
+          a
+            .config(c.auth)
+            .addOIDC('oidc', o =>
+              o
+                .clientID('code-client')
+                .clientSecret(provider.clientSecret)
+                .sessionSecret(SESSION_SECRET)
+                .issuer(ISSUER)
+                .authorizationEndpoint(`${ISSUER}/authorize`)
+                .tokenEndpoint(`${ISSUER}/token`)
+                .jwksURI(`${ISSUER}/jwks`)
+                .endSessionEndpoint(`${ISSUER}/logout`)
+                .callbackURL('https://app.test/signin/back'),
+            ),
+        )
+        .mount(
+          newRouter('/session')
+            .authorize({ allowAnonymous: true })
+            .inject({ auth: AuthenticationService })
+            .post('/out', (ctx, { auth }) => auth.signOut(ctx, 'oidc')),
+        )
+      await app.ready()
+
+      const out = await app.fetch('/session/out', { method: 'POST', redirect: 'manual' })
+      expect(out.status).toBe(302)
+
+      const logout = new URL(out.headers.get('location')!)
+      expect(logout.origin + logout.pathname).toBe(`${ISSUER}/logout`)
+      expect(logout.searchParams.get('post_logout_redirect_uri')).toBe('https://app.test/signed-out')
+
+      await app.close()
+    })
+  })
+
+  // The login page reads the way back under the name it was written under. Applied to nothing, a deep link is
+  // lost on every sign-in and the user lands on the application root instead.
+  it('carries the way back on the query parameter `returnUrlParameter` names', async () => {
+    const container = new CaffeineIoC()
+    container.bind(UserProvider, t => t.toValue({ findByIdentifier: () => null } as unknown as UserProvider))
+
+    const app = createWebApplication(fastifyAdapterFactory(server()), {
+      container,
+      config: configured({ schemes: { Cookie: { returnUrlParameter: 'next' } } }),
+    })
+      .authentication((a, c) =>
+        a.config(c.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).loginPath('/login')),
+      )
+      .mount(
+        newRouter('/reports')
+          .authorize({})
+          .get('/', () => ({ ok: true })),
+      )
+    await app.ready()
+
+    const challenged = await app.fetch('/reports', {
+      headers: { 'sec-fetch-mode': 'navigate' },
+      redirect: 'manual',
+    })
+
+    expect(challenged.status).toBe(302)
+    expect(challenged.headers.get('location')).toBe(`/login?next=${encodeURIComponent('/reports')}`)
+
+    await app.close()
+  })
+
   // RFC 6749 §2.3.1 recommends against the secret in the request body. An operator who configured the header and
   // got the body has the secret in every proxy log between here and the provider.
   it('sends the client secret to the token endpoint the way `tokenEndpointAuthMethod` says', async () => {
@@ -302,6 +510,44 @@ describe('authentication options set from the tree', () => {
     // Used thirty seconds ago, and still a minute old at most.
     vi.setSystemTime(new Date('2026-01-01T00:01:01Z'))
     await expect(service.refresh(refreshed.refreshToken)).rejects.toBeInstanceOf(ErrRefreshTokenRejected)
+
+    await app.close()
+  })
+
+  // The access token is the credential that is replayed on every request and cannot be revoked before it
+  // expires, so its lifetime is the window a stolen one stays good. Configured short and applied to nothing, a
+  // deployment runs on the default while believing the window was closed.
+  it('mints an access token that lives for `refresh.accessTtl` and no longer', async () => {
+    const container = new CaffeineIoC()
+    container.bind(RefreshTokenStore, t => t.toValue(new SeriesStore() as unknown as RefreshTokenStore))
+
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      container,
+      config: configured({ refresh: { accessTtl: 60 } }),
+    })
+      .authentication((a, c) =>
+        a
+          .config(c.auth)
+          .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
+          .addRefreshTokens(o => o.resolve(() => ada())),
+      )
+      .mount(
+        newRouter('/reports')
+          .authorize({})
+          .get('/', () => ({ ok: true })),
+      )
+    await app.ready()
+
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+
+    const { accessToken } = await app.container.get(RefreshTokenService).issue(ada())
+    const asBearer = { headers: { authorization: `Bearer ${accessToken}` } }
+
+    expect((await app.fetch('/reports', asBearer)).status).toBe(200)
+
+    vi.setSystemTime(new Date('2026-01-01T00:01:01Z'))
+    expect((await app.fetch('/reports', asBearer)).status).toBe(401)
 
     await app.close()
   })
