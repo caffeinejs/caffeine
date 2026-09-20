@@ -2,9 +2,8 @@ import { AllowAnonymous, AuthenticationService, Authorize, type Context, Control
 import { APIGroup } from '@caffeinejs/openapi'
 import { View } from '@caffeinejs/view'
 
-// GitHub OAuth sign-in. The callback route (/login/github/callback) is registered automatically by
-// the framework's OIDCConfigurer from the configured callbackURL — only the initiation route lives
-// here.
+// The pages around the GitHub sign-in. The sign-in itself needs no controller: the scheme registers the route
+// that starts it (/login/github, its `loginPath`) and the one GitHub comes back to (/login/github/callback).
 //
 // Hidden from the OpenAPI document: these are browser redirects and rendered pages, not API operations. The
 // GitHub scheme itself still appears under components.securitySchemes, derived from .authentication(...).
@@ -12,23 +11,6 @@ import { View } from '@caffeinejs/view'
 @Controller('/', [AuthenticationService])
 export class GithubAuthController {
   constructor(private readonly auth: AuthenticationService) {}
-
-  // Starts the flow explicitly: the challenge builds GitHub's authorize URL, sets the sealed state
-  // cookie, and 302-redirects. Anonymous so the authz guard does not challenge first — the
-  // default scheme only redirects to GitHub once a session cookie exists.
-  //
-  // Already-signed-in requests must NOT re-challenge: the callback redirects back to the URL that
-  // started the flow (this route), so a blind challenge here loops forever. Send them to the
-  // dashboard instead — which is also the landing page after a fresh sign-in.
-  @Get('/login/github', p => [p.context()])
-  @AllowAnonymous()
-  async login(ctx: Context) {
-    if (ctx.user.authenticated) {
-      ctx.redirect('/dashboard')
-      return
-    }
-    await this.auth.challenge(ctx, 'GitHub')
-  }
 
   // Post-login landing page: a small HTML profile of whoever is signed in.
   // Rendered from src/views/dashboard.hbs; Handlebars auto-escapes the model, so no manual escaping.
@@ -60,11 +42,15 @@ export class GithubAuthController {
     })
   }
 
-  // Clears the GitHub session cookie and returns home. Anonymous so signing out never 401s.
+  // Signs the user out and returns home. Anonymous so signing out never 401s.
+  //
+  // `signOut` ends the session everywhere the scheme reaches. For GitHub that is here: OAuth 2.0 has no
+  // end-session endpoint, so the request is still this handler's to answer. Under an OpenID Connect scheme the
+  // same call would send the browser to the provider, and the redirect below would go.
   @Get('/logout', p => [p.context()])
   @AllowAnonymous()
   async logout(ctx: Context) {
-    await this.auth.revoke(ctx, 'GitHub')
+    await this.auth.signOut(ctx, 'GitHub')
     ctx.redirect('/')
   }
 

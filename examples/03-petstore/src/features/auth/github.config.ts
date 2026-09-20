@@ -1,5 +1,5 @@
 // GitHub OAuth settings, read straight from the environment (same style as the docs credentials in
-// tokens.ts). The values live in the repo-root .env under the PETSTOREDEMO_AUTH_GITHUB_* prefix;
+// app.ts). The values live in the repo-root .env under the PETSTOREDEMO_AUTH_GITHUB_* prefix;
 // main.ts loads that file via `dotenv/config`.
 const clientID = process.env.PETSTOREDEMO_AUTH_GITHUB_CLIENT_ID ?? ''
 const clientSecret = process.env.PETSTOREDEMO_AUTH_GITHUB_CLIENT_SECRET ?? ''
@@ -7,8 +7,7 @@ const clientSecret = process.env.PETSTOREDEMO_AUTH_GITHUB_CLIENT_SECRET ?? ''
 /** Whether real GitHub credentials are present. Shapes the homepage copy. */
 export const githubConfigured = clientID !== '' && clientSecret !== ''
 
-// Fixed name for the GitHub session cookie. app.ts sets it on the scheme and the Forward selector
-// reads it to route a browser request to the GitHub scheme.
+// Fixed name for the GitHub session cookie. app.ts sets it on the scheme, and the tests present it.
 export const GITHUB_SESSION_COOKIE = 'petstore_gh_session'
 
 export const githubConfig = {

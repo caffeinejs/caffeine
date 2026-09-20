@@ -94,17 +94,12 @@ describe('authentication wiring', () => {
       name: unknown
     }
     expect(body.authenticated).toBe(true)
-    expect(body.sub).toBe(4242)
+    expect(body.sub).toBe('4242')
     expect(body.name).toBe('The Octocat')
 
-    // 4. Re-hitting /login/github while signed in must redirect to the dashboard, not re-challenge
-    // GitHub — otherwise the post-callback return to this route loops forever.
-    const relogin = await app.fetch('/login/github', {
-      headers: { cookie: `petstore_gh_session=${sessionCookie}` },
-    })
-    expect(relogin.status).toBe(302)
-    expect(relogin.headers.get('location')).toBe('/dashboard')
-    expect(relogin.headers.get('location')).not.toContain('github.com')
+    // 4. The callback came back to the dashboard, not to the route that started the sign-in — coming back
+    // there would start another one, for ever.
+    expect(callback.headers.get('location')).toBe('/dashboard')
 
     // 5. The dashboard renders the signed-in identity as HTML.
     const dash = await app.fetch('/dashboard', {
@@ -152,7 +147,7 @@ describe('authentication wiring', () => {
     })
 
     expect(res.status).toBe(401)
-    expect(res.headers.get('location')).toMatch(/\/login\/github\/callback\/login\?returnTo=%2Fme$/)
+    expect(res.headers.get('location')).toMatch(/\/login\/github\?returnTo=%2Fme$/)
     // Nothing is started for a caller that cannot go there: the round trip begins when a browser does.
     expect(res.headers.get('set-cookie')).toBeNull()
   })
@@ -170,7 +165,7 @@ describe('authentication wiring', () => {
       name: unknown
     }
     expect(body.authenticated).toBe(true)
-    expect(body.sub).toBe(4242)
+    expect(body.sub).toBe('4242')
     expect(body.name).toBe('The Octocat')
   })
 })
