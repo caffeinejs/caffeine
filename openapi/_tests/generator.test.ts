@@ -395,6 +395,18 @@ describe('security', () => {
       expect(operation?.security).toEqual([{ OAuth: ['admin'] }, { OAuth: ['admin', 'auditor'] }])
     })
 
+    // A controller and a method can name the same pair in a different order, and two ways of taking one role
+    // out of each then arrive at the same set. Listed twice, it reads as two distinct ways in.
+    it('names a requirement once when two lists reach the same set', () => {
+      const operation = securityOf({ schemes: ['OAuth'], roles: ['admin', 'manager'] }, { roles: ['manager', 'admin'] })
+
+      expect(operation?.security).toEqual([
+        { OAuth: ['admin', 'manager'] },
+        { OAuth: ['admin'] },
+        { OAuth: ['manager'] },
+      ])
+    })
+
     it('asks for the scheme alone when no role was named', () => {
       expect(securityOf({ schemes: ['OAuth'] })?.security).toEqual([{ OAuth: [] }])
     })
