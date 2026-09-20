@@ -680,6 +680,3 @@ export class OIDCAuthenticationOptionsBuilder {
     return resolveOIDCOptions(this.#options as OIDCAuthenticationOptions, scheme)
   }
 }
-
-// The generic halves of this module now live in the shared OAuth core; re-exported so callers
-// and tests keep one import site for the option surface.
