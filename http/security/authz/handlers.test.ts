@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { Context } from '../../context.js'
-import { Claim, Identity, Principal, newAnonymousUser } from '../identity.js'
+import { Claim, Identity, Principal, anonymousUser } from '../identity.js'
 import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import type {
   AssertionRequirement,
@@ -38,7 +38,7 @@ describe('AuthenticatedUserHandler', () => {
   })
 
   it('fails an anonymous principal with a reason', async () => {
-    expect(await handler.handle(ctx, newAnonymousUser())).toEqual({ ok: false, reason: 'User is not authenticated' })
+    expect(await handler.handle(ctx, anonymousUser())).toEqual({ ok: false, reason: 'User is not authenticated' })
   })
 })
 

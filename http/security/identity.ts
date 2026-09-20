@@ -1,11 +1,16 @@
 import type { Context } from '../context.js'
 
+/**
+ * One set of claims about a caller, as one scheme established them.
+ *
+ * Immutable: {@link withClaims} and {@link withoutClaims} answer with another identity. A store may therefore hand
+ * the same identity to every request that presents the same credential.
+ */
 export class Identity {
   readonly #authenticationType: string
   readonly #authenticated: boolean
   readonly #roleClaimType: string
-
-  #claims: Claim[]
+  readonly #claims: readonly Claim[]
 
   constructor(
     authenticationType: string,
@@ -15,10 +20,9 @@ export class Identity {
   ) {
     this.#authenticationType = authenticationType
     this.#authenticated = authenticated
-    // Copied, not aliased: `claims` advertises `readonly Claim[]`, and holding the caller's array would
-    // make that a lie — whoever passed it in could keep appending to a principal already handed to
-    // authorization. The reverse leaks too: `addClaim` would mutate an array the caller still holds.
-    this.#claims = [...claims]
+    // Copied, not aliased: whoever passed the array in could otherwise keep appending to a principal already
+    // handed to authorization.
+    this.#claims = Object.freeze([...claims])
     this.#roleClaimType = roleClaimType
   }
 
@@ -38,13 +42,18 @@ export class Identity {
     return this.#roleClaimType
   }
 
-  addClaim(claim: Claim): void {
-    this.#claims.push(claim)
+  /** This identity with `claims` added after the ones it holds. */
+  withClaims(...claims: Claim[]): Identity {
+    return this.#with([...this.#claims, ...claims])
   }
 
-  /** Drops every claim the predicate matches. */
-  removeClaimBy(predicate: (claim: Claim) => boolean): void {
-    this.#claims = this.#claims.filter(claim => !predicate(claim))
+  /** This identity without the claims the predicate matches. */
+  withoutClaims(predicate: (claim: Claim) => boolean): Identity {
+    return this.#with(this.#claims.filter(claim => !predicate(claim)))
+  }
+
+  #with(claims: Claim[]): Identity {
+    return new Identity(this.#authenticationType, this.#authenticated, claims, this.#roleClaimType)
   }
 }
 
@@ -58,13 +67,18 @@ export class Claim {
 
 export type PrincipalMapper = (ctx: Context, principal: Principal) => Promise<Principal> | Principal
 
+/**
+ * Who is asking: the identities every scheme that accepted the caller established.
+ *
+ * Immutable, as each {@link Identity} is: {@link withIdentity} answers with another principal.
+ */
 export class Principal {
   readonly #authenticated: boolean
-  readonly #identities: Identity[]
+  readonly #identities: readonly Identity[]
 
-  constructor(authenticated: boolean, identities: Identity[] | Identity) {
+  constructor(authenticated: boolean, identities: readonly Identity[] | Identity) {
     this.#authenticated = authenticated
-    this.#identities = Array.isArray(identities) ? identities : [identities]
+    this.#identities = Object.freeze(Array.isArray(identities) ? [...identities] : [identities as Identity])
   }
 
   get authenticated(): boolean {
@@ -105,8 +119,9 @@ export class Principal {
     return this.#identities.flatMap(i => i.claims.filter(c => c.type === type))
   }
 
-  addIdentity(identity: Identity): void {
-    this.#identities.push(identity)
+  /** This principal with `identities` added after the ones it holds. */
+  withIdentity(...identities: Identity[]): Principal {
+    return new Principal(this.#authenticated, [...this.#identities, ...identities])
   }
 }
 
@@ -130,29 +145,12 @@ export function mergePrincipals(into: Principal | undefined, from: Principal): P
     return from
   }
 
-  const merged = new Principal(true, [...into.identities])
-  for (const identity of from.identities) {
-    merged.addIdentity(identity)
-  }
-
-  return merged
+  return new Principal(true, [...into.identities, ...from.identities])
 }
 
-class AnonymousUser extends Principal {
-  constructor() {
-    super(false, [])
-  }
+const ANONYMOUS = new Principal(false, [])
 
-  addIdentity(): void {
-    throw new Error('Anonymous user cannot add identities')
-  }
-}
-
-/**
- * A fresh unauthenticated principal.
- *
- * A new instance per call: no two unauthenticated requests share one. Its `addIdentity` throws.
- */
-export function newAnonymousUser(): Principal {
-  return new AnonymousUser()
+/** The unauthenticated principal: no identity, no claim. One instance stands for every such caller. */
+export function anonymousUser(): Principal {
+  return ANONYMOUS
 }

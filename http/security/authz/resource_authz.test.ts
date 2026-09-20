@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
-import { Claim, Identity, Principal, newAnonymousUser } from '../index.js'
+import { Claim, Identity, Principal, anonymousUser } from '../index.js'
 import { AuthenticatedUserHandler, ResourceHandler } from './handlers.js'
 import { AuthzRequirement, AuthzRequirementHandler, PolicyEvaluator, newPolicyEvaluator } from './policy.js'
 import { PolicyBuilder } from './policy_builder.js'
@@ -56,7 +56,7 @@ describe('resource-based authorization', () => {
   })
 
   it('fails the authenticated requirement first for an anonymous user', async () => {
-    const error = await authz.authorize(ctxFor(newAnonymousUser()), 'CanEditOrder', order).catch(e => e)
+    const error = await authz.authorize(ctxFor(anonymousUser()), 'CanEditOrder', order).catch(e => e)
 
     expect(error).toBeInstanceOf(ErrHTTPForbidden)
     expect(String(error.cause.message)).toMatch(/CanEditOrder.*not authenticated/)

@@ -11,7 +11,7 @@ import { AuthenticationService } from './auth/service.js'
 import { kAuthzHandlers, kAuthzOpts } from './authz/keys.js'
 import { newPolicyEvaluator } from './authz/policy.js'
 import { AuthzRouteService } from './authz/route_service.js'
-import { mergePrincipals, newAnonymousUser, type Principal } from './index.js'
+import { anonymousUser, mergePrincipals, type Principal } from './index.js'
 
 /**
  * Refuses an application that protects a route and never configured authentication.
@@ -218,7 +218,7 @@ async function authenticateDefault(
   defaultScheme: string,
 ): Promise<Principal> {
   const result = await service.authenticate(ctx, defaultScheme)
-  return result.succeeded ? result.ticket!.principal : newAnonymousUser()
+  return result.succeeded ? result.ticket!.principal : anonymousUser()
 }
 
 /**
@@ -249,5 +249,5 @@ async function authenticateNamed(
     }
   }
 
-  return user ?? newAnonymousUser()
+  return user ?? anonymousUser()
 }

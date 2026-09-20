@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '../../context.js'
 import { foldAuthz, mergeAuthz } from '../../routing/inherit.js'
 import type { RouteAuthz, RouteAuthzOptions } from '../../routing/spec.js'
-import { Claim, Identity, Principal, newAnonymousUser } from '../identity.js'
+import { Claim, Identity, Principal, anonymousUser } from '../identity.js'
 import type { AuthorizationOptions } from './authz.js'
 import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import {
@@ -99,12 +99,12 @@ async function authorize(
 
 describe('compileRoutePolicy — anonymous', () => {
   it('returns no guard when the route allows anonymous', async () => {
-    const { service } = await authorize(undefined, { allowAnonymous: true }, newAnonymousUser())
+    const { service } = await authorize(undefined, { allowAnonymous: true }, anonymousUser())
     expect(service).toBeUndefined()
   })
 
   it('returns no guard when the controller allows anonymous', async () => {
-    const { service } = await authorize({ allowAnonymous: true }, undefined, newAnonymousUser())
+    const { service } = await authorize({ allowAnonymous: true }, undefined, anonymousUser())
     expect(service).toBeUndefined()
   })
 
@@ -113,19 +113,19 @@ describe('compileRoutePolicy — anonymous', () => {
   it('keeps a route-level requirement under a controller-level allowAnonymous', async () => {
     const router = { allowAnonymous: true }
 
-    expect((await authorize(router, { roles: ['admin'] }, newAnonymousUser())).result?.ok).toBe(false)
+    expect((await authorize(router, { roles: ['admin'] }, anonymousUser())).result?.ok).toBe(false)
     expect((await authorize(router, { roles: ['admin'] }, withRoles('viewer'))).result?.ok).toBe(false)
     expect((await authorize(router, { roles: ['admin'] }, withRoles('admin'))).result?.ok).toBe(true)
-    expect((await authorize(router, {}, newAnonymousUser())).result?.ok).toBe(false)
+    expect((await authorize(router, {}, anonymousUser())).result?.ok).toBe(false)
   })
 
   it('opens a route that declares nothing under a controller-level allowAnonymous', async () => {
-    const { service } = await authorize({ allowAnonymous: true }, undefined, newAnonymousUser())
+    const { service } = await authorize({ allowAnonymous: true }, undefined, anonymousUser())
     expect(service).toBeUndefined()
   })
 
   it('lets allowAnonymous win over a requirement declared on the same level', async () => {
-    const { service } = await authorize(undefined, [{ roles: ['admin'] }, { allowAnonymous: true }], newAnonymousUser())
+    const { service } = await authorize(undefined, [{ roles: ['admin'] }, { allowAnonymous: true }], anonymousUser())
     expect(service).toBeUndefined()
   })
 
@@ -135,18 +135,18 @@ describe('compileRoutePolicy — anonymous', () => {
     const outer = [{ roles: ['admin'] }]
     const publicGroup = { allowAnonymous: true }
 
-    expect((await authorize(publicGroup, undefined, newAnonymousUser(), { outer })).service).toBeUndefined()
+    expect((await authorize(publicGroup, undefined, anonymousUser(), { outer })).service).toBeUndefined()
     expect((await authorize(publicGroup, {}, withRoles('viewer'), { outer })).result?.ok).toBe(false)
     expect((await authorize(publicGroup, {}, withRoles('admin'), { outer })).result?.ok).toBe(true)
   })
 
   it('lets a route-level allowAnonymous defeat a controller-level requirement', async () => {
-    const { service } = await authorize({ roles: ['admin'] }, { allowAnonymous: true }, newAnonymousUser())
+    const { service } = await authorize({ roles: ['admin'] }, { allowAnonymous: true }, anonymousUser())
     expect(service).toBeUndefined()
   })
 
   it('treats an explicit allowAnonymous: false as no opt-out', async () => {
-    const { service, result } = await authorize(undefined, { allowAnonymous: false }, newAnonymousUser())
+    const { service, result } = await authorize(undefined, { allowAnonymous: false }, anonymousUser())
 
     expect(service).toBeDefined()
     expect(result?.ok).toBe(false)
@@ -156,18 +156,18 @@ describe('compileRoutePolicy — anonymous', () => {
 describe('compileRoutePolicy — the default policy', () => {
   it('applies the default policy when nothing else was declared', async () => {
     expect((await authorize(undefined, {}, user())).result?.ok).toBe(true)
-    expect((await authorize(undefined, {}, newAnonymousUser())).result?.ok).toBe(false)
+    expect((await authorize(undefined, {}, anonymousUser())).result?.ok).toBe(false)
   })
 
   // `schemes` states no requirement of its own, so it must not suppress the default policy. This is the
   // regression that made @Authorize({ schemes }) admit anonymous callers.
   it('still applies the default policy when only schemes were named', async () => {
-    expect((await authorize(undefined, { schemes: ['Basic'] }, newAnonymousUser())).result?.ok).toBe(false)
+    expect((await authorize(undefined, { schemes: ['Basic'] }, anonymousUser())).result?.ok).toBe(false)
     expect((await authorize(undefined, { schemes: ['Basic'] }, user())).result?.ok).toBe(true)
   })
 
   it('applies an empty roles array as no requirement, falling back to the default policy', async () => {
-    expect((await authorize(undefined, { roles: [] }, newAnonymousUser())).result?.ok).toBe(false)
+    expect((await authorize(undefined, { roles: [] }, anonymousUser())).result?.ok).toBe(false)
   })
 
   // The existing suite set this to the same value as the built-in default, so the override path was never
@@ -280,7 +280,7 @@ describe('compileRoutePolicy — named policies', () => {
     expect((await authorize(undefined, route, withRoles('staff', 'admin'), { policies })).result?.ok).toBe(true)
     expect((await authorize(undefined, route, withRoles('staff'), { policies })).result?.ok).toBe(false)
     expect((await authorize(undefined, route, withRoles('admin'), { policies })).result?.ok).toBe(false)
-    expect((await authorize(undefined, route, newAnonymousUser(), { policies })).result?.ok).toBe(false)
+    expect((await authorize(undefined, route, anonymousUser(), { policies })).result?.ok).toBe(false)
   })
 
   // A bare @Authorize on the controller says "signed-in users only". A method naming a policy adds to that;
@@ -288,10 +288,10 @@ describe('compileRoutePolicy — named policies', () => {
   it('keeps the default policy of a bare controller declaration when the route names a policy', async () => {
     const policies = policyMap({ open: async () => ({ ok: true }) })
 
-    expect((await authorize({}, { policy: 'open' }, newAnonymousUser(), { policies })).result?.ok).toBe(false)
+    expect((await authorize({}, { policy: 'open' }, anonymousUser(), { policies })).result?.ok).toBe(false)
     expect((await authorize({}, { policy: 'open' }, user(), { policies })).result?.ok).toBe(true)
     // Without the bare declaration the policy stands alone, and it asks for no identity.
-    expect((await authorize(undefined, { policy: 'open' }, newAnonymousUser(), { policies })).result?.ok).toBe(true)
+    expect((await authorize(undefined, { policy: 'open' }, anonymousUser(), { policies })).result?.ok).toBe(true)
   })
 
   it('stops at the first failing policy and does not run the rest', async () => {
@@ -335,7 +335,7 @@ describe('compileRoutePolicy — a declaration assembled by hand', () => {
     const empty: RouteAuthz = { allowAnonymous: false, defaultPolicy: false, policies: [], roleGroups: [] }
     const service = compileRoutePolicy(options(), new Map(), handlers(), empty)
 
-    expect((await service?.authorize(ctx, newAnonymousUser()))?.ok).toBe(false)
+    expect((await service?.authorize(ctx, anonymousUser()))?.ok).toBe(false)
     expect((await service?.authorize(ctx, user()))?.ok).toBe(true)
   })
 })

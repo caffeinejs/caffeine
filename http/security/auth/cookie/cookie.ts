@@ -310,8 +310,11 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
       return this.#rememberRefused(ctx, 'unknown')
     }
 
-    const remembered = buildCredentialPrincipal(user, { scheme: this.#name, roleClaimType: this.options.roleClaimType })
-    remembered.identities[0].addClaim(new Claim(REMEMBERED_CLAIM, true, ''))
+    const [identity] = buildCredentialPrincipal(user, {
+      scheme: this.#name,
+      roleClaimType: this.options.roleClaimType,
+    }).identities
+    const remembered = new Principal(true, identity.withClaims(new Claim(REMEMBERED_CLAIM, true, '')))
 
     // The same say the application has over a session cookie: a user it no longer accepts is not remembered back in.
     const principal = await this.#validate(ctx, remembered)
