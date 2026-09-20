@@ -395,10 +395,8 @@ export abstract class RemoteAuthenticationHandler<
   /**
    * The state cookie name for one authorization round-trip.
    *
-   * Suffixed with the flow's own `state` so concurrent sign-ins do not collide. With a single fixed name,
-   * opening the provider in two tabs meant the second challenge overwrote the first's cookie, and the
-   * first callback then died with "state mismatch" — a flow the user started, killed by an unrelated one.
-   * The `state` value is already the per-flow random this handler mints.
+   * Suffixed with the flow's own `state`, the per-flow random this handler mints, so sign-ins under way in two
+   * tabs each keep their cookie.
    *
    * `state` is base64url, which is within the cookie-name charset, so the composed name stays valid —
    * including under the `__Host-` prefix, which constrains attributes rather than the name.

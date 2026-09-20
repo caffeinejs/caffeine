@@ -33,6 +33,9 @@ export {
 } from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { isSafeReturnPath } from './internal/remote/config.js'
+export type { RemoteChallengeMode } from './internal/remote/handler.js'
+export type { RemoteAuthenticationSession } from './internal/remote/session_store.js'
+export type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from './internal/remote/ticket_store.js'
 export {
   JWTAuthenticationHandler,
   type JWTAuthenticationOptions,
@@ -58,10 +61,6 @@ export {
   OIDCAuthenticationHandler,
   type OIDCAuthenticationOptions,
   OIDCAuthenticationOptionsBuilder,
-  type RemoteAuthenticationSession,
-  type RemoteAuthenticationTicket,
-  type RemoteAuthenticationTicketStore,
-  type RemoteChallengeMode,
 } from './oidc/index.js'
 export {
   OpaqueTokenAuthenticationHandler,

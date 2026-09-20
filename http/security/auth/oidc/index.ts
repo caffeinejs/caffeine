@@ -1,44 +1,12 @@
-export { type TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
-export { type RemoteChallengeMode } from '../internal/remote/handler.js'
-export { generateCodeChallenge, generateCodeVerifier, selectPKCEMethod } from '../internal/remote/pkce.js'
-export {
-  claimsToSession,
-  decodeSession,
-  decodeTicketRef,
-  encodeSession,
-  encodeTicketRef,
-  type RemoteAuthenticationSession,
-} from '../internal/remote/session_store.js'
-export {
-  decodeState,
-  encodeState,
-  type RemoteAuthenticationState,
-  STATE_TTL_SECONDS,
-} from '../internal/remote/state_store.js'
-export {
-  type RemoteAuthenticationTicket,
-  type RemoteAuthenticationTicketStore,
-} from '../internal/remote/ticket_store.js'
 export { fetchDiscovery, type OIDCDiscoveryDocument } from './discovery.js'
-export {
-  ErrOIDCCallback,
-  ErrOIDCConfiguration,
-  ErrOIDCDiscovery,
-  ErrOIDCSession,
-  isOIDCError,
-  OIDCError,
-} from './errors.js'
+export { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 export { OIDCAuthenticationHandler } from './handler.js'
 export {
-  assertSecureEndpoint,
-  isSafeReturnPath,
-  MIN_SESSION_SECRET_LENGTH,
   type OIDCAuthenticationOptions,
   OIDCAuthenticationOptionsBuilder,
   type OIDCTokens,
   type ResolvedOIDCAuthenticationOptions,
   resolveOIDCOptions,
-  sanitizeSchemeName,
 } from './options.js'
 export { GOOGLE_ISSUER, googleOIDCPreset } from './provider/google.js'
 

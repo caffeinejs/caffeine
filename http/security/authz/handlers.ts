@@ -14,7 +14,7 @@ export class AuthenticatedUserHandler extends AuthzRequirementHandler<Authentica
     return 'authenticated'
   }
 
-  async handle(ctx: Context, user: Principal): Promise<AuthzPolicyResult> {
+  handle(ctx: Context, user: Principal): AuthzPolicyResult {
     if (user.authenticated) {
       return { ok: true }
     }
@@ -37,7 +37,7 @@ export class RoleHandler extends AuthzRequirementHandler<RoleRequirement> {
     return 'role'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: RoleRequirement): Promise<AuthzPolicyResult> {
+  handle(ctx: Context, user: Principal, requirement: RoleRequirement): AuthzPolicyResult {
     if (requirement.roles.some(role => user.isInRole(role))) {
       return { ok: true }
     }
@@ -51,7 +51,7 @@ export class ClaimHandler extends AuthzRequirementHandler<ClaimRequirement> {
     return 'claim'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: ClaimRequirement): Promise<AuthzPolicyResult> {
+  handle(ctx: Context, user: Principal, requirement: ClaimRequirement): AuthzPolicyResult {
     if (requirement.claimValues.length === 0 && user.hasClaim(requirement.claim)) {
       return { ok: true }
     }

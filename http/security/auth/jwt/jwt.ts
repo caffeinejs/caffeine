@@ -138,12 +138,7 @@ function buildService(options: JWTAuthenticationOptions): JWTService {
     : new JWTService({ publicKey: secret, algorithm })
 }
 
-/**
- * Maps a verified payload to claims, dropping the registered ones.
- *
- * The OIDC handler has always excluded these; this scheme did not, so `iss`/`exp`/`aud` and friends
- * landed on the principal where an application claim type could collide with them.
- */
+/** Maps a verified payload to claims, dropping the {@link REGISTERED_CLAIMS}, which describe the token and not the user. */
 function mapClaims(payload: JWTPayload): Claim[] {
   const issuer = payload.iss ?? ''
   const claims: Claim[] = []

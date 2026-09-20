@@ -389,15 +389,15 @@ export const SCHEME_SCHEMAS = {
   github: oauthSchemeSchema,
 } as const
 
-export const SCHEME_CONFIG: { readonly [K in SchemeKind]: SchemeConfigSpec<never> } = {
-  jwt: jwt as SchemeConfigSpec<never>,
-  basic: basic as SchemeConfigSpec<never>,
-  cookie: cookie as SchemeConfigSpec<never>,
-  opaque: opaque as SchemeConfigSpec<never>,
-  oidc: oidc as SchemeConfigSpec<never>,
-  oauth: oauth as SchemeConfigSpec<never>,
-  github: oauth as SchemeConfigSpec<never>,
-}
+export const SCHEME_CONFIG = {
+  jwt,
+  basic,
+  cookie,
+  opaque,
+  oidc,
+  oauth,
+  github: oauth,
+} satisfies { readonly [K in SchemeKind]: SchemeConfigSpec<never> }
 
 export const refresh: SchemeConfigSpec<RefreshTokenOptionsBuilder> = {
   schema: refreshConfigSchema as ConfigSchema<Record<string, unknown>>,

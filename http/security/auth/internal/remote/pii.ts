@@ -3,8 +3,8 @@
  *
  * Scoped to a single OIDC strategy rather than being a process-wide static.
  *
- * This gates **server-side diagnostics only** — the `message` of an `OIDCError`, which the
- * adapter writes to the log. `OIDCError.publicMessage`, everything the client can observe,
+ * This gates **server-side diagnostics only** — the `message` of a `RemoteAuthenticationError`, which the
+ * adapter writes to the log. `RemoteAuthenticationError.publicMessage`, everything the client can observe,
  * never carries user data regardless of this flag.
  */
 export function redactPii(type: string, value: unknown, showPii: boolean): string {

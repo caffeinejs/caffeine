@@ -56,19 +56,43 @@ export function newPolicyEvaluator(
     compiled[i] = [requirement, handler]
   }
 
-  return async (ctx: Context, user: Principal, resource?: unknown) => {
-    for (const [requirement, handler] of compiled) {
-      const result = await handler.handle(ctx, user, requirement, resource)
+  const failed = (requirement: AuthzRequirement, result: AuthzPolicyResult): AuthzResult => ({
+    ok: false,
+    failedRequirement: requirement,
+    failedPolicy: policy.name,
+    reason: result.reason,
+  })
+
+  // Fail-fast: the first requirement that is not met ends the evaluation. Most requirements answer at once, so
+  // the evaluation only becomes a promise at the first one that does not.
+  const evaluate = (
+    ctx: Context,
+    user: Principal,
+    resource: unknown,
+    from: number,
+  ): AuthzResult | Promise<AuthzResult> => {
+    for (let i = from; i < compiled.length; i++) {
+      const [requirement, handler] = compiled[i]
+      const result = handler.handle(ctx, user, requirement, resource)
+
+      if (result instanceof Promise) {
+        return result.then(settled =>
+          settled.ok ? evaluate(ctx, user, resource, i + 1) : failed(requirement, settled),
+        )
+      }
+
       if (!result.ok) {
-        // Fail-fast: upon first failure,
-        // stop executing and return the result immediately.
-        return { ok: false, failedRequirement: requirement, failedPolicy: policy.name, reason: result.reason }
+        return failed(requirement, result)
       }
     }
 
-    return { ok: true }
+    return ALLOWED
   }
+
+  return (ctx, user, resource) => evaluate(ctx, user, resource, 0)
 }
+
+const ALLOWED: AuthzResult = Object.freeze({ ok: true })
 
 /**
  * Compiles the authorization a route actually runs, or `undefined` when it runs none.

@@ -112,7 +112,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    *
    * Scoped to this strategy rather than a process-wide static. Off by
    * default: error messages carry a redaction notice instead of claim values. Turning it on
-   * affects only the logged `message` — `OIDCError.publicMessage`, all the client can see,
+   * affects only the logged `message` — `RemoteAuthenticationError.publicMessage`, all the client can see,
    * never carries user data either way.
    */
   showPii: boolean
@@ -670,10 +670,3 @@ export class OIDCAuthenticationOptionsBuilder {
 
 // The generic halves of this module now live in the shared OAuth core; re-exported so callers
 // and tests keep one import site for the option surface.
-export {
-  assertSecureEndpoint,
-  defaultSecureCookie,
-  isSafeReturnPath,
-  MIN_SESSION_SECRET_LENGTH,
-  sanitizeSchemeName,
-} from '../internal/remote/config.js'

@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
 import { kAuthenticationExempt } from '../keys.js'
-import { isOIDCError, type OIDCMeta } from './index.js'
+import type { OIDCMeta } from './index.js'
 
 /**
  * Registers the OIDC/OAuth2 callback routes.
@@ -88,8 +89,8 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
           return reply.send()
         }
 
-        const status = isOIDCError(e) ? e.statusCode : 400
-        const error = isOIDCError(e) ? e.publicMessage : 'Authentication failed'
+        const status = isRemoteAuthenticationError(e) ? e.statusCode : 400
+        const error = isRemoteAuthenticationError(e) ? e.publicMessage : 'Authentication failed'
         return reply.status(status).send({ error, statusCode: status })
       }
     })

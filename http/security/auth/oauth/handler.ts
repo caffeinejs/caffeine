@@ -197,8 +197,8 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
  * account being authenticated gets to name its own roles. Nothing about the transport prevents that —
  * unlike OIDC, there is no signature over these fields to appeal to.
  *
- * Wholesale copying additionally used to overflow the sealed session cookie past the
- * browser's ~4 KB limit on providers with large bodies, which the browser drops silently.
+ * It is also what keeps the sealed session cookie under the ~4 KB a browser accepts: past that the cookie is
+ * dropped silently, and some providers answer with bodies that large.
  *
  * Nested objects and arrays are skipped even when mapped: a claim value has to survive the JSON
  * round-trip through the session cookie and be comparable by an authorization policy, and neither holds

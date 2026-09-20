@@ -151,10 +151,7 @@ class AnonymousUser extends Principal {
 /**
  * A fresh unauthenticated principal.
  *
- * A new instance per call rather than a shared singleton. `AnonymousUser.addIdentity` throws, so one
- * instance is safe today, but it would be a single mutable object standing in for every unauthenticated
- * request in the process — and the safety rests entirely on that one override staying in place.
- * Allocating an empty object on a path that is already doing I/O is not a cost worth that coupling.
+ * A new instance per call: no two unauthenticated requests share one. Its `addIdentity` throws.
  */
 export function newAnonymousUser(): Principal {
   return new AnonymousUser()

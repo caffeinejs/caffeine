@@ -1,6 +1,5 @@
-import { DEFAULT_HTTP_TIMEOUT_MS } from '../internal/remote/config.js'
+import { assertSecureEndpoint, DEFAULT_HTTP_TIMEOUT_MS } from '../internal/remote/config.js'
 import { ErrOIDCDiscovery } from './errors.js'
-import { assertSecureEndpoint } from './options.js'
 
 export interface OIDCDiscoveryDocument {
   issuer: string

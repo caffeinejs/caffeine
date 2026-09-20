@@ -9,9 +9,19 @@ export class AuthzRouteService {
     this.#evaluators = evaluators
   }
 
-  async authorize(ctx: Context, user: Principal, resource?: unknown): Promise<AuthzResult> {
-    for (const evaluator of this.#evaluators) {
-      const result = await evaluator(ctx, user, resource)
+  /** Every evaluator has to allow. A promise only when one of them had to wait for its answer. */
+  authorize(ctx: Context, user: Principal, resource?: unknown): AuthzResult | Promise<AuthzResult> {
+    return this.#authorize(ctx, user, resource, 0)
+  }
+
+  #authorize(ctx: Context, user: Principal, resource: unknown, from: number): AuthzResult | Promise<AuthzResult> {
+    for (let i = from; i < this.#evaluators.length; i++) {
+      const result = this.#evaluators[i](ctx, user, resource)
+
+      if (result instanceof Promise) {
+        return result.then(settled => (settled.ok ? this.#authorize(ctx, user, resource, i + 1) : settled))
+      }
+
       if (!result.ok) {
         return result
       }

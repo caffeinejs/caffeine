@@ -58,8 +58,3 @@ export class ErrOIDCSession extends RemoteAuthenticationError {
     this.name = 'ErrOIDCSession'
   }
 }
-
-export {
-  isRemoteAuthenticationError as isOIDCError,
-  RemoteAuthenticationError as OIDCError,
-} from '../internal/remote/errors.js'

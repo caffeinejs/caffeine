@@ -34,7 +34,12 @@ import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
 import { JWTService } from './jwt/jwt_service.js'
 import { jwtServiceKey } from './jwt/keys.js'
 import { kAuthSchemeDescriptors } from './keys.js'
-import { githubOAuth2Preset, OAuth2AuthenticationHandler, OAuth2AuthenticationOptionsBuilder } from './oauth/index.js'
+import {
+  githubOAuth2Preset,
+  OAuth2AuthenticationHandler,
+  type OAuth2AuthenticationOptions,
+  OAuth2AuthenticationOptionsBuilder,
+} from './oauth/index.js'
 import type { GithubPresetOptions } from './oauth/provider/github.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
@@ -64,16 +69,128 @@ export interface AuthenticationOptions {
 /**
  * A scheme the application asked for, before anything was built.
  *
- * Nothing is constructed inside the `addX(...)` callback any more: the callback is held here and run while the
- * feature configures, which is after configuration has resolved. That is what lets a JWT secret or an OIDC
- * client secret come from the environment — the handler is built from the merged options, once.
+ * Nothing is constructed inside the `addX(...)` callback: the callback is held here and run while the feature
+ * configures, which is after configuration has resolved. That is what lets a JWT secret or an OIDC client secret
+ * come from the environment — the handler is built from the merged options, once.
  */
 interface SchemeRegistration {
   name: string
   kind: SchemeKind
-  configure: (builder: never) => void
-  /** github's endpoint and scope defaults, applied to the raw options before they are resolved. */
-  preset?: GithubPresetOptions
+  /** @param configured - What the configuration tree carries for this scheme. */
+  build(configured: Record<string, unknown>): BuiltScheme
+}
+
+interface BuiltScheme {
+  handler: AuthenticationHandler
+  /** How the scheme expects its credential, for whoever documents the routes it protects. */
+  descriptor: AuthSchemeDescriptor
+  /** Set by the OAuth-family kinds: they answer on a callback route, which the server has to register. */
+  callback?: OAuthCallbackHandler
+}
+
+/** What building one kind of scheme takes: the options builder it starts from, the configuration it accepts, and
+ * the handler its options make. */
+interface SchemeKindSpec<B> {
+  options(): B
+  config: SchemeConfigSpec<B>
+  build(name: string, options: B): BuiltScheme
+}
+
+const JWT_KIND: SchemeKindSpec<JWTAuthenticationOptionsBuilder> = {
+  options: () => new JWTAuthenticationOptionsBuilder(),
+  config: SCHEME_CONFIG.jwt,
+  build: (name, options) => ({
+    handler: new JWTAuthenticationHandler(name, options.build()),
+    descriptor: { kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+  }),
+}
+
+const BASIC_KIND: SchemeKindSpec<BasicAuthenticationOptionsBuilder> = {
+  options: () => new BasicAuthenticationOptionsBuilder(),
+  config: SCHEME_CONFIG.basic,
+  build: (name, options) => ({
+    handler: new BasicAuthenticationHandler(name, options.build()),
+    descriptor: { kind: 'http', scheme: 'basic' },
+  }),
+}
+
+const COOKIE_KIND: SchemeKindSpec<CookieAuthenticationOptionsBuilder> = {
+  options: () => new CookieAuthenticationOptionsBuilder(),
+  config: SCHEME_CONFIG.cookie,
+  build: (name, options) => {
+    const resolved = options.build()
+
+    return {
+      handler: new CookieAuthenticationHandler(name, resolved),
+      descriptor: { kind: 'apiKey', in: 'cookie', name: resolved.cookieName },
+    }
+  },
+}
+
+const OPAQUE_KIND: SchemeKindSpec<OpaqueTokenAuthenticationOptionsBuilder> = {
+  options: () => new OpaqueTokenAuthenticationOptionsBuilder(),
+  config: SCHEME_CONFIG.opaque,
+  build: (name, options) => {
+    const resolved = options.build()
+
+    return {
+      handler: new OpaqueTokenAuthenticationHandler(name, resolved),
+      descriptor: {
+        kind: 'http',
+        scheme: (resolved.scheme ?? 'Bearer').toLowerCase(),
+        description: 'Opaque token, verified against a server-side store',
+      },
+    }
+  },
+}
+
+const OIDC_KIND: SchemeKindSpec<OIDCAuthenticationOptionsBuilder> = {
+  options: () => new OIDCAuthenticationOptionsBuilder(),
+  config: SCHEME_CONFIG.oidc,
+  build: (name, options) => {
+    const resolved = options.build(name)
+    const handler = new OIDCAuthenticationHandler(name, resolved)
+
+    // Only a discovery URL describes the sign-in as OpenID Connect; a provider configured with explicit
+    // endpoints is an OAuth 2.0 authorization-code flow as far as any consumer can tell.
+    const obtainedBy =
+      resolved.discoveryURL !== undefined
+        ? { openIdConnectURL: resolved.discoveryURL }
+        : { flows: authorizationCodeFlow(resolved.authorizationEndpoint, resolved.tokenEndpoint, resolved.scopes) }
+
+    return { handler, callback: handler, descriptor: sessionCookieScheme(handler, obtainedBy) }
+  },
+}
+
+/**
+ * Plain OAuth 2.0, and the presets over it.
+ *
+ * @param preset - Folded into the raw options before they are resolved: a preset supplies the endpoints, the
+ * subject claim and the scope defaults that resolution requires.
+ */
+function oauthKind(
+  preset: (options: OAuth2AuthenticationOptions) => OAuth2AuthenticationOptions = options => options,
+): SchemeKindSpec<OAuth2AuthenticationOptionsBuilder> {
+  return {
+    options: () => new OAuth2AuthenticationOptionsBuilder(),
+    config: SCHEME_CONFIG.oauth,
+    build: (name, options) => {
+      // Raw options, not `build(name)`: the handler constructor is the single resolution point, so resolving here
+      // as well would validate and default the options twice.
+      const handler = new OAuth2AuthenticationHandler(name, preset(options.toOptions()))
+
+      // Read back off the handler: it resolved the raw options, so this is what the flow actually uses.
+      const { authorizationEndpoint, tokenEndpoint, scopes } = handler.options
+
+      return {
+        handler,
+        callback: handler,
+        descriptor: sessionCookieScheme(handler, {
+          flows: authorizationCodeFlow(authorizationEndpoint, tokenEndpoint, scopes),
+        }),
+      }
+    },
+  }
 }
 
 export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
@@ -138,9 +255,22 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * which scheme is the implicit default when only one exists, and a `Map` keeps a key's original position
    * when its value is replaced later.
    */
-  #register(name: string, kind: SchemeKind, configure: (builder: never) => void, preset?: GithubPresetOptions): this {
+  #register<B>(name: string, kind: SchemeKind, spec: SchemeKindSpec<B>, configure: (options: B) => void): this {
     this.#reserve(name)
-    this.#registrations.push({ name, kind, configure, preset })
+    this.#registrations.push({
+      name,
+      kind,
+      // Code first, configuration over it, and only then the build: building last is what puts each scheme's own
+      // validation on the merged options, not on the half that was written in code.
+      build: configured => {
+        const options = spec.options()
+
+        configure(options)
+        applyScheme(options, spec.config, configured, `authentication scheme "${name}"`)
+
+        return spec.build(name, options)
+      },
+    })
     this.#schemes.set(name, undefined as unknown as AuthenticationHandler)
     return this
   }
@@ -179,7 +309,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       throw new ErrAuthConfiguration('Options are required')
     }
 
-    return this.#register(name, 'jwt', optsFn as (builder: never) => void)
+    return this.#register(name, 'jwt', JWT_KIND, optsFn)
   }
 
   addBasic(opts: (opts: BasicAuthenticationOptionsBuilder) => void): this
@@ -194,7 +324,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       throw new ErrAuthConfiguration('Options are required')
     }
 
-    return this.#register(name, 'basic', optsFn as (builder: never) => void)
+    return this.#register(name, 'basic', BASIC_KIND, optsFn)
   }
 
   addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
@@ -209,7 +339,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       throw new ErrAuthConfiguration('Options are required')
     }
 
-    return this.#register(name, 'cookie', optsFn as (builder: never) => void)
+    return this.#register(name, 'cookie', COOKIE_KIND, optsFn)
   }
 
   /**
@@ -234,11 +364,11 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 
     // The options callback is optional: `store` defaults to the `OpaqueTokenStore` token, so the
     // zero-arg form works once the user has bound their store to the container.
-    return this.#register(name, 'opaque', (optsFn ?? noOptions) as (builder: never) => void)
+    return this.#register(name, 'opaque', OPAQUE_KIND, optsFn ?? noOptions)
   }
 
   addOIDC(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
-    return this.#register(name, 'oidc', configure as (builder: never) => void)
+    return this.#register(name, 'oidc', OIDC_KIND, configure)
   }
 
   addOIDCGoogle(name: string, configure: (opts: OIDCAuthenticationOptionsBuilder) => void): this {
@@ -255,7 +385,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * assertion than a JSON body fetched with a bearer token.
    */
   addOAuth2(name: string, configure: (opts: OAuth2AuthenticationOptionsBuilder) => void): this {
-    return this.#register(name, 'oauth', configure as (builder: never) => void)
+    return this.#register(name, 'oauth', oauthKind(), configure)
   }
 
   addGithub(
@@ -263,7 +393,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     configure: (opts: OAuth2AuthenticationOptionsBuilder) => void,
     preset: GithubPresetOptions = {},
   ): this {
-    return this.#register(name, 'github', configure as (builder: never) => void, preset)
+    return this.#register(
+      name,
+      'github',
+      oauthKind(options => githubOAuth2Preset({ ...options, ...preset })),
+      configure,
+    )
   }
 
   forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
@@ -331,146 +466,13 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    */
   #buildSchemes(): void {
     for (const registration of this.#registrations) {
-      const configured = this.#config?.schemes?.[registration.name] ?? {}
-      const where = `authentication scheme "${registration.name}"`
+      const built = registration.build(this.#config?.schemes?.[registration.name] ?? {})
 
-      switch (registration.kind) {
-        case 'jwt': {
-          const builder = new JWTAuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.jwt as SchemeConfigSpec<JWTAuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
+      this.#describe(registration.name, built.descriptor)
+      this.#schemes.set(registration.name, built.handler)
 
-          this.#describe(registration.name, { kind: 'http', scheme: 'bearer', bearerFormat: 'JWT' })
-          this.#schemes.set(registration.name, new JWTAuthenticationHandler(registration.name, builder.build()))
-          break
-        }
-
-        case 'basic': {
-          const builder = new BasicAuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.basic as SchemeConfigSpec<BasicAuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
-
-          this.#describe(registration.name, { kind: 'http', scheme: 'basic' })
-          this.#schemes.set(registration.name, new BasicAuthenticationHandler(registration.name, builder.build()))
-          break
-        }
-
-        case 'cookie': {
-          const builder = new CookieAuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.cookie as SchemeConfigSpec<CookieAuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
-          const resolved = builder.build()
-
-          this.#describe(registration.name, { kind: 'apiKey', in: 'cookie', name: resolved.cookieName })
-          this.#schemes.set(registration.name, new CookieAuthenticationHandler(registration.name, resolved))
-          break
-        }
-
-        case 'opaque': {
-          const builder = new OpaqueTokenAuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.opaque as SchemeConfigSpec<OpaqueTokenAuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
-          const resolved = builder.build()
-
-          this.#describe(registration.name, {
-            kind: 'http',
-            scheme: (resolved.scheme ?? 'Bearer').toLowerCase(),
-            description: 'Opaque token, verified against a server-side store',
-          })
-          this.#schemes.set(registration.name, new OpaqueTokenAuthenticationHandler(registration.name, resolved))
-          break
-        }
-
-        case 'oidc': {
-          const builder = new OIDCAuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.oidc as SchemeConfigSpec<OIDCAuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
-
-          const options = builder.build(registration.name)
-          const handler = new OIDCAuthenticationHandler(registration.name, options)
-          this.#oidcHandlers.push(handler)
-
-          // Only a discovery URL describes the sign-in as OpenID Connect; a provider configured with explicit
-          // endpoints is an OAuth 2.0 authorization-code flow as far as any consumer can tell.
-          this.#describe(
-            registration.name,
-            sessionCookieScheme(
-              handler,
-              options.discoveryURL !== undefined
-                ? { openIdConnectURL: options.discoveryURL }
-                : {
-                    flows: authorizationCodeFlow(options.authorizationEndpoint, options.tokenEndpoint, options.scopes),
-                  },
-            ),
-          )
-
-          this.#schemes.set(registration.name, handler)
-          break
-        }
-
-        case 'oauth':
-        case 'github': {
-          const builder = new OAuth2AuthenticationOptionsBuilder()
-          registration.configure(builder as never)
-          applyScheme(
-            builder,
-            SCHEME_CONFIG.oauth as SchemeConfigSpec<OAuth2AuthenticationOptionsBuilder>,
-            configured,
-            where,
-          )
-
-          // Raw options, not `build(name)`: the handler constructor is the single resolution point, so
-          // resolving here as well would validate and default the options twice. The github preset supplies
-          // the endpoints, subjectClaim and scope defaults that resolution requires, so it has to be folded
-          // in before resolution rather than after.
-          const raw =
-            registration.kind === 'github'
-              ? githubOAuth2Preset({ ...builder.toOptions(), ...registration.preset })
-              : builder.toOptions()
-
-          const handler = new OAuth2AuthenticationHandler(registration.name, raw)
-          this.#oidcHandlers.push(handler)
-
-          // Read back off the handler: it resolved the raw options, so this is what the flow actually uses.
-          this.#describe(
-            registration.name,
-            sessionCookieScheme(handler, {
-              flows: authorizationCodeFlow(
-                handler.options.authorizationEndpoint,
-                handler.options.tokenEndpoint,
-                handler.options.scopes,
-              ),
-            }),
-          )
-
-          this.#schemes.set(registration.name, handler)
-          break
-        }
+      if (built.callback !== undefined) {
+        this.#oidcHandlers.push(built.callback)
       }
     }
 
