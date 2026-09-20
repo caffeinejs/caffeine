@@ -297,6 +297,41 @@ describe('per-route authentication schemes', () => {
     expect(((await res.json()) as { types: string[] }).types).toEqual(['Basic'])
   })
 
+  // The schemes are the inner level's to choose: naming some on a method replaces the controller's, it does not add
+  // to them. That is the only way a route can refuse a credential its controller accepts — a state-changing route
+  // taking a token and not the session cookie every other route of the controller takes.
+  it('lets a method accept fewer schemes than its controller does', async () => {
+    @Authorize({ schemes: ['Default', 'Basic'] })
+    @Controller('/narrowed')
+    class NarrowedController {
+      @Get('/either')
+      read() {
+        return { ok: true }
+      }
+
+      @Get('/basic-only')
+      @Authorize({ schemes: ['Basic'] })
+      write() {
+        return { ok: true }
+      }
+    }
+    void [NarrowedController]
+
+    app = buildApp()
+    await app.ready()
+
+    const withDefault = { headers: { 'x-default-user': 'mallory' } }
+
+    expect((await app.fetch('/narrowed/either', withDefault)).status).toBe(200)
+
+    const refused = await app.fetch('/narrowed/basic-only', withDefault)
+    expect(refused.status).toBe(401)
+    expect(refused.headers.get('www-authenticate')).toBe('Basic realm="Docs", charset="UTF-8"')
+
+    const withBasic = { headers: { authorization: basicHeader('admin', 'admin123') } }
+    expect((await app.fetch('/narrowed/basic-only', withBasic)).status).toBe(200)
+  })
+
   it('refuses to start when a route names a scheme that was never registered', async () => {
     // Silently, this produced a route that rejected every caller: the unknown name authenticated nobody, so
     // the principal was reset to anonymous and authorization denied — with nothing anywhere naming the typo.

@@ -377,6 +377,9 @@ export class Router<
    *
    * `{ allowAnonymous: true }` opens the routes that declare nothing themselves; one that calls `.authorize(...)`
    * on its own chain stays protected.
+   *
+   * `schemes` do not add up across levels: a route, or a router mounted inside this one, that names schemes of its
+   * own replaces these, and one that names none uses them.
    */
   authorize(options: RouteAuthzOptions): this {
     this.#state.builder.authorize(options)

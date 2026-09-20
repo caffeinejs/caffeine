@@ -143,7 +143,13 @@ function fallbackFor(container: Container): { for(request: FastifyRequest): Gate
     allowAnonymous: false,
     authorizer: new AuthzRouteService([newPolicyEvaluator(options.fallbackPolicy, container.get(kAuthzHandlers))]),
   }
-  const except = options.fallbackExcept ?? []
+  // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is
+  // under it. Compared as plain text, `/assets` would open `/assets-old` as well.
+  const except = (options.fallbackExcept ?? []).map(prefix => {
+    const exact = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+
+    return { exact, under: `${exact}/` }
+  })
 
   return {
     for(request) {
@@ -157,7 +163,7 @@ function fallbackFor(container: Container): { for(request: FastifyRequest): Gate
       // borrow the exemption of a route it did not match.
       const path = request.routeOptions.url ?? ''
 
-      return except.some(prefix => path.startsWith(prefix)) ? undefined : gated
+      return except.some(({ exact, under }) => path === exact || path.startsWith(under)) ? undefined : gated
     },
   }
 }

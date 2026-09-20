@@ -162,6 +162,22 @@ describe('the authentication gate and routes registered straight on the server',
     expect((await app.fetch('/livez')).status).toBe(200)
   })
 
+  // A prefix is a run of whole path segments. Read as a run of characters, `/assets` would also open
+  // `/assets-but-not-really`, which nobody who wrote `/assets` meant to leave unguarded.
+  it('excepts whole path segments, so a prefix written without its trailing slash opens no neighbour', async () => {
+    const app = await ready(
+      createWebApplication(fastifyAdapterFactory(fastify()))
+        .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
+        .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets', '/admin-ui/users'] }))
+        .with(plainRoutes()),
+    )
+
+    expect((await app.fetch('/assets/app.js')).status).toBe(200)
+    expect((await app.fetch('/assets-but-not-really')).status).toBe(401)
+    // The prefix itself is a path too.
+    expect((await app.fetch('/admin-ui/users')).status).toBe(200)
+  })
+
   it('refuses a path to except that is not absolute', () => {
     const building = createWebApplication(fastifyAdapterFactory(fastify()))
 

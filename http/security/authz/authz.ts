@@ -35,6 +35,9 @@ export interface FallbackPolicyOptions {
    *
    * Matched against the path the route was registered under, never against the URL of the request, so no spelling
    * of a URL reaches a route on another route's exemption.
+   *
+   * A prefix is made of whole segments, with or without its trailing slash: `/assets` leaves `/assets` and
+   * `/assets/app.js` open, and `/assets-old` guarded.
    */
   except?: readonly string[]
 }

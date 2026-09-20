@@ -8,6 +8,8 @@ import type { RouteAuthz, RouteAuthzOptions, RouteGroupSpec } from './spec.js'
  * Nothing is replaced. Each `roles` declaration stays a requirement of its own, so `@Roles('admin')` next to
  * `@Roles('manager')` asks for both, while `@Roles('admin', 'manager')` asks for either. Policies and schemes
  * accumulate, and `allowAnonymous` sticks once declared.
+ *
+ * That holds for the declarations of one level. Across levels the schemes do not accumulate: see {@link mergeAuthz}.
  */
 export function foldAuthz(declared: RouteAuthz | undefined, options: RouteAuthzOptions): RouteAuthz {
   const policies = normalizeList(options.policy)
@@ -35,6 +37,10 @@ export function foldAuthz(declared: RouteAuthz | undefined, options: RouteAuthzO
  * Whether the result is public is the inner level's call alone. A level declared public opens what declares
  * nothing below it; a level that declares protection is protected whatever was declared above it, and by
  * everything that was declared above it.
+ *
+ * The schemes are the inner level's to choose as well. They select who authenticates and are not a requirement, so
+ * a level that names some replaces the ones named above it, and a level that names none inherits them. Replacing is
+ * what lets a route accept fewer schemes than its group: a token only, under a group that also takes a cookie.
  */
 export function mergeAuthz(outer: RouteAuthz | undefined, inner: RouteAuthz | undefined): RouteAuthz | undefined {
   if (outer === undefined) {
