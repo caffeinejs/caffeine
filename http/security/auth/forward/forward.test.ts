@@ -22,6 +22,7 @@ function makeDelegate() {
     forbid: vi.fn().mockResolvedValue(undefined),
     persist: vi.fn().mockResolvedValue(undefined),
     revoke: vi.fn().mockResolvedValue(undefined),
+    signOut: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -109,6 +110,18 @@ describe('ForwardAuthenticationHandler', () => {
       await forward.revoke(ctx, props)
 
       expect(handler.revoke).toHaveBeenCalledWith(ctx, props)
+    })
+  })
+
+  describe('signOut()', () => {
+    it('signs out of the scheme it picked', async () => {
+      const { forward, handler } = setup((_ctx, s) => s)
+      const props = { redirectURI: '/signed-out' }
+
+      await forward.signOut(ctx, props)
+
+      expect(handler.signOut).toHaveBeenCalledWith(ctx, props)
+      expect(handler.revoke).not.toHaveBeenCalled()
     })
   })
 

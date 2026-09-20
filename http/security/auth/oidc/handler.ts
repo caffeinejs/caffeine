@@ -233,8 +233,13 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    *
    * The local session is dropped first: if the redirect fails or the user abandons it midway,
    * the outcome is a signed-out user, not a live session and a false sense of security.
+   *
+   * Reached through `AuthenticationService.signOut(ctx, scheme)`.
+   *
+   * @throws ErrOIDCConfiguration when no end-session endpoint is configured and the provider advertises none. The
+   * session here is gone by then.
    */
-  async signOutRedirect(ctx: Context): Promise<void> {
+  override async signOut(ctx: Context): Promise<void> {
     // Read the id_token before revoking — revocation is what makes the ticket unreachable.
     const idToken = (await this.currentTicket(ctx))?.tokens?.idToken
 

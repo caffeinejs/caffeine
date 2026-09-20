@@ -1,10 +1,8 @@
 import { randomUUID } from 'node:crypto'
 
 import {
-  AuthenticationSchemeProvider,
   AuthenticationService,
   type OAuth2AuthenticationOptionsBuilder,
-  type OIDCAuthenticationHandler,
   type OIDCAuthenticationOptionsBuilder,
   newRouter,
 } from '@caffeinejs/http'
@@ -65,7 +63,7 @@ function routes(scheme: string) {
     .get('/:year', ctx => ({ year: ctx.req.param('year'), tab: ctx.req.query('tab') }))
 
   const session = newRouter()
-    .inject({ auth: AuthenticationService, schemes: AuthenticationSchemeProvider })
+    .inject({ auth: AuthenticationService })
     .get('/public', () => ({ ok: true }))
     .get('/signed-out', () => ({ signedOut: true }))
     // A sign-in link: the application decides where the user lands afterwards, and says so to the challenge.
@@ -76,8 +74,8 @@ function routes(scheme: string) {
       await auth.revoke(ctx, scheme)
       return { ok: true }
     })
-    .get('/logout/provider', async (ctx, { schemes }) => {
-      await (schemes.schemeFor(scheme)!.get() as OIDCAuthenticationHandler).signOutRedirect(ctx)
+    .get('/logout/provider', async (ctx, { auth }) => {
+      await auth.signOut(ctx, scheme)
     })
 
   return newRouter().mount(

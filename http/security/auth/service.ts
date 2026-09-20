@@ -88,9 +88,23 @@ export class AuthenticationService {
     return this.#handlerFor(name).get().persist(ctx, ticket)
   }
 
+  /** Ends the session the scheme keeps here, and nothing else. The request is left for the caller to answer. */
   revoke(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     return this.#handlerFor(name).get().revoke(ctx, properties)
+  }
+
+  /**
+   * Signs the user out everywhere the scheme reaches: here, and at the identity provider when there is one.
+   *
+   * An OpenID Connect scheme answers the request by sending the browser to the provider's end-session endpoint, so
+   * this is the last thing a handler does. With {@link revoke} alone the provider still knows the user, and the
+   * next sign-in goes through without a prompt. A scheme with nowhere else to sign out of only revokes, and the
+   * request is still the caller's to answer.
+   */
+  signOut(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
+    const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
+    return this.#handlerFor(name).get().signOut(ctx, properties)
   }
 
   /**

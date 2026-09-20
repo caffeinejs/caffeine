@@ -158,7 +158,7 @@ export interface ResolvedOIDCAuthenticationOptions {
   /**
    * Keeps the provider's tokens on the server-side ticket.
    *
-   * Required for `signOutRedirect()`, which needs the id_token as `id_token_hint`. Refusing to
+   * Required for `signOut()`, which needs the id_token as `id_token_hint`. Refusing to
    * configure without a `ticketStore` is deliberate: the alternative home for the tokens is the
    * session cookie, and a refresh token is a long-lived credential that does not belong in
    * something the client holds.
@@ -592,7 +592,7 @@ export class OIDCAuthenticationOptionsBuilder {
    * Keeps the provider's tokens on the server-side ticket.
    *
    * Requires a `ticketStore`; configuring without one is an error rather than a silent
-   * downgrade. Needed for `signOutRedirect()`.
+   * downgrade. Needed for `signOut()`.
    */
   saveTokens(save = true): this {
     this.#options.saveTokens = save

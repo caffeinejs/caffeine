@@ -14,7 +14,18 @@ export interface AuthenticationHandler {
   challenge(ctx: Context, properties?: AuthenticationProperties, previous?: AuthenticateResult): Promise<void>
   forbid(ctx: Context, properties?: AuthenticationProperties): Promise<void>
   persist(ctx: Context, ticket: AuthenticationTicket): Promise<void>
+
+  /** Ends the session this scheme keeps here. Nothing leaves this application, and the request is not answered. */
   revoke(ctx: Context, properties?: AuthenticationProperties): Promise<void>
+
+  /**
+   * Signs the user out everywhere the scheme reaches: the session here, as {@link revoke} does, and then the one at
+   * an identity provider when the scheme signed the user in through one.
+   *
+   * It may answer the request — a provider is left by sending the browser there — so call it last. A scheme with
+   * nowhere else to sign out of does what {@link revoke} does.
+   */
+  signOut(ctx: Context, properties?: AuthenticationProperties): Promise<void>
 }
 
 export abstract class BaseAuthenticationHandler<TOptions> implements AuthenticationHandler {
@@ -44,5 +55,9 @@ export abstract class BaseAuthenticationHandler<TOptions> implements Authenticat
 
   revoke(_ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     return Promise.resolve()
+  }
+
+  signOut(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+    return this.revoke(ctx, properties)
   }
 }

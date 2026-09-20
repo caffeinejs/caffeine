@@ -54,6 +54,10 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
     return this.#select(ctx).then(({ handler }) => handler.revoke(ctx, properties))
   }
 
+  signOut(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+    return this.#select(ctx).then(({ handler }) => handler.signOut(ctx, properties))
+  }
+
   async #select(ctx: Context): Promise<{ scheme: string; handler: AuthenticationHandler }> {
     const scheme = await this.#selector(ctx, this.#schemeProvider.defaultAuthenticateScheme)
     if (!scheme) {

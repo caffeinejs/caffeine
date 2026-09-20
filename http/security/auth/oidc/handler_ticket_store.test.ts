@@ -639,7 +639,7 @@ describe('RP-initiated logout', () => {
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     const url = new URL(redirect.mock.calls[0][0] as string)
     expect(url.origin + url.pathname).toBe(END_SESSION)
@@ -666,7 +666,7 @@ describe('RP-initiated logout', () => {
     expect(store.tickets.size).toBe(1)
 
     const { ctx, deleteCookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     expect(store.tickets.size).toBe(0)
     expect(deleteCookie).toHaveBeenCalledWith('__oidc_session', expect.any(Object))
@@ -686,7 +686,7 @@ describe('RP-initiated logout', () => {
     const sessionCookie = await signIn(handler)
 
     const { ctx, redirect } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     const url = new URL(redirect.mock.calls[0][0] as string)
     // Omitted rather than faked: sending some other session's token would be worse.
@@ -704,7 +704,7 @@ describe('RP-initiated logout', () => {
     )
     await signIn(handler, 'n', { end_session_endpoint: undefined })
 
-    await expect(handler.signOutRedirect(makeCtx().ctx)).rejects.toThrow('advertises no end_session_endpoint')
+    await expect(handler.signOut(makeCtx().ctx)).rejects.toThrow('advertises no end_session_endpoint')
   })
 
   /**
@@ -735,7 +735,7 @@ describe('RP-initiated logout', () => {
     )
 
     const { ctx, redirect, deleteCookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await handler.signOutRedirect(ctx)
+    await handler.signOut(ctx)
 
     expect(store.tickets.size).toBe(0)
     expect(deleteCookie).toHaveBeenCalledWith('__oidc_session', expect.any(Object))
@@ -756,7 +756,7 @@ describe('RP-initiated logout', () => {
     // Revoke runs before the endpoint is resolved, so the ticket is gone even though the call
     // ultimately rejects for want of an end_session_endpoint.
     const { ctx } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
-    await expect(handler.signOutRedirect(ctx)).rejects.toThrow('advertises no end_session_endpoint')
+    await expect(handler.signOut(ctx)).rejects.toThrow('advertises no end_session_endpoint')
     expect(store.tickets.size).toBe(0)
   })
 })
