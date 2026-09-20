@@ -2,11 +2,15 @@ import type { Provider } from '@caffeinejs/di'
 
 import type { Context } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
+import { ErrAuthConfiguration } from '../errors.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { challenge } from '../internal/challenge.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
 import type { OpaqueTokenAuthenticationOptions } from './opaque_options.js'
 import type { OpaqueTokenStore } from './opaque_token_store.js'
+
+/** RFC 9110 §5.6.2 `token`, which is what an authentication scheme is (§11.1). */
+const HTTP_TOKEN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
 
 export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<OpaqueTokenAuthenticationOptions> {
   readonly #name: string
@@ -14,10 +18,20 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
 
   #store!: Provider<OpaqueTokenStore>
 
+  /**
+   * @throws ErrAuthConfiguration when `options.scheme` is not an RFC 9110 token. It goes out as it is in every
+   * challenge, and a header holding a space or a line break is one the server refuses to send.
+   */
   constructor(name: string, options: OpaqueTokenAuthenticationOptions) {
     super(options)
     this.#name = name
     this.#scheme = options.scheme ?? 'Bearer'
+
+    if (!HTTP_TOKEN.test(this.#scheme)) {
+      throw new ErrAuthConfiguration(
+        `Cannot configure authentication scheme "${name}": the scheme keyword "${this.#scheme}" is not a valid HTTP token`,
+      )
+    }
   }
 
   /**

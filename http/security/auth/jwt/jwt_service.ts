@@ -58,13 +58,7 @@ export class JWTService {
       const key = typeof options.secret === 'string' ? new TextEncoder().encode(options.secret) : options.secret
       this.#algorithm = options.algorithm ?? 'HS256'
 
-      const hmac = HMAC.get(this.#algorithm)
-      if (hmac !== undefined && key.byteLength < hmac.bytes) {
-        throw new Error(
-          `Cannot create JWTService: a "secret" for ${this.#algorithm} must be at least ${hmac.bytes} bytes, ` +
-            `got ${key.byteLength}`,
-        )
-      }
+      assertHMACKeyLength(this.#algorithm, 'secret', key)
 
       this.#signKey = key
       this.#verifyKey = key
@@ -77,6 +71,11 @@ export class JWTService {
     if (options.algorithm == null) {
       throw new Error('Cannot create JWTService: an "algorithm" is required for an asymmetric key pair')
     }
+
+    // A symmetric key may come through here as well, already imported or as bytes: the bearer scheme hands a
+    // `CryptoKey` secret over as the public key.
+    assertHMACKeyLength(options.algorithm, 'privateKey', options.privateKey)
+    assertHMACKeyLength(options.algorithm, 'publicKey', options.publicKey)
 
     this.#signKey = options.privateKey
     this.#verifyKey = options.publicKey
@@ -135,7 +134,8 @@ export class JWTService {
    * (bad signature, expiry, issuer/audience mismatch). `options` merge over the service defaults.
    *
    * A token with no `exp` is rejected: jose checks an expiry only when there is one, so without this a token minted
-   * without a lifetime is good forever. Pass `requiredClaims: []` to accept one all the same.
+   * without a lifetime is good forever. `requiredClaims` adds to that and does not replace it: asking for `sub`
+   * asks for `sub` and `exp`. Pass `requiredClaims: []`, and nothing else, to accept a token with no expiry.
    */
   async verify<T extends JWTPayload = JWTPayload>(token: string, options: JWTVerifyOptions = {}): Promise<T> {
     const verifyOptions: JWTVerifyOptions = {
@@ -143,8 +143,8 @@ export class JWTService {
       issuer: this.#options.issuer,
       audience: this.#options.audience,
       clockTolerance: this.#options.clockTolerance,
-      requiredClaims: ['exp'],
       ...options,
+      requiredClaims: withExpiry(options.requiredClaims),
     }
 
     // Split calls so each matches a jwtVerify overload (a union arg satisfies neither).
@@ -255,4 +255,33 @@ export class JWTServiceBuilder {
 // seconds from now (a string duration like '15m' passes through unchanged).
 function relativeTime(value: string | number): string | Date {
   return typeof value === 'number' ? new Date(Date.now() + value * 1000) : value
+}
+
+/**
+ * Refuses a key shorter than the hash of the HMAC algorithm it is for. Any other algorithm, and a key whose length
+ * cannot be read, pass.
+ */
+function assertHMACKeyLength(algorithm: string, option: string, key: Uint8Array | CryptoKey | undefined): void {
+  const hmac = HMAC.get(algorithm)
+  if (hmac === undefined || key === undefined) {
+    return
+  }
+
+  // An imported HMAC key states its length in bits.
+  const bits = key instanceof Uint8Array ? key.byteLength * 8 : (key.algorithm as { length?: number }).length
+  if (bits !== undefined && bits < hmac.bytes * 8) {
+    throw new Error(
+      `Cannot create JWTService: a "${option}" for ${algorithm} must be at least ${hmac.bytes} bytes, got ${bits / 8}`,
+    )
+  }
+}
+
+// `exp` on top of whatever the caller requires. An empty list is the caller saying that no claim is required, the
+// expiry included, and is the only way to say it.
+function withExpiry(requested: string[] | undefined): string[] {
+  if (requested === undefined) {
+    return ['exp']
+  }
+
+  return requested.length === 0 ? [] : [...new Set(['exp', ...requested])]
 }

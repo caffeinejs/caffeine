@@ -665,8 +665,11 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * derived keys are distinct.
    */
   #assertOIDCIsolation(): void {
+    // A callback path and a sign-in path are both routes, so they are kept apart from each other as well.
+    const paths = new Map<string, string>()
     const seen = new Map<string, Map<string, string>>([
-      ['callbackPath', new Map()],
+      ['callbackPath', paths],
+      ['loginPath', paths],
       ['session cookie name', new Map()],
       ['state cookie name', new Map()],
     ])
@@ -674,6 +677,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     for (const handler of this.#oidcHandlers) {
       const values: Array<[string, string]> = [
         ['callbackPath', handler.callbackPath],
+        ['loginPath', handler.loginPath],
         ['session cookie name', handler.sessionCookieName],
         ['state cookie name', handler.stateCookieName],
       ]

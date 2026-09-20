@@ -92,6 +92,30 @@ describe('JWTService — a token that never expires', () => {
     // Asked for by name, it is still possible.
     expect((await jwt.verify(eternal, { requiredClaims: [] })).sub).toBe('u1')
   })
+
+  // Requiring one more claim is tightening the check. Were the caller's list to replace the default, asking for
+  // `sub` would stop asking for `exp` without anyone having said so.
+  it('still refuses one when the caller requires another claim as well', async () => {
+    const eternal = await new SignJWT({ sub: 'u1' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer('caffeine')
+      .setAudience('petstore')
+      .sign(new TextEncoder().encode(SECRET))
+
+    await expect(jwt.verify(eternal, { requiredClaims: ['sub'] })).rejects.toMatchObject({
+      code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
+      claim: 'exp',
+    })
+  })
+
+  it('requires what the caller asked for on top of the expiry', async () => {
+    const withoutSubject = await jwt.sign({ scope: 'read' }, { expiresIn: '5m' })
+
+    await expect(jwt.verify(withoutSubject, { requiredClaims: ['sub'] })).rejects.toMatchObject({
+      code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
+      claim: 'sub',
+    })
+  })
 })
 
 describe('JWTService — the strength of a symmetric secret', () => {
@@ -115,6 +139,27 @@ describe('JWTService — the strength of a symmetric secret', () => {
   it('counts bytes, not characters', () => {
     expect(() => new JWTService({ secret: new Uint8Array(31) })).toThrow(/at least 32 bytes, got 31/)
     expect(() => new JWTService({ secret: new Uint8Array(32) })).not.toThrow()
+  })
+
+  // A symmetric key can also arrive already imported, which is how the bearer scheme hands over a `CryptoKey`
+  // secret: in the place of the public key. It is the same key and as easy to search for when it is short.
+  it('holds an imported HMAC key to the same length', async () => {
+    const imported = (bytes: number) =>
+      crypto.subtle.importKey('raw', new Uint8Array(bytes).fill(7), { name: 'HMAC', hash: 'SHA-256' }, false, [
+        'sign',
+        'verify',
+      ])
+
+    const short = await imported(16)
+    expect(() => new JWTService({ publicKey: short, algorithm: 'HS256' })).toThrow(/at least 32 bytes, got 16/)
+    expect(() => new JWTService({ privateKey: short, publicKey: short, algorithm: 'HS256' })).toThrow(/at least 32 bytes/)
+
+    const long = await imported(32)
+    expect(() => new JWTService({ publicKey: long, algorithm: 'HS256' })).not.toThrow()
+  })
+
+  it('holds raw bytes given in the place of a key pair to the same length', () => {
+    expect(() => new JWTService({ publicKey: new Uint8Array(16), algorithm: 'HS256' })).toThrow(/at least 32 bytes/)
   })
 })
 

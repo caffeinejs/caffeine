@@ -138,6 +138,24 @@ describe('OpaqueTokenAuthenticationHandler', () => {
     })
   })
 
+  // The keyword goes out as it is in every challenge. One that is not an RFC 9110 token — a space, a line break — makes
+  // a header the server refuses to send, so each request that should be challenged is answered 500 instead. It also
+  // matches no `Authorization` header anyone could send, so the scheme would authenticate nobody.
+  describe('the scheme keyword', () => {
+    it.each(['', 'My Token', 'Token\r\nX-Injected: 1', 'Tökén', 'Token,', '"Token"'])(
+      'is refused when the scheme is built, not when a request is challenged: %j',
+      scheme => {
+        expect(() => makeHandler(storeReturning(null), { scheme })).toThrow(
+          expect.objectContaining({ code: 'ERR_AUTH_CONFIGURATION' }),
+        )
+      },
+    )
+
+    it.each(['Bearer', 'Token', 'ApiKey', 'X-Custom.Scheme_1'])('is accepted when it is a token: %s', scheme => {
+      expect(() => makeHandler(storeReturning(null), { scheme })).not.toThrow()
+    })
+  })
+
   describe('challenge()', () => {
     // RFC 6750 §3 makes the realm optional, and an empty one names nothing.
     it('sets status 401 and a bare WWW-Authenticate: Bearer when no realm is configured', async () => {

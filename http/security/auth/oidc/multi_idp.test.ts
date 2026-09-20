@@ -250,6 +250,9 @@ describe('startup validation', () => {
       if ('sessionCookieName' in opts) {
         o.sessionCookieName(opts.sessionCookieName as string)
       }
+      if ('loginPath' in opts) {
+        o.loginPath(opts.loginPath as string)
+      }
     })
 
   it('T-MULTI-02: rejects two strategies sharing a callback path', async () => {
@@ -270,6 +273,28 @@ describe('startup validation', () => {
         b.forward('auth', () => 'Google').default('auth')
       }),
     ).rejects.toThrow(/share the session cookie name "shared"/)
+  })
+
+  // Each strategy answers on two paths, and both are routes. Left to the server, a collision is reported as a
+  // duplicate route, which names neither strategy nor the option that caused it.
+  it('rejects two strategies sharing a sign-in path', async () => {
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE, { loginPath: '/signin' })
+        addOIDC(b, 'Okta', OKTA, { loginPath: '/signin' })
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).rejects.toThrow(/"Google" and "Okta" share the loginPath "\/signin"/)
+  })
+
+  it("rejects a sign-in path that is another strategy's callback path", async () => {
+    await expect(
+      configure(b => {
+        addOIDC(b, 'Google', GOOGLE)
+        addOIDC(b, 'Okta', OKTA, { loginPath: '/auth/google' })
+        b.forward('auth', () => 'Google').default('auth')
+      }),
+    ).rejects.toThrow(/"Google" and "Okta" share the loginPath "\/auth\/google"/)
   })
 
   it('names both offending strategies', async () => {
