@@ -57,12 +57,23 @@ export class Identity {
   }
 }
 
+/**
+ * One statement about a caller: its `type`, its `value`, and the `issuer` that made it.
+ *
+ * A list handed over as the value is copied, and the copy is read-only: the roles a claim carries cannot be added
+ * to once it sits on an {@link Identity}, not even through the array it was made from. Any other value is kept as
+ * it is.
+ */
 export class Claim {
-  constructor(
-    readonly type: string,
-    readonly value: unknown,
-    readonly issuer: string,
-  ) {}
+  readonly type: string
+  readonly value: unknown
+  readonly issuer: string
+
+  constructor(type: string, value: unknown, issuer: string) {
+    this.type = type
+    this.value = Array.isArray(value) ? Object.freeze([...value]) : value
+    this.issuer = issuer
+  }
 }
 
 export type PrincipalMapper = (ctx: Context, principal: Principal) => Promise<Principal> | Principal

@@ -50,6 +50,40 @@ describe('Identity', () => {
   })
 })
 
+// `isInRole` and `hasClaim` read a list-valued claim member by member, and one identity may serve every request
+// that presents the same credential. A list that could still be written to would let one request grant a role to
+// all the others.
+describe('Claim', () => {
+  it('holds a list no one can add a role to, neither through the claim nor through the array it was given', () => {
+    const given = ['user']
+    const roles = claim('roles', given)
+    const principal = new Principal(true, new Identity('test', true, [roles]))
+
+    expect(() => (roles.value as string[]).push('admin')).toThrow(TypeError)
+    given.push('admin')
+
+    expect(roles.value).toEqual(['user'])
+    expect(principal.isInRole('admin')).toBe(false)
+    expect(principal.hasClaim('roles', 'admin')).toBe(false)
+  })
+
+  // Freezing happens to a copy: the array belongs to whoever passed it, and they may go on using it.
+  it('leaves the array it was given writable', () => {
+    const given = ['user']
+    claim('roles', given)
+
+    expect(Object.isFrozen(given)).toBe(false)
+  })
+
+  it('takes any other value as it is', () => {
+    const profile = { plan: 'pro' }
+
+    expect(claim('sub', 'u1').value).toBe('u1')
+    expect(claim('age', 42).value).toBe(42)
+    expect(claim('profile', profile).value).toBe(profile)
+  })
+})
+
 describe('Principal', () => {
   const principal = () =>
     new Principal(true, [
