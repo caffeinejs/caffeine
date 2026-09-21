@@ -91,7 +91,7 @@ function fieldErrors(err: ValidationError): FieldError[] {
 // Renders any thrown ErrHTTP (e.g. ErrHTTPNotFound → 404) as { code, message } — JSON, or an HTML error
 // page for browser requests.
 @Catch(ErrHTTP)
-export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
+export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
   async handle(ctx: Context, err: ErrHTTP): Promise<ActionResult> {
     return respond(ctx, err.statusCode, {
       code: codeFor(err.statusCode),
@@ -103,7 +103,7 @@ export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
 // Catch-all: schema-validation failures become 422 (body, with field errors) or 400 (params/query);
 // anything else is an unexpected 500.
 @Catch(Error)
-export class FallbackErrorHandler extends ErrorHandler<Error> {
+export class FallbackErrorHandler implements ErrorHandler<Error> {
   async handle(ctx: Context, err: Error): Promise<ActionResult> {
     if (isValidationError(err)) {
       if (err.validationContext === 'body') {

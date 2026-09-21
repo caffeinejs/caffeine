@@ -11,23 +11,36 @@ import {
   fastifyAdapterFactory,
 } from '../../index.js'
 
-// Isolated: two handlers for the same error type. The ambiguity poisons every app build in its
-// module, so it must be the only error-handler concern in this file.
+// Two handlers for the same error type. Declaring both is fine — enrolling both is what the application
+// cannot mean, because nothing then decides which one renders an ErrHTTPNotFound.
 @Catch(ErrHTTPNotFound)
-class FirstHandler extends ErrorHandler<ErrHTTPNotFound> {
+class FirstHandler implements ErrorHandler<ErrHTTPNotFound> {
   async handle(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
 }
 
 @Catch(ErrHTTPNotFound)
-class SecondHandler extends ErrorHandler<ErrHTTPNotFound> {
+class SecondHandler implements ErrorHandler<ErrHTTPNotFound> {
   async handle(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
 }
-void [FirstHandler, SecondHandler]
 
 describe('ambiguous error handler', () => {
-  it('rejects when two handlers target the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+  it('rejects when two enrolled handlers target the same error type', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+      e.globalHandlers(FirstHandler, SecondHandler),
+    )
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+  })
+
+  // The pair only conflicts because both were named. Declaring a second handler for an error type some other
+  // controller renders with @CatchWith is not itself an error, which is the whole point of enrolment.
+  it('accepts the same two handlers when only one is enrolled', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+      e.globalHandlers(FirstHandler),
+    )
+
+    await app.ready()
+
+    await app.close()
   })
 })

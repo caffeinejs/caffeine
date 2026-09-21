@@ -4,7 +4,7 @@ import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
 
 import type { Context } from './context.js'
-import type { ErrorHandler } from './error/error.js'
+import type { ErrorHandler } from './error/handler.js'
 import type { CompiledGuard } from './guards/compile.js'
 import type { RouteDetail, RouteGroupDetail } from './routing/detail.js'
 import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'

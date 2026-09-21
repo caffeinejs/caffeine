@@ -14,11 +14,14 @@ Unmatched URLs do not go through `@Catch`. SPA `index.html` is not an error hand
 
 ## Steps
 
-1. Extend `ErrorHandler<E>`. Decorate `@Catch(ErrHTTPNotFound)` (or `@Catch(ErrHTTP)` for all HTTP errors).
+1. Implement `ErrorHandler<E>`. Decorate `@Catch(ErrHTTPNotFound)` (or `@Catch(ErrHTTP)` for all HTTP errors).
 2. `handle(ctx, err)` either `ctx.status(...).body(...)` or return a JSON object / `View`.
-3. Global is the default. A second global `@Catch` for the same class fails at boot — use `{ global: false }` and `@CatchWith(Handler)` on the controller or route.
-4. Optional: `@Catch(ErrType)` on a **controller method** `(ctx, error)` instead of a separate class.
-5. Prefer throwing `ErrHTTPNotFound` in the handler over `ctx.notFound()` if you want `@Catch` to run.
+3. Enrol it on the application: `.errorHandling(e => e.globalHandlers(Handler))`. Declaring the class is not enough — an unenrolled handler renders nothing application-wide.
+4. For one controller or route, leave it unenrolled and name it with `@CatchWith(Handler)` instead. Enrolling two handlers for the same error class fails at boot; declaring two is fine.
+5. Optional: `@Catch(ErrType)` on a **controller method** `(ctx, error)` instead of a separate class.
+6. Prefer throwing `ErrHTTPNotFound` in the handler over `ctx.notFound()` if you want `@Catch` to run.
+
+An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as the default JSON envelope.
 
 ## Shape
 
@@ -26,19 +29,21 @@ Unmatched URLs do not go through `@Catch`. SPA `index.html` is not an error hand
 import { Catch, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
 
 @Catch(ErrHTTP)
-export class HTTPErrorHandler extends ErrorHandler<ErrHTTP> {
+export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
   async handle(ctx: Context, err: ErrHTTP) {
     ctx.status(err.statusCode)
     return { code: err.code, message: err.message }
   }
 }
+
+createWebApplication().errorHandling(e => e.globalHandlers(HTTPErrorHandler))
 ```
 
-Per-controller:
+Per-controller — declared, never enrolled:
 
 ```ts
-@Catch(ErrHTTPNotFound, { global: false })
-class PetsNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
+@Catch(ErrHTTPNotFound)
+class PetsNotFoundHandler implements ErrorHandler<ErrHTTPNotFound> {
   /* ... */
 }
 
@@ -49,7 +54,7 @@ class PetsController {}
 
 ## Verify
 
-A test or request that throws `ErrHTTPNotFound` returns 404 and the handler body. A second global `@Catch` for the same type must not boot.
+A test or request that throws `ErrHTTPNotFound` returns 404 and the handler body. The same handler left out of `globalHandlers(...)` must leave the default envelope in place. Enrolling two handlers for one type must not boot.
 
 ## Related
 

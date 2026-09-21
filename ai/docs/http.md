@@ -28,7 +28,7 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 - Routes: method decorators (`@Get`, `@Post`, …) on a `@Controller(path)` class. Constructor injection via `@Injectable` / the controller decorator’s dependency list.
 - `@Args` / `$p` pick body, params, query — same idea as Kafka `$k`.
 - `@Prefix` is a Fastify plugin prefix; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
-- Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, `{ global: false }` + `@CatchWith`, or a `@Catch` method on the controller. Duplicate global `@Catch` for the same class fails at boot. See [errors.md](errors.md).
+- Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, then enrol it with `.errorHandling(e => e.globalHandlers(H))`; or leave it unenrolled and name it with `@CatchWith`, or use a `@Catch` method on the controller. Enrolling two handlers for the same class fails at boot. See [errors.md](errors.md).
 
 ## Programmatic routers
 

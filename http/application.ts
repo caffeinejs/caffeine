@@ -15,8 +15,8 @@ import { fastifyAdapterFactory } from './adapter_factory.js'
 import type { AdapterTypes } from './adapter_types.js'
 import { CookieBuilder } from './cookies.js'
 import { controllerPlugins } from './decorators/use.js'
+import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration, ErrShutdownTimeout } from './error/common.js'
-import { ErrorHandlingFeature } from './error/error.js'
 import { solutions } from './error/util.js'
 import type { FastifyTypes } from './fastify_types.js'
 import { kFeatureServer, type HTTPFeature } from './feature.js'
@@ -142,7 +142,7 @@ export class WebApplication<
 
   // Held rather than built per `configurers()` call: the instance that configured is the one whose server hook
   // installs, and it holds what its configure step bound.
-  readonly #errorHandling = new ErrorHandlingFeature()
+  readonly #errorHandling = new ErrorHandlingBuilder<C>()
 
   #authBuilder: AuthenticationBuilder<C> | undefined
   #authzBuilder: AuthorizationBuilder | undefined
@@ -402,6 +402,26 @@ export class WebApplication<
   cookie(configure: FeatureConfigurer<CookieBuilder<C>, C>): this {
     this.assertConfigurable()
     this.#cookieBuilder[kAddConfigurer](configure)
+    return this
+  }
+
+  /**
+   * Enrols the application's global error handlers. The feature is registered either way and installs ahead of
+   * every plugin, so where in the chain the call is written makes no difference, and an application that never
+   * calls it still renders a thrown `ErrHTTP` as the default JSON envelope.
+   *
+   * A `@Catch` class renders errors application-wide only once it is named here. One nobody names stays bound
+   * in the container, reachable through `@CatchWith` on a controller or route.
+   *
+   * ```ts
+   * .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  errorHandling(configure: FeatureConfigurer<ErrorHandlingBuilder<C>, C>): this {
+    this.assertConfigurable()
+    this.#errorHandling[kAddConfigurer](configure)
     return this
   }
 

@@ -11,19 +11,18 @@ import {
   fastifyAdapterFactory,
 } from '../index.js'
 
-// In its own file: a global @Catch handler applies to every application built in the module, so leaving it
-// beside the envelope tests would make them assert this handler's body instead of the default one.
 @Catch(ErrHTTPNotFound)
-class GlobalNotFound extends ErrorHandler<ErrHTTPNotFound> {
+class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
   handle(ctx: Context, error: ErrHTTPNotFound): ActionResult {
     return ctx.status(404).body({ caught: true, message: error.message })
   }
 }
 
 describe('@Catch and unmatched routes', () => {
-  it('a global @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-    app.container.bind(GlobalNotFound, t => t.toClass(GlobalNotFound).extends(ErrorHandler))
+  it('an enrolled @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
+    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).errorHandling(e =>
+      e.globalHandlers(GlobalNotFound),
+    )
     await app.ready()
 
     const res = await app.fetch('/definitely-not-a-route')

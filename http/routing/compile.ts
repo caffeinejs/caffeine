@@ -1,11 +1,11 @@
-import { Container, Ctor, InjectionToken } from '@caffeinejs/di'
+import { Container, InjectionToken } from '@caffeinejs/di'
 
-import { CatchMetadata, ErrConfiguration, ErrorHandler, ErrorHandlerRef, kErrorHandler } from '../error/index.js'
+import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
-import { CatchByMap, Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
+import { Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
   AuthorizationOptions,
@@ -131,7 +131,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
         // Copied, not shared: a plugin enriching the compiled route's detail from an `onRoute` hook must not
         // write back into the spec the route was authored from.
         detail: route.detail === undefined ? undefined : { ...route.detail },
-        catchBy: buildCatchByMap(container, route.catchBy, owner),
+        catchBy: buildCatchByMap(container, route.catchBy, { owner, declaredBy: '"@CatchWith"' }),
         guards: compileRouteGuardChain(container, compiledGuards, globalGuards, spec.guards, route.guards, owner),
         authorization: (() => {
           // Always compiled, never gated on a decorator being present: an undecorated route is exactly
@@ -167,7 +167,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       target: meta.target,
       onRequest: meta.onRequest,
       handleError: meta.handleError,
-      catchBy: buildCatchByMap(container, spec.catchBy, meta.name),
+      catchBy: buildCatchByMap(container, spec.catchBy, { owner: meta.name, declaredBy: '"@CatchWith"' }),
       // Kept on the router rather than merged down: group-level metadata describes the group, and a reader
       // that wants both levels reads them separately rather than receiving one flattened bag.
       detail: spec.detail,
@@ -232,60 +232,6 @@ function compileRouteGuardChain(
 // One compiled entry per token, so a guard listed twice for a route runs once, where it first appears.
 function dedupe(chain: CompiledGuard[]): CompiledGuard[] {
   return [...new Set(chain)]
-}
-
-// Resolves the "@CatchWith" references of a group or route into a map of error type to handler
-// provider. Resolution goes through the container, so a reference by class or by "@Named" identifier
-// honours @Primary, @ConditionalOn and @Profile like any other injection point.
-function buildCatchByMap(
-  container: Container,
-  refs: ErrorHandlerRef[] | undefined,
-  owner: string,
-): CatchByMap | undefined {
-  if (!refs?.length) {
-    return undefined
-  }
-
-  const map: CatchByMap = new Map()
-  const owners = new Map<Ctor<Error>, string>()
-
-  for (const ref of refs) {
-    const name = typeof ref === 'function' ? ref.name : String(ref)
-    const binding = container.getBinding(ref)
-    if (!binding) {
-      throw new ErrConfiguration(
-        `Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered` +
-          solutions(
-            `Decorate "${name}" with "@Catch(ErrorType)" so it is registered in the container`,
-            'Make sure the handler module is imported by the application',
-          ),
-      )
-    }
-
-    const meta = binding.tags.get(kErrorHandler) as CatchMetadata | undefined
-    if (!meta) {
-      throw new ErrConfiguration(
-        `Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"` +
-          solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`),
-      )
-    }
-
-    const provider = container.wrapBinding<ErrorHandler<Error>>(binding)
-    for (const errorType of meta.errors) {
-      const previous = owners.get(errorType)
-      if (previous !== undefined) {
-        throw new ErrConfiguration(
-          `Ambiguous "@CatchWith" in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"` +
-            solutions(`Keep a single handler for "${errorType.name}" at this level`),
-        )
-      }
-
-      owners.set(errorType, name)
-      map.set(errorType, provider)
-    }
-  }
-
-  return map
 }
 
 /**

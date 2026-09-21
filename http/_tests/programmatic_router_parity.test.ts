@@ -140,7 +140,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given an error handler named by the group', () => {
     it('should render errors thrown by its routes', async () => {
-      @Catch(ErrHTTPNotFound, { global: false })
+      @Catch(ErrHTTPNotFound)
       class MissingHandler implements ErrorHandler<ErrHTTPNotFound> {
         handle(ctx: Context): ActionResult {
           return ctx.status(404).body({ handled: 'by-group' })

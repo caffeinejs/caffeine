@@ -14,7 +14,7 @@ import {
 
 import type { AdapterExtensions } from './adapter_extension.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
-import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/error_handling.js'
+import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/plugin.js'
 import { solutions } from './error/util.js'
 import { attachGuardHook } from './guards/fastify.js'
 import { joinPaths } from './internal/paths/index.js'

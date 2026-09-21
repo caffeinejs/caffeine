@@ -14,7 +14,7 @@ import {
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file.
-class UnboundHandler extends ErrorHandler<Error> {
+class UnboundHandler implements ErrorHandler<Error> {
   async handle(_ctx: Context, _error: Error): Promise<void> {}
 }
 

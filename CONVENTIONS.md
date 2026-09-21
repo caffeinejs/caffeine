@@ -320,10 +320,10 @@ before an application can name a callback, so `.server(...)` and its siblings ha
 
 A feature the application cannot configure implements `Feature` / `HTTPFeature` directly instead —
 `FeatureBuilder` exists to run a configure callback, and one with no callback to run is not a feature builder.
-There are three: `AuthorizationBuilder` and `GuardsBuilder`, which configure nothing tunable, and
-`ErrorHandlingFeature`, which the application never names at all — it is registered unconditionally and leads
-`WebApplication.configurers()`. Having real work in both phases does not change this; having nothing to
-configure does.
+There are two: `AuthorizationBuilder` and `GuardsBuilder`, which configure nothing tunable. Having real work in
+both phases does not change this; having nothing to configure does. Being registered unconditionally does not
+either — `ErrorHandlingBuilder` leads `WebApplication.configurers()` and is still a `FeatureBuilder`, because
+`.errorHandling(...)` hands it a callback.
 
 ## Error messages
 

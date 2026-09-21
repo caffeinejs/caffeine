@@ -13,17 +13,16 @@ import {
   fastifyAdapterFactory,
 } from '../../index.js'
 
-// Isolated: the ambiguity poisons every app build in its module, so it must be the only
-// error-handler concern in this file.
+// Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
 class ErrAmbiguous extends Error {}
 
-@Catch(ErrAmbiguous, { global: false })
-class FirstHandler extends ErrorHandler<ErrAmbiguous> {
+@Catch(ErrAmbiguous)
+class FirstHandler implements ErrorHandler<ErrAmbiguous> {
   async handle(_ctx: Context, _error: ErrAmbiguous): Promise<void> {}
 }
 
-@Catch(ErrAmbiguous, { global: false })
-class SecondHandler extends ErrorHandler<ErrAmbiguous> {
+@Catch(ErrAmbiguous)
+class SecondHandler implements ErrorHandler<ErrAmbiguous> {
   async handle(_ctx: Context, _error: ErrAmbiguous): Promise<void> {}
 }
 void [FirstHandler, SecondHandler]
