@@ -26,10 +26,8 @@ import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 // Unit — ErrorHandlerProvider.handlerFor (no container, no registry)
 // ---------------------------------------------------------------------------
 
-class Recorder extends ErrorHandler<Error> {
-  constructor(readonly label: string) {
-    super()
-  }
+class Recorder implements ErrorHandler<Error> {
+  constructor(readonly label: string) {}
 
   async handle(_ctx: Context, _error: Error): Promise<void> {}
 }
@@ -89,6 +87,14 @@ describe('ErrorHandlerProvider', () => {
 // handler and a @Catch(Error) catch-all coexist without conflict.
 // ---------------------------------------------------------------------------
 
+// The three handlers every application below enrols. Declaring the others in this module no longer reaches
+// any of them, which is what lets one file hold handlers that would otherwise collide on the same error type.
+function buildApp() {
+  return createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+    e.globalHandlers(NotFoundHandler, CatchAllHandler, AlphaGammaHandler),
+  )
+}
+
 @Injectable()
 class Greeter {
   greet(): string {
@@ -98,10 +104,8 @@ class Greeter {
 
 // @Catch composes @Injectable: the [Greeter] dependency is injected into the handler.
 @Catch(ErrHTTPNotFound, [Greeter])
-class NotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
-  constructor(private readonly greeter: Greeter) {
-    super()
-  }
+class NotFoundHandler implements ErrorHandler<ErrHTTPNotFound> {
+  constructor(private readonly greeter: Greeter) {}
 
   async handle(ctx: Context, error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ error: error.message, via: this.greeter.greet() })
@@ -109,13 +113,13 @@ class NotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
 }
 
 @Catch(Error)
-class CatchAllHandler extends ErrorHandler<Error> {
+class CatchAllHandler implements ErrorHandler<Error> {
   async handle(ctx: Context, error: Error): Promise<void> {
     ctx.status(500).body({ caught: error.message })
   }
 }
 
-void [Greeter, NotFoundHandler, CatchAllHandler]
+void [Greeter]
 
 @Controller('/pets')
 class PetsController {
@@ -138,7 +142,7 @@ void [PetsController, BoomController]
 
 describe('error handler dispatch', () => {
   it('renders the matching @Catch handler with injected dependencies', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/pets/42')
@@ -148,7 +152,7 @@ describe('error handler dispatch', () => {
   })
 
   it('routes an arbitrary Error to the @Catch(Error) catch-all', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/boom')
@@ -262,7 +266,7 @@ void [ShopController, WidgetsController, MixedController, ScopedController, TxCo
 
 describe('per-controller error handler', () => {
   it('wins over a global handler for the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/shop/9')
@@ -272,7 +276,7 @@ describe('per-controller error handler', () => {
   })
 
   it('catches subclasses via a base-type @Catch method', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/widgets/conflict')
@@ -282,7 +286,7 @@ describe('per-controller error handler', () => {
   })
 
   it('falls back to the global handler for an uncovered error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/mixed/other')
@@ -292,7 +296,7 @@ describe('per-controller error handler', () => {
   })
 
   it('runs on the same request-scoped instance that threw', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/scoped/boom')
@@ -302,7 +306,7 @@ describe('per-controller error handler', () => {
   })
 
   it('runs on the same transient instance that threw', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/tx/boom')
@@ -312,7 +316,7 @@ describe('per-controller error handler', () => {
   })
 
   it('catches a schema-validation error thrown before the route handler', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/validated', {
@@ -344,36 +348,34 @@ class Marker {
   }
 }
 
-// A single class declaring several error types. Global by default.
+// A single class declaring several error types, and the one of the three ErrAlpha handlers enrolled.
 @Catch([ErrAlpha, ErrGamma])
-class AlphaGammaHandler extends ErrorHandler<ErrAlpha | ErrGamma> {
+class AlphaGammaHandler implements ErrorHandler<ErrAlpha | ErrGamma> {
   async handle(ctx: Context, error: ErrAlpha | ErrGamma): Promise<void> {
     ctx.status(500).body({ by: 'global', error: error.message })
   }
 }
 
-// Same error type as the global handler above, but excluded from the global map — reachable only
-// through @CatchWith. Without { global: false } this would fail the app build as an ambiguous handler.
-@Catch(ErrAlpha, [Marker], { global: false })
-class ControllerAlphaHandler extends ErrorHandler<ErrAlpha> {
-  constructor(private readonly marker: Marker) {
-    super()
-  }
+// Same error type as the enrolled handler above. Never enrolled, so it never competes with it — it is
+// reachable only through @CatchWith, and declaring it costs nothing.
+@Catch(ErrAlpha, [Marker])
+class ControllerAlphaHandler implements ErrorHandler<ErrAlpha> {
+  constructor(private readonly marker: Marker) {}
 
   async handle(ctx: Context, error: ErrAlpha): Promise<void> {
     ctx.status(400).body({ by: 'controller', via: this.marker.value(), error: error.message })
   }
 }
 
-@Catch(ErrAlpha, { global: false })
-class RouteAlphaHandler extends ErrorHandler<ErrAlpha> {
+@Catch(ErrAlpha)
+class RouteAlphaHandler implements ErrorHandler<ErrAlpha> {
   async handle(ctx: Context, error: ErrAlpha): Promise<void> {
     ctx.status(402).body({ by: 'route', error: error.message })
   }
 }
 
-@Catch(Error, { global: false })
-class ValidationHandler extends ErrorHandler<Error> {
+@Catch(Error)
+class ValidationHandler implements ErrorHandler<Error> {
   async handle(ctx: Context, _error: Error): Promise<void> {
     ctx.status(422).body({ by: 'route-validation' })
   }
@@ -381,8 +383,8 @@ class ValidationHandler extends ErrorHandler<Error> {
 
 // Two handlers share a name; @Primary decides which one @CatchWith(token<ErrorHandler<Error>>('deltaHandler')) resolves.
 @Named('deltaHandler')
-@Catch(ErrDelta, { global: false })
-class DeltaFallbackHandler extends ErrorHandler<ErrDelta> {
+@Catch(ErrDelta)
+class DeltaFallbackHandler implements ErrorHandler<ErrDelta> {
   async handle(ctx: Context, _error: ErrDelta): Promise<void> {
     ctx.status(500).body({ by: 'fallback' })
   }
@@ -390,14 +392,14 @@ class DeltaFallbackHandler extends ErrorHandler<ErrDelta> {
 
 @Primary()
 @Named('deltaHandler')
-@Catch(ErrDelta, { global: false })
-class DeltaPrimaryHandler extends ErrorHandler<ErrDelta> {
+@Catch(ErrDelta)
+class DeltaPrimaryHandler implements ErrorHandler<ErrDelta> {
   async handle(ctx: Context, _error: ErrDelta): Promise<void> {
     ctx.status(409).body({ by: 'primary' })
   }
 }
 
-void [Marker, AlphaGammaHandler, ControllerAlphaHandler, RouteAlphaHandler]
+void [Marker, ControllerAlphaHandler, RouteAlphaHandler]
 void [ValidationHandler, DeltaFallbackHandler, DeltaPrimaryHandler]
 
 @Controller('/multi')
@@ -482,7 +484,7 @@ class CatchByValidatedController {
   }
 }
 
-// Same error type, no @CatchWith: the non-global ErrDelta handlers must not be reachable from here.
+// Same error type, no @CatchWith: the unenrolled ErrDelta handlers must not be reachable from here.
 @Controller('/cb-orphan')
 class CatchByOrphanController {
   @Get('/delta')
@@ -496,7 +498,7 @@ void [CatchByNamedController, CatchByValidatedController, CatchByOrphanControlle
 
 describe('@Catch with multiple error types', () => {
   it('serves every declared error type from one handler class', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const alpha = await app.fetch('/multi/alpha')
@@ -509,7 +511,7 @@ describe('@Catch with multiple error types', () => {
   })
 
   it('serves subclasses of a declared error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/multi/beta')
@@ -521,7 +523,7 @@ describe('@Catch with multiple error types', () => {
 
 describe('@CatchWith', () => {
   it('overrides the global handler for the controller, with dependencies injected', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-shop/alpha')
@@ -531,7 +533,7 @@ describe('@CatchWith', () => {
   })
 
   it('overrides the controller handler on a single route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-shop/override')
@@ -541,7 +543,7 @@ describe('@CatchWith', () => {
   })
 
   it('leaves error types it does not declare to the @Catch method', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-shop/gamma')
@@ -551,7 +553,7 @@ describe('@CatchWith', () => {
   })
 
   it('wins over a @Catch method registered for the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-priority/alpha')
@@ -561,7 +563,7 @@ describe('@CatchWith', () => {
   })
 
   it('catches a schema-validation error from a route-level handler', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-validated', {
@@ -575,7 +577,7 @@ describe('@CatchWith', () => {
   })
 
   it('resolves a handler by @Named identifier, honouring @Primary', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = buildApp()
     await app.ready()
 
     const res = await app.fetch('/cb-named/delta')
@@ -584,12 +586,12 @@ describe('@CatchWith', () => {
     expect(await res.json()).toEqual({ by: 'primary' })
   })
 
-  it('keeps a non-global handler out of the application-wide map', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+  it('keeps an unenrolled handler out of the application-wide map', async () => {
+    const app = buildApp()
     await app.ready()
 
-    // ErrDelta is served only by handlers marked { global: false }. A controller that does not name
-    // them cannot reach them: the lookup falls through to the global @Catch(Error) catch-all.
+    // ErrDelta is served only by handlers nobody enrolled. A controller that does not name them cannot
+    // reach them: the lookup falls through to the enrolled @Catch(Error) catch-all.
     const res = await app.fetch('/cb-orphan/delta')
 
     expect(res.status).toBe(500)

@@ -1,7 +1,7 @@
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
-import type { ErrorHandlerRef } from '../error/error.js'
+import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import type { RouteValidationSchema } from '../route.js'
 import type { RouteDetail, RouteGroupDetail } from './detail.js'

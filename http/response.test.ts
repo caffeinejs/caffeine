@@ -29,7 +29,7 @@ class TextResult extends Responder {
 class ErrCustom extends Error {}
 
 @Catch(ErrCustom)
-class CustomErrorHandler extends ErrorHandler<ErrCustom> {
+class CustomErrorHandler implements ErrorHandler<ErrCustom> {
   handle(ctx: Context, error: ErrCustom): ActionResult {
     ctx.status(422)
     return new TextResult(`caught: ${error.message}`)
@@ -59,11 +59,13 @@ class CustomController {
   }
 }
 
-void [CustomController, CustomErrorHandler]
+void [CustomController]
 
 describe('custom ResponseResult dispatch', () => {
   async function buildApp() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+      e.globalHandlers(CustomErrorHandler),
+    )
     await app.ready()
     return app
   }

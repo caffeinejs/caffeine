@@ -24,7 +24,7 @@ const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta
 class ErrReturnView extends Error {}
 
 @Catch(ErrReturnView)
-class ReturnViewHandler extends ErrorHandler<ErrReturnView> {
+class ReturnViewHandler implements ErrorHandler<ErrReturnView> {
   handle(ctx: Context, error: ErrReturnView): ActionResult {
     ctx.status(404)
     return View('message', { message: error.message })
@@ -39,13 +39,13 @@ class ErrReturnController {
   }
 }
 
-void [ReturnViewHandler, ErrReturnController]
+void [ErrReturnController]
 
 describe('error handler returning a View()', () => {
   it('renders a returned View() as HTML', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-      view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
-    )
+    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      .errorHandling(e => e.globalHandlers(ReturnViewHandler))
+      .with(view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
     await app.ready()
 
     const res = await app.fetch('/err-return-view/view')

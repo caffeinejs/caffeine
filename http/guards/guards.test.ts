@@ -526,7 +526,7 @@ describe('denial', () => {
   }
 
   @Catch(ErrHTTPUnauthorized)
-  class UnauthorizedCatch extends ErrorHandler<ErrHTTPUnauthorized> {
+  class UnauthorizedCatch implements ErrorHandler<ErrHTTPUnauthorized> {
     handle(ctx: Context, error: ErrHTTPUnauthorized): ActionResult {
       ctx.status(401)
       return { caught: true, message: error.message }
@@ -560,7 +560,7 @@ describe('denial', () => {
     }
   }
 
-  void [FalseGuard, ReasonGuard, UnauthorizedGuard, FaultyGuard, UnauthorizedCatch, DenialController]
+  void [FalseGuard, ReasonGuard, UnauthorizedGuard, FaultyGuard, DenialController]
 
   it('renders the default 403 envelope for boolean false', async () => {
     const built = buildApp()
@@ -595,7 +595,7 @@ describe('denial', () => {
   })
 
   it('lets a thrown ErrHTTPUnauthorized reach @Catch', async () => {
-    const built = buildApp()
+    const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
     await built.ready()
 
     const res = await built.fetch('/denial/401')

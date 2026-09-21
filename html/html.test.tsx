@@ -100,7 +100,7 @@ class HTMLController {
 class ErrRenderHTML extends Error {}
 
 @Catch(ErrRenderHTML)
-class RenderHTMLHandler extends ErrorHandler<ErrRenderHTML> {
+class RenderHTMLHandler implements ErrorHandler<ErrRenderHTML> {
   handle(ctx: Context, error: ErrRenderHTML): ActionResult {
     ctx.status(404)
     return HTML(<Snippet title={error.message} />)
@@ -115,10 +115,12 @@ class HTMLErrorController {
   }
 }
 
-void [HTMLController, RenderHTMLHandler, HTMLErrorController]
+void [HTMLController, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => html(defaults))
+  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .errorHandling(e => e.globalHandlers(RenderHTMLHandler))
+    .with(() => html(defaults))
 }
 
 describe('HTML', () => {

@@ -10,7 +10,8 @@ export class ErrCaffeineWebApplication extends Error {
 
 export class ErrConfiguration extends ErrCaffeineWebApplication {
   constructor(message: string) {
-    super(message, 'CFN_ERR_CONFIGURATION')
+    super(message, 'ERR_CONFIGURATION')
+    this.name = 'ErrConfiguration'
   }
 }
 

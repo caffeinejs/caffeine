@@ -8,7 +8,7 @@ Thrown as `ErrHTTPNotFound` (HTTP 404) from a **matched** handler when a resourc
 throw new ErrHTTPNotFound(`The requested pet with ID "${id}" was not found`)
 ```
 
-Render with `@Catch(ErrHTTPNotFound)` or `@Catch(ErrHTTP)`. Default body uses `code: 'ERR_HTTP_NOT_FOUND'`.
+Render with `@Catch(ErrHTTPNotFound)` or `@Catch(ErrHTTP)`, enrolled with `.errorHandling(e => e.globalHandlers(H))`. Default body uses `code: 'ERR_HTTP_NOT_FOUND'`.
 
 ## Do not
 

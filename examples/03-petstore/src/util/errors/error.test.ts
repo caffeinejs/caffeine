@@ -17,11 +17,9 @@ import { $t } from '@caffeinejs/std'
 import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-// Side-effect import: registers HTTPErrorHandler / FallbackErrorHandler as global @Catch handlers.
-import './error.handlers.js'
-import type { ErrorBody } from './error.handlers.js'
+import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'
 
-// A throwing controller exercising each error path the global handlers cover.
+// A throwing controller exercising each error path the enrolled handlers cover.
 @Controller('/things')
 class ThingsController {
   @Get('/', p => [p.query()])
@@ -53,11 +51,11 @@ class ThingsController {
 }
 void [ThingsController]
 
-// A controller that opts out of the global rendering for 404s only. The handler is declared
-// { global: false } so it does not compete with HTTPErrorHandler, and is attached with @CatchWith —
-// which takes precedence over the global handler for this controller alone.
-@Catch(ErrHTTPNotFound, { global: false })
-class SilentNotFoundHandler extends ErrorHandler<ErrHTTPNotFound> {
+// A controller that opts out of the application-wide rendering for 404s only. The handler is never
+// enrolled, so it does not compete with HTTPErrorHandler, and is attached with @CatchWith — which takes
+// precedence over the enrolled handler for this controller alone.
+@Catch(ErrHTTPNotFound)
+class SilentNotFoundHandler implements ErrorHandler<ErrHTTPNotFound> {
   async handle(ctx: Context, _err: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ found: false })
   }
@@ -80,7 +78,9 @@ class GadgetsController {
 void [GadgetsController]
 
 async function buildApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => html())
+  const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
+    .with(() => html())
   await app.ready()
 
   return app

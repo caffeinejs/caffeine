@@ -26,7 +26,7 @@ registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` 
 re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
-holds the only framework slot — `ErrorHandlingFeature` leads — and everything after it, this package's
+holds the only framework slot — `ErrorHandlingBuilder` leads — and everything after it, this package's
 features and the user's alike, runs in `.with(...)` call order. The adapter installs two things around that
 loop: the form body parser before it, and the default not-found handler after it. Do not reintroduce a stage,
 and do not add a third direct `install*()` call: anything a feature can own belongs in a feature, in the right
@@ -246,7 +246,16 @@ A programmatic handler is `(ctx, deps)`. Both arguments are pickers (`$p.context
 - `ctx.notFound(body)` sets 404 on a request that **already matched**
 - Do not return SPA `index.html` from `@Catch(ErrHTTPNotFound)`
 
-One global `@Catch` per error class. Duplicate global for the same class fails at boot. Per-controller: `@Catch(..., { global: false })` + `@CatchWith`, or a `@Catch` method on the controller.
+`@Catch` declares the error types a handler renders; it does not put it to work. A handler class reaches the
+whole application only when the application enrols it — `.errorHandling(e => e.globalHandlers(H))` — and one
+nobody enrols stays bound in the container, reachable through `@CatchWith` on a controller or route, or through
+a `@Catch` method on the controller. There is no `{ global: false }`: not enrolling is what that meant. Two
+**enrolled** handlers for the same error class fail at boot; two merely declared ones are fine, which is what
+lets one module hold both an application-wide handler and a `@CatchWith` one for the same type.
+
+`ErrorHandlingBuilder` is registered unconditionally and leads the install list whether or not
+`.errorHandling(...)` is ever called, so an application that never calls it still renders a thrown `ErrHTTP` as
+the default JSON envelope.
 
 ## Per-request values
 

@@ -8,7 +8,7 @@ Three different “404s”. `@Catch` only sees the first.
 | No route matched                       | Fastify not-found           | Does **not** go through `@Catch`                                                |
 | Browser client route (`GET /settings`) | 200 `index.html` for an SPA | `@caffeinejs/static`'s `.spa(...)` — its own `setNotFoundHandler`, not `@Catch` |
 
-`@Catch` is exception dispatch by **class**, not by URL path. One global handler per error class. Per-controller: `@Catch(..., { global: false })` + `@CatchWith`, or a `@Catch` method on the controller.
+`@Catch` is exception dispatch by **class**, not by URL path. `@Catch` declares the error types; the application enrols the handler with `.errorHandling(e => e.globalHandlers(H))`. One enrolled handler per error class. Per-controller: declare the handler and name it with `@CatchWith` instead of enrolling it, or use a `@Catch` method on the controller.
 
 `ctx.notFound(body)` sets status 404 on a request that **already matched**.
 

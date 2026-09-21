@@ -23,7 +23,7 @@ export class ErrHTTP extends ErrCaffeineWebApplication {
     this.name = 'ErrHTTP'
     this.cause = options?.cause
     this.body = options?.body
-    this.headers = options?.headers ?? {}
+    this.headers = options?.headers
   }
 
   static builder() {

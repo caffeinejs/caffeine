@@ -5,7 +5,7 @@ import type { FastifyContext } from '../fastify_context.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../route.js'
 import { ErrCaffeineWebApplication } from './common.js'
-import { ErrorHandlerProvider, resolveByErrorChain } from './error.js'
+import { ErrorHandlerProvider, resolveByErrorChain } from './handler.js'
 import { ErrHTTP, httpErrorBody, statusErrorBody } from './http.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>

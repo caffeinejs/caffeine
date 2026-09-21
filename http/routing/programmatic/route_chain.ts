@@ -7,7 +7,7 @@ import {
 } from '@caffeinejs/di'
 
 import type { AdapterTypes } from '../../adapter_types.js'
-import type { ErrorHandlerRef } from '../../error/error.js'
+import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteValidationSchema } from '../../route.js'
 import type { RouteDetail } from '../detail.js'

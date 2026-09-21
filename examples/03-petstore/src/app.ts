@@ -12,7 +12,7 @@ import { GITHUB_SESSION_COOKIE, GITHUB_STATE_COOKIE, configuration } from './app
 import { createLogger } from './app.log.js'
 import { inventoriesRouter } from './inventories/index.js'
 import { ordersRouter } from './orders/index.js'
-import { APIErrorSchema } from './util/errors/index.js'
+import { APIErrorSchema, FallbackErrorHandler, HTTPErrorHandler } from './util/errors/index.js'
 
 const GITHUB_ISSUER = 'https://github.com'
 const publicRoot = fileURLToPath(new URL('../public', import.meta.url))
@@ -43,6 +43,10 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
 
       // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
       .server((s, { config }) => s.config(config.server))
+      // The two handlers that render every thrown error: HTTPErrorHandler for an ErrHTTP, FallbackErrorHandler
+      // for a validation failure or anything unexpected. Declaring them is not enough — this is what puts them
+      // in front of the whole application.
+      .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
       // The level follows configuration, and the adapter re-syncs Fastify's own child logger from it.
       .logger((b, { config }) => b.level(config.log.level))
       // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the

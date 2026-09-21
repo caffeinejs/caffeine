@@ -19,7 +19,7 @@ class ErrReturnJson extends Error {}
 class ErrReturnVoid extends Error {}
 
 @Catch(ErrReturnJson)
-class ReturnJsonHandler extends ErrorHandler<ErrReturnJson> {
+class ReturnJsonHandler implements ErrorHandler<ErrReturnJson> {
   handle(ctx: Context, error: ErrReturnJson): ActionResult {
     ctx.status(418)
     return { code: 'TEAPOT', message: error.message }
@@ -27,7 +27,7 @@ class ReturnJsonHandler extends ErrorHandler<ErrReturnJson> {
 }
 
 @Catch(ErrReturnVoid)
-class ReturnVoidHandler extends ErrorHandler<ErrReturnVoid> {
+class ReturnVoidHandler implements ErrorHandler<ErrReturnVoid> {
   async handle(ctx: Context, error: ErrReturnVoid): Promise<void> {
     ctx.status(500).body({ viaCtx: error.message })
   }
@@ -46,11 +46,13 @@ class ErrReturnController {
   }
 }
 
-void [ReturnJsonHandler, ReturnVoidHandler, ErrReturnController]
+void [ErrReturnController]
 
 describe('error handler return values', () => {
   it('serializes a returned object as JSON', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
+    )
     await app.ready()
 
     const res = await app.fetch('/err-return/json')
@@ -61,7 +63,9 @@ describe('error handler return values', () => {
   })
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
+    )
     await app.ready()
 
     const res = await app.fetch('/err-return/void')
