@@ -21,6 +21,6 @@
     "clean:dist": "rm -rf dist"
   },
   "devDependencies": {
-    "vite": "*"
+    "vite": "^8.3.0"
   }
 }
