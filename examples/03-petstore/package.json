@@ -33,7 +33,7 @@
     "@caffeinejs/brewer": "*",
     "@caffeinejs/cli": "*",
     "@caffeinejs/testing": "*",
-    "@types/node": "^26.4.0",
+    "@types/node": "^26.5.1",
     "prisma": "^6.2.1",
     "tsx": "^4.23.13"
   }
