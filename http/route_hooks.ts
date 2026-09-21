@@ -38,7 +38,9 @@ export type RouteHookKey = 'onRequest' | 'onSend'
  * array up front — allocated one array per hook key per route, which for an application with many routes and
  * few hooks is almost all waste.
  *
- * A hook the route itself declared (through `fst`) is preserved and stays first.
+ * A hook the route itself declared (through `fst`) is preserved and stays first. An array already in the slot is
+ * replaced, never mutated: Fastify hands the same array to a GET route's automatic HEAD twin, and a group-level
+ * `fst({ onSend: [...] })` hands one array to every route in the group.
  */
 export function addRouteHook<K extends RouteHookKey>(
   routeDef: AdapterRouteOptions,
@@ -53,7 +55,7 @@ export function addRouteHook<K extends RouteHookKey>(
   }
 
   if (Array.isArray(existing)) {
-    ;(existing as unknown[]).push(fn)
+    routeDef[key] = [...(existing as unknown[]), fn] as AdapterRouteOptions[K]
     return
   }
 
