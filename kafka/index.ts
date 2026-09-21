@@ -21,7 +21,7 @@ export { KafkaLifecycle } from './lifecycle.js'
 export { type KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
 export { kafkaBinder, type KafkaBinderOptions } from './messaging_binder.js'
 export { $k, type KafkaPickers } from './pickers.js'
-export { kafka, type KafkaConfigure, type KafkaPluginOptions } from './plugin.js'
+export { kafka, type KafkaConfigurer, type KafkaPluginOptions } from './plugin.js'
 export {
   type DeadLetterManager,
   deadLetterManager,

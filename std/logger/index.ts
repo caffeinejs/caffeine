@@ -1,3 +1,4 @@
+export * from './config.js'
 export * from './errors.js'
 export * from './keys.js'
 export * from './log.js'

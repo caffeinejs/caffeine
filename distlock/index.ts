@@ -6,4 +6,4 @@ export type { AcquireOptions, DistLock, Lock, OnceOptions, OnceResult } from './
 export { ErrDistLock, ErrDistLockConfiguration, ErrLockNotAcquired } from './errors.js'
 export { kDistLock, kDistLockBackend } from './keys.js'
 export { DEFAULT_DIST_LOCK_OPTIONS, type DistLockOptions } from './options.js'
-export { distlock, type DistLockConfigure } from './plugin.js'
+export { distlock, type DistLockConfigurer } from './plugin.js'

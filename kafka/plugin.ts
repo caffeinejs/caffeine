@@ -11,7 +11,7 @@ export interface KafkaPluginOptions {
 }
 
 /** The builder callback that configures one kafka instance, over an application config type `C`. */
-export type KafkaConfigure<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
+export type KafkaConfigurer<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
 
 /**
  * The Kafka integration feature. `.with(kafka(k => …))` configures the default instance;
@@ -28,21 +28,21 @@ export type KafkaConfigure<C = unknown> = FeatureConfigurer<KafkaBuilder<C>, C>
  * await app.run()
  * ```
  */
-export function kafka<C = unknown>(configure?: KafkaConfigure<C>, options?: KafkaPluginOptions): Feature<C>
+export function kafka<C = unknown>(configure?: KafkaConfigurer<C>, options?: KafkaPluginOptions): Feature<C>
 export function kafka<C = unknown>(
   instance: string,
-  configure?: KafkaConfigure<C>,
+  configure?: KafkaConfigurer<C>,
   options?: KafkaPluginOptions,
 ): Feature<C>
 export function kafka<C = unknown>(
-  instanceOrConfigure?: string | KafkaConfigure<C>,
-  configureOrOptions?: KafkaConfigure<C> | KafkaPluginOptions,
+  instanceOrConfigure?: string | KafkaConfigurer<C>,
+  configureOrOptions?: KafkaConfigurer<C> | KafkaPluginOptions,
   maybeOptions?: KafkaPluginOptions,
 ): Feature<C> {
   const named = typeof instanceOrConfigure === 'string'
   const instance = named ? instanceOrConfigure : DEFAULT_INSTANCE
-  const configure = (named ? configureOrOptions : instanceOrConfigure) as KafkaConfigure<C> | undefined
+  const configure = (named ? configureOrOptions : instanceOrConfigure) as KafkaConfigurer<C> | undefined
   const options = (named ? maybeOptions : (configureOrOptions as KafkaPluginOptions | undefined)) ?? {}
 
-  return new KafkaBuilder<C>(options.clients ?? defaultKafkaClients, instance, configure as never)
+  return new KafkaBuilder<C>(options.clients ?? defaultKafkaClients, instance, configure)
 }

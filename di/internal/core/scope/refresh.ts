@@ -10,7 +10,7 @@ export class RefreshScope extends SingletonScope {
     super()
   }
 
-  get lazy(): boolean {
+  override get lazy(): boolean {
     return false
   }
 
@@ -30,7 +30,7 @@ export class RefreshScope extends SingletonScope {
     )
   }
 
-  configure(binding: Binding) {
+  override configure(binding: Binding) {
     if (this.managedBindings.some(b => b.id === binding.id)) {
       return
     }

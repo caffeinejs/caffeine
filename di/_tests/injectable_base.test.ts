@@ -14,7 +14,7 @@ describe('@Injectable — extending an @Injectable base', function () {
 
   @Injectable()
   class Child extends Base {
-    greet(): string {
+    override greet(): string {
       return 'child'
     }
   }

@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
-import { kafka, type KafkaConfigure } from './plugin.js'
+import { kafka, type KafkaConfigurer } from './plugin.js'
 import { kafkaTemplate, Keys } from './symbols.js'
 import { KafkaTemplate } from './template.js'
 
@@ -21,7 +21,7 @@ function noopClients(): KafkaClients {
 
 describe('kafka feature', () => {
   it('returns the same builder from .with()', () => {
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
     expect(app.with(kfk(k => k.brokers('localhost:9092')))).toBe(app)
@@ -29,7 +29,7 @@ describe('kafka feature', () => {
 
   it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({ container }).with(kfk(k => k.brokers('localhost:9092').groupId('g')))
 
@@ -45,7 +45,7 @@ describe('kafka feature', () => {
   })
 
   it('binds distinct templates for multiple named instances', async () => {
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
       .with(kfk(k => k.brokers('b1').groupId('g')))
@@ -68,7 +68,7 @@ describe('kafka feature', () => {
   // when the feature bootstraps. It fails there, naming the real problem rather than arriving wrapped as a
   // configuration failure.
   it('rejects at ready() when an instance has no brokers', async () => {
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({}).with(kfk(k => k.groupId('g'))) // no brokers
 
@@ -76,7 +76,7 @@ describe('kafka feature', () => {
   })
 
   it('throws when the same instance is installed twice', () => {
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     expect(() => createApplication({}).with(kfk()).with(kfk())).toThrow(ErrFeatureAlreadyInstalled)
     expect(() => createApplication({}).with(kfk(undefined, 'orders')).with(kfk(undefined, 'orders'))).toThrow(

@@ -93,7 +93,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Reads the settings from a node of the configuration tree, e.g. `c.app.distlock`.
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.distlock`.
    *
    * The node is read once, when the feature configures. Every other method on this builder wins over what it
    * carries.
@@ -103,7 +103,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const backend = this.#backend
     if (backend === undefined) {
       throw new ErrDistLockConfiguration(

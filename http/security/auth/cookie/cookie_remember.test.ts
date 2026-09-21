@@ -46,7 +46,7 @@ class FakeStore extends RememberMeTokenStore {
 
 class FakeUserProvider extends UserProvider {
   findByIdentifier = vi.fn()
-  findById = vi.fn((id: string): CredentialUser | null =>
+  override findById = vi.fn((id: string): CredentialUser | null =>
     id === 'u1' ? { id: 'u1', passwordHash: 'x', claims: [new Claim('roles', 'admin', '')] } : null,
   )
 }

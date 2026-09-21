@@ -26,7 +26,7 @@ class TrackerBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): Promise<void> {
+  protected override configure(kit: FeatureConfigureKit<C>): Promise<void> {
     const value = this.#value
     kit.container.bind(kSentinel, t => t.toValue({ value }))
     return Promise.resolve()

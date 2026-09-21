@@ -4,7 +4,7 @@ import { MessagingBuilder } from './builder.js'
 import { DEFAULT_BINDER } from './symbols.js'
 
 /** The builder callback that configures one messaging integration, over an application config type `C`. */
-export type MessagingConfigure<C = unknown> = FeatureConfigurer<MessagingBuilder<C>, C>
+export type MessagingConfigurer<C = unknown> = FeatureConfigurer<MessagingBuilder<C>, C>
 
 /**
  * The portable messaging feature. `.with(messaging(m => …))` registers binder instances and bindings; a
@@ -22,14 +22,14 @@ export type MessagingConfigure<C = unknown> = FeatureConfigurer<MessagingBuilder
  * await app.run()
  * ```
  */
-export function messaging<C = unknown>(configure?: MessagingConfigure<C>): Feature<C>
-export function messaging<C = unknown>(instance: string, configure?: MessagingConfigure<C>): Feature<C>
+export function messaging<C = unknown>(configure?: MessagingConfigurer<C>): Feature<C>
+export function messaging<C = unknown>(instance: string, configure?: MessagingConfigurer<C>): Feature<C>
 export function messaging<C = unknown>(
-  instanceOrConfigure?: string | MessagingConfigure<C>,
-  maybeConfigure?: MessagingConfigure<C>,
+  instanceOrConfigure?: string | MessagingConfigurer<C>,
+  maybeConfigure?: MessagingConfigurer<C>,
 ): Feature<C> {
   const instance = typeof instanceOrConfigure === 'string' ? instanceOrConfigure : DEFAULT_BINDER
   const configure = typeof instanceOrConfigure === 'string' ? maybeConfigure : instanceOrConfigure
 
-  return new MessagingBuilder<C>(instance, configure as never)
+  return new MessagingBuilder<C>(instance, configure)
 }

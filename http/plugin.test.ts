@@ -28,7 +28,7 @@ class ProbeBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): Promise<void> {
+  protected override configure(kit: FeatureConfigureKit<C>): Promise<void> {
     const broker = this.#broker
     kit.container.bind(kProbe, t => t.toValue({ broker }))
     return Promise.resolve()

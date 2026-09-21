@@ -58,7 +58,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
   #host: string | undefined
 
   /**
-   * Reads the address from a node of the configuration tree, e.g. `c.app.server`.
+   * Reads the address from a node of the configuration tree, e.g. `config.app.server`.
    *
    * The node is read once, when the feature configures. {@link port} and {@link host} win over what the node
    * carries.
@@ -78,7 +78,7 @@ export class ServerBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const raw = { port: this.#port ?? this.#config?.port, host: this.#host ?? this.#config?.host }
     const options = { port: raw.port ?? DEFAULT_SERVER_OPTIONS.port, host: raw.host ?? DEFAULT_SERVER_OPTIONS.host }
 

@@ -5,7 +5,7 @@ import { deferred, FakeBroker } from './broker.testkit.js'
 import type { KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
-import { kafka, type KafkaConfigure } from './plugin.js'
+import { kafka, type KafkaConfigurer } from './plugin.js'
 import { KafkaTemplate } from './template.js'
 
 // A tagged deserializer so we can prove the right one reached the right consumer.
@@ -32,7 +32,7 @@ class MixedFormatConsumer {
 describe('per-listener deserializers', () => {
   it('runs the two listeners on separate consumers with their own deserializers', async () => {
     const broker = new FakeBroker({ applyDeserializers: true })
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined
         ? kafka(configure, { clients: broker.clients() })
         : kafka(i, configure, { clients: broker.clients() })

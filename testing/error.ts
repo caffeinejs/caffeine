@@ -1,6 +1,6 @@
 export class ErrNoRouter extends Error {
   readonly code = 'CAFFEINE_ERR_NO_ROUTER'
-  readonly name = 'ErrNoRouter'
+  override readonly name = 'ErrNoRouter'
 
   constructor(routerName: string) {
     super(`Cannot build test client: no router found for "${routerName}"`)
@@ -9,7 +9,7 @@ export class ErrNoRouter extends Error {
 
 export class ErrMissingRouteParam extends Error {
   readonly code = 'CAFFEINE_ERR_MISSING_ROUTE_PARAM'
-  readonly name = 'ErrMissingRouteParam'
+  override readonly name = 'ErrMissingRouteParam'
 
   constructor(param: string, path: string) {
     super(`Cannot build route URL: missing path parameter ":${param}" for "${path}"`)
@@ -18,7 +18,7 @@ export class ErrMissingRouteParam extends Error {
 
 export class ErrTestClientTarget extends Error {
   readonly code = 'CAFFEINE_ERR_TEST_CLIENT_TARGET'
-  readonly name = 'ErrTestClientTarget'
+  override readonly name = 'ErrTestClientTarget'
 
   constructor(detail: string) {
     super(`Cannot build test client: ${detail}`)
@@ -27,7 +27,7 @@ export class ErrTestClientTarget extends Error {
 
 export class ErrTestClientAlreadyReady extends Error {
   readonly code = 'CAFFEINE_ERR_TEST_CLIENT_ALREADY_READY'
-  readonly name = 'ErrTestClientAlreadyReady'
+  override readonly name = 'ErrTestClientAlreadyReady'
 
   constructor(option: string) {
     super(

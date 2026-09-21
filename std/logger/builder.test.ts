@@ -6,6 +6,7 @@ import { InlineConfigSource } from '../config/index.js'
 import { newConfiguration } from '../configuration.js'
 import { $t } from '../schema/t.js'
 import { LoggerBuilder } from './builder.js'
+import { loggerConfigSchema, type LoggerConfig } from './config.js'
 import { ConsoleLogger } from './console/console.js'
 import { ErrInvalidLogLevel, ErrLoggerAlreadyConfigured } from './errors.js'
 import { logToken } from './keys.js'
@@ -17,6 +18,16 @@ const kConfig = token<AppConfig>(Symbol('logger_builder.test.config'))
 
 function appWithConfig(logEnabled: boolean) {
   const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({ logEnabled })).build()
+
+  return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
+}
+
+const sliceSchema = $t.Object({ log: loggerConfigSchema })
+type SliceConfig = { log: LoggerConfig }
+const kSlice = token<SliceConfig>(Symbol('logger_builder.test.slice'))
+
+function appWithSlice(log: LoggerConfig) {
+  const conf = newConfiguration(sliceSchema, kSlice).source(new InlineConfigSource({ log })).build()
 
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }
@@ -138,6 +149,53 @@ describe('Application integration', () => {
     await app.ready()
 
     expect(app.log).not.toBe(noopLogger)
+  })
+
+  // Every other configurable feature takes a whole node with `config(...)`; the logger took settings one at a
+  // time, so an application had to restate the mapping instead of composing `loggerConfigSchema`.
+  describe('config(node)', () => {
+    it('reads the level and the enabled flag off the node', async () => {
+      const app = appWithSlice({ level: 'debug', enabled: true })
+      app.logger((b, { config }) => b.config(config.log))
+
+      await app.ready()
+
+      expect(app.log).not.toBe(noopLogger)
+      expect(app.log.level).toBe('debug')
+    })
+
+    // The tree states `enabled`; the builder holds `disabled`. The mapping is the feature's, not the caller's.
+    it('disables on `enabled: false`', async () => {
+      const app = appWithSlice({ enabled: false })
+      app.logger((b, { config }) => b.config(config.log))
+
+      await app.ready()
+
+      expect(app.log).toBe(noopLogger)
+    })
+
+    // A fluent method is the last word: the node is what the environment offered, and code that names the same
+    // setting alongside it has overridden it deliberately.
+    it('loses to a fluent method naming the same setting', async () => {
+      const app = appWithSlice({ level: 'error', enabled: false })
+      app.logger((b, { config }) => b.config(config.log).level('trace').disable(false))
+
+      await app.ready()
+
+      expect(app.log).not.toBe(noopLogger)
+      expect(app.log.level).toBe('trace')
+    })
+
+    // Absence has to keep meaning "nobody set this", or an unset key in the tree would silently beat the code.
+    it('leaves what the node does not name to the builder', async () => {
+      const app = appWithSlice({ level: 'warn' })
+      app.logger((b, { config }) => b.config(config.log))
+
+      await app.ready()
+
+      expect(app.log).not.toBe(noopLogger)
+      expect(app.log.level).toBe('warn')
+    })
   })
 
   // The level is the one setting that has to come from the environment. Without this, an application wanting

@@ -26,11 +26,11 @@ class Stub extends HealthIndicator {
     return this.id
   }
 
-  get groups(): readonly HealthGroup[] {
+  override get groups(): readonly HealthGroup[] {
     return this.groupList ?? super.groups
   }
 
-  get critical(): boolean {
+  override get critical(): boolean {
     return this.isCritical ?? super.critical
   }
 

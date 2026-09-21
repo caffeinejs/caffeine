@@ -102,13 +102,13 @@ export class Application<TConfig = unknown> {
   // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
   // reaches it only through `.shutdown((s, { config }) => s.config(...))`. Held so `.shutdown()` can configure
   // it in place.
-  readonly #shutdownBuilder = new ShutdownBuilder<unknown>()
+  readonly #shutdownBuilder = new ShutdownBuilder<TConfig>()
 
   // Registered unconditionally, like #shutdownBuilder: a `.logger(...)` call is deferred to this Feature's own
   // `configure()`, during `ready()`, so it sees resolved configuration. `#logger` (not just the builder) is
   // held too, seeded here in the constructor, so `log` answers before `ready()` without touching the
   // container — refreshed again once this builder's `configure()` has run.
-  readonly #loggerBuilder = new LoggerBuilder<unknown>()
+  readonly #loggerBuilder = new LoggerBuilder<TConfig>()
   #logger: Logger
 
   #store: ConfigStore<unknown> | undefined
@@ -147,8 +147,8 @@ export class Application<TConfig = unknown> {
 
     // Pushed directly, not through `addFeature`: a subclass's private fields do not exist yet while this
     // constructor runs, so an overridden method cannot be called from here.
-    this.#services.push(this.#shutdownBuilder)
-    this.#services.push(this.#loggerBuilder)
+    this.#register(this.#shutdownBuilder)
+    this.#register(this.#loggerBuilder)
 
     // Seeds the builder from the simple, eager path; `.logger(configure)` layers on top of this during
     // `ready()`. Bound here so `logToken()` resolves even for an application that never calls `.logger()`.
@@ -182,10 +182,22 @@ export class Application<TConfig = unknown> {
     return this.#availability
   }
 
-  addFeature(feature: Feature): this {
+  addFeature(feature: Feature<TConfig>): this {
     this.assertConfigurable()
-    this.#services.push(feature)
+    this.#register(feature)
     return this
+  }
+
+  /**
+   * Records a feature without going through {@link addFeature}, which a subclass overrides — the constructor
+   * runs before the subclass's own fields exist, so calling the override from there reads them unset.
+   *
+   * This is also the one place the application's configuration type is erased. `#services` is
+   * `Feature<unknown>[]` because the store behind the kits is `ConfigStore<unknown>` by design, and a feature's
+   * hooks take their kit as a method, so the parameter is bivariant and the erasure holds both ways.
+   */
+  #register(feature: Feature<TConfig>): void {
+    this.#services.push(feature as Feature)
   }
 
   addModules(module: Module | ModuleFn, ...modules: Array<Module | ModuleFn>): this {
@@ -222,7 +234,7 @@ export class Application<TConfig = unknown> {
     }
     this.#installed.add(name)
 
-    return this.addFeature(feature as Feature)
+    return this.addFeature(feature)
   }
 
   /**
@@ -235,7 +247,7 @@ export class Application<TConfig = unknown> {
    */
   shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
-    this.#shutdownBuilder[kAddConfigurer](configure as never)
+    this.#shutdownBuilder[kAddConfigurer](configure)
     return this
   }
 
@@ -255,7 +267,7 @@ export class Application<TConfig = unknown> {
    */
   logger(configure: FeatureConfigurer<LoggerBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
-    this.#loggerBuilder[kAddConfigurer](configure as never)
+    this.#loggerBuilder[kAddConfigurer](configure)
     return this
   }
 

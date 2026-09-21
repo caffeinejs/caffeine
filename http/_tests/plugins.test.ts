@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { kFeatureConfigure, kFeatureName, type BootstrapKit } from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
 import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 import fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -210,14 +210,16 @@ describe('plugin registration', () => {
   // asked for rather than the default the application started with.
   it('hands factories and server hooks one context carrying the configured logger', async () => {
     const custom: Logger = { ...newNoopLogger() }
-    const seen: { factory?: HTTPSetupContext; hook?: BootstrapKit } = {}
+    // One declared type for both, which is the point: the hook and the factory are handed the same object, and
+    // the hook used to be told it was a narrower one.
+    const seen: { factory?: HTTPSetupContext; hook?: HTTPSetupContext } = {}
 
     const probe: HTTPFeature = {
       [kFeatureName]: 'kit-probe',
       [kFeatureConfigure](): void {
         // Nothing to bind.
       },
-      [kFeatureServer]: (_instance: FastifyInstance, kit: BootstrapKit): void => {
+      [kFeatureServer]: (_instance: FastifyInstance, kit: HTTPSetupContext): void => {
         seen.hook = kit
       },
     }
@@ -235,6 +237,8 @@ describe('plugin registration', () => {
     expect(seen.hook).toBe(seen.factory)
     expect(seen.factory?.logger).toBe(custom)
     expect(seen.factory?.container).toBe(app.container)
+    // The container the hook is handed resolves; it was declared as lookup-only `ContainerOps` before.
+    expect(seen.hook?.container).toBe(app.container)
   })
 
   // An app-level factory is called once the container has initialized — not while features configure, where

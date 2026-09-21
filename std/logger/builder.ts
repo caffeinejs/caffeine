@@ -1,5 +1,6 @@
 import { type FeatureConfigureKit, kFeatureName } from '../feature.js'
 import { FeatureBuilder } from '../feature_builder.js'
+import type { LoggerConfig } from './config.js'
 import { ConsoleLogger } from './console/console.js'
 import { ErrLoggerAlreadyConfigured } from './errors.js'
 import { logToken } from './keys.js'
@@ -17,13 +18,25 @@ export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'logger'
 
   #logger: Logger | undefined
-  #disabled = false
+  #config: Partial<LoggerConfig> | undefined
+  #disabled: boolean | undefined
   #level: string | undefined
 
   // Separate from `#logger`: caches the fallback so repeated reads of `.logger` agree on one instance, without
   // making `.use()` think a real logger was already provided — `#logger` stays `undefined` until `.use()`
   // itself sets it.
   #defaultLogger: Logger | undefined
+
+  /**
+   * Reads every setting from a node of the configuration tree, e.g. `config.app.log`.
+   *
+   * The node is read once, when the feature configures. A fluent method called alongside this one wins over
+   * what the node carries. {@link use} is not covered: a logger instance cannot travel a configuration tree.
+   */
+  config(config: Partial<LoggerConfig>): this {
+    this.#config = config
+    return this
+  }
 
   /**
    * Provides the logger to use.
@@ -50,6 +63,15 @@ export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /** What a fluent method set, else what the configuration node carries. */
+  get #resolved(): { level: string | undefined; disabled: boolean } {
+    return {
+      level: this.#level ?? this.#config?.level,
+      // The tree states `enabled`; the builder holds `disabled`. Neither set leaves the logger on.
+      disabled: this.#disabled ?? (this.#config?.enabled === undefined ? false : !this.#config.enabled),
+    }
+  }
+
   /**
    * Sets the level on whatever logger this resolves to, when the feature configures.
    *
@@ -72,16 +94,17 @@ export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
    * on the same instance.
    */
   get logger(): Logger {
-    return this.#disabled ? noopLogger : (this.#logger ?? (this.#defaultLogger ??= new ConsoleLogger()))
+    return this.#resolved.disabled ? noopLogger : (this.#logger ?? (this.#defaultLogger ??= new ConsoleLogger()))
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const logger = this.logger
+    const { level, disabled } = this.#resolved
 
     // Never while disabled: `noopLogger` is one shared instance, so a level written to it would follow every
     // other application in the process.
-    if (this.#level !== undefined && !this.#disabled) {
-      logger.level = this.#level
+    if (level !== undefined && !disabled) {
+      logger.level = level
     }
 
     kit.container.rebind(logToken(), t => t.toValue(logger))
