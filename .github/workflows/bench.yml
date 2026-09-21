@@ -68,6 +68,12 @@ jobs:
       - name: Benchmark
         # An explicit shell turns on pipefail: without it tee's exit code hides a benchmark that failed.
         shell: bash
+        # The load benchmarks size their window off the cores available; pinning it keeps two runs comparable
+        # when GitHub changes the runner. The timeout is generous because the runner is shared.
+        env:
+          BENCH_CONNECTIONS: '32'
+          BENCH_PIPELINING: '8'
+          BENCH_TIMEOUT: '30'
         run: npm run bench:${{ inputs.benchmark }} -w @caffeinejs/benchmarks | tee /tmp/bench-output.txt
 
       - name: Summary
