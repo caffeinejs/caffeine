@@ -103,4 +103,16 @@ describe('loggingCacheObserver', () => {
 
     expect(log.written[0].args).toEqual([{ route, segment: 'products', scope: 'segment' }, 'cache invalidate'])
   })
+
+  // An outage is not a debug-level outcome: it is written at error whatever `level` says.
+  it('records a store failure at error, whatever the level', () => {
+    const log = new Recorder()
+    const error = new Error('store down')
+
+    loggingCacheObserver(log, { level: 'trace' }).onError!({ route, segment: 'pets', operation: 'put', error })
+
+    expect(log.written).toEqual([
+      { severity: 'error', args: [{ route, segment: 'pets', operation: 'put', err: error }, 'cache store error'] },
+    ])
+  })
 })

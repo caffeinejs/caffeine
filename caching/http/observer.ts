@@ -18,6 +18,8 @@ export type CacheBypassReason =
   | 'private'
   /** The request carried `Authorization` and the route did not declare itself public. */
   | 'authorization'
+  /** The request was authenticated by other means, a session cookie for one, and the route did not declare itself public. */
+  | 'authenticated'
   /** The route varies on `*`, which no stored response can match. */
   | 'vary-any'
   | 'no-cache'
@@ -31,7 +33,9 @@ export type CacheMissReason =
   | 'absent'
   /** An entry is stored, but it is older than the request's `max-age` allows. */
   | 'stale-for-request'
-  /** Nothing is stored and the request said `only-if-cached`, so it was answered `504`. */
+  /** The store handed back an entry older than the route's `ttl`. */
+  | 'expired'
+  /** Nothing the request accepts is stored and it said `only-if-cached`, so it was answered `504`. */
   | 'only-if-cached'
 
 export interface CacheBypassEvent {
@@ -89,6 +93,20 @@ export type CacheInvalidateEvent =
     }
   | { readonly route: CacheRoute; readonly segment: string; readonly scope: 'segment' }
 
+/** The store call that failed. `delete` covers an eviction by keys, `clear` one by segment. */
+export type CacheOperation = 'get' | 'put' | 'delete' | 'clear'
+
+/**
+ * A store call that rejected. The request went on without the cache: a failed `get` was treated as a miss, a
+ * failed write or eviction was skipped.
+ */
+export interface CacheErrorEvent {
+  readonly route: CacheRoute
+  readonly segment?: string
+  readonly operation: CacheOperation
+  readonly error: unknown
+}
+
 /**
  * Notified of what the HTTP cache did for each request on a route that declares caching.
  *
@@ -105,6 +123,11 @@ export interface CacheObserver {
   onBypass?(event: CacheBypassEvent): void
   onStore?(event: CacheStoreEvent): void
   onInvalidate?(event: CacheInvalidateEvent): void
+  /**
+   * Without one, `HTTPCaching` logs store failures itself, on the application logger, at most once a minute for
+   * each operation.
+   */
+  onError?(event: CacheErrorEvent): void
 }
 
 // Written as a `Record` over the interface's keys, so a method added to `CacheObserver` and not here fails to
@@ -115,6 +138,7 @@ const methods: Record<keyof CacheObserver, true> = {
   onBypass: true,
   onStore: true,
   onInvalidate: true,
+  onError: true,
 }
 
 /** Every {@link CacheObserver} method name. */

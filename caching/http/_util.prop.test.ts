@@ -1,16 +1,17 @@
-import type { AdapterRequest } from '@caffeinejs/http'
+import { FastifyContextRequest, type AdapterRequest } from '@caffeinejs/http'
 import { it, fc } from '@fast-check/vitest'
+import type { FastifyRequest } from 'fastify'
 import { describe, expect } from 'vitest'
 
 import { defaultCacheKey, generateETag, matchesETag, pathCacheKey } from './_util.js'
+import { cacheKey } from './cache_key.js'
 
-// Arbitrary ETag token: no commas (would be parsed as list delimiter), no leading W/ (covered separately)
-// matchesETag trims ifNoneMatch entries after splitting but not the stored ETag, so a stored
-// value with leading/trailing whitespace would never match itself in a list context.
-// Restricting to trimmed strings keeps properties about list membership meaningful.
+// An arbitrary entity-tag as RFC 9110 §8.8.3 writes one: double-quoted, no quote inside, no leading W/ (covered
+// separately). A comma inside is legal, which is why a list is scanned for tags and never cut on commas.
 const etagToken = fc
   .string({ minLength: 1 })
-  .filter(s => s === s.trim() && !s.includes(',') && !s.startsWith('W/') && s !== '*')
+  .filter(s => !s.includes('"'))
+  .map(s => `"${s}"`)
 
 describe('generateETag (property)', () => {
   const anyPayload = fc.oneof(
@@ -118,6 +119,53 @@ describe('pathCacheKey (property)', () => {
       const request = { method, url: withQuery(path, shuffled), headers: {} } as unknown as AdapterRequest
 
       expect(pathCacheKey(withQuery(path, params))).toBe(defaultCacheKey(request))
+    },
+  )
+})
+
+describe('cacheKey (property)', () => {
+  const asRequest = (method: string, url: string, headers: Record<string, string> = {}) =>
+    ({ method, url, headers }) as unknown as AdapterRequest
+
+  const wrap = (request: AdapterRequest) => new FastifyContextRequest(request as unknown as FastifyRequest)
+
+  // The helper exists to name an entry from another request. If it ever derives a key the cache would not have
+  // stored, an eviction written with it reports success and evicts nothing.
+  it.prop([pathWithQuery, fc.constantFrom('GET', 'HEAD', 'POST')])(
+    'is the key the cache stores for the same request',
+    ([path, , shuffled], method) => {
+      const request = asRequest(method, withQuery(path, shuffled))
+
+      expect(cacheKey(wrap(request))).toBe(defaultCacheKey(request))
+    },
+  )
+
+  it.prop([pathWithQuery, fc.constantFrom('PUT', 'POST', 'DELETE', 'PATCH')])(
+    'names, from a mutating request, the entry a GET stored on that URL or on another',
+    ([path, params, shuffled], method) => {
+      const mutation = wrap(asRequest(method, withQuery(path, shuffled)))
+
+      expect(cacheKey(mutation, { method: 'get' })).toBe(pathCacheKey(withQuery(path, params)))
+      expect(cacheKey(wrap(asRequest(method, '/elsewhere')), { method: 'GET', url: withQuery(path, params) })).toBe(
+        pathCacheKey(withQuery(path, shuffled)),
+      )
+    },
+  )
+
+  it.prop([pathWithQuery, fc.string(), fc.string()])(
+    'names one variant of a varying route, from header values it is given',
+    ([path, params], language, other) => {
+      const stored = asRequest('GET', withQuery(path, params), { 'accept-language': language })
+      const mutation = wrap(asRequest('POST', '/publish', { 'accept-language': other }))
+
+      expect(
+        cacheKey(mutation, {
+          method: 'GET',
+          url: withQuery(path, params),
+          vary: ['Accept-Language'],
+          headers: { 'accept-language': language },
+        }),
+      ).toBe(defaultCacheKey(stored, ['Accept-Language']))
     },
   )
 })

@@ -2,7 +2,7 @@ import type { AdapterRouteOptions } from '@caffeinejs/http'
 import type { Logger } from '@caffeinejs/std/logger'
 
 import { routeMethods } from './_util.js'
-import { observerMethods, type CacheObserver, type CacheRoute } from './observer.js'
+import { observerMethods, type CacheObserver, type CacheOperation, type CacheRoute } from './observer.js'
 
 // Read while `onRoute` runs and frozen: Fastify has prefixed `url` by then and may rewrite it afterwards for a
 // trailing-slash twin, and the same object reaches every observer on every request to the route.
@@ -50,4 +50,29 @@ export function guardObserver(observer: CacheObserver, log: Logger): CacheObserv
   }
 
   return guarded as CacheObserver
+}
+
+const STORE_ERROR_LOG_INTERVAL_MS = 60_000
+
+// What `HTTPCaching` listens with when the application's observer has no `onError`: a store outage has to show
+// up somewhere, and at request rate it must not flood the log. It implements `onError` alone, so every other
+// call site still short-circuits before building an event.
+export function storeErrorLogger(log: Logger): CacheObserver {
+  const lastLogged = new Map<CacheOperation, number>()
+
+  return {
+    onError(event) {
+      const now = Date.now()
+      const last = lastLogged.get(event.operation)
+      if (last !== undefined && now - last < STORE_ERROR_LOG_INTERVAL_MS) {
+        return
+      }
+
+      lastLogged.set(event.operation, now)
+      log.error(
+        { err: event.error, route: event.route, segment: event.segment, operation: event.operation },
+        `Cache store "${event.operation}" failed; the request went on without the cache`,
+      )
+    },
+  }
 }

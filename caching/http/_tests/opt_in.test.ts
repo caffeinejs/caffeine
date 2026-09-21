@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Cache } from '../../store.js'
 import { MemoryCache } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching } from '../index.js'
+import { CacheControl, HTTPCaching, kETagGenerator } from '../index.js'
 
 describe('caching is opt-in', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -49,6 +49,16 @@ describe('caching is opt-in', () => {
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
+  // A generator someone named and forgot to bind is a mistake, not a request for the default one.
+  it('throws ErrConfiguration when the etagGenerator token resolves to nothing', async () => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache()).etagGenerator(kETagGenerator)))
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(
+      'Cannot install HTTP caching: no binding registered for the given etagGenerator token',
+    )
+  })
+
   it('throws ErrConfiguration when installed with no store option', async () => {
     @Controller('/optin-default')
     class DefaultController {
@@ -73,8 +83,16 @@ describe('caching is opt-in', () => {
         this.ops.push('get')
         return undefined
       }
-      async set() {
-        this.ops.push('set')
+      async getMany(keys: string[]) {
+        return Promise.all(keys.map(() => this.get()))
+      }
+      async put() {
+        this.ops.push('put')
+      }
+      async putMany(items: unknown[]) {
+        for (const _ of items) {
+          await this.put()
+        }
       }
       async delete() {}
       async deleteMany() {}
@@ -101,7 +119,7 @@ describe('caching is opt-in', () => {
     await app.fetch('/optin-token-store/data')
 
     const store = app.container.get(MapStore) as MapStore
-    expect(store.ops).toContain('set')
+    expect(store.ops).toContain('put')
   })
 
   it('honors .statusHeader(...)', async () => {

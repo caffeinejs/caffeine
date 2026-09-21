@@ -271,9 +271,18 @@ describe('miss events', () => {
   it('reports an entry older than the request allows as stale-for-request', async () => {
     class AgedStore implements Cache {
       async get(): Promise<CacheEntry> {
-        return { payload: '{"ok":true}', headers: { 'content-type': 'application/json' }, storedAt: Date.now() - 5000 }
+        return {
+          payload: '{"ok":true}',
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          storedAt: Date.now() - 5000,
+        }
       }
-      async set(): Promise<void> {}
+      async getMany(keys: string[]): Promise<CacheEntry[]> {
+        return Promise.all(keys.map(() => this.get()))
+      }
+      async put(): Promise<void> {}
+      async putMany(): Promise<void> {}
       async delete(): Promise<void> {}
       async deleteMany(): Promise<void> {}
       async clear(): Promise<void> {}
@@ -411,7 +420,13 @@ describe('store events', () => {
       async get(): Promise<undefined> {
         return undefined
       }
-      async set(): Promise<void> {
+      async getMany(keys: string[]): Promise<undefined[]> {
+        return keys.map(() => undefined)
+      }
+      async put(): Promise<void> {
+        throw new Error('store unavailable')
+      }
+      async putMany(): Promise<void> {
         throw new Error('store unavailable')
       }
       async delete(): Promise<void> {}
@@ -432,8 +447,11 @@ describe('store events', () => {
     const observer = new RecordingObserver()
     const app = await start(observer, { store: new FailingStore() })
 
-    await app.fetch('/obs-store-fails/data')
+    const res = await app.fetch('/obs-store-fails/data')
 
+    // The write failed, the response did not: the handler's answer still goes out.
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true })
     expect(observer.stores).toEqual([])
   })
 })
