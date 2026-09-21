@@ -1,14 +1,14 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
 import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
-import fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
+import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { kFeatureServer, type HTTPFeature } from '../feature.js'
-import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
+import { createWebApplication, type WebApplication } from '../index.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -75,7 +75,7 @@ describe('plugin registration', () => {
   it('registers plugins in the order .with() was written', async () => {
     const log: string[] = []
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(stamping('third', 'x-third', log))
       .with(stamping('first', 'x-first', log))
       .with(stamping('second', 'x-second', log))
@@ -90,7 +90,7 @@ describe('plugin registration', () => {
   it('interleaves features and plugins in the order they were written', async () => {
     const log: string[] = []
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(stamping('plugin-a', 'x-a', log))
       .with(logging('feature-b', log))
       .with(stamping('plugin-c', 'x-c', log))
@@ -106,7 +106,7 @@ describe('plugin registration', () => {
   it('runs the server hook of a feature installed with addFeature, in its slot', async () => {
     const log: string[] = []
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(stamping('before', 'x-before', log))
       .addFeature(logging('added', log))
       .with(stamping('after', 'x-after', log))
@@ -139,7 +139,7 @@ describe('plugin registration', () => {
       },
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(slow)
       .with(stamping('after', 'x-after', log))
 
@@ -170,7 +170,7 @@ describe('plugin registration', () => {
       },
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(forgetful)
       .with(stamping('after', 'x-after', log))
 
@@ -197,7 +197,7 @@ describe('plugin registration', () => {
       },
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(probe)
+    app = createWebApplication().with(probe)
 
     await app.ready()
 
@@ -224,7 +224,7 @@ describe('plugin registration', () => {
       },
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .logger(b => b.use(custom))
       .with(context => {
         seen.factory = context
@@ -262,7 +262,7 @@ describe('plugin registration', () => {
       return fp(plugin, { name: 'greeting' })
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).with(factory)
+    app = createWebApplication({ container }).with(factory)
 
     await expect(app.ready()).resolves.not.toThrow()
 
@@ -289,7 +289,7 @@ describe('plugin registration', () => {
       return fp(plugin, { name: 'awaiting' })
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
       .with(stamping('before', 'x-before', log))
       .with(awaiting)
       .with(stamping('after', 'x-after', log))
@@ -311,7 +311,7 @@ describe('plugin registration', () => {
     }
     void [HeadSlotController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
 
     await app.ready()
 
@@ -325,7 +325,7 @@ describe('plugin registration', () => {
   // The tail slot: the not-found handler is contributed last, so it sees whatever the plugins decorated the
   // server with and still answers a URL no route matched.
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(stamping('stamp', 'x-stamp'))
+    app = createWebApplication().with(stamping('stamp', 'x-stamp'))
 
     await app.ready()
 
@@ -355,7 +355,7 @@ describe('scoped plugin registration', () => {
     // Bound to no adapter, and mounted next to a Fastify-bound router all the same.
     const orders = new Router('/scoped-orders').get('/', () => ({ ok: true }))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(pets, orders)
+    app = createWebApplication().mount(pets, orders)
 
     await app.ready()
 
@@ -372,7 +372,7 @@ describe('scoped plugin registration', () => {
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(shop)
+    app = createWebApplication().mount(shop)
 
     await app.ready()
 
@@ -399,7 +399,7 @@ describe('scoped plugin registration', () => {
     }
     void [AdminController, PublicController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
 
     await app.ready()
 
@@ -419,9 +419,7 @@ describe('scoped plugin registration', () => {
       return plugin
     }
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(twice)
-      .with(twice)
+    app = createWebApplication().with(twice).with(twice)
 
     await app.ready()
 
@@ -434,9 +432,7 @@ describe('scoped plugin registration', () => {
   it('refuses a second plugin registered under the same fastify-plugin name', async () => {
     const twice = stamping('twice', 'x-twice')
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
-      .with(twice)
-      .with(twice)
+    app = createWebApplication().with(twice).with(twice)
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
   })
@@ -449,7 +445,7 @@ describe('scoped plugin registration', () => {
       .plugin(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(pets, orders)
+    app = createWebApplication().mount(pets, orders)
 
     await app.ready()
 

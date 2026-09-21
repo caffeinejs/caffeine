@@ -1,12 +1,11 @@
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
 import type { ShutdownBuilder } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect, beforeEach } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import { ErrShutdownTimeout } from '../error/common.js'
 import { health } from '../health/health.js'
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, createWebApplication } from '../index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -45,9 +44,10 @@ void [DrainController]
 
 async function start(configure: (shutdown: ShutdownBuilder<unknown>) => void): Promise<WebApplication> {
   // health() mounts the probes the readiness/liveness assertions poll; `.shutdown()` owns the drain.
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).with(health()).shutdown(configure)
+  const app = createWebApplication().with(health()).shutdown(configure)
 
-  await app.run()
+  // The in-flight request below dials 127.0.0.1, so the bind is pinned to it rather than left to `localhost`.
+  await app.run({ host: '127.0.0.1', port: 0 })
 
   return app
 }

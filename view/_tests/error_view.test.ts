@@ -8,9 +8,7 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '@caffeinejs/http'
-import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { describe, it, expect } from 'vitest'
 
@@ -43,7 +41,7 @@ void [ErrReturnController]
 
 describe('error handler returning a View()', () => {
   it('renders a returned View() as HTML', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    const app = createWebApplication({})
       .errorHandling(e => e.globalHandlers(ReturnViewHandler))
       .with(view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
     await app.ready()

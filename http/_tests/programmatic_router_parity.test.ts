@@ -1,5 +1,4 @@
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -17,7 +16,6 @@ import {
   Router,
   constraints,
   createWebApplication,
-  fastifyAdapterFactory,
   version,
   type ActionResult,
   type GuardInput,
@@ -98,7 +96,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const handler = new FakeAuthHandler()
       handler.result = AuthenticateResult.none()
 
-      const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+      const builder = createWebApplication()
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
       const app = builder.mount(router)
       await app.ready()
@@ -120,7 +118,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .handler(() => ({ ok: true }))
 
       const handler = new FakeAuthHandler()
-      const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+      const builder = createWebApplication()
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
       const app = builder.mount(router)
       await app.ready()

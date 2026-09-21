@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, createWebApplication, Timeout, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, createWebApplication, Timeout } from '../index.js'
 
 describe('Timeout', () => {
   it('method-level @Timeout overrides class-level timeout', async () => {
@@ -24,7 +23,7 @@ describe('Timeout', () => {
 
     void [TimedClassController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const slowRes = await app.fetch('/timed-class/slow')
@@ -48,7 +47,7 @@ describe('Timeout', () => {
 
     void [TimedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/timed/slow')

@@ -11,11 +11,10 @@ import {
   Status,
   WebApplication,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std'
-import fastify, { type FastifyInstance } from 'fastify'
+import { type FastifyInstance } from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -82,7 +81,7 @@ function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
 // application declaring authorization without authentication refuses to start. It also means every test
 // exercises the securityScheme derivation rather than only the unauthenticated path.
 function newBuilder(configure?: OpenAPIConfigurer) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+  return createWebApplication({})
     .with(openapi(configure))
     .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
 }

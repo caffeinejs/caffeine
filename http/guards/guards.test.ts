@@ -8,7 +8,7 @@ import {
   getMetadataOverride,
   token,
 } from '@caffeinejs/di'
-import fastify, { type RouteOptions } from 'fastify'
+import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
 import {
@@ -26,7 +26,6 @@ import {
   Router,
   UseGuards,
   createWebApplication,
-  fastifyAdapterFactory,
   type ActionResult,
   type Context,
   type GuardResult,
@@ -35,7 +34,7 @@ import {
 import type { GuardInput } from './guard.js'
 
 function buildApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+  return createWebApplication()
 }
 
 describe('guard', () => {
@@ -339,9 +338,7 @@ describe('use_guards', () => {
 
   it('runs global, then controller, then method', async () => {
     order.length = 0
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
-      g.global(GlobalGuard),
-    )
+    const app = createWebApplication().guards(g => g.global(GlobalGuard))
     await app.ready()
 
     const res = await app.fetch('/use-guards/both')
@@ -365,9 +362,7 @@ describe('use_guards', () => {
 
   it('runs a guard listed at several levels once, at its first position', async () => {
     order.length = 0
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
-      g.global(RepeatedGuard),
-    )
+    const app = createWebApplication().guards(g => g.global(RepeatedGuard))
     await app.ready()
 
     const res = await app.fetch('/use-guards-repeated')
@@ -429,9 +424,7 @@ describe('builder', () => {
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
 
   it('runs a global guard listed by InjectionToken on every route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
-      g.global(ListedGuard),
-    )
+    const app = createWebApplication().guards(g => g.global(ListedGuard))
     await app.ready()
 
     const res = await app.fetch('/builder-ok')
@@ -452,15 +445,13 @@ describe('builder', () => {
 
   it('rejects a missing InjectionToken at start-up', async () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g => g.global(kMissing))
+    const app = createWebApplication().guards(g => g.global(kMissing))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 
   it('rejects an InjectionToken that is not a Guard at start-up', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
-      g.global(NotAGuard as never),
-    )
+    const app = createWebApplication().guards(g => g.global(NotAGuard as never))
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
@@ -484,9 +475,7 @@ describe('builder', () => {
     const router = new Router('/abstract-guard').guards([AuditGuard])
     router.get('/').handler(() => ({ ok: true }))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).mount(
-      router,
-    ) as WebApplication
+    const app = createWebApplication({ container }).mount(router) as WebApplication
     await app.ready()
 
     const res = await app.fetch('/abstract-guard')
@@ -777,9 +766,7 @@ describe('authorization', () => {
   void [AuthGuard, RolesGuard, CatsController]
 
   async function ready() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).guards(g =>
-      g.global(AuthGuard, RolesGuard),
-    )
+    const app = createWebApplication().guards(g => g.global(AuthGuard, RolesGuard))
     await app.ready()
     return app
   }
@@ -934,12 +921,11 @@ describe('zero_cost', () => {
   let app: WebApplication
 
   beforeAll(async () => {
-    const server = fastify({ logger: false })
-    server.addHook('onRoute', route => {
-      registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+    app = createWebApplication().server(undefined, server => {
+      server.addHook('onRoute', route => {
+        registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+      })
     })
-
-    app = createWebApplication(fastifyAdapterFactory(server))
     await app.ready()
   })
 

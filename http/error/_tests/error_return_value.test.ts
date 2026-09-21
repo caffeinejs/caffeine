@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -9,7 +8,6 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../../index.js'
 
 // Error handlers, like controller handlers, may RETURN a value the framework finalizes: a plain object
@@ -50,9 +48,7 @@ void [ErrReturnController]
 
 describe('error handler return values', () => {
   it('serializes a returned object as JSON', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
-      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
-    )
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
     await app.ready()
 
     const res = await app.fetch('/err-return/json')
@@ -63,9 +59,7 @@ describe('error handler return values', () => {
   })
 
   it('leaves a ctx-based (void-returning) handler unchanged', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
-      e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler),
-    )
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
     await app.ready()
 
     const res = await app.fetch('/err-return/void')

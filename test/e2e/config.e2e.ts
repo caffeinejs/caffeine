@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { Controller, Get, Router, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import {
   ConfigStore,
@@ -14,7 +14,6 @@ import {
   type ConfigSource,
   type InferConfig,
 } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -121,7 +120,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
     .source(overrides)
     .build()
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {
+  return createWebApplication({
     container: new CaffeineIoC({ profiles: ['dev'] }),
     config: conf,
   }).mount(routes)

@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -13,7 +12,6 @@ import {
   Args,
   Principal,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 
@@ -38,7 +36,7 @@ class FakeOpaqueStore extends OpaqueTokenStore {
 function opaqueBuilder() {
   const container = new CaffeineIoC()
   container.bind(OpaqueTokenStore, t => t.toClass(FakeOpaqueStore))
-  const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
+  const builder = createWebApplication({ container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.
   builder.authorization(authz =>

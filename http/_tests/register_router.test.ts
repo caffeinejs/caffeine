@@ -5,20 +5,11 @@ import {
   type Feature,
   type FeatureConfigureKit,
 } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { registerRouteGroup } from '../decorators/registrar/index.js'
-import {
-  $p,
-  Keys,
-  type RouteAuthzOptions,
-  RouteBuilder,
-  WebApplication,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, createWebApplication } from '../index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -89,7 +80,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('routes a controller bound during configure()', async () => {
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.addFeature(new ProgrammaticService())
     app = builder
     await app.ready()
@@ -101,7 +92,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('applies authentication and authorization to the registered route', async () => {
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ schemes: ['Bearer'] }))
     app = builder
@@ -119,7 +110,7 @@ describe('registerRouteGroup', () => {
   })
 
   it('enforces role requirements on the registered route', async () => {
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ roles: ['ops'] }))
     app = builder

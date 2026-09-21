@@ -10,11 +10,10 @@ import {
   type InferSchema,
 } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig, type LiveConfig } from '@caffeinejs/std/config'
-import fastify, { type FastifyPluginAsync, type FastifyReply } from 'fastify'
+import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { AdapterExtensionFactory } from '../adapter_extension.js'
-import { fastifyAdapterFactory } from '../adapter_factory.js'
 import type { AdapterTypes, AnyAdapterTypes, ContextPlatform } from '../adapter_types.js'
 import { createWebApplication, type Adapter, type AdapterFactory, type AdapterIn } from '../application.js'
 import type { Context } from '../context.js'
@@ -165,13 +164,6 @@ describe('adapter types', () => {
     expectTypeOf<AnyAdapterTypes>().toEqualTypeOf<FastifyTypes>()
   })
 
-  it('keeps the type of a Fastify instance the application was built around', () => {
-    const mine = fastify({ logger: false })
-    const app = createWebApplication(fastifyAdapterFactory(mine))
-
-    expectTypeOf(app.instance).toEqualTypeOf<typeof mine>()
-  })
-
   it('refuses what another adapter installs', () => {
     // @ts-expect-error a feature written for another server
     createWebApplication().with(fakeFeature('elsewhere'))
@@ -238,7 +230,7 @@ describe('adapter types', () => {
     const bound = newRouter('/fastify').get('/', () => 1)
 
     createWebApplication().mount(unbound, bound)
-    createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).mount(bound)
+    createWebApplication().mount(bound)
     onFake().mount(unbound)
     newRouter('/parent').mount(unbound)
 

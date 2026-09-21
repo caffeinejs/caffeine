@@ -1,17 +1,7 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import {
-  Controller,
-  Delete,
-  ErrConfiguration,
-  Get,
-  Post,
-  Status,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, Delete, ErrConfiguration, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
 import { LRUCache } from 'lru-cache'
 import { describe, it, expect } from 'vitest'
 
@@ -32,8 +22,7 @@ describe('Cache-Control headers', () => {
       }
       void [TtlNumController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-num/data')
@@ -52,8 +41,7 @@ describe('Cache-Control headers', () => {
       }
       void [TtlStrMController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-str-m/data')
@@ -71,8 +59,7 @@ describe('Cache-Control headers', () => {
       }
       void [TtlCompoundController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-ttl-compound/data')
@@ -92,8 +79,7 @@ describe('Cache-Control headers', () => {
       }
       void [SharedMaxAgeController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-smaxage/data')
@@ -114,8 +100,7 @@ describe('Cache-Control headers', () => {
       }
       void [StaleWhileRevalidateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-swr/data')
@@ -133,8 +118,7 @@ describe('Cache-Control headers', () => {
       }
       void [StaleIfErrorController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-sie/data')
@@ -154,8 +138,7 @@ describe('Cache-Control headers', () => {
       }
       void [PrivateCacheController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-private/data')
@@ -173,8 +156,7 @@ describe('Cache-Control headers', () => {
       }
       void [PublicCacheController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-public/data')
@@ -194,8 +176,7 @@ describe('Cache-Control headers', () => {
       }
       void [NoStoreController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-nostore/data')
@@ -213,8 +194,7 @@ describe('Cache-Control headers', () => {
       }
       void [NoCacheController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-nocache/data')
@@ -232,8 +212,7 @@ describe('Cache-Control headers', () => {
       }
       void [MustRevalidateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-mustrevalidate/data')
@@ -251,8 +230,7 @@ describe('Cache-Control headers', () => {
       }
       void [ImmutableController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-cc-immutable/data')
@@ -271,8 +249,7 @@ describe('Cache-Control headers', () => {
     }
     void [EmptyOptionsController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-cc-empty/data')
@@ -292,8 +269,7 @@ describe('Vary header', () => {
     }
     void [VarySingleController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-vary-single/data')
@@ -311,8 +287,7 @@ describe('Vary header', () => {
     }
     void [VaryMultiController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-vary-multi/data')
@@ -330,8 +305,7 @@ describe('Vary header', () => {
     }
     void [VaryNoneController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-vary-none/data')
@@ -351,8 +325,7 @@ describe('ETag', () => {
     }
     void [ETagPresentController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-etag-present/data')
@@ -372,8 +345,7 @@ describe('ETag', () => {
     }
     void [ETagStableController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-etag-stable/data')
@@ -399,8 +371,7 @@ describe('ETag', () => {
     }
     void [ETagDiffController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const resA = await app.fetch('/cache-etag-diff/a')
@@ -422,8 +393,7 @@ describe('ETag', () => {
     }
     void [ETagDisabledController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-etag-disabled/data')
@@ -441,8 +411,7 @@ describe('ETag', () => {
     }
     void [ETagNoStoreController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-etag-nostore/data')
@@ -460,8 +429,7 @@ describe('ETag', () => {
     }
     void [ETagStreamController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-etag-stream/data')
@@ -482,8 +450,7 @@ describe('304 Not Modified', () => {
     }
     void [Match304Controller]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-match/data')
@@ -506,8 +473,7 @@ describe('304 Not Modified', () => {
     }
     void [NoMatch304Controller]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-304-nomatch/data')
@@ -529,8 +495,7 @@ describe('304 Not Modified', () => {
     void [Stale304Controller]
 
     const store = new MemoryCache()
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(store)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-stale/data')
@@ -554,8 +519,7 @@ describe('304 Not Modified', () => {
     }
     void [Head304Controller]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-304-head/data')
@@ -581,8 +545,7 @@ describe('Cache store', () => {
     }
     void [StoreBupassController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-store-bypass/data')
@@ -608,8 +571,7 @@ describe('Cache store', () => {
     }
     void [StoreNoStoreController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-store-nostore/data')
@@ -631,8 +593,7 @@ describe('Cache store', () => {
     }
     void [StorePostDefaultController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-store-post-default/data', { method: 'POST' })
@@ -654,8 +615,7 @@ describe('Cache store', () => {
     }
     void [StorePostCustomController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
@@ -689,11 +649,13 @@ describe('Cache store', () => {
     }
     void [StoreStatusController]
 
-    const server = fastify()
-    server.setNotFoundHandler((_req, reply) => {
-      void reply.code(400).send({ error: 'bad' })
-    })
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication()
+      .server(undefined, server => {
+        server.setNotFoundHandler((_req, reply) => {
+          void reply.code(400).send({ error: 'bad' })
+        })
+      })
+      .with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-store-status/ok')
@@ -716,8 +678,7 @@ describe('Cache store', () => {
     void [StoreClearController]
 
     const store = new MemoryCache()
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(store)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.ready()
 
     await app.fetch('/cache-store-clear/data')
@@ -748,8 +709,7 @@ describe('Cache key', () => {
     }
     void [KeyDefaultController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-key-default/data')
@@ -779,8 +739,7 @@ describe('Cache key', () => {
     }
     void [KeyURLsController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-key-urls/a')
@@ -806,8 +765,7 @@ describe('Cache key', () => {
     }
     void [KeyCustomPathController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-key-custom-path/data?v=1')
@@ -829,8 +787,7 @@ describe('Cache key', () => {
     }
     void [KeyCustomQueryController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-key-custom-query/data?lang=en')
@@ -860,8 +817,7 @@ describe('Decorator scope', () => {
     }
     void [ScopeClassController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const resA = await app.fetch('/cache-scope-class/a')
@@ -887,8 +843,7 @@ describe('Decorator scope', () => {
     }
     void [ScopeMethodController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const resCached = await app.fetch('/cache-scope-method/cached')
@@ -910,8 +865,7 @@ describe('Decorator scope', () => {
     }
     void [ScopeReplaceController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-scope-replace/route')
@@ -934,8 +888,7 @@ describe('Undecorated routes', () => {
     }
     void [UndecoratedController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/cache-undecorated/data')
@@ -959,8 +912,7 @@ describe('@CacheControl(false)', () => {
     }
     void [CacheFalseMethodController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/cache-false-method/data')
@@ -987,8 +939,7 @@ describe('@CacheControl(false)', () => {
     }
     void [CacheFalseClassController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const resA = await app.fetch('/cache-false-class/a')
@@ -1012,8 +963,7 @@ describe('@CacheControl(false)', () => {
     }
     void [CacheFalseNoCacheController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/cache-false-nocache/data')
@@ -1039,8 +989,7 @@ describe('Bug fixes', () => {
       }
       void [Bug1EtagFalseController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-bug1-etag-false/data')
@@ -1065,8 +1014,7 @@ describe('Bug fixes', () => {
       }
       void [Bug1InmIgnoredController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-bug1-inm-ignored/data')
@@ -1091,8 +1039,7 @@ describe('Bug fixes', () => {
       }
       void [Bug2PrivateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-bug2-private/data')
@@ -1120,8 +1067,7 @@ describe('Bug fixes', () => {
       }
       void [Bug3VarySeparateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
@@ -1143,8 +1089,7 @@ describe('Bug fixes', () => {
       }
       void [Bug3VaryHitController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
@@ -1166,8 +1111,7 @@ describe('Bug fixes', () => {
       }
       void [Bug3VaryMultiController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       // same Accept-Language, different Accept → separate entry
@@ -1200,8 +1144,7 @@ describe('Bug fixes', () => {
       }
       void [Bug4CCNoCacheController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-bug4-cc-nocache/data')
@@ -1231,8 +1174,7 @@ describe('Bug fixes', () => {
       }
       void [Bug4PragmaController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-bug4-pragma/data')
@@ -1256,8 +1198,7 @@ describe('Bug fixes', () => {
       }
       void [Bug5HeadNoBodyController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const getRes = await app.fetch('/cache-bug5-head-nobody/data')
@@ -1281,8 +1222,7 @@ describe('Bug fixes', () => {
       }
       void [Bug5Head304Controller]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const getRes = await app.fetch('/cache-bug5-head-304/data')
@@ -1313,8 +1253,7 @@ describe('Bug fixes', () => {
       }
       void [VaryStarController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-vary-star/data')
@@ -1357,8 +1296,7 @@ describe('Bug fixes', () => {
       }
       void [SegmentController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(spyStore)))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
       await app.ready()
 
       await app.fetch('/cache-segment/data')
@@ -1382,8 +1320,7 @@ describe('Bug fixes', () => {
       }
       void [AuthPrivateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
@@ -1411,8 +1348,7 @@ describe('Bug fixes', () => {
       }
       void [AuthPublicOverrideController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
@@ -1455,8 +1391,7 @@ describe('Bug fixes', () => {
       }
       void [KeyEncodeController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(spyStore)))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
       await app.ready()
 
       await app.fetch('/cache-key-encode/data?a=1&b=2')
@@ -1484,8 +1419,7 @@ describe('Bug fixes', () => {
       }
       void [ReqNoStoreController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-req-nostore/data')
@@ -1514,8 +1448,7 @@ describe('Bug fixes', () => {
       }
       void [Headers304Controller]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-304-headers/data')
@@ -1541,8 +1474,7 @@ describe('Bug fixes', () => {
       }
       void [InmWildcardController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-inm-wildcard/data')
@@ -1562,8 +1494,7 @@ describe('Bug fixes', () => {
       }
       void [InmListController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-inm-list/data')
@@ -1586,8 +1517,7 @@ describe('Bug fixes', () => {
       }
       void [InmWeakController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-inm-weak/data')
@@ -1624,8 +1554,7 @@ describe('Bug fixes', () => {
       }
       void [SegIsoBController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(store)))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
       await app.ready()
 
       // Prime both segments
@@ -1656,8 +1585,7 @@ describe('Bug fixes', () => {
       }
       void [ProxyRevalidateController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-proxy-revalidate/data')
@@ -1687,8 +1615,7 @@ describe('Bug fixes', () => {
       }
       void [InvalidateSelfController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-invalidate-self/resource')
@@ -1721,8 +1648,7 @@ describe('Bug fixes', () => {
       }
       void [InvalidatePathsController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-invalidate-paths/resource')
@@ -1755,8 +1681,7 @@ describe('Bug fixes', () => {
       }
       void [Invalidate4xxController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-invalidate-4xx/resource')
@@ -1782,8 +1707,7 @@ describe('Bug fixes', () => {
       }
       void [OnlyIfCachedMissController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-only-if-cached-miss/data', { headers: { 'cache-control': 'only-if-cached' } })
@@ -1804,8 +1728,7 @@ describe('Bug fixes', () => {
       }
       void [OnlyIfCachedHitController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-only-if-cached-hit/data')
@@ -1829,8 +1752,7 @@ describe('Bug fixes', () => {
       }
       void [NoTransformController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-no-transform/data')
@@ -1851,8 +1773,7 @@ describe('Bug fixes', () => {
       }
       void [LastModifiedController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res = await app.fetch('/cache-last-modified/data')
@@ -1870,8 +1791,7 @@ describe('Bug fixes', () => {
       }
       void [ImsMatchController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       const res1 = await app.fetch('/cache-ims-match/data')
@@ -1894,8 +1814,7 @@ describe('Bug fixes', () => {
       }
       void [ImsStaleController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-ims-stale/data')
@@ -1918,8 +1837,7 @@ describe('Bug fixes', () => {
       }
       void [InmPrecedenceController]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-inm-precedence/data')
@@ -1951,8 +1869,7 @@ describe('Bug fixes', () => {
       }
       void [ReqMaxAge0Controller]
 
-      const server = fastify()
-      const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
       await app.ready()
 
       await app.fetch('/cache-req-maxage0/data')
@@ -2013,10 +1930,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const container = new CaffeineIoC()
     container.bind(MapStore, t => t.toClass(MapStore))
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server), { container }).with(
-      HTTPCaching(b => b.store(MapStore)),
-    )
+    const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
     await app.ready()
 
     await app.fetch('/cache-di-custom-store/data')
@@ -2045,10 +1959,9 @@ describe('CacheControl builder & container-managed store', () => {
 
     const container = new CaffeineIoC()
     container.bind(MapStore, t => t.toClass(MapStore))
-    const server = fastify()
     // No .store(...) option — HTTPCaching requires one explicitly and throws without it; the container
     // binding above is never consulted.
-    const app = createWebApplication(fastifyAdapterFactory(server), { container }).with(HTTPCaching())
+    const app = createWebApplication({ container }).with(HTTPCaching())
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
 
@@ -2071,8 +1984,7 @@ describe('CacheControl builder & container-managed store', () => {
     void [BuilderStoreController]
 
     const store = new MapStore()
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(store)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.ready()
 
     await app.fetch('/cache-builder-store/data')
@@ -2096,10 +2008,7 @@ describe('CacheControl builder & container-managed store', () => {
     void [BuilderBothController]
 
     const store = new MapStore()
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(
-      HTTPCaching(b => b.store(store).etagGenerator(() => '"builder-etag"')),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).etagGenerator(() => '"builder-etag"')))
     await app.ready()
 
     const res = await app.fetch('/cache-builder-both/data')
@@ -2120,8 +2029,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const container = new CaffeineIoC()
     container.bind(kETagGenerator, t => t.toValue(() => '"sentinel-etag"'))
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server), { container }).with(
+    const app = createWebApplication({ container }).with(
       HTTPCaching(b => b.store(new MemoryCache()).etagGenerator(kETagGenerator)),
     )
     await app.ready()
@@ -2143,8 +2051,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const container = new CaffeineIoC()
     container.bind(kETagGenerator, t => t.toValue(() => '"sentinel-etag"'))
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server), { container }).with(
+    const app = createWebApplication({ container }).with(
       HTTPCaching(b => b.store(new MemoryCache()).etagGenerator(kETagGenerator)),
     )
     await app.ready()
@@ -2166,8 +2073,7 @@ describe('X-Cache status header', () => {
     }
     void [XCBasicController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/xc-basic/data')
@@ -2188,8 +2094,7 @@ describe('X-Cache status header', () => {
     }
     void [XC304Controller]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res1 = await app.fetch('/xc-304/data')
@@ -2211,8 +2116,7 @@ describe('X-Cache status header', () => {
     }
     void [XCBypassController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/xc-bypass/data', { headers: { 'cache-control': 'no-store' } })
@@ -2230,8 +2134,7 @@ describe('X-Cache status header', () => {
     }
     void [XCFalseController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     const res = await app.fetch('/xc-false/data')
@@ -2249,10 +2152,7 @@ describe('X-Cache status header', () => {
     }
     void [XCCustomController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(
-      HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-My-Cache')),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-My-Cache')))
     await app.ready()
 
     const res = await app.fetch('/xc-custom/data')
@@ -2276,8 +2176,7 @@ describe('Canonical query keys', () => {
     }
     void [QueryKeyOrderController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/qk-order/data?a=1&b=2')
@@ -2301,8 +2200,7 @@ describe('Canonical query keys', () => {
     }
     void [QueryKeyValuesController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/qk-values/data?a=1')
@@ -2323,8 +2221,7 @@ describe('Age header & request max-age', () => {
     }
     void [AgeHitController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/age-hit/data')
@@ -2346,8 +2243,7 @@ describe('Age header & request max-age', () => {
     }
     void [AgeMaxAgeOkController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
     await app.fetch('/age-maxage-ok/data')
@@ -2381,8 +2277,7 @@ describe('Age header & request max-age', () => {
     }
     void [AgeMaxAgeStaleController]
 
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new AgedStore())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new AgedStore())))
     await app.ready()
 
     const res = await app.fetch('/age-maxage-stale/data', { headers: { 'cache-control': 'max-age=10' } })

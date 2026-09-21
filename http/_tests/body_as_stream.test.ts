@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, BodyAsStream } from '../index.js'
+import { Controller, Post, Args, createWebApplication, BodyAsStream } from '../index.js'
 import { $p } from '../route_picker.js'
 
 describe('BodyAsStream', () => {
@@ -24,7 +23,7 @@ describe('BodyAsStream', () => {
 
     void [StreamController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const payload = Buffer.from('hello stream world')
@@ -57,7 +56,7 @@ describe('BodyAsStream', () => {
 
     void [StreamBinaryController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
@@ -89,7 +88,7 @@ describe('BodyAsStream', () => {
 
     void [StreamJSONController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const jsonStr = JSON.stringify({ key: 'value' })
@@ -123,7 +122,7 @@ describe('BodyAsStream', () => {
 
     void [MixedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const streamRes = await app.fetch('/stream-mixed/raw', {

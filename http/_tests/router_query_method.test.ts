@@ -1,9 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { createWebApplication, fastifyAdapterFactory, Router } from '../index.js'
+import { createWebApplication, Router } from '../index.js'
 
 // QUERY is in Fastify's default method set, so a route declaring it needs nothing opted into.
 describe('Router.query()', () => {
@@ -12,8 +11,7 @@ describe('Router.query()', () => {
       term: ctx.req.body().term,
     }))
 
-    const instance = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(instance), { container: new CaffeineIoC() }).mount(routes)
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
     await app.ready()
 
     const res = await app.fetch('/query-test', {

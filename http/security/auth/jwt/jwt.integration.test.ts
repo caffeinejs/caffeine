@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, it, expect, vi } from 'vitest'
 
@@ -12,7 +11,6 @@ import {
   Post,
   Status,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 
@@ -55,7 +53,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTValidController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -78,7 +76,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTNoHeaderController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -99,7 +97,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTBadTokenController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -121,7 +119,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTExpiredController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -144,7 +142,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTWrongIssController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth.addJWTBearer(b =>
         b
@@ -174,7 +172,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTWrongAudController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth.addJWTBearer(b =>
         b
@@ -205,7 +203,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTSubClaimController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -230,7 +228,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTRoleController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -253,7 +251,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTArrayRolesController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -278,7 +276,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTOnValidatedController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth.addJWTBearer(b =>
         b
@@ -316,7 +314,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTOnFailController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth.addJWTBearer(b =>
         b
@@ -352,7 +350,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTRole403Controller]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -382,7 +380,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTStatusGuardController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()
@@ -409,7 +407,7 @@ describe('JWTBearerHandler', () => {
     }
     void [JWTAllowAnonController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
     await app.ready()

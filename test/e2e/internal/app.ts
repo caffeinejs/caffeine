@@ -1,7 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, fastifyAdapterFactory, type WebApplicationOptions } from '@caffeinejs/http'
+import { createWebApplication, type WebApplicationOptions } from '@caffeinejs/http'
 import type { ConfigDefinition } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 
 /**
  * Starts an application on a real socket for the authentication e2e specs.
@@ -11,12 +10,7 @@ import fastify from 'fastify'
  */
 
 function newApplication<C>(options: StartAppOptions<C>) {
-  const server = fastify()
-
-  // Registered on the server itself, ahead of everything the application installs, so cookies are parsed by the
-  // time the authentication gate reads them.
-
-  // Both type parameters are inferred: the adapter from the factory, the configuration from `options.config`.
+  // The configuration type is inferred from `options.config`.
   const applicationOptions: WebApplicationOptions<C> = {
     container: options.container,
     config: options.config,
@@ -24,7 +18,7 @@ function newApplication<C>(options: StartAppOptions<C>) {
     logger: false,
   }
 
-  return createWebApplication(fastifyAdapterFactory(server), applicationOptions)
+  return createWebApplication(applicationOptions)
 }
 
 export type E2EApplication<C = unknown> = ReturnType<typeof newApplication<C>>
@@ -54,10 +48,9 @@ export async function startApp<C = unknown>(
 ): Promise<RunningApp<C>> {
   const app = newApplication<C>(options)
 
-  app.server(s => s.host('127.0.0.1').port(options.port ?? 0))
   configure(app)
 
-  const { address } = await app.run()
+  const { address } = await app.run({ host: '127.0.0.1', port: options.port ?? 0 })
   if (address === undefined) {
     throw new Error('Cannot start the e2e application: the server reported no address')
   }

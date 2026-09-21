@@ -1,13 +1,12 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import type { HealthBuilder } from '../health/builder.js'
 import { ErrHealthIndicatorNotSingleton } from '../health/errors.js'
 import { health } from '../health/health.js'
-import { Authorize, Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Authorize, Controller, Get, createWebApplication } from '../index.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {
@@ -59,7 +58,7 @@ async function start(
   configure?: (health: HealthBuilder) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
-  const app = createWebApplication(fastifyAdapterFactory(fastify())).with(health(configure ?? (() => {})))
+  const app = createWebApplication().with(health(configure ?? (() => {})))
 
   bindIndicators(app, ...indicators)
   await app.run()
@@ -93,7 +92,7 @@ describe('health probes', () => {
   })
 
   it('does not mount them when health was never configured and Kubernetes is absent', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.run()
 
     try {
@@ -163,7 +162,7 @@ describe('health probes', () => {
   })
 
   it('rejects a non-singleton indicator at ready', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).with(health())
+    const app = createWebApplication().with(health())
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
@@ -266,7 +265,7 @@ describe('health probes', () => {
 
     void [SecuredController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
       .authentication(auth =>
         auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
       )

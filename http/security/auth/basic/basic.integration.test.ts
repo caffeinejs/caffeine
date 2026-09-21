@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -11,7 +10,6 @@ import {
   Args,
   Principal,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 
@@ -32,7 +30,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicOkController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth.addBasic(b =>
         b.validate((_ctx, user, pass) =>
@@ -61,7 +59,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicChallengeController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null)))
     const app = builder
     await app.ready()
@@ -82,7 +80,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     }
     void [BasicBadController]
 
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addBasic(b => b.validate(() => null)))
     const app = builder
     await app.ready()

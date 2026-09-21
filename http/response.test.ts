@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -10,7 +9,6 @@ import {
   Responder,
   ActionResult,
   createWebApplication,
-  fastifyAdapterFactory,
 } from './index.js'
 
 // A custom response kind with NO view/Fastify involvement: it renders itself through the platform-neutral
@@ -63,9 +61,7 @@ void [CustomController]
 
 describe('custom ResponseResult dispatch', () => {
   async function buildApp() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
-      e.globalHandlers(CustomErrorHandler),
-    )
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(CustomErrorHandler))
     await app.ready()
     return app
   }

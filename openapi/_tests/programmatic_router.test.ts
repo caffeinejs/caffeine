@@ -1,13 +1,5 @@
-import {
-  Router,
-  WebApplication,
-  constraints,
-  createWebApplication,
-  fastifyAdapterFactory,
-  version,
-} from '@caffeinejs/http'
+import { Router, WebApplication, constraints, createWebApplication, version } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'
@@ -46,7 +38,7 @@ describe('openapi from a programmatic router', () => {
       .with(operation({ hidden: true }))
       .handler(() => ({}))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    app = createWebApplication({})
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -82,7 +74,7 @@ describe('openapi from a programmatic router', () => {
       .status(201)
       .handler(ctx => ctx.body(ctx.req.body()))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    app = createWebApplication({})
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
@@ -109,7 +101,7 @@ describe('openapi from a programmatic router', () => {
       .name('list')
       .handler(() => [])
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    app = createWebApplication({})
       .with(() => constraints())
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication

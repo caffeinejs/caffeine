@@ -1,8 +1,7 @@
 import { Injectable, type OnBootstrap, type OnDestroy } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, createWebApplication } from '../index.js'
 
 describe('Adapter Lifecycle', () => {
   it('a container OnBootstrap hook runs before the first request is served', async () => {
@@ -26,7 +25,7 @@ describe('Adapter Lifecycle', () => {
 
     void [LifecycleController, Warmup]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await app.ready()
 
@@ -56,7 +55,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc3Controller, Resource]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await app.ready()
     await app.close()
@@ -75,7 +74,7 @@ describe('Adapter Lifecycle', () => {
 
     void [Lc4Controller]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const beforeClose = await app.fetch('/lc4/ping')

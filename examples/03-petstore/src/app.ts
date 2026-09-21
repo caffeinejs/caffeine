@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import { Claim, Identity, Principal, createWebApplication, fastifyAdapterFactory, health } from '@caffeinejs/http'
+import { Claim, Identity, Principal, createWebApplication, health } from '@caffeinejs/http'
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
@@ -33,7 +33,7 @@ export interface BuildAppOptions {
  */
 export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
-    createWebApplication(fastifyAdapterFactory(), {
+    createWebApplication({
       container,
       config: configuration(),
       logger: options.logger ?? createLogger(),
@@ -42,12 +42,12 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // makes no difference to install order; they are grouped first because they read as configuration.
 
       // Server host/port come from PETSTORE_SERVER__HOST / PETSTORE_SERVER__PORT (defaults in the schema).
-      .server((s, { config }) => s.config(config.server))
+      .server(({ config }) => ({ listener: config.server }))
       // The two handlers that render every thrown error: HTTPErrorHandler for an ErrHTTP, FallbackErrorHandler
       // for a validation failure or anything unexpected. Declaring them is not enough — this is what puts them
       // in front of the whole application.
       .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
-      // The level follows configuration, and the adapter re-syncs Fastify's own child logger from it.
+      // The level follows configuration; the adapter builds Fastify on this logger, so the server follows it too.
       .logger((b, { config }) => b.level(config.log.level))
       // Graceful shutdown: SIGTERM makes /readyz answer 503 immediately, the drain delay covers the
       // routing-table lag while requests keep being served normally, and only then does the server close. No

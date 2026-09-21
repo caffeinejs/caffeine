@@ -1,5 +1,4 @@
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, Get, createWebApplication } from '@caffeinejs/http'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -13,7 +12,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+const app = createWebApplication()
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Prefix, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, Prefix, createWebApplication } from '../index.js'
 
 describe('Prefix', () => {
   it('prepends prefix to all routes in the controller', async () => {
@@ -16,7 +15,7 @@ describe('Prefix', () => {
 
     void [UsersController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const hit = await app.fetch('/v1/users/list')
@@ -47,7 +46,7 @@ describe('Prefix', () => {
 
     void [ItemsController, ItemsV2Controller]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const v1 = await app.fetch('/v1/items/all')

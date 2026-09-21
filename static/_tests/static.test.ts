@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
-import { WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { WebApplication, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticConfigSchema, staticFiles } from '../index.js'
@@ -20,9 +19,7 @@ describe('static feature', () => {
   })
 
   it('serves a file under the configured prefix', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-      staticFiles(s => s.serve(fixtures, { prefix: '/static' })),
-    )
+    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.ready()
 
     const res = await app.fetch('/static/hello.txt')
@@ -33,9 +30,7 @@ describe('static feature', () => {
   })
 
   it('sets the css content-type from the extension', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-      staticFiles(s => s.serve(fixtures, { prefix: '/assets' })),
-    )
+    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
     await app.ready()
 
     const res = await app.fetch('/assets/style.css')
@@ -45,9 +40,7 @@ describe('static feature', () => {
   })
 
   it('404s for a missing file', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
-      staticFiles(s => s.serve(fixtures, { prefix: '/static' })),
-    )
+    app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
     await app.ready()
 
     const res = await app.fetch('/static/nope.txt')
@@ -56,7 +49,7 @@ describe('static feature', () => {
   })
 
   it('serves from multiple mounts (only the first decorates reply)', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    app = createWebApplication({}).with(
       staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })),
     )
     await app.ready()

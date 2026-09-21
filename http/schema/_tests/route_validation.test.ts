@@ -1,5 +1,4 @@
 import { ErrSchemaNotRepresentable, $t } from '@caffeinejs/std/schema'
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -8,7 +7,6 @@ import {
   AllowAnonymous,
   Controller,
   createWebApplication,
-  fastifyAdapterFactory,
   type FastifyContext,
   Get,
   Args,
@@ -84,7 +82,7 @@ class PetsController {
 void PetsController
 
 async function boot() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()))
+  const app = createWebApplication()
   await app.ready()
   return app
 }

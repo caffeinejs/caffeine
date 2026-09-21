@@ -1,5 +1,4 @@
 import { token } from '@caffeinejs/di'
-import { serverConfigSchema } from '@caffeinejs/http'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
 
@@ -16,8 +15,11 @@ import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
  * `.clientID(...)`.
  */
 export const ConfigSchema = $t.Object({
-  // Imported rather than restated, which is what carries the server's own defaults into the tree.
-  server: $t.Object(serverConfigSchema.properties),
+  // What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
+  server: $t.Object({
+    host: $t.String({ default: '0.0.0.0' }),
+    port: $t.Number({ default: 9999 }),
+  }),
   log: $t.Object({
     level: $t.String({ default: 'info' }),
   }),

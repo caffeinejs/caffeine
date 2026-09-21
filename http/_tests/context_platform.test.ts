@@ -1,9 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Context } from '../context.js'
-import { createWebApplication, fastifyAdapterFactory, type WebApplication } from '../index.js'
+import { createWebApplication, type WebApplication } from '../index.js'
 import { Responder, type ActionResult } from '../response.js'
 import { Router } from '../routing/programmatic/router.js'
 
@@ -40,7 +39,7 @@ describe('ctx.platform', () => {
       .get('/handler', ctx => describePlatform(ctx))
       .get('/responder', () => new PlatformResponder())
 
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    app = createWebApplication({
       container: new CaffeineIoC({ decorators: false }),
     })
       .use((ctx, next) => {

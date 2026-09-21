@@ -2,11 +2,11 @@ import { token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import FastifyCookie, { sign } from '@fastify/cookie'
-import fastify, { type FastifyInstance } from 'fastify'
+import { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { cookieConfigSchema, createWebApplication, fastifyAdapterFactory, newRouter } from '../index.js'
+import { cookieConfigSchema, createWebApplication, newRouter } from '../index.js'
 
 const schema = $t.Object({ app: $t.Object({ cookie: cookieConfigSchema }) })
 
@@ -55,7 +55,7 @@ describe('ctx.req.cookie()', () => {
   }
 
   it('reads a cookie with nothing registered by the application', async () => {
-    const app = await ready(createWebApplication(fastifyAdapterFactory(fastify())).mount(routes()))
+    const app = await ready(createWebApplication().mount(routes()))
 
     const response = await app.fetch('/page', { headers: { cookie: 'session=abc' } })
 
@@ -64,16 +64,14 @@ describe('ctx.req.cookie()', () => {
   })
 
   it('answers null for a cookie the request did not send', async () => {
-    const app = await ready(createWebApplication(fastifyAdapterFactory(fastify())).mount(routes()))
+    const app = await ready(createWebApplication().mount(routes()))
 
     expect(await (await app.fetch('/page')).json()).toEqual({ session: null })
   })
 
   // The parsing is in place before any plugin registers, so a hook that runs ahead of the routes sees it too.
   it('has them parsed by the time an onRequest hook reads them', async () => {
-    const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify())).with(readsCookieEarly()).mount(routes()),
-    )
+    const app = await ready(createWebApplication().with(readsCookieEarly()).mount(routes()))
 
     const response = await app.fetch('/page', { headers: { cookie: 'session=abc' } })
 
@@ -91,7 +89,7 @@ describe('ctx.req.cookie()', () => {
     })
 
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()))
+      createWebApplication()
         .cookie(k => k.secret(secret))
         .mount(signing, reads()),
     )
@@ -111,7 +109,7 @@ describe('ctx.req.cookie()', () => {
       .build()
 
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
+      createWebApplication({ config: conf })
         .cookie((k, { config }) => k.config(config.app.cookie))
         .mount(reads()),
     )
@@ -131,7 +129,7 @@ describe('ctx.req.cookie()', () => {
       .build()
 
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()), { config: conf })
+      createWebApplication({ config: conf })
         .cookie((k, { config }) => k.config(config.app.cookie).secret(fromCode))
         .mount(reads()),
     )
@@ -148,10 +146,14 @@ describe('ctx.req.cookie()', () => {
   // start-up on decorators that are already there.
   it('leaves a server that registered the plugin itself alone', async () => {
     const secret = 'the-secret-the-application-registered-with'
-    const server = fastify()
-    server.register(FastifyCookie, { secret })
 
-    const app = await ready(createWebApplication(fastifyAdapterFactory(server)).mount(reads()))
+    const app = await ready(
+      createWebApplication()
+        .server(undefined, server => {
+          server.register(FastifyCookie, { secret })
+        })
+        .mount(reads()),
+    )
 
     const response = await app.fetch('/read', { headers: { cookie: `tok=${sign('value', secret)}` } })
 
@@ -163,7 +165,7 @@ describe('ctx.req.cookie()', () => {
   // cookie scheme authenticate nobody.
   it('fails the read when the application turned cookies off', async () => {
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()))
+      createWebApplication()
         .cookie(k => k.enabled(false))
         .mount(routes()),
     )

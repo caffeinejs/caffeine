@@ -1,7 +1,6 @@
 import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Args, createWebApplication, $p, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, Delete, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
 
 // --- services ---
 
@@ -79,12 +78,12 @@ void [TaskStore, TaskLogger, TaskController]
 // --- bootstrap ---
 
 const container = new CaffeineIoC({ modules: [DevtoolsModule({ port: 9229 })] })
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container })
+const app = createWebApplication({ container })
 await app.ready()
 
 const devtools = container.get(DevtoolsServer)
 devtools.attach(app).start()
 
-await app.instance.listen({ port: 3000, host: '127.0.0.1' })
+await app.run({ port: 3000, host: '127.0.0.1' })
 console.log('[app] HTTP server at http://localhost:3000')
 console.log('[app] Devtools at http://localhost:9229')

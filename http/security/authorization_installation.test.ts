@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -9,7 +8,6 @@ import {
   ErrAuthorizationRequired,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../index.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
@@ -27,7 +25,7 @@ describe('authorization installation', () => {
     }
     void [NoneNeededController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/authz-none-needed')
@@ -44,7 +42,7 @@ describe('authorization installation', () => {
     }
     void [StandaloneController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     // Never named by a route: the policy is only there so `.authorization(...)` has something to install.
     app.authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated()))
     await app.ready()
@@ -68,7 +66,7 @@ describe('authorization installation', () => {
     }
     void [NeitherConfiguredController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
   })
@@ -86,7 +84,7 @@ describe('authorization installation', () => {
     }
     void [BypassedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     app.container.bind(AuthenticationService, t => t.toValue({} as AuthenticationService))
 
     await expect(app.ready()).rejects.toThrow(ErrAuthorizationRequired)

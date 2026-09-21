@@ -1,5 +1,4 @@
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -11,7 +10,6 @@ import {
   bodyAsBuffer,
   bodyAsStream,
   createWebApplication,
-  fastifyAdapterFactory,
   fst,
   type RouteExtension,
 } from '../index.js'
@@ -57,7 +55,7 @@ describe('route extensions', () => {
       }
       void [DecoratedStreamController]
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
+      const app = createWebApplication().mount(router)
       await app.ready()
 
       const payload = Buffer.from('hello stream world')
@@ -81,7 +79,7 @@ describe('route extensions', () => {
           return { isBuffer: Buffer.isBuffer(body), text: body.toString() }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
+      const app = createWebApplication().mount(router)
       await app.ready()
 
       const res = await app.fetch('/ext-buffer/upload', {
@@ -150,7 +148,7 @@ describe('fst', () => {
           return { ok: true }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
+      const app = createWebApplication().mount(router)
       await app.ready()
 
       expect((await app.fetch('/fst/hooked')).status).toBe(200)
@@ -172,7 +170,7 @@ describe('fst', () => {
           return { invalid: validationError !== undefined }
         })
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify())).mount(router)
+      const app = createWebApplication().mount(router)
       await app.ready()
 
       // attachValidation turns a validation failure into a flag on the request instead of a 400.

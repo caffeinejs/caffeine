@@ -1,5 +1,5 @@
 import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
-import fastify, { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
+import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
@@ -10,7 +10,6 @@ import {
   Controller,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
   kFeatureServer,
   type Context,
   type HTTPFeature,
@@ -71,7 +70,7 @@ class GuardedController {
 void [GuardedController]
 
 function guardedApp(ran: string[]) {
-  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+  return createWebApplication()
     .with(stamping('before', ran))
     .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never'))
     .with(stamping('after', ran))
@@ -114,7 +113,7 @@ describe('the authentication gate registers where it was written', () => {
   // The assertion the gate used to carry. It is checked whether or not `.authentication(...)` was ever
   // called — which is the case it exists for, and the reason it does not live in the gate any more.
   it('refuses to start when a route is protected and nothing configured authentication', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    const app = createWebApplication()
 
     await expect(app.ready()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
   })

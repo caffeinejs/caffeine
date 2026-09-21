@@ -8,7 +8,6 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { AdapterExtensions, type AdapterExtensionFactory } from './adapter_extension.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
@@ -41,9 +40,39 @@ import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
-import { ServerBuilder, type ServerAddress } from './server/index.js'
 import type { HTTPSetupContext } from './setup_context.js'
 import { Keys } from './symbols.js'
+
+/**
+ * Where the server ended up listening, as reported by the bound socket — which is not what was asked for:
+ * port `0` becomes an OS-assigned port, and a wildcard host stays a wildcard.
+ */
+export interface ServerAddress {
+  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. */
+  readonly host: string
+  /** The bound port. Never `0`. */
+  readonly port: number
+  /**
+   * An origin that can be connected to. A wildcard {@link host} is rendered as the matching loopback address,
+   * since `0.0.0.0` is an address to accept on, not one to dial.
+   */
+  readonly origin: string
+}
+
+/**
+ * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
+ * factory gets, so `config` is the resolved tree and the container resolves. Returns the adapter's own shape —
+ * under Fastify, `{ factory, listener }`.
+ */
+export type ServerConfigurer<T extends AdapterTypes, C = unknown> = (
+  context: HTTPSetupContext<C>,
+) => T['serverOptions'] | Promise<T['serverOptions']>
+
+/**
+ * The callback `.server(_, customize)` takes: handed the server right after the adapter constructs it, before
+ * anything is decorated or registered on it.
+ */
+export type ServerCustomizer<T extends AdapterTypes> = (instance: T['instance']) => void | Promise<void>
 
 /** What an application hands its adapter to set the server up with. */
 export interface AdapterIn<T extends AdapterTypes> {
@@ -56,6 +85,10 @@ export interface AdapterIn<T extends AdapterTypes> {
   middlewares: MiddlewarePipeline<T['hook']>
   /** What the features and factories contributed, in the order they were installed. */
   extensions: AdapterExtensions<T['instance'], T['extension']>
+  /** What every `.server(configure)` resolved to, merged section by section. Empty when none was made. */
+  server: T['serverOptions']
+  /** Every `.server(_, customize)` callback folded into one that runs them in call order. `undefined` when none. */
+  customize: ServerCustomizer<T> | undefined
 }
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -73,13 +106,17 @@ export interface WebRunInfo extends RunInfo {
  * what the application, its routers and each request's context are typed with.
  */
 export interface Adapter<T extends AdapterTypes> {
+  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
   get instance(): T['instance']
 
   /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
   get address(): ServerAddress | undefined
 
+  /** Builds the server from `input.server`, hands it to `input.customize`, then wires everything else onto it. */
   setup(input: AdapterIn<T>): Promise<void>
-  run(): Promise<void>
+  /** Starts listening. The arguments are what {@link WebApplication.run} was given, untouched. */
+  run(...args: T['runArgs']): Promise<void>
+  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 
   teardown(): Promise<void>
@@ -94,12 +131,6 @@ export interface Adapter<T extends AdapterTypes> {
 
 export interface AdapterFactoryIn {
   container: Container
-
-  /**
-   * The application's logger, as it stands when the adapter is constructed — the eager one, since no feature has
-   * configured yet. An adapter whose server takes its logger at construction has no later chance to read it.
-   */
-  logger: Logger
 }
 
 export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) => Adapter<T>
@@ -117,7 +148,7 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  * createWebApplication()
  *   .with(staticFiles(s => s.serve('public')))
  *   .authentication(auth => auth.addJWTBearer(b => b.secret(SECRET)))
- *   .server(s => s.port(3000))
+ *   .server(() => ({ listener: { port: 3000 } }))
  * ```
  */
 export class WebApplication<
@@ -136,6 +167,9 @@ export class WebApplication<
   readonly #middlewares = new MiddlewarePipeline<T['hook']>()
   readonly #extensions = new AdapterExtensions<T['instance'], T['extension']>()
   readonly #installs: Install<T, C>[] = []
+  readonly #serverConfigurers: ServerConfigurer<T, C>[] = []
+  readonly #serverCustomizers: ServerCustomizer<T>[] = []
+  #runArgs: T['runArgs'] | undefined
   #routeGroups: RouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
   #built = false
@@ -147,7 +181,6 @@ export class WebApplication<
   #authBuilder: AuthenticationBuilder<C> | undefined
   #authzBuilder: AuthorizationBuilder | undefined
   #guardsBuilder: GuardsBuilder | undefined
-  readonly #serverBuilder = new ServerBuilder<C>()
   readonly #cookieBuilder = new CookieBuilder<C>()
 
   constructor(adapterFactory: AdapterFactory<T>, options: WebApplicationOptions<C> = {}) {
@@ -158,13 +191,9 @@ export class WebApplication<
     // it. Only the error handler is installed earlier, and it reads no cookies.
     this.addFeature(this.#cookieBuilder)
 
-    // Registered unconditionally: every application has a listen address. Configuration reaches it only
-    // through `.server((s, { config }) => s.config(...))` — declaring `server` in the schema is not enough.
-    this.addFeature(this.#serverBuilder)
-
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
-    this.#adapter = adapterFactory({ container: this.container, logger: this.log })
+    this.#adapter = adapterFactory({ container: this.container })
   }
 
   /**
@@ -180,6 +209,11 @@ export class WebApplication<
     return this
   }
 
+  /**
+   * The server the adapter built.
+   *
+   * @throws ErrApplicationNotReady before {@link ready} has built it.
+   */
   get instance(): T['instance'] {
     return this.#adapter.instance
   }
@@ -321,7 +355,7 @@ export class WebApplication<
 
   /**
    * Configures authorization. Runs immediately: there is nothing to read from the configuration tree, so
-   * there is no `(a, kit)` callback and nothing is queued for bootstrap — unlike `.server((s, kit) => …)`.
+   * there is no `(a, kit)` callback and nothing is queued for bootstrap — unlike `.cookie((k, kit) => …)`.
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
@@ -342,7 +376,7 @@ export class WebApplication<
    * controller- and method-level `@UseGuards`.
    *
    * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, kit)`
-   * callback and nothing is queued for bootstrap — unlike `.server((s, kit) => …)`.
+   * callback and nothing is queued for bootstrap — unlike `.cookie((k, kit) => …)`.
    *
    * Does not bind the classes. Each Key must already be a container-managed Guard.
    * Calling this is not required for `@UseGuards` on controllers.
@@ -380,10 +414,35 @@ export class WebApplication<
     return super.ready()
   }
 
-  /** @throws ErrApplicationStarted when {@link ready} has already started. */
-  server(configure: FeatureConfigurer<ServerBuilder<C>, C>): this {
+  /**
+   * Configures the server the adapter builds at {@link ready}.
+   *
+   * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
+   * under Fastify `{ factory, listener }`, the constructor options and the listen options. `customize` is handed
+   * the server right after it is constructed, before the adapter decorates or registers anything on it: a plugin
+   * registered there loads ahead of every feature, and a not-found handler set there is kept.
+   *
+   * Calls accumulate: the settings shallow-merge section by section in call order, and the customizers run in
+   * call order. A configuration node handed over as a section is copied, never mutated.
+   *
+   * ```ts
+   * .server(({ config }) => ({ listener: config.app.server }))
+   * .server(undefined, instance => instance.addHook('onRoute', seen))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  server(configure?: ServerConfigurer<T, C>, customize?: ServerCustomizer<T>): this {
     this.assertConfigurable()
-    this.#serverBuilder[kAddConfigurer](configure)
+
+    if (configure !== undefined) {
+      this.#serverConfigurers.push(configure)
+    }
+
+    if (customize !== undefined) {
+      this.#serverCustomizers.push(customize)
+    }
+
     return this
   }
 
@@ -554,6 +613,10 @@ export class WebApplication<
 
     // The live object is deliberately LiveConfig<unknown> on the base class (see std's Application); it is this
     // application's own configuration for its own C, so the application's own factories get it typed.
+    //
+    // The server's own settings first: they describe what everything below registers onto, and a callback that
+    // fails should do so before a factory with side effects has run.
+    const server = await this.#resolveServerOptions(context as HTTPSetupContext<C>)
     await this.#registerExtensions(context as HTTPSetupContext<C>)
     await this.#registerScopedExtensions(context)
 
@@ -563,18 +626,62 @@ export class WebApplication<
       context,
       middlewares: this.#middlewares,
       extensions: this.#extensions,
+      server,
+      customize: this.#serverCustomizer(),
     })
   }
 
+  /**
+   * Folds every `.server(configure)` result into one, section by section: a section that is an object is
+   * shallow-merged over the one before it, anything else replaces. Sections are copied, never aliased — a live
+   * configuration node is read-only, and the adapter writes into what it is handed.
+   */
+  async #resolveServerOptions(context: HTTPSetupContext<C>): Promise<T['serverOptions']> {
+    const merged: Record<string, unknown> = {}
+
+    for (const configure of this.#serverConfigurers) {
+      for (const [section, value] of Object.entries(await configure(context))) {
+        if (value === undefined) {
+          continue
+        }
+
+        const current = merged[section]
+        merged[section] = isPlainObject(value) ? { ...(isPlainObject(current) ? current : {}), ...value } : value
+      }
+    }
+
+    return merged as T['serverOptions']
+  }
+
+  /** Every `.server(_, customize)` callback as one, run in call order; `undefined` when there is none. */
+  #serverCustomizer(): ServerCustomizer<T> | undefined {
+    if (this.#serverCustomizers.length === 0) {
+      return undefined
+    }
+
+    const customizers = [...this.#serverCustomizers]
+
+    return async instance => {
+      for (const customize of customizers) {
+        await customize(instance)
+      }
+    }
+  }
+
   protected override start(): Promise<void> {
-    return this.#adapter.run()
+    return this.#adapter.run(...((this.#runArgs ?? []) as T['runArgs']))
   }
 
   protected override runInfo(): WebRunInfo {
     return { ...super.runInfo(), address: this.address }
   }
 
-  override run(): Promise<WebRunInfo> {
+  /**
+   * Readies the application if needed and starts the server with what the adapter's `run` takes — under Fastify,
+   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key.
+   */
+  override run(...args: T['runArgs']): Promise<WebRunInfo> {
+    this.#runArgs = args
     // runInfo() is overridden, so what base run() resolves to is already a WebRunInfo.
     return super.run() as Promise<WebRunInfo>
   }
@@ -629,12 +736,11 @@ export class WebApplication<
  *   .with(staticFiles(s => s.serve('public')))
  * ```
  */
-// Default Fastify — no adapter factory or Fastify instance required.
+// Default Fastify — no adapter factory required; `.server(...)` configures the instance it builds.
 export function createWebApplication<TConfig = unknown>(
   options?: WebApplicationOptions<TConfig>,
 ): WebApplication<FastifyTypes, never, never, TConfig>
-// Explicit adapter factory — a customized Fastify instance (`fastifyAdapterFactory(myFastify)`) or a
-// custom adapter altogether.
+// Explicit adapter factory — another adapter altogether.
 export function createWebApplication<T extends AdapterTypes, TConfig = unknown>(
   adapterFactory: AdapterFactory<T>,
   options?: WebApplicationOptions<TConfig>,
@@ -701,4 +807,8 @@ type PlainFeature<C> = Feature<C> & { readonly [kFeatureServer]?: never }
 
 function hasServerHook<C, I>(feature: Feature<C>): feature is HTTPFeature<C, I> {
   return typeof (feature as Partial<HTTPFeature<C, I>>)[kFeatureServer] === 'function'
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

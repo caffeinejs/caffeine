@@ -1,5 +1,5 @@
-import { Controller, Get, createWebApplication, fastifyAdapterFactory, newRouter } from '@caffeinejs/http'
-import fastify, { type RouteOptions } from 'fastify'
+import { Controller, Get, createWebApplication, newRouter } from '@caffeinejs/http'
+import { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
@@ -36,17 +36,18 @@ describe('cache plugin wiring', () => {
     }
     void [ContribController]
 
-    const server = fastify()
-    server.addHook('onRoute', route => {
-      registered.set(`${route.method} ${route.url}`, route as RouteOptions)
-    })
-
-    const app = createWebApplication(fastifyAdapterFactory(server)).with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication()
+      .server(undefined, server => {
+        server.addHook('onRoute', route => {
+          registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+        })
+      })
+      .with(HTTPCaching(b => b.store(new MemoryCache())))
     close = () => app.close()
     await app.ready()
 
     // The plugin registered: the request decoration is in place.
-    expect(server.hasRequestDecorator('responseCached')).toBe(true)
+    expect(app.instance.hasRequestDecorator('responseCached')).toBe(true)
 
     // The onRoute hook only touched the decorated route.
     expect(registered.get('GET /contrib/plain')!.onSend).toBeUndefined()
@@ -56,8 +57,7 @@ describe('cache plugin wiring', () => {
   // Named and fastify-plugin-wrapped like any other first-party plugin: a second registration on the exact
   // same context is refused before Fastify ever sees it, same as two `.with(cors)` calls would be.
   it('refuses a second registration on the same context', async () => {
-    const server = fastify()
-    const app = createWebApplication(fastifyAdapterFactory(server))
+    const app = createWebApplication()
       .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-First')))
       .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Second')))
     close = () => app.close()
@@ -72,7 +72,7 @@ describe('cache plugin wiring', () => {
     const router = newRouter('/nested-install').plugin(HTTPCaching(b => b.store(new MemoryCache())))
     router.get('/data').handler(() => ({ ok: true }))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
       .with(HTTPCaching(b => b.store(new MemoryCache())))
       .mount(router)
     close = () => app.close()

@@ -11,10 +11,8 @@ import {
   Schema,
   WebApplication,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { openapi } from '../openapi.js'
@@ -45,7 +43,7 @@ const HAND_WRITTEN: OpenAPIDocument = {
 }
 
 function build(configure: (o: OpenAPIOptionsBuilder) => void): WebApplication {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+  return createWebApplication({}).with(
     openapi(o => {
       o.docs(false).public()
       configure(o)

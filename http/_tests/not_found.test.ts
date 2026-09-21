@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
@@ -8,7 +7,6 @@ import {
   Get,
   createWebApplication,
   deriveServerOwnedPaths,
-  fastifyAdapterFactory,
   isServerOwned,
 } from '../index.js'
 import type { Route, RouteGroup } from '../route.js'
@@ -29,7 +27,7 @@ void [PetsController]
 
 describe('unmatched routes', () => {
   it('renders the same envelope as a 404 a handler threw', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    const app = createWebApplication()
     await app.ready()
 
     const thrown = (await (await app.fetch('/pets/42')).json()) as Record<string, unknown>
@@ -57,7 +55,7 @@ describe('unmatched routes', () => {
       })
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(() => shell)
+    const app = createWebApplication().with(() => shell)
     await app.ready()
 
     const res = await app.fetch('/client/route?a=b')
@@ -76,7 +74,7 @@ describe('unmatched routes', () => {
       })
     })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).with(() => partial)
+    const app = createWebApplication().with(() => partial)
     await app.ready()
 
     const res = await app.fetch('/nope')
@@ -88,13 +86,12 @@ describe('unmatched routes', () => {
     await app.close()
   })
 
-  it('keeps a not-found handler set on a Fastify instance the caller brought', async () => {
-    const server = fastify({ logger: false })
-    server.setNotFoundHandler((_req, reply) => {
-      void reply.code(418).send({ mine: true })
+  it('keeps a not-found handler the application set on the server itself', async () => {
+    const app = createWebApplication().server(undefined, server => {
+      server.setNotFoundHandler((_req, reply) => {
+        void reply.code(418).send({ mine: true })
+      })
     })
-
-    const app = createWebApplication(fastifyAdapterFactory(server))
     await app.ready()
 
     const res = await app.fetch('/nope')

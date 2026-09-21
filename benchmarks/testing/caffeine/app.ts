@@ -1,6 +1,5 @@
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
-import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { createWebApplication } from '@caffeinejs/http'
 
 import { hello } from './hello.routes.js'
 
@@ -9,5 +8,5 @@ export function createContainer() {
 }
 
 export function createApp(container: Container) {
-  return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).mount(hello)
+  return createWebApplication({ container }).mount(hello)
 }

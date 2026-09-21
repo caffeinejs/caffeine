@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
 import {
@@ -21,7 +20,6 @@ import {
   type SeriesTokenRotation,
   UserProvider,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 
@@ -136,12 +134,11 @@ class SchemeScopedMeController {
 void [SessionController, MeController, SchemeScopedMeController]
 
 async function buildApp() {
-  const f = fastify()
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
   // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
-  const builder = createWebApplication(fastifyAdapterFactory(f), { container })
+  const builder = createWebApplication({ container })
   builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())
   const app = builder
   await app.ready()
@@ -231,13 +228,12 @@ describe('cookie session login (application)', () => {
 // ---------------------------------------------------------------------------
 
 async function buildDurableApp(graceSeconds?: number) {
-  const f = fastify()
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
   const store = new InMemoryRememberStore()
   container.bind(RememberMeTokenStore, t => t.toValue(store))
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
-  const builder = createWebApplication(fastifyAdapterFactory(f), { container })
+  const builder = createWebApplication({ container })
   builder.authentication(auth =>
     auth
       .addCookie(o => {

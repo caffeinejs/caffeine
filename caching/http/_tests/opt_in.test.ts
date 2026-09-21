@@ -1,6 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Cache } from '../../store.js'
@@ -25,7 +24,7 @@ describe('caching is opt-in', () => {
     }
     void [PlainController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    const app = createWebApplication()
     close = () => app.close()
     await app.ready()
 
@@ -44,7 +43,7 @@ describe('caching is opt-in', () => {
     }
     void [MissingController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    const app = createWebApplication()
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
@@ -61,7 +60,7 @@ describe('caching is opt-in', () => {
     }
     void [DefaultController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(HTTPCaching())
+    const app = createWebApplication({}).with(HTTPCaching())
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
@@ -95,9 +94,7 @@ describe('caching is opt-in', () => {
     const container = new CaffeineIoC()
     container.bind(MapStore, t => t.toClass(MapStore))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { container }).with(
-      HTTPCaching(b => b.store(MapStore)),
-    )
+    const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
     close = () => app.close()
     await app.ready()
 
@@ -118,9 +115,7 @@ describe('caching is opt-in', () => {
     }
     void [HeaderController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
-      HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Edge')),
-    )
+    const app = createWebApplication({}).with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Edge')))
     close = () => app.close()
     await app.ready()
 

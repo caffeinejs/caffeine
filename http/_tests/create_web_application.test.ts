@@ -88,7 +88,7 @@ describe('configuring a started web application', () => {
     const app = createWebApplication()
     await app.ready()
 
-    expect(() => app.server(s => s.port(0))).toThrow(ErrApplicationStarted)
+    expect(() => app.server(() => ({}))).toThrow(ErrApplicationStarted)
     expect(() => app.authentication(a => a.default('Bearer'))).toThrow(ErrApplicationStarted)
     expect(() => app.authorization(a => a.requireAuthenticatedByDefault())).toThrow(ErrApplicationStarted)
     expect(() => app.guards(() => undefined)).toThrow(ErrApplicationStarted)

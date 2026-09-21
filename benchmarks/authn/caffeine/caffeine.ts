@@ -1,14 +1,4 @@
-import {
-  Authorize,
-  Controller,
-  Get,
-  JWTService,
-  Post,
-  Status,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Authorize, Controller, Get, JWTService, Post, Status, createWebApplication } from '@caffeinejs/http'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
 
@@ -33,7 +23,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).authentication(auth =>
+const app = createWebApplication().authentication(auth =>
   auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h')),
 )
 

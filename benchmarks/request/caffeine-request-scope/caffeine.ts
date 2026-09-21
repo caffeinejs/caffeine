@@ -1,17 +1,6 @@
 import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
-import {
-  Controller,
-  Get,
-  createWebApplication,
-  Args,
-  Post,
-  Schema,
-  $p,
-  fastifyAdapterFactory,
-  FastifyContext,
-} from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Args, Post, Schema, $p, FastifyContext } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -82,22 +71,20 @@ class AppController {
 
 void [AppController]
 
-const server = fastify({ logger: false })
+const app = createWebApplication().server(undefined, server => {
+  server.addHook('onRequest', (req, reply, done) => {
+    reply.header('x-request-id', Math.random().toString(36).slice(2))
+    done()
+  })
 
-server.addHook('onRequest', (req, reply, done) => {
-  reply.header('x-request-id', Math.random().toString(36).slice(2))
-  done()
+  server.addHook('preHandler', (req, reply, done) => {
+    if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
+      reply.code(401).send({ error: 'Unauthorized' })
+      return
+    }
+    done()
+  })
 })
-
-server.addHook('preHandler', (req, reply, done) => {
-  if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
-    reply.code(401).send({ error: 'Unauthorized' })
-    return
-  }
-  done()
-})
-
-const app = createWebApplication(fastifyAdapterFactory(server))
 
 await app.ready()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

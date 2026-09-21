@@ -1,4 +1,4 @@
-import fastify, { type FastifyInstance } from 'fastify'
+import { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -11,7 +11,6 @@ import {
   Identity,
   Principal,
   createWebApplication,
-  fastifyAdapterFactory,
   health,
   kAuthenticationExempt,
   newRouter,
@@ -87,7 +86,7 @@ describe('the authentication gate and routes registered straight on the server',
 
   it('leaves them open when the application set no fallback policy', async () => {
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()))
+      createWebApplication()
         .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
         .with(plainRoutes()),
     )
@@ -98,7 +97,7 @@ describe('the authentication gate and routes registered straight on the server',
   describe('under a fallback policy', () => {
     function build() {
       return ready(
-        createWebApplication(fastifyAdapterFactory(fastify()))
+        createWebApplication()
           .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
           .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] }))
           .with(health())
@@ -151,7 +150,7 @@ describe('the authentication gate and routes registered straight on the server',
   // orchestrator see a 500 and restart a process that was in fact alive.
   it('keeps a failing authentication scheme away from the health probes', async () => {
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()))
+      createWebApplication()
         .authentication(auth => auth.addStrategy('Broken', new BrokenScheme()))
         .with(health())
         .mount(newRouter('/compiled').get('/', ok)),
@@ -165,7 +164,7 @@ describe('the authentication gate and routes registered straight on the server',
   // `/assets-but-not-really`, which nobody who wrote `/assets` meant to leave unguarded.
   it('excepts whole path segments, so a prefix written without its trailing slash opens no neighbour', async () => {
     const app = await ready(
-      createWebApplication(fastifyAdapterFactory(fastify()))
+      createWebApplication()
         .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
         .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets', '/admin-ui/users'] }))
         .with(plainRoutes()),
@@ -178,7 +177,7 @@ describe('the authentication gate and routes registered straight on the server',
   })
 
   it('refuses a path to except that is not absolute', () => {
-    const building = createWebApplication(fastifyAdapterFactory(fastify()))
+    const building = createWebApplication()
 
     expect(() => building.authorization(authz => authz.requireAuthenticatedByDefault({ except: ['assets/'] }))).toThrow(
       expect.objectContaining({ code: 'ERR_AUTHZ_FALLBACK_EXCEPT' }),
@@ -205,10 +204,8 @@ describe('the challenge of a route that names several schemes', () => {
   const secret = 'a-session-secret-of-at-least-32-characters'
 
   function build(schemes: string[]) {
-    const server = fastify()
-
     return ready(
-      createWebApplication(fastifyAdapterFactory(server))
+      createWebApplication()
         .authentication(auth =>
           auth
             .addBasic(b => b.realm('Docs').validate(() => null))
@@ -276,16 +273,14 @@ describe('an application whose scheme reads cookies', () => {
   // lands in. Ordering this by hand used to be the application's job, and getting it wrong was a TypeError on
   // every request.
   it('starts with nothing registered by the application', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).authentication(auth =>
-      auth.addCookie(c => c.sessionSecret(secret)),
-    )
+    const app = createWebApplication().authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
 
     await expect(app.ready()).resolves.toBeUndefined()
     await app.close()
   })
 
   it('parses the cookies of a request reaching a route registered before authentication', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
       .with(() =>
         fp(
           async (instance: FastifyInstance) => {
@@ -305,9 +300,7 @@ describe('an application whose scheme reads cookies', () => {
   })
 
   it('asks nothing of an application whose schemes read no cookie', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).authentication(auth =>
-      auth.addBasic(b => b.validate(() => null)),
-    )
+    const app = createWebApplication().authentication(auth => auth.addBasic(b => b.validate(() => null)))
 
     await expect(app.ready()).resolves.toBeUndefined()
     await app.close()

@@ -1,12 +1,5 @@
-import {
-  Controller,
-  Get,
-  Post,
-  type WebApplication,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify, { type RouteOptions } from 'fastify'
+import { Controller, Get, Post, type WebApplication, createWebApplication } from '@caffeinejs/http'
+import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
@@ -53,15 +46,18 @@ const registered = new Map<string, RouteOptions>()
 let app: WebApplication
 
 beforeAll(async () => {
-  const server = fastify()
-  // onRoute sees the route definition exactly as it was handed to Fastify, after everything attached to it.
-  server.addHook('onRoute', route => {
-    registered.set(`${route.method} ${route.url}`, route as RouteOptions)
-  })
-
-  app = createWebApplication(fastifyAdapterFactory(server)).with(
-    HTTPCaching(b => b.store(new MemoryCache()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} })),
-  )
+  app = createWebApplication()
+    // onRoute sees the route definition exactly as it was handed to Fastify, after everything attached to it.
+    .server(undefined, server => {
+      server.addHook('onRoute', route => {
+        registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+      })
+    })
+    .with(
+      HTTPCaching(b =>
+        b.store(new MemoryCache()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} }),
+      ),
+    )
   await app.ready()
 })
 

@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -10,7 +9,6 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../../index.js'
 
 // Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
@@ -39,7 +37,7 @@ void [AmbiguousController]
 
 describe('ambiguous @CatchWith', () => {
   it('rejects when two referenced handlers cover the same error type', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

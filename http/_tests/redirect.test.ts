@@ -1,16 +1,6 @@
-import fastify from 'fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import {
-  type Context,
-  Controller,
-  Get,
-  Header,
-  createWebApplication,
-  Args,
-  Post,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { type Context, Controller, Get, Header, createWebApplication, Args, Post } from '../index.js'
 import { $p } from '../route_picker.js'
 
 describe('Redirect', () => {
@@ -32,7 +22,7 @@ describe('Redirect', () => {
 
     void [RedirectController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     beforeAll(async () => {
       await app.ready()

@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWK, JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -12,7 +11,6 @@ import {
   Claim,
   Args,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
@@ -26,8 +24,8 @@ const CALLBACK_PATH = '/oidc/callback'
 /** Cookie names and derived keys are namespaced by the strategy this app registers. */
 const SCHEME = 'Google'
 
-function makeOIDCApp(fastifyInstance: ReturnType<typeof fastify>, jwksResolver?: (uri: string) => JWTVerifyGetKey) {
-  const builder = createWebApplication(fastifyAdapterFactory(fastifyInstance))
+function makeOIDCApp(jwksResolver?: (uri: string) => JWTVerifyGetKey) {
+  const builder = createWebApplication()
   builder.authentication(auth =>
     auth.addOIDC('Google', opts => {
       opts
@@ -72,8 +70,7 @@ describe('OIDC integration', () => {
     }
     void [OIDCIntChallengeController]
 
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     // A navigation, so the challenge redirects. Without the header this is a 401 carrying the same URL —
@@ -142,8 +139,7 @@ describe('OIDC integration', () => {
       mockTokenEndpoint(nonce)
 
       const stateCookie = await makeStateCookie(nonce)
-      const f = fastify()
-      const app = makeOIDCApp(f, jwksResolver)
+      const app = makeOIDCApp(jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
@@ -157,8 +153,7 @@ describe('OIDC integration', () => {
 
     it('callback with state mismatch → 400', async () => {
       const stateCookie = await makeStateCookie('n', 'correct-state')
-      const f = fastify()
-      const app = makeOIDCApp(f, jwksResolver)
+      const app = makeOIDCApp(jwksResolver)
       await app.ready()
 
       // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
@@ -173,8 +168,7 @@ describe('OIDC integration', () => {
     it('callback with nonce mismatch → 400', async () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
-      const f = fastify()
-      const app = makeOIDCApp(f, jwksResolver)
+      const app = makeOIDCApp(jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
@@ -187,8 +181,7 @@ describe('OIDC integration', () => {
     it('callback failures return a generic body that discloses no internals', async () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
-      const f = fastify({ logger: false })
-      const app = makeOIDCApp(f, jwksResolver)
+      const app = makeOIDCApp(jwksResolver)
       await app.ready()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
@@ -220,8 +213,7 @@ describe('OIDC integration', () => {
     void [OIDCIntSessionController]
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-session', {
@@ -250,8 +242,7 @@ describe('OIDC integration', () => {
     }
     void [OIDCIntAnonController]
 
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     const [pub, prot] = await Promise.all([app.fetch('/oidc-int-anon/public'), app.fetch('/oidc-int-anon/protected')])
@@ -279,8 +270,7 @@ describe('OIDC integration', () => {
     }
     void [OIDCIntXHRController]
 
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
@@ -314,8 +304,7 @@ describe('OIDC integration', () => {
     void [OIDCIntRoleOkController]
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'admin', ISSUER), new Claim('roles', 'admin', ISSUER)])
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-ok', {
@@ -339,8 +328,7 @@ describe('OIDC integration', () => {
       new Claim('sub', 'viewer', ISSUER),
       new Claim('roles', 'viewer', ISSUER),
     ])
-    const f = fastify()
-    const app = makeOIDCApp(f)
+    const app = makeOIDCApp()
     await app.ready()
 
     const res = await app.fetch('/oidc-int-role-403', {
@@ -352,7 +340,7 @@ describe('OIDC integration', () => {
   // The adapter registers @fastify/cookie itself, so the state and session cookies this flow depends on are
   // parsed with nothing asked of the application.
   it('starts with @fastify/cookie registered by nobody', async () => {
-    const builder = makeOIDCApp(fastify())
+    const builder = makeOIDCApp()
     await expect(builder.ready()).resolves.toBeUndefined()
     await builder.close()
   })
@@ -367,8 +355,7 @@ describe('OIDC integration', () => {
     }
     void [ConflictingController]
 
-    const f = fastify()
-    const builder = makeOIDCApp(f)
+    const builder = makeOIDCApp()
     await expect(builder.ready()).rejects.toThrow('conflicts with a registered controller route')
   })
 })

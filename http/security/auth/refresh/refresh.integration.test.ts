@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -18,7 +17,6 @@ import {
   RefreshTokenService,
   RefreshTokenStore,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../../index.js'
 
@@ -115,7 +113,7 @@ async function buildApp() {
   const container = new CaffeineIoC()
   const store = new InMemoryRefreshStore()
   container.bind(RefreshTokenStore, t => t.toValue(store))
-  const builder = createWebApplication(fastifyAdapterFactory(fastify()), { container })
+  const builder = createWebApplication({ container })
   builder.authentication(a =>
     a
       .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())

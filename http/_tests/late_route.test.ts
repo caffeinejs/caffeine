@@ -1,5 +1,5 @@
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import fastify, { type FastifyInstance } from 'fastify'
+import { type FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -9,7 +9,6 @@ import {
   RouteBuilder,
   RouteGroupBuilder,
   createWebApplication,
-  fastifyAdapterFactory,
   type GuardInput,
   type HTTPPluginFactory,
   type WebApplication,
@@ -31,7 +30,7 @@ describe('$route', () => {
   })
 
   it('registers a route that responds, through a plugin registered with .with(...)', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+    app = createWebApplication().with(
       lateRoute(router => {
         router.path('/late').routes([
           new RouteBuilder()
@@ -49,7 +48,7 @@ describe('$route', () => {
   })
 
   it('does not appear in app.routeGroups', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+    app = createWebApplication().with(
       lateRoute(router => {
         router.path('/late').routes([
           new RouteBuilder()
@@ -75,7 +74,7 @@ describe('$route', () => {
     const container = new CaffeineIoC()
     container.bind(DenyGuard, t => t.toSelf())
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { container }).with(
+    app = createWebApplication({ container }).with(
       lateRoute(router => {
         router
           .path('/late')
@@ -95,7 +94,7 @@ describe('$route', () => {
   })
 
   it('participates in the startup check for a protected route with no authentication configured', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify())).with(
+    app = createWebApplication().with(
       lateRoute(router => {
         router
           .path('/late')
@@ -136,7 +135,7 @@ describe('$route', () => {
     const ordinary = new Router('/ordinary').guards([CountingGuard])
     ordinary.get('/hello').handler(() => ({ ok: true }))
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { container })
+    app = createWebApplication({ container })
       .with(
         lateRoute(router => {
           router

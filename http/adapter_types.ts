@@ -33,6 +33,15 @@ export interface AdapterTypes {
 
   /** What `ctx.platform` is. */
   platform: ContextPlatform
+
+  /**
+   * What `.server(configure)` resolves to: the server's construction and listen settings, in the sections the
+   * adapter names. Several calls shallow-merge section by section, in call order.
+   */
+  serverOptions: object
+
+  /** What `app.run(...)` takes and hands `Adapter.run(...)` untouched. `[]` when the server takes nothing. */
+  runArgs: readonly unknown[]
 }
 
 /**

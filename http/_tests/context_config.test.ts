@@ -1,10 +1,9 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
 import { CONFIG_REFRESH_LABEL, InlineConfigSource, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { type MiddlewareFn, Router, createWebApplication, fastifyAdapterFactory, kServerOptions } from '../index.js'
+import { type MiddlewareFn, Router, createWebApplication } from '../index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),
@@ -32,7 +31,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+    const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
     }).mount(routes)
@@ -65,7 +64,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(liveSource(() => current))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+    const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
     }).mount(routes)
@@ -88,7 +87,7 @@ describe('ctx.config', () => {
   it('serves an application that declared no configuration at all', async () => {
     const routes = new Router('/plain').get('/', ctx => ({ keys: Object.keys(ctx.config) }))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() }).mount(routes)
+    const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
 
     await app.ready()
 
@@ -113,7 +112,7 @@ describe('ctx.config', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+    const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
     }).mount(routes)
@@ -198,8 +197,8 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration(ownSchema, kFull)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, { config }) => s.config(config.server))
+    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
+      .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
 
     await app.ready()
@@ -219,8 +218,8 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration(ownSchema, kFull)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC(), config: conf })
-      .server((s, { config }) => s.config(config.server))
+    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
+      .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
 
     await app.ready()
@@ -238,7 +237,7 @@ describe('ctx.config with an application schema', () => {
     const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }), kFull)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+    const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
     }).mount(routes)
@@ -246,33 +245,30 @@ describe('ctx.config with an application schema', () => {
     await app.ready()
 
     expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['catalog'] })
-    // And the server did not take it either — it was pointed nowhere, so its own default stands.
-    expect(app.container.get(kServerOptions).host).toBe('0.0.0.0')
 
     await app.close()
   })
 
-  it('lets the application default a builtin feature from its own schema', async () => {
+  it('lets the application default the server from its own schema', async () => {
     const withServer = $t.Object({
       server: $t.Object(
-        { port: $t.Number({ default: 4321 }), host: $t.String({ default: '0.0.0.0' }) },
+        { port: $t.Number({ default: 0 }), host: $t.String({ default: '127.0.0.1' }) },
         { default: {} },
       ),
     })
     const kServer = token<InferConfig<typeof withServer>>(Symbol('app.server'))
 
     const conf = newConfiguration(withServer, kServer).build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {
+    const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
-    }).server((s, { config }) => s.config(config.server))
+    }).server(({ config }) => ({ listener: config.server }))
 
-    await app.ready()
+    await app.run()
 
-    // Read through the server's own key, not the root handle: the root would show 4321 either way,
-    // because the application schema declares it. What has to be true is that the value reached the *feature*,
-    // whose framework default is 0 — an OS-assigned port.
-    expect(app.container.get(kServerOptions).port).toBe(4321)
+    // Read off the bound socket, not the tree: the tree would show the default either way, because the
+    // application schema declares it. What has to be true is that the value reached the server.
+    expect(app.address?.host).toBe('127.0.0.1')
 
     await app.close()
   })

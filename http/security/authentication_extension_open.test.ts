@@ -1,14 +1,6 @@
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  AllowAnonymous,
-  Controller,
-  Get,
-  WebApplication,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { AllowAnonymous, Controller, Get, WebApplication, createWebApplication } from '../index.js'
 
 /**
  * The other half of the authentication extension's start-up check: applications that must NOT be refused.
@@ -42,7 +34,7 @@ describe('applications that are not refused at start-up', () => {
     }
     void [OpenController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())) as WebApplication
+    app = createWebApplication() as WebApplication
     await app.ready()
 
     expect((await app.fetch('/authz-open')).status).toBe(200)
@@ -61,7 +53,7 @@ describe('applications that are not refused at start-up', () => {
     }
     void [AnonOnlyController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify())) as WebApplication
+    app = createWebApplication() as WebApplication
     await app.ready()
 
     expect((await app.fetch('/authz-anon-only')).status).toBe(200)

@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, fastifyAdapterFactory, newRouter, type Context } from '../../../index.js'
+import { createWebApplication, newRouter, type Context } from '../../../index.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
@@ -21,12 +20,14 @@ interface LogEntry {
   err?: { code?: string }
 }
 
-function application(onFail?: (ctx: Context, error: Error) => void, logged: LogEntry[] = []) {
-  const server = fastify({
-    logger: { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } },
-  })
+/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
+function pinoTo(logged: LogEntry[], level = 'warn') {
+  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+}
 
-  return createWebApplication(fastifyAdapterFactory(server))
+function application(onFail?: (ctx: Context, error: Error) => void, logged: LogEntry[] = []) {
+  return createWebApplication()
+    .server(() => ({ factory: { logger: pinoTo(logged) } }))
     .authentication(auth =>
       auth.addOIDC('Provider', o => {
         o.clientID('client')
@@ -99,14 +100,14 @@ describe('a sign-in that cannot go ahead', () => {
   // The log has it, as information: a request somebody got wrong is not a fault for an operator to be paged about.
   it('keeps the detail of a 4xx from the client as well, and logs it as information, not as an error', async () => {
     const logged: LogEntry[] = []
-    const server = fastify({
-      logger: { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } },
-    })
-    const app = createWebApplication(fastifyAdapterFactory(server)).mount(
-      newRouter('/finish').get('/', () => {
-        throw new ErrOAuthCallback('state mismatch for subject jane@example.com')
-      }),
-    )
+    const app = createWebApplication()
+      // At `info`, since that is the level the record is expected at.
+      .server(() => ({ factory: { logger: pinoTo(logged, 'info') } }))
+      .mount(
+        newRouter('/finish').get('/', () => {
+          throw new ErrOAuthCallback('state mismatch for subject jane@example.com')
+        }),
+      )
     await app.ready()
 
     const res = await app.fetch('/finish')
@@ -125,8 +126,7 @@ describe('a sign-in that cannot go ahead', () => {
   })
 
   it('still describes an ordinary error the ordinary way', async () => {
-    const server = fastify({ logger: false })
-    const app = createWebApplication(fastifyAdapterFactory(server)).mount(
+    const app = createWebApplication().mount(
       newRouter('/broken').get('/', () => {
         throw Object.assign(new Error('teapot'), { statusCode: 418 })
       }),

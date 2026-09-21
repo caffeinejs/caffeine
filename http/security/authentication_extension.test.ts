@@ -1,5 +1,4 @@
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -18,7 +17,6 @@ import {
   Principal,
   Schema,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../index.js'
 
 /**
@@ -78,7 +76,7 @@ function newApp() {
   const first = new HeaderSchemeHandler('First', 'x-first')
   const second = new HeaderSchemeHandler('Second', 'x-second')
 
-  const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+  const builder = createWebApplication()
   builder.authentication(auth =>
     auth.addStrategy('Default', byDefault).addStrategy('First', first).addStrategy('Second', second).default('Default'),
   )
@@ -100,7 +98,7 @@ describe('authentication extension — start-up', () => {
 
     // No `.authentication(...)`: the extension is still registered unconditionally, and it is what refuses
     // the application rather than serve the guarded route to anonymous callers.
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
   })

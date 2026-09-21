@@ -1,9 +1,9 @@
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { ConsoleLogger } from '@caffeinejs/std/logger/console'
-import fastify, { type FastifyBaseLogger } from 'fastify'
+import type { FastifyBaseLogger } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, createWebApplication } from '../index.js'
 
 type Record_ = { severity: string; args: unknown[]; bindings: Bindings }
 
@@ -77,7 +77,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     void [LoggedController]
 
     const recorder = new Recorder()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ loggerInstance: recorder as any })))
+    const app = createWebApplication({ logger: recorder as unknown as Logger })
     await app.ready()
 
     const res = await app.fetch('/logged/ping')
@@ -100,14 +100,12 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     void [LoggingController]
 
     const recorder = new Recorder()
-    const instance = fastify({ loggerInstance: recorder as any })
-
-    instance.addHook('onRequest', (req, _reply, done) => {
-      req.log.warn({ from: 'request' }, 'per-request record')
-      done()
+    const app = createWebApplication({ logger: recorder as unknown as Logger }).server(undefined, instance => {
+      instance.addHook('onRequest', (req, _reply, done) => {
+        req.log.warn({ from: 'request' }, 'per-request record')
+        done()
+      })
     })
-
-    const app = createWebApplication(fastifyAdapterFactory(instance))
     await app.ready()
 
     await app.fetch('/logging/write')
@@ -148,11 +146,11 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     void [WiredController]
 
     const recorder = new Recorder()
-    const app = createWebApplication({ logger: recorder as unknown as Logger })
-
-    app.instance.addHook('onRequest', (req, _reply, done) => {
-      req.log.warn({ from: 'request' }, 'wired per-request record')
-      done()
+    const app = createWebApplication({ logger: recorder as unknown as Logger }).server(undefined, instance => {
+      instance.addHook('onRequest', (req, _reply, done) => {
+        req.log.warn({ from: 'request' }, 'wired per-request record')
+        done()
+      })
     })
 
     await app.ready()
@@ -165,9 +163,9 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
   })
 
   // Fastify derives its own child of the logger while it is constructed, and a child keeps the level it was born
-  // with — so without the adapter pushing the resolved level onto it, `.level('debug')` would govern every
-  // logger except the server's own, which is the one a `LOG_LEVEL=debug` is usually reaching for.
-  it('takes the level the logger feature resolved, after the server was built', async () => {
+  // with — so the server is built only once the logger feature has resolved its level, or `.level('debug')`
+  // would govern every logger except the server's own, which is the one a `LOG_LEVEL=debug` is usually reaching for.
+  it('builds the server on the level the logger feature resolved', async () => {
     @Controller('/levelled')
     class LevelledController {
       @Get('/ping')
@@ -178,14 +176,15 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
 
     void [LevelledController]
 
-    const app = createWebApplication()
-    app.logger(l => l.level('debug'))
-
     let perRequestLevel: string | undefined
-    app.instance.addHook('onRequest', (req, _reply, done) => {
-      perRequestLevel = req.log.level
-      done()
-    })
+    const app = createWebApplication()
+      .logger(l => l.level('debug'))
+      .server(undefined, instance => {
+        instance.addHook('onRequest', (req, _reply, done) => {
+          perRequestLevel = req.log.level
+          done()
+        })
+      })
 
     await app.ready()
     await app.fetch('/levelled/ping')
@@ -219,16 +218,28 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
 
   it('routes the server logger back to the implementation', async () => {
     const recorder = new Recorder()
-    const instance = fastify({ loggerInstance: recorder as any })
-
-    const app = createWebApplication(fastifyAdapterFactory(instance))
+    const app = createWebApplication({ logger: recorder as unknown as Logger })
     await app.ready()
 
-    instance.log.error({ code: 'x' }, 'server record')
+    app.instance.log.error({ code: 'x' }, 'server record')
 
     const written = recorder.records.find(record => record.args[1] === 'server record')
 
     expect(written).toBeDefined()
     expect(written?.severity).toBe('error')
+  })
+
+  // A `logger` in the factory settings is the application's word: Fastify then runs on that one, and the
+  // application's own is left out of the server entirely.
+  it('leaves the application logger out of a server whose factory settings named their own', async () => {
+    const recorder = new Recorder()
+    const app = createWebApplication({ logger: recorder as unknown as Logger }).server(() => ({
+      factory: { logger: false },
+    }))
+    await app.ready()
+
+    app.instance.log.error({ code: 'x' }, 'not through the application logger')
+
+    expect(recorder.records.map(record => record.args[1])).not.toContain('not through the application logger')
   })
 })

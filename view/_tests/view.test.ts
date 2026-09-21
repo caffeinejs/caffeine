@@ -1,8 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
 import * as ejs from 'ejs'
-import fastify from 'fastify'
 import handlebars from 'handlebars'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -13,7 +12,7 @@ const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
 
 function viewApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+  return createWebApplication({}).with(
     view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
   )
 }
@@ -80,7 +79,7 @@ describe('view feature', () => {
 
     void [ContextController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    app = createWebApplication({}).with(
       view(v =>
         v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' })),
       ),
@@ -103,7 +102,7 @@ describe('view feature', () => {
 
     void [NamespacedController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    app = createWebApplication({}).with(
       view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
     )
     await app.ready()
@@ -188,7 +187,7 @@ describe('view feature', () => {
 
     void [UnconfiguredController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
+    app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/view-unconfigured/show')
@@ -207,7 +206,7 @@ describe('view feature', () => {
 
     void [UnconfiguredAsyncController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
+    app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/view-unconfigured-async/show')
@@ -233,7 +232,7 @@ describe('view feature', () => {
 
     void [MultiController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    app = createWebApplication({}).with(
       view(v => {
         v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
         v.add('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
@@ -269,7 +268,7 @@ describe('view feature', () => {
 
     void [SameEngineController]
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    app = createWebApplication({}).with(
       view(v => {
         v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))
         v.add('alt', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
@@ -313,7 +312,7 @@ describe('view feature', () => {
   // The configure callback runs when the application bootstraps, so an authoring mistake inside it surfaces
   // from `ready()` rather than from the `.with(...)` call that wrote it.
   it('rejects registering an engine named "view" (reserved for the default engine)', async () => {
-    const rejected = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(
+    const rejected = createWebApplication({}).with(
       view(v => v.add('view', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
     )
 
@@ -321,7 +320,7 @@ describe('view feature', () => {
   })
 
   it('refuses a view plugin with no engine configured', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(view())
+    app = createWebApplication({}).with(view())
 
     await expect(app.ready()).rejects.toThrow(/Cannot install the view plugin: no engine was configured/)
   })

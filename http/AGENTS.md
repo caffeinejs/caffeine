@@ -39,10 +39,11 @@ first in the install list — only the error handler precedes it, and it reads n
 neither registers `@fastify/cookie` nor orders it, and the authentication gate carries no cookie check: a scheme
 reading its credential from a cookie can no longer be registered ahead of the parsing. An application states the
 plugin's options with `.cookie(...)`, wherever in the chain it likes — a `secret` is the one that matters, since
-`ctx.req.signedCookie()` has nothing to verify with otherwise. The two ways out of the registration: a Fastify
-instance that already has the plugin keeps its own (the feature stands down rather than failing on the duplicate
-decorators, and that application owns its cookie settings entirely), and `.cookie(k => k.enabled(false))`, which
-leaves the plugin unregistered so `ctx.req.cookie()` fails rather than answering `undefined`.
+`ctx.req.signedCookie()` has nothing to verify with otherwise. The two ways out of the registration: a server whose
+`.server(_, customize)` callback registered the plugin itself keeps its own (the feature stands down rather than
+failing on the duplicate decorators, and that application owns its cookie settings entirely), and
+`.cookie(k => k.enabled(false))`, which leaves the plugin unregistered so `ctx.req.cookie()` fails rather than
+answering `undefined`.
 
 The authentication gate has **no** slot. It is contributed by `AuthenticationBuilder`, so it registers where
 `.authentication(...)` was written: a CORS plugin registered before it still stamps its headers on a 401, and a hook
@@ -91,10 +92,35 @@ from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered uncondition
 `createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, { config }) => …)`.
 It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown.
 
-The resolved options of the built-ins that remain container bindings — `kServerOptions`, `kStaticOptions` — are
+The resolved options of the built-ins that remain container bindings — `kStaticOptions` — are
 container bindings, not configuration keys (health no longer has one). There is no `featureConfigKey` and
 `ctx.config` is not callable — a package that needs its settings on a request either binds them and resolves
 them, or decorates the Fastify instance as `@caffeinejs/html` does.
+
+## The adapter owns the instance
+
+`fastifyAdapterFactory()` takes nothing, and `createWebApplication()` runs on it when no adapter is named. Nobody
+hands the framework a Fastify instance: the adapter constructs it inside `setup()`, from what `.server(...)`
+returned, once configuration has resolved and the container has initialized. `.server(configure, customize)`
+is the whole surface. `configure` gets the `HTTPSetupContext` a plugin factory gets and returns
+`{ factory, listener }` — Fastify's constructor options and its listen options; `customize` is handed the bare
+instance right after construction, before `$container`, the request decorations, the hooks, the form parser and
+every plugin, so it is where a pre-registered plugin, an `onRoute` hook, a raw route or a not-found handler goes.
+Calls accumulate: sections shallow-merge in call order, customizers run in call order. The old builder feature
+(`ServerBuilder`, `kServerOptions`, `serverConfigSchema`) is gone; an application declares its own `server` block
+and hands the node over as the `listener`.
+
+The application's configured logger is the server's `loggerInstance`, with request logging off through a
+`LogController`, unless `factory.logger` or `factory.loggerInstance` is set — Fastify refuses both together, so a
+`logger` named there is passed through untouched, request logging and level included. The instance is built
+after the logger feature resolved, so there is no level to re-sync.
+
+`run(listenOptions?)` is typed by the adapter (`AdapterTypes.runArgs`): under Fastify it takes listen options,
+merged over `listener` key by key, `run()` winning. With neither, `listen()` is called bare and Fastify's own
+default stands (`localhost`, an OS-assigned port); a `listener` naming a `host` but no `port` is refused by Node
+at `run()`, so `port: 0` is spelled out for an OS-assigned port. `run()` still resolves to `WebRunInfo`.
+`app.instance` and `app.fetch()` throw `ErrApplicationNotReady` before `ready()`; `app.address` is `undefined`
+until `run()` bound the socket.
 
 ## The adapter owns its types
 

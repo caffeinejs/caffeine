@@ -9,7 +9,6 @@ import {
   Router,
   collectRouteGroups,
   createWebApplication,
-  fastifyAdapterFactory,
   type HTTPPluginFactory,
   type Route,
   type RouteGroup,
@@ -86,10 +85,7 @@ describe('route metadata on config.$caffeine', () => {
 
   it('reaches onRoute for decorated, programmatic and $route routes, and not for a raw Fastify route', async () => {
     const seen: Seen[] = []
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(observer(seen))
-      .with(lateAndRaw)
-      .mount(routerWithOneRoute()) as WebApplication
+    app = createWebApplication().with(observer(seen)).with(lateAndRaw).mount(routerWithOneRoute()) as WebApplication
     await app.ready()
 
     const get = (url: string) => seen.find(s => s.url === url && s.method === 'GET')
@@ -109,9 +105,7 @@ describe('route metadata on config.$caffeine', () => {
 
   it('hands the automatic HEAD twin of a GET route the same compiled route', async () => {
     const seen: Seen[] = []
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
-      .with(observer(seen))
-      .mount(routerWithOneRoute()) as WebApplication
+    app = createWebApplication().with(observer(seen)).mount(routerWithOneRoute()) as WebApplication
     await app.ready()
 
     const twins = seen.filter(s => s.url === '/meta-router/hello')
@@ -123,7 +117,7 @@ describe('route metadata on config.$caffeine', () => {
 
   it('collectRouteGroups regroups what registered and counts the HEAD twin once', async () => {
     let groups: RouteGroup[] = []
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
+    app = createWebApplication()
       .with(() =>
         fp(
           async (instance: FastifyInstance) => {

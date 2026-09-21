@@ -1,7 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -23,7 +22,6 @@ import {
   UserProvider,
   authConfigSchema,
   createWebApplication,
-  fastifyAdapterFactory,
   newRouter,
 } from '../../../index.js'
 
@@ -42,12 +40,6 @@ const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
 
 const configured = (auth: Record<string, unknown>) =>
   newConfiguration(schema, kConfig).source(new InlineConfigSource({ auth })).build()
-
-function server() {
-  const instance = fastify({ logger: false })
-
-  return instance
-}
 
 const ada = () => new Principal(true, new Identity('test', true, [new Claim('sub', 'ada', '')]))
 
@@ -107,7 +99,7 @@ describe('authentication options set from the tree', () => {
     // Reloads the user when a session is restored. Nothing is restored here, but the scheme wants one bound.
     container.bind(UserProvider, t => t.toValue({ findByIdentifier: () => null } as unknown as UserProvider))
 
-    const app = createWebApplication(fastifyAdapterFactory(server()), {
+    const app = createWebApplication({
       container,
       config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 3600 } } }),
     })
@@ -148,7 +140,7 @@ describe('authentication options set from the tree', () => {
     // The 401 names it and the route answers there. Were the key applied to nothing, a client would be sent to a
     // URL that was never registered.
     it('is where an OAuth 2.0 scheme sends a script, and where it starts the sign-in', async () => {
-      const app = createWebApplication(fastifyAdapterFactory(server()), {
+      const app = createWebApplication({
         config: configured({ schemes: { oauth: { loginPath: '/start' } } }),
       })
         .authentication((a, { config }) =>
@@ -185,7 +177,7 @@ describe('authentication options set from the tree', () => {
     })
 
     it('is where an OpenID Connect scheme sends a script', async () => {
-      const app = createWebApplication(fastifyAdapterFactory(server()), {
+      const app = createWebApplication({
         config: configured({ schemes: { oidc: { loginPath: '/oidc/start' } } }),
       })
         .authentication((a, { config }) =>
@@ -252,7 +244,7 @@ describe('authentication options set from the tree', () => {
     }
 
     const appWith = (oidc: Record<string, unknown>) =>
-      createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
+      createWebApplication({ config: configured({ schemes: { oidc } }) })
         .authentication((a, { config }) =>
           a
             .config(config.auth)
@@ -320,7 +312,7 @@ describe('authentication options set from the tree', () => {
     // and the options refuse to resolve without it rather than leave a scheme that cannot verify anything.
     it('completes a hand-assembled provider that has no discovery document', async () => {
       const manual = (oidc: Record<string, unknown>) =>
-        createWebApplication(fastifyAdapterFactory(server()), { config: configured({ schemes: { oidc } }) })
+        createWebApplication({ config: configured({ schemes: { oidc } }) })
           .authentication((a, { config }) =>
             a
               .config(config.auth)
@@ -354,7 +346,7 @@ describe('authentication options set from the tree', () => {
     // The provider validates this against the registration and refuses to return the user anywhere else, so an
     // application whose configured value never arrives strands every sign-out on the provider's own page.
     it('asks the provider to return the user to `postLogoutRedirectUri` after a sign-out', async () => {
-      const app = createWebApplication(fastifyAdapterFactory(server()), {
+      const app = createWebApplication({
         config: configured({ schemes: { oidc: { postLogoutRedirectUri: 'https://app.test/signed-out' } } }),
       })
         .authentication((a, { config }) =>
@@ -398,7 +390,7 @@ describe('authentication options set from the tree', () => {
     const container = new CaffeineIoC()
     container.bind(UserProvider, t => t.toValue({ findByIdentifier: () => null } as unknown as UserProvider))
 
-    const app = createWebApplication(fastifyAdapterFactory(server()), {
+    const app = createWebApplication({
       container,
       config: configured({ schemes: { Cookie: { returnUrlParameter: 'next' } } }),
     })
@@ -439,7 +431,7 @@ describe('authentication options set from the tree', () => {
       }),
     )
 
-    const app = createWebApplication(fastifyAdapterFactory(server()), {
+    const app = createWebApplication({
       config: configured({ schemes: { oauth: { tokenEndpointAuthMethod: 'client_secret_basic' } } }),
     }).authentication((a, { config }) =>
       a
@@ -485,7 +477,7 @@ describe('authentication options set from the tree', () => {
     const container = new CaffeineIoC()
     container.bind(RefreshTokenStore, t => t.toValue(store as unknown as RefreshTokenStore))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       container,
       config: configured({ refresh: { absoluteTtl: 60, refreshTtl: '30d' } }),
     }).authentication((a, { config }) =>
@@ -519,7 +511,7 @@ describe('authentication options set from the tree', () => {
     const container = new CaffeineIoC()
     container.bind(RefreshTokenStore, t => t.toValue(new SeriesStore() as unknown as RefreshTokenStore))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       container,
       config: configured({ refresh: { accessTtl: 60 } }),
     })
@@ -568,7 +560,7 @@ describe('authentication options set from the tree', () => {
       container.bind(UserProvider, t => t.toValue(new Users(passwordHash)))
       container.bind(PasswordHasher, t => t.toValue(hasher))
 
-      return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+      return createWebApplication({
         container,
         config: configured({ credentials }),
       }).authentication((a, { config }) =>

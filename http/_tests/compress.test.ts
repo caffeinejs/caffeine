@@ -1,5 +1,5 @@
 import fastifyCompress from '@fastify/compress'
-import fastify, { type FastifyPluginAsync } from 'fastify'
+import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
@@ -12,7 +12,6 @@ import {
   RouteBuilder,
   RouteGroupBuilder,
   createWebApplication,
-  fastifyAdapterFactory,
   type CompressOptions,
 } from '../index.js'
 
@@ -21,7 +20,7 @@ function compressApp(options: CompressOptions = {}) {
     await instance.register(fastifyCompress, options)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'compress' }))
+  return createWebApplication({}).with(() => fp(plugin, { name: 'compress' }))
 }
 
 describe('Compress', () => {
@@ -57,7 +56,7 @@ describe('Compress', () => {
 
       void [NoCompressController]
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      const app = createWebApplication({})
       await app.ready()
 
       const res = await app.fetch('/no-compress/data', { headers: { 'accept-encoding': 'br, gzip, deflate' } })

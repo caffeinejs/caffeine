@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -9,7 +8,6 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../../index.js'
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
@@ -30,7 +28,7 @@ void [UnknownRefController]
 
 describe('@CatchWith with an unregistered handler', () => {
   it('rejects when the referenced handler has no binding', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
 
     await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })

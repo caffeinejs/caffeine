@@ -1,18 +1,27 @@
 import './_fastify.js'
 import { AsyncLocalStorage } from 'node:async_hooks'
+import type { Server } from 'node:http'
 
 import { Container, Scopes } from '@caffeinejs/di'
 import { ConfigStore } from '@caffeinejs/std/config'
-import { logToken } from '@caffeinejs/std/logger'
-import { type FastifyInstance, type FastifyPluginAsync, type FastifyReply, type FastifyRequest } from 'fastify'
+import type { Logger } from '@caffeinejs/std/logger'
+import Fastify, {
+  LogController,
+  type FastifyHttpOptions,
+  type FastifyInstance,
+  type FastifyListenOptions,
+  type FastifyPluginAsync,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify'
 import fp from 'fastify-plugin'
 
 import { assertFastifyPlugin, assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
 import type { AdapterExtensionEntry } from './adapter_extension.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
-import type { Adapter, AdapterIn, AdapterFactoryIn } from './application.js'
+import type { Adapter, AdapterIn, AdapterFactoryIn, ServerAddress } from './application.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrApplicationNotReady, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { solutions } from './error/util.js'
 import { FastifyContext } from './fastify_context.js'
@@ -25,7 +34,6 @@ import { RouteGroupBuilder } from './routing/builder.js'
 import type { RouteCompilers } from './routing/dispatch.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
-import { DEFAULT_SERVER_OPTIONS, ServerOptions, kServerOptions, type ServerAddress } from './server/index.js'
 import { Keys } from './symbols.js'
 
 /**
@@ -36,27 +44,29 @@ import { Keys } from './symbols.js'
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
-export class FastifyAdapter<
-  SERVER extends FastifyInstance = FastifyInstance,
-  REQ extends FastifyRequest = FastifyRequest,
-  RES extends FastifyReply = FastifyReply,
-> implements Adapter<FastifyTypes<SERVER, REQ, RES>> {
+export class FastifyAdapter implements Adapter<FastifyTypes> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
    * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
    */
-  readonly #compilers: RouteCompilers<REQ> = {
-    handler: (parameters, fn) => compileHandler<REQ, RES>(parameters, fn) as (req: REQ, res: unknown) => unknown,
-    args: parameters => compileArgs<REQ, RES>(parameters) as (req: REQ, res: unknown) => unknown[] | Promise<unknown[]>,
+  readonly #compilers: RouteCompilers<FastifyRequest> = {
+    handler: (parameters, fn) =>
+      compileHandler<FastifyRequest, FastifyReply>(parameters, fn) as (req: FastifyRequest, res: unknown) => unknown,
+    args: parameters =>
+      compileArgs<FastifyRequest, FastifyReply>(parameters) as (
+        req: FastifyRequest,
+        res: unknown,
+      ) => unknown[] | Promise<unknown[]>,
   }
 
-  #fastify: SERVER
+  /** Built in {@link setup}; there is no server before that. */
+  #fastify: FastifyInstance | undefined
+  /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
+  #listener: FastifyListenOptions | undefined
   #container: Container
-  #serverOptions: ServerOptions = DEFAULT_SERVER_OPTIONS
   readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
 
-  constructor(kit: AdapterFactoryIn, fastify: SERVER) {
-    this.#fastify = fastify
+  constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
     this.#container.bind(FastifyContext, t =>
       t
@@ -67,16 +77,43 @@ export class FastifyAdapter<
     )
   }
 
-  async run(): Promise<void> {
-    await this.#fastify.listen(this.#serverOptions)
+  /**
+   * Listens with the options `run(...)` was given merged over the `listener` section `.server(...)` returned,
+   * the former winning key by key. With neither, Fastify's own default applies.
+   */
+  async run(options?: FastifyListenOptions): Promise<void> {
+    const fastify = this.#server()
+
+    // Fastify defaults `localhost` and an OS-assigned port only for an absent argument: `listen({})` is refused
+    // by Node, which wants a port or a path.
+    if (this.#listener === undefined && options === undefined) {
+      await fastify.listen()
+      return
+    }
+
+    // A fresh object every call: `listen()` writes into what it is handed.
+    await fastify.listen({ ...this.#listener, ...options })
   }
 
-  async setup(input: AdapterIn<FastifyTypes<SERVER, REQ, RES>>): Promise<void> {
+  async setup(input: AdapterIn<FastifyTypes>): Promise<void> {
     const container = this.#container
     // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
     // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
-    const routeGroups = [...(input.routeGroups as RouteGroup<REQ>[])]
-    const fastify = this.#fastify
+    const routeGroups = [...input.routeGroups]
+
+    // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
+    // afterwards, and the configured logger exists only once every feature has configured.
+    const { factory = {}, listener } = input.server
+    const fastify = Fastify(withApplicationLogger(factory, input.context.logger))
+    this.#fastify = fastify
+
+    // Copied and read once: `listen()` writes into what it is handed, a live configuration node refuses that, and
+    // the address has to stop moving once the socket is bound.
+    this.#listener = listener === undefined ? undefined : { ...listener }
+
+    // The application's turn on the bare server, ahead of everything this adapter decorates, hooks or registers:
+    // a plugin registered here loads before every feature's, and a not-found handler set here is kept.
+    await input.customize?.(fastify)
 
     // Decorating the server
     fastify.decorate('$container', container)
@@ -88,20 +125,6 @@ export class FastifyAdapter<
 
     // One lookup for the whole server: each context takes its own snapshot off the store, on first read.
     const store = container.get(ConfigStore)
-
-    // Copied out of the live settings: `listen()` mutates what it is handed, and the address has to stop
-    // moving once the socket is bound. An application that never registered the server feature runs on the
-    // defaults.
-    this.#serverOptions = { ...(container.getOptional(kServerOptions) ?? DEFAULT_SERVER_OPTIONS) }
-
-    // Fastify derived its own child of the application's logger while it was constructed, and a child keeps the
-    // level it was born with. Without this, a level the logger feature resolved — from configuration, after the
-    // server existed — would govern every logger but the server's own.
-    const log = container.getOptional(logToken())
-
-    if (log !== undefined) {
-      fastify.log.level = log.level
-    }
 
     fastify.addHook('onRequest', (req, reply, done) => {
       req.httpContext = new FastifyContext(req, reply, store)
@@ -144,7 +167,7 @@ export class FastifyAdapter<
     fastify.decorate('$route', (name: string, build: (router: RouteGroupBuilder) => void) => {
       const builder = new RouteGroupBuilder()
       build(builder)
-      routeGroups.push(input.compileRouteGroup(builder.toRouteGroup<REQ>(), { name }))
+      routeGroups.push(input.compileRouteGroup(builder.toRouteGroup<FastifyRequest>(), { name }))
     })
 
     // Every plugin the factories produced and every feature's server hook, in the order the application
@@ -188,8 +211,9 @@ export class FastifyAdapter<
     await fastify.ready()
   }
 
+  // Both tolerate a server that was never built: `close()` runs `stop()` whether or not `ready()` got that far.
   async teardown(): Promise<void> {
-    await this.#fastify.close()
+    await this.#fastify?.close()
   }
 
   /**
@@ -198,27 +222,37 @@ export class FastifyAdapter<
    * interrupted mid-request by the orchestrator.
    */
   forceTeardown(): Promise<void> {
-    this.#fastify.server.closeAllConnections()
+    this.#fastify?.server.closeAllConnections()
     return Promise.resolve()
   }
 
-  get instance(): SERVER {
-    return this.#fastify
+  get instance(): FastifyInstance {
+    return this.#server()
   }
 
   get address(): ServerAddress | undefined {
-    const bound = this.#fastify.server.address()
+    const bound = this.#fastify?.server.address()
 
-    // `null` when nothing is listening; a string when bound to a unix socket or a named pipe, which has no
-    // host/port to report.
-    if (bound === null || typeof bound === 'string') {
+    // `undefined` before the server is built; `null` when nothing is listening; a string when bound to a unix
+    // socket or a named pipe, which has no host/port to report.
+    if (bound == null || typeof bound === 'string') {
       return undefined
     }
 
     return { host: bound.address, port: bound.port, origin: originOf(bound.address, bound.port) }
   }
 
+  /** @throws ErrApplicationNotReady before {@link setup} built the server. */
+  #server(): FastifyInstance {
+    if (this.#fastify === undefined) {
+      throw new ErrApplicationNotReady()
+    }
+
+    return this.#fastify
+  }
+
   async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
+    const fastify = this.#server()
     let request: Request
 
     if (input instanceof Request) {
@@ -241,7 +275,7 @@ export class FastifyAdapter<
     request.headers.delete('content-length')
 
     return new Promise<Response>((resolve, reject) => {
-      this.#fastify.inject(
+      fastify.inject(
         {
           method: request.method as any,
           url: request.url,
@@ -287,6 +321,27 @@ export class FastifyAdapter<
         },
       )
     })
+  }
+}
+
+/**
+ * The application's configured logger becomes the server's, with request logging off, unless the factory
+ * settings name a logger of their own. Fastify refuses `logger` and `loggerInstance` together, so a `logger` set
+ * there is passed through untouched — request logging included, since that is then Fastify's default and not
+ * this adapter's.
+ *
+ * Annotated rather than inferred on purpose: `loggerInstance` typed as the application's logger would make
+ * `Fastify()` infer its logger parameter from it, and the instance would no longer be a plain `FastifyInstance`.
+ */
+function withApplicationLogger(factory: FastifyHttpOptions<Server>, logger: Logger): FastifyHttpOptions<Server> {
+  if (factory.logger !== undefined || factory.loggerInstance !== undefined) {
+    return factory
+  }
+
+  return {
+    ...factory,
+    loggerInstance: logger,
+    logController: factory.logController ?? new LogController({ disableRequestLogging: true }),
   }
 }
 

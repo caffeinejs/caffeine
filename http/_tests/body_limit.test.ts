@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, createWebApplication, BodyLimit, fastifyAdapterFactory } from '../index.js'
+import { Controller, Post, createWebApplication, BodyLimit } from '../index.js'
 
 describe('BodyLimit', () => {
   it('class-level @BodyLimit rejects bodies exceeding the limit with 413', async () => {
@@ -16,7 +15,7 @@ describe('BodyLimit', () => {
 
     void [LimitedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const over = await app.fetch('/limited/data', {
@@ -46,7 +45,7 @@ describe('BodyLimit', () => {
 
     void [MixedLimitController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const body = 'x'.repeat(50)

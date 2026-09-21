@@ -1,7 +1,7 @@
-import type { IncomingMessage } from 'node:http'
+import type { IncomingMessage, Server } from 'node:http'
 
 import type { CookieSerializeOptions } from '@fastify/cookie'
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyHttpOptions, FastifyInstance, FastifyListenOptions, FastifyReply, FastifyRequest } from 'fastify'
 
 import type { AdapterTypes, ContextPlatform } from './adapter_types.js'
 import type { FastifyMiddlewareHook } from './middleware/fastify.js'
@@ -18,6 +18,29 @@ export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extend
   readonly reply: RES
 }
 
+/**
+ * What `.server(configure)` returns under the Fastify adapter.
+ *
+ * ```ts
+ * .server(({ config }) => ({ factory: { bodyLimit: 1_048_576 }, listener: config.app.server }))
+ * ```
+ */
+export interface FastifyServerSettings {
+  /**
+   * What `Fastify(...)` is constructed with. The application's configured logger is the server's, with request
+   * logging off, unless `logger` or `loggerInstance` is set here. `https` and `http2` are not accepted: they
+   * change the instance type.
+   */
+  factory?: FastifyHttpOptions<Server>
+
+  /**
+   * What `listen()` is called with. What `run(options)` is given is merged over it, key by key. With neither,
+   * Fastify's own default applies (`localhost`, an OS-assigned port); a `host` without a `port` is refused by
+   * Node, so write `port: 0` for an OS-assigned port.
+   */
+  listener?: FastifyListenOptions
+}
+
 /** The Fastify adapter's {@link AdapterTypes}. */
 export interface FastifyTypes<
   S extends FastifyInstance = FastifyInstance,
@@ -32,6 +55,8 @@ export interface FastifyTypes<
   cookieOptions: CookieSerializeOptions
   asyncCookies: false
   platform: FastifyPlatform<RES>
+  serverOptions: FastifyServerSettings
+  runArgs: [options?: FastifyListenOptions]
 }
 
 /**

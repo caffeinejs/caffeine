@@ -11,10 +11,8 @@ import {
   Post,
   Schema,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'
@@ -78,7 +76,7 @@ class GadgetsController {
 void [GadgetsController]
 
 async function buildApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+  const app = createWebApplication({})
     .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
     .with(() => html())
   await app.ready()

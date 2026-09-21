@@ -66,7 +66,7 @@ const conf = newConfiguration(appConfigSchema, kAppConfig)
   .args()
   .build()
 
-createWebApplication(adapter, { config: conf }).server((s, { config }) => s.config(config.server))
+createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
@@ -145,7 +145,6 @@ request. A selector that throws during a swap is logged and leaves the view as i
 A feature registers nothing here. The application hands it what it wants, in the configure callback:
 
 ```ts
-.with(server((s, { config }) => s.config(config.app.server)))
 .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
 .with(thing((b, { store }) => b.config(store.view(t => t.app.thing))))
 .logger((b, { config }) => b.config(config.app.log))
@@ -155,7 +154,7 @@ A feature registers nothing here. The application hands it what it wants, in the
   not. A feature's own resolved options are a plain object read once, when the feature configures.
 - **The application's schema is the only schema.** A feature seeds nothing, so a block declared with required,
   undefaulted fields and no source to fill them fails validation. Splice the feature's exported schema
-  (`serverConfigSchema`, `healthConfigSchema`, …) rather than restating it.
+  (`loggerConfigSchema`, `healthConfigSchema`, …) rather than restating it.
 
 The callback runs once, when the application readies: after configuration has loaded and before the feature binds
 anything.

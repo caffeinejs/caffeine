@@ -1,5 +1,4 @@
-import { createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { createWebApplication } from '@caffeinejs/http'
 
 // Side-effect imports register the controllers (and, transitively, their services and repositories)
 // in the global component registry that the container snapshots when the app is built.
@@ -10,7 +9,7 @@ import './order/order.controller.js'
 import './payment/payment.controller.js'
 
 const started = performance.now()
-const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+const app = createWebApplication()
 await app.ready()
 await app.instance.listen({ port: 3013, host: '127.0.0.1' })
 // performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.

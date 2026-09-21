@@ -25,7 +25,7 @@ Throw `ErrHTTPNotFound` (and other `ErrHTTP*` types) from handlers. Do not inven
 Plugins and builders, not Nest modules:
 
 ```ts
-createWebApplication(fastifyAdapterFactory(server), { container })
+createWebApplication({ container })
   .with(staticFiles(s => s.serve(dir, { prefix: '/static' })))
   .with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
 ```

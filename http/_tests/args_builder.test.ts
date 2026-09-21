@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { $p, Controller, Get, Args, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { $p, Controller, Get, Args, createWebApplication } from '../index.js'
 
 // @Args accepts either an array of `$p` pickers or a builder function that receives the builtin pickers.
 // Both must resolve handler arguments identically.
@@ -24,7 +23,7 @@ void [ParamsBuilderController]
 
 describe('@Args builder signature', () => {
   it('resolves the same arguments from the function form as the array form', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     try {

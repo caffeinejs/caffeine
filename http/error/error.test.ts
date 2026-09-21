@@ -1,7 +1,6 @@
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -17,7 +16,6 @@ import {
   Post,
   Schema,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
@@ -90,7 +88,7 @@ describe('ErrorHandlerProvider', () => {
 // The three handlers every application below enrols. Declaring the others in this module no longer reaches
 // any of them, which is what lets one file hold handlers that would otherwise collide on the same error type.
 function buildApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
+  return createWebApplication().errorHandling(e =>
     e.globalHandlers(NotFoundHandler, CatchAllHandler, AlphaGammaHandler),
   )
 }

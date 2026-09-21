@@ -1,16 +1,5 @@
-import {
-  Controller,
-  Get,
-  createWebApplication,
-  Args,
-  Post,
-  Schema,
-  $p,
-  fastifyAdapterFactory,
-  FastifyContext,
-} from '@caffeinejs/http'
+import { Controller, Get, createWebApplication, Args, Post, Schema, $p, FastifyContext } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 
@@ -65,17 +54,15 @@ class AppController {
 
 void [AppController]
 
-const server = fastify({ logger: false })
-
-server.addHook('preHandler', (req, reply, done) => {
-  if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
-    reply.code(401).send({ error: 'Unauthorized' })
-    return
-  }
-  done()
+const app = createWebApplication().server(undefined, server => {
+  server.addHook('preHandler', (req, reply, done) => {
+    if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
+      reply.code(401).send({ error: 'Unauthorized' })
+      return
+    }
+    done()
+  })
 })
-
-const app = createWebApplication(fastifyAdapterFactory(server))
 
 // The request-id hook the `caffeine` fixture registers directly on Fastify, expressed as a middleware. It is the
 // one difference between the two fixtures, so the delta against that one is the pipeline's overhead alone.

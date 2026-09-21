@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -10,7 +9,6 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../index.js'
 
 @Controller('/http-err')
@@ -44,7 +42,7 @@ void [NeverEnrolledHandler]
 
 describe('ErrHTTP envelope fallback', () => {
   it('renders the status and a structured envelope for an unhandled ErrHTTP', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/http-err/conflict')
@@ -62,7 +60,7 @@ describe('ErrHTTP envelope fallback', () => {
   })
 
   it('sends a falsy-but-defined body verbatim instead of the envelope', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/http-err/zero-body')
@@ -76,7 +74,7 @@ describe('ErrHTTP envelope fallback', () => {
   // `headers` is optional and stays undefined when the error carries none, so this is the only path that
   // reaches reply.headers at all.
   it('applies the headers an ErrHTTP carries', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/http-err/with-headers')
@@ -90,7 +88,7 @@ describe('ErrHTTP envelope fallback', () => {
   // The envelope is what an application gets for free. A @Catch class declared anywhere in the process used to
   // replace it by being imported; now only the application naming the handler does.
   it('keeps the envelope when a matching handler was declared but never enrolled', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/http-err/conflict')
@@ -102,9 +100,7 @@ describe('ErrHTTP envelope fallback', () => {
   })
 
   it('replaces the envelope once the application enrols that same handler', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).errorHandling(e =>
-      e.globalHandlers(NeverEnrolledHandler),
-    )
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
     await app.ready()
 
     const res = await app.fetch('/http-err/conflict')

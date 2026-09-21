@@ -1,5 +1,4 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -9,7 +8,6 @@ import {
   BaseAuthenticationHandler,
   ErrAuthzPolicyEmpty,
   createWebApplication,
-  fastifyAdapterFactory,
   newRouter,
   type AuthzRequirement,
 } from '../../index.js'
@@ -81,7 +79,7 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
     const container = new CaffeineIoC()
     container.bind(AdmitsEveryRole, t => t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler))
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { container })
+    const app = createWebApplication({ container })
       .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()))
       .mount(
         newRouter('/admin')

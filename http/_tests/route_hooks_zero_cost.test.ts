@@ -1,7 +1,7 @@
-import fastify, { type RouteOptions } from 'fastify'
+import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import { Controller, Get, type WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, type WebApplication, createWebApplication } from '../index.js'
 
 /**
  * What a route costs when it uses none of the features that attach hooks.
@@ -24,13 +24,12 @@ const registered = new Map<string, RouteOptions>()
 let app: WebApplication
 
 beforeAll(async () => {
-  const server = fastify()
   // onRoute sees the route definition exactly as it was handed to Fastify, after everything attached to it.
-  server.addHook('onRoute', route => {
-    registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+  app = createWebApplication().server(undefined, server => {
+    server.addHook('onRoute', route => {
+      registered.set(`${route.method} ${route.url}`, route as RouteOptions)
+    })
   })
-
-  app = createWebApplication(fastifyAdapterFactory(server))
   await app.ready()
 })
 

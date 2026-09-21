@@ -1,7 +1,6 @@
-import { $p, Args, Controller, Post, Router, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { $p, Args, Controller, Post, Router, createWebApplication } from '@caffeinejs/http'
 import type { FastifyContext } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { multipart, multipartPlugin } from './index.js'
@@ -12,7 +11,7 @@ const BOUNDARY = '----TestBoundary123'
 type ME = { name: string; value: string } | { name: string; filename: string; content: string; mime?: string }
 
 function multipartApp() {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => multipartPlugin())
+  return createWebApplication({}).with(() => multipartPlugin())
 }
 
 function multipartBody(entries: Array<ME>): Uint8Array {

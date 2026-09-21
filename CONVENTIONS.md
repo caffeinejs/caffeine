@@ -175,10 +175,14 @@ either configuration — so the callback reads it out of the tree and hands it o
 binding. There is no side channel between a feature and the application's configuration: a feature registers
 no slice, publishes no key, and adds no field to the resolved configuration object.
 
-**A fluent method is the last word.** `s.port(3000)` is what the feature runs on; it is not a default that a
+**A fluent method is the last word.** `s.drainDelay('5s')` is what the feature runs on; it is not a default that a
 higher band quietly outranks. Configuration reaches a feature because the application's configure callback
-wired it — `.with(server((s, { config }) => s.config(config.app.server)))` — and by no other path. Where the more
+wired it — `.shutdown((s, { config }) => s.config(config.app.shutdown))` — and by no other path. Where the more
 specific of the two is named, the more specific wins: a setter beats the block `config(...)` handed over.
+
+The server's own construction and listen settings are not a feature. `.server(configure, customize)` hands them
+to the adapter — `configure` resolves them against the setup context, `customize` is handed the bare instance —
+and the adapter builds the server from them in `setup()`, once the container has initialized.
 
 Exceptions, where `config(...)` overlays what the fluent methods set:
 
@@ -186,8 +190,8 @@ Exceptions, where `config(...)` overlays what the fluent methods set:
 - kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
 - messaging binding destinations (and the other keys a binding's config slice declares)
 
-The application declares the whole schema, importing the feature's exported schema (`serverConfigSchema`,
-`loggerConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
+The application declares the whole schema, importing the feature's exported schema (`loggerConfigSchema`,
+`cookieConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
 into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
 fields and no source to fill them fails validation at `ready()`.
 
@@ -314,8 +318,8 @@ export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>
 export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
 ```
 
-The framework's own pre-registered builders — the server, the probes, the shutdown policy — are constructed
-before an application can name a callback, so `.server(...)` and its siblings hand theirs over with
+The framework's own pre-registered builders — the shutdown policy, the logger, cookies, error handling — are
+constructed before an application can name a callback, so `.shutdown(...)` and its siblings hand theirs over with
 `builder[kAddConfigurer](configure)`. Nothing else uses that symbol.
 
 A feature the application cannot configure implements `Feature` / `HTTPFeature` directly instead —

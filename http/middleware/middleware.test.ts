@@ -1,6 +1,5 @@
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import cors from 'cors'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -13,7 +12,6 @@ import {
   type Next,
   Router,
   createWebApplication,
-  fastifyAdapterFactory,
   kMiddlewareHook,
 } from '../index.js'
 
@@ -55,7 +53,7 @@ class Counter implements Middleware {
 function newApp(configure: (container: CaffeineIoC) => void = () => {}) {
   const container = new CaffeineIoC()
   configure(container)
-  return createWebApplication(fastifyAdapterFactory(fastify()), { container })
+  return createWebApplication({ container })
 }
 
 describe('middleware pipeline', () => {

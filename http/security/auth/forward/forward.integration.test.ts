@@ -1,17 +1,7 @@
-import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Authorize,
-  Claim,
-  Controller,
-  Get,
-  Identity,
-  Principal,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../../../index.js'
+import { Authorize, Claim, Controller, Get, Identity, Principal, createWebApplication } from '../../../index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(TEST_SECRET)
@@ -30,7 +20,7 @@ async function signToken(payload: Record<string, unknown>): Promise<string> {
 
 describe('scheme negotiation (Forward, application)', () => {
   function forwardBuilder() {
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth =>
       auth
         .addBasic('Basic', b =>

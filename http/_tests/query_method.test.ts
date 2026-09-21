@@ -1,7 +1,6 @@
-import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Args, Query, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Args, Query, createWebApplication } from '../index.js'
 import { $p } from '../route_picker.js'
 
 // Isolated file: registering a @Query controller forces a QUERY route onto every app built in the
@@ -18,8 +17,7 @@ describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
     }
     void [QueryController]
 
-    const instance = Fastify()
-    const app = createWebApplication(fastifyAdapterFactory(instance))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/query-test', {

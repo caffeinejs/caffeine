@@ -8,13 +8,11 @@ import {
   Get,
   Produces,
   createWebApplication,
-  fastifyAdapterFactory,
   type ActionResult,
   type Context,
 } from '@caffeinejs/http'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { HTML, html, type HTMLDefaults } from './index.js'
@@ -118,7 +116,7 @@ class HTMLErrorController {
 void [HTMLController, HTMLErrorController]
 
 function htmlApp(defaults?: Partial<HTMLDefaults>) {
-  return createWebApplication(fastifyAdapterFactory(fastify()), {})
+  return createWebApplication({})
     .errorHandling(e => e.globalHandlers(RenderHTMLHandler))
     .with(() => html(defaults))
 }
@@ -139,7 +137,7 @@ describe('HTML', () => {
   // Rendering must not require any application wiring: with no plugin registered nothing decorated the
   // instance and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+    const app = createWebApplication({})
     await app.ready()
 
     const res = await app.fetch('/html/document')
@@ -206,9 +204,7 @@ describe('HTML', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(({ config }) =>
-      html(config.html),
-    )
+    const app = createWebApplication({ config: conf }).with(({ config }) => html(config.html))
 
     await app.ready()
 

@@ -7,10 +7,9 @@ import {
   type InferConfig,
   type ConfigSource,
 } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { WebApplication, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { WebApplication, createWebApplication } from '../index.js'
 import { HealthBuilder } from './builder.js'
 import { health } from './health.js'
 import { healthConfigSchema, type HealthConfig } from './options.js'
@@ -101,7 +100,7 @@ describe('health()', () => {
   })
 
   it('mounts the probes just by being installed', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify())).with(health())
+    app = createWebApplication().with(health())
 
     await app.run()
 
@@ -109,7 +108,7 @@ describe('health()', () => {
   })
 
   it('mounts nothing when never installed', async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify()))
+    app = createWebApplication()
 
     await app.ready()
 
@@ -121,9 +120,7 @@ describe('health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
 
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, { config }) => h.config(config.health)),
-    )
+    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
 
     await app.ready()
 
@@ -135,7 +132,7 @@ describe('health()', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(health())
+    app = createWebApplication({ config: conf }).with(health())
 
     await app.run()
 
@@ -147,9 +144,7 @@ describe('health()', () => {
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
-    app = createWebApplication(fastifyAdapterFactory(fastify()), { config: conf }).with(
-      health((h, { config }) => h.config(config.health)),
-    )
+    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
 
     await app.run()
 
@@ -166,7 +161,7 @@ describe('health()', () => {
   // health() reads the application's own ApplicationAvailability off the container rather than a fresh one —
   // otherwise liveness would never reflect what the application lifecycle actually does to it.
   it("reflects the application's own availability, not a container-constructed one", async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify())).with(health())
+    app = createWebApplication().with(health())
 
     await app.run()
 

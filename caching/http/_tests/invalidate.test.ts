@@ -1,13 +1,4 @@
-import {
-  Controller,
-  ErrConfiguration,
-  Get,
-  Post,
-  Router,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, ErrConfiguration, Get, Post, Router, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
@@ -27,9 +18,7 @@ describe('@CacheInvalidate reaches the entries the cache stored', () => {
   })
 
   async function start() {
-    const app = createWebApplication(fastifyAdapterFactory(fastify())).with(
-      HTTPCaching(b => b.store(new MemoryCache())),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     close = () => app.close()
     await app.ready()
     return app
@@ -217,7 +206,7 @@ describe('cacheInvalidate refuses an ambiguous or unbounded eviction at start-up
   })
 
   function ready(router: Router) {
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
       .with(HTTPCaching(b => b.store(new MemoryCache())))
       .mount(router)
     close = () => app.close()

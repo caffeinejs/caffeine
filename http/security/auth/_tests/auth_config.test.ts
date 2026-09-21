@@ -1,7 +1,6 @@
 import { token } from '@caffeinejs/di'
 import { $t, newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import fastify from 'fastify'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 
@@ -12,7 +11,6 @@ import {
   Controller,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../../../index.js'
 import { SCHEME_SCHEMAS, authConfigSchema, credentialsConfigSchema, refreshConfigSchema } from '../config.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
@@ -84,7 +82,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
@@ -107,7 +105,7 @@ describe('authentication configuration', () => {
   })
 
   it('leaves the code-set secret in place when configuration carries none', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).authentication(a =>
+    const app = createWebApplication().authentication(a =>
       a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
@@ -126,7 +124,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
@@ -149,9 +147,8 @@ describe('authentication configuration', () => {
       )
       .build()
     // A cookie scheme is registered, so the cookie plugin has to be there first or the application refuses to start.
-    const server = fastify({ logger: false })
 
-    const app = createWebApplication(fastifyAdapterFactory(server), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a
@@ -181,7 +178,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a
@@ -204,7 +201,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a.config(config.auth).addBasic(b =>
@@ -239,7 +236,7 @@ describe('authentication configuration', () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
       .build()
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {
+    const app = createWebApplication({
       config: conf,
     }).authentication((a, { config }) =>
       a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
@@ -264,9 +261,8 @@ describe('authentication configuration', () => {
     function appFrom(values: Record<string, string>) {
       const conf = newConfiguration(openSchema, kOpenConfig).source(env(values)).build()
 
-      return createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), { config: conf }).authentication(
-        (a, { config }) =>
-          a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
+      return createWebApplication({ config: conf }).authentication((a, { config }) =>
+        a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
       )
     }
 
@@ -321,22 +317,20 @@ describe('authentication configuration', () => {
           }),
         )
         .build()
-      const server = fastify({ logger: false })
 
-      const app = createWebApplication(fastifyAdapterFactory(server), { config: conf }).authentication(
-        (a, { config }) =>
-          a
-            .config(config.auth)
-            .addOAuth2('oauth', o =>
-              o
-                .clientID('code-client')
-                .clientSecret('code-client-secret')
-                .sessionSecret('a-perfectly-long-session-secret-value!!')
-                .authorizationEndpoint('https://provider.test/authorize')
-                .tokenEndpoint('https://provider.test/token')
-                .userInfoEndpoint('https://provider.test/userinfo')
-                .callbackURL('https://app.test/auth/callback'),
-            ),
+      const app = createWebApplication({ config: conf }).authentication((a, { config }) =>
+        a
+          .config(config.auth)
+          .addOAuth2('oauth', o =>
+            o
+              .clientID('code-client')
+              .clientSecret('code-client-secret')
+              .sessionSecret('a-perfectly-long-session-secret-value!!')
+              .authorizationEndpoint('https://provider.test/authorize')
+              .tokenEndpoint('https://provider.test/token')
+              .userInfoEndpoint('https://provider.test/userinfo')
+              .callbackURL('https://app.test/auth/callback'),
+          ),
       )
 
       await app.ready()

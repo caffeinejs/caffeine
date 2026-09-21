@@ -28,9 +28,9 @@ export type FeatureConfigurer<B, C = unknown> = (builder: B, kit: FeatureConfigu
 /**
  * Adds a configure callback to a builder the framework registered itself.
  *
- * `.with(...)` hands a feature its callback at construction, but the built-in features — the server, the
- * shutdown policy, the probes — are registered before the application can name one, so `.server(...)` and its
- * siblings reach the already-registered builder through this. Symbol-keyed so it stays off the fluent
+ * `.with(...)` hands a feature its callback at construction, but the built-in features — the shutdown policy,
+ * the logger — are registered before the application can name one, so `.shutdown(...)` and its siblings reach
+ * the already-registered builder through this. Symbol-keyed so it stays off the fluent
  * surface. Callbacks run in the order they were added.
  */
 export const kAddConfigurer = Symbol('caffeine.feature.addConfigurer')

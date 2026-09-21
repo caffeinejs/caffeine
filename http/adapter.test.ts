@@ -1,8 +1,8 @@
 import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
-import Fastify from 'fastify'
+import type { FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Method, createWebApplication, Args, fastifyAdapterFactory, FastifyContext } from './index.js'
+import { Controller, Get, Method, createWebApplication, Args, FastifyContext } from './index.js'
 import { $p } from './route_picker.js'
 
 describe('Fastify Adapter', () => {
@@ -10,14 +10,15 @@ describe('Fastify Adapter', () => {
   // parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without making it
   // flaky.
   it('binds a real listener and serves it over the network', { retry: 2 }, async () => {
-    const server = Fastify()
-    server.get('/', () => ({ ok: true }))
-
-    const app = createWebApplication(fastifyAdapterFactory(server))
+    let seen: FastifyInstance | undefined
+    const app = createWebApplication().server(undefined, server => {
+      seen = server
+      server.get('/', () => ({ ok: true }))
+    })
     await app.run()
 
     try {
-      expect(app.instance).toBe(server)
+      expect(app.instance).toBe(seen)
       expect(app.address!.port).toBeGreaterThan(0)
 
       // Native fetch, not app.fetch(): the point is that traffic reaches the process through a socket.
@@ -31,10 +32,9 @@ describe('Fastify Adapter', () => {
   })
 
   it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
-    const server = Fastify()
-    server.get('/', () => ({ ok: true }))
-
-    const app = createWebApplication(fastifyAdapterFactory(server))
+    const app = createWebApplication().server(undefined, server => {
+      server.get('/', () => ({ ok: true }))
+    })
     await app.ready()
 
     const result = await app.fetch('/')
@@ -55,7 +55,7 @@ describe('Fastify Adapter', () => {
 
       void [TestController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
@@ -84,7 +84,7 @@ describe('Fastify Adapter', () => {
 
       void [PickersController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/test/pickers?foo=bar')
@@ -111,7 +111,7 @@ describe('Fastify Adapter', () => {
 
       void [AsyncPickController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/async-pick/value')
@@ -134,7 +134,7 @@ describe('Fastify Adapter', () => {
 
       void [MixedPickController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/mixed-pick/42')
@@ -157,7 +157,7 @@ describe('Fastify Adapter', () => {
 
       void [MethodController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       for (const m of methods) {
@@ -184,7 +184,7 @@ describe('Fastify Adapter', () => {
 
       void [RequestScopedController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const r1 = await app.fetch('/req-ctrl/id')
@@ -218,7 +218,7 @@ describe('Fastify Adapter', () => {
 
       void [TransientController]
 
-      const app = createWebApplication(fastifyAdapterFactory(Fastify()))
+      const app = createWebApplication()
       await app.ready()
 
       const r1 = await app.fetch('/transient-ctrl/svc-id')
@@ -246,9 +246,7 @@ describe('Fastify Adapter', () => {
       }
       void [NamedCookieController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
@@ -267,9 +265,7 @@ describe('Fastify Adapter', () => {
       }
       void [AllCookiesController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
@@ -292,9 +288,7 @@ describe('Fastify Adapter', () => {
       }
       void [SignedController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret(SECRET))
+      const app = createWebApplication().cookie(k => k.secret(SECRET))
       await app.ready()
 
       const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
@@ -313,9 +307,7 @@ describe('Fastify Adapter', () => {
       }
       void [TamperedController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret('test-secret'))
+      const app = createWebApplication().cookie(k => k.secret('test-secret'))
       await app.ready()
 
       const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
@@ -335,9 +327,7 @@ describe('Fastify Adapter', () => {
       }
       void [SetCookieController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/ck/set')
@@ -358,9 +348,7 @@ describe('Fastify Adapter', () => {
       }
       void [GetCookieController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
@@ -383,9 +371,7 @@ describe('Fastify Adapter', () => {
       }
       void [ReqSignedCookieController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify)).cookie(k => k.secret(SECRET))
+      const app = createWebApplication().cookie(k => k.secret(SECRET))
       await app.ready()
 
       const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
@@ -405,9 +391,7 @@ describe('Fastify Adapter', () => {
       }
       void [DeleteCookieController]
 
-      const fastify = Fastify()
-
-      const app = createWebApplication(fastifyAdapterFactory(fastify))
+      const app = createWebApplication()
       await app.ready()
 
       const res = await app.fetch('/ck/delete')

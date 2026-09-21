@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Post, Status, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, Post, Status, createWebApplication } from '../index.js'
 
 describe('Status', () => {
   it('returns the custom status code set by @Status', async () => {
@@ -16,7 +15,7 @@ describe('Status', () => {
 
     void [StatusController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/status/created', { method: 'POST' })
@@ -35,7 +34,7 @@ describe('Status', () => {
 
     void [StatusDefaultController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/status-default/ok')
@@ -53,7 +52,7 @@ describe('Status', () => {
 
     void [StatusEmptyController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/status-empty/ok')

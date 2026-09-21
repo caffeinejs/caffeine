@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -9,7 +8,6 @@ import {
   Controller,
   Get,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../index.js'
 
 /**
@@ -43,7 +41,7 @@ void [TypoController]
 
 describe('authentication extension — unknown scheme', () => {
   it('refuses to start when a route names a scheme nothing registered', async () => {
-    const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+    const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('Header', new NeverAuthenticates()).default('Header'))
 
     await expect(builder.ready()).rejects.toThrow('Cannot resolve authentication scheme "Typo"')

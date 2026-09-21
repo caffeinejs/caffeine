@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Header, MediaType, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Get, Header, MediaType, createWebApplication } from '../index.js'
 
 describe('Header', () => {
   it('applies class-level header to all routes', async () => {
@@ -21,7 +20,7 @@ describe('Header', () => {
 
     void [VersionedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const resA = await app.fetch('/versioned/a')
@@ -48,7 +47,7 @@ describe('Header', () => {
 
     void [TargetedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const hit = await app.fetch('/targeted/with-header')
@@ -70,7 +69,7 @@ describe('Header', () => {
 
     void [MultiClassController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/multi-class/route')
@@ -91,7 +90,7 @@ describe('Header', () => {
 
     void [MultiMethodController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/multi-method/route')
@@ -112,7 +111,7 @@ describe('Header', () => {
 
     void [OverrideController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/override/route')
@@ -133,7 +132,7 @@ describe('Header', () => {
 
     void [CharsetController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/charset/route')
@@ -153,7 +152,7 @@ describe('Header', () => {
 
     void [NoCharsetController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/no-charset/route')
@@ -173,7 +172,7 @@ describe('Header', () => {
 
     void [CharsetArrayController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const res = await app.fetch('/charset-array/route')

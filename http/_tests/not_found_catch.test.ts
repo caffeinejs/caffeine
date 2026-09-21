@@ -1,15 +1,6 @@
-import fastify from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import {
-  type ActionResult,
-  Catch,
-  Context,
-  ErrHTTPNotFound,
-  ErrorHandler,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { type ActionResult, Catch, Context, ErrHTTPNotFound, ErrorHandler, createWebApplication } from '../index.js'
 
 @Catch(ErrHTTPNotFound)
 class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
@@ -20,9 +11,7 @@ class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
 
 describe('@Catch and unmatched routes', () => {
   it('an enrolled @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
-    const app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false }))).errorHandling(e =>
-      e.globalHandlers(GlobalNotFound),
-    )
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(GlobalNotFound))
     await app.ready()
 
     const res = await app.fetch('/definitely-not-a-route')

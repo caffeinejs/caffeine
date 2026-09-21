@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -13,7 +12,6 @@ import {
   Router,
   $p,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../index.js'
 
 // Controllers are registered globally at decoration time and a container snapshots them when it is
@@ -75,7 +73,7 @@ const tenancy: MiddlewareFn<Vars> = (ctx, next) => {
 }
 
 function newApp() {
-  const app = createWebApplication(fastifyAdapterFactory(fastify()), { container: new CaffeineIoC() })
+  const app = createWebApplication({ container: new CaffeineIoC() })
   app.use(tenancy, { hook: 'onRequest' })
   return app
 }

@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -14,7 +13,6 @@ import {
   Principal,
   WebApplication,
   createWebApplication,
-  fastifyAdapterFactory,
 } from '../../index.js'
 
 /**
@@ -62,7 +60,7 @@ class OptedOutController {
 void [UndecoratedController, OptedOutController]
 
 function buildApp(withFallback: boolean): WebApplication {
-  const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+  const builder = createWebApplication()
 
   builder.authentication(auth => auth.addStrategy('Header', new HeaderSchemeHandler()).default('Header'))
   if (withFallback) {

@@ -1,7 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
-import { Controller, Get, WebApplication, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
-import fastify from 'fastify'
+import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticConfigurer, staticFiles } from '../index.js'
@@ -24,7 +23,7 @@ describe('SPA fallback', () => {
   let app: WebApplication | undefined
 
   const start = async (configure: StaticConfigurer) => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(staticFiles(configure))
+    app = createWebApplication({}).with(staticFiles(configure))
     await app.ready()
 
     return app
@@ -150,9 +149,7 @@ describe('SPA fallback', () => {
   })
 
   it('refuses to start when the shell is missing', async () => {
-    const failing = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
-      staticFiles(s => s.spa(empty)),
-    )
+    const failing = createWebApplication({}).with(staticFiles(s => s.spa(empty)))
 
     await expect(failing.ready()).rejects.toThrow(ErrSPAIndexMissing)
     await failing.close()
@@ -161,22 +158,21 @@ describe('SPA fallback', () => {
   // Two `.spa()` calls cannot both be right, and the answer does not depend on anything configuration might
   // say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
   it('refuses a second SPA mount', async () => {
-    const rejected = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })), {}).with(
-      staticFiles(s => s.spa(dist).spa(dist)),
-    )
+    const rejected = createWebApplication({}).with(staticFiles(s => s.spa(dist).spa(dist)))
 
     await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
   })
 
   // The shell is served from the not-found handler, and Fastify allows one per context: a handler the caller
   // already set would silently stop the shell, so start-up fails instead.
-  it('refuses to start when the Fastify instance already has a not-found handler', async () => {
-    const server = fastify({ logger: false })
-    server.setNotFoundHandler((_req, reply) => {
-      void reply.code(404).send()
-    })
-
-    const rejected = createWebApplication(fastifyAdapterFactory(server), {}).with(staticFiles(s => s.spa(dist)))
+  it('refuses to start when the server already has a not-found handler', async () => {
+    const rejected = createWebApplication({})
+      .server(undefined, server => {
+        server.setNotFoundHandler((_req, reply) => {
+          void reply.code(404).send()
+        })
+      })
+      .with(staticFiles(s => s.spa(dist)))
 
     await expect(rejected.ready()).rejects.toThrow(/Not found handler already set/)
     await rejected.close()

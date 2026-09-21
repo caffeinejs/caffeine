@@ -1,7 +1,6 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory, BodyAsBuffer } from '../index.js'
+import { Controller, Post, Args, createWebApplication, BodyAsBuffer } from '../index.js'
 import { $p } from '../route_picker.js'
 
 describe('BodyAsBuffer', () => {
@@ -18,7 +17,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const payload = Buffer.from('hello raw world')
@@ -46,7 +45,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawBinaryController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const payload = Buffer.from([0x01, 0x02, 0x03, 0xff])
@@ -74,7 +73,7 @@ describe('BodyAsBuffer', () => {
 
     void [RawJSONController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const jsonStr = JSON.stringify({ key: 'value' })
@@ -108,7 +107,7 @@ describe('BodyAsBuffer', () => {
 
     void [MixedController]
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()))
+    const app = createWebApplication()
     await app.ready()
 
     const rawRes = await app.fetch('/raw-mixed/raw', {

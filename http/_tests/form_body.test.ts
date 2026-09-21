@@ -1,14 +1,13 @@
-import fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication, fastifyAdapterFactory } from '../index.js'
+import { Controller, Post, Args, createWebApplication } from '../index.js'
 import { $p } from '../route_picker.js'
 
 const FORM = 'application/x-www-form-urlencoded'
 
 async function appWith(controller: unknown) {
   void [controller]
-  const app = createWebApplication(fastifyAdapterFactory(fastify()))
+  const app = createWebApplication()
   await app.ready()
   return app
 }

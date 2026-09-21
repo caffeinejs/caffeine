@@ -1,15 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
-import {
-  WebApplication,
-  Controller,
-  Get,
-  Post,
-  Args,
-  createWebApplication,
-  $p,
-  fastifyAdapterFactory,
-} from '@caffeinejs/http'
-import fastify from 'fastify'
+import { WebApplication, Controller, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'
@@ -73,7 +63,7 @@ describe('controllerTypedClient()', () => {
   let baseURL: string
 
   beforeAll(async () => {
-    app = createWebApplication(fastifyAdapterFactory(fastify({ logger: false })))
+    app = createWebApplication()
     await app.ready()
     baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })

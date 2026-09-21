@@ -9,10 +9,9 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import Fastify from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { createWebApplication, fastifyAdapterFactory } from './index.js'
+import { createWebApplication } from './index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
 // the same `bootstrap()` path as the built-in auth/authz services.
@@ -42,9 +41,7 @@ function probe<C = unknown>(configure?: FeatureConfigurer<ProbeBuilder<C>, C>): 
 describe('WebApplication.with()', () => {
   it('installs the feature and rides the bootstrap path into the container', async () => {
     const container = new CaffeineIoC()
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container }).with(
-      probe(t => t.capture('localhost:9092')),
-    )
+    const app = createWebApplication({ container }).with(probe(t => t.capture('localhost:9092')))
 
     await app.ready()
 
@@ -52,7 +49,7 @@ describe('WebApplication.with()', () => {
   })
 
   it('does not add methods to the builder', () => {
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), {}).with(probe())
+    const app = createWebApplication({}).with(probe())
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = app.probe
     expect(missing).toBeUndefined()
@@ -64,9 +61,7 @@ describe('WebApplication.with()', () => {
     const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
     const conf = newConfiguration(schema, kConfig).source(new EnvConfigSource()).build()
 
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { container, config: conf }).with(
-      probe(t => t.capture('after-config:9092')),
-    )
+    const app = createWebApplication({ container, config: conf }).with(probe(t => t.capture('after-config:9092')))
 
     await app.ready()
 
@@ -78,9 +73,9 @@ describe('WebApplication.with()', () => {
     const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
     const conf = newConfiguration(schema, kConfig).source(new EnvConfigSource()).build()
 
-    const app = createWebApplication(fastifyAdapterFactory(Fastify()), { config: conf })
+    const app = createWebApplication({ config: conf })
       .with(probe())
-      .server((s, { config }) => s.config(config.app.server))
+      .server(({ config }) => ({ listener: config.app.server }))
 
     expect(typeof app.ready).toBe('function')
   })

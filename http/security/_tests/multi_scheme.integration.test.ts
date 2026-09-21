@@ -1,4 +1,3 @@
-import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -16,7 +15,6 @@ import {
   Principal,
   WebApplication,
   createWebApplication,
-  fastifyAdapterFactory,
   $p,
 } from '../../index.js'
 
@@ -58,7 +56,7 @@ class DefaultSchemeHandler extends BaseAuthenticationHandler<object> {
 }
 
 function buildApp(): WebApplication {
-  const builder = createWebApplication(fastifyAdapterFactory(fastify()))
+  const builder = createWebApplication()
 
   builder.authentication(auth =>
     auth

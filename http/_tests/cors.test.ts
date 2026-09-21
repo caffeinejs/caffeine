@@ -1,5 +1,5 @@
 import fastifyCors from '@fastify/cors'
-import fastify, { type FastifyPluginAsync } from 'fastify'
+import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
@@ -12,7 +12,6 @@ import {
   RouteBuilder,
   RouteGroupBuilder,
   createWebApplication,
-  fastifyAdapterFactory,
   type CorsOptions,
 } from '../index.js'
 
@@ -21,7 +20,7 @@ function corsApp(options: CorsOptions = {}) {
     await instance.register(fastifyCors, options)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'cors' }))
+  return createWebApplication({}).with(() => fp(plugin, { name: 'cors' }))
 }
 
 describe('CORS', () => {
@@ -81,7 +80,7 @@ describe('CORS', () => {
       }
       void [NoCorsController]
 
-      const app = createWebApplication(fastifyAdapterFactory(fastify()), {})
+      const app = createWebApplication({})
       await app.ready()
 
       const res = await app.fetch('/no-cors/resource', { headers: { origin: 'https://example.com' } })
@@ -246,7 +245,7 @@ describe('CORS', () => {
     }
     const registerCors = () => fp(plugin, { name: 'cors' })
 
-    const app = createWebApplication(fastifyAdapterFactory(fastify()), {}).with(registerCors).with(registerCors)
+    const app = createWebApplication({}).with(registerCors).with(registerCors)
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "cors": it is already registered/)
     await app.close()

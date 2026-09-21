@@ -2,26 +2,18 @@ import { Readable } from 'node:stream'
 import { createGzip, createBrotliCompress } from 'node:zlib'
 
 import fastifyCompress from '@fastify/compress'
-import fastify, { type FastifyPluginAsync } from 'fastify'
+import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Encoding,
-  encoding,
-  Controller,
-  Post,
-  RouteBuilder,
-  createWebApplication,
-  fastifyAdapterFactory,
-} from '../index.js'
+import { Encoding, encoding, Controller, Post, RouteBuilder, createWebApplication } from '../index.js'
 
 function encodingApp() {
   const plugin: FastifyPluginAsync = async instance => {
     await instance.register(fastifyCompress)
   }
 
-  return createWebApplication(fastifyAdapterFactory(fastify()), {}).with(() => fp(plugin, { name: 'compress' }))
+  return createWebApplication({}).with(() => fp(plugin, { name: 'compress' }))
 }
 
 async function gzip(data: string): Promise<Buffer> {

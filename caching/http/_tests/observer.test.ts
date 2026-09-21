@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Status, createWebApplication, fastifyAdapterFactory } from '@caffeinejs/http'
+import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -93,9 +93,7 @@ afterEach(async () => {
 
 async function start(observer: CacheObserver, options: { store?: Cache; logger?: Logger } = {}) {
   const store = options.store ?? new MemoryCache()
-  const app = createWebApplication(fastifyAdapterFactory(fastify()), { logger: options.logger }).with(
-    HTTPCaching(b => b.store(store).observer(observer)),
-  )
+  const app = createWebApplication({ logger: options.logger }).with(HTTPCaching(b => b.store(store).observer(observer)))
   close = () => app.close()
   await app.ready()
   return app
