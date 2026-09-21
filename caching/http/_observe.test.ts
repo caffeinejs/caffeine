@@ -116,6 +116,36 @@ describe('guardObserver', () => {
     expect(errors).toHaveLength(2)
   })
 
+  // `async onBypass()` fits the `void` signature. Its rejection has no handler of its own, and an unhandled
+  // rejection ends the process.
+  it('handles a rejection from an async method like a throw, once', async () => {
+    const { log, errors } = recordingLog()
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+
+    try {
+      const guarded = guardObserver(
+        {
+          async onBypass() {
+            throw new Error('late boom')
+          },
+        },
+        log,
+      )
+
+      guarded.onBypass!(bypass)
+      guarded.onBypass!(bypass)
+      await new Promise(resolve => setImmediate(resolve))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(errors).toHaveLength(1)
+    expect(errors[0][0]).toMatchObject({ err: expect.objectContaining({ message: 'late boom' }) })
+  })
+
   it('defines only the methods the observer implements, and calls them as methods', () => {
     const { log } = recordingLog()
 

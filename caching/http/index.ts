@@ -8,6 +8,7 @@ export { HTTPCachingOptionsBuilder } from './options_builder.js'
 export { CacheControl, CacheInvalidate } from './decorators/index.js'
 export { cacheControl, cacheInvalidate } from './helpers/index.js'
 export { HTTPCaching, cachePlugin, type HTTPCachingConfigurer } from './caching.js'
+export { ErrCacheStoreTimeout } from './store_timeout.js'
 export {
   composeObservers,
   type CacheBypassEvent,

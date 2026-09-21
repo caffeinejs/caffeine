@@ -78,13 +78,16 @@ describe('matchesETag (property)', () => {
     },
   )
 
-  it.prop([etagToken, fc.array(etagToken, { maxLength: 3 }), fc.integer({ min: 0, max: 4 }).map(n => ' '.repeat(n))])(
-    'whitespace around comma separators is trimmed',
-    (stored, others, spaces) => {
-      const list = [stored, ...others].join(`,${spaces}`)
-      expect(matchesETag(list, stored)).toBe(true)
-    },
-  )
+  // The tag looked for comes last, behind a separator that always has whitespace on both sides: a comparison
+  // that trimmed nothing would not find it.
+  it.prop([
+    etagToken,
+    fc.array(etagToken, { minLength: 1, maxLength: 3 }),
+    fc.integer({ min: 1, max: 4 }).map(n => ' '.repeat(n)),
+  ])('whitespace around comma separators is trimmed', (stored, others, spaces) => {
+    const list = [...others, stored].join(`${spaces},${spaces}`)
+    expect(matchesETag(list, stored)).toBe(true)
+  })
 })
 
 // Query keys are unique: a repeated key's values keep their relative order through canonicalization, so

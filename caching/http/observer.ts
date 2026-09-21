@@ -112,7 +112,8 @@ export interface CacheErrorEvent {
  *
  * Every method is optional and called synchronously, inside the request's own hook, so whatever the request's
  * async context holds — an active tracing span, for one — is still current. `HTTPCaching` catches a method that
- * throws, logs the first throw from each method on the application logger, and never lets it reach the response.
+ * throws, or whose returned promise rejects, logs the first from each method on the application logger, and never
+ * lets it reach the response. A returned promise is not awaited.
  *
  * Reports outcomes the cache status header does not carry: a request whose method the route does not cache, and
  * an `only-if-cached` request answered `504`.

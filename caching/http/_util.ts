@@ -22,7 +22,7 @@ export function routeMethods(routeDef: AdapterRouteOptions): string {
 
 // Canonicalizes a request URL so query parameters in a different order share one cache entry
 // (`?a=1&b=2` and `?b=2&a=1` are equivalent). Sorts the query keys; leaves query-less URLs untouched.
-export function canonicalizeUrl(url: string): string {
+export function canonicalizeURL(url: string): string {
   const queryStart = url.indexOf('?')
   if (queryStart === -1) {
     return url
@@ -49,7 +49,7 @@ export function buildCacheKey(
   vary: readonly string[] | undefined,
   headerOf: (name: string) => string | string[] | undefined,
 ): string {
-  const canonical = canonicalizeUrl(url)
+  const canonical = canonicalizeURL(url)
   const base = method === 'GET' || method === 'HEAD' ? canonical : `${method}:${canonical}`
   if (!vary?.length) {
     return encodeURIComponent(base)
@@ -187,6 +187,7 @@ const NOT_STORED = new Set([
   'connection',
   'keep-alive',
   'proxy-authenticate',
+  'proxy-authentication-info',
   'proxy-authorization',
   'te',
   'trailer',
@@ -202,10 +203,17 @@ const NOT_STORED = new Set([
 export function storedHeadersOf(reply: AdapterReply, statusHeader: string): Record<string, string | string[]> {
   const all = reply.getHeaders()
   const stored: Record<string, string | string[]> = {}
+  const connection = connectionFieldsOf(all.connection)
 
   for (const name in all) {
     const value = all[name]
-    if (value === undefined || name === statusHeader || NOT_STORED.has(name) || name.startsWith('access-control-')) {
+    if (
+      value === undefined ||
+      name === statusHeader ||
+      NOT_STORED.has(name) ||
+      name.startsWith('access-control-') ||
+      connection?.has(name)
+    ) {
       continue
     }
 
@@ -213,6 +221,20 @@ export function storedHeadersOf(reply: AdapterReply, statusHeader: string): Reco
   }
 
   return stored
+}
+
+// RFC 9111 §3.1 — the fields a response's `Connection` names are that connection's, whatever they are called.
+function connectionFieldsOf(connection: unknown): Set<string> | undefined {
+  if (connection === undefined) {
+    return undefined
+  }
+
+  return new Set(
+    [connection]
+      .flat()
+      .flatMap(value => String(value).split(','))
+      .map(name => name.trim().toLowerCase()),
+  )
 }
 
 // A header an earlier hook already set belongs to this request — CORS, authentication — and outranks the one
@@ -295,25 +317,30 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
   }
 
   if (opts.ttl !== undefined) {
-    directives.push(`max-age=${Math.round(parseDuration(opts.ttl))}`)
+    directives.push(`max-age=${Math.floor(parseDuration(opts.ttl))}`)
   }
 
   if (opts.sharedMaxAge !== undefined) {
-    directives.push(`s-maxage=${Math.round(parseDuration(opts.sharedMaxAge))}`)
+    directives.push(`s-maxage=${Math.floor(parseDuration(opts.sharedMaxAge))}`)
   }
 
   if (opts.staleWhileRevalidate !== undefined) {
-    directives.push(`stale-while-revalidate=${Math.round(parseDuration(opts.staleWhileRevalidate))}`)
+    directives.push(`stale-while-revalidate=${Math.floor(parseDuration(opts.staleWhileRevalidate))}`)
   }
 
   if (opts.staleIfError !== undefined) {
-    directives.push(`stale-if-error=${Math.round(parseDuration(opts.staleIfError))}`)
+    directives.push(`stale-if-error=${Math.floor(parseDuration(opts.staleIfError))}`)
   }
 
   return directives.length > 0 ? directives.join(', ') : null
 }
 
 const DURATION = new RegExp(DURATION_PATTERN)
+
+// `NaN` for a string `parseDuration` would read as 0 rather than refuse.
+export function strictSeconds(value: Duration): number {
+  return typeof value === 'string' && !DURATION.test(value) ? Number.NaN : parseDuration(value)
+}
 
 // `parseDuration` reads what it cannot parse as 0, and a store reads a ttl of 0 as it pleases — `lru-cache` as
 // "never expires". So a duration is refused while the route registers, not discovered in production.
@@ -323,7 +350,7 @@ export function durationSeconds(
   value: Duration,
   positive: boolean,
 ): number {
-  const seconds = typeof value === 'string' && !DURATION.test(value) ? Number.NaN : parseDuration(value)
+  const seconds = strictSeconds(value)
 
   if (!Number.isFinite(seconds) || seconds < 0 || (positive && seconds === 0)) {
     throw new ErrConfiguration(

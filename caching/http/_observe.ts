@@ -35,16 +35,24 @@ export function guardObserver(observer: CacheObserver, log: Logger): CacheObserv
 
     let reported = false
 
+    const report = (err: unknown): void => {
+      if (reported) {
+        return
+      }
+
+      reported = true
+      log.error({ err }, `Cache observer "${method}" threw; further throws from "${method}" are suppressed`)
+    }
+
     guarded[method] = event => {
       try {
-        ;(observer[method] as (this: CacheObserver, event: unknown) => void).call(observer, event)
-      } catch (err) {
-        if (reported) {
-          return
+        // An `async` method fits the `void` signature, and its rejection would otherwise have no handler.
+        const result = (observer[method] as (this: CacheObserver, event: unknown) => unknown).call(observer, event)
+        if (result instanceof Promise) {
+          result.catch(report)
         }
-
-        reported = true
-        log.error({ err }, `Cache observer "${method}" threw; further throws from "${method}" are suppressed`)
+      } catch (err) {
+        report(err)
       }
     }
   }

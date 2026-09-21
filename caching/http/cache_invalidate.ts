@@ -11,6 +11,7 @@ import type { FastifyRequest } from 'fastify'
 import { cacheRouteOf } from './_observe.js'
 import { pathCacheKey, routeMethods } from './_util.js'
 import type { CacheDeps } from './cache.js'
+import { withStoreTimeout } from './store_timeout.js'
 
 /**
  * What a route evicts once a mutating request is answered with a `2xx` or a `3xx` — one of three forms, never
@@ -37,7 +38,7 @@ export type CacheInvalidateOptions =
  * Attaches the eviction hook to one route, per its `@CacheInvalidate` options.
  *
  * Evicts cached entries after a mutating request answered with a `2xx` or a `3xx`, targeting the store the
- * cache hooks write to. A store that rejects the eviction does not fail the response. Like those, `opts` is closed over rather than re-read per request.
+ * cache hooks write to. A store that rejects the eviction does not fail the response.
  *
  * @throws ErrConfiguration When `opts` mixes forms, or asks to `clear` without a `segment`.
  */
@@ -48,7 +49,7 @@ export function attachCacheInvalidateHook(
 ): void {
   assertOneForm(routeDef, opts)
 
-  const { store, observer } = deps
+  const { store, observer, storeTimeoutMs } = deps
   const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
 
   // RFC 9111 §4.4 — a non-error response, 2xx or 3xx, invalidates: a 303 after a form post evicts like a 200.
@@ -61,7 +62,7 @@ export function attachCacheInvalidateHook(
 
     if (opts.clear === true) {
       try {
-        await store.clear(opts.segment)
+        await withStoreTimeout(store.clear(opts.segment), 'clear', storeTimeoutMs)
         observer?.onInvalidate?.({ route: route!, segment: opts.segment, scope: 'segment' })
       } catch (error) {
         observer?.onError?.({ route: route!, segment: opts.segment, operation: 'clear', error })
@@ -72,7 +73,7 @@ export function attachCacheInvalidateHook(
 
     const keys = keysOf(request, opts)
     try {
-      await store.deleteMany(keys, opts.segment)
+      await withStoreTimeout(store.deleteMany(keys, opts.segment), 'delete', storeTimeoutMs)
       observer?.onInvalidate?.({ route: route!, segment: opts.segment, scope: 'keys', keys })
     } catch (error) {
       observer?.onError?.({ route: route!, segment: opts.segment, operation: 'delete', error })

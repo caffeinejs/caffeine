@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Post, Principal, Status, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Head, Header, Post, Principal, Status, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
@@ -107,6 +107,39 @@ describe('what the cache says about a response', () => {
     expect(failed.headers.get('cache-control')).toBe('no-store')
   })
 
+  // `noStore` is the restrictive form, like `@CacheControl(false)`: a handler does not get to loosen it.
+  it('says no-store over a Cache-Control the handler wrote, on a route that stores nothing', async () => {
+    @Controller('/resp-nostore-handler')
+    class NoStoreOverHandlerController {
+      @CacheControl({ noStore: true })
+      @Header('Cache-Control', 'public, max-age=600')
+      @Get('/ok')
+      ok() {
+        return { ok: true }
+      }
+
+      @CacheControl({ noStore: true })
+      @Header('Cache-Control', 'public, max-age=600')
+      @Status(404)
+      @Get('/missing')
+      missing() {
+        return { error: 'nope' }
+      }
+    }
+    void [NoStoreOverHandlerController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    close = () => app.close()
+    await app.ready()
+
+    const ok = await app.fetch('/resp-nostore-handler/ok')
+    const missing = await app.fetch('/resp-nostore-handler/missing')
+
+    expect(ok.headers.get('cache-control')).toBe('no-store')
+    expect(missing.status).toBe(404)
+    expect(missing.headers.get('cache-control')).toBe('no-store')
+  })
+
   // The handler knows this response is one client's. The route's policy does not get to publish it.
   it('leaves a Cache-Control the handler wrote as written, and does not store that response', async () => {
     let calls = 0
@@ -164,13 +197,12 @@ describe('what the cache says about a response', () => {
   })
 
   // A hit is the response the handler produced, not an abridged one: pagination totals, a language, a filename.
-  it('replays the headers of the stored response, and never its cookies', async () => {
+  it('replays the headers of the stored response', async () => {
     @Controller('/resp-headers')
     class HeadersController {
       @CacheControl({ ttl: 60 })
       @Header('X-Total-Count', '42')
       @Header('Content-Language', 'en')
-      @Header('Set-Cookie', 'visit=1')
       @Get('/list')
       list() {
         return [1, 2, 3]
@@ -183,13 +215,64 @@ describe('what the cache says about a response', () => {
     await app.ready()
 
     const miss = await app.fetch('/resp-headers/list')
-    expect(miss.headers.get('set-cookie')).toBe('visit=1')
-
     const hit = await app.fetch('/resp-headers/list')
+
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.headers.get('x-total-count')).toBe('42')
     expect(hit.headers.get('content-language')).toBe('en')
     expect(hit.headers.get('content-type')).toBe(miss.headers.get('content-type'))
+  })
+
+  // A response that sets a cookie is usually one client's: the request that starts a session is not yet
+  // authenticated, so nothing else would keep its body out of the shared store.
+  it('does not store a response that sets a cookie', async () => {
+    let calls = 0
+
+    @Controller('/resp-cookie')
+    class CookieController {
+      @CacheControl({ ttl: 60 })
+      @Header('Set-Cookie', 'session=1')
+      @Get('/start')
+      start() {
+        return { n: ++calls }
+      }
+    }
+    void [CookieController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    close = () => app.close()
+    await app.ready()
+
+    await app.fetch('/resp-cookie/start')
+    const second = await app.fetch('/resp-cookie/start')
+
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(second.headers.get('set-cookie')).toBe('session=1')
+    expect(await second.json()).toEqual({ n: 2 })
+  })
+
+  // `public` is the route saying the body is everyone's. The cookie still is not: it never goes to the store.
+  it('stores it on a route that declares itself public, and never replays the cookie', async () => {
+    @Controller('/resp-cookie-public')
+    class PublicCookieController {
+      @CacheControl({ ttl: 60, privacy: 'public' })
+      @Header('Set-Cookie', 'visit=1')
+      @Get('/list')
+      list() {
+        return [1, 2, 3]
+      }
+    }
+    void [PublicCookieController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    close = () => app.close()
+    await app.ready()
+
+    const miss = await app.fetch('/resp-cookie-public/list')
+    const hit = await app.fetch('/resp-cookie-public/list')
+
+    expect(miss.headers.get('set-cookie')).toBe('visit=1')
+    expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(hit.headers.get('set-cookie')).toBeNull()
   })
 
@@ -248,6 +331,37 @@ describe('what the cache says about a response', () => {
     expect(head.headers.get('content-length')).toBe(get.headers.get('content-length'))
     expect(Number(head.headers.get('content-length'))).toBeGreaterThan(100)
     expect(await head.text()).toBe('')
+  })
+
+  // RFC 9111 §4: a response to a HEAD never answers a GET. GET and HEAD share a key, and a route's own HEAD
+  // handler has no body to offer.
+  it('does not store the response to a HEAD, so a GET is never answered with it', async () => {
+    @CacheControl({ ttl: 60 })
+    @Controller('/resp-head-own')
+    class OwnHeadController {
+      @Head('/data')
+      head() {
+        return ''
+      }
+
+      @Get('/data')
+      data() {
+        return 'the body'
+      }
+    }
+    void [OwnHeadController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    close = () => app.close()
+    await app.ready()
+
+    const head = await app.fetch('/resp-head-own/data', { method: 'HEAD' })
+    const get = await app.fetch('/resp-head-own/data')
+
+    expect(head.headers.get('x-cache')).toBe('MISS')
+    expect(head.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(get.headers.get('x-cache')).toBe('MISS')
+    expect(await get.text()).toBe('the body')
   })
 
   // RFC 9110 §15.4.5: a 304 carries what guides a cache update, not the representation's other metadata.

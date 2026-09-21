@@ -2,7 +2,7 @@ services:
   redis:
     image: redis:8-alpine
     ports:
-      - '6379:6379'
+      - '127.0.0.1:6379:6379'
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
@@ -11,7 +11,7 @@ services:
   valkey:
     image: valkey/valkey:9-alpine
     ports:
-      - '6380:6379'
+      - '127.0.0.1:6380:6379'
     healthcheck:
       test: ['CMD', 'valkey-cli', 'ping']
       interval: 5s
@@ -29,7 +29,7 @@ services:
       redis-cli -p 6381 cluster addslotsrange 0 16383;
       wait"
     ports:
-      - '6381:6381'
+      - '127.0.0.1:6381:6381'
     healthcheck:
       test: ['CMD-SHELL', 'redis-cli -p 6381 cluster info | grep -q cluster_state:ok']
       interval: 5s
@@ -44,7 +44,7 @@ services:
       valkey-cli -p 6382 cluster addslotsrange 0 16383;
       wait"
     ports:
-      - '6382:6382'
+      - '127.0.0.1:6382:6382'
     healthcheck:
       test: ['CMD-SHELL', 'valkey-cli -p 6382 cluster info | grep -q cluster_state:ok']
       interval: 5s

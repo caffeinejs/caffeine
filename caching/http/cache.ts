@@ -26,6 +26,7 @@ import {
   storedHeadersOf,
 } from './_util.js'
 import type { CacheBypassReason, CacheObserver } from './observer.js'
+import { withStoreTimeout } from './store_timeout.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -49,7 +50,10 @@ export interface CacheControlOptions {
   staleWhileRevalidate?: Duration
   /** Sent as `stale-if-error`, for caches downstream. The server-side store never serves stale. */
   staleIfError?: Duration
-  /** Sends `no-store` on every response of the route, errors included, and stores nothing. */
+  /**
+   * Sends `no-store` on every response of the route, errors included, over a `Cache-Control` the handler wrote,
+   * and stores nothing.
+   */
   noStore?: boolean
   noCache?: boolean
   mustRevalidate?: boolean
@@ -57,8 +61,9 @@ export interface CacheControlOptions {
   noTransform?: boolean
   /**
    * `private` keeps the response out of the server-side store. `public` stores it even for an identified
-   * client. Left unset, a request that carries `Authorization`, or that an authentication scheme identified
-   * some other way, is answered as `private` and not stored.
+   * client, and even when it sets a cookie — the cookie itself is never stored. Left unset, a request that
+   * carries `Authorization`, or that an authentication scheme identified some other way, is answered as
+   * `private` and not stored, and a response that sets a cookie is not stored.
    */
   privacy?: 'private' | 'public'
   immutable?: boolean
@@ -116,19 +121,23 @@ export interface CacheDeps {
    * these itself for `cachePlugin` or `attachCacheHooks` owns that.
    */
   observer?: CacheObserver
+  /**
+   * Milliseconds a store call may take before the cache goes on without it, reported like a rejection. Left out,
+   * a call is waited for however long it takes.
+   */
+  storeTimeoutMs?: number
 }
 
 /**
  * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
- * Serves cacheable responses from and stores them into the container-resolved {@link Cache}, and emits
+ * Serves cacheable responses from and stores them into the {@link Cache} in `deps`, and emits
  * `Cache-Control`/`ETag`/`Vary` headers.
  *
- * `opts` is closed over rather than re-read from `request.routeOptions.config` per request: the hooks are
- * attached only to routes that declared options, so what they would read back is already known here.
- *
  * A handler that writes its own `Cache-Control` has decided for that response: the header is left as written
- * and the response is not stored. `@CacheControl(false)` is the exception, and overwrites it.
+ * and the response is not stored. `noStore` and `@CacheControl(false)` are the exceptions, and overwrite it.
+ *
+ * Not stored either: the response to a `HEAD`, and one that sets a cookie unless the route is `public`.
  *
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
@@ -146,7 +155,7 @@ export function attachCacheHooks(
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer } = deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs } = deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
@@ -263,7 +272,7 @@ export function attachCacheHooks(
 
     let cached: CacheEntry | undefined
     try {
-      cached = await store.get(key, read.segment)
+      cached = await withStoreTimeout(store.get(key, read.segment), 'get', storeTimeoutMs)
     } catch (error) {
       // A store that is down costs the cache, not the request.
       observer?.onError?.({ route: route!, segment: read.segment, operation: 'get', error })
@@ -339,13 +348,14 @@ export function attachCacheHooks(
     }
 
     // A handler that wrote its own Cache-Control has decided for this response: it is left as written, and the
-    // response is not stored under a policy it opted out of.
+    // response is not stored under a policy it opted out of. `noStore` is the exception: the restrictive form is
+    // written over whatever the handler said.
     const handlerDecides = reply.hasHeader('cache-control')
 
     // The policy describes the responses the route caches. Anything else — an error, a method the route does not
     // cache — gets nothing permissive from it, only the one directive that restricts.
     if (!methods.includes(request.method) || !statusCodes.includes(reply.statusCode)) {
-      if (read.noStore && !handlerDecides) {
+      if (read.noStore) {
         reply.header('Cache-Control', 'no-store')
       }
 
@@ -354,7 +364,7 @@ export function attachCacheHooks(
 
     const isPrivate = privacyOf(request) !== undefined
 
-    if (!handlerDecides) {
+    if (!handlerDecides || read.noStore) {
       const cacheControl = isPrivate ? privateCacheControl : policyCacheControl
       if (cacheControl) {
         reply.header('Cache-Control', cacheControl)
@@ -376,12 +386,16 @@ export function attachCacheHooks(
     // Private responses must not be stored in the shared server-side cache
     // RFC 9111 §4.1 — Vary: * means the response must never be cached
     // RFC 9111 §5.2.1.5 — nor is the response to a request that said no-store
+    // RFC 9111 §4 — nor the response to a HEAD, which shares the GET's key and may have no body to offer it
+    // A response that sets a cookie is taken for one client's, unless the route said `public`
     const shouldCache =
       ttlSeconds !== undefined &&
+      request.method !== 'HEAD' &&
       !read.noStore &&
       !isPrivate &&
       !varyAny &&
       !handlerDecides &&
+      (read.privacy === 'public' || !reply.hasHeader('set-cookie')) &&
       isStringOrBuffer &&
       !parseRequestCacheControl(request.headers['cache-control']).noStore
 
@@ -395,18 +409,22 @@ export function attachCacheHooks(
       const key = request.cacheKey ?? keyOf(request)
 
       try {
-        await store.put(
-          key,
-          {
-            payload: payload as string | Buffer,
-            statusCode: reply.statusCode,
-            etag,
-            lastModified,
-            storedAt: Date.now(),
-            headers: storedHeadersOf(reply, statusHeaderName),
-          },
-          read.ttl!,
-          read.segment,
+        await withStoreTimeout(
+          store.put(
+            key,
+            {
+              payload: payload as string | Buffer,
+              statusCode: reply.statusCode,
+              etag,
+              lastModified,
+              storedAt: Date.now(),
+              headers: storedHeadersOf(reply, statusHeaderName),
+            },
+            read.ttl!,
+            read.segment,
+          ),
+          'put',
+          storeTimeoutMs,
         )
 
         observer?.onStore?.({

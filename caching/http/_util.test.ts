@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest'
 import {
   applyStoredHeaders,
   assertConstraintsKeyed,
+  buildCacheControl,
   generateETag,
   isNotModified,
   matchesETag,
@@ -149,6 +150,19 @@ describe('the headers kept with an entry', () => {
     expect(storedHeadersOf(reply, 'x-cache')).toEqual({ 'x-total-count': '42', link: ['a', 'b'] })
   })
 
+  // RFC 9111 §3.1: a field the response's own `Connection` names belongs to that connection, whatever it is
+  // called, and so does what a proxy says about its authentication.
+  it('leaves out the fields Connection names, and Proxy-Authentication-Info', () => {
+    const { reply } = replyWith({
+      connection: 'close, X-Hop',
+      'x-hop': 'one connection only',
+      'proxy-authentication-info': 'nextnonce="abc"',
+      'x-kept': 'yes',
+    })
+
+    expect(storedHeadersOf(reply, 'x-cache')).toEqual({ 'x-kept': 'yes' })
+  })
+
   // `Vary` may have been stored from a list. Replaying it must add to what this request's hooks already said.
   it('merges a Vary stored as a list into the one already on the reply', () => {
     const { reply, set } = replyWith({ vary: 'Origin' })
@@ -197,6 +211,17 @@ describe('assertConstraintsKeyed', () => {
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['Accept-Version'] })).toThrow(
       'constrained on "X-API-Version"',
     )
+  })
+})
+
+describe('buildCacheControl', () => {
+  // The entry is gone from the store when its ttl is up. A lifetime rounded up tells a cache downstream to keep
+  // serving what the origin has already dropped.
+  it('never tells a cache downstream a lifetime longer than the one given', () => {
+    expect(buildCacheControl({ ttl: '1500ms' })).toBe('public, max-age=1')
+    expect(
+      buildCacheControl({ ttl: 2.9, sharedMaxAge: '2500ms', staleWhileRevalidate: 0.9, staleIfError: '1900ms' }),
+    ).toBe('public, max-age=2, s-maxage=2, stale-while-revalidate=0, stale-if-error=1')
   })
 })
 

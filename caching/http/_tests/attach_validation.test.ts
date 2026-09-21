@@ -183,6 +183,7 @@ describe('constrained routes that share a URL', () => {
 
     await expect(build({ ttl: 60 })).rejects.toThrow(/constraint "tenant" reads no header the cache key can vary on/)
     await close?.()
-    await expect(build({ ttl: 60, segment: 'acme' })).resolves.not.toThrow()
+    // A rejection here fails the test: the segment is what lets the same route start.
+    await build({ ttl: 60, segment: 'acme' })
   })
 })

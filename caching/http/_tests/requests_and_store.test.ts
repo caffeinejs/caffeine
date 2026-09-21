@@ -1,15 +1,14 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-
 import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { LRUCache } from 'lru-cache'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Cache, CacheEntry } from '../../store.js'
 import { MemoryCache } from '../../store/memory/index.js'
 import {
   CacheControl,
   CacheInvalidate,
+  ErrCacheStoreTimeout,
   HTTPCaching,
   type CacheErrorEvent,
   type CacheMissEvent,
@@ -20,6 +19,7 @@ describe('what a request may ask of the cache', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
@@ -113,8 +113,10 @@ describe('what a request may ask of the cache', () => {
     close = () => app.close()
     await app.ready()
 
+    // Only the clock the cache reads an entry's age from is moved; the store's own ttl runs on another.
+    vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/req-only-if-cached/data')
-    await sleep(2100)
+    vi.setSystemTime(Date.now() + 2100)
     const res = await app.fetch('/req-only-if-cached/data', {
       headers: { 'cache-control': 'only-if-cached, max-age=1' },
     })
@@ -308,6 +310,105 @@ describe('a store that rejects', () => {
   })
 })
 
+/**
+ * A store that rejects costs the cache. One that never answers — a client queueing commands while its server is
+ * gone — would cost every request on a cached route, unless the wait is bounded.
+ */
+describe('a store that never answers', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  const never = new Promise<never>(() => {})
+
+  class HungStore implements Cache {
+    get(): Promise<CacheEntry | undefined> {
+      return never
+    }
+    getMany(): Promise<(CacheEntry | undefined)[]> {
+      return never
+    }
+    put(): Promise<void> {
+      return never
+    }
+    putMany(): Promise<void> {
+      return never
+    }
+    delete(): Promise<void> {
+      return never
+    }
+    deleteMany(): Promise<void> {
+      return never
+    }
+    clear(): Promise<void> {
+      return never
+    }
+  }
+
+  @Controller('/store-hung')
+  class StoreHungController {
+    @CacheControl({ ttl: 60 })
+    @Get('/data')
+    data() {
+      return { ok: true }
+    }
+
+    @CacheInvalidate()
+    @Post('/data')
+    create() {
+      return { created: true }
+    }
+
+    @CacheInvalidate({ clear: true, segment: 'pets' })
+    @Post('/clear')
+    clear() {
+      return { cleared: true }
+    }
+  }
+  void [StoreHungController]
+
+  it('gives up on each store call after storeTimeout, and reports it like a failure', async () => {
+    const errors: CacheErrorEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b =>
+        b
+          .store(new HungStore())
+          .storeTimeout('20ms')
+          .observer({ onError: event => errors.push(event) }),
+      ),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    const read = await app.fetch('/store-hung/data')
+    const evicted = await app.fetch('/store-hung/data', { method: 'POST' })
+    const cleared = await app.fetch('/store-hung/clear', { method: 'POST' })
+
+    expect(read.status).toBe(200)
+    expect(read.headers.get('x-cache')).toBe('MISS')
+    expect(await read.json()).toEqual({ ok: true })
+    expect(evicted.status).toBe(200)
+    expect(cleared.status).toBe(200)
+
+    expect(errors.map(event => event.operation)).toEqual(['get', 'put', 'delete', 'clear'])
+    for (const event of errors) {
+      expect(event.error).toBeInstanceOf(ErrCacheStoreTimeout)
+    }
+    expect((errors[0].error as ErrCacheStoreTimeout).code).toBe('ERR_CACHE_STORE_TIMEOUT')
+    expect((errors[0].error as Error).message).toBe('Cannot wait for the cache store: "get" did not settle within 20ms')
+  })
+
+  it.each([0, -1, 'soon', Number.NaN])('refuses a storeTimeout of %s', async value => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache()).storeTimeout(value as number)))
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(/storeTimeout must be a positive duration/)
+  })
+})
+
 // `MemoryCache` runs on a caller's `LRUCache` as given, `allowStale` included: what the store hands back is
 // checked against the route's ttl rather than believed.
 /**
@@ -315,6 +416,14 @@ describe('a store that rejects', () => {
  * traffic. Such an entry carries no `storedAt`, and is served as one that was just stored.
  */
 describe('an entry the application put in the store itself', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await close?.()
+    close = undefined
+  })
+
   it('is served as a hit, with an age of zero', async () => {
     let calls = 0
     const store = new MemoryCache()
@@ -338,9 +447,9 @@ describe('an entry the application put in the store itself', () => {
     ])
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
+    close = () => app.close()
     await app.ready()
     const res = await app.fetch('/store-warm/data')
-    await app.close()
 
     expect(res.headers.get('x-cache')).toBe('HIT')
     expect(res.headers.get('age')).toBe('0')
@@ -350,6 +459,14 @@ describe('an entry the application put in the store itself', () => {
 })
 
 describe('a store that hands back an entry past the route ttl', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    vi.useRealTimers()
+    await close?.()
+    close = undefined
+  })
+
   it('is treated as a miss', async () => {
     let calls = 0
     const misses: CacheMissEvent[] = []
@@ -368,12 +485,14 @@ describe('a store that hands back an entry past the route ttl', () => {
     const app = createWebApplication().with(
       HTTPCaching(b => b.store(new MemoryCache(lru)).observer({ onMiss: event => misses.push(event) })),
     )
+    close = () => app.close()
     await app.ready()
 
+    // `allowStale` hands the entry back whatever its age, so the clock the cache reads is the only one to move.
+    vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/store-stale/data')
-    await sleep(2100)
+    vi.setSystemTime(Date.now() + 2100)
     const res = await app.fetch('/store-stale/data')
-    await app.close()
 
     expect(await res.json()).toEqual({ n: 2 })
     expect(res.headers.get('x-cache')).toBe('MISS')

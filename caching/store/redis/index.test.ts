@@ -109,7 +109,7 @@ describe('RedisCache on a cluster', () => {
   it.each([
     ['a tag for each segment', (segment: string) => segment, 'pets'],
     ['a segment holding a colon', (segment: string) => segment, 'a:b'],
-    ['a tag several segments share', () => 'shared', 'owners'],
+    ['a tag that is not the segment', () => 'shared', 'owners'],
   ])('keeps the keys of a segment in one slot under a hash tag (%s)', async (_name, hashTag, segment) => {
     const { client, sent } = recordingClient()
     const store = new RedisCache(client, { hashTag })
@@ -186,6 +186,24 @@ describe('RedisCache on a cluster', () => {
     await store.put('a', entry, 0)
 
     expect(sent).toEqual([])
+  })
+
+  // A `ttl` is seconds and the server is told milliseconds. No expiry test is slow enough to notice an hour
+  // that became 3.6 seconds, so the number sent is pinned here.
+  it('sends the ttl to the server in milliseconds', async () => {
+    const { client, commands } = recordingClient()
+    const hSetEx = vi.spyOn(commands, 'hSetEx')
+    const store = new RedisCache(client)
+
+    await store.put('a', entry, '1h')
+    await store.put('b', entry, 1.5)
+    await store.put('c', entry, '1ms')
+
+    expect(hSetEx.mock.calls.map(call => call[2])).toEqual([
+      { expiration: { type: 'PX', value: 3_600_000 } },
+      { expiration: { type: 'PX', value: 1500 } },
+      { expiration: { type: 'PX', value: 1 } },
+    ])
   })
 
   // Redis hashes the first `{...}` of a key: a brace of the caller's would decide the slot instead of the tag.

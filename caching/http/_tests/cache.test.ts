@@ -1,12 +1,34 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Delete, ErrConfiguration, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
-import { describe, it, expect } from 'vitest'
+import {
+  Controller,
+  Delete,
+  ErrConfiguration,
+  Get,
+  Post,
+  Status,
+  createWebApplication as newWebApplication,
+} from '@caffeinejs/http'
+import { afterEach, describe, it, expect } from 'vitest'
 
 import type { Cache, CacheEntry, CachePutItem } from '../../store.js'
 import { MemoryCache } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
+
+// Every application a case builds is closed after it, whether or not it got as far as `ready()`.
+const opened: { close(): Promise<unknown> }[] = []
+
+function createWebApplication(options?: { container: CaffeineIoC }) {
+  const app = newWebApplication(options)
+  opened.push(app)
+
+  return app
+}
+
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map(app => app.close()))
+})
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {

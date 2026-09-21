@@ -6,6 +6,7 @@ import {
   type HTTPPluginFactory,
   type HTTPSetupContext,
 } from '@caffeinejs/http'
+import type { Duration } from '@caffeinejs/std'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -13,6 +14,7 @@ import fp from 'fastify-plugin'
 import './_fastify.js'
 import type { Cache } from '../store.js'
 import { guardObserver, storeErrorLogger } from './_observe.js'
+import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
 import { composeObservers, type CacheObserver } from './observer.js'
@@ -32,7 +34,8 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  *
  * An `observer` that throws is caught; its first throw from each method is logged on the application logger. A
  * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
- * failure itself when the observer does not listen for it.
+ * failure itself when the observer does not listen for it. A store that never answers is bounded only by
+ * `storeTimeout`, which has no default.
  *
  * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
  * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
@@ -56,8 +59,24 @@ export function HTTPCaching<C = unknown>(
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
+      storeTimeoutMs: resolveStoreTimeout(resolved.storeTimeout),
     })
   }
+}
+
+function resolveStoreTimeout(value: Duration | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const seconds = strictSeconds(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new ErrConfiguration(
+      `Cannot install HTTP caching: storeTimeout must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+    )
+  }
+
+  return Math.ceil(seconds * 1000)
 }
 
 // A store failure is never silent: an observer that listens for it owns the report, otherwise it is logged.
@@ -165,9 +184,8 @@ function resolveETagGenerator(
  * A `key` function is handed the request of the handler's own context, which exists only on a server the
  * application's adapter drives. Everything else works on any server.
  *
- * `deps` is resolved by the caller (`HTTPCaching`) — this plugin never touches the container. Named and
- * `fastify-plugin`-wrapped like any other first-party plugin, so it installs once per context — root, or one
- * route group with `router.plugin(...)` / `@Use(...)` — not stacked repeatedly onto the identical context.
+ * Installs once per context — the root, or one route group — and a second registration on the same context is
+ * refused.
  */
 export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {

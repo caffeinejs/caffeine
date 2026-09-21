@@ -19,6 +19,8 @@ import { HTTPCaching, cacheControl, cacheInvalidate } from '../../http/index.js'
 import { describeCacheContract } from '../../store.testkit.js'
 import { RedisCache, type RedisCacheClient, type RedisCacheCommands } from './index.js'
 
+// Copies of `test/e2e/internal`'s two helpers: this spec is inside the package's check project, which takes no
+// file from outside the package.
 function reachable(url: string): Promise<boolean> {
   const { hostname, port } = new URL(url)
 
@@ -66,15 +68,13 @@ const SERVERS: { name: string; url: string; connect: (url: string) => Connection
 ]
 
 // Probed once, up front, so a row whose server is down skips on its own and the others still run.
-const targets = await Promise.all(
-  SERVERS.map(async server => ({ ...server, up: required(server.name, await reachable(server.url)) })),
-)
+const targets = await Promise.all(SERVERS.map(async server => ({ ...server, up: await reachable(server.url) })))
 
 const FORBIDDEN = ['scan', 'scanIterator', 'keys', 'flushDb', 'flushAll', 'mGet', 'mSet', 'del', 'eval', 'evalSha']
 
 /** Hands the store its commands through a recorder, so a test can say what went to the server and what never did. */
 function recording(client: RedisCacheClient) {
-  const sent: { command: string }[] = []
+  const sent: { command: string; key: unknown }[] = []
 
   const wrapped: RedisCacheClient = {
     withTypeMapping(mapping) {
@@ -88,7 +88,7 @@ function recording(client: RedisCacheClient) {
           }
 
           return (...args: unknown[]) => {
-            sent.push({ command: property })
+            sent.push({ command: property, key: args[0] })
             return member.apply(target, args)
           }
         },
@@ -102,9 +102,16 @@ function recording(client: RedisCacheClient) {
 const entry = (payload: string | Buffer) => ({ payload, statusCode: 200, headers: {} })
 
 describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => {
+  // Under `CAFFEINE_E2E_STRICT=1` a server that is down fails here, in its own row, and the other rows still run.
+  if (!up) {
+    it('is skipped, its server being down', () => {
+      expect(required(name, up)).toBe(false)
+    })
+  }
+
   describe.skipIf(!up)(url, () => {
     let client: Connection
-    const sent: { command: string }[] = []
+    const sent: { command: string; key: unknown }[] = []
 
     // A fresh prefix for every store: a rerun never meets what an earlier one left, and nothing is ever flushed.
     const newStore = (options?: { hashTag?: (segment: string) => string | undefined }) => {
@@ -144,7 +151,7 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
 
       await store.clear('pets')
 
-      expect(commands).toEqual([{ command: 'incr' }])
+      expect(commands.map(item => item.command)).toEqual(['incr'])
       expect((await store.getMany(['/pets/0', '/pets/49'], 'pets')).every(read => read === undefined)).toBe(true)
     })
 
@@ -243,8 +250,9 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
     it('never walked the keyspace, flushed, ran a script, or named two keys in one command', () => {
       expect(sent.length).toBeGreaterThan(0)
       expect(sent.filter(item => FORBIDDEN.includes(item.command))).toEqual([])
-      // Each of these takes exactly one key, so nothing the store sent could cross a slot.
+      // Each of these was handed one key, never a list of them, so nothing the store sent could cross a slot.
       expect(new Set(sent.map(item => item.command))).toEqual(new Set(['get', 'hmGet', 'hSetEx', 'unlink', 'incr']))
+      expect(sent.filter(item => typeof item.key !== 'string')).toEqual([])
     })
   })
 })

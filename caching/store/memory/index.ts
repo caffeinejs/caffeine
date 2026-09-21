@@ -8,10 +8,9 @@ export interface MemoryCacheOptions {
   /** Maximum number of entries kept in the cache. Defaults to 500. */
   max?: number
   /**
-   * Optional cap on the total bytes of cached entries, written the way a Docker Compose file writes one
-   * (`'512kb'`, `'10MB'`, or a bare number of bytes). When set, the store evicts least-recently-used
-   * entries once the summed size of stored payloads (plus their headers) exceeds this budget — a more
-   * predictable bound on memory use than the entry count alone.
+   * Optional cap on the total bytes of cached entries: `'512kb'`, `'10MB'`, or a bare number of bytes. When set,
+   * the store evicts least-recently-used entries once the summed size of stored payloads (plus their headers)
+   * exceeds this budget.
    */
   maxSize?: ByteSize
 }

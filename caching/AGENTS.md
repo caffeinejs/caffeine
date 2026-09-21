@@ -38,7 +38,7 @@ sibling that declared caching and installed nothing is still refused.
 Caching attaches its Fastify `onRequest` / `onSend` hooks per route, from Fastify's own `onRoute` hook inside
 `cachePlugin()`. A route without a cache decorator keeps its hook slots undefined and pays nothing —
 `_tests/route_hooks_zero_cost.test.ts` guards this. The plugin takes its resolved `CacheDeps` (`store`,
-`etagGenerator`, `statusHeader`) as a parameter — it never reads the container itself — and the `onRoute` hook
+`etagGenerator`, `statusHeader`, `observer`, `storeTimeoutMs`) as a parameter — it never reads the container itself — and the `onRoute` hook
 reads `routeDef.config` and attaches only where `cache` / `cacheInvalidate` is set.
 
 ## Ordering
@@ -63,20 +63,26 @@ documented, not coded.
 The policy describes the responses the route caches — a method in `methods` with a status in `statusCodes`.
 Any other response (an error, the cache's own `504`, a `POST` under a class-level `@CacheControl`) gets nothing
 permissive from it: no `Cache-Control`, no `ETag`, no `Last-Modified`. The one directive that restricts still
-applies — a `noStore` route says `no-store` on its errors too. `Vary` goes on every response, merged with
-`appendVary` from `@caffeinejs/http`, never assigned: CORS and the `constraints()` plugin write it as well.
+applies — a `noStore` route says `no-store` on its errors too. `Vary` goes on every response, through
+`appendVary` from `@caffeinejs/http`, which merges into what CORS and the `constraints()` plugin wrote. The one
+time it assigns is `*`, which covers every name already there.
 
 A handler is the last word on its own response. A `Cache-Control` it wrote is left as written and that
 response is not stored; an `ETag` or `Last-Modified` it wrote is kept and becomes the stored validator.
-`@CacheControl(false)` alone overwrites, being the restrictive form.
+The two restrictive forms overwrite it: `noStore`, on every response of the route, and `@CacheControl(false)`.
+
+Two more responses are never stored. The response to a `HEAD`: it shares the `GET`'s key, and a route's own
+`@Head` handler has no body to offer a later `GET` (RFC 9111 §4). And a response that sets a cookie, unless the
+route says `privacy: 'public'`: the request that starts a session is not authenticated yet, so the privacy check
+below does not see it. `Set-Cookie` stays in `NOT_STORED` either way.
 
 A request is private when the route says so, when it carries `Authorization`, or when an authentication scheme
 identified the client some other way (`request.user.authenticated` — a session cookie, OIDC, forward auth).
 Private means `BYPASS`, `Cache-Control: private`, and nothing stored; `privacy: 'public'` is the opt-out. Do not
 narrow this back to the header: a cookie-authenticated response in a shared store is a leak.
 
-An entry keeps the response's status code and every header except the connection-specific ones, `Set-Cookie`,
-`Content-Length`, `Date`, `Age`, `Access-Control-*` and the status header (`storedHeadersOf`). A hit replays
+An entry keeps the response's status code and every header except the connection-specific ones (the names the
+response's own `Connection` lists included), `Set-Cookie`, `Content-Length`, `Date`, `Age`, `Access-Control-*` and the status header (`storedHeadersOf`). A hit replays
 them, skipping any header an earlier hook already set for _this_ request and merging `Vary`
 (`applyStoredHeaders`). A `304` carries only what guides a cache update. A HEAD hit sends the payload so the
 server computes the GET's `Content-Length` and drops the body.
@@ -86,7 +92,8 @@ Conditional requests are answered off the fresh response as well as off the stor
 stamped itself — equal seconds would answer `304` for changed content.
 
 Durations are checked while the route registers: `ttl` must be positive, since `parseDuration` reads what it
-cannot parse as `0` and `lru-cache` reads a ttl of `0` as "never expires".
+cannot parse as `0` and `lru-cache` reads a ttl of `0` as "never expires". What goes out in `Cache-Control` is
+floored to whole seconds, never rounded: a cache downstream must not be told a lifetime longer than the entry's.
 
 Routes that share a URL under different constraints share a default key. A constrained route with a `ttl` must
 list the constraint's header in `vary`, or have its own `segment` or `key`, or `ready()` fails. A shared
@@ -100,6 +107,12 @@ Never fails a request. A failed `get` is a miss, a failed `put` or eviction is s
 composed with `storeErrorLogger` (`_observe.ts`), which implements `onError` alone — so every other call site
 still short-circuits — and logs on the application logger at most once a minute for each operation.
 `onStore` / `onInvalidate` fire only after the store settled.
+
+A store that never answers is not a store that rejects: a node-redis client queues commands while its server is
+away. `storeTimeout` on `HTTPCaching` bounds each of the four store calls through `withStoreTimeout`
+(`store_timeout.ts`), which rejects with `ErrCacheStoreTimeout` into the same `catch` a rejection reaches. There is
+no default, and unset the call is handed back as it came — no timer, no second promise. Keep it that way: the
+unbounded path runs on every request.
 
 ## `store` / `etagGenerator`: instance or token
 
@@ -142,8 +155,9 @@ only show up as an empty dashboard. There is no convenience token for it — eve
 optional, and `token()` refuses a type `{}` satisfies.
 
 `HTTPCaching` wraps the observer with `guardObserver` (`http/_observe.ts`): a throw never reaches the response,
-and the first throw from each method is logged on the application logger (`logToken()`), never `request.log`,
-which is silent under a caller-supplied `fastify()`.
+and neither does the rejection of a promise an `async` method returned, which is caught and never awaited. The
+first from each method is logged on the application logger — the `logger` of the setup context — never
+`request.log`, which is silent under a caller-supplied `fastify()`.
 
 Zero-cost when unobserved is a code-shape rule no test can fully prove, so keep it by construction:
 
