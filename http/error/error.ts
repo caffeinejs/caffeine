@@ -77,12 +77,14 @@ export class ErrorHandlerProvider {
   }
 }
 
-export class ErrorHandlingServiceConfigurer implements HTTPFeature {
+export class ErrorHandlingFeature implements HTTPFeature {
   get [kFeatureName](): string {
     return 'error-handling'
   }
 
-  #ref: GlobalErrorHandlerRef | undefined;
+  // Built here rather than in `configure`: the server hook reads the same instance, and an application that
+  // never configured would otherwise reach it unset.
+  readonly #ref = new GlobalErrorHandlerRef();
 
   [kFeatureConfigure](kit: FeatureConfigureKit): void {
     const handlerBinding = kit.container.getBindings(ErrorHandler)
@@ -127,12 +129,10 @@ export class ErrorHandlingServiceConfigurer implements HTTPFeature {
       t.toValue(new ErrorHandlerProvider(handlers)).lifetime(Scopes.SINGLETON).internal(),
     )
 
-    const ref = new GlobalErrorHandlerRef()
-    this.#ref = ref
-    kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(ref).lifetime(Scopes.SINGLETON).internal())
+    kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(this.#ref).lifetime(Scopes.SINGLETON).internal())
   }
 
   readonly [kFeatureServer] = async (instance: FastifyInstance): Promise<void> => {
-    await instance.register(globalErrorHandlerPlugin(this.#ref!))
+    await instance.register(globalErrorHandlerPlugin(this.#ref))
   }
 }

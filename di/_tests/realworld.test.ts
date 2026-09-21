@@ -163,7 +163,7 @@ describe('Real World', function () {
 
   @Injectable()
   class LegacyViewEngine extends ViewEngine {
-    render(): string {
+    override render(): string {
       return super.render() + ' - legacy'
     }
   }
@@ -172,7 +172,7 @@ describe('Real World', function () {
   @Extends(ViewEngine)
   @Primary()
   class ActualViewEngine extends ViewEngine {
-    render(): string {
+    override render(): string {
       return super.render() + ' - actual'
     }
   }

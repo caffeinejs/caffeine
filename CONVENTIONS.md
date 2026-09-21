@@ -187,7 +187,7 @@ Exceptions, where `config(...)` overlays what the fluent methods set:
 - messaging binding destinations (and the other keys a binding's config slice declares)
 
 The application declares the whole schema, importing the feature's exported schema (`serverConfigSchema`,
-`healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
+`loggerConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
 into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
 fields and no source to fill them fails validation at `ready()`.
 
@@ -247,19 +247,28 @@ there. Its kit carries the logger the application configured.
 
 An HTTP feature that wires the server implements `HTTPFeature` from `@caffeinejs/http`, which adds a fourth
 member: `[kFeatureServer]`, handed the server at the feature's install position, after the container has
-initialized. It is a property rather than a method, so a feature written for one server does not compile on an
-application running another.
+initialized, together with the same `HTTPSetupContext` a plugin factory receives. It is a property rather than a
+method, so a feature written for one server does not compile on an application running another.
+
+That property is why the interface states the kit as `HTTPSetupContext`, with no `C`: a property's parameter is
+checked strictly, so naming `C` there would make `HTTPFeature` invariant in it, and an application held without
+its configuration type — `function portOf(app: WebApplication)` — could no longer take a configured one.
+`HTTPFeatureBuilder` restores it, so a subclass's `server(instance, kit)` reads `HTTPSetupContext<C>`. That is
+the same trade `configure` already makes, whose hook is a bivariant method while `FeatureBuilder.configure` is
+handed `FeatureConfigureKit<C>`.
 
 Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exactly one thing: it runs the
 application's configure callbacks against the builder, with the resolved configuration, immediately before
 `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
-`configure`. An HTTP feature extends `HTTPFeatureBuilder<C>` instead, and wires the server in `server`:
+`configure`.
 
 The callback the application writes is `(builder, kit)` — one context argument, the same shape a plugin
 factory takes. The kit is the `FeatureConfigureKit` the feature's own `configure` receives, so a callback
 reads `config` and `store` and may `container.bind(...)`; it runs before `container.init()`, so there is no
 `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` instead and is handed the
 `HTTPSetupContext` its factory got, where the container resolves and binding is closed.
+
+An HTTP feature extends `HTTPFeatureBuilder<C>` instead, and wires the server in `server`:
 
 ```ts
 export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
@@ -309,9 +318,12 @@ The framework's own pre-registered builders — the server, the probes, the shut
 before an application can name a callback, so `.server(...)` and its siblings hand theirs over with
 `builder[kAddConfigurer](configure)`. Nothing else uses that symbol.
 
-A builder that configures nothing tunable (`AuthorizationBuilder`, `GuardsBuilder`) implements `Feature`
-directly instead — `FeatureBuilder` exists to run a configure callback, and one with nothing to configure is
-not a feature builder.
+A feature the application cannot configure implements `Feature` / `HTTPFeature` directly instead —
+`FeatureBuilder` exists to run a configure callback, and one with no callback to run is not a feature builder.
+There are three: `AuthorizationBuilder` and `GuardsBuilder`, which configure nothing tunable, and
+`ErrorHandlingFeature`, which the application never names at all — it is registered unconditionally and leads
+`WebApplication.configurers()`. Having real work in both phases does not change this; having nothing to
+configure does.
 
 ## Error messages
 

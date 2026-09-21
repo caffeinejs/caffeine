@@ -18,14 +18,15 @@ plugin does not pick that context — the application registers it on the root s
 
 `.with(...)` takes either a feature or a plugin factory `({ config, container, logger }) => <plugin>` — never a
 bare plugin, so `.with(() => myPlugin)` is how a plugin needing no configuration is written. The factory's one
-argument is `HTTPSetupContext`, the same object a feature's server hook and a middleware factory get. Both shapes
+argument is `HTTPSetupContext`, the same object a feature's server hook and a middleware factory get — the hook
+declares that type, so the container it is handed resolves. Both shapes
 land in the same list, so they register in the order the calls were written. A feature is installed once per name. A
 plugin factory is never deduplicated, so two calls register two plugins; a `fastify-plugin` name already
 registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging inside a
 re-declared decorator.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
-holds the only framework slot — `ErrorHandlingServiceConfigurer` leads — and everything after it, this package's
+holds the only framework slot — `ErrorHandlingFeature` leads — and everything after it, this package's
 features and the user's alike, runs in `.with(...)` call order. The adapter installs two things around that
 loop: the form body parser before it, and the default not-found handler after it. Do not reintroduce a stage,
 and do not add a third direct `install*()` call: anything a feature can own belongs in a feature, in the right

@@ -51,7 +51,7 @@ class GadgetBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected bootstrap(): Promise<void> {
+  protected override bootstrap(): Promise<void> {
     this.resolved = {
       size: this.#size ?? this.node?.size ?? DEFAULTS.size,
       label: this.#label ?? this.node?.label ?? DEFAULTS.label,
@@ -162,7 +162,7 @@ describe('FeatureBuilder', () => {
         return this
       }
 
-      protected bootstrap(): void {
+      protected override bootstrap(): void {
         order.push('bootstrap')
       }
     }
@@ -185,7 +185,7 @@ describe('FeatureBuilder', () => {
         return this
       }
 
-      protected configure(): void {
+      protected override configure(): void {
         order.push('configure')
       }
     }

@@ -453,7 +453,7 @@ describe('Abstract Classes', function () {
 
     @Injectable()
     class ConcreteChild extends ConcreteBase {
-      greet(): string {
+      override greet(): string {
         return 'child'
       }
     }

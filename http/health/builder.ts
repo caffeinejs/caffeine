@@ -21,7 +21,7 @@ export class HealthBuilder {
   readonly #values: HealthConfig = {}
 
   /**
-   * Reads every setting from a node of the configuration tree, e.g. `c.app.health`.
+   * Reads every setting from a node of the configuration tree, e.g. `config.app.health`.
    *
    * The node is read once, when the plugin registers. A fluent method called alongside this one wins over
    * what the node carries.

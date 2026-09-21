@@ -220,7 +220,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 
   /**
    * Reads the default schemes, each scheme's own options, the credentials block and the refresh block from a
-   * node of the configuration tree, e.g. `c.app.auth`.
+   * node of the configuration tree, e.g. `config.app.auth`.
    *
    * Configuration is applied **over** what the scheme's `addX(...)` callback set, so a secret written in code
    * is a default the environment can redirect. Each scheme is matched by the name it was registered under —
@@ -442,11 +442,11 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     this.#doConfigure(kit)
   }
 
-  protected async server(instance: FastifyInstance): Promise<void> {
+  protected override async server(instance: FastifyInstance): Promise<void> {
     // The gate lands where `.authentication(...)` was written: everything installed before it runs ahead of
     // the hook, everything after it only for a request the hook let through.
     await instance.register(authenticationPlugin())

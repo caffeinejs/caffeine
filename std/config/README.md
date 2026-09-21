@@ -148,6 +148,7 @@ A feature registers nothing here. The application hands it what it wants, in the
 .with(server((s, { config }) => s.config(config.app.server)))
 .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
 .with(thing((b, { store }) => b.config(store.view(t => t.app.thing))))
+.logger((b, { config }) => b.config(config.app.log))
 ```
 
 - **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does

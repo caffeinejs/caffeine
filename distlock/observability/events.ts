@@ -67,7 +67,7 @@ export class LockEvents extends EventEmitter<LockEventMap> {
     return this
   }
 
-  [captureRejectionSymbol](error: Error, event: string | symbol): void {
+  override [captureRejectionSymbol](error: Error, event: string | symbol): void {
     this.#report(event, error)
   }
 

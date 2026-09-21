@@ -88,7 +88,7 @@ describe('Post Processors', function () {
       super()
     }
 
-    message(): string {
+    override message(): string {
       return `the message is ${this.dep.message()}`
     }
   }

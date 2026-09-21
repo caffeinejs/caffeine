@@ -24,7 +24,7 @@ class DegradedIndicator extends HealthIndicator {
     return 'metrics'
   }
 
-  get critical(): boolean {
+  override get critical(): boolean {
     return false
   }
 

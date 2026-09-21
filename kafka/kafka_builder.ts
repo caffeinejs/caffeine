@@ -77,7 +77,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Reads the settings from a node of the configuration tree, e.g. `c.app.kafka`.
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.kafka`.
    *
    * Applied **over** what the fluent methods set, so `k.brokers(...)` is a default a deployment can redirect.
    * The serializers, the retry strategy, the classifier, the recoverer and the error hooks are functions and
@@ -203,7 +203,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#resolve()
     const rKey = runtimeKey(this.#name)
     const tKey = kafkaTemplate(this.#name)

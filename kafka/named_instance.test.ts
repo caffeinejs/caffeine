@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
-import { kafka, type KafkaConfigure } from './plugin.js'
+import { kafka, type KafkaConfigurer } from './plugin.js'
 import { kafkaTemplate } from './symbols.js'
 import { KafkaTemplate } from './template.js'
 
@@ -119,7 +119,7 @@ class NamedConsumer {
 describe('named kafka instances', () => {
   it('routes to a named handler through the named instance and its own template', async () => {
     const broker = new FakeBroker()
-    const kfk = <C>(configure?: KafkaConfigure<C>, i?: string) =>
+    const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined
         ? kafka(configure, { clients: broker.clients() })
         : kafka(i, configure, { clients: broker.clients() })

@@ -10,7 +10,7 @@ export interface ErrHTTPOptions {
 }
 
 export class ErrHTTP extends ErrCaffeineWebApplication {
-  readonly cause?: unknown
+  override readonly cause?: unknown
   readonly body?: unknown
   readonly headers?: Record<string, string>
 

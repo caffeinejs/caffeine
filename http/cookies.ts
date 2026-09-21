@@ -59,7 +59,7 @@ export class CookieBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   #parseOptions: CookieSerializeOptions | undefined
 
   /**
-   * Reads the settings from a node of the configuration tree, e.g. `c.app.cookie`.
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.cookie`.
    *
    * The node is read once, when the server is wired. {@link enabled} and {@link secret} win over what the node
    * carries.
@@ -88,7 +88,7 @@ export class CookieBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this
   }
 
-  protected async server(instance: FastifyInstance): Promise<void> {
+  protected override async server(instance: FastifyInstance): Promise<void> {
     if (!(this.#enabled ?? this.#config?.enabled ?? true)) {
       return
     }

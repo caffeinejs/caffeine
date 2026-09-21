@@ -109,7 +109,7 @@ export class ErrInvalidAspect extends CaffeineIoCError {
  */
 export class ErrInjectableBase extends CaffeineIoCError {
   static readonly code = 'ERR_INJECTABLE_BASE'
-  readonly code = ErrInjectableBase.code
+  override readonly code = ErrInjectableBase.code
 
   constructor(child: string, base: string) {
     super(

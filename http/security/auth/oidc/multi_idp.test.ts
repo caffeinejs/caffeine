@@ -1,9 +1,10 @@
-import { kFeatureConfigure, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { Context } from '../../../context.js'
 import { kFeatureServer } from '../../../feature.js'
+import type { HTTPSetupContext } from '../../../setup_context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -45,7 +46,7 @@ function makeCtx(cookies: Record<string, string> = {}) {
 }
 
 /** Minimal kit double — configure touches bind/wrap. */
-function makeKit(): { kit: FeatureConfigureKit & BootstrapKit } {
+function makeKit(): { kit: FeatureConfigureKit & HTTPSetupContext } {
   const binding = () => ({
     toValue: () => ({ internal: () => undefined }),
   })
@@ -54,7 +55,7 @@ function makeKit(): { kit: FeatureConfigureKit & BootstrapKit } {
       bind: binding,
       wrap: (v: unknown) => ({ get: () => v }),
     },
-  } as unknown as FeatureConfigureKit & BootstrapKit
+  } as unknown as FeatureConfigureKit & HTTPSetupContext
 
   return { kit }
 }

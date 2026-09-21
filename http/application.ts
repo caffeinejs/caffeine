@@ -16,7 +16,7 @@ import type { AdapterTypes } from './adapter_types.js'
 import { CookieBuilder } from './cookies.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrConfiguration, ErrShutdownTimeout } from './error/common.js'
-import { ErrorHandlingServiceConfigurer } from './error/error.js'
+import { ErrorHandlingFeature } from './error/error.js'
 import { solutions } from './error/util.js'
 import type { FastifyTypes } from './fastify_types.js'
 import { kFeatureServer, type HTTPFeature } from './feature.js'
@@ -142,13 +142,13 @@ export class WebApplication<
 
   // Held rather than built per `configurers()` call: the instance that configured is the one whose server hook
   // installs, and it holds what its configure step bound.
-  readonly #errorHandling = new ErrorHandlingServiceConfigurer()
+  readonly #errorHandling = new ErrorHandlingFeature()
 
-  #authBuilder: AuthenticationBuilder | undefined
+  #authBuilder: AuthenticationBuilder<C> | undefined
   #authzBuilder: AuthorizationBuilder | undefined
   #guardsBuilder: GuardsBuilder | undefined
-  readonly #serverBuilder = new ServerBuilder<unknown>()
-  readonly #cookieBuilder = new CookieBuilder<unknown>()
+  readonly #serverBuilder = new ServerBuilder<C>()
+  readonly #cookieBuilder = new CookieBuilder<C>()
 
   constructor(adapterFactory: AdapterFactory<T>, options: WebApplicationOptions<C> = {}) {
     super(options)
@@ -314,7 +314,7 @@ export class WebApplication<
       this.addFeature(this.#authBuilder)
     }
 
-    this.#authBuilder[kAddConfigurer](configure as never)
+    this.#authBuilder[kAddConfigurer](configure)
 
     return this
   }
@@ -341,7 +341,7 @@ export class WebApplication<
    * Lists the container Keys of guards that run on every route, in registration order, before
    * controller- and method-level `@UseGuards`.
    *
-   * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, c)`
+   * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, kit)`
    * callback and nothing is queued for bootstrap — unlike `.server((s, kit) => …)`.
    *
    * Does not bind the classes. Each Key must already be a container-managed Guard.
@@ -383,7 +383,7 @@ export class WebApplication<
   /** @throws ErrApplicationStarted when {@link ready} has already started. */
   server(configure: FeatureConfigurer<ServerBuilder<C>, C>): this {
     this.assertConfigurable()
-    this.#serverBuilder[kAddConfigurer](configure as never)
+    this.#serverBuilder[kAddConfigurer](configure)
     return this
   }
 
@@ -401,7 +401,7 @@ export class WebApplication<
    */
   cookie(configure: FeatureConfigurer<CookieBuilder<C>, C>): this {
     this.assertConfigurable()
-    this.#cookieBuilder[kAddConfigurer](configure as never)
+    this.#cookieBuilder[kAddConfigurer](configure)
     return this
   }
 

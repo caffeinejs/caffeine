@@ -111,7 +111,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
 
   /**
    * Reads the declared bindings' configurable halves from a node of the configuration tree, e.g.
-   * `c.app.messaging`.
+   * `config.app.messaging`.
    *
    * Applied **over** what `.in(...)` / `.out(...)` set, so a destination written in code is a default. Only
    * bindings the builder declared are resolved: a binding named in the tree that no `.in(...)` created has
@@ -122,7 +122,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     const binders = new Map<string, Binder>()
     for (const [name, binder] of this.#binders) {
       binders.set(name, typeof binder === 'function' ? binder(name) : binder)

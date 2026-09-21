@@ -32,7 +32,7 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   #dispatcher: SignalDispatcher | undefined
 
   /**
-   * Reads every setting from a node of the configuration tree, e.g. `c.app.shutdown`.
+   * Reads every setting from a node of the configuration tree, e.g. `config.app.shutdown`.
    *
    * The node is read once, when the feature configures. A fluent method called alongside this one wins over
    * what the node carries.
@@ -83,7 +83,7 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  protected configure(kit: FeatureConfigureKit<C>): void {
+  protected override configure(kit: FeatureConfigureKit<C>): void {
     // Validated here, at `ready()` while the logs are still being watched, rather than during the shutdown a
     // bad budget would ruin.
     const policy = finalizeShutdownOptions(mergeShutdownConfig(this.#inputs(), { dispatcher: this.#dispatcher }))
