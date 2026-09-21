@@ -131,9 +131,9 @@ oauthserver-down: ## stop the Spring Authorization Server
 	@docker compose -f test/services/oauthserver/docker-compose.yml down
 
 .PHONY: redis-up
-redis-up: ## spin up Redis and Valkey locally (Docker)
+redis-up: ## spin up Redis and Valkey locally, standalone and one-node clusters (Docker)
 	@docker compose -f test/services/redis/docker-compose.yml up -d --wait
-	@echo "redis and valkey are up"
+	@echo "redis and valkey are up, standalone (6379, 6380) and cluster (6381, 6382)"
 
 .PHONY: redis-down
 redis-down: ## stop Redis and Valkey

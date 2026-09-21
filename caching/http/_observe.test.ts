@@ -1,9 +1,9 @@
 import type { AdapterRouteOptions } from '@caffeinejs/http'
 import type { Logger } from '@caffeinejs/std/logger'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { cacheRouteOf, guardObserver } from './_observe.js'
-import type { CacheBypassEvent, CacheObserver } from './observer.js'
+import { cacheRouteOf, guardObserver, storeErrorLogger } from './_observe.js'
+import type { CacheBypassEvent, CacheErrorEvent, CacheObserver } from './observer.js'
 
 function routeDef(
   method: string | string[],
@@ -116,6 +116,36 @@ describe('guardObserver', () => {
     expect(errors).toHaveLength(2)
   })
 
+  // `async onBypass()` fits the `void` signature. Its rejection has no handler of its own, and an unhandled
+  // rejection ends the process.
+  it('handles a rejection from an async method like a throw, once', async () => {
+    const { log, errors } = recordingLog()
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+
+    try {
+      const guarded = guardObserver(
+        {
+          async onBypass() {
+            throw new Error('late boom')
+          },
+        },
+        log,
+      )
+
+      guarded.onBypass!(bypass)
+      guarded.onBypass!(bypass)
+      await new Promise(resolve => setImmediate(resolve))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(errors).toHaveLength(1)
+    expect(errors[0][0]).toMatchObject({ err: expect.objectContaining({ message: 'late boom' }) })
+  })
+
   it('defines only the methods the observer implements, and calls them as methods', () => {
     const { log } = recordingLog()
 
@@ -137,5 +167,59 @@ describe('guardObserver', () => {
 
     expect(counting.bypasses).toBe(1)
     expect(guarded.onHit).toBeUndefined()
+  })
+})
+
+// A store that is down fails every request on every cached route. The outage has to be reported, and the
+// report must not arrive at request rate.
+describe('storeErrorLogger', () => {
+  const route = Object.freeze({ method: 'GET', url: '/pets' })
+  const failed = (operation: CacheErrorEvent['operation']): CacheErrorEvent => ({
+    route,
+    operation,
+    error: new Error('store down'),
+  })
+
+  function recordingLog() {
+    const errors: unknown[][] = []
+    const log = { error: (...args: unknown[]) => errors.push(args) } as unknown as Logger
+    return { log, errors }
+  }
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('logs the first failure, stays quiet for a minute, then logs again', () => {
+    vi.useFakeTimers()
+    const { log, errors } = recordingLog()
+    const observer = storeErrorLogger(log)
+
+    observer.onError!(failed('get'))
+    vi.advanceTimersByTime(59_000)
+    observer.onError!(failed('get'))
+    expect(errors).toHaveLength(1)
+
+    vi.advanceTimersByTime(2_000)
+    observer.onError!(failed('get'))
+    expect(errors).toHaveLength(2)
+  })
+
+  it('counts each operation on its own', () => {
+    vi.useFakeTimers()
+    const { log, errors } = recordingLog()
+    const observer = storeErrorLogger(log)
+
+    observer.onError!(failed('get'))
+    observer.onError!(failed('put'))
+
+    expect(errors).toHaveLength(2)
+    expect((errors[0][0] as { operation: string; err: Error }).operation).toBe('get')
+    expect((errors[0][0] as { err: Error }).err.message).toBe('store down')
+  })
+
+  // Zero cost when unobserved: a method that exists makes the hooks build an event for it on every request.
+  it('listens for failures and nothing else', () => {
+    expect(Object.keys(storeErrorLogger(recordingLog().log))).toEqual(['onError'])
   })
 })

@@ -19,6 +19,10 @@
       "types": "./dist/store/memory/index.d.ts",
       "default": "./dist/store/memory/index.js"
     },
+    "./store/redis": {
+      "types": "./dist/store/redis/index.d.ts",
+      "default": "./dist/store/redis/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -37,7 +41,13 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
+    "@redis/client": "^6.2.1",
     "fastify": "^5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@redis/client": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "fastify": "^5.12.1"

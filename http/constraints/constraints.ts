@@ -1,8 +1,9 @@
-import type { FastifyPluginAsync, FastifyReply } from 'fastify'
+import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrConfiguration } from '../error/index.js'
 import { solutions } from '../error/util.js'
+import { appendVary } from '../vary.js'
 import type { ConstraintStrategy } from './strategy.js'
 
 export const VERSION_CONSTRAINT = 'version'
@@ -86,22 +87,4 @@ export function constraints(strategies: readonly ConstraintStrategy[] = []): Fas
   }
 
   return fp(plugin, { name: CONSTRAINTS_PLUGIN })
-}
-
-function appendVary(reply: FastifyReply, owned: readonly string[]): void {
-  const current = reply.getHeader('vary')
-  const existing =
-    typeof current === 'string'
-      ? current
-          .split(',')
-          .map(token => token.trim())
-          .filter(Boolean)
-      : []
-
-  if (existing.includes('*')) {
-    return
-  }
-
-  const merged = [...new Set([...existing, ...owned])]
-  reply.header('vary', merged.join(', '))
 }

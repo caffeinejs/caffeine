@@ -1,4 +1,5 @@
 import type { InjectionToken } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std'
 
 import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
@@ -19,6 +20,7 @@ export class HTTPCachingOptionsBuilder {
   #etagGenerator: ETagGenerator | InjectionToken<ETagGenerator> | undefined
   #statusHeader: string | undefined
   #observer: CacheObserver | InjectionToken<CacheObserver> | undefined
+  #storeTimeout: Duration | undefined
 
   /** The store backing cached responses, or a token to resolve one from the container. */
   store(store: Cache | InjectionToken<Cache>): this {
@@ -44,12 +46,19 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
+  /** How long one store call may take before the request goes on without the cache. No default. */
+  storeTimeout(timeout: Duration): this {
+    this.#storeTimeout = timeout
+    return this
+  }
+
   [kBuild](): HTTPCachingOptions {
     return {
       store: this.#store,
       etagGenerator: this.#etagGenerator,
       statusHeader: this.#statusHeader,
       observer: this.#observer,
+      storeTimeout: this.#storeTimeout,
     }
   }
 }

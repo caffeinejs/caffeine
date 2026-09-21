@@ -3,7 +3,7 @@ import type { LogLevel, Logger } from '@caffeinejs/std/logger'
 import type { CacheObserver } from './observer.js'
 
 export interface LoggingCacheObserverOptions {
-  /** The level every record is written at. Defaults to `debug`. */
+  /** The level every outcome is written at. Defaults to `debug`. A store failure is always written at `error`. */
   level?: LogLevel
   /**
    * Adds `key` / `keys` to the records. Off by default: a key carries the request's query string and `Vary`
@@ -75,6 +75,13 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
           ...(includeKeys && { keys: event.keys }),
         },
         'cache invalidate',
+      )
+    },
+
+    onError(event) {
+      log.error(
+        { route: event.route, segment: event.segment, operation: event.operation, err: event.error },
+        'cache store error',
       )
     },
   }

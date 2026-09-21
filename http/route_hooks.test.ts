@@ -27,7 +27,9 @@ describe('addRouteHook', () => {
     expect(routeDef.onRequest).toEqual([a, b])
   })
 
-  it('pushes onto the existing array from the third write on', () => {
+  // Fastify clones route options shallowly for a GET route's HEAD twin, so an array in a slot is shared with it:
+  // a push would land the hook on both routes, and the twin would then add its own copy on top.
+  it('replaces the array from the third write on, leaving the earlier one as it was', () => {
     const routeDef = newRouteDef()
 
     addRouteHook(routeDef, 'onSend', a as never)
@@ -35,7 +37,18 @@ describe('addRouteHook', () => {
     const array = routeDef.onSend
     addRouteHook(routeDef, 'onSend', c as never)
 
-    expect(routeDef.onSend).toBe(array)
+    expect(array).toEqual([a, b])
+    expect(routeDef.onSend).toEqual([a, b, c])
+  })
+
+  it('does not mutate an array the route declared itself', () => {
+    const routeDef = newRouteDef()
+    const declared = [a, b]
+    routeDef.onSend = declared as never
+
+    addRouteHook(routeDef, 'onSend', c as never)
+
+    expect(declared).toEqual([a, b])
     expect(routeDef.onSend).toEqual([a, b, c])
   })
 

@@ -1,4 +1,5 @@
 import type { InjectionToken } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std'
 
 import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
@@ -24,7 +25,10 @@ export interface HTTPCachingOptions {
   /**
    * The function hashing a payload into an `ETag`, or a token to resolve one from the container — a
    * `string`/`symbol` is a token, a `function` is the generator itself. Defaults to an internal SHA-1 hash
-   * when omitted.
+   * when omitted; a token that resolves to nothing throws `ErrConfiguration`.
+   *
+   * The default tag is strong and hashed before any content-coding. Behind a plugin that compresses responses,
+   * give a generator that returns weak tags (`W/"..."`), since the one tag then goes out with every coding.
    */
   etagGenerator?: ETagGenerator | InjectionToken<ETagGenerator>
   /** The cache-status response header name. Defaults to {@link DEFAULT_STATUS_HEADER}. */
@@ -35,4 +39,12 @@ export interface HTTPCachingOptions {
    * hooks do no observer work at all; a token that resolves to nothing throws `ErrConfiguration`.
    */
   observer?: CacheObserver | InjectionToken<CacheObserver>
+  /**
+   * How long one store call may take. Past it the request goes on without the cache — a read is a miss, a write
+   * or an eviction is skipped — and `observer.onError` is handed an `ErrCacheStoreTimeout`. Must be positive.
+   *
+   * There is no default: left out, a store that neither answers nor rejects holds every request on a cached
+   * route. A client that queues commands while its server is away is such a store.
+   */
+  storeTimeout?: Duration
 }

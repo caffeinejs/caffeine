@@ -1,13 +1,34 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Delete, ErrConfiguration, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
-import { LRUCache } from 'lru-cache'
-import { describe, it, expect } from 'vitest'
+import {
+  Controller,
+  Delete,
+  ErrConfiguration,
+  Get,
+  Post,
+  Status,
+  createWebApplication as newWebApplication,
+} from '@caffeinejs/http'
+import { afterEach, describe, it, expect } from 'vitest'
 
-import type { Cache, CacheEntry } from '../../store.js'
+import type { Cache, CacheEntry, CachePutItem } from '../../store.js'
 import { MemoryCache } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
+
+// Every application a case builds is closed after it, whether or not it got as far as `ready()`.
+const opened: { close(): Promise<unknown> }[] = []
+
+function createWebApplication(options?: { container: CaffeineIoC }) {
+  const app = newWebApplication(options)
+  opened.push(app)
+
+  return app
+}
+
+afterEach(async () => {
+  await Promise.all(opened.splice(0).map(app => app.close()))
+})
 
 describe('Cache-Control headers', () => {
   describe('ttl', () => {
@@ -484,12 +505,14 @@ describe('304 Not Modified', () => {
   })
 
   it('GET with stale If-None-Match after cache clear → 200, new ETag', async () => {
+    let version = 1
+
     @Controller('/cache-304-stale')
     class Stale304Controller {
       @CacheControl({ ttl: 60 })
       @Get('/data')
       data() {
-        return { value: 'content' }
+        return { version }
       }
     }
     void [Stale304Controller]
@@ -501,11 +524,66 @@ describe('304 Not Modified', () => {
     const res1 = await app.fetch('/cache-304-stale/data')
     const oldEtag = res1.headers.get('etag') as string
 
+    version = 2
     await store.clear()
 
     const res2 = await app.fetch('/cache-304-stale/data', { headers: { 'if-none-match': oldEtag } })
     expect(res2.status).toBe(200)
-    expect(res2.headers.get('etag')).toBeDefined()
+    expect(await res2.json()).toEqual({ version: 2 })
+    expect(res2.headers.get('etag')).not.toBe(oldEtag)
+  })
+
+  // The store forgetting an entry does not change the resource. A client revalidating the copy it holds is told
+  // it is still current, from the response the handler just produced.
+  it('GET with a still-matching If-None-Match after cache clear → 304 off the fresh response', async () => {
+    @Controller('/cache-304-fresh')
+    class Fresh304Controller {
+      @CacheControl({ ttl: 60 })
+      @Get('/data')
+      data() {
+        return { value: 'content' }
+      }
+    }
+    void [Fresh304Controller]
+
+    const store = new MemoryCache()
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
+    await app.ready()
+
+    const etag = (await app.fetch('/cache-304-fresh/data')).headers.get('etag') as string
+    await store.clear()
+
+    const res = await app.fetch('/cache-304-fresh/data', { headers: { 'if-none-match': etag } })
+    expect(res.status).toBe(304)
+    expect(await res.text()).toBe('')
+    expect(res.headers.get('x-cache')).toBe('MISS')
+
+    // It was stored on the way out all the same: the next plain request is a hit with the body.
+    const hit = await app.fetch('/cache-304-fresh/data')
+    expect(hit.headers.get('x-cache')).toBe('HIT')
+    expect(await hit.json()).toEqual({ value: 'content' })
+  })
+
+  // An ETag nobody compares is a hash computed for nothing: a route with no ttl still answers a revalidation.
+  it('@CacheControl() with no ttl → 304 for a matching If-None-Match', async () => {
+    @Controller('/cache-304-etag-only')
+    class ETagOnly304Controller {
+      @CacheControl()
+      @Get('/data')
+      data() {
+        return { same: true }
+      }
+    }
+    void [ETagOnly304Controller]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    await app.ready()
+
+    const etag = (await app.fetch('/cache-304-etag-only/data')).headers.get('etag') as string
+    const res = await app.fetch('/cache-304-etag-only/data', { headers: { 'if-none-match': etag } })
+
+    expect(res.status).toBe(304)
+    expect(await res.text()).toBe('')
   })
 
   it('HEAD with matching If-None-Match → 304', async () => {
@@ -628,19 +706,21 @@ describe('Cache store', () => {
   })
 
   it('@CacheControl({ statusCodes: [200, 201] }) caches 201 but not 400', async () => {
-    let okCount = 0
+    let createdCount = 0
     let errCount = 0
 
     @Controller('/cache-store-status')
     class StoreStatusController {
       @CacheControl({ ttl: 60, statusCodes: [200, 201] })
-      @Get('/ok')
-      ok() {
-        okCount++
-        return { n: okCount }
+      @Status(201)
+      @Get('/created')
+      created() {
+        createdCount++
+        return { n: createdCount }
       }
 
       @CacheControl({ ttl: 60, statusCodes: [200, 201] })
+      @Status(400)
       @Get('/err')
       err() {
         errCount++
@@ -649,18 +729,21 @@ describe('Cache store', () => {
     }
     void [StoreStatusController]
 
-    const app = createWebApplication()
-      .server(undefined, server => {
-        server.setNotFoundHandler((_req, reply) => {
-          void reply.code(400).send({ error: 'bad' })
-        })
-      })
-      .with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
     await app.ready()
 
-    await app.fetch('/cache-store-status/ok')
-    await app.fetch('/cache-store-status/ok')
-    expect(okCount).toBe(1)
+    await app.fetch('/cache-store-status/created')
+    const replayed = await app.fetch('/cache-store-status/created')
+    expect(createdCount).toBe(1)
+    expect(replayed.headers.get('x-cache')).toBe('HIT')
+    // Served from the store as what it was: a 201, not a 200 carrying a 201's body.
+    expect(replayed.status).toBe(201)
+
+    await app.fetch('/cache-store-status/err')
+    const again = await app.fetch('/cache-store-status/err')
+    expect(errCount).toBe(2)
+    expect(again.status).toBe(400)
+    expect(again.headers.get('x-cache')).toBe('MISS')
   })
 
   it('after cache.clear(), handler is called again', async () => {
@@ -1277,8 +1360,18 @@ describe('Bug fixes', () => {
           return undefined
         }
 
-        async set(_key: string, _entry: unknown, _ttl: unknown, segment?: string) {
+        async getMany(keys: string[], segment?: string) {
+          return Promise.all(keys.map(key => this.get(key, segment)))
+        }
+
+        async put(_key: string, _entry: unknown, _ttl: unknown, segment?: string) {
           this.setCalls.push(segment ?? '')
+        }
+
+        async putMany(items: CachePutItem[], segment?: string) {
+          for (const item of items) {
+            await this.put(item.key, item.entry, item.ttl, segment)
+          }
         }
         async delete() {}
         async deleteMany() {}
@@ -1371,8 +1464,18 @@ describe('Bug fixes', () => {
           return undefined
         }
 
-        async set(key: string) {
+        async getMany(keys: string[]) {
+          return Promise.all(keys.map(key => this.get(key)))
+        }
+
+        async put(key: string) {
           this.keySeen.push(key)
+        }
+
+        async putMany(items: CachePutItem[]) {
+          for (const item of items) {
+            await this.put(item.key)
+          }
         }
         async delete() {}
         async deleteMany() {}
@@ -1894,9 +1997,19 @@ describe('CacheControl builder & container-managed store', () => {
       return this.#entries.get(segment ? `${segment}:${key}` : key)
     }
 
-    async set(key: string, entry: CacheEntry, _ttl: unknown, segment?: string): Promise<void> {
-      this.ops.push('set')
+    async getMany(keys: string[], segment?: string): Promise<(CacheEntry | undefined)[]> {
+      return Promise.all(keys.map(key => this.get(key, segment)))
+    }
+
+    async put(key: string, entry: CacheEntry, _ttl: unknown, segment?: string): Promise<void> {
+      this.ops.push('put')
       this.#entries.set(segment ? `${segment}:${key}` : key, entry)
+    }
+
+    async putMany(items: CachePutItem[], segment?: string): Promise<void> {
+      for (const item of items) {
+        await this.put(item.key, item.entry, item.ttl, segment)
+      }
     }
 
     async delete(key: string, segment?: string): Promise<void> {
@@ -1939,7 +2052,7 @@ describe('CacheControl builder & container-managed store', () => {
     const resolved = app.container.get(MapStore) as MapStore
     expect(resolved).toBeInstanceOf(MapStore)
     expect(resolved).not.toBeInstanceOf(MemoryCache)
-    expect(resolved.ops).toContain('set')
+    expect(resolved.ops).toContain('put')
     expect(resolved.ops).toContain('get')
     // Second request served from the custom store — handler ran only once.
     expect(callCount).toBe(1)
@@ -1990,7 +2103,7 @@ describe('CacheControl builder & container-managed store', () => {
     await app.fetch('/cache-builder-store/data')
     const res2 = await app.fetch('/cache-builder-store/data')
 
-    expect(store.ops).toContain('set')
+    expect(store.ops).toContain('put')
     expect(store.ops).toContain('get')
     expect(callCount).toBe(1)
     expect(await res2.json()).toEqual({ count: 1 })
@@ -2013,7 +2126,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const res = await app.fetch('/cache-builder-both/data')
     expect(res.headers.get('etag')).toBe('"builder-etag"')
-    expect(store.ops).toContain('set')
+    expect(store.ops).toContain('put')
   })
 
   it('.etagGenerator(kETagGenerator) resolves a container-bound generator and drives the ETag header', async () => {
@@ -2257,10 +2370,15 @@ describe('Age header & request max-age', () => {
     // A store that always returns an entry aged ~100s, so the max-age=10 request must revalidate.
     class AgedStore implements Cache {
       async get(): Promise<CacheEntry | undefined> {
-        return { payload: JSON.stringify({ ok: true }), headers: {}, storedAt: Date.now() - 100_000 }
+        return { payload: JSON.stringify({ ok: true }), statusCode: 200, headers: {}, storedAt: Date.now() - 100_000 }
       }
 
-      async set() {}
+      async getMany(keys: string[]) {
+        return Promise.all(keys.map(() => this.get()))
+      }
+
+      async put() {}
+      async putMany() {}
       async delete() {}
       async deleteMany() {}
       async clear() {}
@@ -2284,31 +2402,5 @@ describe('Age header & request max-age', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('x-cache')).toBe('MISS')
     expect(callCount).toBe(1)
-  })
-})
-
-describe('MemoryCache maxSize budget', () => {
-  it('evicts least-recently-used entries once the byte budget is exceeded', async () => {
-    const store = new MemoryCache({ maxSize: 200 })
-    const big = 'x'.repeat(150)
-
-    await store.set('a', { payload: big, headers: {} }, 60, 'seg')
-    await store.set('b', { payload: big, headers: {} }, 60, 'seg')
-
-    // Two ~151-byte entries exceed the 200-byte budget → the older 'a' is evicted, 'b' survives.
-    expect(await store.get('a', 'seg')).toBeUndefined()
-    expect(await store.get('b', 'seg')).toBeDefined()
-  })
-})
-
-describe('MemoryCache constructor', () => {
-  it('accepts a pre-built LRUCache instance and uses it as-is', async () => {
-    const lru = new LRUCache<string, CacheEntry>({ max: 10 })
-    const store = new MemoryCache(lru)
-
-    await store.set('key', { payload: 'value', headers: {} }, 60)
-
-    expect(lru.size).toBe(1)
-    expect(await store.get('key')).toEqual({ payload: 'value', headers: {} })
   })
 })

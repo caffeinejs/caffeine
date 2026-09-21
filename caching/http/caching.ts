@@ -6,15 +6,18 @@ import {
   type HTTPPluginFactory,
   type HTTPSetupContext,
 } from '@caffeinejs/http'
+import type { Duration } from '@caffeinejs/std'
+import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
 import type { Cache } from '../store.js'
-import { guardObserver } from './_observe.js'
+import { guardObserver, storeErrorLogger } from './_observe.js'
+import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
-import type { CacheObserver } from './observer.js'
+import { composeObservers, type CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
 
@@ -25,15 +28,21 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * HTTP response caching, as an ordinary Fastify plugin factory: `.with(HTTPCaching())`.
  *
  * Takes an options object or a builder callback. Neither binds anything into the container — `store`,
- * `etagGenerator` and `observer` are resolved once as the plugin registers, from the option given or, for
- * `etagGenerator` alone, an internal default (a SHA-1 hash). `store` has no default: installing without one throws
- * {@link ErrConfiguration}. An `observer` that throws is caught; its first throw from each method is logged on the
- * application logger. Being a plain plugin factory rather than a feature, it installs once per
- * context — the root, or one route group with `router.plugin(...)` / `@Use(...)` — each with its own
- * settings.
+ * `etagGenerator` and `observer` are resolved once as the plugin registers, from the option given. An omitted
+ * `etagGenerator` is an internal SHA-1 hash. `store` has no default: installing without one throws
+ * {@link ErrConfiguration}, and so does any of the three given as a token that resolves to nothing.
+ *
+ * An `observer` that throws is caught; its first throw from each method is logged on the application logger. A
+ * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
+ * failure itself when the observer does not listen for it. A store that never answers is bounded only by
+ * `storeTimeout`, which has no default.
+ *
+ * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
+ * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
- * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`.
+ * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`, and before a plugin that
+ * compresses responses: a payload a compressor already turned into a stream is neither hashed nor stored.
  */
 export function HTTPCaching<C = unknown>(
   options?: HTTPCachingOptions | HTTPCachingConfigurer<C>,
@@ -49,9 +58,34 @@ export function HTTPCaching<C = unknown>(
       store,
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
-      observer: observer === undefined ? undefined : guardObserver(observer, logger),
+      observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
+      storeTimeoutMs: resolveStoreTimeout(resolved.storeTimeout),
     })
   }
+}
+
+function resolveStoreTimeout(value: Duration | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  const seconds = strictSeconds(value)
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    throw new ErrConfiguration(
+      `Cannot install HTTP caching: storeTimeout must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+    )
+  }
+
+  return Math.ceil(seconds * 1000)
+}
+
+// A store failure is never silent: an observer that listens for it owns the report, otherwise it is logged.
+function withStoreErrorLogger(observer: CacheObserver | undefined, logger: Logger): CacheObserver {
+  if (observer === undefined) {
+    return storeErrorLogger(logger)
+  }
+
+  return observer.onError === undefined ? composeObservers(observer, storeErrorLogger(logger)) : observer
 }
 
 function build<C>(configure: HTTPCachingConfigurer<C>, context: HTTPSetupContext<C>): HTTPCachingOptions {
@@ -61,8 +95,8 @@ function build<C>(configure: HTTPCachingConfigurer<C>, context: HTTPSetupContext
 }
 
 // A real Cache instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
-// string/symbol — never a plain object — so the two are told apart by shape. Unlike `etagGenerator`, `store`
-// has no default: an omitted store, or a token that resolves to nothing, both throw.
+// string/symbol — never a plain object — so the two are told apart by shape. `store` has no default: an omitted
+// store, or a token that resolves to nothing, both throw.
 function resolveCache(value: Cache | InjectionToken<Cache> | undefined, container: Container): Cache {
   if (value === undefined) {
     throw new ErrConfiguration(
@@ -86,9 +120,9 @@ function resolveCache(value: Cache | InjectionToken<Cache> | undefined, containe
   return value
 }
 
-// Told apart from a token by shape, like `store`: an observer is a plain object or a class instance. Unlike
-// `etagGenerator`, a token that resolves to nothing throws — there is no default to fall back to, and silently
-// running without the observer someone asked for would only show up as an empty dashboard.
+// Told apart from a token by shape, like `store`: an observer is a plain object or a class instance. A token
+// that resolves to nothing throws: silently running without the observer someone asked for would only show up as
+// an empty dashboard.
 function resolveObserver(
   value: CacheObserver | InjectionToken<CacheObserver> | undefined,
   container: Container,
@@ -125,7 +159,11 @@ function resolveETagGenerator(
   }
 
   if (typeof value === 'string' || typeof value === 'symbol') {
-    return container.getOptional(value)
+    const resolved = container.getOptional(value)
+    if (resolved === undefined) {
+      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given etagGenerator token')
+    }
+    return resolved
   }
 
   // Not a token by elimination — the class-token shapes InjectionToken<T> also allows do not apply to a
@@ -143,14 +181,20 @@ function resolveETagGenerator(
  * The hooks land behind the ones the adapter already attached, `@UseGuards` included, so a guard runs on a
  * cache hit as well as on a miss.
  *
- * `deps` is resolved by the caller (`HTTPCaching`) — this plugin never touches the container. Named and
- * `fastify-plugin`-wrapped like any other first-party plugin, so it installs once per context — root, or one
- * route group with `router.plugin(...)` / `@Use(...)` — not stacked repeatedly onto the identical context.
+ * A `key` function is handed the request of the handler's own context, which exists only on a server the
+ * application's adapter drives. Everything else works on any server.
+ *
+ * Installs once per context — the root, or one route group — and a second registration on the same context is
+ * refused.
  */
 export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     if (!instance.hasRequestDecorator('responseCached')) {
       instance.decorateRequest('responseCached', false)
+    }
+
+    if (!instance.hasRequestDecorator('cacheKey')) {
+      instance.decorateRequest('cacheKey', null)
     }
 
     instance.addHook('onRoute', routeOptions => {

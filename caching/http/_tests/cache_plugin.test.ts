@@ -1,9 +1,10 @@
-import { Controller, Get, createWebApplication, newRouter } from '@caffeinejs/http'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { Controller, ErrConfiguration, Get, createWebApplication, newRouter } from '@caffeinejs/http'
 import { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching } from '../index.js'
+import { CacheControl, HTTPCaching, cacheControl } from '../index.js'
 
 /**
  * The caching feature reaches routes through Fastify's own `onRoute` hook, not through the adapter. These
@@ -78,5 +79,74 @@ describe('cache plugin wiring', () => {
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
+  })
+
+  // The start-up refusal exists for a decorated route nothing serves. A group that installed the plugin for
+  // itself is served, though the root server never heard of it.
+  // Programmatic routes only (`decorators: false`): the controller registry is global, and a decorated
+  // controller from another test would be one more group nothing serves.
+  it('serves the routes of a group that installed it for itself', async () => {
+    const router = newRouter('/group-install').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    router
+      .get('/data')
+      .with(cacheControl({ ttl: 60 }))
+      .handler(() => ({ ok: true }))
+
+    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(router)
+    close = () => app.close()
+    await app.ready()
+
+    expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('MISS')
+    expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('HIT')
+  })
+
+  // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other.
+  it('gives each group that installed it a store of its own', async () => {
+    const stores = { pets: new MemoryCache(), owners: new MemoryCache() }
+    const group = (name: keyof typeof stores) => {
+      const router = newRouter(`/group-own-${name}`).plugin(HTTPCaching(b => b.store(stores[name])))
+      router
+        .get('/data')
+        .with(cacheControl({ ttl: 60 }))
+        .handler(() => ({ name }))
+
+      return router
+    }
+
+    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(
+      group('pets'),
+      group('owners'),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    await app.fetch('/group-own-pets/data')
+    await app.fetch('/group-own-owners/data')
+
+    const petsKey = encodeURIComponent('/group-own-pets/data')
+    expect((await stores.pets.get(petsKey))?.payload).toBe('{"name":"pets"}')
+    expect(await stores.owners.get(petsKey)).toBeUndefined()
+    expect((await app.fetch('/group-own-owners/data')).headers.get('x-cache')).toBe('HIT')
+  })
+
+  it('still refuses a sibling group that declares caching and installed nothing', async () => {
+    const served = newRouter('/group-served').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    served
+      .get('/data')
+      .with(cacheControl({ ttl: 60 }))
+      .handler(() => ({ ok: true }))
+
+    const unserved = newRouter('/group-unserved')
+    unserved
+      .get('/data')
+      .with(cacheControl({ ttl: 60 }))
+      .handler(() => ({ ok: true }))
+
+    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .mount(served)
+      .mount(unserved)
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
   })
 })

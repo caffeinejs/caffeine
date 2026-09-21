@@ -1,18 +1,32 @@
 import {
-  FastifyContextRequest,
   addRouteHook,
+  appendVary,
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
+  type FastifyContextRequest,
+  type Principal,
 } from '@caffeinejs/http'
-import { Duration, parseDuration } from '@caffeinejs/std'
-import { FastifyRequest } from 'fastify'
+import type { Duration } from '@caffeinejs/std'
+import type { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
-import type { Cache } from '../store.js'
+import type { Cache, CacheEntry } from '../store.js'
 import { cacheRouteOf } from './_observe.js'
-import { buildCacheControl, defaultCacheKey, generateETag, matchesETag } from './_util.js'
+import {
+  applyStoredHeaders,
+  assertConstraintsKeyed,
+  buildCacheControl,
+  defaultCacheKey,
+  durationSeconds,
+  generateETag,
+  isNotModified,
+  parseRequestCacheControl,
+  pragmaNoCache,
+  storedHeadersOf,
+} from './_util.js'
 import type { CacheBypassReason, CacheObserver } from './observer.js'
+import { withStoreTimeout } from './store_timeout.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -25,23 +39,75 @@ const CACHE_BYPASS = 'BYPASS'
 export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 
 export interface CacheControlOptions {
+  /**
+   * How long a response stays fresh: both the lifetime of the entry in the server-side store and the `max-age`
+   * sent to the client. Without it nothing is stored. Must be positive.
+   */
   ttl?: Duration
+  /** `s-maxage`, for shared caches downstream. The server-side store goes by `ttl`. */
   sharedMaxAge?: Duration
+  /** Sent as `stale-while-revalidate`, for caches downstream. The server-side store never serves stale. */
   staleWhileRevalidate?: Duration
+  /** Sent as `stale-if-error`, for caches downstream. The server-side store never serves stale. */
   staleIfError?: Duration
+  /**
+   * Sends `no-store` on every response of the route, errors included, over a `Cache-Control` the handler wrote,
+   * and stores nothing.
+   */
   noStore?: boolean
   noCache?: boolean
   mustRevalidate?: boolean
   proxyRevalidate?: boolean
   noTransform?: boolean
+  /**
+   * `private` keeps the response out of the server-side store. `public` stores it even for an identified
+   * client, and even when it sets a cookie — the cookie itself is never stored. Left unset, a request that
+   * carries `Authorization`, or that an authentication scheme identified some other way, is answered as
+   * `private` and not stored, and a response that sets a cookie is not stored.
+   */
   privacy?: 'private' | 'public'
   immutable?: boolean
+  /**
+   * The request headers the response depends on. Added to the response's `Vary`, and their values become part of
+   * the store key. `*` means the response is never stored.
+   *
+   * A route selected by a constraint — a version, a host — shares its URL with the routes selected otherwise, so
+   * it must list the constraint's header here, or have its own `segment` or `key`; it is refused at start-up
+   * otherwise.
+   */
   vary?: string[]
+  /** `false` sends no `ETag`. A handler's own `ETag` header is always kept, and used instead of a hash. */
   etag?: boolean
+  /**
+   * The request methods whose responses are cached. Defaults to `GET` and `HEAD`.
+   *
+   * The default key is built from the method, the URL and the `vary` headers, never the body: a `POST` listed
+   * here is answered with whatever the first `POST` to that URL produced, unless `key` tells them apart.
+   */
   methods?: string[]
+  /**
+   * The status codes whose responses are cached and replayed as they were. Defaults to `200`. A response with any
+   * other status carries nothing of this policy but `noStore`.
+   */
   statusCodes?: number[]
+  /**
+   * Groups the route's entries so `@CacheInvalidate({ clear: true, segment })` can evict them together — the
+   * only eviction that reaches every variant of a route that varies.
+   *
+   * Constrained routes on one URL need a segment each: two that share one still share a key.
+   */
   segment?: string
+  /**
+   * Derives the store key instead of the default. An eviction reaches the entry only under this exact key, so a
+   * route keyed here is invalidated with the same function, not with `paths`.
+   *
+   * `req` is the request of the handler's own context, so it needs a server the application's adapter drives.
+   */
   key?: (req: FastifyContextRequest) => string
+  /**
+   * Hashes the payload into the `ETag`, instead of the one given to `HTTPCaching`. The default tag is strong and
+   * computed before any content-coding.
+   */
   etagGenerator?: ETagGenerator
 }
 
@@ -55,149 +121,217 @@ export interface CacheDeps {
    * these itself for `cachePlugin` or `attachCacheHooks` owns that.
    */
   observer?: CacheObserver
+  /**
+   * Milliseconds a store call may take before the cache goes on without it, reported like a rejection. Left out,
+   * a call is waited for however long it takes.
+   */
+  storeTimeoutMs?: number
 }
 
 /**
  * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
- * Serves cacheable responses from and stores them into the container-resolved {@link Cache}, and emits
+ * Serves cacheable responses from and stores them into the {@link Cache} in `deps`, and emits
  * `Cache-Control`/`ETag`/`Vary` headers.
  *
- * `opts` is closed over rather than re-read from `request.routeOptions.config` per request: the hooks are
- * attached only to routes that declared options, so what they would read back is already known here.
+ * A handler that writes its own `Cache-Control` has decided for that response: the header is left as written
+ * and the response is not stored. `noStore` and `@CacheControl(false)` are the exceptions, and overwrite it.
+ *
+ * Not stored either: the response to a `HEAD`, and one that sets a cookie unless the route is `public`.
+ *
+ * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
+ * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
+ * handler ran and its response matches, that response goes out as the `304`, with its own headers and without
+ * its body or `Content-Length`.
  *
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
+ *
+ * @throws ErrConfiguration When a duration is not one, `ttl` is not positive, or the route is constrained and
+ *   nothing in its key tells it from the other routes on its URL.
  */
 export function attachCacheHooks(
   routeDef: AdapterRouteOptions,
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer } = deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs } = deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
   // route allocates no event.
   const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
-  const ttlSeconds = observer !== undefined && opts !== false && opts.ttl !== undefined ? parseDuration(opts.ttl) : 0
 
-  if (opts !== false) {
-    // A separate binding so the closure below sees `CacheControlOptions`, not the union: TypeScript does not
-    // carry a parameter's narrowing into a nested function.
-    const read: CacheControlOptions = opts
+  if (opts === false) {
+    // @CacheControl(false): actively disable caching with the full set of no-cache headers. The restrictive
+    // form, so it is written over whatever the handler set.
+    addRouteHook(routeDef, 'onSend', async function onSend(_request: AdapterRequest, reply: AdapterReply, payload) {
+      reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
+      reply.header('Expires', '0')
+      reply.header('Pragma', 'no-cache')
+      reply.header('Surrogate-Control', 'no-store')
+      reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, reason: 'disabled' })
 
-    // OnRequest phase: check if the request is cacheable and return the cached response if it is
-    async function onRequest(request: AdapterRequest, reply: AdapterReply) {
-      const methods = read.methods ?? DEFAULT_METHODS
-      if (!methods.includes(request.method)) {
-        // No status header here, but the observer still hears of it: leaving it out would drop these requests from
-        // every hit ratio computed off the events.
-        observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'method' })
-        return
-      }
+      return payload
+    })
 
-      // RFC 7234 §3.2 — Authorization present without explicit public override → never serve from cache
-      const hasAuth = !!request.headers.authorization
-      const effectivePrivacy = read.privacy ?? (hasAuth ? 'private' : undefined)
-      if (effectivePrivacy === 'private') {
-        reply.header(statusHeader, CACHE_BYPASS)
-        observer?.onBypass?.({
-          route: route!,
-          segment: read.segment,
-          reason: read.privacy === 'private' ? 'private' : 'authorization',
-        })
-        return
-      }
+    return
+  }
 
-      // RFC 7234 §4.1 — Vary: * always fails to match; never serve from cache
-      if (read.vary?.includes('*')) {
-        reply.header(statusHeader, CACHE_BYPASS)
-        observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'vary-any' })
-        return
-      }
+  // Everything a request would otherwise work out again is worked out here, once per route.
+  const read: CacheControlOptions = opts
+  const methods = read.methods?.map(method => method.toUpperCase()) ?? DEFAULT_METHODS
+  const statusCodes = read.statusCodes ?? DEFAULT_STATUS_CODES
+  const ttlSeconds = read.ttl === undefined ? undefined : durationSeconds(routeDef, 'ttl', read.ttl, true)
 
-      // RFC 7234 §5.2.1.4 — bypass cache when client requests fresh response
-      const reqCC = request.headers['cache-control']
-      const reqMaxAge0 = reqCC != null && /(?:^|,)\s*max-age\s*=\s*0(?:\s*,|$)/.test(reqCC)
-      if (
-        reqCC?.includes('no-cache') ||
-        reqCC?.includes('no-store') ||
-        reqMaxAge0 ||
-        request.headers['pragma'] === 'no-cache'
-      ) {
-        reply.header(statusHeader, CACHE_BYPASS)
-        observer?.onBypass?.({ route: route!, segment: read.segment, reason: clientBypassReason(reqCC, reqMaxAge0) })
-        return
-      }
+  if (read.sharedMaxAge !== undefined) {
+    durationSeconds(routeDef, 'sharedMaxAge', read.sharedMaxAge, false)
+  }
+  if (read.staleWhileRevalidate !== undefined) {
+    durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, false)
+  }
+  if (read.staleIfError !== undefined) {
+    durationSeconds(routeDef, 'staleIfError', read.staleIfError, false)
+  }
 
-      // Vary-aware cache key — must match key used in onSend
-      const key = read.key
-        ? read.key(new FastifyContextRequest(request as FastifyRequest))
-        : defaultCacheKey(request, read.vary)
-      const cached = await store.get(key, read.segment)
-      if (!cached) {
-        if (reqCC?.includes('only-if-cached')) {
-          observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
-          return reply.code(504).send()
-        }
-        reply.header(statusHeader, CACHE_MISS)
-        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'absent' })
-        return
-      }
+  assertConstraintsKeyed(routeDef, read)
 
-      // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
-      const age = cached.storedAt ? Math.max(0, Math.floor((Date.now() - cached.storedAt) / 1000)) : 0
+  const policyCacheControl = buildCacheControl(read)
+  const privateCacheControl = buildCacheControl(read, 'private')
+  const vary = read.vary?.length ? read.vary : undefined
+  const varyAny = vary?.includes('*') === true
+  const statusHeaderName = statusHeader.toLowerCase()
 
-      // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
-      const reqMaxAge = requestMaxAge(reqCC)
-      if (reqMaxAge !== undefined && age > reqMaxAge) {
-        reply.header(statusHeader, CACHE_MISS)
-        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'stale-for-request' })
-        return
-      }
+  // The context is the one the adapter gave the request before any route hook ran: a key function reads the
+  // same request the handler will, and nothing is built for it here.
+  const keyOf = (request: AdapterRequest): string =>
+    read.key ? read.key((request as FastifyRequest).httpContext.req) : defaultCacheKey(request, vary)
 
-      // RFC 7232 §6 — If-None-Match takes precedence over If-Modified-Since
-      const ifNoneMatch = request.headers['if-none-match']
-      if (ifNoneMatch) {
-        if (cached.etag && matchesETag(ifNoneMatch, cached.etag)) {
-          request.responseCached = true
-          observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
-          return reply
-            .code(304)
-            .headers(cached.headers)
-            .header(statusHeader, CACHE_HIT)
-            .header('Age', String(age))
-            .send()
-        }
-      } else {
-        const ifModifiedSince = request.headers['if-modified-since']
-        if (ifModifiedSince && cached.lastModified) {
-          if (Date.parse(cached.lastModified) <= Date.parse(ifModifiedSince)) {
-            request.responseCached = true
-            observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
-            return reply
-              .code(304)
-              .headers(cached.headers)
-              .header(statusHeader, CACHE_HIT)
-              .header('Age', String(age))
-              .send()
-          }
-        }
-      }
-
-      // RFC 7230 §3.3 — HEAD responses must not include a body
-      request.responseCached = true
-      reply.status(200).headers(cached.headers).header(statusHeader, CACHE_HIT).header('Age', String(age))
-      observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: false, ageSeconds: age })
-      if (request.method === 'HEAD') {
-        return reply.send()
-      }
-
-      return reply.send(cached.payload)
+  // Why this request's response belongs to one client, if it does. A route that says `public` has answered the
+  // question; otherwise any proof of identity on the request makes it private — the `Authorization` header
+  // (RFC 9111 §3.5), or a principal an authentication scheme established some other way, a session cookie for one.
+  function privacyOf(request: AdapterRequest): 'private' | 'authorization' | 'authenticated' | undefined {
+    if (read.privacy !== undefined) {
+      return read.privacy === 'private' ? 'private' : undefined
     }
 
-    addRouteHook(routeDef, 'onRequest', onRequest)
+    if (request.headers.authorization) {
+      return 'authorization'
+    }
+
+    // `null` until a scheme authenticates, and absent on a server the framework does not drive.
+    const user = (request as FastifyRequest).user as Principal | null | undefined
+
+    return user?.authenticated === true ? 'authenticated' : undefined
+  }
+
+  // OnRequest phase: check if the request is cacheable and return the cached response if it is
+  async function onRequest(request: AdapterRequest, reply: AdapterReply) {
+    if (!methods.includes(request.method)) {
+      // No status header here, but the observer still hears of it: leaving it out would drop these requests from
+      // every hit ratio computed off the events.
+      observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'method' })
+      return
+    }
+
+    const privacy = privacyOf(request)
+    if (privacy !== undefined) {
+      reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, segment: read.segment, reason: privacy })
+      return
+    }
+
+    // RFC 9111 §4.1 — Vary: * always fails to match; never serve from cache
+    if (varyAny) {
+      reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'vary-any' })
+      return
+    }
+
+    // RFC 9111 §5.2.1 — a client asking for a fresh response is not answered from the store
+    const directives = parseRequestCacheControl(request.headers['cache-control'])
+    const bypass: CacheBypassReason | undefined = directives.noCache
+      ? 'no-cache'
+      : directives.noStore
+        ? 'no-store'
+        : directives.maxAge === 0
+          ? 'max-age-0'
+          : pragmaNoCache(request)
+            ? 'pragma-no-cache'
+            : undefined
+    if (bypass !== undefined) {
+      reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, segment: read.segment, reason: bypass })
+      return
+    }
+
+    // Derived once and carried to the store hook, so the two cannot disagree on it.
+    const key = keyOf(request)
+    request.cacheKey = key
+
+    let cached: CacheEntry | undefined
+    try {
+      cached = await withStoreTimeout(store.get(key, read.segment), 'get', storeTimeoutMs)
+    } catch (error) {
+      // A store that is down costs the cache, not the request.
+      observer?.onError?.({ route: route!, segment: read.segment, operation: 'get', error })
+    }
+
+    if (!cached) {
+      if (directives.onlyIfCached) {
+        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
+        return reply.code(504).send()
+      }
+      reply.header(statusHeader, CACHE_MISS)
+      observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'absent' })
+      return
+    }
+
+    // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
+    const age = cached.storedAt ? Math.max(0, Math.floor((Date.now() - cached.storedAt) / 1000)) : 0
+
+    // A store is trusted to expire its entries, not relied on to: one that hands back an entry past the route's
+    // ttl has nothing fresh to offer.
+    const expired = ttlSeconds !== undefined && age > ttlSeconds
+
+    // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
+    if (expired || (directives.maxAge !== undefined && age > directives.maxAge)) {
+      if (directives.onlyIfCached) {
+        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
+        return reply.code(504).send()
+      }
+      reply.header(statusHeader, CACHE_MISS)
+      observer?.onMiss?.({
+        route: route!,
+        segment: read.segment,
+        key,
+        reason: expired ? 'expired' : 'stale-for-request',
+      })
+      return
+    }
+
+    request.responseCached = true
+
+    // RFC 9110 §13.2.1 — preconditions apply to GET and HEAD, and only where the answer would be a 2xx.
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      cached.statusCode >= 200 &&
+      cached.statusCode < 300 &&
+      isNotModified(request, cached.etag, cached.lastModified)
+    ) {
+      observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
+      applyStoredHeaders(reply, cached.headers, true)
+      return reply.code(304).header(statusHeader, CACHE_HIT).header('Age', String(age)).send()
+    }
+
+    observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: false, ageSeconds: age })
+    applyStoredHeaders(reply, cached.headers, false)
+    reply.status(cached.statusCode).header(statusHeader, CACHE_HIT).header('Age', String(age))
+
+    // The payload goes out on a HEAD too: the server drops the body and keeps its length, which is the
+    // Content-Length a GET would have carried (RFC 9110 §8.6).
+    return reply.send(cached.payload)
   }
 
   // Before sending the response,
@@ -207,132 +341,127 @@ export function attachCacheHooks(
       return payload
     }
 
-    // @CacheControl(false): actively disable caching with the full set of no-cache headers
-    if (opts === false) {
-      reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
-      reply.header('Expires', '0')
-      reply.header('Pragma', 'no-cache')
-      reply.header('Surrogate-Control', 'no-store')
-      reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, reason: 'disabled' })
+    // On every response of the route, whatever its status (RFC 9110 §12.5.5), and added to what other plugins
+    // already said the response varies on.
+    if (vary !== undefined) {
+      appendVary(reply, vary)
+    }
+
+    // A handler that wrote its own Cache-Control has decided for this response: it is left as written, and the
+    // response is not stored under a policy it opted out of. `noStore` is the exception: the restrictive form is
+    // written over whatever the handler said.
+    const handlerDecides = reply.hasHeader('cache-control')
+
+    // The policy describes the responses the route caches. Anything else — an error, a method the route does not
+    // cache — gets nothing permissive from it, only the one directive that restricts.
+    if (!methods.includes(request.method) || !statusCodes.includes(reply.statusCode)) {
+      if (read.noStore) {
+        reply.header('Cache-Control', 'no-store')
+      }
+
       return payload
     }
 
-    const methods = opts.methods ?? DEFAULT_METHODS
-    const statusCodes = opts.statusCodes ?? DEFAULT_STATUS_CODES
-    const isCacheableMethod = methods.includes(request.method)
-    const isCacheableStatus = statusCodes.includes(reply.statusCode)
+    const isPrivate = privacyOf(request) !== undefined
 
-    const hasAuth = !!request.headers.authorization
-    const effectivePrivacy = opts.privacy ?? (hasAuth ? 'private' : undefined)
-
-    const cacheControl = buildCacheControl(opts, effectivePrivacy)
-    if (cacheControl) {
-      reply.header('Cache-Control', cacheControl)
-    }
-
-    if (opts.vary?.length) {
-      reply.header('Vary', opts.vary.join(', '))
+    if (!handlerDecides || read.noStore) {
+      const cacheControl = isPrivate ? privateCacheControl : policyCacheControl
+      if (cacheControl) {
+        reply.header('Cache-Control', cacheControl)
+      }
     }
 
     const isStringOrBuffer = typeof payload === 'string' || Buffer.isBuffer(payload)
-    const shouldETag = opts.etag !== false && isCacheableStatus && !opts.noStore && isStringOrBuffer
 
-    let etag: string | undefined
-    if (shouldETag) {
-      etag = await generateETag(payload as string | Buffer, opts.etagGenerator ?? etagGenerator)
+    // The handler's validators are the better ones — it knows the resource's version and when it changed.
+    let etag = headerText(reply.getHeader('etag'))
+    if (etag === undefined && read.etag !== false && !read.noStore && isStringOrBuffer) {
+      etag = await generateETag(payload as string | Buffer, read.etagGenerator ?? etagGenerator)
       reply.header('ETag', etag)
     }
 
+    const handlerLastModified = headerText(reply.getHeader('last-modified'))
+
     // ETag and storage are independent — etag: false must not prevent caching
     // Private responses must not be stored in the shared server-side cache
-    // RFC 7234 §4.1 — Vary: * means the response must never be cached
+    // RFC 9111 §4.1 — Vary: * means the response must never be cached
+    // RFC 9111 §5.2.1.5 — nor is the response to a request that said no-store
+    // RFC 9111 §4 — nor the response to a HEAD, which shares the GET's key and may have no body to offer it
+    // A response that sets a cookie is taken for one client's, unless the route said `public`
     const shouldCache =
-      opts.ttl !== undefined &&
-      !opts.noStore &&
-      effectivePrivacy !== 'private' &&
-      !opts.vary?.includes('*') &&
-      isCacheableMethod &&
-      isCacheableStatus &&
-      isStringOrBuffer
+      ttlSeconds !== undefined &&
+      request.method !== 'HEAD' &&
+      !read.noStore &&
+      !isPrivate &&
+      !varyAny &&
+      !handlerDecides &&
+      (read.privacy === 'public' || !reply.hasHeader('set-cookie')) &&
+      isStringOrBuffer &&
+      !parseRequestCacheControl(request.headers['cache-control']).noStore
 
     if (shouldCache) {
-      const headers: Record<string, string> = {}
-      const contentType = reply.getHeader('content-type')
-
-      if (typeof contentType === 'string') {
-        headers['content-type'] = contentType
+      const lastModified = handlerLastModified ?? new Date().toUTCString()
+      if (handlerLastModified === undefined) {
+        reply.header('Last-Modified', lastModified)
       }
 
-      if (cacheControl) {
-        headers['cache-control'] = cacheControl
+      // The read hook derived it unless it returned before getting that far.
+      const key = request.cacheKey ?? keyOf(request)
+
+      try {
+        await withStoreTimeout(
+          store.put(
+            key,
+            {
+              payload: payload as string | Buffer,
+              statusCode: reply.statusCode,
+              etag,
+              lastModified,
+              storedAt: Date.now(),
+              headers: storedHeadersOf(reply, statusHeaderName),
+            },
+            read.ttl!,
+            read.segment,
+          ),
+          'put',
+          storeTimeoutMs,
+        )
+
+        observer?.onStore?.({
+          route: route!,
+          segment: read.segment,
+          key,
+          bytes: typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length,
+          ttlSeconds,
+        })
+      } catch (error) {
+        // Nothing was stored; the response the handler produced still goes out.
+        observer?.onError?.({ route: route!, segment: read.segment, operation: 'put', error })
       }
+    }
 
-      if (etag) {
-        headers['etag'] = etag
-      }
+    // The response just produced is the current representation, so a client that already holds it is told so.
+    // The cache's own Last-Modified is left out: stamped this second, it would match a copy from earlier in the
+    // same second whatever had changed since.
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      reply.statusCode >= 200 &&
+      reply.statusCode < 300 &&
+      isNotModified(request, etag, handlerLastModified)
+    ) {
+      reply.code(304)
+      reply.removeHeader('content-length')
 
-      if (opts.vary?.length) {
-        headers['vary'] = opts.vary.join(', ')
-      }
-
-      const lastModified = new Date().toUTCString()
-      headers['last-modified'] = lastModified
-      reply.header('Last-Modified', lastModified)
-
-      // Vary-aware cache key — must match key used in onRequest
-      const key = opts.key
-        ? opts.key(new FastifyContextRequest(request as FastifyRequest))
-        : defaultCacheKey(request, opts.vary)
-
-      await store.set(
-        key,
-        {
-          payload: payload as string | Buffer,
-          etag,
-          lastModified,
-          storedAt: Date.now(),
-          headers,
-        },
-        opts.ttl!,
-        opts.segment,
-      )
-
-      // After the write settles: a `set` that rejected stored nothing.
-      observer?.onStore?.({
-        route: route!,
-        segment: opts.segment,
-        key,
-        bytes: typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length,
-        ttlSeconds,
-      })
+      return null
     }
 
     return payload
   }
 
+  addRouteHook(routeDef, 'onRequest', onRequest)
   addRouteHook(routeDef, 'onSend', onSend)
 }
 
-// Parses the numeric `max-age=N` from a request Cache-Control header. Returns undefined when absent.
-function requestMaxAge(cacheControl: string | undefined): number | undefined {
-  if (cacheControl == null) {
-    return undefined
-  }
-  const match = /(?:^|,)\s*max-age\s*=\s*(\d+)/.exec(cacheControl)
-
-  return match ? Number(match[1]) : undefined
-}
-
-// Which client directive bypassed the cache, tested in the order the read hook tests them.
-function clientBypassReason(cacheControl: string | undefined, maxAge0: boolean): CacheBypassReason {
-  if (cacheControl?.includes('no-cache')) {
-    return 'no-cache'
-  }
-
-  if (cacheControl?.includes('no-store')) {
-    return 'no-store'
-  }
-
-  return maxAge0 ? 'max-age-0' : 'pragma-no-cache'
+function headerText(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
 }
