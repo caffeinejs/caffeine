@@ -168,4 +168,19 @@ describe('cacheKey (property)', () => {
       ).toBe(defaultCacheKey(stored, ['Accept-Language']))
     },
   )
+
+  // A mutation usually shares most of what the stored request varied on: only the values that differ are
+  // given, and the rest is read off the mutating request, as the cache read it off the one that stored.
+  it.prop([fc.string(), fc.string(), fc.string()])(
+    'reads from the request the varied headers it is not given',
+    (language, encoding, other) => {
+      const vary = ['Accept-Language', 'Accept-Encoding']
+      const stored = asRequest('GET', '/pets', { 'accept-language': language, 'accept-encoding': encoding })
+      const mutation = wrap(asRequest('PUT', '/pets', { 'accept-language': other, 'accept-encoding': encoding }))
+
+      expect(cacheKey(mutation, { method: 'GET', vary, headers: { 'accept-language': language } })).toBe(
+        defaultCacheKey(stored, vary),
+      )
+    },
+  )
 })

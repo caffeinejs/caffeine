@@ -310,6 +310,45 @@ describe('a store that rejects', () => {
 
 // `MemoryCache` runs on a caller's `LRUCache` as given, `allowStale` included: what the store hands back is
 // checked against the route's ttl rather than believed.
+/**
+ * The hooks are not the only writer a store may have: `putMany` exists so an application can fill it ahead of
+ * traffic. Such an entry carries no `storedAt`, and is served as one that was just stored.
+ */
+describe('an entry the application put in the store itself', () => {
+  it('is served as a hit, with an age of zero', async () => {
+    let calls = 0
+    const store = new MemoryCache()
+
+    @Controller('/store-warm')
+    class WarmStoreController {
+      @CacheControl({ ttl: 60 })
+      @Get('/data')
+      data() {
+        return { n: ++calls }
+      }
+    }
+    void [WarmStoreController]
+
+    await store.putMany([
+      {
+        key: encodeURIComponent('/store-warm/data'),
+        entry: { payload: '{"warm":true}', statusCode: 200, headers: { 'content-type': 'application/json' } },
+        ttl: 60,
+      },
+    ])
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
+    await app.ready()
+    const res = await app.fetch('/store-warm/data')
+    await app.close()
+
+    expect(res.headers.get('x-cache')).toBe('HIT')
+    expect(res.headers.get('age')).toBe('0')
+    expect(await res.json()).toEqual({ warm: true })
+    expect(calls).toBe(0)
+  })
+})
+
 describe('a store that hands back an entry past the route ttl', () => {
   it('is treated as a miss', async () => {
     let calls = 0

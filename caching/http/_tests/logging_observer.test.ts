@@ -92,9 +92,13 @@ describe('loggingCacheObserver', () => {
 
     observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1 })
     observer.onInvalidate!({ route, scope: 'keys', keys: ['k1', 'k2'] })
+    observer.onMiss!({ route, key: 'k3', reason: 'absent' })
+    observer.onStore!({ route, key: 'k4', bytes: 10, ttlSeconds: 60 })
 
     expect(log.written[0].args[0]).toMatchObject({ key: 'k1', revalidated: true })
     expect(log.written[1].args[0]).toMatchObject({ keys: ['k1', 'k2'], keyCount: 2 })
+    expect(log.written[2].args[0]).toMatchObject({ key: 'k3', reason: 'absent' })
+    expect(log.written[3].args[0]).toMatchObject({ key: 'k4', bytes: 10 })
   })
 
   it('records a segment clear by its segment', () => {

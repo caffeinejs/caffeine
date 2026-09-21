@@ -1,10 +1,10 @@
 import {
   ErrConfiguration,
-  FastifyContextRequest,
   addRouteHook,
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
+  type FastifyContextRequest,
 } from '@caffeinejs/http'
 import type { FastifyRequest } from 'fastify'
 
@@ -21,7 +21,8 @@ import type { CacheDeps } from './cache.js'
  *   combination of `Vary` values, and a path names none of them.
  * - `key`: the store keys to evict, used as returned. An entry is reached only under the exact key it was stored
  *   with: for a route whose `@CacheControl` has a `key` function, call that same function; for one on the default
- *   key, `cacheKey(req, { method: 'GET', url })` derives it from the evicting request.
+ *   key, `cacheKey(req, { method: 'GET', url })` derives it from the evicting request. `req` is the request of the
+ *   handler's own context, so it needs a server the application's adapter drives.
  * - `clear`: every entry in `segment` — the one form that reaches a varying route's entries. `segment` is
  *   required, since clearing without one would empty the whole store.
  *
@@ -85,7 +86,7 @@ export function attachCacheInvalidateHook(
 
 function keysOf(request: AdapterRequest, opts: CacheInvalidateOptions): string[] {
   if (opts.key !== undefined) {
-    const keys = opts.key(new FastifyContextRequest(request as FastifyRequest))
+    const keys = opts.key((request as FastifyRequest).httpContext.req)
     return typeof keys === 'string' ? [keys] : keys
   }
 

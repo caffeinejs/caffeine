@@ -100,6 +100,35 @@ describe('cache plugin wiring', () => {
     expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('HIT')
   })
 
+  // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other.
+  it('gives each group that installed it a store of its own', async () => {
+    const stores = { pets: new MemoryCache(), owners: new MemoryCache() }
+    const group = (name: keyof typeof stores) => {
+      const router = newRouter(`/group-own-${name}`).plugin(HTTPCaching(b => b.store(stores[name])))
+      router
+        .get('/data')
+        .with(cacheControl({ ttl: 60 }))
+        .handler(() => ({ name }))
+
+      return router
+    }
+
+    const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(
+      group('pets'),
+      group('owners'),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    await app.fetch('/group-own-pets/data')
+    await app.fetch('/group-own-owners/data')
+
+    const petsKey = encodeURIComponent('/group-own-pets/data')
+    expect((await stores.pets.get(petsKey))?.payload).toBe('{"name":"pets"}')
+    expect(await stores.owners.get(petsKey)).toBeUndefined()
+    expect((await app.fetch('/group-own-owners/data')).headers.get('x-cache')).toBe('HIT')
+  })
+
   it('still refuses a sibling group that declares caching and installed nothing', async () => {
     const served = newRouter('/group-served').plugin(HTTPCaching(b => b.store(new MemoryCache())))
     served

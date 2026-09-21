@@ -12,13 +12,12 @@ export interface VaryReply {
  */
 export function appendVary(reply: VaryReply, names: readonly string[]): void {
   const current = reply.getHeader('vary')
-  const merged =
-    typeof current === 'string'
-      ? current
-          .split(',')
-          .map(token => token.trim())
-          .filter(Boolean)
-      : []
+  // A header set from a list is handed back as one.
+  const merged = (Array.isArray(current) ? current : [current])
+    .filter(value => typeof value === 'string')
+    .flatMap(value => value.split(','))
+    .map(token => token.trim())
+    .filter(Boolean)
 
   if (merged.includes('*')) {
     return

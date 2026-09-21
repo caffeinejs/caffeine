@@ -70,11 +70,11 @@ const targets = await Promise.all(
   SERVERS.map(async server => ({ ...server, up: required(server.name, await reachable(server.url)) })),
 )
 
-const FORBIDDEN = ['scan', 'scanIterator', 'keys', 'flushDb', 'flushAll', 'mGet', 'mSet', 'del']
+const FORBIDDEN = ['scan', 'scanIterator', 'keys', 'flushDb', 'flushAll', 'mGet', 'mSet', 'del', 'eval', 'evalSha']
 
 /** Hands the store its commands through a recorder, so a test can say what went to the server and what never did. */
 function recording(client: RedisCacheClient) {
-  const sent: { command: string; keys: number }[] = []
+  const sent: { command: string }[] = []
 
   const wrapped: RedisCacheClient = {
     withTypeMapping(mapping) {
@@ -88,8 +88,7 @@ function recording(client: RedisCacheClient) {
           }
 
           return (...args: unknown[]) => {
-            const keys = property === 'eval' ? (args[1] as { keys: string[] }).keys.length : 1
-            sent.push({ command: property, keys })
+            sent.push({ command: property })
             return member.apply(target, args)
           }
         },
@@ -105,7 +104,7 @@ const entry = (payload: string | Buffer) => ({ payload, statusCode: 200, headers
 describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => {
   describe.skipIf(!up)(url, () => {
     let client: Connection
-    const sent: { command: string; keys: number }[] = []
+    const sent: { command: string }[] = []
 
     // A fresh prefix for every store: a rerun never meets what an earlier one left, and nothing is ever flushed.
     const newStore = (options?: { hashTag?: (segment: string) => string | undefined }) => {
@@ -145,7 +144,7 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
 
       await store.clear('pets')
 
-      expect(commands).toEqual([{ command: 'incr', keys: 1 }])
+      expect(commands).toEqual([{ command: 'incr' }])
       expect((await store.getMany(['/pets/0', '/pets/49'], 'pets')).every(read => read === undefined)).toBe(true)
     })
 
@@ -166,16 +165,28 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
       expect((await stranger.get('k', 'pets'))?.payload).toBe('theirs')
     })
 
-    // Without a segment, keys carry no hash tag and scatter over the slots: a batch must still go through.
-    it('reads, writes and deletes a batch whose keys fall in different slots', async () => {
+    // Keys carry no hash tag by default and scatter over the slots, a segment's and its counter included: a batch
+    // must still go through, which it only does when no command names two of them.
+    it.each([
+      ['without a segment', undefined],
+      ['in a segment', 'scattered'],
+    ])('reads, writes, deletes and clears a batch whose keys fall in different slots (%s)', async (_name, segment) => {
       const { store } = newStore()
       const keys = Array.from({ length: 40 }, (_, i) => `/scattered/${i}`)
 
-      await store.putMany(keys.map(key => ({ key, entry: entry(key), ttl: 60 })))
-      expect((await store.getMany(keys)).map(read => read?.payload)).toEqual(keys)
+      await store.putMany(
+        keys.map(key => ({ key, entry: entry(key), ttl: 60 })),
+        segment,
+      )
+      expect((await store.getMany(keys, segment)).map(read => read?.payload)).toEqual(keys)
 
-      await store.deleteMany(keys)
-      expect((await store.getMany(keys)).every(read => read === undefined)).toBe(true)
+      await store.deleteMany(keys.slice(0, 20), segment)
+      expect((await store.getMany(keys, segment)).filter(read => read !== undefined)).toHaveLength(20)
+
+      if (segment) {
+        await store.clear(segment)
+        expect((await store.getMany(keys, segment)).every(read => read === undefined)).toBe(true)
+      }
     })
 
     it('keeps segments a hash tag maps together apart in every other way', async () => {
@@ -229,12 +240,11 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
     })
 
     // Last on purpose: it reads back what every case of the contract made the store send.
-    it('never walked the keyspace, flushed, or named keys from two slots in one command', () => {
+    it('never walked the keyspace, flushed, ran a script, or named two keys in one command', () => {
       expect(sent.length).toBeGreaterThan(0)
       expect(sent.filter(item => FORBIDDEN.includes(item.command))).toEqual([])
-      // The write script is the one command with two keys, and they share a hash tag.
-      expect(sent.filter(item => item.keys > 1 && item.command !== 'eval')).toEqual([])
-      expect(new Set(sent.map(item => item.command))).toEqual(new Set(['get', 'hmGet', 'eval', 'unlink', 'incr']))
+      // Each of these takes exactly one key, so nothing the store sent could cross a slot.
+      expect(new Set(sent.map(item => item.command))).toEqual(new Set(['get', 'hmGet', 'hSetEx', 'unlink', 'incr']))
     })
   })
 })

@@ -13,11 +13,15 @@ export class ErrRedisCache extends Error {
   }
 }
 
-/** The commands {@link RedisCache} sends. Every one of them names the keys of a single slot. */
+/** The commands {@link RedisCache} sends. Every one of them names a single key. */
 export interface RedisCacheCommands {
   get(key: string): Promise<unknown>
   hmGet(key: string, fields: string[]): Promise<unknown>
-  eval(script: string, options: { keys: string[]; arguments: (string | Buffer)[] }): Promise<unknown>
+  hSetEx(
+    key: string,
+    fields: Record<string, string | Buffer>,
+    options: { expiration: { type: 'PX'; value: number } },
+  ): Promise<unknown>
   unlink(key: string): Promise<unknown>
   incr(key: string): Promise<unknown>
 }
@@ -34,36 +38,31 @@ export interface RedisCacheOptions {
   /** Prepended to every key this store writes. Defaults to `caffeine:cache:`. May not hold `{` or `}`. */
   prefix?: string
   /**
-   * The cluster hash tag for a segment's keys. Defaults to the segment itself, so a segment lives on one shard
-   * and segments spread over the cluster. Return the same tag for several segments to keep them together, or
-   * `undefined` for no tag on a server that is not a cluster. A tag may not hold `{` or `}`.
-   *
-   * It is given the segment and never the key: an entry and the counter that clears its segment have to fall in
-   * the same slot.
+   * The cluster hash tag for a segment's keys. There is none by default, so the keys of a segment spread over the
+   * cluster one by one. Return a tag to keep a segment on one shard, the same tag for several segments to keep
+   * them together, or `undefined` for none. A tag may not hold `{` or `}`.
    */
   hashTag?: (segment: string) => string | undefined
 }
 
 const DEFAULT_PREFIX = 'caffeine:cache:'
 
-// p payload · e payload kind (s string, b Buffer) · s status code · t etag · m last-modified · a stored at ·
-// h headers as JSON · g the segment generation the entry was written under. Read with HMGET on this fixed list
-// so the reply is an array under RESP2 and RESP3 alike.
-const FIELDS = ['p', 'e', 's', 't', 'm', 'a', 'h', 'g']
+// p the payload, as the bytes it was given · m everything else about the entry, as JSON. Both are written on
+// every put: HSETEX leaves a field it does not name in place, so an entry made of a fixed set of fields can
+// never inherit one from the entry it replaces.
+const FIELDS = ['p', 'm']
 
-// KEYS[1] the entry, KEYS[2] its segment counter when it has a segment. ARGV[1] the ttl in milliseconds, the rest
-// field/value pairs. The entry is deleted first so an optional field of the one it replaces cannot outlive it.
-const PUT = `
-local fields = {}
-for i = 2, #ARGV do fields[#fields + 1] = ARGV[i] end
-if KEYS[2] then
-  fields[#fields + 1] = 'g'
-  fields[#fields + 1] = redis.call('GET', KEYS[2]) or '0'
-end
-redis.call('DEL', KEYS[1])
-redis.call('HSET', KEYS[1], unpack(fields))
-redis.call('PEXPIRE', KEYS[1], ARGV[1])
-return 1`
+// s status code · k payload kind (s string, b Buffer) · h headers · t etag · l last-modified · a stored at ·
+// g the segment generation the entry was written under.
+interface Meta {
+  s: number
+  k: 's' | 'b'
+  h: CacheEntry['headers']
+  t?: string
+  l?: string
+  a?: number
+  g?: string
+}
 
 /**
  * A {@link Cache} on one Redis or Valkey server, or on a cluster of them.
@@ -71,14 +70,15 @@ return 1`
  * The client is the caller's, from `createClient()` or `createCluster()`: it is expected connected, and this
  * store never connects, closes, or reconnects it.
  *
+ * Needs Redis 8.0 or Valkey 9.0: an entry is written with `HSETEX`, and an older server rejects every write.
+ *
  * An entry is one hash, its payload stored as the bytes it was given. `clear(segment)` is a single `INCR` on the
  * segment's generation counter, whatever the segment holds: an entry written under an earlier generation reads
  * as absent, and is overwritten by the next `put` under its key or removed by its `ttl`. `clear()` without a
  * segment is refused — nothing short of walking the keyspace could serve it, and this store never does.
  *
- * No command names keys from two slots, so a cluster client needs nothing more: a batch is sent as single-key
- * commands in one go, and the keys of a segment share a hash tag (see {@link RedisCacheOptions.hashTag}).
- * Entries without a segment carry no tag and spread over the cluster key by key.
+ * No command names more than one key, so a cluster client needs nothing more: a batch is sent as single-key
+ * commands in one go, and keys spread over the cluster unless {@link RedisCacheOptions.hashTag} gathers them.
  *
  * Counters have no `ttl`. Under an `allkeys-*` eviction policy the server may evict one, which restarts the
  * segment's generation: an entry written under a number that comes round again is readable until its own `ttl`.
@@ -93,7 +93,7 @@ export class RedisCache implements Cache {
 
   constructor(client: RedisCacheClient, options?: RedisCacheOptions) {
     this.#prefix = options?.prefix ?? DEFAULT_PREFIX
-    this.#hashTag = options?.hashTag ?? (segment => segment)
+    this.#hashTag = options?.hashTag ?? noTag
 
     // Redis hashes the first `{...}` of a key, so a brace ahead of the tag would take its place.
     if (hasBrace(this.#prefix)) {
@@ -124,22 +124,45 @@ export class RedisCache implements Cache {
     }
 
     // Single-key commands issued together: one pipeline on a server, one fan-out over the nodes of a cluster.
+    // Awaited as one, so a command that rejects after another did is never left without a handler.
     const root = segment ? this.#root(segment) : this.#prefix
-    const generation = segment ? this.#commands.get(counterKey(root, segment)) : undefined
-    const replies = await Promise.all(keys.map(key => this.#commands.hmGet(entryKey(root, segment, key), FIELDS)))
-    const current = segment ? (text(await generation) ?? '0') : undefined
+    const [generation, replies] = await Promise.all([
+      segment ? this.#commands.get(counterKey(root, segment)) : undefined,
+      Promise.all(keys.map(key => this.#commands.hmGet(entryKey(root, segment, key), FIELDS))),
+    ])
+    const current = segment ? (text(generation) ?? '0') : undefined
 
     return replies.map(fields => decode(fields, current))
   }
 
   async put(key: string, entry: CacheEntry, ttl: Duration, segment?: string): Promise<void> {
-    await this.#put(segment ? this.#root(segment) : this.#prefix, key, entry, ttl, segment)
+    await this.putMany([{ key, entry, ttl }], segment)
   }
 
   async putMany(items: CachePutItem[], segment?: string): Promise<void> {
-    const root = segment ? this.#root(segment) : this.#prefix
+    const writes = items.flatMap(item => {
+      const ms = Math.ceil(parseDuration(item.ttl) * 1000)
 
-    await Promise.all(items.map(item => this.#put(root, item.key, item.entry, item.ttl, segment)))
+      return ms > 0 && Number.isFinite(ms) ? [{ ...item, ms }] : []
+    })
+    if (writes.length === 0) {
+      return
+    }
+
+    // Read once for the batch. A `clear` landing between this and a write leaves an entry under the earlier
+    // generation, which reads as absent.
+    const root = segment ? this.#root(segment) : this.#prefix
+    const generation = segment ? (text(await this.#commands.get(counterKey(root, segment))) ?? '0') : undefined
+
+    await Promise.all(
+      writes.map(({ key, entry, ms }) =>
+        this.#commands.hSetEx(
+          entryKey(root, segment, key),
+          { p: entry.payload, m: JSON.stringify(metaOf(entry, generation)) },
+          { expiration: { type: 'PX', value: ms } },
+        ),
+      ),
+    )
   }
 
   async delete(key: string, segment?: string): Promise<void> {
@@ -162,40 +185,6 @@ export class RedisCache implements Cache {
     }
 
     await this.#commands.incr(counterKey(this.#root(segment), segment))
-  }
-
-  async #put(root: string, key: string, entry: CacheEntry, ttl: Duration, segment?: string): Promise<void> {
-    const ms = Math.ceil(parseDuration(ttl) * 1000)
-    if (!(ms > 0) || !Number.isFinite(ms)) {
-      return
-    }
-
-    const isBuffer = Buffer.isBuffer(entry.payload)
-    const fields: (string | Buffer)[] = [
-      String(ms),
-      'p',
-      entry.payload,
-      'e',
-      isBuffer ? 'b' : 's',
-      's',
-      String(entry.statusCode),
-      'h',
-      JSON.stringify(entry.headers),
-    ]
-
-    if (entry.etag !== undefined) {
-      fields.push('t', entry.etag)
-    }
-    if (entry.lastModified !== undefined) {
-      fields.push('m', entry.lastModified)
-    }
-    if (entry.storedAt !== undefined) {
-      fields.push('a', String(entry.storedAt))
-    }
-
-    const keys = segment ? [entryKey(root, segment, key), counterKey(root, segment)] : [entryKey(root, segment, key)]
-
-    await this.#commands.eval(PUT, { keys, arguments: fields })
   }
 
   #entryKey(key: string): string {
@@ -228,6 +217,10 @@ function counterKey(root: string, segment: string): string {
   return `${root}g:${segment}`
 }
 
+function noTag(): undefined {
+  return undefined
+}
+
 function hasBrace(value: string): boolean {
   return value.includes('{') || value.includes('}')
 }
@@ -240,32 +233,45 @@ function text(value: unknown): string | undefined {
   return Buffer.isBuffer(value) ? value.toString() : String(value)
 }
 
+function metaOf(entry: CacheEntry, generation: string | undefined): Meta {
+  return {
+    s: entry.statusCode,
+    k: Buffer.isBuffer(entry.payload) ? 'b' : 's',
+    h: entry.headers,
+    t: entry.etag,
+    l: entry.lastModified,
+    a: entry.storedAt,
+    g: generation,
+  }
+}
+
 // `generation` is the segment's current one, `undefined` for an entry without a segment.
 function decode(reply: unknown, generation: string | undefined): CacheEntry | undefined {
-  const [payload, kind, status, etag, lastModified, storedAt, headers, written] = reply as (Buffer | null)[]
+  const [payload, fields] = reply as (Buffer | null)[]
 
-  if (payload === null || payload === undefined) {
+  if (payload === null || payload === undefined || fields === null || fields === undefined) {
     return undefined
   }
 
-  if (generation !== undefined && text(written) !== generation) {
+  const meta = JSON.parse(fields.toString()) as Meta
+  if (meta.g !== generation) {
     return undefined
   }
 
   const entry: CacheEntry = {
-    payload: text(kind) === 'b' ? payload : payload.toString(),
-    statusCode: Number(text(status)),
-    headers: JSON.parse(text(headers) ?? '{}') as CacheEntry['headers'],
+    payload: meta.k === 'b' ? payload : payload.toString(),
+    statusCode: meta.s,
+    headers: meta.h,
   }
 
-  if (etag) {
-    entry.etag = etag.toString()
+  if (meta.t !== undefined) {
+    entry.etag = meta.t
   }
-  if (lastModified) {
-    entry.lastModified = lastModified.toString()
+  if (meta.l !== undefined) {
+    entry.lastModified = meta.l
   }
-  if (storedAt) {
-    entry.storedAt = Number(storedAt.toString())
+  if (meta.a !== undefined) {
+    entry.storedAt = meta.a
   }
 
   return entry

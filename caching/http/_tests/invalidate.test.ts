@@ -2,7 +2,7 @@ import { Controller, ErrConfiguration, Get, Post, Put, Router, Status, createWeb
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryCache } from '../../store/memory/index.js'
-import { CacheControl, CacheInvalidate, HTTPCaching, cacheInvalidate, cacheKey } from '../index.js'
+import { CacheControl, CacheInvalidate, HTTPCaching, cacheControl, cacheInvalidate, cacheKey } from '../index.js'
 
 /**
  * Invalidation has to delete the key the cache hooks actually stored. Each case below targets an entry whose
@@ -337,6 +337,69 @@ describe('cacheKey', () => {
     expect((await app.fetch('/ck-vary/page', { headers: { 'accept-language': 'pt' } })).headers.get('x-cache')).toBe(
       'HIT',
     )
+  })
+})
+
+/**
+ * The adapter gives every request its context before any route hook runs. A key function is handed that
+ * context's request, never one built for it: what it reads, params and validated input included, is what the
+ * handler reads, and a request costs no second wrapper.
+ */
+describe('the request a key function is handed', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  it("is the one the handler's context holds, for a cached route and for an evicting one", async () => {
+    const seen: { by: string; req: unknown }[] = []
+    const router = new Router('/key-request')
+    router
+      .get('/:id')
+      .with(
+        cacheControl({
+          ttl: 60,
+          key: req => {
+            seen.push({ by: 'cache key', req })
+            return `item:${req.param('id')}`
+          },
+        }),
+      )
+      .handler(ctx => {
+        seen.push({ by: 'get handler', req: ctx.req })
+        return { ok: true }
+      })
+    router
+      .put('/:id')
+      .with(
+        cacheInvalidate({
+          key: req => {
+            seen.push({ by: 'evict key', req })
+            return `item:${req.param('id')}`
+          },
+        }),
+      )
+      .handler(ctx => {
+        seen.push({ by: 'put handler', req: ctx.req })
+        return { ok: true }
+      })
+
+    const app = createWebApplication()
+      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .mount(router)
+    close = () => app.close()
+    await app.ready()
+
+    await app.fetch('/key-request/1')
+    expect(seen.map(item => item.by)).toEqual(['cache key', 'get handler'])
+    expect(seen[0].req).toBe(seen[1].req)
+
+    seen.length = 0
+    await app.fetch('/key-request/1', { method: 'PUT' })
+    expect(seen.map(item => item.by)).toEqual(['put handler', 'evict key'])
+    expect(seen[0].req).toBe(seen[1].req)
   })
 })
 

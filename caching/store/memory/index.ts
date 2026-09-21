@@ -75,7 +75,8 @@ export class MemoryCache implements Cache {
       return
     }
     const prefix = segmentPrefix(segment)
-    for (const key of this.#cache.keys()) {
+    // Copied first: deleting from the cache while walking its own keys is nothing `lru-cache` promises to survive.
+    for (const key of [...this.#cache.keys()]) {
       if (key.startsWith(prefix)) {
         this.#cache.delete(key)
       }

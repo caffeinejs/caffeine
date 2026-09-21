@@ -1,14 +1,14 @@
 import {
-  FastifyContextRequest,
   addRouteHook,
   appendVary,
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
+  type FastifyContextRequest,
   type Principal,
 } from '@caffeinejs/http'
 import type { Duration } from '@caffeinejs/std'
-import { FastifyRequest } from 'fastify'
+import type { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
 import type { Cache, CacheEntry } from '../store.js'
@@ -95,6 +95,8 @@ export interface CacheControlOptions {
   /**
    * Derives the store key instead of the default. An eviction reaches the entry only under this exact key, so a
    * route keyed here is invalidated with the same function, not with `paths`.
+   *
+   * `req` is the request of the handler's own context, so it needs a server the application's adapter drives.
    */
   key?: (req: FastifyContextRequest) => string
   /**
@@ -127,6 +129,11 @@ export interface CacheDeps {
  *
  * A handler that writes its own `Cache-Control` has decided for that response: the header is left as written
  * and the response is not stored. `@CacheControl(false)` is the exception, and overwrites it.
+ *
+ * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
+ * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
+ * handler ran and its response matches, that response goes out as the `304`, with its own headers and without
+ * its body or `Content-Length`.
  *
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
@@ -187,8 +194,10 @@ export function attachCacheHooks(
   const varyAny = vary?.includes('*') === true
   const statusHeaderName = statusHeader.toLowerCase()
 
+  // The context is the one the adapter gave the request before any route hook ran: a key function reads the
+  // same request the handler will, and nothing is built for it here.
   const keyOf = (request: AdapterRequest): string =>
-    read.key ? read.key(new FastifyContextRequest(request as FastifyRequest)) : defaultCacheKey(request, vary)
+    read.key ? read.key((request as FastifyRequest).httpContext.req) : defaultCacheKey(request, vary)
 
   // Why this request's response belongs to one client, if it does. A route that says `public` has answered the
   // question; otherwise any proof of identity on the request makes it private — the `Authorization` header

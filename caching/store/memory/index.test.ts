@@ -31,6 +31,18 @@ describe('MemoryCache', () => {
     expect(await store.get('b')).toBeDefined()
   })
 
+  // Bytes are bytes: a binary payload and a plain header weigh against the budget like any other.
+  it('counts a Buffer payload and a text header against maxSize', async () => {
+    const store = new MemoryCache({ maxSize: 200 })
+    const entry = { payload: Buffer.alloc(100), statusCode: 200, headers: { 'x-note': 'y'.repeat(40) } }
+
+    await store.put('a', entry, 60)
+    await store.put('b', entry, 60)
+
+    expect(await store.get('a')).toBeUndefined()
+    expect(await store.get('b')).toBeDefined()
+  })
+
   it('runs on a pre-built LRUCache as given', async () => {
     const lru = new LRUCache<string, CacheEntry>({ max: 1 })
     const store = new MemoryCache(lru)

@@ -83,7 +83,9 @@ A hit replays the stored status code and headers. Connection-specific headers, `
 `Date`, `Age` and `Access-Control-*` are never stored, so each response gets its own. A header that an earlier hook
 already set for the current request is kept over the stored one, and `Vary` is merged, never replaced.
 
-A route with no `ttl` stores nothing and still gets the policy headers and an `ETag`, so clients can revalidate.
+A route with no `ttl` stores nothing. It still sends an `ETag`, so clients can revalidate, and whatever policy it
+declared: `@CacheControl({ noCache: true })` sends `Cache-Control: no-cache`, while `@CacheControl()` alone has no
+directive to send and sends no `Cache-Control`.
 
 ### Private requests
 
@@ -116,8 +118,10 @@ no `Cache-Control`, no `ETag`, no `Last-Modified`. A `noStore` route still says 
 | `If-None-Match`, `If-Modified-Since` on a `GET` or `HEAD` | `304` when it matches, on a hit and on a miss alike.          |
 
 Directive names are matched case-insensitively. `If-None-Match` wins over `If-Modified-Since` when both are sent.
-A `304` carries only `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. A `HEAD`
-hit carries the `Content-Length` the `GET` would have.
+A `304` answered from the store carries only `Cache-Control`, `Content-Location`, `ETag`, `Expires`,
+`Last-Modified` and `Vary`. A `304` on a miss is the handler's own response with the body and `Content-Length`
+taken off, so it keeps that response's other headers, `Content-Type` included. A `HEAD` hit carries the
+`Content-Length` the `GET` would have.
 
 The status header is `X-Cache` by default, renamed with `.statusHeader(...)`:
 
@@ -126,6 +130,9 @@ The status header is `X-Cache` by default, renamed with `.statusHeader(...)`:
 | `HIT`    | Answered from the store, with the stored body or with a `304`.                                                 |
 | `MISS`   | The handler ran. The response was stored if it qualified.                                                      |
 | `BYPASS` | The store was not consulted: a private request, a request directive, `vary: ['*']`, or `@CacheControl(false)`. |
+
+A request whose method is not in `methods` gets no status header at all: the cache has nothing to say about it.
+An observer still hears of it, as `onBypass` with `reason: 'method'`.
 
 ## `@CacheControl` options
 
@@ -177,8 +184,9 @@ with a redirect evicts as well. It has three forms, never mixed:
 // 1. Paths: literal, not patterns. Without `paths`, the request's own URL.
 @CacheInvalidate({ paths: ['/pets', '/pets/featured'] })
 
-// 2. Keys: used exactly as returned.
-@CacheInvalidate({ key: req => `pet:${req.param('id')}` })
+// 2. Keys: used exactly as returned. Reaches what this stored: @CacheControl({ ttl: '5m', key: petKey })
+const petKey = (req: FastifyContextRequest) => `pet:${req.param('id')}`
+@CacheInvalidate({ key: petKey })
 
 // 3. A whole segment. The only form that reaches every variant of a route that varies.
 @CacheInvalidate({ clear: true, segment: 'pets' })
@@ -253,7 +261,9 @@ others.
 
 ### `RedisCache`
 
-For Redis or Valkey. Needs `@redis/client`, an optional peer that is loaded only when you import this path.
+For Redis 8.0 or later, or Valkey 9.0 or later: entries are written with `HSETEX`, and an older server rejects
+every write, which shows as a store failure in the log and a cache that never fills. Needs `@redis/client`, an
+optional peer that is loaded only when you import this path.
 
 ```ts
 import { createClient } from '@redis/client'
@@ -269,11 +279,10 @@ const store = new RedisCache(client, { prefix: 'myapp:cache:' })
   one from `createCluster()` both fit.
 - An entry is one hash, with the payload stored as the bytes it was given.
 - `clear(segment)` costs one `INCR`, whatever the segment holds. `clear()` without a segment rejects.
-- It never sends `SCAN`, `KEYS`, `FLUSHDB`, `FLUSHALL` or a command naming keys from two slots, so it is safe on a
+- It never sends `SCAN`, `KEYS`, `FLUSHDB`, `FLUSHALL`, a script, or a command naming two keys, so it is safe on a
   cluster and on a shared server.
-- On a cluster, a segment's keys share a hash tag and live on one shard; entries without a segment spread key by
-  key. `hashTag: segment => ...` changes the tag: return the same tag for several segments to keep them
-  together, or `undefined` for none.
+- On a cluster, keys spread over the shards one by one. `hashTag: segment => ...` gathers them: return a tag to
+  keep a segment on one shard, or the same tag for several segments to keep those together.
 - Run the server with `noeviction` or a `volatile-*` policy. Under `allkeys-*` the server may evict a segment's
   counter, and entries cleared earlier can become readable again until their own `ttl`.
 - `prefix` and hash tags may not contain `{` or `}`: `ErrRedisCache`.
@@ -357,4 +366,6 @@ All of these fail `app.ready()` with `ErrConfiguration`:
 - No stampede protection yet: concurrent misses for one key each run the handler.
 - A `GET` already running when a mutation evicts can store the older response after the eviction. Keep `ttl`
   short where that matters.
-- A `HEAD` that misses carries no `ETag`: the body it would be hashed from is not produced.
+- A `HEAD` that misses stores nothing and carries no `ETag`: the server drops the body of a `HEAD` before the
+  cache sees it. A `HEAD` is answered from what a `GET` stored, so a route that only ever receives `HEAD` never
+  fills the cache.

@@ -162,6 +162,9 @@ function resolveETagGenerator(
  * The hooks land behind the ones the adapter already attached, `@UseGuards` included, so a guard runs on a
  * cache hit as well as on a miss.
  *
+ * A `key` function is handed the request of the handler's own context, which exists only on a server the
+ * application's adapter drives. Everything else works on any server.
+ *
  * `deps` is resolved by the caller (`HTTPCaching`) — this plugin never touches the container. Named and
  * `fastify-plugin`-wrapped like any other first-party plugin, so it installs once per context — root, or one
  * route group with `router.plugin(...)` / `@Use(...)` — not stacked repeatedly onto the identical context.

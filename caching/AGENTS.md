@@ -123,6 +123,11 @@ throws `ErrConfiguration` — callers must supply a `Cache` implementation expli
 one function, `buildCacheKey` in `_util.ts`: `defaultCacheKey`, `pathCacheKey` and the exported `cacheKey(req,
 options)` helper all call it, and `_util.prop.test.ts` pins that they agree for any query order.
 
+A `key` function, on either decorator, is handed `request.httpContext.req`: the request of the context the
+adapter gave the request in its first `onRequest` hook, ahead of every route hook. Never build a
+`FastifyContextRequest` in this package. On a server the adapter does not drive there is no context, and a
+`key` function there is unsupported — documented on the options, deliberately not checked.
+
 That an eviction must use the exact key the cache stored is **deliberately not enforced** in code: the TSDoc on
 both `key` options states it, and `cacheKey` makes the matching key easy to derive from the evicting request
 (`{ method: 'GET' }`, `{ url }`, `{ vary, headers }` for one variant). Do not add a start-up check. A path cannot reach a route that varies (one entry per
@@ -152,28 +157,42 @@ The observer reports outcomes the status header does not (a method the route doe
 ## Stores
 
 The store verbs are `get` / `getMany` / `put` / `putMany` / `delete` / `deleteMany` / `clear`. `getMany` is
-aligned to its keys; each `putMany` item carries its own `ttl`. The batch reads and writes have no caller in
-`http/`: the hooks stay on the single-key ones. `store.testkit.ts` (`describeCacheContract`) is the contract
-every store passes — `MemoryCache` in its unit test, `RedisCache` in `store/redis/redis.e2e.ts`, which the e2e Vitest project (`test/e2e/vitest.config.ts`) picks up. A new store
-runs it before anything else.
+aligned to its keys; each `putMany` item carries its own `ttl`. `getMany` and `putMany` have no caller in
+`http/`: the read and store hooks stay on the single-key verbs, and only eviction batches, with `deleteMany`.
+`store.testkit.ts` (`describeCacheContract`) is the contract
+every store passes — `MemoryCache` in its unit test, `RedisCache` twice: in its unit test over an in-memory
+fake of the five commands it sends, and in `store/redis/redis.e2e.ts` against real servers, which the e2e
+Vitest project (`test/e2e/vitest.config.ts`) picks up. A new store runs it before anything else.
 
 `RedisCache` is at `@caffeinejs/caching/store/redis`, reachable from no barrel, so an application that does not
 import it never loads `@redis/client` — an **optional** peer for that reason, as in `distlock`. It takes a
 connected node-redis client through a structural interface and owns nothing about it; `createClient()` and
 `createCluster()` both fit, which a type-only test pins.
 
-- One hash per entry, payload as raw bytes, read with `HMGET` on a fixed field list through a view whose bulk
-  replies are Buffers (`withTypeMapping`).
+- One hash per entry, of two fields: `p` the payload as raw bytes, `m` the rest as JSON. Written with one
+  `HSETEX ... PX`, which is why the store needs **Redis 8.0 or Valkey 9.0** — documented, never probed; an older
+  server rejects every write and the cache fails open. Read with `HMGET` through a view whose bulk replies are
+  Buffers (`withTypeMapping`). `HSETEX` leaves a field it does not name in place with its old TTL, so **both
+  fields are written on every put**: do not add an optional field, put it inside `m`. There is no script, and no
+  `eval` in the client interface.
 - `clear(segment)` is one `INCR` on the segment's generation counter; an entry carries the generation it was
-  written under and the store compares it after a pipelined read. `clear()` without a segment rejects.
-- `SCAN`, `KEYS`, `FLUSH*` and every multi-key command are forbidden: no `MGET`, no multi-key `UNLINK`. A batch
-  is single-key commands issued together. The write script is the one command naming two keys — the entry and
-  its counter — and they share a hash tag, which is a function of the **segment only** (`hashTag` option).
+  written under and the store compares it after a pipelined read. `clear()` without a segment rejects. A write
+  reads the counter first, once for a batch, with a plain `GET`: a `clear` landing between the two leaves an
+  entry under the earlier generation, which reads as absent.
+- `SCAN`, `KEYS`, `FLUSH*`, scripts and every multi-key command are forbidden: no `MGET`, no multi-key `UNLINK`.
+  A batch is single-key commands issued together, awaited as one so that none is left to reject unhandled. No
+  command names two keys, so a hash tag is a placement choice and never a requirement: there is none by default,
+  and the `hashTag` option, a function of the **segment only**, gathers a segment's keys on one shard.
 - The e2e spec runs on Redis and Valkey, each as one server and as a one-node cluster (which still answers
   `CROSSSLOT`), and asserts what was never sent.
 
-Cache stampede protection is not built, and room is kept for it: the `l:` key namespace beside `e:` and `g:`,
-under the segment's tag; `Cache` stays a plain contract, coordination arriving later as a separate optional
+Two limits are known and accepted; do not report them as new. The counter `GET` and the entry `HMGET` of a read
+are two commands, so a `clear` from another connection landing between them is missed by that one read. And
+`buildCacheKey` does not escape the `vary` values it joins, so two requests crafted with the separator in a
+header value can share a key; a request without it cannot be reached, and escaping would change every key.
+
+Cache stampede protection is not built, and room is kept for it: the `l:` key namespace beside `e:` and `g:`;
+`Cache` stays a plain contract, coordination arriving later as a separate optional
 capability a store may implement; and the hooks derive the store key once per request, carried on
 `request.cacheKey`, which leaves one place to wait between a miss and the handler and one to release after
 `put`. Do not add lock or wait methods to `Cache`, and do not derive the key a second time.

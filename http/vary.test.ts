@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 
 import { appendVary, type VaryReply } from './vary.js'
 
-function newReply(vary?: string): VaryReply & { headers: Record<string, string> } {
-  const headers: Record<string, string> = vary === undefined ? {} : { vary }
+function newReply(vary?: string | string[]): VaryReply & { headers: Record<string, string | string[]> } {
+  const headers: Record<string, string | string[]> = vary === undefined ? {} : { vary }
 
   return {
     headers,
@@ -31,6 +31,16 @@ describe('appendVary', () => {
     appendVary(reply, ['Accept-Language'])
 
     expect(reply.headers.vary).toBe('Origin, Accept-Language')
+  })
+
+  // A reply header may be set from a list, and is then read back as one. Treating it as "no header" would
+  // replace what the other plugin said instead of adding to it.
+  it('keeps the fields of a header that was set from a list', () => {
+    const reply = newReply(['Origin', 'Accept, accept-encoding'])
+
+    appendVary(reply, ['Accept-Language', 'ACCEPT'])
+
+    expect(reply.headers.vary).toBe('Origin, Accept, accept-encoding, Accept-Language')
   })
 
   it('does not repeat a field that differs only in case, and keeps the first spelling', () => {

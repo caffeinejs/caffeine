@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -56,6 +56,17 @@ describe('caching is opt-in', () => {
 
     await expect(app.ready()).rejects.toThrow(
       'Cannot install HTTP caching: no binding registered for the given etagGenerator token',
+    )
+  })
+
+  // A token someone named and bound nothing to is a mistake to surface, not a reason to run without a store.
+  it('throws ErrConfiguration when the store token resolves to nothing', async () => {
+    const kStore = token<Cache>(Symbol('optin.unbound-store'))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(kStore)))
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(
+      'Cannot install HTTP caching: no binding registered for the given store token',
     )
   })
 

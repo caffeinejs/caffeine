@@ -5,9 +5,10 @@ import { defineConfig } from 'vitest/config'
 
 // Opt-in e2e project (not in the root vitest projects list). Runs authentication and authorization over a real
 // socket — against the dockerized Spring Authorization Server (test/services/oauthserver) and Redis
-// (test/services/redis) where a spec needs them — distlock and the caching Redis store (caching/store/redis/redis.e2e.ts) against the dockerized Redis and Valkey, and
-// configuration against the dockerized Spring Cloud Config Server (test/services/configserver). Specs skip when
-// their service is not up, unless CAFFEINE_E2E_STRICT=1, which fails them instead.
+// (test/services/redis) where a spec needs them — distlock and the caching Redis store
+// (caching/store/redis/redis.e2e.ts) against the dockerized Redis and Valkey, and configuration against the
+// dockerized Spring Cloud Config Server (test/services/configserver). Specs skip when their service is not up,
+// unless CAFFEINE_E2E_STRICT=1, which fails them instead.
 export default defineConfig({
   plugins: [
     swc.vite({

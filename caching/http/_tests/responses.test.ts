@@ -276,6 +276,36 @@ describe('what the cache says about a response', () => {
     expect(res.headers.get('vary')).toBe('Accept-Language')
     expect(res.headers.get('content-type')).toBeNull()
   })
+
+  // The other 304: nothing is stored, so the handler ran and the answer is its own response with the body taken
+  // off. It keeps that response's metadata, which RFC 9110 §15.4.5 allows, and the two shapes are documented as
+  // different. A length left behind would describe a body that is not there.
+  it('turns a fresh response into a 304 that keeps its own headers, without a length', async () => {
+    @Controller('/resp-304-fresh')
+    class FreshNotModifiedController {
+      @CacheControl({ vary: ['Accept-Language'] })
+      @Get('/data')
+      data() {
+        return { ok: true }
+      }
+    }
+    void [FreshNotModifiedController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    close = () => app.close()
+    await app.ready()
+
+    const etag = (await app.fetch('/resp-304-fresh/data')).headers.get('etag') as string
+    const res = await app.fetch('/resp-304-fresh/data', { headers: { 'if-none-match': etag } })
+
+    expect(res.status).toBe(304)
+    expect(res.headers.get('x-cache')).toBe('MISS')
+    expect(res.headers.get('etag')).toBe(etag)
+    expect(res.headers.get('vary')).toBe('Accept-Language')
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(res.headers.get('content-length')).toBeNull()
+    expect(await res.text()).toBe('')
+  })
 })
 
 /**
