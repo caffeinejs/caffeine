@@ -45,6 +45,8 @@ interface Sample {
   latencyP50: number
   latencyP99: number
   throughputMBs: number
+  failures: number
+  totalRequests: number
 }
 
 function intEnv(name: string, fallback: number): number {
@@ -62,10 +64,18 @@ function intEnv(name: string, fallback: number): number {
 const ROUNDS = Math.max(1, intEnv('BENCH_ROUNDS', 3))
 const WARMUP = intEnv('BENCH_WARMUP', 5)
 const DURATION = Math.max(1, intEnv('BENCH_DURATION', 10))
-const CONNECTIONS = Math.max(1, intEnv('BENCH_CONNECTIONS', 100))
-const PIPELINING = Math.max(1, intEnv('BENCH_PIPELINING', 10))
+// The load generator, the harness and a single-threaded server share the machine, so the window of
+// outstanding requests follows the cores rather than a fixed number: a window wide enough to queue measures
+// the queue, and on a CPU-poor box it measures the collapse.
+const CONNECTIONS = Math.max(8, intEnv('BENCH_CONNECTIONS', os.availableParallelism() * 8))
+const PIPELINING = Math.max(1, intEnv('BENCH_PIPELINING', 8))
 // The load generator runs off the harness thread and leaves a core for the server and one for the harness.
 const WORKERS = Math.max(1, intEnv('BENCH_WORKERS', Math.min(4, os.availableParallelism() - 2)))
+// Seconds a connection may go without a response before the load generator gives up on it.
+const TIMEOUT = Math.max(1, intEnv('BENCH_TIMEOUT', 10))
+// Autocannon gives up on a whole connection at once, costing one request per pipelining slot, so a starved
+// connection is this many failures. More than that is the server rather than the machine.
+const MAX_FAILURES = intEnv('BENCH_MAX_FAILURES', PIPELINING)
 const READY_TIMEOUT = process.env.CI === 'true' ? 60_000 : 30_000
 
 let activeChild: ChildProcess | null = null
@@ -170,6 +180,7 @@ async function measure(server: ServerConfig, benchmark: LoadBenchmark): Promise<
       connections: CONNECTIONS,
       pipelining: PIPELINING,
       workers: WORKERS,
+      timeout: TIMEOUT,
     }
 
     if (WARMUP > 0) {
@@ -182,10 +193,14 @@ async function measure(server: ServerConfig, benchmark: LoadBenchmark): Promise<
       throw failure
     }
     // A server that rejects every request answers faster than one that serves them, and would top the table.
-    if (result.non2xx > 0 || result.errors > 0 || result.timeouts > 0) {
+    if (result.non2xx > 0) {
+      throw new Error(`Cannot accept the "${server.name}" run: ${result.non2xx} non-2xx responses`)
+    }
+    // `errors` counts timeouts too.
+    if (result.errors > MAX_FAILURES) {
       throw new Error(
-        `Cannot accept the "${server.name}" run: ${result.non2xx} non-2xx responses, ${result.errors} errors, ` +
-          `${result.timeouts} timeouts`,
+        `Cannot accept the "${server.name}" run: ${result.errors} failed requests ` +
+          `(${result.timeouts} timeouts), over the ${MAX_FAILURES} allowed`,
       )
     }
 
@@ -195,6 +210,8 @@ async function measure(server: ServerConfig, benchmark: LoadBenchmark): Promise<
       latencyP50: result.latency.p50,
       latencyP99: result.latency.p99,
       throughputMBs: result.throughput.average / 1_048_576,
+      failures: result.errors,
+      totalRequests: result.requests.sent,
     }
   } finally {
     await stop(running.child)
@@ -218,6 +235,8 @@ interface Row {
   latencyP50: number
   latencyP99: number
   throughputMBs: number
+  failures: number
+  totalRequests: number
 }
 
 function summarize(name: string, samples: Sample[]): Row {
@@ -231,11 +250,14 @@ function summarize(name: string, samples: Sample[]): Row {
     latencyP50: median(samples.map(s => s.latencyP50)),
     latencyP99: median(samples.map(s => s.latencyP99)),
     throughputMBs: median(samples.map(s => s.throughputMBs)),
+    failures: samples.reduce((total, s) => total + s.failures, 0),
+    totalRequests: samples.reduce((total, s) => total + s.totalRequests, 0),
   }
 }
 
+const int = (n: number): string => Math.round(n).toLocaleString('en-US')
+
 function printTable(rows: Row[]): void {
-  const int = (n: number): string => Math.round(n).toLocaleString('en-US')
   const columns: Array<[string, (r: Row) => string]> = [
     ['Req/sec (median)', r => int(r.reqPerSec)],
     ['min', r => int(r.min)],
@@ -297,7 +319,11 @@ export async function runLoadBenchmark(benchmark: LoadBenchmark): Promise<void> 
   printVersions(benchmark.versions ?? [])
   console.log(
     `\nLoad: ${ROUNDS} rounds, ${WARMUP}s warmup + ${DURATION}s measured, ${CONNECTIONS} connections, ` +
-      `pipelining ${PIPELINING}, ${WORKERS} load workers`,
+      `pipelining ${PIPELINING}, ${WORKERS} load workers, ${TIMEOUT}s timeout`,
   )
   printTable(rows)
+
+  for (const row of rows.filter(r => r.failures > 0)) {
+    console.log(`Tolerated failures: ${row.name} ${int(row.failures)} of ${int(row.totalRequests)} requests`)
+  }
 }
