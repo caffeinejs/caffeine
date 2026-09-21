@@ -17,7 +17,7 @@ import Fastify, {
 import fp from 'fastify-plugin'
 
 import { assertFastifyPlugin, assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
-import type { AdapterExtensionEntry } from './adapter_extension.js'
+import type { AdapterExtensionEntry, AdapterExtensions } from './adapter_extension.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn, ServerAddress } from './application.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
@@ -29,6 +29,7 @@ import type { FastifyTypes } from './fastify_types.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares } from './middleware/fastify.js'
 import { installNotFoundHandler } from './not_found.js'
+import { pluginName, type AnyFastifyPlugin } from './plugin.js'
 import type { RouteGroup } from './route.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import type { RouteCompilers } from './routing/dispatch.js'
@@ -199,7 +200,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // the same table the registration loop below reads.
     assertAuthenticationConfigured(container, routeGroups)
     assertAuthorizationConfigured(container, routeGroups)
-    assertRouteFeaturesInstalled(fastify, routeGroups)
+    assertRouteFeaturesInstalled(fastify, routeGroups, input.extensions)
 
     // The same for every group, so it is built once here rather than per registration.
     const registration = { extensions: input.extensions, compilers: this.#compilers, globalErrorHandler }
@@ -368,20 +369,36 @@ function featurePlugin<S extends FastifyInstance>(
  * Refuses what the application declared and no installed feature can serve, as a start-up failure rather than
  * a route that quietly never does what its decorator says.
  *
- * @throws ErrConfiguration when a route carries `@Cache` / `@CacheInvalidate` or a constraint and the plugin
- *   that serves it is not registered.
+ * Caching may be installed on the root server or on one route group, so each group is asked on its own: a
+ * plugin one group installed does not serve its sibling.
+ *
+ * @throws ErrConfiguration when a route carries `@CacheControl` / `@CacheInvalidate` or a constraint and the
+ *   plugin that serves it is not registered.
  */
-function assertRouteFeaturesInstalled(server: FastifyInstance, routeGroups: readonly RouteGroup<any>[]): void {
-  if (
-    !server.hasPlugin(CACHING_PLUGIN) &&
-    routeGroups.some(group =>
-      group.routes.some(route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true),
-    )
-  ) {
-    throw new ErrConfiguration(
-      'Routes are decorated with @Cache or @CacheInvalidate but the caching feature is not installed: ' +
-        'add ".with(HTTPCaching())" to the application builder',
-    )
+function assertRouteFeaturesInstalled(
+  server: FastifyInstance,
+  routeGroups: readonly RouteGroup<any>[],
+  extensions: Pick<AdapterExtensions<unknown, AnyFastifyPlugin>, 'of'>,
+): void {
+  if (!server.hasPlugin(CACHING_PLUGIN)) {
+    for (const group of routeGroups) {
+      const cached = group.routes.some(
+        route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
+      )
+      const installed = (group.scopes ?? []).some(scope =>
+        extensions.of(scope).some(plugin => typeof plugin === 'function' && pluginName(plugin) === CACHING_PLUGIN),
+      )
+
+      if (cached && !installed) {
+        throw new ErrConfiguration(
+          'Cannot register routes decorated with @CacheControl or @CacheInvalidate: the caching plugin is not installed' +
+            solutions(
+              'Add ".with(HTTPCaching(...))" to the application builder',
+              'Install it on the route group with ".plugin(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
+            ),
+        )
+      }
+    }
   }
 
   if (
