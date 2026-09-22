@@ -10,12 +10,14 @@ import { describe, expect, it } from 'vitest'
 import {
   applyStoredHeaders,
   assertConstraintsKeyed,
+  assertTags,
   buildCacheControl,
+  buildCacheKey,
+  durationSeconds,
   generateETag,
   isNotModified,
   matchesETag,
   parseRequestCacheControl,
-  pathCacheKey,
   pragmaNoCache,
   storedHeadersOf,
 } from './_util.js'
@@ -117,11 +119,65 @@ describe('isNotModified', () => {
   })
 })
 
-describe('pathCacheKey', () => {
-  // `/pets?` and `/pets` name one resource: an eviction by path must reach what either request stored.
-  it('gives a URL with an empty query the key of the bare path', () => {
-    expect(pathCacheKey('/pets?')).toBe(pathCacheKey('/pets'))
-    expect(pathCacheKey('/pets?b=2&a=1')).toBe(pathCacheKey('/pets?a=1&b=2'))
+describe('buildCacheKey', () => {
+  const noHeader = () => undefined
+
+  // `/pets?` and `/pets` name one resource, and a query in another order is the same query.
+  it('gives a URL with an empty query the key of the bare path, whatever the query order', () => {
+    expect(buildCacheKey('GET', '/pets?', undefined, noHeader)).toBe(buildCacheKey('GET', '/pets', undefined, noHeader))
+    expect(buildCacheKey('GET', '/pets?b=2&a=1', undefined, noHeader)).toBe(
+      buildCacheKey('GET', '/pets?a=1&b=2', undefined, noHeader),
+    )
+  })
+
+  // A tracking parameter must not give every visitor an entry of their own.
+  it('keeps only the query parameters named in varyByQuery', () => {
+    const named = new Set(['page', 'q'])
+
+    expect(buildCacheKey('GET', '/pets?utm_source=x&page=2&q=cat', undefined, noHeader, named)).toBe(
+      buildCacheKey('GET', '/pets?q=cat&page=2', undefined, noHeader),
+    )
+    expect(buildCacheKey('GET', '/pets?utm_source=x', undefined, noHeader, new Set())).toBe(
+      buildCacheKey('GET', '/pets', undefined, noHeader),
+    )
+    expect(buildCacheKey('GET', '/pets?Page=2', undefined, noHeader, named)).toBe(
+      buildCacheKey('GET', '/pets', undefined, noHeader),
+    )
+  })
+})
+
+describe('durationSeconds', () => {
+  const route = { method: 'GET', url: '/pets' } as unknown as AdapterRouteOptions
+
+  // `max-age` is whole seconds: a ttl of 400ms would be sent as `max-age=0`.
+  it('refuses a ttl below one second, and takes a stale window of zero', () => {
+    expect(() => durationSeconds(route, 'ttl', '400ms', 1)).toThrow(ErrConfiguration)
+    expect(() => durationSeconds(route, 'ttl', 0.999, 1)).toThrow('ttl must be at least one second')
+    expect(durationSeconds(route, 'ttl', 1, 1)).toBe(1)
+    expect(durationSeconds(route, 'staleIfError', 0, 0)).toBe(0)
+    expect(() => durationSeconds(route, 'staleIfError', -1, 0)).toThrow('staleIfError must be a non-negative duration')
+  })
+})
+
+describe('assertTags', () => {
+  const route = { method: 'POST', url: '/pets' } as unknown as AdapterRouteOptions
+
+  it('wants at least one tag where tags are required, and takes none where they are not', () => {
+    expect(() => assertTags(route, undefined, { what: 'cache invalidation', required: true })).toThrow(
+      'Cannot install cache invalidation on "POST /pets": tags must name at least one tag',
+    )
+    expect(() => assertTags(route, [], { what: 'cache invalidation', required: true })).toThrow(ErrConfiguration)
+    expect(() => assertTags(route, undefined, { what: 'caching', required: false })).not.toThrow()
+    expect(() => assertTags(route, [], { what: 'caching', required: false })).not.toThrow()
+  })
+
+  // A brace in a key decides its slot on a Redis cluster; an empty tag names nothing.
+  it('refuses a tag that is empty, not a string, or holds a brace', () => {
+    for (const tag of ['', 42, '{a}', 'a}']) {
+      expect(() => assertTags(route, [tag], { what: 'caching', required: false })).toThrow(
+        `Cannot install caching on "POST /pets": a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`,
+      )
+    }
   })
 })
 
@@ -186,15 +242,15 @@ describe('assertConstraintsKeyed', () => {
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['host'] })).not.toThrow()
   })
 
-  // A custom constraint may read anything, a header or not. Nothing in `vary` can stand for it, so only a
-  // segment or a key function of the route's own tells it apart.
-  it('wants a segment or a key from a route under a constraint it does not know', () => {
+  // A custom constraint may read anything, a header or not. Nothing in `vary` can stand for it, so only a key
+  // function of the route's own tells it apart.
+  it('wants a key from a route under a constraint it does not know', () => {
     const constrained = route({ constraints: { tenant: 'a' } })
 
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['tenant'] })).toThrow(
       'constraint "tenant" reads no header the cache key can vary on',
     )
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, segment: 'tenant-a' })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, key: () => 'tenant-a' })).not.toThrow()
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60, key: () => 'a:pets' })).not.toThrow()
   })
 

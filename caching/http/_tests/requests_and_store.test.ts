@@ -1,10 +1,9 @@
-import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Header, Post, Status, createWebApplication } from '@caffeinejs/http'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Cache, CacheEntry } from '../../store.js'
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore, type MemoryHTTPCacheRecord } from '../../store/memory/index.js'
 import {
   CacheControl,
   CacheInvalidate,
@@ -13,6 +12,11 @@ import {
   type CacheErrorEvent,
   type CacheMissEvent,
   type CacheObserver,
+  type CacheSkipEvent,
+  type HTTPCacheEntry,
+  type HTTPCacheGetOptions,
+  type HTTPCachePutOptions,
+  type HTTPCacheStore,
 } from '../index.js'
 
 describe('what a request may ask of the cache', () => {
@@ -38,7 +42,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [NoStoreRequestController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -62,7 +66,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [CaseController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -85,7 +89,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [PragmaController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -109,7 +113,7 @@ describe('what a request may ask of the cache', () => {
     }
     void [OnlyIfCachedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -123,6 +127,157 @@ describe('what a request may ask of the cache', () => {
 
     expect(res.status).toBe(504)
     expect(calls).toBe(1)
+  })
+})
+
+/**
+ * The query is part of the key, but not all of it has to be: a tracking parameter must not give every visitor
+ * an entry of their own.
+ */
+describe('what of the query the key carries', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  const calls = { listed: 0, unlisted: 0, none: 0 }
+
+  @Controller('/query')
+  class QueryController {
+    @CacheControl({ ttl: 60, varyByQuery: ['page'] })
+    @Get('/listed')
+    listed() {
+      return { n: ++calls.listed }
+    }
+
+    @CacheControl({ ttl: 60 })
+    @Get('/unlisted')
+    unlisted() {
+      return { n: ++calls.unlisted }
+    }
+
+    @CacheControl({ ttl: 60, varyByQuery: [] })
+    @Get('/none')
+    none() {
+      return { n: ++calls.none }
+    }
+  }
+  void [QueryController]
+
+  const status = async (app: { fetch(url: string): Promise<Response> }, url: string) =>
+    (await app.fetch(url)).headers.get('x-cache')
+
+  it('keeps the parameters a route lists and drops the rest, in any order', async () => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    close = () => app.close()
+    await app.ready()
+
+    expect(await status(app, '/query/listed?page=1&utm_source=mail')).toBe('MISS')
+    expect(await status(app, '/query/listed?utm_source=ad&page=1')).toBe('HIT')
+    expect(await status(app, '/query/listed?page=2')).toBe('MISS')
+    expect(await status(app, '/query/listed?page=2&utm_campaign=x')).toBe('HIT')
+  })
+
+  it('falls back to the install list, and a route may leave the whole query out', async () => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])))
+    close = () => app.close()
+    await app.ready()
+
+    expect(await status(app, '/query/unlisted?q=cat&utm_source=mail')).toBe('MISS')
+    expect(await status(app, '/query/unlisted?q=cat')).toBe('HIT')
+    expect(await status(app, '/query/unlisted?q=dog')).toBe('MISS')
+
+    expect(await status(app, '/query/none?anything=1')).toBe('MISS')
+    expect(await status(app, '/query/none?other=2')).toBe('HIT')
+    expect(await status(app, '/query/none')).toBe('HIT')
+  })
+
+  it('counts the whole query when nobody lists anything', async () => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    close = () => app.close()
+    await app.ready()
+
+    expect(await status(app, '/query/unlisted?a=1')).toBe('MISS')
+    expect(await status(app, '/query/unlisted?a=2')).toBe('MISS')
+    expect(await status(app, '/query/unlisted?a=1')).toBe('HIT')
+  })
+})
+
+/** A response the policy would store, left out: the observer is told, with what it would have cost. */
+describe('a response left out of the store', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  @Controller('/skip')
+  class SkipController {
+    @CacheControl({ ttl: 60 })
+    @Get('/large')
+    large() {
+      return 'x'.repeat(200)
+    }
+
+    @CacheControl({ ttl: 60 })
+    @Get('/small')
+    small() {
+      return 'x'.repeat(20)
+    }
+
+    @CacheControl({ ttl: 60 })
+    @Header('Set-Cookie', 'session=1')
+    @Get('/cookie')
+    cookie() {
+      return { ok: true }
+    }
+  }
+  void [SkipController]
+
+  it('is larger than maxEntrySize: it goes out, is not stored, and is reported', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize(100).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    const first = await app.fetch('/skip/large')
+    const second = await app.fetch('/skip/large')
+    await app.fetch('/skip/small')
+    const small = await app.fetch('/skip/small')
+
+    expect(first.status).toBe(200)
+    expect(await first.text()).toBe('x'.repeat(200))
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(small.headers.get('x-cache')).toBe('HIT')
+    expect(skips).toMatchObject([
+      { route: { url: '/skip/large' }, reason: 'entry-too-large', bytes: 200 },
+      { route: { url: '/skip/large' }, reason: 'entry-too-large', bytes: 200 },
+    ])
+  })
+
+  it('sets a cookie: it is reported the same way', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    await app.fetch('/skip/cookie')
+
+    expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', bytes: 11 }])
+  })
+
+  it('refuses a maxEntrySize that is not a byte size at start-up', async () => {
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize('lots')))
+    close = () => app.close()
+
+    await expect(app.ready()).rejects.toThrow(/maxEntrySize must be a byte size/)
   })
 })
 
@@ -176,37 +331,25 @@ describe('a store that rejects', () => {
     close = undefined
   })
 
-  class DownStore implements Cache {
-    readonly inner = new MemoryCache()
+  class DownStore implements HTTPCacheStore {
+    readonly inner = new MemoryHTTPCacheStore()
     failGet = false
     failPut = false
     failEvict = false
 
-    async get(key: string, segment?: string) {
+    async get(key: string, options?: HTTPCacheGetOptions) {
       if (this.failGet) {
         throw new Error('store down')
       }
-      return this.inner.get(key, segment)
+      return this.inner.get(key, options)
     }
-    async getMany(keys: string[], segment?: string) {
-      return Promise.all(keys.map(key => this.get(key, segment)))
-    }
-    async put(key: string, entry: CacheEntry, ttl: number, segment?: string) {
+    async put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions) {
       if (this.failPut) {
         throw new Error('store down')
       }
-      return this.inner.put(key, entry, ttl, segment)
+      return this.inner.put(key, entry, options)
     }
-    async putMany() {
-      throw new Error('not used')
-    }
-    async delete() {}
-    async deleteMany() {
-      if (this.failEvict) {
-        throw new Error('store down')
-      }
-    }
-    async clear() {
+    async evictByTag() {
       if (this.failEvict) {
         throw new Error('store down')
       }
@@ -215,23 +358,17 @@ describe('a store that rejects', () => {
 
   @Controller('/store-down')
   class StoreDownController {
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60, tags: ['pets'] })
     @Get('/data')
     data() {
       return { ok: true }
     }
 
-    @CacheInvalidate()
+    @CacheInvalidate({ tags: ['pets'] })
     @Status(201)
     @Post('/data')
     create() {
       return { created: true }
-    }
-
-    @CacheInvalidate({ clear: true, segment: 'pets' })
-    @Post('/clear')
-    clear() {
-      return { cleared: true }
     }
   }
   void [StoreDownController]
@@ -266,9 +403,8 @@ describe('a store that rejects', () => {
     const mutated = await app.fetch('/store-down/data', { method: 'POST' })
     expect(mutated.status).toBe(201)
     expect(await mutated.json()).toEqual({ created: true })
-    expect((await app.fetch('/store-down/clear', { method: 'POST' })).status).toBe(200)
 
-    expect(errors.map(event => event.operation)).toEqual(['put', 'get', 'put', 'delete', 'clear'])
+    expect(errors.map(event => event.operation)).toEqual(['put', 'get', 'put', 'evict'])
     expect((errors[0].error as Error).message).toBe('store down')
     // An event says what happened: a write and an eviction that rejected did not.
     expect(stored).toEqual([])
@@ -324,48 +460,30 @@ describe('a store that never answers', () => {
 
   const never = new Promise<never>(() => {})
 
-  class HungStore implements Cache {
-    get(): Promise<CacheEntry | undefined> {
-      return never
-    }
-    getMany(): Promise<(CacheEntry | undefined)[]> {
+  class HungStore implements HTTPCacheStore {
+    get(): Promise<HTTPCacheEntry | undefined> {
       return never
     }
     put(): Promise<void> {
       return never
     }
-    putMany(): Promise<void> {
-      return never
-    }
-    delete(): Promise<void> {
-      return never
-    }
-    deleteMany(): Promise<void> {
-      return never
-    }
-    clear(): Promise<void> {
+    evictByTag(): Promise<void> {
       return never
     }
   }
 
   @Controller('/store-hung')
   class StoreHungController {
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60, tags: ['pets'] })
     @Get('/data')
     data() {
       return { ok: true }
     }
 
-    @CacheInvalidate()
+    @CacheInvalidate({ tags: ['pets'] })
     @Post('/data')
     create() {
       return { created: true }
-    }
-
-    @CacheInvalidate({ clear: true, segment: 'pets' })
-    @Post('/clear')
-    clear() {
-      return { cleared: true }
     }
   }
   void [StoreHungController]
@@ -385,15 +503,13 @@ describe('a store that never answers', () => {
 
     const read = await app.fetch('/store-hung/data')
     const evicted = await app.fetch('/store-hung/data', { method: 'POST' })
-    const cleared = await app.fetch('/store-hung/clear', { method: 'POST' })
 
     expect(read.status).toBe(200)
     expect(read.headers.get('x-cache')).toBe('MISS')
     expect(await read.json()).toEqual({ ok: true })
     expect(evicted.status).toBe(200)
-    expect(cleared.status).toBe(200)
 
-    expect(errors.map(event => event.operation)).toEqual(['get', 'put', 'delete', 'clear'])
+    expect(errors.map(event => event.operation)).toEqual(['get', 'put', 'evict'])
     for (const event of errors) {
       expect(event.error).toBeInstanceOf(ErrCacheStoreTimeout)
     }
@@ -402,18 +518,18 @@ describe('a store that never answers', () => {
   })
 
   it.each([0, -1, 'soon', Number.NaN])('refuses a storeTimeout of %s', async value => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache()).storeTimeout(value as number)))
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).storeTimeout(value as number)),
+    )
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/storeTimeout must be a positive duration/)
   })
 })
 
-// `MemoryCache` runs on a caller's `LRUCache` as given, `allowStale` included: what the store hands back is
-// checked against the route's ttl rather than believed.
 /**
- * The hooks are not the only writer a store may have: `putMany` exists so an application can fill it ahead of
- * traffic. Such an entry carries no `storedAt`, and is served as one that was just stored.
+ * The hooks are not the only writer a store may have: an application can fill it ahead of traffic. Such an
+ * entry carries no `storedAt`, and is served as one that was just stored.
  */
 describe('an entry the application put in the store itself', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -426,7 +542,7 @@ describe('an entry the application put in the store itself', () => {
 
   it('is served as a hit, with an age of zero', async () => {
     let calls = 0
-    const store = new MemoryCache()
+    const store = new MemoryHTTPCacheStore()
 
     @Controller('/store-warm')
     class WarmStoreController {
@@ -438,13 +554,11 @@ describe('an entry the application put in the store itself', () => {
     }
     void [WarmStoreController]
 
-    await store.putMany([
-      {
-        key: encodeURIComponent('/store-warm/data'),
-        entry: { payload: '{"warm":true}', statusCode: 200, headers: { 'content-type': 'application/json' } },
-        ttl: 60,
-      },
-    ])
+    await store.put(
+      encodeURIComponent('/store-warm/data'),
+      { payload: '{"warm":true}', statusCode: 200, headers: { 'content-type': 'application/json' } },
+      { ttl: 60 },
+    )
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
@@ -458,6 +572,8 @@ describe('an entry the application put in the store itself', () => {
   })
 })
 
+// `MemoryHTTPCacheStore` runs on a caller's `LRUCache` as given, `allowStale` included: what the store hands
+// back is checked against the route's ttl rather than believed.
 describe('a store that hands back an entry past the route ttl', () => {
   let close: (() => Promise<unknown>) | undefined
 
@@ -470,7 +586,7 @@ describe('a store that hands back an entry past the route ttl', () => {
   it('is treated as a miss', async () => {
     let calls = 0
     const misses: CacheMissEvent[] = []
-    const lru = new LRUCache<string, CacheEntry>({ max: 10, allowStale: true, noDeleteOnStaleGet: true })
+    const lru = new LRUCache<string, MemoryHTTPCacheRecord>({ max: 10, allowStale: true, noDeleteOnStaleGet: true })
 
     @Controller('/store-stale')
     class StaleStoreController {
@@ -483,7 +599,7 @@ describe('a store that hands back an entry past the route ttl', () => {
     void [StaleStoreController]
 
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryCache(lru)).observer({ onMiss: event => misses.push(event) })),
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore(lru)).observer({ onMiss: event => misses.push(event) })),
     )
     close = () => app.close()
     await app.ready()

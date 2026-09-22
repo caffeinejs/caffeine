@@ -7,12 +7,12 @@ import {
   type HTTPSetupContext,
 } from '@caffeinejs/http'
 import type { Duration } from '@caffeinejs/std'
+import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
-import type { Cache } from '../store.js'
 import { guardObserver, storeErrorLogger } from './_observe.js'
 import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
@@ -20,6 +20,7 @@ import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_
 import { composeObservers, type CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
+import type { HTTPCacheStore } from './store.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
 export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C>
@@ -60,6 +61,8 @@ export function HTTPCaching<C = unknown>(
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
       storeTimeoutMs: resolveStoreTimeout(resolved.storeTimeout),
+      varyByQuery: resolved.varyByQuery === undefined ? undefined : Object.freeze([...resolved.varyByQuery]),
+      maxEntrySizeBytes: resolveMaxEntrySize(resolved.maxEntrySize),
     })
   }
 }
@@ -79,6 +82,20 @@ function resolveStoreTimeout(value: Duration | undefined): number | undefined {
   return Math.ceil(seconds * 1000)
 }
 
+function resolveMaxEntrySize(value: ByteSize | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  try {
+    return bytes(value)
+  } catch {
+    throw new ErrConfiguration(
+      `Cannot install HTTP caching: maxEntrySize must be a byte size such as 1048576 or "1MB", got "${String(value)}"`,
+    )
+  }
+}
+
 // A store failure is never silent: an observer that listens for it owns the report, otherwise it is logged.
 function withStoreErrorLogger(observer: CacheObserver | undefined, logger: Logger): CacheObserver {
   if (observer === undefined) {
@@ -94,13 +111,16 @@ function build<C>(configure: HTTPCachingConfigurer<C>, context: HTTPSetupContext
   return builder[kBuild]()
 }
 
-// A real Cache instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
+// A real store instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
 // string/symbol — never a plain object — so the two are told apart by shape. `store` has no default: an omitted
 // store, or a token that resolves to nothing, both throw.
-function resolveCache(value: Cache | InjectionToken<Cache> | undefined, container: Container): Cache {
+function resolveCache(
+  value: HTTPCacheStore | InjectionToken<HTTPCacheStore> | undefined,
+  container: Container,
+): HTTPCacheStore {
   if (value === undefined) {
     throw new ErrConfiguration(
-      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryCache())',
+      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryHTTPCacheStore())',
     )
   }
 

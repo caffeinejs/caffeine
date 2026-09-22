@@ -11,11 +11,11 @@ import type { Duration } from '@caffeinejs/std'
 import type { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
-import type { Cache, CacheEntry } from '../store.js'
 import { cacheRouteOf } from './_observe.js'
 import {
   applyStoredHeaders,
   assertConstraintsKeyed,
+  assertTags,
   buildCacheControl,
   defaultCacheKey,
   durationSeconds,
@@ -26,7 +26,8 @@ import {
   storedHeadersOf,
 } from './_util.js'
 import type { CacheBypassReason, CacheObserver } from './observer.js'
-import { withStoreTimeout } from './store_timeout.js'
+import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
+import { withStoreSignal } from './store_signal.js'
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -72,10 +73,20 @@ export interface CacheControlOptions {
    * the store key. `*` means the response is never stored.
    *
    * A route selected by a constraint — a version, a host — shares its URL with the routes selected otherwise, so
-   * it must list the constraint's header here, or have its own `segment` or `key`; it is refused at start-up
-   * otherwise.
+   * it must list the constraint's header here, or have its own `key`; it is refused at start-up otherwise.
    */
   vary?: string[]
+  /**
+   * The query parameters the response depends on. The others are left out of the store key, so `?utm_source=`
+   * does not fragment the cache. `[]` leaves the whole query out. Unset, the install's `varyByQuery` applies,
+   * and without one the whole query counts.
+   */
+  varyByQuery?: string[]
+  /**
+   * The tags the entry is stored under: what `@CacheInvalidate({ tags })`, and `HTTPCacheStore.evictByTag` from
+   * any service, reach it by. Non-empty strings without `{` or `}`; refused at start-up otherwise.
+   */
+  tags?: string[]
   /** `false` sends no `ETag`. A handler's own `ETag` header is always kept, and used instead of a hash. */
   etag?: boolean
   /**
@@ -91,15 +102,7 @@ export interface CacheControlOptions {
    */
   statusCodes?: number[]
   /**
-   * Groups the route's entries so `@CacheInvalidate({ clear: true, segment })` can evict them together — the
-   * only eviction that reaches every variant of a route that varies.
-   *
-   * Constrained routes on one URL need a segment each: two that share one still share a key.
-   */
-  segment?: string
-  /**
-   * Derives the store key instead of the default. An eviction reaches the entry only under this exact key, so a
-   * route keyed here is invalidated with the same function, not with `paths`.
+   * Derives the store key instead of the default. Eviction is by tag, so the key is the cache's own concern.
    *
    * `req` is the request of the handler's own context, so it needs a server the application's adapter drives.
    */
@@ -113,7 +116,7 @@ export interface CacheControlOptions {
 
 /** What the cache hooks need, resolved once at start-up by `HTTPCaching`. */
 export interface CacheDeps {
-  store: Cache
+  store: HTTPCacheStore
   etagGenerator: ETagGenerator | undefined
   statusHeader: string
   /**
@@ -123,21 +126,29 @@ export interface CacheDeps {
   observer?: CacheObserver
   /**
    * Milliseconds a store call may take before the cache goes on without it, reported like a rejection. Left out,
-   * a call is waited for however long it takes.
+   * a call is bounded by the request alone.
    */
   storeTimeoutMs?: number
+  /** The query parameters a store key carries, for a route that does not list its own. Unset: the whole query. */
+  varyByQuery?: readonly string[]
+  /** Bytes. A larger payload is not stored, and `observer.onSkip` is told. Unset: no limit. */
+  maxEntrySizeBytes?: number
 }
 
 /**
  * Attaches the read and store hooks to one route, per its `@CacheControl` options.
  *
- * Serves cacheable responses from and stores them into the {@link Cache} in `deps`, and emits
+ * Serves cacheable responses from and stores them into the {@link HTTPCacheStore} in `deps`, and emits
  * `Cache-Control`/`ETag`/`Vary` headers.
  *
  * A handler that writes its own `Cache-Control` has decided for that response: the header is left as written
  * and the response is not stored. `noStore` and `@CacheControl(false)` are the exceptions, and overwrite it.
  *
- * Not stored either: the response to a `HEAD`, and one that sets a cookie unless the route is `public`.
+ * Not stored either: the response to a `HEAD`, one larger than `maxEntrySize`, and one that sets a cookie
+ * unless the route is `public`; the last two are reported to `observer.onSkip`.
+ *
+ * A store read is bounded by the request's own signal and by `storeTimeout`; a write is bounded by
+ * `storeTimeout` alone, since the entry is for the requests that follow.
  *
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
@@ -147,15 +158,16 @@ export interface CacheDeps {
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
  *
- * @throws ErrConfiguration When a duration is not one, `ttl` is not positive, or the route is constrained and
- *   nothing in its key tells it from the other routes on its URL.
+ * @throws ErrConfiguration When a duration is not one, `ttl` is below one second, a tag is not a non-empty
+ *   string without a brace, or the route is constrained and nothing in its key tells it from the other routes on
+ *   its URL.
  */
 export function attachCacheHooks(
   routeDef: AdapterRouteOptions,
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs } = deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs, maxEntrySizeBytes } = deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
@@ -183,19 +195,24 @@ export function attachCacheHooks(
   const read: CacheControlOptions = opts
   const methods = read.methods?.map(method => method.toUpperCase()) ?? DEFAULT_METHODS
   const statusCodes = read.statusCodes ?? DEFAULT_STATUS_CODES
-  const ttlSeconds = read.ttl === undefined ? undefined : durationSeconds(routeDef, 'ttl', read.ttl, true)
+  const ttlSeconds = read.ttl === undefined ? undefined : durationSeconds(routeDef, 'ttl', read.ttl, 1)
 
   if (read.sharedMaxAge !== undefined) {
-    durationSeconds(routeDef, 'sharedMaxAge', read.sharedMaxAge, false)
+    durationSeconds(routeDef, 'sharedMaxAge', read.sharedMaxAge, 0)
   }
   if (read.staleWhileRevalidate !== undefined) {
-    durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, false)
+    durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, 0)
   }
   if (read.staleIfError !== undefined) {
-    durationSeconds(routeDef, 'staleIfError', read.staleIfError, false)
+    durationSeconds(routeDef, 'staleIfError', read.staleIfError, 0)
   }
 
+  assertTags(routeDef, read.tags, { what: 'caching', required: false })
   assertConstraintsKeyed(routeDef, read)
+
+  const tags: readonly string[] | undefined = read.tags?.length ? Object.freeze([...read.tags]) : undefined
+  const varyByQuery = read.varyByQuery ?? deps.varyByQuery
+  const queryNames = varyByQuery === undefined ? undefined : new Set(varyByQuery)
 
   const policyCacheControl = buildCacheControl(read)
   const privateCacheControl = buildCacheControl(read, 'private')
@@ -206,7 +223,7 @@ export function attachCacheHooks(
   // The context is the one the adapter gave the request before any route hook ran: a key function reads the
   // same request the handler will, and nothing is built for it here.
   const keyOf = (request: AdapterRequest): string =>
-    read.key ? read.key((request as FastifyRequest).httpContext.req) : defaultCacheKey(request, vary)
+    read.key ? read.key((request as FastifyRequest).httpContext.req) : defaultCacheKey(request, vary, queryNames)
 
   // Why this request's response belongs to one client, if it does. A route that says `public` has answered the
   // question; otherwise any proof of identity on the request makes it private — the `Authorization` header
@@ -231,21 +248,21 @@ export function attachCacheHooks(
     if (!methods.includes(request.method)) {
       // No status header here, but the observer still hears of it: leaving it out would drop these requests from
       // every hit ratio computed off the events.
-      observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'method' })
+      observer?.onBypass?.({ route: route!, reason: 'method' })
       return
     }
 
     const privacy = privacyOf(request)
     if (privacy !== undefined) {
       reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, segment: read.segment, reason: privacy })
+      observer?.onBypass?.({ route: route!, reason: privacy })
       return
     }
 
     // RFC 9111 §4.1 — Vary: * always fails to match; never serve from cache
     if (varyAny) {
       reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, segment: read.segment, reason: 'vary-any' })
+      observer?.onBypass?.({ route: route!, reason: 'vary-any' })
       return
     }
 
@@ -262,7 +279,7 @@ export function attachCacheHooks(
             : undefined
     if (bypass !== undefined) {
       reply.header(statusHeader, CACHE_BYPASS)
-      observer?.onBypass?.({ route: route!, segment: read.segment, reason: bypass })
+      observer?.onBypass?.({ route: route!, reason: bypass })
       return
     }
 
@@ -270,21 +287,27 @@ export function attachCacheHooks(
     const key = keyOf(request)
     request.cacheKey = key
 
-    let cached: CacheEntry | undefined
+    let cached: HTTPCacheEntry | undefined
     try {
-      cached = await withStoreTimeout(store.get(key, read.segment), 'get', storeTimeoutMs)
+      cached = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
     } catch (error) {
+      // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+      // nothing to report.
+      if (request.signal.aborted) {
+        return
+      }
+
       // A store that is down costs the cache, not the request.
-      observer?.onError?.({ route: route!, segment: read.segment, operation: 'get', error })
+      observer?.onError?.({ route: route!, operation: 'get', error })
     }
 
     if (!cached) {
       if (directives.onlyIfCached) {
-        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
+        observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
         return reply.code(504).send()
       }
       reply.header(statusHeader, CACHE_MISS)
-      observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'absent' })
+      observer?.onMiss?.({ route: route!, key, reason: 'absent' })
       return
     }
 
@@ -298,16 +321,11 @@ export function attachCacheHooks(
     // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
     if (expired || (directives.maxAge !== undefined && age > directives.maxAge)) {
       if (directives.onlyIfCached) {
-        observer?.onMiss?.({ route: route!, segment: read.segment, key, reason: 'only-if-cached' })
+        observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
         return reply.code(504).send()
       }
       reply.header(statusHeader, CACHE_MISS)
-      observer?.onMiss?.({
-        route: route!,
-        segment: read.segment,
-        key,
-        reason: expired ? 'expired' : 'stale-for-request',
-      })
+      observer?.onMiss?.({ route: route!, key, reason: expired ? 'expired' : 'stale-for-request' })
       return
     }
 
@@ -320,12 +338,12 @@ export function attachCacheHooks(
       cached.statusCode < 300 &&
       isNotModified(request, cached.etag, cached.lastModified)
     ) {
-      observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: true, ageSeconds: age })
+      observer?.onHit?.({ route: route!, key, revalidated: true, ageSeconds: age })
       applyStoredHeaders(reply, cached.headers, true)
       return reply.code(304).header(statusHeader, CACHE_HIT).header('Age', String(age)).send()
     }
 
-    observer?.onHit?.({ route: route!, segment: read.segment, key, revalidated: false, ageSeconds: age })
+    observer?.onHit?.({ route: route!, key, revalidated: false, ageSeconds: age })
     applyStoredHeaders(reply, cached.headers, false)
     reply.status(cached.statusCode).header(statusHeader, CACHE_HIT).header('Age', String(age))
 
@@ -387,56 +405,54 @@ export function attachCacheHooks(
     // RFC 9111 §4.1 — Vary: * means the response must never be cached
     // RFC 9111 §5.2.1.5 — nor is the response to a request that said no-store
     // RFC 9111 §4 — nor the response to a HEAD, which shares the GET's key and may have no body to offer it
-    // A response that sets a cookie is taken for one client's, unless the route said `public`
-    const shouldCache =
+    const storable =
       ttlSeconds !== undefined &&
       request.method !== 'HEAD' &&
       !read.noStore &&
       !isPrivate &&
       !varyAny &&
       !handlerDecides &&
-      (read.privacy === 'public' || !reply.hasHeader('set-cookie')) &&
       isStringOrBuffer &&
       !parseRequestCacheControl(request.headers['cache-control']).noStore
 
-    if (shouldCache) {
-      const lastModified = handlerLastModified ?? new Date().toUTCString()
-      if (handlerLastModified === undefined) {
-        reply.header('Last-Modified', lastModified)
-      }
-
+    if (storable) {
       // The read hook derived it unless it returned before getting that far.
       const key = request.cacheKey ?? keyOf(request)
+      const bytes = typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length
 
-      try {
-        await withStoreTimeout(
-          store.put(
-            key,
-            {
-              payload: payload as string | Buffer,
-              statusCode: reply.statusCode,
-              etag,
-              lastModified,
-              storedAt: Date.now(),
-              headers: storedHeadersOf(reply, statusHeaderName),
-            },
-            read.ttl!,
-            read.segment,
-          ),
-          'put',
-          storeTimeoutMs,
-        )
+      if (read.privacy !== 'public' && reply.hasHeader('set-cookie')) {
+        // A response that sets a cookie is taken for one client's, unless the route said `public`.
+        observer?.onSkip?.({ route: route!, key, reason: 'set-cookie', bytes })
+      } else if (maxEntrySizeBytes !== undefined && bytes > maxEntrySizeBytes) {
+        observer?.onSkip?.({ route: route!, key, reason: 'entry-too-large', bytes })
+      } else {
+        const lastModified = handlerLastModified ?? new Date().toUTCString()
+        if (handlerLastModified === undefined) {
+          reply.header('Last-Modified', lastModified)
+        }
 
-        observer?.onStore?.({
-          route: route!,
-          segment: read.segment,
-          key,
-          bytes: typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length,
-          ttlSeconds,
-        })
-      } catch (error) {
-        // Nothing was stored; the response the handler produced still goes out.
-        observer?.onError?.({ route: route!, segment: read.segment, operation: 'put', error })
+        // Bounded by `storeTimeout` alone: the entry is for the requests that follow, whatever became of this one.
+        try {
+          await withStoreSignal('put', undefined, storeTimeoutMs, signal =>
+            store.put(
+              key,
+              {
+                payload: payload as string | Buffer,
+                statusCode: reply.statusCode,
+                etag,
+                lastModified,
+                storedAt: Date.now(),
+                headers: storedHeadersOf(reply, statusHeaderName),
+              },
+              { ttl: read.ttl!, tags, signal },
+            ),
+          )
+
+          observer?.onStore?.({ route: route!, key, bytes, ttlSeconds, tags })
+        } catch (error) {
+          // Nothing was stored; the response the handler produced still goes out.
+          observer?.onError?.({ route: route!, operation: 'put', error })
+        }
       }
     }
 

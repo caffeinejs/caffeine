@@ -78,7 +78,7 @@ export function storeErrorLogger(log: Logger): CacheObserver {
 
       lastLogged.set(event.operation, now)
       log.error(
-        { err: event.error, route: event.route, segment: event.segment, operation: event.operation },
+        { err: event.error, route: event.route, operation: event.operation },
         `Cache store "${event.operation}" failed; the request went on without the cache`,
       )
     },

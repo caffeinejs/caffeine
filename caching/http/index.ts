@@ -1,7 +1,6 @@
 export type { ETagGenerator } from './cache.js'
 export { attachCacheHooks, type CacheDeps, type CacheControlOptions } from './cache.js'
 export { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
-export { cacheKey, type CacheKeyOptions } from './cache_key.js'
 export { kETagGenerator, kHTTPCacheStore } from './keys.js'
 export type {
   HTTPCacheCallOptions,
@@ -15,7 +14,7 @@ export { HTTPCachingOptionsBuilder } from './options_builder.js'
 export { CacheControl, CacheInvalidate } from './decorators/index.js'
 export { cacheControl, cacheInvalidate } from './helpers/index.js'
 export { HTTPCaching, cachePlugin, type HTTPCachingConfigurer } from './caching.js'
-export { ErrCacheStoreTimeout } from './store_timeout.js'
+export { ErrCacheStoreTimeout } from './store_signal.js'
 export {
   composeObservers,
   type CacheBypassEvent,
@@ -28,6 +27,8 @@ export {
   type CacheObserver,
   type CacheOperation,
   type CacheRoute,
+  type CacheSkipEvent,
+  type CacheSkipReason,
   type CacheStoreEvent,
 } from './observer.js'
 export { loggingCacheObserver, type LoggingCacheObserverOptions } from './logging_observer.js'

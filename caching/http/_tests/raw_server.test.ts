@@ -1,7 +1,7 @@
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { cachePlugin, type CacheStoreEvent } from '../index.js'
 
 /**
@@ -24,7 +24,7 @@ describe('cachePlugin on a server the application does not drive', () => {
     close = () => server.close()
     await server.register(
       cachePlugin({
-        store: new MemoryCache(),
+        store: new MemoryHTTPCacheStore(),
         etagGenerator: undefined,
         statusHeader: 'X-Cache',
         observer: { onStore: event => stored.push(event) },
@@ -52,17 +52,17 @@ describe('cachePlugin on a server the application does not drive', () => {
     let calls = 0
     const server = fastify()
     close = () => server.close()
-    await server.register(cachePlugin({ store: new MemoryCache(), etagGenerator: undefined, statusHeader: 'X-Cache' }))
+    await server.register(cachePlugin({ store: new MemoryHTTPCacheStore(), etagGenerator: undefined, statusHeader: 'X-Cache' }))
     server.route({
       method: 'GET',
       url: '/item',
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60, tags: ['item'] } },
       handler: () => ({ n: ++calls }),
     })
     server.route({
       method: 'PUT',
       url: '/item',
-      config: { cacheInvalidate: {} },
+      config: { cacheInvalidate: { tags: ['item'] } },
       handler: () => ({ ok: true }),
     })
     await server.ready()

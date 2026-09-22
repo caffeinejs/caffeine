@@ -21,8 +21,9 @@ export function routeMethods(routeDef: AdapterRouteOptions): string {
 }
 
 // Canonicalizes a request URL so query parameters in a different order share one cache entry
-// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Sorts the query keys; leaves query-less URLs untouched.
-export function canonicalizeURL(url: string): string {
+// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Keeps only the parameters in `varyByQuery` when there is a list,
+// sorts the rest by key, and leaves a query-less URL untouched.
+export function canonicalizeURL(url: string, varyByQuery?: ReadonlySet<string>): string {
   const queryStart = url.indexOf('?')
   if (queryStart === -1) {
     return url
@@ -30,6 +31,13 @@ export function canonicalizeURL(url: string): string {
 
   const path = url.slice(0, queryStart)
   const params = new URLSearchParams(url.slice(queryStart + 1))
+  if (varyByQuery !== undefined) {
+    for (const name of [...params.keys()]) {
+      if (!varyByQuery.has(name)) {
+        params.delete(name)
+      }
+    }
+  }
   params.sort()
 
   const query = params.toString()
@@ -37,8 +45,7 @@ export function canonicalizeURL(url: string): string {
   return query ? `${path}?${query}` : path
 }
 
-// The one derivation of a store key, over plain values so the hooks, a path and the `cacheKey` helper all go
-// through it.
+// The one derivation of a store key.
 //
 // GET and HEAD have equivalent representations — they share the same cache entry. Other methods include the
 // method in the key to avoid cross-method collisions. When vary headers are configured, their request values are
@@ -48,8 +55,9 @@ export function buildCacheKey(
   url: string,
   vary: readonly string[] | undefined,
   headerOf: (name: string) => string | string[] | undefined,
+  varyByQuery?: ReadonlySet<string>,
 ): string {
-  const canonical = canonicalizeURL(url)
+  const canonical = canonicalizeURL(url, varyByQuery)
   const base = method === 'GET' || method === 'HEAD' ? canonical : `${method}:${canonical}`
   if (!vary?.length) {
     return encodeURIComponent(base)
@@ -60,18 +68,12 @@ export function buildCacheKey(
   return encodeURIComponent(`${base}#${parts.join('&')}`)
 }
 
-export function defaultCacheKey(request: AdapterRequest, vary?: readonly string[]): string {
-  return buildCacheKey(request.method, request.url, vary, name => request.headers[name])
-}
-
-// The key `defaultCacheKey` gives a GET for `path` on a route with no vary — what an invalidation by path must
-// delete. Kept beside `defaultCacheKey` so the two derivations cannot drift apart; the property test pins them.
-export function pathCacheKey(path: string): string {
-  return buildCacheKey('GET', path, undefined, noHeader)
-}
-
-function noHeader(): undefined {
-  return undefined
+export function defaultCacheKey(
+  request: AdapterRequest,
+  vary?: readonly string[],
+  varyByQuery?: ReadonlySet<string>,
+): string {
+  return buildCacheKey(request.method, request.url, vary, name => request.headers[name], varyByQuery)
 }
 
 /** The request directives the cache acts on. */
@@ -343,31 +345,61 @@ export function strictSeconds(value: Duration): number {
 }
 
 // `parseDuration` reads what it cannot parse as 0, and a store reads a ttl of 0 as it pleases — `lru-cache` as
-// "never expires". So a duration is refused while the route registers, not discovered in production.
+// "never expires". So a duration is refused while the route registers, not discovered in production. A `ttl`
+// below one second is refused too: `max-age` is whole seconds, and it would be sent as `max-age=0`.
 export function durationSeconds(
   routeDef: AdapterRouteOptions,
   option: string,
   value: Duration,
-  positive: boolean,
+  minimum: 0 | 1,
 ): number {
   const seconds = strictSeconds(value)
 
-  if (!Number.isFinite(seconds) || seconds < 0 || (positive && seconds === 0)) {
+  if (!Number.isFinite(seconds) || seconds < minimum) {
     throw new ErrConfiguration(
-      `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be a ${
-        positive ? 'positive' : 'non-negative'
-      } duration such as 60 or "5m", got "${String(value)}"`,
+      `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
+        minimum === 1 ? 'at least one second' : 'a non-negative duration'
+      }, such as ${minimum === 1 ? '60' : '0'} or "5m", got "${String(value)}"`,
     )
   }
 
   return seconds
 }
 
+// A tag names a counter in the store, and a brace in a key would decide its slot on a Redis cluster.
+export function assertTags(
+  routeDef: AdapterRouteOptions,
+  tags: unknown,
+  { what, required }: { what: 'caching' | 'cache invalidation'; required: boolean },
+): void {
+  const where = `Cannot install ${what} on "${routeMethods(routeDef)} ${routeDef.url}"`
+
+  if (tags === undefined) {
+    if (required) {
+      throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+    }
+
+    return
+  }
+
+  if (!Array.isArray(tags) || (required && tags.length === 0)) {
+    throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+  }
+
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || tag === '' || tag.includes('{') || tag.includes('}')) {
+      throw new ErrConfiguration(
+        `${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`,
+      )
+    }
+  }
+}
+
 // Routes that share a URL under different constraints share a default key too, so one would be served the
 // other's response. What tells them apart on the wire is the header the constraint reads, which the key carries
-// once the route varies on it; a segment of its own, or its own key function, does the same job.
+// once the route varies on it; a key function of the route's own does the same job.
 export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: CacheControlOptions): void {
-  if (opts.ttl === undefined || opts.key !== undefined || opts.segment || opts.vary?.includes('*')) {
+  if (opts.ttl === undefined || opts.key !== undefined || opts.vary?.includes('*')) {
     return
   }
 
@@ -391,13 +423,13 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
   for (const [name, header] of headers) {
     if (header === undefined) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route its own "segment" or a "key" function`,
+        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
       )
     }
 
     if (!vary.has(header.toLowerCase())) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route its own "segment" or a "key" function`,
+        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
       )
     }
   }

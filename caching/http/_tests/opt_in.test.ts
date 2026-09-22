@@ -2,9 +2,8 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Cache } from '../../store.js'
-import { MemoryCache } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching, kETagGenerator } from '../index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
+import { CacheControl, HTTPCaching, kETagGenerator, type HTTPCacheStore } from '../index.js'
 
 describe('caching is opt-in', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -51,7 +50,7 @@ describe('caching is opt-in', () => {
 
   // A generator someone named and forgot to bind is a mistake, not a request for the default one.
   it('throws ErrConfiguration when the etagGenerator token resolves to nothing', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache()).etagGenerator(kETagGenerator)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)))
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(
@@ -61,7 +60,7 @@ describe('caching is opt-in', () => {
 
   // A token someone named and bound nothing to is a mistake to surface, not a reason to run without a store.
   it('throws ErrConfiguration when the store token resolves to nothing', async () => {
-    const kStore = token<Cache>(Symbol('optin.unbound-store'))
+    const kStore = token<HTTPCacheStore>(Symbol('optin.unbound-store'))
     const app = createWebApplication().with(HTTPCaching(b => b.store(kStore)))
     close = () => app.close()
 
@@ -88,26 +87,16 @@ describe('caching is opt-in', () => {
   })
 
   it('resolves a container-bound store passed as a token', async () => {
-    class MapStore implements Cache {
+    class MapStore implements HTTPCacheStore {
       readonly ops: string[] = []
       async get() {
         this.ops.push('get')
         return undefined
       }
-      async getMany(keys: string[]) {
-        return Promise.all(keys.map(() => this.get()))
-      }
       async put() {
         this.ops.push('put')
       }
-      async putMany(items: unknown[]) {
-        for (const _ of items) {
-          await this.put()
-        }
-      }
-      async delete() {}
-      async deleteMany() {}
-      async clear() {}
+      async evictByTag() {}
     }
 
     @Controller('/optin-token-store')
@@ -144,7 +133,7 @@ describe('caching is opt-in', () => {
     }
     void [HeaderController]
 
-    const app = createWebApplication({}).with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Edge')))
+    const app = createWebApplication({}).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Edge')))
     close = () => app.close()
     await app.ready()
 
