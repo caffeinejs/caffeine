@@ -2,7 +2,14 @@ export type { ETagGenerator } from './cache.js'
 export { attachCacheHooks, type CacheDeps, type CacheControlOptions } from './cache.js'
 export { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
 export { cacheKey, type CacheKeyOptions } from './cache_key.js'
-export { kETagGenerator } from './keys.js'
+export { kETagGenerator, kHTTPCacheStore } from './keys.js'
+export type {
+  HTTPCacheCallOptions,
+  HTTPCacheEntry,
+  HTTPCacheGetOptions,
+  HTTPCachePutOptions,
+  HTTPCacheStore,
+} from './store.js'
 export type { HTTPCachingOptions } from './options.js'
 export { HTTPCachingOptionsBuilder } from './options_builder.js'
 export { CacheControl, CacheInvalidate } from './decorators/index.js'
