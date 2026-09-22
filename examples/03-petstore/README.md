@@ -18,7 +18,8 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 - **Multipart upload** (`$multipart.file()`), and the OpenAPI 3.2 **QUERY** search verb.
 - **Generated API docs** via `@caffeinejs/openapi`: an OpenAPI 3.2 document derived from the routes themselves —
   controllers and routers alike — plus a Scalar UI at `/docs`.
-- **Configuration** in one schema, one file: `src/app.config.ts`. Nothing in this app reads `process.env`.
+- **Configuration** in one schema, one file: `src/app.config.ts`. The application reads nothing from
+  `process.env`; Prisma reads `DATABASE_URL` for itself.
 - **Structured logging** with pino, at a level the configuration chooses.
 - **Kubernetes probes** via `.with(health())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
@@ -110,20 +111,26 @@ if that is how you are running it.
 ## Configuration
 
 Everything this app reads from its environment is declared once, in [src/app.config.ts](src/app.config.ts):
-the server address, the log level, the docs credentials and the GitHub OAuth settings. Nothing else reads
-`process.env`.
+the server address, the log level, the docs credentials and the GitHub OAuth settings. Nothing in the
+application reads `process.env`.
+
+The one variable outside that schema is `DATABASE_URL`, and it is Prisma's: `prisma/schema.prisma` reads it
+directly, for the client and for `prisma migrate` and the seed, which is why it carries no `PETSTORE_` prefix.
+`src/main.ts` and `prisma.config.ts` load `.env` so it is set for both.
 
 Every block is optional. A block nobody sets resolves to its field defaults, so `npm start` works with no `.env`
 at all — see [.env.example](.env.example) for the variables and their defaults. A double underscore separates
 path segments, and each segment folds to lower case, which is why the keys are spelled `clientId` and
 `callbackUrl`:
 
-| Variable                             | Sets                   |
-| ------------------------------------ | ---------------------- |
-| `PETSTORE_SERVER__PORT`              | `server.port`          |
-| `PETSTORE_LOG__LEVEL`                | `log.level`            |
-| `PETSTORE_DOCS__USER` / `__PASSWORD` | the Basic credentials  |
-| `PETSTORE_AUTH__GITHUB__CLIENT_ID`   | `auth.github.clientId` |
+| Variable                              | Sets                                |
+| ------------------------------------- | ----------------------------------- |
+| `PETSTORE_SERVER__PORT`               | `server.port`                       |
+| `PETSTORE_LOG__LEVEL`                 | `log.level`                         |
+| `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials               |
+| `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`              |
+| `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`           |
+| `DATABASE_URL`                        | Prisma's datasource, not the schema |
 
 > Earlier revisions of this example used a `PETSTOREDEMO_AUTH_GITHUB_*` prefix with single underscores. If you
 > have an old `.env`, rename those four variables.
@@ -223,6 +230,11 @@ name, an avatar URL, an error message — carries it, because none of that text 
 ## Local development (without Docker)
 
 Needs a reachable PostgreSQL and `DATABASE_URL` (copy `.env.example` → `.env`).
+
+Open **http://localhost:9999**, not the `http://127.0.0.1:9999` the startup log prints for a wildcard bind. The
+GitHub callback URL names `localhost`, and the sign-in sets its state cookie for the host the browser is on: a
+sign-in started on `127.0.0.1` comes back to `localhost` without it and fails with `missing state cookie`. The
+log says so with a second line whenever the two differ.
 
 Root `npm run build` (`tsc`) does **not** produce the `caffeine` CLI binary. Build it once (after clone, clean, or
 whenever `node_modules/.bin/caffeine` is missing) before generate/build:

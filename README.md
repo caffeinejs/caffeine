@@ -6,7 +6,8 @@
 
 <p align="center">
   Modular, batteries-included TypeScript framework for server-side applications.<br>
-  Built on standard TC39 decorators. End-to-end type safety.
+  Built on standard ECMAScript decorators.<br>
+  End-to-end type safety.
 </p>
 
 <p align="center">
@@ -19,7 +20,7 @@
 
 CaffeineJS is a TypeScript framework for building server-side applications. It is a monorepo of focused `@caffeinejs/*` packages — an IoC container, HTTP, configuration, messaging, caching, resilience, and more — so an application depends on the pieces it uses and nothing else.
 
-It is built on standard TC39 decorators, with no `experimentalDecorators`, `emitDecoratorMetadata` or `reflect-metadata` anywhere, and it carries types end to end: the configuration schema, the route handler and the HTTP client all check against the same definitions.
+It is built on standard ECMAScript decorators, with no `experimentalDecorators`, `emitDecoratorMetadata` or `reflect-metadata` anywhere, and it carries types end to end: the configuration schema, the route handler and the HTTP client all check against the same definitions.
 
 > [!WARNING]
 > Work in progress. Nothing is published to npm yet, and the public API changes without notice.

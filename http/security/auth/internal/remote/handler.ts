@@ -607,7 +607,14 @@ export abstract class RemoteAuthenticationHandler<
 
       const stateCookie = ctx.req.cookie(stateCookieName)
       if (!stateCookie) {
-        throw this.callbackFailure('missing state cookie')
+        // The one host a browser sends it to is the callback URL's, so a sign-in that started on another —
+        // 127.0.0.1 for a callback on localhost — comes back without it, as does one older than the state's
+        // lifetime. Which host that was is not knowable here; naming the one it had to be is what makes the
+        // failure actionable rather than read as a cookie bug.
+        throw this.callbackFailure(
+          `missing state cookie: the sign-in must start on the callback URL host "${new URL(this.options.callbackURL).host}"` +
+            ` and come back within ${STATE_TTL_SECONDS / 60} minutes`,
+        )
       }
 
       let stored: RemoteAuthenticationState

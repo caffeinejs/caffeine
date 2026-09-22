@@ -1903,6 +1903,17 @@ describe('OIDCAuthenticationHandler', () => {
       await expect(handler.processCallback(ctx)).rejects.toThrow('missing state cookie')
     })
 
+    // A sign-in started on 127.0.0.1 whose provider comes back to localhost: the cookie exists, on the other host,
+    // and the callback cannot see which host that was. Naming the one host it is ever sent to is what makes the
+    // failure actionable rather than read as a cookie bug.
+    it('names the callback URL host and the state lifetime when the state cookie is missing', async () => {
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const { ctx } = makeCtx({ url: CALLBACK_PATH, query: { code: 'c', state: 'st' } })
+      await expect(handler.processCallback(ctx)).rejects.toThrow(
+        'missing state cookie: the sign-in must start on the callback URL host "app.example.com" and come back within 10 minutes',
+      )
+    })
+
     it('throws when state param does not match stored state', async () => {
       const stateCookieJWT = await encodeState(
         {
