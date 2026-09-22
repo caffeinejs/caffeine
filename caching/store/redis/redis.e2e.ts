@@ -16,8 +16,15 @@ import { createClient, createCluster } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { HTTPCaching, cacheControl, cacheInvalidate } from '../../http/index.js'
+import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
 import { describeCacheContract } from '../../store.testkit.js'
-import { RedisCache, type RedisCacheClient, type RedisCacheCommands } from './index.js'
+import {
+  RedisCache,
+  RedisHTTPCacheStore,
+  type RedisCacheClient,
+  type RedisCacheCommands,
+  type RedisHTTPCacheClient,
+} from './index.js'
 
 // Copies of `test/e2e/internal`'s two helpers: this spec is inside the package's check project, which takes no
 // file from outside the package.
@@ -46,10 +53,11 @@ function required(service: string, up: boolean): boolean {
   return up
 }
 
-interface Connection extends RedisCacheClient {
-  connect(): Promise<unknown>
-  close(): Promise<unknown> | void
-}
+type Connection = RedisCacheClient &
+  RedisHTTPCacheClient & {
+    connect(): Promise<unknown>
+    close(): Promise<unknown> | void
+  }
 
 // Every server the suite runs against. Adding a server is adding a row; the cases below run once per row.
 const SERVERS: { name: string; url: string; connect: (url: string) => Connection }[] = [
@@ -70,31 +78,47 @@ const SERVERS: { name: string; url: string; connect: (url: string) => Connection
 // Probed once, up front, so a row whose server is down skips on its own and the others still run.
 const targets = await Promise.all(SERVERS.map(async server => ({ ...server, up: await reachable(server.url) })))
 
-const FORBIDDEN = ['scan', 'scanIterator', 'keys', 'flushDb', 'flushAll', 'mGet', 'mSet', 'del', 'eval', 'evalSha']
+const FORBIDDEN = [
+  'scan',
+  'scanIterator',
+  'keys',
+  'flushDb',
+  'flushAll',
+  'mGet',
+  'mSet',
+  'del',
+  'eval',
+  'evalSha',
+  'multi',
+]
 
 /** Hands the store its commands through a recorder, so a test can say what went to the server and what never did. */
-function recording(client: RedisCacheClient) {
+function recording(client: RedisCacheClient & RedisHTTPCacheClient) {
   const sent: { command: string; key: unknown }[] = []
 
-  const wrapped: RedisCacheClient = {
-    withTypeMapping(mapping) {
-      const view = client.withTypeMapping(mapping) as unknown as Record<string, (...args: unknown[]) => unknown>
+  // A view bound to a signal is a view like any other: what it sends is recorded the same way.
+  const record = <T extends object>(view: T): T =>
+    new Proxy(view as Record<string, (...args: unknown[]) => unknown>, {
+      get(target, property: string) {
+        const member = target[property]
+        if (typeof member !== 'function') {
+          return member
+        }
+        if (property === 'withAbortSignal') {
+          return (signal: AbortSignal) => record(member.call(target, signal) as object)
+        }
 
-      return new Proxy(view, {
-        get(target, property: string) {
-          const member = target[property]
-          if (typeof member !== 'function') {
-            return member
-          }
+        return (...args: unknown[]) => {
+          sent.push({ command: property, key: args[0] })
+          return member.apply(target, args)
+        }
+      },
+    }) as unknown as T
 
-          return (...args: unknown[]) => {
-            sent.push({ command: property, key: args[0] })
-            return member.apply(target, args)
-          }
-        },
-      }) as unknown as RedisCacheCommands
-    },
-  }
+  const wrapped: RedisCacheClient & RedisHTTPCacheClient = {
+    withTypeMapping: mapping => record(client.withTypeMapping(mapping) as RedisCacheCommands & RedisHTTPCacheClient),
+    withCommandOptions: options => record(client.withCommandOptions(options)),
+  } as RedisCacheClient & RedisHTTPCacheClient
 
   return { client: wrapped, sent }
 }
@@ -252,6 +276,118 @@ describe.each(targets)('RedisCache over $name', ({ name, url, up, connect }) => 
       expect(sent.filter(item => FORBIDDEN.includes(item.command))).toEqual([])
       // Each of these was handed one key, never a list of them, so nothing the store sent could cross a slot.
       expect(new Set(sent.map(item => item.command))).toEqual(new Set(['get', 'hmGet', 'hSetEx', 'unlink', 'incr']))
+      expect(sent.filter(item => typeof item.key !== 'string')).toEqual([])
+    })
+  })
+})
+
+const httpEntry = (payload: string | Buffer) => ({ payload, statusCode: 200, headers: {} })
+
+describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, connect }) => {
+  if (!up) {
+    it('is skipped, its server being down', () => {
+      expect(required(name, up)).toBe(false)
+    })
+  }
+
+  describe.skipIf(!up)(url, () => {
+    let client: Connection
+    const sent: { command: string; key: unknown }[] = []
+
+    const newStore = () => {
+      const recorded = recording(client)
+      const prefix = `caffeine:cache:e2e:${randomUUID()}:`
+
+      return { store: new RedisHTTPCacheStore(recorded.client, { prefix }), sent: recorded.sent, prefix }
+    }
+
+    beforeAll(async () => {
+      client = connect(url)
+      await client.connect()
+    })
+
+    afterAll(async () => {
+      await client?.close()
+    })
+
+    describeHTTPCacheStoreContract(name, () => {
+      const created = newStore()
+      // Shared with the last case below, which reads back everything the contract made the store send.
+      created.sent.push = (...items) => sent.push(...items)
+      return created.store
+    })
+
+    it('evicts a tag with one INCR, whatever it covers', async () => {
+      const { store, sent: commands } = newStore()
+      await Promise.all(
+        Array.from({ length: 50 }, (_, i) =>
+          store.put(`/pets/${i}`, httpEntry(`pet ${i}`), { ttl: 60, tags: ['pets'] }),
+        ),
+      )
+      commands.length = 0
+
+      await store.evictByTag('pets')
+
+      expect(commands.map(item => item.command)).toEqual(['incr'])
+      expect(await store.get('/pets/0', { tags: ['pets'] })).toBeUndefined()
+      expect(await store.get('/pets/49')).toBeUndefined()
+    })
+
+    // Two application instances share the server, not the process: one evicting a tag is a miss on the other.
+    it('lets one instance evict what another instance reads', async () => {
+      const prefix = `caffeine:cache:e2e:${randomUUID()}:`
+      const writer = new RedisHTTPCacheStore(client, { prefix })
+      const reader = new RedisHTTPCacheStore(client, { prefix })
+      const stranger = new RedisHTTPCacheStore(client, { prefix: `${prefix}other:` })
+
+      await writer.put('k', httpEntry('shared'), { ttl: 60, tags: ['pets'] })
+      await stranger.put('k', httpEntry('theirs'), { ttl: 60, tags: ['pets'] })
+      expect((await reader.get('k', { tags: ['pets'] }))?.payload).toBe('shared')
+
+      await writer.evictByTag('pets')
+
+      expect(await reader.get('k', { tags: ['pets'] })).toBeUndefined()
+      expect((await stranger.get('k', { tags: ['pets'] }))?.payload).toBe('theirs')
+    })
+
+    // Keys carry no hash tag and scatter over the slots, an entry's tag counters included: a call's commands must
+    // still go through, which they only do when no command names two of them.
+    it('reads, writes and evicts entries whose keys fall in different slots', async () => {
+      const { store } = newStore()
+      const keys = Array.from({ length: 40 }, (_, i) => `/scattered/${i}`)
+
+      await Promise.all(keys.map(key => store.put(key, httpEntry(key), { ttl: 60, tags: ['scattered', key] })))
+      expect(
+        (await Promise.all(keys.map(key => store.get(key, { tags: ['scattered', key] })))).map(r => r?.payload),
+      ).toEqual(keys)
+
+      await store.evictByTag(keys.slice(0, 20))
+      expect((await Promise.all(keys.map(key => store.get(key)))).filter(read => read !== undefined)).toHaveLength(20)
+
+      await store.evictByTag('scattered')
+      expect((await Promise.all(keys.map(key => store.get(key)))).every(read => read === undefined)).toBe(true)
+    })
+
+    it('sends nothing for a call whose signal is already aborted', async () => {
+      const { store, sent: commands } = newStore()
+      await store.put('k', httpEntry('v'), { ttl: 60, tags: ['pets'] })
+      commands.length = 0
+      const signal = AbortSignal.abort()
+
+      await expect(store.get('k', { tags: ['pets'], signal })).rejects.toThrow()
+      await expect(store.put('k', httpEntry('w'), { ttl: 60, signal })).rejects.toThrow()
+      await expect(store.evictByTag('pets', { signal })).rejects.toThrow()
+
+      expect(commands).toEqual([])
+      expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('v')
+    })
+
+    // Last on purpose: it reads back what every case of the contract made the store send.
+    it('never walked the keyspace, flushed, ran a script, or named two keys in one command', () => {
+      expect(sent.length).toBeGreaterThan(0)
+      expect(sent.filter(item => FORBIDDEN.includes(item.command))).toEqual([])
+      // Each of these was handed one key, never a list of them, so nothing the store sent could cross a slot.
+      expect(new Set(sent.map(item => item.command))).toEqual(new Set(['get', 'hmGet', 'hSetEx', 'incr']))
       expect(sent.filter(item => typeof item.key !== 'string')).toEqual([])
     })
   })
