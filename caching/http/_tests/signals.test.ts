@@ -1,12 +1,15 @@
 import { connect } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { Controller, Get, createWebApplication } from '@caffeinejs/http'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import {
+  CacheControl,
   ErrCacheStoreTimeout,
+  HTTPCaching,
   cachePlugin,
   type CacheErrorEvent,
   type HTTPCacheCallOptions,
@@ -158,6 +161,53 @@ describe('the signal a store call carries', () => {
     await sleep(20)
     expect(errors).toEqual([])
   })
+})
+
+describe('storeTimeout on HTTPCaching', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  // A store that neither answers nor rejects — a client queueing commands for a server that is away — would
+  // otherwise hold every request on a cached route for as long as the request itself lasts.
+  it('defaults to 2s: a read that never answers is given up on then, and the request goes on', async () => {
+    @Controller('/default-timeout')
+    class DefaultTimeoutController {
+      @Get('/data')
+      @CacheControl({ ttl: 60 })
+      data() {
+        return { ok: true }
+      }
+    }
+    void [DefaultTimeoutController]
+
+    const errors: CacheErrorEvent[] = []
+    const store: HTTPCacheStore = {
+      get: (_key, options) =>
+        new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true })
+        }),
+      put: () => Promise.resolve(),
+      evictByTag: () => Promise.resolve(),
+    }
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer({ onError: e => errors.push(e) })))
+    close = () => app.close()
+    await app.ready()
+
+    const started = Date.now()
+    const res = await app.fetch('/default-timeout/data')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-cache')).toBe('MISS')
+    expect(Date.now() - started).toBeGreaterThanOrEqual(1900)
+    expect(errors).toHaveLength(1)
+    expect(errors[0].operation).toBe('get')
+    expect(errors[0].error).toBeInstanceOf(ErrCacheStoreTimeout)
+    expect((errors[0].error as Error).message).toContain('2000ms')
+  }, 10_000)
 })
 
 async function waitFor(condition: () => boolean): Promise<void> {

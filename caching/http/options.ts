@@ -45,8 +45,8 @@ export interface HTTPCachingOptions {
    * How long one store call may take. Past it the request goes on without the cache — a read is a miss, a write
    * or an eviction is skipped — and `observer.onError` is handed an `ErrCacheStoreTimeout`. Must be positive.
    *
-   * There is no default: left out, a store that neither answers nor rejects holds every request on a cached
-   * route. A client that queues commands while its server is away is such a store.
+   * Defaults to `2s`: a store that neither answers nor rejects, such as a client queueing commands while its
+   * server is away, holds a request that long at most.
    */
   storeTimeout?: Duration
   /**

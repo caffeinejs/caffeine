@@ -121,12 +121,13 @@ still short-circuits — and logs on the application logger at most once a minut
 A store that never answers is not a store that rejects: a node-redis client queues commands while its server is
 away. Every store call goes through `withStoreSignal` (`store_signal.ts`) and carries a signal the store is
 expected to honour: a read gets the request's own `request.signal` (client gone, or Fastify's `handlerTimeout`)
-composed with `storeTimeout`'s through `AbortSignal.any`; a write or an eviction gets the timeout alone — a
+composed with `storeTimeout`'s on one `AbortController`; a write or an eviction gets the timeout alone — a
 leader whose client left has done the work its followers wait for, and an eviction follows a mutation that
 already went through. When the timeout is what aborted, the hook rejects with `ErrCacheStoreTimeout` whatever
-the store rejects with; when the request is over, the `catch` returns and reports nothing. `storeTimeout` has
-no default; without it and with no request signal the call is handed back as it came — no timer, no second
-promise. Keep it that way: the write path runs on every miss.
+the store rejects with; when the request is over, the `catch` returns and reports nothing. `HTTPCaching` sets
+`storeTimeout` to `2s` unless told otherwise, so every call carries one controller and one timer, both gone when
+the call settles — keep the timer cleared on settle, the write path runs on every miss. A hand-built `CacheDeps`
+without `storeTimeoutMs` hands the call back as it came: no timer, no second promise.
 
 `request.signal` costs one `AbortController` and one `'close'` listener per request the first time it is read,
 unless the server configured `handlerTimeout`, when Fastify pre-creates it. Accepted: a cached route pays a store
@@ -262,7 +263,7 @@ a connected node-redis client through a structural interface and owns nothing ab
 - Every call binds the signal it is handed to every command of the call: `withTypeMapping(...).withAbortSignal(...)`
   on a single-server client, which keeps the client's default command options, and `withCommandOptions({
 typeMapping, abortSignal })` on a cluster client, which has no `withAbortSignal` and whose `withCommandOptions`
-  replaces them — so on a cluster a call with a signal runs without the client's default command timeout. A queued
+  replaces them — so on a cluster a call runs under `storeTimeout` and not the client's command timeout. A queued
   command is taken out of the client's offline queue when the signal aborts, which a unit test proves on a real
   `createClient()` that never reaches its server. Every key of a call is derived before a command goes out, so a
   refused tag sends nothing.

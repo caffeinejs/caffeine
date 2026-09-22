@@ -151,8 +151,8 @@ export interface CacheDeps {
    */
   observer?: CacheObserver
   /**
-   * Milliseconds a store call may take before the cache goes on without it, reported like a rejection. Left out,
-   * a call is bounded by the request alone.
+   * Milliseconds a store call may take before the cache goes on without it, reported like a rejection.
+   * `HTTPCaching` sets `2s` unless told otherwise; left out here, a call is bounded by the request alone.
    */
   storeTimeoutMs?: number
   /** The query parameters a store key carries, for a route that does not list its own. Unset: the whole query. */

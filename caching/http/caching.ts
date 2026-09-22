@@ -36,8 +36,8 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  *
  * An `observer` that throws is caught; its first throw from each method is logged on the application logger. A
  * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
- * failure itself when the observer does not listen for it. A store that never answers is bounded only by
- * `storeTimeout`, which has no default.
+ * failure itself when the observer does not listen for it. A store that never answers is given up on after
+ * `storeTimeout`, `2s` unless set.
  *
  * Concurrent misses for one key run the handler once: the first request leads, the others wait, up to
  * `lockTimeout`, for what it stores. The wait is in this process alone.
@@ -64,7 +64,7 @@ export function HTTPCaching<C = unknown>(
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
-      storeTimeoutMs: resolveTimeout('storeTimeout', resolved.storeTimeout, undefined),
+      storeTimeoutMs: resolveTimeout('storeTimeout', resolved.storeTimeout, DEFAULT_STORE_TIMEOUT_MS),
       // One table per install: a root install and a group install have stores of their own, and flights too.
       flights: new Map() as FlightTable,
       lockTimeoutMs: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT_MS),
@@ -74,6 +74,7 @@ export function HTTPCaching<C = unknown>(
   }
 }
 
+const DEFAULT_STORE_TIMEOUT_MS = 2_000
 const DEFAULT_LOCK_TIMEOUT_MS = 10_000
 
 function resolveTimeout<D extends number | undefined>(

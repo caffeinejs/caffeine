@@ -1,10 +1,36 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { ErrCacheStoreTimeout, withStoreSignal } from './store_signal.js'
 
 describe('withStoreSignal', () => {
+  // With a default timeout every store call has a timer: one that outlived its call would be one per call, alive
+  // for the whole timeout.
+  it('clears its timer when the call settles first', async () => {
+    vi.useFakeTimers()
+    try {
+      await expect(withStoreSignal('get', undefined, 1000, () => Promise.resolve('entry'))).resolves.toBe('entry')
+      expect(vi.getTimerCount()).toBe(0)
+
+      await expect(withStoreSignal('put', undefined, 1000, () => Promise.reject(new Error('down')))).rejects.toThrow(
+        'down',
+      )
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('calls nothing for a request already over, and rejects with its reason', async () => {
+    const request = new AbortController()
+    request.abort(new Error('client gone'))
+    const call = vi.fn(() => Promise.resolve('entry'))
+
+    await expect(withStoreSignal('get', request.signal, 1000, call)).rejects.toThrow('client gone')
+    expect(call).not.toHaveBeenCalled()
+  })
+
   // The unbounded path is the default one, and it runs on every request of a cached route.
   it('hands the call the request signal as is, and no timer, when no timeout is set', async () => {
     const request = new AbortController().signal

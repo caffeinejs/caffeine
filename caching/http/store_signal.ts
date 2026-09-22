@@ -14,10 +14,11 @@ export class ErrCacheStoreTimeout extends Error {
  * Runs one store call under the signal it is owed: the request's, `storeTimeout`'s, both, or none.
  *
  * With no timeout the call is handed the request signal as is — no timer, no promise of this function's own.
- * With one, the call gets a signal that aborts with either, and the promise handed back rejects with
+ * With one, the call gets a signal of its own that aborts with either, and the promise handed back rejects with
  * {@link ErrCacheStoreTimeout} when the timeout is what aborted it, or with the request signal's reason
- * otherwise. The hook's listener is registered ahead of the store's, so the store's own abort rejection, which
- * arrives second, lands on a promise already settled.
+ * otherwise; a request already over is rejected with its reason and the store is not called. The hook's listener
+ * is registered ahead of the store's, so the store's own abort rejection, which arrives second, lands on a
+ * promise already settled. Nothing outlives the call: its timer and listeners go when it settles.
  */
 export function withStoreSignal<T>(
   operation: CacheOperation,
@@ -29,29 +30,48 @@ export function withStoreSignal<T>(
     return call(requestSignal)
   }
 
-  const timeout = AbortSignal.timeout(timeoutMs)
-  const signal = requestSignal === undefined ? timeout : AbortSignal.any([requestSignal, timeout])
+  if (requestSignal?.aborted) {
+    return Promise.reject(requestSignal.reason)
+  }
+
+  const controller = new AbortController()
+  const { signal } = controller
+  const timer = setTimeout(() => controller.abort(new ErrCacheStoreTimeout(operation, timeoutMs)), timeoutMs)
+  timer.unref()
+
+  const onRequestAbort = () => controller.abort(requestSignal!.reason)
+  requestSignal?.addEventListener('abort', onRequestAbort, { once: true })
 
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(timeout.aborted ? new ErrCacheStoreTimeout(operation, timeoutMs) : signal.reason)
+    function settle() {
+      clearTimeout(timer)
+      requestSignal?.removeEventListener('abort', onRequestAbort)
+      signal.removeEventListener('abort', onAbort)
+    }
+
+    function onAbort() {
+      settle()
+      reject(signal.reason)
+    }
+
     signal.addEventListener('abort', onAbort, { once: true })
 
     let pending: Promise<T>
     try {
       pending = call(signal)
     } catch (error) {
-      signal.removeEventListener('abort', onAbort)
+      settle()
       reject(error)
       return
     }
 
     pending.then(
       value => {
-        signal.removeEventListener('abort', onAbort)
+        settle()
         resolve(value)
       },
       (error: unknown) => {
-        signal.removeEventListener('abort', onAbort)
+        settle()
         reject(error)
       },
     )

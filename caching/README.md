@@ -289,7 +289,7 @@ context, with the `container` and the application `logger`.
 | `statusHeader`  | The cache status header's name. Default `X-Cache`.                                                                                        |
 | `varyByQuery`   | The query parameters a key carries, for every route that does not list its own.                                                           |
 | `maxEntrySize`  | The largest payload stored: `'1MB'`, `'512kb'`, or a number of bytes. A larger response goes out and is not stored, and `onSkip` is told. |
-| `storeTimeout`  | How long one store call may take. No default. See "When the store fails".                                                                 |
+| `storeTimeout`  | How long one store call may take. Default `2s`. See "When the store fails".                                                               |
 | `lockTimeout`   | How long a request waits for another's handler run. Default `10s`.                                                                        |
 
 `store`, `etagGenerator` and `observer` each take the value or a container token. A token bound to nothing fails
@@ -342,8 +342,8 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
   is safe on a cluster and on a shared server.
 - Every call carries the signal the cache hands it, so a command a request gave up on is taken out of the
   client's queue. On a single-server client that keeps the client's own command options; a cluster client has
-  no way to bind a signal without replacing them, so there a call with a signal runs without the client's default
-  command timeout, and the signal is its bound.
+  no way to bind a signal without replacing them, so there a call runs under `storeTimeout` and not the client's
+  command timeout.
 - Run the server with `noeviction` or a `volatile-*` policy. Under `allkeys-*` the server may evict a tag's
   counter, and entries evicted earlier can become readable again until their own `ttl`.
 - `prefix` is put in front of every key as given, with no separator of the store's own: `''` puts nothing in
@@ -386,8 +386,7 @@ A store that never answers is bounded by the signal each call carries. A read is
 signal — the client gone, or the server's handler timeout — and by `storeTimeout`; a write or an eviction by
 `storeTimeout` alone, since the entry is for the requests that follow and the eviction follows a mutation that
 already went through. A call past `storeTimeout` is given up on and reported like a rejection, with an
-`ErrCacheStoreTimeout`. There is no default: set one. A read given up on because the request is over is not
-reported.
+`ErrCacheStoreTimeout`. The default is `2s`. A read given up on because the request is over is not reported.
 
 ```ts
 HTTPCaching(b => b.store(store).storeTimeout('250ms'))

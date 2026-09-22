@@ -54,8 +54,8 @@ export interface RedisHTTPCacheView extends RedisHTTPCacheCommands {
  *
  * A call with a signal binds it through `withAbortSignal` where the client has it, which keeps the client's own
  * command options. A cluster client has no `withAbortSignal`, so the signal goes through `withCommandOptions`,
- * which replaces those options: on a cluster, a call with a signal runs without the client's default command
- * timeout, and the signal is its only bound.
+ * which replaces those options: on a cluster, a call runs under the cache's `storeTimeout` and not the client's
+ * command timeout.
  */
 export interface RedisHTTPCacheClient {
   withTypeMapping(typeMapping: BufferMapping): RedisHTTPCacheView
