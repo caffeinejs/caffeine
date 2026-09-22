@@ -52,7 +52,9 @@ describe('cachePlugin on a server the application does not drive', () => {
     let calls = 0
     const server = fastify()
     close = () => server.close()
-    await server.register(cachePlugin({ store: new MemoryHTTPCacheStore(), etagGenerator: undefined, statusHeader: 'X-Cache' }))
+    await server.register(
+      cachePlugin({ store: new MemoryHTTPCacheStore(), etagGenerator: undefined, statusHeader: 'X-Cache' }),
+    )
     server.route({
       method: 'GET',
       url: '/item',

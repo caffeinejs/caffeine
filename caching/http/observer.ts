@@ -37,6 +37,8 @@ export type CacheMissReason =
   | 'expired'
   /** Nothing the request accepts is stored and it said `only-if-cached`, so it was answered `504`. */
   | 'only-if-cached'
+  /** The request waited on another's handler run, which stored nothing it could use, so it ran the handler itself. */
+  | 'not-coalesced'
 
 /** Why a response the policy would have stored was left out. */
 export type CacheSkipReason =
@@ -68,6 +70,8 @@ export interface CacheHitEvent {
   readonly revalidated: boolean
   /** Apparent age of the served entry, in whole seconds. `0` when the store did not record `storedAt`. */
   readonly ageSeconds: number
+  /** `true` when the request waited on another's handler run and was served what it stored. */
+  readonly coalesced: boolean
 }
 
 export interface CacheStoreEvent {

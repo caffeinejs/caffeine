@@ -50,7 +50,9 @@ describe('caching is opt-in', () => {
 
   // A generator someone named and forgot to bind is a mistake, not a request for the default one.
   it('throws ErrConfiguration when the etagGenerator token resolves to nothing', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)))
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)),
+    )
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(
@@ -133,7 +135,9 @@ describe('caching is opt-in', () => {
     }
     void [HeaderController]
 
-    const app = createWebApplication({}).with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Edge')))
+    const app = createWebApplication({}).with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Edge')),
+    )
     close = () => app.close()
     await app.ready()
 

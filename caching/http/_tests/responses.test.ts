@@ -443,7 +443,11 @@ describe('a request authenticated without an Authorization header', () => {
           }
         })
       })
-      .with(HTTPCaching(b => (observer ? b.store(new MemoryHTTPCacheStore()).observer(observer) : b.store(new MemoryHTTPCacheStore()))))
+      .with(
+        HTTPCaching(b =>
+          observer ? b.store(new MemoryHTTPCacheStore()).observer(observer) : b.store(new MemoryHTTPCacheStore()),
+        ),
+      )
   }
 
   it('is answered privately, is not stored, and is not served what someone else stored', async () => {

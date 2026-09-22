@@ -24,10 +24,15 @@ import {
   parseRequestCacheControl,
   pragmaNoCache,
   storedHeadersOf,
+  type RequestCacheControl,
 } from './_util.js'
-import type { CacheBypassReason, CacheObserver } from './observer.js'
+import { Flight, type FlightTable } from './flight.js'
+import type { CacheBypassReason, CacheMissReason, CacheObserver } from './observer.js'
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
 import { withStoreSignal } from './store_signal.js'
+
+/** What a hook that finishes synchronously calls, with the payload as Fastify hands it on. */
+type OnSendNext = (err: Error | null, payload?: unknown) => void
 
 const DEFAULT_METHODS = ['GET', 'HEAD']
 const DEFAULT_STATUS_CODES = [200]
@@ -90,6 +95,12 @@ export interface CacheControlOptions {
   /** `false` sends no `ETag`. A handler's own `ETag` header is always kept, and used instead of a hash. */
   etag?: boolean
   /**
+   * `false` lets every concurrent miss run the handler. On by default: the first miss for a key runs the handler
+   * and the others wait, up to the install's `lockTimeout`, for what it stores. A route whose handler hijacks
+   * the reply or streams should turn it off, since such a response settles nothing before the timeout.
+   */
+  lock?: boolean
+  /**
    * The request methods whose responses are cached. Defaults to `GET` and `HEAD`.
    *
    * The default key is built from the method, the URL and the `vary` headers, never the body: a `POST` listed
@@ -133,6 +144,10 @@ export interface CacheDeps {
   varyByQuery?: readonly string[]
   /** Bytes. A larger payload is not stored, and `observer.onSkip` is told. Unset: no limit. */
   maxEntrySizeBytes?: number
+  /** The install's flights, one table per install. Absent, with `lockTimeoutMs`, concurrent misses each run the handler. */
+  flights?: FlightTable
+  /** How long a follower waits on a flight, in milliseconds. */
+  lockTimeoutMs?: number
 }
 
 /**
@@ -149,6 +164,12 @@ export interface CacheDeps {
  *
  * A store read is bounded by the request's own signal and by `storeTimeout`; a write is bounded by
  * `storeTimeout` alone, since the entry is for the requests that follow.
+ *
+ * Concurrent misses for one key run the handler once. The first leads and the rest wait on its flight; when
+ * it stored, they are served the entry (`coalesced` on the hit event), otherwise they run the handler themselves
+ * (`not-coalesced` on the miss event). A `HEAD` never leads, since its response is never stored, but it does
+ * wait. The leader settles the flight from its store hook, and a flight settles itself at `lockTimeout` for a
+ * leader whose store hook never runs.
  *
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
@@ -167,7 +188,8 @@ export function attachCacheHooks(
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs, maxEntrySizeBytes } = deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs, maxEntrySizeBytes, flights, lockTimeoutMs } =
+    deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
@@ -177,7 +199,7 @@ export function attachCacheHooks(
   if (opts === false) {
     // @CacheControl(false): actively disable caching with the full set of no-cache headers. The restrictive
     // form, so it is written over whatever the handler set.
-    addRouteHook(routeDef, 'onSend', async function onSend(_request: AdapterRequest, reply: AdapterReply, payload) {
+    addRouteHook(routeDef, 'onSend', function onSend(_request, reply, payload, next: OnSendNext) {
       reply.header('Cache-Control', 'no-store, max-age=0, must-revalidate, proxy-revalidate')
       reply.header('Expires', '0')
       reply.header('Pragma', 'no-cache')
@@ -185,7 +207,7 @@ export function attachCacheHooks(
       reply.header(statusHeader, CACHE_BYPASS)
       observer?.onBypass?.({ route: route!, reason: 'disabled' })
 
-      return payload
+      next(null, payload)
     })
 
     return
@@ -213,6 +235,14 @@ export function attachCacheHooks(
   const tags: readonly string[] | undefined = read.tags?.length ? Object.freeze([...read.tags]) : undefined
   const varyByQuery = read.varyByQuery ?? deps.varyByQuery
   const queryNames = varyByQuery === undefined ? undefined : new Set(varyByQuery)
+
+  // A route that can never store never creates a flight: followers would wait for nothing.
+  const lockable =
+    read.lock !== false &&
+    flights !== undefined &&
+    lockTimeoutMs !== undefined &&
+    ttlSeconds !== undefined &&
+    !read.noStore
 
   const policyCacheControl = buildCacheControl(read)
   const privateCacheControl = buildCacheControl(read, 'private')
@@ -288,6 +318,7 @@ export function attachCacheHooks(
     request.cacheKey = key
 
     let cached: HTTPCacheEntry | undefined
+    let readFailed = false
     try {
       cached = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
     } catch (error) {
@@ -298,37 +329,113 @@ export function attachCacheHooks(
       }
 
       // A store that is down costs the cache, not the request.
+      readFailed = true
       observer?.onError?.({ route: route!, operation: 'get', error })
     }
 
-    if (!cached) {
-      if (directives.onlyIfCached) {
-        observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
-        return reply.code(504).send()
+    if (cached !== undefined) {
+      const age = ageOf(cached)
+      if (accepts(age, directives.maxAge)) {
+        return serve(request, reply, cached, age, false)
       }
-      reply.header(statusHeader, CACHE_MISS)
-      observer?.onMiss?.({ route: route!, key, reason: 'absent' })
-      return
+
+      return miss(request, reply, key, directives, expired(age) ? 'expired' : 'stale-for-request', !readFailed)
     }
 
-    // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
-    const age = cached.storedAt ? Math.max(0, Math.floor((Date.now() - cached.storedAt) / 1000)) : 0
+    return miss(request, reply, key, directives, 'absent', !readFailed)
+  }
 
-    // A store is trusted to expire its entries, not relied on to: one that hands back an entry past the route's
-    // ttl has nothing fresh to offer.
-    const expired = ttlSeconds !== undefined && age > ttlSeconds
+  // RFC 9111 §4.2.3 — apparent age of the stored response, in whole seconds.
+  function ageOf(entry: HTTPCacheEntry): number {
+    return entry.storedAt ? Math.max(0, Math.floor((Date.now() - entry.storedAt) / 1000)) : 0
+  }
 
-    // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
-    if (expired || (directives.maxAge !== undefined && age > directives.maxAge)) {
-      if (directives.onlyIfCached) {
-        observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
-        return reply.code(504).send()
-      }
-      reply.header(statusHeader, CACHE_MISS)
-      observer?.onMiss?.({ route: route!, key, reason: expired ? 'expired' : 'stale-for-request' })
-      return
+  // A store is trusted to expire its entries, not relied on to: one that hands back an entry past the route's
+  // ttl has nothing fresh to offer.
+  function expired(age: number): boolean {
+    return ttlSeconds !== undefined && age > ttlSeconds
+  }
+
+  // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
+  function accepts(age: number, maxAge: number | undefined): boolean {
+    return !expired(age) && (maxAge === undefined || age <= maxAge)
+  }
+
+  // Nothing to serve. A miss either joins the flight already running the handler for this key, or starts one and
+  // runs the handler itself. A miss the store could not even be asked about does neither: there would be nothing
+  // for a follower to read.
+  async function miss(
+    request: AdapterRequest,
+    reply: AdapterReply,
+    key: string,
+    directives: RequestCacheControl,
+    reason: CacheMissReason,
+    canJoin: boolean,
+  ): Promise<unknown> {
+    if (directives.onlyIfCached) {
+      observer?.onMiss?.({ route: route!, key, reason: 'only-if-cached' })
+      return reply.code(504).send()
     }
 
+    if (lockable && canJoin) {
+      const flight = flights!.get(key)
+      if (flight !== undefined) {
+        return follow(request, reply, key, directives, flight)
+      }
+
+      // A HEAD never leads: its response is never stored, so it would release its followers to nothing.
+      if (request.method !== 'HEAD') {
+        request.cacheFlight = new Flight(flights!, key, lockTimeoutMs!)
+      }
+    }
+
+    reply.header(statusHeader, CACHE_MISS)
+    observer?.onMiss?.({ route: route!, key, reason })
+
+    return
+  }
+
+  async function follow(
+    request: AdapterRequest,
+    reply: AdapterReply,
+    key: string,
+    directives: RequestCacheControl,
+    flight: Flight,
+  ): Promise<unknown> {
+    if ((await flight.done) === 'stored') {
+      let again: HTTPCacheEntry | undefined
+      try {
+        again = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
+      } catch (error) {
+        if (request.signal.aborted) {
+          return
+        }
+
+        observer?.onError?.({ route: route!, operation: 'get', error })
+      }
+
+      if (again !== undefined) {
+        const age = ageOf(again)
+        if (accepts(age, directives.maxAge)) {
+          return serve(request, reply, again, age, true)
+        }
+      }
+    }
+
+    // What the leader did is no use to this request: it runs the handler itself, and leads nobody.
+    reply.header(statusHeader, CACHE_MISS)
+    observer?.onMiss?.({ route: route!, key, reason: 'not-coalesced' })
+
+    return
+  }
+
+  function serve(
+    request: AdapterRequest,
+    reply: AdapterReply,
+    cached: HTTPCacheEntry,
+    age: number,
+    coalesced: boolean,
+  ): unknown {
     request.responseCached = true
 
     // RFC 9110 §13.2.1 — preconditions apply to GET and HEAD, and only where the answer would be a 2xx.
@@ -338,12 +445,12 @@ export function attachCacheHooks(
       cached.statusCode < 300 &&
       isNotModified(request, cached.etag, cached.lastModified)
     ) {
-      observer?.onHit?.({ route: route!, key, revalidated: true, ageSeconds: age })
+      observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: true, ageSeconds: age, coalesced })
       applyStoredHeaders(reply, cached.headers, true)
       return reply.code(304).header(statusHeader, CACHE_HIT).header('Age', String(age)).send()
     }
 
-    observer?.onHit?.({ route: route!, key, revalidated: false, ageSeconds: age })
+    observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: false, ageSeconds: age, coalesced })
     applyStoredHeaders(reply, cached.headers, false)
     reply.status(cached.statusCode).header(statusHeader, CACHE_HIT).header('Age', String(age))
 
@@ -352,11 +459,22 @@ export function attachCacheHooks(
     return reply.send(cached.payload)
   }
 
-  // Before sending the response,
-  // we need to build the cache control headers and store the response in the cache
-  async function onSend(request: AdapterRequest, reply: AdapterReply, payload: unknown) {
+  // The store hook: emits the cache headers and stores the response. A leader settles its flight here, whatever
+  // happened — `stored` once the write landed, `not-stored` on every other way out, the throw included.
+  //
+  // Fastify runs a hook on the promise it hands back, or on the `next` it calls. A response the policy caches
+  // awaits the store; every other one is finished here and now, so a response Fastify sends while this route's
+  // read hook is still waiting on the store — its handler timeout's 503 — is over before that hook returns, and
+  // the lifecycle stops there instead of sending a second time.
+  function onSend(
+    request: AdapterRequest,
+    reply: AdapterReply,
+    payload: unknown,
+    next: OnSendNext,
+  ): void | Promise<unknown> {
     if (request.responseCached) {
-      return payload
+      next(null, payload)
+      return
     }
 
     // On every response of the route, whatever its status (RFC 9110 §12.5.5), and added to what other plugins
@@ -377,9 +495,20 @@ export function attachCacheHooks(
         reply.header('Cache-Control', 'no-store')
       }
 
-      return payload
+      request.cacheFlight?.settle('not-stored')
+      next(null, payload)
+      return
     }
 
+    return send(request, reply, payload, handlerDecides).finally(() => request.cacheFlight?.settle('not-stored'))
+  }
+
+  async function send(
+    request: AdapterRequest,
+    reply: AdapterReply,
+    payload: unknown,
+    handlerDecides: boolean,
+  ): Promise<unknown> {
     const isPrivate = privacyOf(request) !== undefined
 
     if (!handlerDecides || read.noStore) {
@@ -448,6 +577,7 @@ export function attachCacheHooks(
             ),
           )
 
+          request.cacheFlight?.settle('stored')
           observer?.onStore?.({ route: route!, key, bytes, ttlSeconds, tags })
         } catch (error) {
           // Nothing was stored; the response the handler produced still goes out.

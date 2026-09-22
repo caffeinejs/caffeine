@@ -240,7 +240,12 @@ describe('a response left out of the store', () => {
   it('is larger than maxEntrySize: it goes out, is not stored, and is reported', async () => {
     const skips: CacheSkipEvent[] = []
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize(100).observer({ onSkip: e => skips.push(e) })),
+      HTTPCaching(b =>
+        b
+          .store(new MemoryHTTPCacheStore())
+          .maxEntrySize(100)
+          .observer({ onSkip: e => skips.push(e) }),
+      ),
     )
     close = () => app.close()
     await app.ready()

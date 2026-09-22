@@ -17,6 +17,7 @@ import { guardObserver, storeErrorLogger } from './_observe.js'
 import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
+import type { FlightTable } from './flight.js'
 import { composeObservers, type CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
@@ -37,6 +38,9 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
  * failure itself when the observer does not listen for it. A store that never answers is bounded only by
  * `storeTimeout`, which has no default.
+ *
+ * Concurrent misses for one key run the handler once: the first request leads, the others wait, up to
+ * `lockTimeout`, for what it stores. The wait is in this process alone.
  *
  * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
  * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
@@ -60,22 +64,31 @@ export function HTTPCaching<C = unknown>(
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
-      storeTimeoutMs: resolveStoreTimeout(resolved.storeTimeout),
+      storeTimeoutMs: resolveTimeout('storeTimeout', resolved.storeTimeout, undefined),
+      // One table per install: a root install and a group install have stores of their own, and flights too.
+      flights: new Map() as FlightTable,
+      lockTimeoutMs: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT_MS),
       varyByQuery: resolved.varyByQuery === undefined ? undefined : Object.freeze([...resolved.varyByQuery]),
       maxEntrySizeBytes: resolveMaxEntrySize(resolved.maxEntrySize),
     })
   }
 }
 
-function resolveStoreTimeout(value: Duration | undefined): number | undefined {
+const DEFAULT_LOCK_TIMEOUT_MS = 10_000
+
+function resolveTimeout<D extends number | undefined>(
+  option: 'storeTimeout' | 'lockTimeout',
+  value: Duration | undefined,
+  fallback: D,
+): number | D {
   if (value === undefined) {
-    return undefined
+    return fallback
   }
 
   const seconds = strictSeconds(value)
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new ErrConfiguration(
-      `Cannot install HTTP caching: storeTimeout must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+      `Cannot install HTTP caching: ${option} must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
     )
   }
 
@@ -215,6 +228,10 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
 
     if (!instance.hasRequestDecorator('cacheKey')) {
       instance.decorateRequest('cacheKey', null)
+    }
+
+    if (!instance.hasRequestDecorator('cacheFlight')) {
+      instance.decorateRequest('cacheFlight', null)
     }
 
     instance.addHook('onRoute', routeOptions => {

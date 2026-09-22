@@ -22,6 +22,7 @@ export class HTTPCachingOptionsBuilder {
   #statusHeader: string | undefined
   #observer: CacheObserver | InjectionToken<CacheObserver> | undefined
   #storeTimeout: Duration | undefined
+  #lockTimeout: Duration | undefined
   #varyByQuery: string[] | undefined
   #maxEntrySize: ByteSize | undefined
 
@@ -55,6 +56,12 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
+  /** How long a request waits for another's handler run on the same key before running the handler itself. Default `10s`. */
+  lockTimeout(timeout: Duration): this {
+    this.#lockTimeout = timeout
+    return this
+  }
+
   /** The query parameters a store key carries, for every route that does not list its own. `[]` leaves the query out. */
   varyByQuery(names: string[]): this {
     this.#varyByQuery = names
@@ -74,6 +81,7 @@ export class HTTPCachingOptionsBuilder {
       statusHeader: this.#statusHeader,
       observer: this.#observer,
       storeTimeout: this.#storeTimeout,
+      lockTimeout: this.#lockTimeout,
       varyByQuery: this.#varyByQuery,
       maxEntrySize: this.#maxEntrySize,
     }

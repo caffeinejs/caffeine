@@ -36,20 +36,29 @@ export function attachCacheInvalidateHook(
   // RFC 9111 §4.4 — a non-error response, 2xx or 3xx, invalidates: a 303 after a form post evicts like a 200.
   // The event fires once the store settled: an eviction that rejected did not happen, and it costs the cache,
   // never the response to a mutation that already went through. The mutation is done, so the eviction is not
-  // tied to the request's own signal.
-  async function invalidateHandler(_request: AdapterRequest, reply: AdapterReply): Promise<unknown> {
+  // tied to the request's own signal. A response that evicts nothing is finished here and now, through `next`,
+  // the way the cache hooks finish one (see `attachCacheHooks`).
+  function invalidateHandler(
+    _request: AdapterRequest,
+    reply: AdapterReply,
+    payload: unknown,
+    next: (err: Error | null, payload?: unknown) => void,
+  ): void | Promise<unknown> {
     if (reply.statusCode < 200 || reply.statusCode >= 400) {
+      next(null, payload)
       return
     }
 
+    return evict().then(() => payload)
+  }
+
+  async function evict(): Promise<void> {
     try {
       await withStoreSignal('evict', undefined, storeTimeoutMs, signal => store.evictByTag(tags, { signal }))
       observer?.onInvalidate?.({ route: route!, tags })
     } catch (error) {
       observer?.onError?.({ route: route!, operation: 'evict', error })
     }
-
-    return
   }
 
   addRouteHook(routeDef, 'onSend', invalidateHandler)

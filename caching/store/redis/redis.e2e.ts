@@ -47,9 +47,9 @@ function required(service: string, up: boolean): boolean {
 }
 
 type Connection = RedisHTTPCacheClient & {
-    connect(): Promise<unknown>
-    close(): Promise<unknown> | void
-  }
+  connect(): Promise<unknown>
+  close(): Promise<unknown> | void
+}
 
 // Every server the suite runs against. Adding a server is adding a row; the cases below run once per row.
 const SERVERS: { name: string; url: string; connect: (url: string) => Connection }[] = [

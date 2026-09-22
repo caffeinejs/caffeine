@@ -29,6 +29,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
           route: event.route,
           revalidated: event.revalidated,
           ageSeconds: event.ageSeconds,
+          coalesced: event.coalesced,
           ...(includeKeys && { key: event.key }),
         },
         'cache hit',

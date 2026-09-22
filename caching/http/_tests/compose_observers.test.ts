@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { composeObservers, type CacheHitEvent, type CacheObserver, type CacheRoute } from '../observer.js'
 
 const route: CacheRoute = Object.freeze({ method: 'GET', url: '/pets/:id' })
-const hit: CacheHitEvent = { route, key: '%2Fpets%2F1', revalidated: false, ageSeconds: 3 }
+const hit: CacheHitEvent = { route, key: '%2Fpets%2F1', revalidated: false, ageSeconds: 3, coalesced: false }
 
 describe('composeObservers', () => {
   it('hands every event to each observer, in argument order', () => {

@@ -13,8 +13,8 @@ import {
 import { afterEach, describe, it, expect } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
 import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
+import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
 
 // Every application a case builds is closed after it, whether or not it got as far as `ready()`.
 const opened: { close(): Promise<unknown> }[] = []
@@ -2180,7 +2180,9 @@ describe('X-Cache status header', () => {
     }
     void [XCCustomController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-My-Cache')))
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-My-Cache')),
+    )
     await app.ready()
 
     const res = await app.fetch('/xc-custom/data')

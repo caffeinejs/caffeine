@@ -50,6 +50,12 @@ export interface HTTPCachingOptions {
    */
   storeTimeout?: Duration
   /**
+   * How long a request waits for another's handler run on the same key before running the handler itself.
+   * Defaults to `10s`. Concurrent misses for one key run the handler once: the first leads, the rest wait for
+   * what it stores. `@CacheControl({ lock: false })` takes a route out of it.
+   */
+  lockTimeout?: Duration
+  /**
    * The query parameters a store key carries, for every route of this install that does not list its own.
    * Parameters outside the list, `utm_source` for one, do not fragment the cache. `[]` leaves the whole query
    * out; unset, the whole query counts.

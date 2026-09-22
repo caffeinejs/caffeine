@@ -1,7 +1,7 @@
 import { connect } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import fastify, { type FastifyInstance } from 'fastify'
+import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -135,7 +135,7 @@ describe('the signal a store call carries', () => {
 
     expect(res.statusCode).toBe(503)
     expect(store.signalOf('get')?.aborted).toBe(true)
-    expect((store.signalOf('get')?.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
+    expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
     expect(errors).toEqual([])
   })
 
@@ -169,6 +169,3 @@ async function waitFor(condition: () => boolean): Promise<void> {
   }
   throw new Error('Condition not met in time')
 }
-
-// `FastifyInstance` is imported so the helper's return type is nameable; the route config is what the plugin reads.
-export type { FastifyInstance }

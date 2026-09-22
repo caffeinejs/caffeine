@@ -388,9 +388,7 @@ export function assertTags(
 
   for (const tag of tags) {
     if (typeof tag !== 'string' || tag === '' || tag.includes('{') || tag.includes('}')) {
-      throw new ErrConfiguration(
-        `${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`,
-      )
+      throw new ErrConfiguration(`${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`)
     }
   }
 }
