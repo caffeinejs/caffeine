@@ -242,6 +242,10 @@ describe('a response left out of the store', () => {
     stream() {
       return Readable.from(['str', 'eam'])
     }
+
+    @CacheControl({ ttl: 60 })
+    @Get('/empty')
+    empty() {}
   }
   void [SkipController]
 
@@ -310,6 +314,33 @@ describe('a response left out of the store', () => {
       })
       expect(skip).not.toHaveProperty('bytes')
     }
+  })
+
+  // A handler that returned nothing: the server sends an empty body, and there is nothing to hash or replay.
+  // Without a report the route is a miss forever, indistinguishable from a store that keeps rejecting.
+  it('has no body: it goes out, is not stored, and is reported with a size of zero', async () => {
+    const skips: CacheSkipEvent[] = []
+    const stores: unknown[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b =>
+        b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e), onStore: e => stores.push(e) }),
+      ),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    const first = await app.fetch('/skip/empty')
+    const second = await app.fetch('/skip/empty')
+
+    expect(first.status).toBe(200)
+    expect(await first.text()).toBe('')
+    expect(first.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(stores).toEqual([])
+    expect(skips).toMatchObject([
+      { route: { url: '/skip/empty' }, reason: 'empty', bytes: 0 },
+      { route: { url: '/skip/empty' }, reason: 'empty', bytes: 0 },
+    ])
   })
 
   it('refuses a maxEntrySize that is not a byte size at start-up', async () => {

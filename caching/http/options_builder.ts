@@ -26,19 +26,21 @@ export class HTTPCachingOptionsBuilder {
   #varyByQuery: string[] | undefined
   #maxEntrySize: ByteSize | undefined
 
-  /** The store backing cached responses, or a token to resolve one from the container. */
+  /** The store backing cached responses, or a token to resolve one from the container. Required. */
   store(store: HTTPCacheStore | InjectionToken<HTTPCacheStore>): this {
     this.#store = store
     return this
   }
 
-  /** The function hashing a payload into an `ETag`, or a token to resolve one from the container. */
+  /** The function hashing a payload into an `ETag`, or a token to resolve one from the container. Default: an internal SHA-1 hash. */
+
   etagGenerator(generator: ETagGenerator | InjectionToken<ETagGenerator>): this {
     this.#etagGenerator = generator
     return this
   }
 
-  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
+  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/STALE/BYPASS. */
+
   statusHeader(name: string): this {
     this.#statusHeader = name
     return this
@@ -50,7 +52,8 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
-  /** How long one store call may take before the request goes on without the cache. No default. */
+  /** How long one store call may take before the request goes on without the cache. Default `2s`. */
+
   storeTimeout(timeout: Duration): this {
     this.#storeTimeout = timeout
     return this
@@ -68,7 +71,8 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
-  /** The largest payload stored; a larger response goes out and is not stored. */
+  /** The largest payload stored; a larger response goes out and is not stored. Unset: no limit. */
+
   maxEntrySize(size: ByteSize): this {
     this.#maxEntrySize = size
     return this

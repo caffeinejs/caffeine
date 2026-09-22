@@ -66,8 +66,16 @@ describe('the signal a store call carries', () => {
 
   async function start(store: RecordingStore, options: { storeTimeoutMs?: number; handlerTimeout?: number } = {}) {
     const errors: CacheErrorEvent[] = []
+    const sends = { n: 0 }
+    const handled = { n: 0 }
     const server = fastify(options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout })
     close = () => server.close()
+    // Ahead of the cache's own store hook, and finishing through `done` as that one does: what is counted is
+    // every send Fastify starts, and nothing here holds one open.
+    server.addHook('onSend', (_request, _reply, payload, done) => {
+      sends.n++
+      done(null, payload)
+    })
     await server.register(
       cachePlugin({
         store,
@@ -81,8 +89,12 @@ describe('the signal a store call carries', () => {
       method: 'GET',
       url: '/data',
       config: { cache: { ttl: 60, tags: ['data'] } },
-      handler: () => ({ ok: true }),
+      handler: () => {
+        handled.n++
+        return { ok: true }
+      },
     })
+
     server.route({
       method: 'POST',
       url: '/data',
@@ -91,7 +103,7 @@ describe('the signal a store call carries', () => {
     })
     await server.ready()
 
-    return { server, errors }
+    return { server, errors, sends, handled }
   }
 
   it('hands a read the request signal and a write no signal at all, with no storeTimeout', async () => {
@@ -129,17 +141,32 @@ describe('the signal a store call carries', () => {
   })
 
   // Fastify answers 503 and aborts the request signal; the read stops with it, and it is not a store failure.
+  // The 503 is over before the read hook returns, since the store hook finished it through `done` rather than
+  // a promise, so the lifecycle stops there: the handler never runs, and nothing is sent a second time.
   it('lets a handler timeout take the read out, and reports nothing', async () => {
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
     const store = new RecordingStore()
     store.hang = true
-    const { server, errors } = await start(store, { handlerTimeout: 50 })
+    const { server, errors, sends, handled } = await start(store, { handlerTimeout: 50 })
 
-    const res = await server.inject('/data')
+    try {
+      const res = await server.inject('/data')
 
-    expect(res.statusCode).toBe(503)
-    expect(store.signalOf('get')?.aborted).toBe(true)
-    expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
-    expect(errors).toEqual([])
+      expect(res.statusCode).toBe(503)
+      expect(store.signalOf('get')?.aborted).toBe(true)
+      expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
+      expect(errors).toEqual([])
+
+      await sleep(20)
+      expect(handled.n).toBe(0)
+      expect(sends.n).toBe(1)
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
   })
 
   it('lets a client that disconnects take the read out, and reports nothing', async () => {

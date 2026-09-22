@@ -84,6 +84,8 @@ Three more responses are never stored. The response to a `HEAD`: it shares the `
 route says `privacy: 'public'`: the request that starts a session is not authenticated yet, so the privacy check
 below does not see it; `Set-Cookie` stays in `NOT_STORED` either way. And a payload larger than `maxEntrySize`.
 The last two are reported to `observer.onSkip`; the `HEAD` is not, being the policy and not an exception to it.
+So are a stream (`stream`) and a handler that returned nothing (`empty`, the one shape Fastify hands `onSend`
+that is neither a string, a `Buffer` nor a stream): nothing to hash, nothing to replay, a miss again next time.
 
 A request is private when the route says so, when it carries `Authorization`, or when an authentication scheme
 identified the client some other way (`request.user.authenticated` — a session cookie, OIDC, forward auth).
@@ -266,7 +268,8 @@ a connected node-redis client through a structural interface and owns nothing ab
   one event-loop tick in one socket write, so a `Promise.all` of single-key commands is one round trip on a
   server and one fan-out on a cluster. A hinted `get` is one round trip (`HMGET` and the tag `GET`s together;
   only a tag the entry carries that the hint did not name costs a second batch), a `put` two (the counters, then
-  the `HSETEX`), an eviction one. A batch is awaited as one so that no command is left to reject unhandled.
+  the `HSETEX`; one for an untagged entry), an eviction one.
+  A batch is awaited as one so that no command is left to reject unhandled.
 - Every call binds the signal it is handed to every command of the call: `withTypeMapping(...).withAbortSignal(...)`
   on a single-server client, which keeps the client's default command options, and `withCommandOptions({
 typeMapping, abortSignal })` on a cluster client, which has no `withAbortSignal` and whose `withCommandOptions`

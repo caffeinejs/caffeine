@@ -233,6 +233,104 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(spy.retentions).toEqual([90, 90, 60, 60])
   })
 
+  // The other two directives that require revalidation: the same rule, and the window is not announced either.
+  it('forbids it under proxyRevalidate and noCache too, and tells no cache downstream otherwise', async () => {
+    const calls = { proxy: 0, nocache: 0 }
+
+    @Controller('/swr-revalidate')
+    class RevalidateController {
+      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300, proxyRevalidate: true })
+      @Get('/proxy')
+      proxy() {
+        return { n: ++calls.proxy }
+      }
+
+      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300, noCache: true })
+      @Get('/nocache')
+      nocache() {
+        return { n: ++calls.nocache }
+      }
+    }
+    void [RevalidateController]
+
+    const spy = new RetentionSpy()
+    const recording = new Recording()
+    const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
+    close = () => app.close()
+    await app.ready()
+
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const proxy = await app.fetch('/swr-revalidate/proxy')
+    const nocache = await app.fetch('/swr-revalidate/nocache')
+    expect(proxy.headers.get('cache-control')).toBe('public, proxy-revalidate, max-age=60')
+    expect(nocache.headers.get('cache-control')).toBe('no-cache, public, max-age=60')
+    age(70)
+
+    // A client that would take a stale entry is not given one: the handler runs.
+    const proxyAgain = await app.fetch('/swr-revalidate/proxy', { headers: { 'cache-control': 'max-stale' } })
+    const nocacheAgain = await app.fetch('/swr-revalidate/nocache', { headers: { 'cache-control': 'max-stale' } })
+    expect(proxyAgain.headers.get('x-cache')).toBe('MISS')
+    expect(nocacheAgain.headers.get('x-cache')).toBe('MISS')
+    expect(calls).toEqual({ proxy: 2, nocache: 2 })
+    expect(recording.hits).toEqual([])
+
+    // Kept for the freshness lifetime alone.
+    expect(spy.retentions).toEqual([60, 60, 60, 60])
+  })
+
+  it('keeps an entry for the longer of the two windows when a route declares both', async () => {
+    let calls = 0
+    let failing = false
+    const g = gate()
+
+    @Controller('/swr-sie')
+    class BothController {
+      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300 })
+      @Get('/data')
+      async data() {
+        calls++
+        if (failing) {
+          throw new Error('backend down')
+        }
+        if (calls === 2) {
+          await g.hold()
+        }
+        return { n: calls }
+      }
+    }
+    void [BothController]
+
+    const spy = new RetentionSpy()
+    const recording = new Recording()
+    const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
+    close = () => app.close()
+    await app.ready()
+
+    vi.useFakeTimers({ toFake: ['Date'] })
+    await app.fetch('/swr-sie/data')
+    age(70)
+
+    // Within stale-while-revalidate: the follower is served the entry while the leader refreshes it.
+    const leader = app.fetch('/swr-sie/data')
+    await g.seen
+    const follower = await app.fetch('/swr-sie/data')
+    expect(follower.headers.get('x-cache')).toBe('STALE')
+    expect(await follower.json()).toEqual({ n: 1 })
+    g.open()
+    expect((await leader).headers.get('x-cache')).toBe('MISS')
+
+    // Past stale-while-revalidate, within stale-if-error: the refreshed entry stands in for the failure.
+    age(100)
+    failing = true
+    const rescued = await app.fetch('/swr-sie/data')
+    expect(rescued.status).toBe(200)
+    expect(rescued.headers.get('x-cache')).toBe('STALE')
+    expect(await rescued.json()).toEqual({ n: 2 })
+
+    expect(recording.rescues).toHaveLength(1)
+    expect(spy.retentions).toEqual([360, 360])
+  })
+
   it('never serves stale to a request the entry does not satisfy, nor to only-if-cached', async () => {
     let calls = 0
     let holding = false
@@ -522,6 +620,14 @@ describe('stale-if-error, served by the store', () => {
     expect(revalidated.status).toBe(304)
     expect(revalidated.headers.get('x-cache')).toBe('STALE')
     expect(await revalidated.text()).toBe('')
+
+    const head = await app.fetch('/sie/data', {
+      method: 'HEAD',
+      headers: { 'if-none-match': stored.headers.get('etag')! },
+    })
+    expect(head.status).toBe(304)
+    expect(head.headers.get('x-cache')).toBe('STALE')
+    expect(await head.text()).toBe('')
   })
 
   it('serves the followers of a rescued leader the same stale entry', async () => {

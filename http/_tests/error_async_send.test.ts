@@ -40,13 +40,17 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
     process.on('unhandledRejection', onUnhandled)
 
+    let runs = 0
+
     try {
       const slowSend: FastifyPluginAsync = async instance => {
         instance.addHook('onSend', async (_request, _reply, payload) => {
+          runs++
           await sleep(1)
           return payload
         })
       }
+
       const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
       close = () => app.close()
       await app.ready()
@@ -69,9 +73,12 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     }
 
     expect(unhandled).toEqual([])
+    // One send per request: a second would have run the hook again.
+    expect(runs).toBe(2)
   })
 
   // The other way an error is answered: a `@Catch` handler that redirects and hands nothing back. The send is
+
   // the context's, so the runner must wait on it rather than read the handler's `undefined` as one of its own.
   it('leaves the response to a @Catch handler that answered from the context', async () => {
     @Controller('/err-async-redirect')

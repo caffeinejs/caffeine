@@ -51,10 +51,12 @@ export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 
 export interface CacheControlOptions {
   /**
-   * How long a response stays fresh: both the lifetime of the entry in the server-side store and the `max-age`
-   * sent to the client. Without it nothing is stored. Must be positive.
+   * How long a response stays fresh: the `max-age` sent to the client, and how long the server-side store serves
+   * the entry as fresh; the store keeps it that long plus the longest of `staleWhileRevalidate` and
+   * `staleIfError`. Without it nothing is stored. At least one second.
    */
   ttl?: Duration
+
   /** `s-maxage`, for shared caches downstream. The server-side store goes by `ttl`. */
   sharedMaxAge?: Duration
   /**
@@ -119,7 +121,8 @@ export interface CacheControlOptions {
   /**
    * The request methods whose responses are cached. Defaults to `GET` and `HEAD`.
    *
-   * The default key is built from the method, the URL and the `vary` headers, never the body: a `POST` listed
+   * The default key is built from the method, the URL with its query and the `vary` headers, never the body: a `POST` listed
+
    * here is answered with whatever the first `POST` to that URL produced, unless `key` tells them apart.
    */
   methods?: string[]
@@ -176,7 +179,8 @@ export interface CacheDeps {
  * and the response is not stored. `noStore` and `@CacheControl(false)` are the exceptions, and overwrite it.
  *
  * Not stored either: the response to a `HEAD`, one larger than `maxEntrySize`, one that sets a cookie unless
- * the route is `public`, and a stream; the last three are reported to `observer.onSkip`.
+ * the route is `public`, a stream, and one with no body at all; the last four are reported to `observer.onSkip`.
+
  *
  * A store read is bounded by the request's own signal and by `storeTimeout`; a write is bounded by
  * `storeTimeout` alone, since the entry is for the requests that follow.
@@ -675,6 +679,12 @@ export function attachCacheHooks(
     // observer is told, since the response would have been stored otherwise.
     if (wanted && !isStringOrBuffer && isStreamPayload(payload)) {
       observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'stream' })
+    }
+
+    // A handler that returned nothing: the server sends an empty body, and there is nothing to hash or replay.
+    // Reported, since the route asked for the response to be stored and it will be a miss again next time.
+    if (wanted && payload === undefined) {
+      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'empty', bytes: 0 })
     }
 
     if (wanted && isStringOrBuffer) {

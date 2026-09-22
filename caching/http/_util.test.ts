@@ -296,6 +296,16 @@ describe('buildCacheControl', () => {
       buildCacheControl({ ttl: 2.9, sharedMaxAge: '2500ms', staleWhileRevalidate: 0.9, staleIfError: '1900ms' }),
     ).toBe('public, max-age=2, s-maxage=2, stale-while-revalidate=0, stale-if-error=1')
   })
+
+  // RFC 9111 §4.2.4 — the store serves nothing stale under these, so a cache downstream is not told to either.
+  it('announces no stale window on a route that must be revalidated', () => {
+    const windows = { ttl: 60, staleWhileRevalidate: 30, staleIfError: 300 }
+
+    expect(buildCacheControl({ ...windows, mustRevalidate: true })).toBe('public, must-revalidate, max-age=60')
+    expect(buildCacheControl({ ...windows, proxyRevalidate: true })).toBe('public, proxy-revalidate, max-age=60')
+    expect(buildCacheControl({ ...windows, noCache: true })).toBe('no-cache, public, max-age=60')
+    expect(buildCacheControl(windows)).toBe('public, max-age=60, stale-while-revalidate=30, stale-if-error=300')
+  })
 })
 
 describe('generateETag', () => {

@@ -31,8 +31,9 @@ export type CacheBypassReason =
 export type CacheMissReason =
   /** Nothing is stored under the key. */
   | 'absent'
-  /** An entry is stored, but it is older than the request's `max-age` allows. */
+  /** An entry is stored, but it is older than the request's `max-age` allows, or fresher for less than its `min-fresh` asks. */
   | 'stale-for-request'
+
   /** The store handed back an entry older than the route's `ttl`. */
   | 'expired'
   /** Nothing the request accepts is stored and it said `only-if-cached`, so it was answered `504`. */
@@ -48,6 +49,8 @@ export type CacheSkipReason =
   | 'entry-too-large'
   /** The payload is a stream, which is neither hashed nor stored. */
   | 'stream'
+  /** The response has no body: nothing to hash, nothing to replay. */
+  | 'empty'
 
 export interface CacheBypassEvent {
   readonly route: CacheRoute
@@ -95,7 +98,8 @@ export interface CacheStoreEvent {
   readonly key: string
   /** Byte length of the stored payload, headers excluded. */
   readonly bytes: number
-  /** The route's `ttl` in seconds, fractional below one second. */
+  /** The route's `ttl` in seconds, fractional above one second. */
+
   readonly ttlSeconds: number
   /** The tags the entry was stored under, when the route declares any. */
   readonly tags?: readonly string[]

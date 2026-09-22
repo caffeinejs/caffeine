@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter } from '../index.js'
+import { Responder, createWebApplication, newRouter, type Context } from '../index.js'
 
 /**
  * A handler that answered the request itself and then returned — the shape of a sign-out: `ctx.redirect(...)`,
@@ -230,6 +230,93 @@ describe('under an onSend hook that awaits', () => {
       await app.close()
     })
 
+    expect(runs.n).toBe(1)
+  })
+
+  // A value handed back after the context answered is not a second answer: Fastify sends any value a promise
+  // resolves with, and any value a synchronous handler returns, with no check of its own.
+  it('runs the send hook once for an asynchronous handler that answered itself and then returned a value', async () => {
+    const runs = { n: 0 }
+
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(
+          newRouter('/held-value').get('/', async ctx => {
+            await sleep(1)
+            ctx.redirect('/x', 303)
+            return { late: true }
+          }),
+        )
+      await app.ready()
+
+      const res = await app.fetch('/held-value')
+
+      expect(res.status).toBe(303)
+      expect(res.headers.get('location')).toBe('/x')
+      expect(await res.text()).toBe('')
+
+      await app.close()
+    })
+
+    expect(runs.n).toBe(1)
+  })
+
+  it('runs the send hook once for a synchronous handler that answered itself and then returned a value', async () => {
+    const runs = { n: 0 }
+
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(
+          newRouter('/held-sync-value').get('/', ctx => {
+            ctx.body('first')
+            return 'second'
+          }),
+        )
+      await app.ready()
+
+      const res = await app.fetch('/held-sync-value')
+
+      expect(await res.text()).toBe('first')
+
+      await app.close()
+    })
+
+    expect(runs.n).toBe(1)
+  })
+
+  it('does not run a Responder returned after the context answered', async () => {
+    const runs = { n: 0 }
+    let responded = false
+
+    class Late extends Responder {
+      respond(ctx: Context) {
+        responded = true
+        return ctx.body('second')
+      }
+    }
+
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(
+          newRouter('/held-responder').get('/', async ctx => {
+            await sleep(1)
+            ctx.body('first')
+            return new Late()
+          }),
+        )
+      await app.ready()
+
+      const res = await app.fetch('/held-responder')
+
+      expect(await res.text()).toBe('first')
+
+      await app.close()
+    })
+
+    expect(responded).toBe(false)
     expect(runs.n).toBe(1)
   })
 

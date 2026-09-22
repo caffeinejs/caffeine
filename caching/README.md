@@ -343,7 +343,8 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 - The client is yours. The store never connects, closes or reconnects it. A client from `createClient()` and
   one from `createCluster()` both fit.
 - An entry is one hash, with the payload stored as the bytes it was given. A tag is a counter. A read is one
-  round trip: the entry and its tags' counters go out together. A write is two, an eviction one.
+  round trip: the entry and its tags' counters go out together. A write is two for a tagged entry and one
+  otherwise, an eviction one.
 - It never sends `SCAN`, `KEYS`, `FLUSHDB`, `FLUSHALL`, `MULTI`, a script, or a command naming two keys, so it
   is safe on a cluster and on a shared server.
 - Every call carries the signal the cache hands it, so a command a request gave up on is taken out of the
@@ -421,7 +422,7 @@ HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics,
 | `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use). |
 | `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.           |
 | `onStore`        | A response was stored, with its size in bytes and its tags.                                                                                                                   |
-| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, or `stream`.                                                                              |
+| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                    |
 | `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                      |
 | `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                               |
 | `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                  |

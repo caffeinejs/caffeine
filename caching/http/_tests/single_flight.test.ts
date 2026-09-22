@@ -378,6 +378,67 @@ describe('concurrent misses for one key', () => {
     expect(calls).toBe(2)
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
   })
+
+  it('run the handler again when a follower cannot re-read the store, and report the failure', async () => {
+    let calls = 0
+    let reads = 0
+    const g = gate()
+
+    // The leader's read and the follower's first read find nothing; the follower's re-read, after the leader
+    // stored, is the one that fails.
+    class FailsOnReread implements HTTPCacheStore {
+      readonly inner = new MemoryHTTPCacheStore()
+      async get(key: string, options?: HTTPCacheGetOptions): Promise<HTTPCacheEntry | undefined> {
+        if (++reads === 3) {
+          throw new Error('store went away')
+        }
+        return this.inner.get(key, options)
+      }
+      put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions) {
+        return this.inner.put(key, entry, options)
+      }
+      async evictByTag() {}
+    }
+
+    @Controller('/sf-reread')
+    class RereadController {
+      @CacheControl({ ttl: 60 })
+      @Get('/data')
+      async data() {
+        calls++
+        if (calls === 1) {
+          await g.hold()
+        }
+        return { n: calls }
+      }
+    }
+    void [RereadController]
+
+    const recording = new Recording()
+    const errors: { operation: string; error: unknown }[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b =>
+        b.store(new FailsOnReread()).observer({ ...recording.observer, onError: event => errors.push(event) }),
+      ),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    const leader = app.fetch('/sf-reread/data')
+    await g.seen
+    const follower = app.fetch('/sf-reread/data')
+    await sleep(10)
+    g.open()
+    const [led, followed] = await Promise.all([leader, follower])
+
+    expect(led.status).toBe(200)
+    expect(followed.status).toBe(200)
+    expect(followed.headers.get('x-cache')).toBe('MISS')
+    expect(await followed.json()).toEqual({ n: 2 })
+    expect(calls).toBe(2)
+    expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
+    expect(errors).toMatchObject([{ operation: 'get', error: { message: 'store went away' } }])
+  })
 })
 
 describe('a HEAD and the flight', () => {

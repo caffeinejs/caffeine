@@ -81,7 +81,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         const handle = route.dispatch(compilers) as (req: REQ, res: unknown) => unknown
 
         // Only a timed route reads `req.signal` below: on any other, the read would create a controller per request.
-        const timed = route.timeout !== undefined || handlerTimeout !== undefined
+        // Fastify creates no timer for a `handlerTimeout` of 0, so that server is not timed either.
+        const timed = route.timeout !== undefined || (handlerTimeout !== undefined && handlerTimeout > 0)
 
         // Route Config
         // https://fastify.dev/docs/latest/Reference/Routes/#config
@@ -163,45 +164,59 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
 
             const result = handle(req as REQ, res)
 
+            if (result instanceof Promise) {
+              return result.then(
+                r => {
+                  // The handler outlived its timeout: Fastify has answered 503 and is sending it. Handed the reply
+                  // itself, the server waits for that send to end instead of starting another with this result.
+                  if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
+                    return res
+                  }
+
+                  // The handler answered the request itself — `ctx.redirect(...)`, then whatever it returned. The
+                  // reply is handed back so the server waits on the send already in flight instead of starting a
+                  // second over it, which is what `undefined` here would do, and what a value or a `Responder`
+                  // would do too, while an `onSend` hook that awaits keeps `reply.sent` false. On a reply already
+                  // out it returns at once.
+                  if (req.httpContext.sent) {
+                    return res
+                  }
+
+                  if (r instanceof Responder) {
+                    return r.respond(req.httpContext)
+                  }
+
+                  if (r === undefined) {
+                    res.send()
+                    return res
+                  }
+
+                  return r
+                },
+                (err: unknown) => {
+                  // A rejection after the timeout is the late result too: the 503 is what answers the request.
+                  if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
+                    req.log.error({ err }, 'Handler rejected after its timeout; the 503 stands')
+                    return res
+                  }
+
+                  throw err
+                },
+              )
+            }
+
+            // As above, minus the reply: the server sends nothing of its own over a handler that returned
+            // synchronously, so there is no second send here to make it wait for.
+            if (req.httpContext.sent) {
+              return
+            }
+
             if (result instanceof Responder) {
               return result.respond(req.httpContext)
             }
 
-            if (result instanceof Promise) {
-              return result.then(r => {
-                // The handler outlived its timeout: Fastify has answered 503 and is sending it. Handed the reply
-                // itself, the server waits for that send to end instead of starting another with this result.
-                if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
-                  return res
-                }
-
-                if (r instanceof Responder) {
-                  return r.respond(req.httpContext)
-                }
-
-                if (r === undefined) {
-                  // The handler either answered the request itself — `ctx.redirect(...)`, then nothing — or had
-                  // nothing to answer with. The reply covers both: the server waits on a send already in flight
-                  // instead of starting a second over it, which is what `undefined` here would do while an
-                  // `onSend` hook that awaits keeps `reply.sent` false. On a reply already out it returns at once.
-                  if (!req.httpContext.sent) {
-                    res.send()
-                  }
-
-                  return res
-                }
-
-                return r
-              })
-            }
-
             if (result === undefined) {
-              // As above, minus the reply: the server sends nothing of its own over a handler that returned
-              // synchronously, so there is no second send here to make it wait for.
-              if (!req.httpContext.sent) {
-                res.send()
-              }
-
+              res.send()
               return
             }
 

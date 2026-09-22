@@ -153,7 +153,10 @@ to `ctx.platform.reply.send(...)`, or hijacking, is outside that record and is s
 ended.
 
 The same question is asked the same way wherever this package sends on somebody else's behalf: the error
-handler's `respond` (`error/plugin.ts`), and the authentication gate after a scheme challenged.
+handler's `respond` (`error/plugin.ts`), the authentication gate after a scheme challenged, the OIDC callback
+route after a strategy's `onFail` (`security/auth/oidc/oidc_routes.ts`), and the middleware chain before it
+runs the next layer (`middleware/_engine.ts`). A handler that answered and then returned a value or a
+`Responder` is not sent over either: the route handler asks before every branch, not only the `undefined` one.
 
 ## The adapter owns its types
 

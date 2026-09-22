@@ -345,11 +345,15 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
     directives.push(`s-maxage=${Math.floor(parseDuration(opts.sharedMaxAge))}`)
   }
 
-  if (opts.staleWhileRevalidate !== undefined) {
+  // RFC 9111 §4.2.4 — a response that must be revalidated is never served stale, so the windows are not
+  // announced either: what the server-side store does not honour, a cache downstream is not told to.
+  const staleAllowed = !opts.mustRevalidate && !opts.proxyRevalidate && !opts.noCache
+
+  if (staleAllowed && opts.staleWhileRevalidate !== undefined) {
     directives.push(`stale-while-revalidate=${Math.floor(parseDuration(opts.staleWhileRevalidate))}`)
   }
 
-  if (opts.staleIfError !== undefined) {
+  if (staleAllowed && opts.staleIfError !== undefined) {
     directives.push(`stale-if-error=${Math.floor(parseDuration(opts.staleIfError))}`)
   }
 

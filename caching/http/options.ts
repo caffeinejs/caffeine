@@ -6,7 +6,8 @@ import type { ETagGenerator } from './cache.js'
 import type { CacheObserver } from './observer.js'
 import type { HTTPCacheStore } from './store.js'
 
-/** The default cache-status response header name, carrying HIT/MISS/BYPASS. */
+/** The default cache-status response header name, carrying HIT/MISS/STALE/BYPASS. */
+
 export const DEFAULT_STATUS_HEADER = 'X-Cache'
 
 /**

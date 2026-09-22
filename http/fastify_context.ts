@@ -147,8 +147,9 @@ export class FastifyContext<
   }
 
   body(body?: unknown): this {
-    this.#reply.send(body)
+    // Before the send, so a send that throws still leaves the context answered.
     this.#answered = true
+    this.#reply.send(body)
     return this
   }
 
@@ -169,8 +170,8 @@ export class FastifyContext<
   }
 
   redirect(url: string, status?: number): this {
-    this.#reply.redirect(url, status)
     this.#answered = true
+    this.#reply.redirect(url, status)
     return this
   }
 

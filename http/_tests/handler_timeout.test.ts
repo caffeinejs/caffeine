@@ -112,4 +112,30 @@ describe('a handler that outlives its timeout', () => {
 
     expect(runs.n).toBe(1)
   })
+
+  // A rejection is the late result too: taken to the error handler, it would send a 500 over the 503.
+  it('is answered 503 once when the handler rejects after its timeout', async () => {
+    const timed = new Router('/timed-reject')
+    timed
+      .get('/slow')
+      .timeout(30)
+      .handler(async () => {
+        await sleep(50)
+        throw new Error('late')
+      })
+
+    const runs = { n: 0 }
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(timed)
+      close = () => app.close()
+      await app.ready()
+
+      const slow = await app.fetch('/timed-reject/slow')
+      expect(slow.status).toBe(503)
+    })
+
+    expect(runs.n).toBe(1)
+  })
 })
