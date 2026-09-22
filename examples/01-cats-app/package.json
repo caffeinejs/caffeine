@@ -10,7 +10,7 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
     "@caffeinejs/http": "*",
-    "fastify": "^5.12.1"
+    "fastify": "^5.12.4"
   },
   "devDependencies": {
     "@caffeinejs/cli": "*"
