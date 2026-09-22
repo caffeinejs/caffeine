@@ -185,7 +185,7 @@ export interface CacheDeps {
  * it stored, they are served the entry (`coalesced` on the hit event), otherwise they run the handler themselves
  * (`not-coalesced` on the miss event). A `HEAD` never leads, since its response is never stored, but it does
  * wait. The leader settles the flight from its store hook, and a flight settles itself at `lockTimeout` for a
- * leader whose store hook never runs.
+ * leader whose store hook never runs. A follower whose own request ends first stops waiting.
  *
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
@@ -467,7 +467,14 @@ export function attachCacheHooks(
     directives: RequestCacheControl,
     flight: Flight,
   ): Promise<unknown> {
-    const outcome = await flight.done
+    const outcome = await flight.wait(request.signal)
+
+    // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
+    // nobody to tell.
+    if (outcome === undefined) {
+      return
+    }
+
     if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {

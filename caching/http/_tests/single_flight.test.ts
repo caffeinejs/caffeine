@@ -631,6 +631,123 @@ describe('the flight table', () => {
   })
 })
 
+describe('a follower whose request is over', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  /** Counts the reads, so a follower's re-read of the store shows. */
+  class CountingStore implements HTTPCacheStore {
+    readonly inner = new MemoryHTTPCacheStore()
+    gets = 0
+    get(key: string, options?: HTTPCacheGetOptions) {
+      this.gets++
+      return this.inner.get(key, options)
+    }
+    put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions) {
+      return this.inner.put(key, entry, options)
+    }
+    evictByTag(tags: string | readonly string[]) {
+      return this.inner.evictByTag(tags)
+    }
+  }
+
+  async function start(options: {
+    lockTimeoutMs: number
+    handlerTimeout?: number
+    hijack?: boolean
+    handler?: () => Promise<unknown>
+  }) {
+    const store = new CountingStore()
+    const recording = new Recording()
+    const server = fastify(options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout })
+    close = () => server.close()
+    await server.register(
+      cachePlugin({
+        store,
+        etagGenerator: undefined,
+        statusHeader: 'X-Cache',
+        observer: recording.observer,
+        flights: new Map() as FlightTable,
+        lockTimeoutMs: options.lockTimeoutMs,
+      }),
+    )
+    server.route({
+      method: 'GET',
+      url: '/data',
+      config: { cache: { ttl: 60 } },
+      handler: options.hijack
+        ? (_request, reply) => {
+            reply.hijack()
+            reply.raw.end('raw')
+          }
+        : (options.handler ?? (() => ({ ok: true }))),
+    })
+    await server.ready()
+
+    return { server, store, recording }
+  }
+
+  // A follower whose client left has nobody to serve. Waiting on would hold its hook, and a re-read, for as long
+  // as the leader takes; instead it goes on at once, and Fastify treats it as any request whose client left.
+  it('stops waiting when its client leaves: no re-read, nothing reported', async () => {
+    let calls = 0
+    const g = gate()
+    const { server, store, recording } = await start({
+      lockTimeoutMs: 1000,
+      handler: async () => {
+        calls++
+        await g.hold()
+        return { ok: true }
+      },
+    })
+    await server.listen({ port: 0, host: '127.0.0.1' })
+    const { port } = server.server.address() as { port: number }
+
+    const leader = server.inject('/data')
+    await g.seen
+
+    const socket = connect({ host: '127.0.0.1', port })
+    await new Promise(resolve => socket.once('connect', resolve))
+    socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
+    await waitFor(() => store.gets === 2)
+    await sleep(10)
+    expect(calls).toBe(1)
+
+    // The follower gives up its wait and, with the gate still closed, enters the handler itself.
+    socket.destroy()
+    await waitFor(() => calls === 2)
+    expect(store.gets).toBe(2)
+
+    g.open()
+    const led = await leader
+    expect(led.headers['x-cache']).toBe('MISS')
+    expect(recording.reasons()).toEqual(['absent'])
+    expect(recording.hits).toEqual([])
+  })
+
+  // Fastify answers the follower 503 at its handler timeout. The follower's wait ends there: when the flight
+  // settles later it is not there to re-read the store, nor to report a miss on a reply already sent.
+  it('stops waiting at the handler timeout, and is not heard from when the flight settles', async () => {
+    const { server, store, recording } = await start({ lockTimeoutMs: 200, handlerTimeout: 40, hijack: true })
+
+    // The leader hijacks, which clears its own timeout and settles its flight only at lockTimeout.
+    const leader = await server.inject('/data')
+    expect(leader.body).toBe('raw')
+
+    const follower = await server.inject('/data')
+    expect(follower.statusCode).toBe(503)
+    expect(store.gets).toBe(2)
+
+    await sleep(300)
+    expect(store.gets).toBe(2)
+    expect(recording.reasons()).toEqual(['absent'])
+  })
+})
+
 describe('lockTimeout', () => {
   let close: (() => Promise<unknown>) | undefined
 

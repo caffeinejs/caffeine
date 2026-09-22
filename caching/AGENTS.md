@@ -180,7 +180,10 @@ The leader settles its flight from the store hook, `'stored'` right after the `p
 in a `finally` on every other way out. `onSend` runs on the error handler's response, after a client abort and
 for a stream; it does not run after `reply.hijack()`, a raw `reply.raw.end()` or a handler that never returns —
 so the Flight's own unref'd timer, at `lockTimeout`, settles `'not-stored'` and is required, and it bounds every
-follower at once: followers hold no timer. `settle` is first-wins and removes only the flight itself from the
+follower at once: followers hold no timer. A follower waits through `Flight.wait(request.signal)` — one `'abort'`
+listener — and when its own request ends first it returns from the read hook with nothing served and nothing
+reported; Fastify stops the lifecycle at `reply.sent` after its `503`, and goes on as for any hook after a client
+left. `settle` is first-wins and removes only the flight itself from the
 table, never a newer one under the same key (a leader outliving its timeout). `_tests/single_flight.test.ts`
 pins all of it. Nothing here reaches across processes: the `l:` Redis namespace stays free for a store-level
 lock, and `HTTPCacheStore` gets no lock or wait verb.

@@ -37,4 +37,21 @@ export class Flight {
     }
     this.#resolve(outcome)
   }
+
+  /** `done`, unless `signal` aborts first: then `undefined`, at once for a signal already aborted. */
+  wait(signal: AbortSignal): Promise<FlightOutcome | undefined> {
+    if (signal.aborted) {
+      return Promise.resolve(undefined)
+    }
+
+    return new Promise(resolve => {
+      const onAbort = () => resolve(undefined)
+      signal.addEventListener('abort', onAbort, { once: true })
+      // `done` only ever resolves.
+      void this.done.then(outcome => {
+        signal.removeEventListener('abort', onAbort)
+        resolve(outcome)
+      })
+    })
+  }
 }
