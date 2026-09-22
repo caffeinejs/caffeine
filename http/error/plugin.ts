@@ -93,7 +93,11 @@ export function installGlobalErrorHandler(
 
     request.log.error({ err }, err.message)
 
-    return defaultErrorHandler(error, request, reply)
+    // The default handler sends the reply itself. Handed back as the result, the reply tells the runner so;
+    // `undefined` would have it send again while an asynchronous `onSend` hook still holds the first response.
+    defaultErrorHandler(error, request, reply)
+
+    return reply
   }
 
   fastify.setErrorHandler(globalErrorHandler)
