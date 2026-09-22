@@ -304,7 +304,7 @@ Order matters in two places:
 - Install it after `.authentication(...)`. Guards run before the cache, on a hit as well as on a miss, so a
   cached response never skips authorization.
 - Install it before a plugin that compresses responses. Installed after one, the cache is handed a stream, which
-  is neither hashed nor stored, and says nothing about it.
+  is neither hashed nor stored, and `onSkip` is told (`stream`).
 
 The default `ETag` is a strong tag hashed from the payload before any content-coding. Behind a compressor, the
 one tag goes out with every coding; if that matters, pass an `etagGenerator` that returns weak tags (`W/"..."`).
@@ -415,7 +415,7 @@ HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics,
 | `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use). |
 | `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.           |
 | `onStore`        | A response was stored, with its size in bytes and its tags.                                                                                                                   |
-| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, or `entry-too-large`.                                                                                        |
+| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, or `stream`.                                                                              |
 | `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                      |
 | `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                               |
 | `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                  |

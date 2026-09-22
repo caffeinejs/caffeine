@@ -445,3 +445,18 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
     }
   }
 }
+
+/** The payload shapes the server sends as a stream: a Node stream, a web stream, or a `Response`. */
+export function isStreamPayload(payload: unknown): boolean {
+  if (payload === null || typeof payload !== 'object') {
+    return false
+  }
+
+  const candidate = payload as { pipe?: unknown; getReader?: unknown }
+
+  return (
+    typeof candidate.pipe === 'function' ||
+    typeof candidate.getReader === 'function' ||
+    Object.prototype.toString.call(payload) === '[object Response]'
+  )
+}

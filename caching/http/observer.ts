@@ -46,6 +46,8 @@ export type CacheSkipReason =
   | 'set-cookie'
   /** The payload is larger than `maxEntrySize`. */
   | 'entry-too-large'
+  /** The payload is a stream, which is neither hashed nor stored. */
+  | 'stream'
 
 export interface CacheBypassEvent {
   readonly route: CacheRoute
@@ -105,8 +107,8 @@ export interface CacheSkipEvent {
   /** The store key; see {@link CacheMissEvent.key}. */
   readonly key: string
   readonly reason: CacheSkipReason
-  /** Byte length of the payload that was not stored. */
-  readonly bytes: number
+  /** Byte length of the payload that was not stored. Absent for a stream. */
+  readonly bytes?: number
 }
 
 /** An eviction a successful mutating request performed: every entry under any of `tags`, from any route. */

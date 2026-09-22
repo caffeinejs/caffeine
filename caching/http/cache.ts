@@ -21,6 +21,7 @@ import {
   durationSeconds,
   generateETag,
   isNotModified,
+  isStreamPayload,
   parseRequestCacheControl,
   pragmaNoCache,
   storedHeadersOf,
@@ -174,8 +175,8 @@ export interface CacheDeps {
  * A handler that writes its own `Cache-Control` has decided for that response: the header is left as written
  * and the response is not stored. `noStore` and `@CacheControl(false)` are the exceptions, and overwrite it.
  *
- * Not stored either: the response to a `HEAD`, one larger than `maxEntrySize`, and one that sets a cookie
- * unless the route is `public`; the last two are reported to `observer.onSkip`.
+ * Not stored either: the response to a `HEAD`, one larger than `maxEntrySize`, one that sets a cookie unless
+ * the route is `public`, and a stream; the last three are reported to `observer.onSkip`.
  *
  * A store read is bounded by the request's own signal and by `storeTimeout`; a write is bounded by
  * `storeTimeout` alone, since the entry is for the requests that follow.
@@ -640,17 +641,22 @@ export function attachCacheHooks(
     // RFC 9111 §4.1 — Vary: * means the response must never be cached
     // RFC 9111 §5.2.1.5 — nor is the response to a request that said no-store
     // RFC 9111 §4 — nor the response to a HEAD, which shares the GET's key and may have no body to offer it
-    const storable =
+    const wanted =
       ttlSeconds !== undefined &&
       request.method !== 'HEAD' &&
       !read.noStore &&
       !isPrivate &&
       !varyAny &&
       !handlerDecides &&
-      isStringOrBuffer &&
       !parseRequestCacheControl(request.headers['cache-control']).noStore
 
-    if (storable) {
+    // A stream is neither hashed nor stored — a compressor installed ahead of the cache hands one over — and the
+    // observer is told, since the response would have been stored otherwise.
+    if (wanted && !isStringOrBuffer && isStreamPayload(payload)) {
+      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'stream' })
+    }
+
+    if (wanted && isStringOrBuffer) {
       // The read hook derived it unless it returned before getting that far.
       const key = request.cacheKey ?? keyOf(request)
       const bytes = typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length

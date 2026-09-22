@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 import { Controller, Get, Header, Post, Status, createWebApplication } from '@caffeinejs/http'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { LRUCache } from 'lru-cache'
@@ -234,6 +236,12 @@ describe('a response left out of the store', () => {
     cookie() {
       return { ok: true }
     }
+
+    @CacheControl({ ttl: 60 })
+    @Get('/stream')
+    stream() {
+      return Readable.from(['str', 'eam'])
+    }
   }
   void [SkipController]
 
@@ -276,6 +284,32 @@ describe('a response left out of the store', () => {
     await app.fetch('/skip/cookie')
 
     expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', bytes: 11 }])
+  })
+
+  // A compressor installed ahead of the cache hands it a stream on every response: without a report the cache
+  // is silently empty.
+  it('is a stream: it goes out, is not stored, and is reported without a size', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.ready()
+
+    const first = await app.fetch('/skip/stream')
+    const second = await app.fetch('/skip/stream')
+
+    expect(await first.text()).toBe('stream')
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(skips).toHaveLength(2)
+    for (const skip of skips) {
+      expect(skip).toEqual({
+        route: expect.objectContaining({ url: '/skip/stream' }),
+        key: expect.any(String),
+        reason: 'stream',
+      })
+      expect(skip).not.toHaveProperty('bytes')
+    }
   })
 
   it('refuses a maxEntrySize that is not a byte size at start-up', async () => {

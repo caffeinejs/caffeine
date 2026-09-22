@@ -59,7 +59,8 @@ Install `.with(HTTPCaching())` after `.authentication(...)`. Authentication adds
 thing keeping the order.
 
 Install it **before** a plugin that compresses responses. `@fastify/compress` attaches per route too, in install
-order: ahead of the cache it hands the store hook a stream, which is neither hashed nor stored, silently. Behind
+order: ahead of the cache it hands the store hook a stream, which is neither hashed nor stored, and `onSkip` is
+told (`stream`). Behind
 it, the cache stores the unencoded payload and the compressor encodes misses and hits alike. The default `ETag`
 is strong and hashed before any content-coding, so with a compressor installed the one tag goes out with every
 coding; an application that minds passes an `etagGenerator` returning weak tags (`W/"..."`). That caveat is
