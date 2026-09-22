@@ -72,6 +72,19 @@ export interface CacheHitEvent {
   readonly ageSeconds: number
   /** `true` when the request waited on another's handler run and was served what it stored. */
   readonly coalesced: boolean
+  /** `true` when the entry was past the route's `ttl` and served under `staleWhileRevalidate` or `staleIfError`. */
+  readonly stale: boolean
+}
+
+/** A `5xx` the handler produced, replaced by a stale entry under `staleIfError`. Nothing was stored. */
+export interface CacheStaleIfErrorEvent {
+  readonly route: CacheRoute
+  /** The store key; see {@link CacheMissEvent.key}. */
+  readonly key: string
+  /** Apparent age of the entry served, in whole seconds. */
+  readonly ageSeconds: number
+  /** The status the handler answered with. */
+  readonly replaced: number
 }
 
 export interface CacheStoreEvent {
@@ -133,6 +146,8 @@ export interface CacheObserver {
   onStore?(event: CacheStoreEvent): void
   onSkip?(event: CacheSkipEvent): void
   onInvalidate?(event: CacheInvalidateEvent): void
+  /** A miss already reported, whose `5xx` a stale entry then replaced. Not a second hit. */
+  onStaleIfError?(event: CacheStaleIfErrorEvent): void
   /**
    * Without one, `HTTPCaching` logs store failures itself, on the application logger, at most once a minute for
    * each operation.
@@ -149,6 +164,7 @@ const methods: Record<keyof CacheObserver, true> = {
   onStore: true,
   onSkip: true,
   onInvalidate: true,
+  onStaleIfError: true,
   onError: true,
 }
 

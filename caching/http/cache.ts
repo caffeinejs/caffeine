@@ -41,6 +41,10 @@ const DEFAULT_STATUS_CODES = [200]
 const CACHE_HIT = 'HIT'
 const CACHE_MISS = 'MISS'
 const CACHE_BYPASS = 'BYPASS'
+const CACHE_STALE = 'STALE'
+
+// RFC 5861 §4 — the responses a stale entry may stand in for.
+const SIE_STATUS = new Set([500, 502, 503, 504])
 
 export type ETagGenerator = (payload: Buffer) => string | Promise<string>
 
@@ -52,9 +56,20 @@ export interface CacheControlOptions {
   ttl?: Duration
   /** `s-maxage`, for shared caches downstream. The server-side store goes by `ttl`. */
   sharedMaxAge?: Duration
-  /** Sent as `stale-while-revalidate`, for caches downstream. The server-side store never serves stale. */
+  /**
+   * How long past `ttl` an entry may still be served while a fresh response is being produced. Sent as
+   * `stale-while-revalidate`, and honoured by the server-side store too: the first request to find the entry
+   * stale runs the handler, and the requests behind it are served the stale entry (`X-Cache: STALE`) until it
+   * stores. Nothing without the route's lock, and never to a request whose `max-age` or `min-fresh` the entry
+   * does not meet. Off under `mustRevalidate`, `proxyRevalidate` or `noCache`.
+   */
   staleWhileRevalidate?: Duration
-  /** Sent as `stale-if-error`, for caches downstream. The server-side store never serves stale. */
+  /**
+   * How long past `ttl` an entry may stand in for a `500`, `502`, `503` or `504` the handler produces. Sent as
+   * `stale-if-error`, and honoured by the server-side store too: the entry goes out in the error's place, with
+   * its own status and headers, marked `X-Cache: STALE`. Off under `mustRevalidate`, `proxyRevalidate` or
+   * `noCache`.
+   */
   staleIfError?: Duration
   /**
    * Sends `no-store` on every response of the route, errors included, over a `Cache-Control` the handler wrote,
@@ -222,12 +237,21 @@ export function attachCacheHooks(
   if (read.sharedMaxAge !== undefined) {
     durationSeconds(routeDef, 'sharedMaxAge', read.sharedMaxAge, 0)
   }
-  if (read.staleWhileRevalidate !== undefined) {
-    durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, 0)
-  }
-  if (read.staleIfError !== undefined) {
-    durationSeconds(routeDef, 'staleIfError', read.staleIfError, 0)
-  }
+  const swrDeclared =
+    read.staleWhileRevalidate === undefined
+      ? undefined
+      : durationSeconds(routeDef, 'staleWhileRevalidate', read.staleWhileRevalidate, 0)
+  const sieDeclared =
+    read.staleIfError === undefined ? undefined : durationSeconds(routeDef, 'staleIfError', read.staleIfError, 0)
+
+  // RFC 9111 §4.2.4 — a response that must be revalidated is never served stale, whatever window it names.
+  const staleAllowed = !read.mustRevalidate && !read.proxyRevalidate && !read.noCache
+  const swrSeconds = staleAllowed ? swrDeclared : undefined
+  const sieSeconds = staleAllowed ? sieDeclared : undefined
+
+  // What the store keeps the entry for: the freshness lifetime, and the longest stale window after it.
+  const retentionSeconds =
+    ttlSeconds === undefined ? undefined : ttlSeconds + Math.max(swrSeconds ?? 0, sieSeconds ?? 0)
 
   assertTags(routeDef, read.tags, { what: 'caching', required: false })
   assertConstraintsKeyed(routeDef, read)
@@ -335,11 +359,29 @@ export function attachCacheHooks(
 
     if (cached !== undefined) {
       const age = ageOf(cached)
-      if (accepts(age, directives.maxAge)) {
-        return serve(request, reply, cached, age, false)
+      if (accepts(age, directives)) {
+        return serve(request, reply, cached, age, false, false)
       }
 
-      return miss(request, reply, key, directives, expired(age) ? 'expired' : 'stale-for-request', !readFailed)
+      if (!expired(age)) {
+        return miss(request, reply, key, directives, 'stale-for-request', !readFailed)
+      }
+
+      // Past its ttl, yet not past what the route allows: kept for the store hook to replay over a 5xx, and
+      // served as it is to whoever arrives while the handler is already running for this key.
+      if (requestAccepts(age, directives) && !directives.onlyIfCached) {
+        if (sieSeconds !== undefined && age <= ttlSeconds! + sieSeconds) {
+          request.cacheStale = cached
+        }
+        if (swrSeconds !== undefined && age <= ttlSeconds! + swrSeconds && lockable && !readFailed) {
+          const flight = flights!.get(key)
+          if (flight !== undefined) {
+            return serve(request, reply, cached, age, false, true)
+          }
+        }
+      }
+
+      return miss(request, reply, key, directives, 'expired', !readFailed)
     }
 
     return miss(request, reply, key, directives, 'absent', !readFailed)
@@ -356,9 +398,17 @@ export function attachCacheHooks(
     return ttlSeconds !== undefined && age > ttlSeconds
   }
 
-  // RFC 9111 §5.2.1.1 — a client's max-age caps how stale a response it will accept from the cache.
-  function accepts(age: number, maxAge: number | undefined): boolean {
-    return !expired(age) && (maxAge === undefined || age <= maxAge)
+  // RFC 9111 §5.2.1.1 and §5.2.1.3 — a client's max-age caps the age it accepts, and its min-fresh the freshness
+  // it wants left. Neither is a reason to serve stale.
+  function requestAccepts(age: number, directives: RequestCacheControl): boolean {
+    return (
+      (directives.maxAge === undefined || age <= directives.maxAge) &&
+      (directives.minFresh === undefined || ttlSeconds === undefined || age + directives.minFresh <= ttlSeconds)
+    )
+  }
+
+  function accepts(age: number, directives: RequestCacheControl): boolean {
+    return !expired(age) && requestAccepts(age, directives)
   }
 
   // Nothing to serve. A miss either joins the flight already running the handler for this key, or starts one and
@@ -402,7 +452,8 @@ export function attachCacheHooks(
     directives: RequestCacheControl,
     flight: Flight,
   ): Promise<unknown> {
-    if ((await flight.done) === 'stored') {
+    const outcome = await flight.done
+    if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {
         again = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
@@ -416,8 +467,19 @@ export function attachCacheHooks(
 
       if (again !== undefined) {
         const age = ageOf(again)
-        if (accepts(age, directives.maxAge)) {
-          return serve(request, reply, again, age, true)
+        if (accepts(age, directives)) {
+          return serve(request, reply, again, age, true, false)
+        }
+
+        // The leader was answered with the stale entry in place of its 5xx: so is a follower it still covers.
+        if (
+          outcome === 'rescued' &&
+          sieSeconds !== undefined &&
+          expired(age) &&
+          age <= ttlSeconds! + sieSeconds &&
+          requestAccepts(age, directives)
+        ) {
+          return serve(request, reply, again, age, true, true)
         }
       }
     }
@@ -435,8 +497,10 @@ export function attachCacheHooks(
     cached: HTTPCacheEntry,
     age: number,
     coalesced: boolean,
+    stale: boolean,
   ): unknown {
     request.responseCached = true
+    const status = stale ? CACHE_STALE : CACHE_HIT
 
     // RFC 9110 §13.2.1 — preconditions apply to GET and HEAD, and only where the answer would be a 2xx.
     if (
@@ -445,14 +509,14 @@ export function attachCacheHooks(
       cached.statusCode < 300 &&
       isNotModified(request, cached.etag, cached.lastModified)
     ) {
-      observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: true, ageSeconds: age, coalesced })
-      applyStoredHeaders(reply, cached.headers, true)
-      return reply.code(304).header(statusHeader, CACHE_HIT).header('Age', String(age)).send()
+      observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: true, ageSeconds: age, coalesced, stale })
+      applyStoredHeaders(reply, cached.headers, 'revalidation')
+      return reply.code(304).header(statusHeader, status).header('Age', String(age)).send()
     }
 
-    observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: false, ageSeconds: age, coalesced })
-    applyStoredHeaders(reply, cached.headers, false)
-    reply.status(cached.statusCode).header(statusHeader, CACHE_HIT).header('Age', String(age))
+    observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: false, ageSeconds: age, coalesced, stale })
+    applyStoredHeaders(reply, cached.headers, 'hit')
+    reply.status(cached.statusCode).header(statusHeader, status).header('Age', String(age))
 
     // The payload goes out on a HEAD too: the server drops the body and keeps its length, which is the
     // Content-Length a GET would have carried (RFC 9110 §8.6).
@@ -474,6 +538,13 @@ export function attachCacheHooks(
   ): void | Promise<unknown> {
     if (request.responseCached) {
       next(null, payload)
+      return
+    }
+
+    // RFC 5861 §4 — the stale entry the read hook kept stands in for the handler's 5xx.
+    const stale = request.cacheStale
+    if (stale !== null && SIE_STATUS.has(reply.statusCode)) {
+      next(null, replace(request, reply, stale))
       return
     }
 
@@ -501,6 +572,41 @@ export function attachCacheHooks(
     }
 
     return send(request, reply, payload, handlerDecides).finally(() => request.cacheFlight?.settle('not-stored'))
+  }
+
+  // The entry goes out as it was stored: its status, its headers over the error's, its payload. `Content-Length`
+  // is removed so the server computes it from the new payload; `Retry-After` belonged to the error. A HEAD gets
+  // the entry's length and no body: Fastify's own HEAD hook has already dropped the error's body and runs ahead
+  // of this one. Nothing is stored, and the leader's followers are told a stale entry was served in its place.
+  function replace(request: AdapterRequest, reply: AdapterReply, stale: HTTPCacheEntry): unknown {
+    const replaced = reply.statusCode
+    const age = ageOf(stale)
+
+    reply.code(stale.statusCode)
+    reply.removeHeader('content-length')
+    reply.removeHeader('retry-after')
+    applyStoredHeaders(reply, stale.headers, 'replacement')
+    reply.header(statusHeader, CACHE_STALE).header('Age', String(age))
+    request.cacheFlight?.settle('rescued')
+    observer?.onStaleIfError?.({ route: route!, key: request.cacheKey!, ageSeconds: age, replaced })
+
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      stale.statusCode >= 200 &&
+      stale.statusCode < 300 &&
+      isNotModified(request, stale.etag, stale.lastModified)
+    ) {
+      reply.code(304)
+      return null
+    }
+
+    if (request.method === 'HEAD') {
+      const length = typeof stale.payload === 'string' ? Buffer.byteLength(stale.payload) : stale.payload.length
+      reply.header('Content-Length', String(length))
+      return null
+    }
+
+    return stale.payload
   }
 
   async function send(
@@ -573,7 +679,7 @@ export function attachCacheHooks(
                 storedAt: Date.now(),
                 headers: storedHeadersOf(reply, statusHeaderName),
               },
-              { ttl: read.ttl!, tags, signal },
+              { ttl: retentionSeconds!, tags, signal },
             ),
           )
 

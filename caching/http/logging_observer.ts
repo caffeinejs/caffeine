@@ -30,6 +30,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
           revalidated: event.revalidated,
           ageSeconds: event.ageSeconds,
           coalesced: event.coalesced,
+          stale: event.stale,
           ...(includeKeys && { key: event.key }),
         },
         'cache hit',
@@ -66,6 +67,18 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
 
     onInvalidate(event) {
       log[level]({ route: event.route, tags: event.tags }, 'cache invalidate')
+    },
+
+    onStaleIfError(event) {
+      log[level](
+        {
+          route: event.route,
+          ageSeconds: event.ageSeconds,
+          replaced: event.replaced,
+          ...(includeKeys && { key: event.key }),
+        },
+        'cache stale-if-error',
+      )
     },
 
     onError(event) {

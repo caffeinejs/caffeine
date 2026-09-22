@@ -29,6 +29,7 @@ export {
   type CacheRoute,
   type CacheSkipEvent,
   type CacheSkipReason,
+  type CacheStaleIfErrorEvent,
   type CacheStoreEvent,
 } from './observer.js'
 export { loggingCacheObserver, type LoggingCacheObserverOptions } from './logging_observer.js'

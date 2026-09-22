@@ -83,6 +83,8 @@ export interface RequestCacheControl {
   readonly onlyIfCached: boolean
   /** Seconds. Absent when the directive is, or when its value is not a number. */
   readonly maxAge: number | undefined
+  /** Seconds the entry must stay fresh for (RFC 9111 §5.2.1.3). Absent as `maxAge` is. */
+  readonly minFresh: number | undefined
 }
 
 const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
@@ -90,6 +92,7 @@ const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
   noStore: false,
   onlyIfCached: false,
   maxAge: undefined,
+  minFresh: undefined,
 })
 
 // RFC 9111 §5.2 — directive names compare case-insensitively, and an argument may arrive as a token or as a
@@ -103,6 +106,7 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
   let noStore = false
   let onlyIfCached = false
   let maxAge: number | undefined
+  let minFresh: number | undefined
 
   for (const part of header.split(',')) {
     const eq = part.indexOf('=')
@@ -115,17 +119,19 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
     } else if (name === 'only-if-cached') {
       onlyIfCached = true
     } else if (name === 'max-age' && eq !== -1) {
-      const raw = part
-        .slice(eq + 1)
-        .trim()
-        .replace(/^"(.*)"$/, '$1')
-      if (/^\d+$/.test(raw)) {
-        maxAge = Number(raw)
-      }
+      maxAge = seconds(part.slice(eq + 1)) ?? maxAge
+    } else if (name === 'min-fresh' && eq !== -1) {
+      minFresh = seconds(part.slice(eq + 1)) ?? minFresh
     }
   }
 
-  return { noCache, noStore, onlyIfCached, maxAge }
+  return { noCache, noStore, onlyIfCached, maxAge, minFresh }
+}
+
+function seconds(argument: string): number | undefined {
+  const raw = argument.trim().replace(/^"(.*)"$/, '$1')
+
+  return /^\d+$/.test(raw) ? Number(raw) : undefined
 }
 
 // RFC 9111 §5.4 — `Pragma: no-cache` stands in for the directive only on a request that sent no Cache-Control.
@@ -239,14 +245,20 @@ function connectionFieldsOf(connection: unknown): Set<string> | undefined {
   )
 }
 
-// A header an earlier hook already set belongs to this request — CORS, authentication — and outranks the one
-// stored with another request's response. `Vary` is the exception: it accumulates.
+/**
+ * How a stored entry's headers land on a reply. On a `hit` a header an earlier hook already set belongs to this
+ * request — CORS, authentication — and outranks the stored one; a `revalidation` carries only what guides a cache
+ * update (RFC 9110 §15.4.5); a `replacement` writes the entry over an error response the handler produced, so the
+ * stored headers win. `Vary` accumulates in every mode.
+ */
+export type StoredHeadersMode = 'hit' | 'revalidation' | 'replacement'
+
 export function applyStoredHeaders(
   reply: AdapterReply,
   headers: Record<string, string | string[]>,
-  revalidation: boolean,
+  mode: StoredHeadersMode,
 ): void {
-  if (revalidation) {
+  if (mode === 'revalidation') {
     for (const name of REVALIDATION_HEADERS) {
       const value = headers[name]
       if (value !== undefined && !reply.hasHeader(name)) {
@@ -254,8 +266,9 @@ export function applyStoredHeaders(
       }
     }
   } else {
+    const overwrite = mode === 'replacement'
     for (const name in headers) {
-      if (name !== 'vary' && !reply.hasHeader(name)) {
+      if (name !== 'vary' && (overwrite || !reply.hasHeader(name))) {
         reply.header(name, headers[name])
       }
     }

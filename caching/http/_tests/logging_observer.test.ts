@@ -74,7 +74,7 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log)
 
-    observer.onHit!({ route, key: 'secret', revalidated: false, ageSeconds: 1, coalesced: false })
+    observer.onHit!({ route, key: 'secret', revalidated: false, ageSeconds: 1, coalesced: false, stale: false })
     observer.onMiss!({ route, key: 'secret', reason: 'absent' })
     observer.onStore!({ route, key: 'secret', bytes: 10, ttlSeconds: 60, tags: ['pets'] })
     observer.onSkip!({ route, key: 'secret', reason: 'entry-too-large', bytes: 10 })
@@ -90,7 +90,7 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log, { includeKeys: true })
 
-    observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1, coalesced: true })
+    observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1, coalesced: true, stale: false })
     observer.onSkip!({ route, key: 'k2', reason: 'set-cookie', bytes: 3 })
     observer.onMiss!({ route, key: 'k3', reason: 'absent' })
     observer.onStore!({ route, key: 'k4', bytes: 10, ttlSeconds: 60 })

@@ -234,6 +234,10 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
       instance.decorateRequest('cacheFlight', null)
     }
 
+    if (!instance.hasRequestDecorator('cacheStale')) {
+      instance.decorateRequest('cacheStale', null)
+    }
+
     instance.addHook('onRoute', routeOptions => {
       const routeDef = routeOptions as AdapterRouteOptions
       const config = routeDef.config as Record<string, unknown> | undefined

@@ -1,4 +1,5 @@
 import type { Flight } from './flight.js'
+import type { HTTPCacheEntry } from './store.js'
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -8,5 +9,7 @@ declare module 'fastify' {
     cacheKey: string | null
     /** The flight this request leads, so its store hook settles it — this one, never a newer flight under the same key. */
     cacheFlight: Flight | null
+    /** A stale entry the read hook found within `staleIfError`, for the store hook to replay over a 5xx. */
+    cacheStale: HTTPCacheEntry | null
   }
 }

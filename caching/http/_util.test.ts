@@ -32,6 +32,7 @@ describe('parseRequestCacheControl', () => {
       noStore: false,
       onlyIfCached: false,
       maxAge: undefined,
+      minFresh: undefined,
     })
   })
 
@@ -39,7 +40,7 @@ describe('parseRequestCacheControl', () => {
   it('reads directive names whatever their case', () => {
     const parsed = parseRequestCacheControl('No-Cache, NO-STORE, Only-If-Cached, MAX-AGE=5')
 
-    expect(parsed).toEqual({ noCache: true, noStore: true, onlyIfCached: true, maxAge: 5 })
+    expect(parsed).toEqual({ noCache: true, noStore: true, onlyIfCached: true, maxAge: 5, minFresh: undefined })
   })
 
   it('reads a quoted max-age, and tolerates spaces around the list', () => {
@@ -50,6 +51,14 @@ describe('parseRequestCacheControl', () => {
   it('reads a max-age that is not a number as absent', () => {
     expect(parseRequestCacheControl('max-age=soon').maxAge).toBeUndefined()
     expect(parseRequestCacheControl('max-age=-1').maxAge).toBeUndefined()
+  })
+
+  // RFC 9111 §5.2.1.3: the client wants the response to stay fresh for at least that long.
+  it('reads min-fresh as whole seconds, and ignores a value that is not a number', () => {
+    expect(parseRequestCacheControl('min-fresh=30').minFresh).toBe(30)
+    expect(parseRequestCacheControl('Min-Fresh="5", max-age=60').minFresh).toBe(5)
+    expect(parseRequestCacheControl('min-fresh=soon').minFresh).toBeUndefined()
+    expect(parseRequestCacheControl('min-fresh').minFresh).toBeUndefined()
   })
 
   it('matches a directive by its whole name, not by a substring', () => {
@@ -223,7 +232,7 @@ describe('the headers kept with an entry', () => {
   it('merges a Vary stored as a list into the one already on the reply', () => {
     const { reply, set } = replyWith({ vary: 'Origin' })
 
-    applyStoredHeaders(reply, { vary: ['Accept-Language', 'origin, Accept'] }, false)
+    applyStoredHeaders(reply, { vary: ['Accept-Language', 'origin, Accept'] }, 'hit')
 
     expect(set.vary).toBe('Origin, Accept-Language, Accept')
   })
