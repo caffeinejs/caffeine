@@ -3,8 +3,7 @@ import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logg
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Cache, CacheEntry } from '../../store.js'
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
 import type {
   CacheBypassEvent,
@@ -14,6 +13,7 @@ import type {
   CacheObserver,
   CacheStoreEvent,
 } from '../observer.js'
+import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
 
 class RecordingObserver implements CacheObserver {
   readonly hits: CacheHitEvent[] = []
@@ -91,8 +91,8 @@ afterEach(async () => {
   close = undefined
 })
 
-async function start(observer: CacheObserver, options: { store?: Cache; logger?: Logger } = {}) {
-  const store = options.store ?? new MemoryCache()
+async function start(observer: CacheObserver, options: { store?: HTTPCacheStore; logger?: Logger } = {}) {
+  const store = options.store ?? new MemoryHTTPCacheStore()
   const app = createWebApplication({ logger: options.logger }).with(HTTPCaching(b => b.store(store).observer(observer)))
   close = () => app.close()
   await app.ready()
@@ -237,7 +237,6 @@ describe('miss events', () => {
     expect(observer.misses).toEqual([
       {
         route: { method: 'GET', url: '/obs-cold/data', handler: 'ColdController.data' },
-        segment: undefined,
         key: encodeURIComponent('/obs-cold/data'),
         reason: 'absent',
       },
@@ -269,8 +268,8 @@ describe('miss events', () => {
 
   // An entry exists, so a store-level view would call this a hit; the handler still runs, so it is a miss.
   it('reports an entry older than the request allows as stale-for-request', async () => {
-    class AgedStore implements Cache {
-      async get(): Promise<CacheEntry> {
+    class AgedStore implements HTTPCacheStore {
+      async get(): Promise<HTTPCacheEntry> {
         return {
           payload: '{"ok":true}',
           statusCode: 200,
@@ -278,14 +277,8 @@ describe('miss events', () => {
           storedAt: Date.now() - 5000,
         }
       }
-      async getMany(keys: string[]): Promise<CacheEntry[]> {
-        return Promise.all(keys.map(() => this.get()))
-      }
       async put(): Promise<void> {}
-      async putMany(): Promise<void> {}
-      async delete(): Promise<void> {}
-      async deleteMany(): Promise<void> {}
-      async clear(): Promise<void> {}
+      async evictByTag(): Promise<void> {}
     }
 
     @Controller('/obs-stale')
@@ -365,7 +358,7 @@ describe('hit events', () => {
 })
 
 describe('store events', () => {
-  it('reports the stored bytes and the ttl in seconds, fractional below one', async () => {
+  it('reports the stored bytes and the ttl in seconds, fractional above one', async () => {
     @Controller('/obs-store')
     class StoreController {
       @CacheControl({ ttl: 60 })
@@ -374,7 +367,7 @@ describe('store events', () => {
         return { ok: true }
       }
 
-      @CacheControl({ ttl: '500ms' })
+      @CacheControl({ ttl: '1500ms' })
       @Get('/brief')
       brief() {
         return { ok: true }
@@ -390,7 +383,7 @@ describe('store events', () => {
 
     expect(observer.stores.map(e => [e.bytes, e.ttlSeconds])).toEqual([
       [Buffer.byteLength(body), 60],
-      [Buffer.byteLength(body), 0.5],
+      [Buffer.byteLength(body), 1.5],
     ])
   })
 
@@ -416,22 +409,14 @@ describe('store events', () => {
   })
 
   it('reports nothing stored when the store rejects the write', async () => {
-    class FailingStore implements Cache {
+    class FailingStore implements HTTPCacheStore {
       async get(): Promise<undefined> {
         return undefined
-      }
-      async getMany(keys: string[]): Promise<undefined[]> {
-        return keys.map(() => undefined)
       }
       async put(): Promise<void> {
         throw new Error('store unavailable')
       }
-      async putMany(): Promise<void> {
-        throw new Error('store unavailable')
-      }
-      async delete(): Promise<void> {}
-      async deleteMany(): Promise<void> {}
-      async clear(): Promise<void> {}
+      async evictByTag(): Promise<void> {}
     }
 
     @Controller('/obs-store-fails')
@@ -457,16 +442,16 @@ describe('store events', () => {
 })
 
 describe('invalidate events', () => {
-  it('reports the keys a successful mutation evicted, and nothing for a failed one', async () => {
+  it('reports the tags a successful mutation evicted, and nothing for a failed one', async () => {
     @Controller('/obs-invalidate')
     class InvalidateController {
-      @CacheInvalidate({ paths: ['/obs-invalidate/a', '/obs-invalidate/b?y=2&x=1'] })
+      @CacheInvalidate({ tags: ['pets', 'all'] })
       @Post('/ok')
       ok() {
         return { ok: true }
       }
 
-      @CacheInvalidate()
+      @CacheInvalidate({ tags: ['pets'] })
       @Status(400)
       @Post('/rejected')
       rejected() {
@@ -484,59 +469,32 @@ describe('invalidate events', () => {
     expect(observer.invalidations).toEqual([
       {
         route: { method: 'POST', url: '/obs-invalidate/ok', handler: 'InvalidateController.ok' },
-        segment: undefined,
-        scope: 'keys',
-        keys: [encodeURIComponent('/obs-invalidate/a'), encodeURIComponent('/obs-invalidate/b?x=1&y=2')],
+        tags: ['pets', 'all'],
       },
     ])
-  })
-
-  it('reports a segment clear by its segment', async () => {
-    @Controller('/obs-clear')
-    class ClearController {
-      @CacheInvalidate({ segment: 'products', clear: true })
-      @Post('/products')
-      update() {
-        return { ok: true }
-      }
-    }
-    void [ClearController]
-
-    const observer = new RecordingObserver()
-    const app = await start(observer)
-
-    await app.fetch('/obs-clear/products', { method: 'POST' })
-
-    expect(observer.invalidations).toMatchObject([{ scope: 'segment', segment: 'products' }])
   })
 })
 
 describe('route identity', () => {
-  it('carries the segment on every event from a segmented route', async () => {
-    @Controller('/obs-segment')
-    class SegmentController {
-      @CacheControl({ ttl: 60, segment: 'pets' })
+  it('carries the tags on the store event of a tagged route', async () => {
+    @Controller('/obs-tags')
+    class TagsController {
+      @CacheControl({ ttl: 60, tags: ['pets'] })
       @Get('/data')
       data() {
         return { ok: true }
       }
     }
-    void [SegmentController]
+    void [TagsController]
 
     const observer = new RecordingObserver()
     const app = await start(observer)
 
-    await app.fetch('/obs-segment/data')
-    await app.fetch('/obs-segment/data')
-    // Bypasses the read, then stores the fresh response it got.
-    await app.fetch('/obs-segment/data', { headers: { 'cache-control': 'no-cache' } })
+    await app.fetch('/obs-tags/data')
+    await app.fetch('/obs-tags/data')
 
-    const events = [...observer.misses, ...observer.stores, ...observer.hits, ...observer.bypasses]
-
-    expect(events.map(e => e.segment)).toEqual(['pets', 'pets', 'pets', 'pets', 'pets'])
-    expect([observer.misses, observer.stores, observer.hits, observer.bypasses].map(list => list.length)).toEqual([
-      1, 2, 1, 1,
-    ])
+    expect(observer.stores.map(e => e.tags)).toEqual([['pets']])
+    expect(observer.hits).toHaveLength(1)
   })
 
   // Built once when the route registers. An adapter may key its own per-route state on this object; rebuilding

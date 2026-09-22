@@ -2,7 +2,7 @@ import { Controller, Get, Post, type WebApplication, createWebApplication } from
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
 
 /**
@@ -34,7 +34,7 @@ class HookController {
     return { ok: true }
   }
 
-  @CacheInvalidate({ paths: ['/hooks/cached'] })
+  @CacheInvalidate({ tags: ['hooks'] })
   @Post('/mutate')
   mutate() {
     return { ok: true }
@@ -55,7 +55,7 @@ beforeAll(async () => {
     })
     .with(
       HTTPCaching(b =>
-        b.store(new MemoryCache()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} }),
+        b.store(new MemoryHTTPCacheStore()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} }),
       ),
     )
   await app.ready()

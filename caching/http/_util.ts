@@ -21,8 +21,9 @@ export function routeMethods(routeDef: AdapterRouteOptions): string {
 }
 
 // Canonicalizes a request URL so query parameters in a different order share one cache entry
-// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Sorts the query keys; leaves query-less URLs untouched.
-export function canonicalizeURL(url: string): string {
+// (`?a=1&b=2` and `?b=2&a=1` are equivalent). Keeps only the parameters in `varyByQuery` when there is a list,
+// sorts the rest by key, and leaves a query-less URL untouched.
+export function canonicalizeURL(url: string, varyByQuery?: ReadonlySet<string>): string {
   const queryStart = url.indexOf('?')
   if (queryStart === -1) {
     return url
@@ -30,6 +31,13 @@ export function canonicalizeURL(url: string): string {
 
   const path = url.slice(0, queryStart)
   const params = new URLSearchParams(url.slice(queryStart + 1))
+  if (varyByQuery !== undefined) {
+    for (const name of [...params.keys()]) {
+      if (!varyByQuery.has(name)) {
+        params.delete(name)
+      }
+    }
+  }
   params.sort()
 
   const query = params.toString()
@@ -37,8 +45,7 @@ export function canonicalizeURL(url: string): string {
   return query ? `${path}?${query}` : path
 }
 
-// The one derivation of a store key, over plain values so the hooks, a path and the `cacheKey` helper all go
-// through it.
+// The one derivation of a store key.
 //
 // GET and HEAD have equivalent representations — they share the same cache entry. Other methods include the
 // method in the key to avoid cross-method collisions. When vary headers are configured, their request values are
@@ -48,8 +55,9 @@ export function buildCacheKey(
   url: string,
   vary: readonly string[] | undefined,
   headerOf: (name: string) => string | string[] | undefined,
+  varyByQuery?: ReadonlySet<string>,
 ): string {
-  const canonical = canonicalizeURL(url)
+  const canonical = canonicalizeURL(url, varyByQuery)
   const base = method === 'GET' || method === 'HEAD' ? canonical : `${method}:${canonical}`
   if (!vary?.length) {
     return encodeURIComponent(base)
@@ -60,18 +68,12 @@ export function buildCacheKey(
   return encodeURIComponent(`${base}#${parts.join('&')}`)
 }
 
-export function defaultCacheKey(request: AdapterRequest, vary?: readonly string[]): string {
-  return buildCacheKey(request.method, request.url, vary, name => request.headers[name])
-}
-
-// The key `defaultCacheKey` gives a GET for `path` on a route with no vary — what an invalidation by path must
-// delete. Kept beside `defaultCacheKey` so the two derivations cannot drift apart; the property test pins them.
-export function pathCacheKey(path: string): string {
-  return buildCacheKey('GET', path, undefined, noHeader)
-}
-
-function noHeader(): undefined {
-  return undefined
+export function defaultCacheKey(
+  request: AdapterRequest,
+  vary?: readonly string[],
+  varyByQuery?: ReadonlySet<string>,
+): string {
+  return buildCacheKey(request.method, request.url, vary, name => request.headers[name], varyByQuery)
 }
 
 /** The request directives the cache acts on. */
@@ -81,6 +83,10 @@ export interface RequestCacheControl {
   readonly onlyIfCached: boolean
   /** Seconds. Absent when the directive is, or when its value is not a number. */
   readonly maxAge: number | undefined
+  /** Seconds the entry must stay fresh for (RFC 9111 §5.2.1.3). Absent as `maxAge` is. */
+  readonly minFresh: number | undefined
+  /** Seconds past its freshness the client accepts (RFC 9111 §5.2.1.2); `Infinity` for the bare directive. */
+  readonly maxStale: number | undefined
 }
 
 const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
@@ -88,6 +94,8 @@ const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
   noStore: false,
   onlyIfCached: false,
   maxAge: undefined,
+  minFresh: undefined,
+  maxStale: undefined,
 })
 
 // RFC 9111 §5.2 — directive names compare case-insensitively, and an argument may arrive as a token or as a
@@ -101,6 +109,8 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
   let noStore = false
   let onlyIfCached = false
   let maxAge: number | undefined
+  let minFresh: number | undefined
+  let maxStale: number | undefined
 
   for (const part of header.split(',')) {
     const eq = part.indexOf('=')
@@ -113,17 +123,21 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
     } else if (name === 'only-if-cached') {
       onlyIfCached = true
     } else if (name === 'max-age' && eq !== -1) {
-      const raw = part
-        .slice(eq + 1)
-        .trim()
-        .replace(/^"(.*)"$/, '$1')
-      if (/^\d+$/.test(raw)) {
-        maxAge = Number(raw)
-      }
+      maxAge = seconds(part.slice(eq + 1)) ?? maxAge
+    } else if (name === 'min-fresh' && eq !== -1) {
+      minFresh = seconds(part.slice(eq + 1)) ?? minFresh
+    } else if (name === 'max-stale') {
+      maxStale = eq === -1 ? Infinity : (seconds(part.slice(eq + 1)) ?? maxStale)
     }
   }
 
-  return { noCache, noStore, onlyIfCached, maxAge }
+  return { noCache, noStore, onlyIfCached, maxAge, minFresh, maxStale }
+}
+
+function seconds(argument: string): number | undefined {
+  const raw = argument.trim().replace(/^"(.*)"$/, '$1')
+
+  return /^\d+$/.test(raw) ? Number(raw) : undefined
 }
 
 // RFC 9111 §5.4 — `Pragma: no-cache` stands in for the directive only on a request that sent no Cache-Control.
@@ -237,14 +251,20 @@ function connectionFieldsOf(connection: unknown): Set<string> | undefined {
   )
 }
 
-// A header an earlier hook already set belongs to this request — CORS, authentication — and outranks the one
-// stored with another request's response. `Vary` is the exception: it accumulates.
+/**
+ * How a stored entry's headers land on a reply. On a `hit` a header an earlier hook already set belongs to this
+ * request — CORS, authentication — and outranks the stored one; a `revalidation` carries only what guides a cache
+ * update (RFC 9110 §15.4.5); a `replacement` writes the entry over an error response the handler produced, so the
+ * stored headers win. `Vary` accumulates in every mode.
+ */
+export type StoredHeadersMode = 'hit' | 'revalidation' | 'replacement'
+
 export function applyStoredHeaders(
   reply: AdapterReply,
   headers: Record<string, string | string[]>,
-  revalidation: boolean,
+  mode: StoredHeadersMode,
 ): void {
-  if (revalidation) {
+  if (mode === 'revalidation') {
     for (const name of REVALIDATION_HEADERS) {
       const value = headers[name]
       if (value !== undefined && !reply.hasHeader(name)) {
@@ -252,8 +272,9 @@ export function applyStoredHeaders(
       }
     }
   } else {
+    const overwrite = mode === 'replacement'
     for (const name in headers) {
-      if (name !== 'vary' && !reply.hasHeader(name)) {
+      if (name !== 'vary' && (overwrite || !reply.hasHeader(name))) {
         reply.header(name, headers[name])
       }
     }
@@ -324,11 +345,15 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
     directives.push(`s-maxage=${Math.floor(parseDuration(opts.sharedMaxAge))}`)
   }
 
-  if (opts.staleWhileRevalidate !== undefined) {
+  // RFC 9111 §4.2.4 — a response that must be revalidated is never served stale, so the windows are not
+  // announced either: what the server-side store does not honour, a cache downstream is not told to.
+  const staleAllowed = !opts.mustRevalidate && !opts.proxyRevalidate && !opts.noCache
+
+  if (staleAllowed && opts.staleWhileRevalidate !== undefined) {
     directives.push(`stale-while-revalidate=${Math.floor(parseDuration(opts.staleWhileRevalidate))}`)
   }
 
-  if (opts.staleIfError !== undefined) {
+  if (staleAllowed && opts.staleIfError !== undefined) {
     directives.push(`stale-if-error=${Math.floor(parseDuration(opts.staleIfError))}`)
   }
 
@@ -343,31 +368,59 @@ export function strictSeconds(value: Duration): number {
 }
 
 // `parseDuration` reads what it cannot parse as 0, and a store reads a ttl of 0 as it pleases — `lru-cache` as
-// "never expires". So a duration is refused while the route registers, not discovered in production.
+// "never expires". So a duration is refused while the route registers, not discovered in production. A `ttl`
+// below one second is refused too: `max-age` is whole seconds, and it would be sent as `max-age=0`.
 export function durationSeconds(
   routeDef: AdapterRouteOptions,
   option: string,
   value: Duration,
-  positive: boolean,
+  minimum: 0 | 1,
 ): number {
   const seconds = strictSeconds(value)
 
-  if (!Number.isFinite(seconds) || seconds < 0 || (positive && seconds === 0)) {
+  if (!Number.isFinite(seconds) || seconds < minimum) {
     throw new ErrConfiguration(
-      `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be a ${
-        positive ? 'positive' : 'non-negative'
-      } duration such as 60 or "5m", got "${String(value)}"`,
+      `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
+        minimum === 1 ? 'at least one second' : 'a non-negative duration'
+      }, such as ${minimum === 1 ? '60' : '0'} or "5m", got "${String(value)}"`,
     )
   }
 
   return seconds
 }
 
+// A tag names a counter in the store, and a brace in a key would decide its slot on a Redis cluster.
+export function assertTags(
+  routeDef: AdapterRouteOptions,
+  tags: unknown,
+  { what, required }: { what: 'caching' | 'cache invalidation'; required: boolean },
+): void {
+  const where = `Cannot install ${what} on "${routeMethods(routeDef)} ${routeDef.url}"`
+
+  if (tags === undefined) {
+    if (required) {
+      throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+    }
+
+    return
+  }
+
+  if (!Array.isArray(tags) || (required && tags.length === 0)) {
+    throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+  }
+
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || tag === '' || tag.includes('{') || tag.includes('}')) {
+      throw new ErrConfiguration(`${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`)
+    }
+  }
+}
+
 // Routes that share a URL under different constraints share a default key too, so one would be served the
 // other's response. What tells them apart on the wire is the header the constraint reads, which the key carries
-// once the route varies on it; a segment of its own, or its own key function, does the same job.
+// once the route varies on it; a key function of the route's own does the same job.
 export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: CacheControlOptions): void {
-  if (opts.ttl === undefined || opts.key !== undefined || opts.segment || opts.vary?.includes('*')) {
+  if (opts.ttl === undefined || opts.key !== undefined || opts.vary?.includes('*')) {
     return
   }
 
@@ -391,14 +444,29 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
   for (const [name, header] of headers) {
     if (header === undefined) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route its own "segment" or a "key" function`,
+        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
       )
     }
 
     if (!vary.has(header.toLowerCase())) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route its own "segment" or a "key" function`,
+        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
       )
     }
   }
+}
+
+/** The payload shapes the server sends as a stream: a Node stream, a web stream, or a `Response`. */
+export function isStreamPayload(payload: unknown): boolean {
+  if (payload === null || typeof payload !== 'object') {
+    return false
+  }
+
+  const candidate = payload as { pipe?: unknown; getReader?: unknown }
+
+  return (
+    typeof candidate.pipe === 'function' ||
+    typeof candidate.getReader === 'function' ||
+    Object.prototype.toString.call(payload) === '[object Response]'
+  )
 }

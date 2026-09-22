@@ -1,3 +1,7 @@
+import { setTimeout as sleep } from 'node:timers/promises'
+
+import type { FastifyPluginAsync } from 'fastify'
+import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createWebApplication, newRouter, type Context } from '../../../index.js'
@@ -169,7 +173,33 @@ describe('a callback that fails', () => {
     await app.close()
   })
 
+  // `reply.sent` stays false while an `onSend` hook that awaits holds onFail's redirect open; asked of Fastify
+  // alone, the route would send its own answer over it.
+  it('leaves the response to onFail under an onSend hook that awaits', async () => {
+    let runs = 0
+    const slowSend: FastifyPluginAsync = async instance => {
+      instance.addHook('onSend', async (_request, _reply, payload) => {
+        runs++
+        await sleep(20)
+        return payload
+      })
+    }
+    const app = application(ctx => {
+      ctx.redirect('/sign-in?failed=1', 303)
+    }).with(() => fp(slowSend, { name: 'slow-send' }))
+    await app.ready()
+
+    const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
+
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/sign-in?failed=1')
+    expect(runs).toBe(1)
+
+    await app.close()
+  })
+
   // The way `onChallenge` and `onForbid` are written: set the redirect, and leave the sending to the framework.
+
   it('sends the redirect onFail set up and left unsent', async () => {
     const app = application(ctx => void ctx.status(302).header('location', '/sign-in?failed=1'))
     await app.ready()

@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { pathToRegexp } from 'path-to-regexp'
 
 import { ErrHTTPBadRequest } from '../error/http.js'
+import { rawContext } from './_raw_context.js'
 import type { MiddlewarePath, Next, NodeMiddleware } from './middleware.js'
 
 // A connect-style chain for one hook. Path matching normalizes the URL the way Fastify's router does, so a
@@ -60,7 +61,10 @@ export function createEngine(options: NormalizationOptions): Engine {
       const next = (err?: Error | null): void => {
         raw.url = originalURL
 
-        if (res.writableEnded) {
+        // A middleware that answered — through the context, or on the raw response — ends the chain. The
+        // context's own record is asked too: `writableEnded` stays false while an `onSend` hook that awaits
+        // holds that answer open, and the handler would send a second time over it.
+        if (res.writableEnded || rawContext(raw)?.sent === true) {
           return
         }
 

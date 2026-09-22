@@ -18,9 +18,10 @@ export function cacheControl(options: CacheControlOptions | false = {}): AnyRout
 }
 
 /**
- * Evicts cached entries after a successful mutating request. The decorator form is {@link CacheInvalidate}.
+ * Evicts every entry stored under any of `tags` after a successful mutating request. The decorator form is
+ * {@link CacheInvalidate}.
  */
-export function cacheInvalidate(options: CacheInvalidateOptions = {}): AnyRouteExtension {
+export function cacheInvalidate(options: CacheInvalidateOptions): AnyRouteExtension {
   return (target: ConfigTarget) => {
     target.config('cacheInvalidate', options)
   }

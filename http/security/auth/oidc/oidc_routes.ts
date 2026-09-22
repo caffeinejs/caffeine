@@ -90,7 +90,8 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
 
         // The strategy's `onFail` has run by now and may have answered, usually by sending the user to a page that
         // says the sign-in did not work. What it answered stands, whether it sent it or left a redirect to be sent.
-        if (reply.sent) {
+        // Asked of the context: `reply.sent` is still false while an `onSend` hook holds that send open.
+        if (req.httpContext.sent) {
           return reply
         }
 

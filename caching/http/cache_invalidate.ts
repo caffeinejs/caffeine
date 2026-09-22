@@ -1,120 +1,65 @@
-import {
-  ErrConfiguration,
-  addRouteHook,
-  type AdapterReply,
-  type AdapterRequest,
-  type AdapterRouteOptions,
-  type FastifyContextRequest,
-} from '@caffeinejs/http'
-import type { FastifyRequest } from 'fastify'
+import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http'
 
 import { cacheRouteOf } from './_observe.js'
-import { pathCacheKey, routeMethods } from './_util.js'
+import { assertTags } from './_util.js'
 import type { CacheDeps } from './cache.js'
-import { withStoreTimeout } from './store_timeout.js'
+import { withStoreSignal } from './store_signal.js'
 
-/**
- * What a route evicts once a mutating request is answered with a `2xx` or a `3xx` — one of three forms, never
- * mixed.
- *
- * - `paths`: literal paths, not patterns, each evicted as the GET representation the cache stored for it. The
- *   request's own URL when omitted. A path cannot reach a route that varies: the cache keeps one entry per
- *   combination of `Vary` values, and a path names none of them.
- * - `key`: the store keys to evict, used as returned. An entry is reached only under the exact key it was stored
- *   with: for a route whose `@CacheControl` has a `key` function, call that same function; for one on the default
- *   key, `cacheKey(req, { method: 'GET', url })` derives it from the evicting request. `req` is the request of the
- *   handler's own context, so it needs a server the application's adapter drives.
- * - `clear`: every entry in `segment` — the one form that reaches a varying route's entries. `segment` is
- *   required, since clearing without one would empty the whole store.
- *
- * `segment` must match the `segment` of the `@CacheControl` that stored the entries.
- */
-export type CacheInvalidateOptions =
-  | { paths?: string[]; segment?: string; key?: never; clear?: never }
-  | { key: (req: FastifyContextRequest) => string | string[]; segment?: string; paths?: never; clear?: never }
-  | { clear: true; segment: string; paths?: never; key?: never }
+export interface CacheInvalidateOptions {
+  /**
+   * The tags to evict once the request is answered with a `2xx` or a `3xx`: every entry stored under any of
+   * them, whatever route stored it. Non-empty strings without `{` or `}`; refused at start-up otherwise.
+   */
+  tags: string[]
+}
 
 /**
  * Attaches the eviction hook to one route, per its `@CacheInvalidate` options.
  *
- * Evicts cached entries after a mutating request answered with a `2xx` or a `3xx`, targeting the store the
- * cache hooks write to. A store that rejects the eviction does not fail the response.
+ * Evicts by tag after a mutating request answered with a `2xx` or a `3xx`, on the store the cache hooks write
+ * to. A store that rejects the eviction does not fail the response.
  *
- * @throws ErrConfiguration When `opts` mixes forms, or asks to `clear` without a `segment`.
+ * @throws ErrConfiguration When `tags` is missing, empty, or holds a tag that is not a non-empty string without
+ *   a brace.
  */
 export function attachCacheInvalidateHook(
   routeDef: AdapterRouteOptions,
   opts: CacheInvalidateOptions,
   deps: CacheDeps,
 ): void {
-  assertOneForm(routeDef, opts)
+  assertTags(routeDef, opts.tags, { what: 'cache invalidation', required: true })
 
   const { store, observer, storeTimeoutMs } = deps
   const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
+  const tags: readonly string[] = Object.freeze([...opts.tags])
 
   // RFC 9111 §4.4 — a non-error response, 2xx or 3xx, invalidates: a 303 after a form post evicts like a 200.
-  // Events fire once the store settles: an eviction that rejected did not happen, and it costs the cache, never
-  // the response to a mutation that already went through.
-  async function invalidateHandler(request: AdapterRequest, reply: AdapterReply): Promise<unknown> {
+  // The event fires once the store settled: an eviction that rejected did not happen, and it costs the cache,
+  // never the response to a mutation that already went through. The mutation is done, so the eviction is not
+  // tied to the request's own signal. A response that evicts nothing is finished here and now, through `next`,
+  // the way the cache hooks finish one (see `attachCacheHooks`).
+  function invalidateHandler(
+    _request: AdapterRequest,
+    reply: AdapterReply,
+    payload: unknown,
+    next: (err: Error | null, payload?: unknown) => void,
+  ): void | Promise<unknown> {
     if (reply.statusCode < 200 || reply.statusCode >= 400) {
+      next(null, payload)
       return
     }
 
-    if (opts.clear === true) {
-      try {
-        await withStoreTimeout(store.clear(opts.segment), 'clear', storeTimeoutMs)
-        observer?.onInvalidate?.({ route: route!, segment: opts.segment, scope: 'segment' })
-      } catch (error) {
-        observer?.onError?.({ route: route!, segment: opts.segment, operation: 'clear', error })
-      }
+    return evict().then(() => payload)
+  }
 
-      return
-    }
-
-    const keys = keysOf(request, opts)
+  async function evict(): Promise<void> {
     try {
-      await withStoreTimeout(store.deleteMany(keys, opts.segment), 'delete', storeTimeoutMs)
-      observer?.onInvalidate?.({ route: route!, segment: opts.segment, scope: 'keys', keys })
+      await withStoreSignal('evict', undefined, storeTimeoutMs, signal => store.evictByTag(tags, { signal }))
+      observer?.onInvalidate?.({ route: route!, tags })
     } catch (error) {
-      observer?.onError?.({ route: route!, segment: opts.segment, operation: 'delete', error })
+      observer?.onError?.({ route: route!, operation: 'evict', error })
     }
-
-    return
   }
 
   addRouteHook(routeDef, 'onSend', invalidateHandler)
-}
-
-function keysOf(request: AdapterRequest, opts: CacheInvalidateOptions): string[] {
-  if (opts.key !== undefined) {
-    const keys = opts.key((request as FastifyRequest).httpContext.req)
-    return typeof keys === 'string' ? [keys] : keys
-  }
-
-  const paths = opts.paths ?? [request.url]
-
-  const keys = new Array<string>(paths.length)
-  for (let i = 0; i < paths.length; i++) {
-    keys[i] = pathCacheKey(paths[i])
-  }
-
-  return keys
-}
-
-// Route config reaches here untyped from a route registered straight on Fastify, so the union's exclusivity is
-// checked again at runtime.
-function assertOneForm(routeDef: AdapterRouteOptions, opts: CacheInvalidateOptions): void {
-  const forms = Number(opts.paths !== undefined) + Number(opts.key !== undefined) + Number(opts.clear === true)
-
-  if (forms > 1) {
-    throw new ErrConfiguration(
-      `Cannot install cache invalidation on "${routeMethods(routeDef)} ${routeDef.url}": paths, key and clear are mutually exclusive`,
-    )
-  }
-
-  if (opts.clear === true && !opts.segment) {
-    throw new ErrConfiguration(
-      `Cannot install cache invalidation on "${routeMethods(routeDef)} ${routeDef.url}": clear requires a segment`,
-    )
-  }
 }

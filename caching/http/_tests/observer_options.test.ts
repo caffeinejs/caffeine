@@ -2,7 +2,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching } from '../index.js'
 import type { CacheMissEvent, CacheObserver } from '../observer.js'
 
@@ -37,7 +37,7 @@ describe('HTTPCaching observer option', () => {
     container.bind(MissCounter, t => t.toClass(MissCounter))
 
     const app = createWebApplication({ container }).with(
-      HTTPCaching(b => b.store(new MemoryCache()).observer(MissCounter)),
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(MissCounter)),
     )
     close = () => app.close()
     await app.ready()
@@ -55,7 +55,7 @@ describe('HTTPCaching observer option', () => {
     }
 
     const app = createWebApplication({ container: new CaffeineIoC() }).with(
-      HTTPCaching(b => b.store(new MemoryCache()).observer(UnboundObserver)),
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(UnboundObserver)),
     )
     close = () => app.close()
 
@@ -79,7 +79,7 @@ describe('HTTPCaching observer option', () => {
     void [ObjectController]
 
     const observer = new MissCounter()
-    const app = createWebApplication().with(HTTPCaching({ store: new MemoryCache(), observer }))
+    const app = createWebApplication().with(HTTPCaching({ store: new MemoryHTTPCacheStore(), observer }))
     close = () => app.close()
     await app.ready()
 

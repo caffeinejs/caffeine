@@ -13,6 +13,10 @@ import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
  * `EnvConfigSource` lowercases each path segment and only `CLIENT_I_D` would reach the other spelling. The
  * TypeScript identifiers they feed still follow the repository's acronym rules, so `clientId` is handed to
  * `.clientID(...)`.
+ *
+ * `DATABASE_URL` is the one value outside this schema, and on purpose: `prisma/schema.prisma` reads it itself,
+ * for the client and for the `prisma migrate` and seed commands, so it has no `PETSTORE_` prefix and nothing here
+ * declares it. `main.ts` and `prisma.config.ts` load `.env` for it.
  */
 export const ConfigSchema = $t.Object({
   // What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
@@ -34,6 +38,9 @@ export const ConfigSchema = $t.Object({
       // credentials, and a sign-in needs real ones to reach GitHub at all.
       clientId: $t.String({ default: 'dev-github-client-id' }),
       clientSecret: $t.String({ default: 'dev-github-client-secret' }),
+      // Also the host to browse the application from. The sign-in sets its state cookie for the host the
+      // browser is on, and GitHub sends the browser back here; `localhost` and `127.0.0.1` are different hosts
+      // to a browser, so a sign-in started on the other one comes back without its cookie.
       callbackUrl: $t.String({ default: 'http://localhost:9999/login/github/callback' }),
       // The OAuth scheme requires at least 32 characters, so the fallback is one.
       sessionSecret: $t.String({ default: 'petstore-dev-session-secret-32-chars!!' }),

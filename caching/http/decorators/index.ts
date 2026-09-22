@@ -20,11 +20,11 @@ export function CacheControl(options: CacheControlOptions | false = {}) {
 }
 
 /**
- * Evicts cached entries after a successful mutating request on the decorated route.
+ * Evicts every entry stored under any of `tags` after a successful mutating request on the decorated route.
  *
  * The programmatic form is {@link cacheInvalidate}.
  */
-export function CacheInvalidate(options: CacheInvalidateOptions = {}) {
+export function CacheInvalidate(options: CacheInvalidateOptions) {
   return (_fn: Function, context: ClassMemberDecoratorContext): void => {
     configureRoute(context, cacheInvalidate(options))
   }

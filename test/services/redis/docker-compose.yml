@@ -1,6 +1,6 @@
 services:
   redis:
-    image: redis:8-alpine
+    image: redis:8.10.2-alpine
     ports:
       - '127.0.0.1:6379:6379'
     healthcheck:
@@ -9,7 +9,7 @@ services:
       timeout: 3s
       retries: 5
   valkey:
-    image: valkey/valkey:9-alpine
+    image: valkey/valkey:9.1.2-alpine
     ports:
       - '127.0.0.1:6380:6379'
     healthcheck:
@@ -21,7 +21,7 @@ services:
   # two of them, which is what a cluster-aware client of these has to be tested against. The node announces the
   # address the host reaches it on, since a cluster client dials what the node announces.
   redis-cluster:
-    image: redis:8-alpine
+    image: redis:8.10.2-alpine
     command: >
       sh -c "redis-server --port 6381 --cluster-enabled yes --cluster-announce-ip 127.0.0.1
       --cluster-announce-port 6381 --save '' --appendonly no &
@@ -36,7 +36,7 @@ services:
       timeout: 3s
       retries: 10
   valkey-cluster:
-    image: valkey/valkey:9-alpine
+    image: valkey/valkey:9.1.2-alpine
     command: >
       sh -c "valkey-server --port 6382 --cluster-enabled yes --cluster-announce-ip 127.0.0.1
       --cluster-announce-port 6382 --save '' --appendonly no &

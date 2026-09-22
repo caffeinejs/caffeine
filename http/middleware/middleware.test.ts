@@ -1,5 +1,9 @@
+import { setTimeout as sleep } from 'node:timers/promises'
+
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import cors from 'cors'
+import type { FastifyPluginAsync } from 'fastify'
+import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -187,6 +191,39 @@ describe('middleware pipeline', () => {
 
     expect(res.status).toBe(418)
     expect(await res.json()).toEqual({ answered: 'directly' })
+    await app.close()
+  })
+
+  // `writableEnded` is false for as long as an `onSend` hook that awaits holds the middleware's answer open, so
+  // the chain asks the context too; otherwise `next()` would run the handler, and its send over the first.
+  it('ends the chain at a middleware that answered and still called next, under an onSend hook that awaits', async () => {
+    let runs = 0
+    const slowSend: FastifyPluginAsync = async instance => {
+      instance.addHook('onSend', async (_request, _reply, payload) => {
+        runs++
+        await sleep(20)
+        return payload
+      })
+    }
+    const reached: string[] = []
+
+    const app = newApp().with(() => fp(slowSend, { name: 'slow-send' }))
+    app.use((ctx, next) => {
+      ctx.status(418).body({ answered: 'early' })
+      next()
+    })
+    app.use((_ctx, next) => {
+      reached.push('second')
+      next()
+    })
+    await app.ready()
+
+    const res = await app.fetch('/mw/echo')
+
+    expect(res.status).toBe(418)
+    expect(await res.json()).toEqual({ answered: 'early' })
+    expect(reached).toEqual([])
+    expect(runs).toBe(1)
     await app.close()
   })
 

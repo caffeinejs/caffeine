@@ -1,7 +1,7 @@
 import { Controller, Get, Head, Header, Post, Principal, Status, createWebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching, type CacheBypassEvent, type CacheObserver } from '../index.js'
 
 /**
@@ -29,7 +29,7 @@ describe('what the cache says about a response', () => {
     }
     void [StatusController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -69,7 +69,7 @@ describe('what the cache says about a response', () => {
     }
     void [NonCacheableController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -97,7 +97,7 @@ describe('what the cache says about a response', () => {
     }
     void [NoStoreController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -128,7 +128,7 @@ describe('what the cache says about a response', () => {
     }
     void [NoStoreOverHandlerController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -155,7 +155,7 @@ describe('what the cache says about a response', () => {
     }
     void [HandlerDecidesController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -180,7 +180,7 @@ describe('what the cache says about a response', () => {
     }
     void [HandlerValidatorsController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -210,7 +210,7 @@ describe('what the cache says about a response', () => {
     }
     void [HeadersController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -239,7 +239,7 @@ describe('what the cache says about a response', () => {
     }
     void [CookieController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -264,7 +264,7 @@ describe('what the cache says about a response', () => {
     }
     void [PublicCookieController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -295,7 +295,7 @@ describe('what the cache says about a response', () => {
           reply.header('Access-Control-Allow-Origin', String(request.headers.origin))
         })
       })
-      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -320,7 +320,7 @@ describe('what the cache says about a response', () => {
     }
     void [HeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -351,7 +351,7 @@ describe('what the cache says about a response', () => {
     }
     void [OwnHeadController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -376,7 +376,7 @@ describe('what the cache says about a response', () => {
     }
     void [NotModifiedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -405,7 +405,7 @@ describe('what the cache says about a response', () => {
     }
     void [FreshNotModifiedController]
 
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryCache())))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -443,7 +443,11 @@ describe('a request authenticated without an Authorization header', () => {
           }
         })
       })
-      .with(HTTPCaching(b => (observer ? b.store(new MemoryCache()).observer(observer) : b.store(new MemoryCache()))))
+      .with(
+        HTTPCaching(b =>
+          observer ? b.store(new MemoryHTTPCacheStore()).observer(observer) : b.store(new MemoryHTTPCacheStore()),
+        ),
+      )
   }
 
   it('is answered privately, is not stored, and is not served what someone else stored', async () => {

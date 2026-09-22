@@ -122,6 +122,42 @@ at `run()`, so `port: 0` is spelled out for an OS-assigned port. `run()` still r
 `app.instance` and `app.fetch()` throw `ErrApplicationNotReady` before `ready()`; `app.address` is `undefined`
 until `run()` bound the socket.
 
+## Handler timeouts
+
+A server's `factory.handlerTimeout` and a route's `.timeout(ms)` are Fastify's `handlerTimeout`: its timer aborts
+`request.signal` with `FST_ERR_HANDLER_TIMEOUT` and sends a `503`. Fastify decides whether a handler that resolves
+afterwards may still send by `reply.sent`, which is `raw.writableEnded`; an `onSend` hook that awaits — a
+compressor — holds the `503` open, so a handler resolving in that window sends a second time, and
+`ERR_HTTP_HEADERS_SENT` escapes as an unhandled rejection. A plain Fastify server does the same. The route handler
+in `_register_route_group.ts` covers this side: on a timed route, a result arriving after the signal was aborted
+by the timeout is replaced by the reply itself, which Fastify awaits until the `503` is out
+(`_tests/handler_timeout.test.ts`). The mirror side — the timer firing while the handler's own response is held
+open by such a hook — is Fastify's to fix. `req.signal` is read on timed routes only: on any other, the read would
+create a controller per request.
+
+## A handler that answers for itself
+
+The route handler's default is to send: a handler returning `undefined` gets an empty response, which is what
+makes a `@Post('/logout')` that only redirects, or a `@Delete` that only deletes, work at all. A handler that
+answered the request itself and then returned — `await auth.signOut(ctx); ctx.redirect('/', 303)` — must not be
+answered over, so the handler asks `ctx.sent` first, and in the asynchronous path hands the reply back rather
+than `undefined`: Fastify reads `undefined` from a promise as a request to send.
+
+`ctx.sent` is the context's own record that `body`, `redirect` or a status shorthand has sent, falling back to
+Fastify's `reply.sent`. Fastify's alone is not enough. It is `raw.writableEnded`, which stays false for as long
+as an `onSend` hook that awaits — `@Compress`, `@caffeinejs/caching` storing an entry — holds the first send
+open, and a send started in that window is not the logged `FST_ERR_REP_ALREADY_SENT` of a response already out:
+it runs the hook chain a second time and writes headers over headers. Both halves are load-bearing, and
+`_tests/handler_answered.test.ts` counts the hook's runs to hold them there. A handler reaching past the context
+to `ctx.platform.reply.send(...)`, or hijacking, is outside that record and is seen only once the response has
+ended.
+
+The same question is asked the same way wherever this package sends on somebody else's behalf: the error
+handler's `respond` (`error/plugin.ts`), the authentication gate after a scheme challenged, the OIDC callback
+route after a strategy's `onFail` (`security/auth/oidc/oidc_routes.ts`), and the middleware chain before it
+runs the next layer (`middleware/_engine.ts`). A handler that answered and then returned a value or a
+`Responder` is not sent over either: the route handler asks before every branch, not only the `undefined` one.
+
 ## The adapter owns its types
 
 Everything that belongs to the server library behind an adapter is named once, in an `AdapterTypes` descriptor

@@ -1,10 +1,8 @@
-import { FastifyContextRequest, type AdapterRequest } from '@caffeinejs/http'
+import type { AdapterRequest } from '@caffeinejs/http'
 import { it, fc } from '@fast-check/vitest'
-import type { FastifyRequest } from 'fastify'
 import { describe, expect } from 'vitest'
 
-import { defaultCacheKey, generateETag, matchesETag, pathCacheKey } from './_util.js'
-import { cacheKey } from './cache_key.js'
+import { defaultCacheKey, generateETag, matchesETag } from './_util.js'
 
 // An arbitrary entity-tag as RFC 9110 §8.8.3 writes one: double-quoted, no quote inside, no leading W/ (covered
 // separately). A comma inside is legal, which is why a list is scanned for tags and never cut on commas.
@@ -113,76 +111,29 @@ function withQuery(path: string, params: [string, string][]): string {
   return `${path}?${params.map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&')}`
 }
 
-describe('pathCacheKey (property)', () => {
-  // Invalidation by path deletes `pathCacheKey(path)`; the cache stored the entry under `defaultCacheKey`. If the
-  // two ever disagree, `@CacheInvalidate({ paths })` reports success and evicts nothing.
+describe('defaultCacheKey (property)', () => {
+  const asRequest = (method: string, url: string) => ({ method, url, headers: {} }) as unknown as AdapterRequest
+
   it.prop([pathWithQuery, fc.constantFrom('GET', 'HEAD')])(
-    'matches the key a GET or HEAD stored, whatever order the query arrived in',
+    'gives a GET and a HEAD one key, whatever order the query arrived in',
     ([path, params, shuffled], method) => {
-      const request = { method, url: withQuery(path, shuffled), headers: {} } as unknown as AdapterRequest
-
-      expect(pathCacheKey(withQuery(path, params))).toBe(defaultCacheKey(request))
-    },
-  )
-})
-
-describe('cacheKey (property)', () => {
-  const asRequest = (method: string, url: string, headers: Record<string, string> = {}) =>
-    ({ method, url, headers }) as unknown as AdapterRequest
-
-  const wrap = (request: AdapterRequest) => new FastifyContextRequest(request as unknown as FastifyRequest)
-
-  // The helper exists to name an entry from another request. If it ever derives a key the cache would not have
-  // stored, an eviction written with it reports success and evicts nothing.
-  it.prop([pathWithQuery, fc.constantFrom('GET', 'HEAD', 'POST')])(
-    'is the key the cache stores for the same request',
-    ([path, , shuffled], method) => {
-      const request = asRequest(method, withQuery(path, shuffled))
-
-      expect(cacheKey(wrap(request))).toBe(defaultCacheKey(request))
-    },
-  )
-
-  it.prop([pathWithQuery, fc.constantFrom('PUT', 'POST', 'DELETE', 'PATCH')])(
-    'names, from a mutating request, the entry a GET stored on that URL or on another',
-    ([path, params, shuffled], method) => {
-      const mutation = wrap(asRequest(method, withQuery(path, shuffled)))
-
-      expect(cacheKey(mutation, { method: 'get' })).toBe(pathCacheKey(withQuery(path, params)))
-      expect(cacheKey(wrap(asRequest(method, '/elsewhere')), { method: 'GET', url: withQuery(path, params) })).toBe(
-        pathCacheKey(withQuery(path, shuffled)),
+      expect(defaultCacheKey(asRequest(method, withQuery(path, shuffled)))).toBe(
+        defaultCacheKey(asRequest('GET', withQuery(path, params))),
       )
     },
   )
 
-  it.prop([pathWithQuery, fc.string(), fc.string()])(
-    'names one variant of a varying route, from header values it is given',
-    ([path, params], language, other) => {
-      const stored = asRequest('GET', withQuery(path, params), { 'accept-language': language })
-      const mutation = wrap(asRequest('POST', '/publish', { 'accept-language': other }))
+  // A parameter outside the allow-list, wherever it sits and whatever it holds, changes nothing about the key;
+  // the ones inside still count, in any order.
+  it.prop([pathWithQuery, fc.array(fc.tuple(fc.stringMatching(/^x-[a-z]{1,6}$/), fc.string()), { maxLength: 3 })])(
+    'leaves the key unchanged by any parameter outside varyByQuery',
+    ([path, params, shuffled], extra) => {
+      const named = new Set(params.map(([k]) => k))
+      fc.pre(!extra.some(([k]) => named.has(k)))
+      const withExtra = [...shuffled.slice(0, 1), ...extra, ...shuffled.slice(1)] as [string, string][]
 
-      expect(
-        cacheKey(mutation, {
-          method: 'GET',
-          url: withQuery(path, params),
-          vary: ['Accept-Language'],
-          headers: { 'accept-language': language },
-        }),
-      ).toBe(defaultCacheKey(stored, ['Accept-Language']))
-    },
-  )
-
-  // A mutation usually shares most of what the stored request varied on: only the values that differ are
-  // given, and the rest is read off the mutating request, as the cache read it off the one that stored.
-  it.prop([fc.string(), fc.string(), fc.string()])(
-    'reads from the request the varied headers it is not given',
-    (language, encoding, other) => {
-      const vary = ['Accept-Language', 'Accept-Encoding']
-      const stored = asRequest('GET', '/pets', { 'accept-language': language, 'accept-encoding': encoding })
-      const mutation = wrap(asRequest('PUT', '/pets', { 'accept-language': other, 'accept-encoding': encoding }))
-
-      expect(cacheKey(mutation, { method: 'GET', vary, headers: { 'accept-language': language } })).toBe(
-        defaultCacheKey(stored, vary),
+      expect(defaultCacheKey(asRequest('GET', withQuery(path, withExtra)), undefined, named)).toBe(
+        defaultCacheKey(asRequest('GET', withQuery(path, params)), undefined, named),
       )
     },
   )

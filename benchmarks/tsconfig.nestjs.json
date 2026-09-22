@@ -21,6 +21,8 @@
     "mixedscopes/nestjs/nestjs.ts",
     "authn/nestjs/nestjs.ts",
     "authn/shared.ts",
+    "caching/nestjs/nestjs.ts",
+    "caching/payload.ts",
     "testing/nestjs/**/*.ts"
   ],
   "exclude": ["dist", "node_modules"]

@@ -1,10 +1,11 @@
 import type { InjectionToken } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 
-import type { Cache } from '../store.js'
 import type { ETagGenerator } from './cache.js'
 import type { CacheObserver } from './observer.js'
 import type { HTTPCachingOptions } from './options.js'
+import type { HTTPCacheStore } from './store.js'
 
 /**
  * Materializes a {@link HTTPCachingOptionsBuilder} into the {@link HTTPCachingOptions} it built.
@@ -16,25 +17,30 @@ export const kBuild = Symbol('caffeine.caching.build')
 
 /** Fluent authoring for {@link HTTPCachingOptions}, e.g. `HTTPCaching(b => b.store(myStore))`. */
 export class HTTPCachingOptionsBuilder {
-  #store: Cache | InjectionToken<Cache> | undefined
+  #store: HTTPCacheStore | InjectionToken<HTTPCacheStore> | undefined
   #etagGenerator: ETagGenerator | InjectionToken<ETagGenerator> | undefined
   #statusHeader: string | undefined
   #observer: CacheObserver | InjectionToken<CacheObserver> | undefined
   #storeTimeout: Duration | undefined
+  #lockTimeout: Duration | undefined
+  #varyByQuery: string[] | undefined
+  #maxEntrySize: ByteSize | undefined
 
-  /** The store backing cached responses, or a token to resolve one from the container. */
-  store(store: Cache | InjectionToken<Cache>): this {
+  /** The store backing cached responses, or a token to resolve one from the container. Required. */
+  store(store: HTTPCacheStore | InjectionToken<HTTPCacheStore>): this {
     this.#store = store
     return this
   }
 
-  /** The function hashing a payload into an `ETag`, or a token to resolve one from the container. */
+  /** The function hashing a payload into an `ETag`, or a token to resolve one from the container. Default: an internal SHA-1 hash. */
+
   etagGenerator(generator: ETagGenerator | InjectionToken<ETagGenerator>): this {
     this.#etagGenerator = generator
     return this
   }
 
-  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/BYPASS. */
+  /** Sets the cache-status response header name (default `X-Cache`), carrying HIT/MISS/STALE/BYPASS. */
+
   statusHeader(name: string): this {
     this.#statusHeader = name
     return this
@@ -46,9 +52,29 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
-  /** How long one store call may take before the request goes on without the cache. No default. */
+  /** How long one store call may take before the request goes on without the cache. Default `2s`. */
+
   storeTimeout(timeout: Duration): this {
     this.#storeTimeout = timeout
+    return this
+  }
+
+  /** How long a request waits for another's handler run on the same key before running the handler itself. Default `10s`. */
+  lockTimeout(timeout: Duration): this {
+    this.#lockTimeout = timeout
+    return this
+  }
+
+  /** The query parameters a store key carries, for every route that does not list its own. `[]` leaves the query out. */
+  varyByQuery(names: string[]): this {
+    this.#varyByQuery = names
+    return this
+  }
+
+  /** The largest payload stored; a larger response goes out and is not stored. Unset: no limit. */
+
+  maxEntrySize(size: ByteSize): this {
+    this.#maxEntrySize = size
     return this
   }
 
@@ -59,6 +85,9 @@ export class HTTPCachingOptionsBuilder {
       statusHeader: this.#statusHeader,
       observer: this.#observer,
       storeTimeout: this.#storeTimeout,
+      lockTimeout: this.#lockTimeout,
+      varyByQuery: this.#varyByQuery,
+      maxEntrySize: this.#maxEntrySize,
     }
   }
 }

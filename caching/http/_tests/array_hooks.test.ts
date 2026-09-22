@@ -1,9 +1,8 @@
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Cache } from '../../store.js'
-import { MemoryCache } from '../../store/memory/index.js'
-import { cachePlugin } from '../index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
+import { cachePlugin, type HTTPCacheStore } from '../index.js'
 
 /**
  * Fastify clones a GET route's options shallowly for its automatic HEAD twin, so an array in a hook slot is the
@@ -18,19 +17,15 @@ describe('a route that declares its hooks as arrays', () => {
   })
 
   it('consults the store once per request', async () => {
-    const inner = new MemoryCache()
+    const inner = new MemoryHTTPCacheStore()
     let gets = 0
-    const store: Cache = {
-      get: (key, segment) => {
+    const store: HTTPCacheStore = {
+      get: (key, options) => {
         gets++
-        return inner.get(key, segment)
+        return inner.get(key, options)
       },
-      getMany: (keys, segment) => inner.getMany(keys, segment),
-      put: (key, entry, ttl, segment) => inner.put(key, entry, ttl, segment),
-      putMany: (items, segment) => inner.putMany(items, segment),
-      delete: (key, segment) => inner.delete(key, segment),
-      deleteMany: (keys, segment) => inner.deleteMany(keys, segment),
-      clear: segment => inner.clear(segment),
+      put: (key, entry, options) => inner.put(key, entry, options),
+      evictByTag: (tags, options) => inner.evictByTag(tags, options),
     }
 
     const server = fastify()

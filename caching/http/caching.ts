@@ -7,19 +7,21 @@ import {
   type HTTPSetupContext,
 } from '@caffeinejs/http'
 import type { Duration } from '@caffeinejs/std'
+import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import './_fastify.js'
-import type { Cache } from '../store.js'
 import { guardObserver, storeErrorLogger } from './_observe.js'
 import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
+import type { FlightTable } from './flight.js'
 import { composeObservers, type CacheObserver } from './observer.js'
 import { DEFAULT_STATUS_HEADER, type HTTPCachingOptions } from './options.js'
 import { kBuild, HTTPCachingOptionsBuilder } from './options_builder.js'
+import type { HTTPCacheStore } from './store.js'
 
 /** Authors {@link HTTPCachingOptions} through {@link HTTPCachingOptionsBuilder} instead of the plain object. */
 export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachingOptionsBuilder, C>
@@ -34,8 +36,11 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  *
  * An `observer` that throws is caught; its first throw from each method is logged on the application logger. A
  * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
- * failure itself when the observer does not listen for it. A store that never answers is bounded only by
- * `storeTimeout`, which has no default.
+ * failure itself when the observer does not listen for it. A store that never answers is given up on after
+ * `storeTimeout`, `2s` unless set.
+ *
+ * Concurrent misses for one key run the handler once: the first request leads, the others wait, up to
+ * `lockTimeout`, for what it stores. The wait is in this process alone.
  *
  * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
  * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
@@ -59,24 +64,50 @@ export function HTTPCaching<C = unknown>(
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
-      storeTimeoutMs: resolveStoreTimeout(resolved.storeTimeout),
+      storeTimeoutMs: resolveTimeout('storeTimeout', resolved.storeTimeout, DEFAULT_STORE_TIMEOUT_MS),
+      // One table per install: a root install and a group install have stores of their own, and flights too.
+      flights: new Map() as FlightTable,
+      lockTimeoutMs: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT_MS),
+      varyByQuery: resolved.varyByQuery === undefined ? undefined : Object.freeze([...resolved.varyByQuery]),
+      maxEntrySizeBytes: resolveMaxEntrySize(resolved.maxEntrySize),
     })
   }
 }
 
-function resolveStoreTimeout(value: Duration | undefined): number | undefined {
+const DEFAULT_STORE_TIMEOUT_MS = 2_000
+const DEFAULT_LOCK_TIMEOUT_MS = 10_000
+
+function resolveTimeout<D extends number | undefined>(
+  option: 'storeTimeout' | 'lockTimeout',
+  value: Duration | undefined,
+  fallback: D,
+): number | D {
   if (value === undefined) {
-    return undefined
+    return fallback
   }
 
   const seconds = strictSeconds(value)
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new ErrConfiguration(
-      `Cannot install HTTP caching: storeTimeout must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+      `Cannot install HTTP caching: ${option} must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
     )
   }
 
   return Math.ceil(seconds * 1000)
+}
+
+function resolveMaxEntrySize(value: ByteSize | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  try {
+    return bytes(value)
+  } catch {
+    throw new ErrConfiguration(
+      `Cannot install HTTP caching: maxEntrySize must be a byte size such as 1048576 or "1MB", got "${String(value)}"`,
+    )
+  }
 }
 
 // A store failure is never silent: an observer that listens for it owns the report, otherwise it is logged.
@@ -94,13 +125,16 @@ function build<C>(configure: HTTPCachingConfigurer<C>, context: HTTPSetupContext
   return builder[kBuild]()
 }
 
-// A real Cache instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
+// A real store instance is always an object; an InjectionToken is a class, a DeferredCtor, or a branded
 // string/symbol — never a plain object — so the two are told apart by shape. `store` has no default: an omitted
 // store, or a token that resolves to nothing, both throw.
-function resolveCache(value: Cache | InjectionToken<Cache> | undefined, container: Container): Cache {
+function resolveCache(
+  value: HTTPCacheStore | InjectionToken<HTTPCacheStore> | undefined,
+  container: Container,
+): HTTPCacheStore {
   if (value === undefined) {
     throw new ErrConfiguration(
-      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryCache())',
+      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryHTTPCacheStore())',
     )
   }
 
@@ -195,6 +229,14 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
 
     if (!instance.hasRequestDecorator('cacheKey')) {
       instance.decorateRequest('cacheKey', null)
+    }
+
+    if (!instance.hasRequestDecorator('cacheFlight')) {
+      instance.decorateRequest('cacheFlight', null)
+    }
+
+    if (!instance.hasRequestDecorator('cacheStale')) {
+      instance.decorateRequest('cacheStale', null)
     }
 
     instance.addHook('onRoute', routeOptions => {

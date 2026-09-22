@@ -10,7 +10,7 @@ import {
 } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { HTTPCaching, cacheControl, type CacheControlOptions } from '../index.js'
 
 // Programmatic routes on a container that reads no decorators: the controller registry is global, and another
@@ -33,7 +33,7 @@ describe('what a route may ask of the cache, checked while it registers', () => 
       .handler(() => ({ ok: true }))
 
     const app = newApp()
-      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
     await app.ready()
@@ -48,14 +48,32 @@ describe('what a route may ask of the cache, checked while it registers', () => 
     ['a negative ttl', { ttl: -5 }],
     ['a sharedMaxAge that is not a duration', { ttl: 60, sharedMaxAge: 'an hour' }],
     ['a negative staleIfError', { ttl: 60, staleIfError: -1 }],
+    ['a ttl below one second, which max-age cannot say', { ttl: '400ms' }],
+    ['an empty tag', { ttl: 60, tags: [''] }],
+    ['a tag holding a brace', { ttl: 60, tags: ['pets', '{x}'] }],
+    ['tags that are not a list', { ttl: 60, tags: 'pets' as never }],
   ] as [string, CacheControlOptions][])('refuses %s', async (_name, options) => {
     await expect(startWith(options)).rejects.toThrow(ErrConfiguration)
   })
 
   it('names the route, the option and the value it refused', async () => {
     await expect(startWith({ ttl: '10 seconds' })).rejects.toThrow(
-      'Cannot install caching on "GET /attach/data": ttl must be a positive duration such as 60 or "5m", got "10 seconds"',
+      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 60 or "5m", got "10 seconds"',
     )
+    await expect(startWith({ ttl: 0.5 })).rejects.toThrow(
+      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 60 or "5m", got "0.5"',
+    )
+    await expect(startWith({ ttl: 60, tags: ['a}b'] })).rejects.toThrow(
+      'Cannot install caching on "GET /attach/data": a tag must be a non-empty string without "{" or "}", got "a}b"',
+    )
+  })
+
+  it('takes a route without tags, and one whose tags are an empty list', async () => {
+    const app = await startWith({ ttl: 60, tags: [] })
+
+    await app.fetch('/attach/data')
+
+    expect((await app.fetch('/attach/data')).headers.get('x-cache')).toBe('HIT')
   })
 
   it('takes a sharedMaxAge of zero, which tells shared caches not to keep the response', async () => {
@@ -102,7 +120,7 @@ describe('constrained routes that share a URL', () => {
   }
 
   async function start(router: Router, cachingFirst = true) {
-    const caching = HTTPCaching(b => b.store(new MemoryCache()))
+    const caching = HTTPCaching(b => b.store(new MemoryHTTPCacheStore()))
     const app = cachingFirst
       ? newApp()
           .with(caching)
@@ -139,8 +157,10 @@ describe('constrained routes that share a URL', () => {
     expect(await v2Again.json()).toEqual({ v: 2 })
   })
 
-  it('never serve one version the other, once each has a segment of its own', async () => {
-    const app = await start(versioned({ ttl: 60, segment: 'pets-v1' }, { ttl: 60, segment: 'pets-v2' }))
+  it('never serve one version the other, once each has a key of its own', async () => {
+    const app = await start(
+      versioned({ ttl: 60, key: req => `v1:${req.url}` }, { ttl: 60, key: req => `v2:${req.url}` }),
+    )
 
     await app.fetch('/pets-versioned', { headers: { 'accept-version': '1.x' } })
     const v2 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '2.x' } })
@@ -154,7 +174,7 @@ describe('constrained routes that share a URL', () => {
   })
 
   // A strategy that reads something other than one header leaves the default key nothing to vary on.
-  it('are refused when the constraint names no header, until the route keys or segments itself', async () => {
+  it('are refused when the constraint names no header, until the route keys itself', async () => {
     const tenant: ConstraintStrategy = {
       name: 'tenant',
       mustMatchWhenDerived: false,
@@ -174,7 +194,7 @@ describe('constrained routes that share a URL', () => {
 
       const app = newApp()
         .with(() => constraints([tenant]))
-        .with(HTTPCaching(b => b.store(new MemoryCache())))
+        .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
         .mount(router)
       close = () => app.close()
 
@@ -183,7 +203,7 @@ describe('constrained routes that share a URL', () => {
 
     await expect(build({ ttl: 60 })).rejects.toThrow(/constraint "tenant" reads no header the cache key can vary on/)
     await close?.()
-    // A rejection here fails the test: the segment is what lets the same route start.
-    await build({ ttl: 60, segment: 'acme' })
+    // A rejection here fails the test: the key is what lets the same route start.
+    await build({ ttl: 60, key: req => `acme:${req.url}` })
   })
 })

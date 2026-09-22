@@ -93,7 +93,11 @@ export function installGlobalErrorHandler(
 
     request.log.error({ err }, err.message)
 
-    return defaultErrorHandler(error, request, reply)
+    // The default handler sends the reply itself. Handed back as the result, the reply tells the runner so;
+    // `undefined` would have it send again while an asynchronous `onSend` hook still holds the first response.
+    defaultErrorHandler(error, request, reply)
+
+    return reply
   }
 
   fastify.setErrorHandler(globalErrorHandler)
@@ -172,8 +176,11 @@ function hasPublicMessage(err: Error): err is ErrorWithPublicMessage {
 function respond(ctx: FastifyContext, result: unknown): unknown {
   const reply = ctx.platform.reply
 
-  if (reply.sent) {
-    return
+  // The handler answered from the context. Handed the reply back, the runner waits for that send out rather
+  // than sending this over it — `reply.sent` alone is still false while an `onSend` hook holds it open, and
+  // this runs inside an async `setErrorHandler`, whose `undefined` the server takes as a request to send.
+  if (ctx.sent) {
+    return reply
   }
 
   if (result instanceof Responder) {
@@ -184,5 +191,7 @@ function respond(ctx: FastifyContext, result: unknown): unknown {
     return result
   }
 
-  return reply.send()
+  reply.send()
+
+  return reply
 }

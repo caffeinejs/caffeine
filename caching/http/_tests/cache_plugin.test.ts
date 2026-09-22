@@ -3,7 +3,7 @@ import { Controller, ErrConfiguration, Get, createWebApplication, newRouter } fr
 import { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { MemoryCache } from '../../store/memory/index.js'
+import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching, cacheControl } from '../index.js'
 
 /**
@@ -43,7 +43,7 @@ describe('cache plugin wiring', () => {
           registered.set(`${route.method} ${route.url}`, route as RouteOptions)
         })
       })
-      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
     await app.ready()
 
@@ -59,8 +59,8 @@ describe('cache plugin wiring', () => {
   // same context is refused before Fastify ever sees it, same as two `.with(cors)` calls would be.
   it('refuses a second registration on the same context', async () => {
     const app = createWebApplication()
-      .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-First')))
-      .with(HTTPCaching(b => b.store(new MemoryCache()).statusHeader('X-Second')))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-First')))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Second')))
     close = () => app.close()
 
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
@@ -70,11 +70,11 @@ describe('cache plugin wiring', () => {
   // same double registration — refused before any route could collect both sets of cache hooks and report every
   // outcome twice.
   it('refuses a group install under a root install', async () => {
-    const router = newRouter('/nested-install').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    const router = newRouter('/nested-install').plugin(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router.get('/data').handler(() => ({ ok: true }))
 
     const app = createWebApplication()
-      .with(HTTPCaching(b => b.store(new MemoryCache())))
+      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
 
@@ -86,7 +86,7 @@ describe('cache plugin wiring', () => {
   // Programmatic routes only (`decorators: false`): the controller registry is global, and a decorated
   // controller from another test would be one more group nothing serves.
   it('serves the routes of a group that installed it for itself', async () => {
-    const router = newRouter('/group-install').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    const router = newRouter('/group-install').plugin(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router
       .get('/data')
       .with(cacheControl({ ttl: 60 }))
@@ -102,7 +102,7 @@ describe('cache plugin wiring', () => {
 
   // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other.
   it('gives each group that installed it a store of its own', async () => {
-    const stores = { pets: new MemoryCache(), owners: new MemoryCache() }
+    const stores = { pets: new MemoryHTTPCacheStore(), owners: new MemoryHTTPCacheStore() }
     const group = (name: keyof typeof stores) => {
       const router = newRouter(`/group-own-${name}`).plugin(HTTPCaching(b => b.store(stores[name])))
       router
@@ -130,7 +130,7 @@ describe('cache plugin wiring', () => {
   })
 
   it('still refuses a sibling group that declares caching and installed nothing', async () => {
-    const served = newRouter('/group-served').plugin(HTTPCaching(b => b.store(new MemoryCache())))
+    const served = newRouter('/group-served').plugin(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     served
       .get('/data')
       .with(cacheControl({ ttl: 60 }))

@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { kConfig } from './app.config.js'
 import { createContainer } from './app.container.js'
 import { buildApp } from './app.js'
 import { rootModule } from './root.gen.mod.js'
@@ -17,4 +18,11 @@ const { address } = await app.run()
 
 if (address !== undefined) {
   app.log.info(`Petstore listening on ${address.origin}`)
+
+  // A wildcard bind prints as 127.0.0.1, but a GitHub sign-in has to start on the callback URL's host: the state
+  // cookie is set for the host the browser is on, and GitHub sends the browser back to the callback URL.
+  const signIn = new URL(app.container.get(kConfig).auth.github.callbackUrl).origin
+  if (signIn !== address.origin) {
+    app.log.info(`Open ${signIn} to sign in with GitHub: the state cookie is sent back only to the callback URL's host`)
+  }
 }

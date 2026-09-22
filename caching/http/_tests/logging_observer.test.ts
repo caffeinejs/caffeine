@@ -60,12 +60,12 @@ describe('loggingCacheObserver', () => {
 
   it('writes the event as structured fields, with the message apart', () => {
     const log = new Recorder()
-    loggingCacheObserver(log).onMiss!({ route, segment: 'pets', key: '%2Fpets%2F1', reason: 'absent' })
+    loggingCacheObserver(log).onMiss!({ route, key: '%2Fpets%2F1', reason: 'absent' })
 
     const [fields, message] = log.written[0].args
 
     expect(message).toBe('cache miss')
-    expect(fields).toMatchObject({ route, segment: 'pets', reason: 'absent' })
+    expect(fields).toMatchObject({ route, reason: 'absent' })
   })
 
   // A key carries the query string and every Vary header value — a bearer token when a route varies on
@@ -74,38 +74,38 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log)
 
-    observer.onHit!({ route, key: 'secret', revalidated: false, ageSeconds: 1 })
+    observer.onHit!({ route, key: 'secret', revalidated: false, ageSeconds: 1, coalesced: false, stale: false })
     observer.onMiss!({ route, key: 'secret', reason: 'absent' })
-    observer.onStore!({ route, key: 'secret', bytes: 10, ttlSeconds: 60 })
-    observer.onInvalidate!({ route, scope: 'keys', keys: ['secret', 'other'] })
+    observer.onStore!({ route, key: 'secret', bytes: 10, ttlSeconds: 60, tags: ['pets'] })
+    observer.onSkip!({ route, key: 'secret', reason: 'entry-too-large', bytes: 10 })
 
     for (const { args } of log.written) {
       expect(args[0]).not.toHaveProperty('key')
-      expect(args[0]).not.toHaveProperty('keys')
     }
-    expect(log.written[3].args[0]).toMatchObject({ scope: 'keys', keyCount: 2 })
+    expect(log.written[2].args[0]).toMatchObject({ tags: ['pets'] })
+    expect(log.written[3].args).toEqual([{ route, reason: 'entry-too-large', bytes: 10 }, 'cache skip'])
   })
 
   it('writes the cache key when includeKeys is set', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log, { includeKeys: true })
 
-    observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1 })
-    observer.onInvalidate!({ route, scope: 'keys', keys: ['k1', 'k2'] })
+    observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1, coalesced: true, stale: false })
+    observer.onSkip!({ route, key: 'k2', reason: 'set-cookie', bytes: 3 })
     observer.onMiss!({ route, key: 'k3', reason: 'absent' })
     observer.onStore!({ route, key: 'k4', bytes: 10, ttlSeconds: 60 })
 
     expect(log.written[0].args[0]).toMatchObject({ key: 'k1', revalidated: true })
-    expect(log.written[1].args[0]).toMatchObject({ keys: ['k1', 'k2'], keyCount: 2 })
+    expect(log.written[1].args[0]).toMatchObject({ key: 'k2', reason: 'set-cookie' })
     expect(log.written[2].args[0]).toMatchObject({ key: 'k3', reason: 'absent' })
     expect(log.written[3].args[0]).toMatchObject({ key: 'k4', bytes: 10 })
   })
 
-  it('records a segment clear by its segment', () => {
+  it('records an eviction by its tags', () => {
     const log = new Recorder()
-    loggingCacheObserver(log).onInvalidate!({ route, scope: 'segment', segment: 'products' })
+    loggingCacheObserver(log).onInvalidate!({ route, tags: ['products', 'all'] })
 
-    expect(log.written[0].args).toEqual([{ route, segment: 'products', scope: 'segment' }, 'cache invalidate'])
+    expect(log.written[0].args).toEqual([{ route, tags: ['products', 'all'] }, 'cache invalidate'])
   })
 
   // An outage is not a debug-level outcome: it is written at error whatever `level` says.
@@ -113,10 +113,10 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const error = new Error('store down')
 
-    loggingCacheObserver(log, { level: 'trace' }).onError!({ route, segment: 'pets', operation: 'put', error })
+    loggingCacheObserver(log, { level: 'trace' }).onError!({ route, operation: 'put', error })
 
     expect(log.written).toEqual([
-      { severity: 'error', args: [{ route, segment: 'pets', operation: 'put', err: error }, 'cache store error'] },
+      { severity: 'error', args: [{ route, operation: 'put', err: error }, 'cache store error'] },
     ])
   })
 })
