@@ -21,6 +21,7 @@ on:
           - memory
           - mixedscopes
           - authn
+          - caching
           - startup
           - request
           - request:bun

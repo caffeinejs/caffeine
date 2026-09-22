@@ -20,6 +20,8 @@
     "mixedscopes/caffeine/**/*.ts",
     "authn/caffeine/**/*.ts",
     "authn/shared.ts",
+    "caching/caffeine/**/*.ts",
+    "caching/payload.ts",
     "startup/caffeine/**/*.ts",
     "testing/caffeine/**/*.ts"
   ],
