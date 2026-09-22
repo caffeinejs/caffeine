@@ -204,7 +204,12 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     assertRouteFeaturesInstalled(fastify, routeGroups, input.extensions)
 
     // The same for every group, so it is built once here rather than per registration.
-    const registration = { extensions: input.extensions, compilers: this.#compilers, globalErrorHandler }
+    const registration = {
+      extensions: input.extensions,
+      compilers: this.#compilers,
+      globalErrorHandler,
+      handlerTimeout: factory.handlerTimeout,
+    }
 
     for (const router of routeGroups) {
       registerCompiledRouteGroup(fastify, router, registration)

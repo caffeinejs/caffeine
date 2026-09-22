@@ -122,6 +122,19 @@ at `run()`, so `port: 0` is spelled out for an OS-assigned port. `run()` still r
 `app.instance` and `app.fetch()` throw `ErrApplicationNotReady` before `ready()`; `app.address` is `undefined`
 until `run()` bound the socket.
 
+## Handler timeouts
+
+A server's `factory.handlerTimeout` and a route's `.timeout(ms)` are Fastify's `handlerTimeout`: its timer aborts
+`request.signal` with `FST_ERR_HANDLER_TIMEOUT` and sends a `503`. Fastify decides whether a handler that resolves
+afterwards may still send by `reply.sent`, which is `raw.writableEnded`; an `onSend` hook that awaits — a
+compressor — holds the `503` open, so a handler resolving in that window sends a second time, and
+`ERR_HTTP_HEADERS_SENT` escapes as an unhandled rejection. A plain Fastify server does the same. The route handler
+in `_register_route_group.ts` covers this side: on a timed route, a result arriving after the signal was aborted
+by the timeout is replaced by the reply itself, which Fastify awaits until the `503` is out
+(`_tests/handler_timeout.test.ts`). The mirror side — the timer firing while the handler's own response is held
+open by such a hook — is Fastify's to fix. `req.signal` is read on timed routes only: on any other, the read would
+create a controller per request.
+
 ## The adapter owns its types
 
 Everything that belongs to the server library behind an adapter is named once, in an `AdapterTypes` descriptor

@@ -34,6 +34,8 @@ export interface RouteGroupRegistration<REQ> {
   extensions: Pick<AdapterExtensions<unknown, AnyFastifyPlugin>, 'of'>
   compilers: RouteCompilers<REQ>
   globalErrorHandler: GlobalErrorHandler
+  /** The server's own `handlerTimeout`, when it set one. */
+  handlerTimeout?: number
 }
 
 /**
@@ -48,7 +50,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   router: RouteGroup<REQ>,
   registration: RouteGroupRegistration<REQ>,
 ): void {
-  const { extensions, compilers, globalErrorHandler } = registration
+  const { extensions, compilers, globalErrorHandler, handlerTimeout } = registration
   const basePath = router.path
   const routes = router.routes
 
@@ -77,6 +79,9 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // Built here, once. The source decides *how* the route is invoked — a method on a singleton, one
         // resolved per request, a plain function — and hands back the function to install.
         const handle = route.dispatch(compilers) as (req: REQ, res: unknown) => unknown
+
+        // Only a timed route reads `req.signal` below: on any other, the read would create a controller per request.
+        const timed = route.timeout !== undefined || handlerTimeout !== undefined
 
         // Route Config
         // https://fastify.dev/docs/latest/Reference/Routes/#config
@@ -164,6 +169,12 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
 
             if (result instanceof Promise) {
               return result.then(r => {
+                // The handler outlived its timeout: Fastify has answered 503 and is sending it. Handed the reply
+                // itself, the server waits for that send to end instead of starting another with this result.
+                if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
+                  return res
+                }
+
                 if (r instanceof Responder) {
                   return r.respond(req.httpContext)
                 }
@@ -277,4 +288,9 @@ export function assertPluginNotRegistered(
       'ERR_HTTP_DUPLICATE_PLUGIN',
     )
   }
+}
+
+/** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
+function isHandlerTimeout(reason: unknown): boolean {
+  return (reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
 }
