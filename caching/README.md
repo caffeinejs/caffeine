@@ -123,12 +123,13 @@ no `Cache-Control`, no `ETag`, no `Last-Modified`. A `noStore` route still says 
 | `Cache-Control: no-store`                | Not answered from the store, and the response is not stored.          |
 | `Cache-Control: max-age=N`               | An entry older than `N` seconds is a miss, never a stale answer.      |
 | `Cache-Control: min-fresh=N`             | An entry with less than `N` seconds of freshness left is a miss.      |
+| `Cache-Control: max-stale=N`             | Served the stale entry the route keeps, at once. See "Stale entries". |
 | `Cache-Control: only-if-cached`          | Answered from the store, or `504` when nothing fresh is. Never waits. |
 | `Pragma: no-cache`                       | Read only when the request has no `Cache-Control` header.             |
 | `If-None-Match` on a `GET` or `HEAD`     | `304` when it matches, on a hit and on a miss alike.                  |
 | `If-Modified-Since` on a `GET` or `HEAD` | `304` when it matches, on a hit. On a miss, see below.                |
 
-Directive names are matched case-insensitively. `max-stale` is not read. `If-None-Match` wins over
+Directive names are matched case-insensitively. `If-None-Match` wins over
 `If-Modified-Since` when both are sent. On a miss, `If-Modified-Since` is compared only with a `Last-Modified`
 the handler wrote. The one the cache stamps is as old as the response itself, and would match a copy from earlier
 in the same second whatever had changed.
@@ -260,6 +261,11 @@ for the server-side store as well as for caches downstream:
 A stale answer is marked `X-Cache: STALE`, with an `Age` above `max-age`. The store keeps an entry for `ttl`
 plus the longest of the two windows. Neither applies under `mustRevalidate`, `proxyRevalidate` or `noCache`,
 neither to `only-if-cached`, and neither to a request whose `max-age` or `min-fresh` the entry does not meet.
+
+A request that says `max-stale` is served an entry past `ttl` at once, with no handler run and no wait, as long
+as the route keeps it and it is stale by no more than the directive says — any amount for the bare directive.
+`only-if-cached` then gets the entry rather than `504`. `mustRevalidate`, `proxyRevalidate` and `noCache` still
+forbid it.
 
 ## Installing
 
@@ -448,4 +454,4 @@ All of these fail `app.ready()` with `ErrConfiguration`:
 - A `HEAD` that misses stores nothing, and carries no `ETag` when the server dropped its body before the cache saw
   it. A `HEAD` is answered from what a `GET` stored, so a route that only ever receives `HEAD` never fills the
   cache.
-- `max-stale` is not read: a route's stale windows are its own choice.
+- `max-stale` reaches only what the route keeps: a route without a stale window has nothing past `ttl` to serve.

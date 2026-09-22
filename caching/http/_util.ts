@@ -85,6 +85,8 @@ export interface RequestCacheControl {
   readonly maxAge: number | undefined
   /** Seconds the entry must stay fresh for (RFC 9111 §5.2.1.3). Absent as `maxAge` is. */
   readonly minFresh: number | undefined
+  /** Seconds past its freshness the client accepts (RFC 9111 §5.2.1.2); `Infinity` for the bare directive. */
+  readonly maxStale: number | undefined
 }
 
 const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
@@ -93,6 +95,7 @@ const NO_DIRECTIVES: RequestCacheControl = Object.freeze({
   onlyIfCached: false,
   maxAge: undefined,
   minFresh: undefined,
+  maxStale: undefined,
 })
 
 // RFC 9111 §5.2 — directive names compare case-insensitively, and an argument may arrive as a token or as a
@@ -107,6 +110,7 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
   let onlyIfCached = false
   let maxAge: number | undefined
   let minFresh: number | undefined
+  let maxStale: number | undefined
 
   for (const part of header.split(',')) {
     const eq = part.indexOf('=')
@@ -122,10 +126,12 @@ export function parseRequestCacheControl(header: string | undefined): RequestCac
       maxAge = seconds(part.slice(eq + 1)) ?? maxAge
     } else if (name === 'min-fresh' && eq !== -1) {
       minFresh = seconds(part.slice(eq + 1)) ?? minFresh
+    } else if (name === 'max-stale') {
+      maxStale = eq === -1 ? Infinity : (seconds(part.slice(eq + 1)) ?? maxStale)
     }
   }
 
-  return { noCache, noStore, onlyIfCached, maxAge, minFresh }
+  return { noCache, noStore, onlyIfCached, maxAge, minFresh, maxStale }
 }
 
 function seconds(argument: string): number | undefined {

@@ -54,6 +54,14 @@ describe('parseRequestCacheControl', () => {
   })
 
   // RFC 9111 §5.2.1.3: the client wants the response to stay fresh for at least that long.
+  it('reads max-stale as whole seconds, the bare directive as any age, and ignores a value that is not a number', () => {
+    expect(parseRequestCacheControl('max-stale=30').maxStale).toBe(30)
+    expect(parseRequestCacheControl('max-stale').maxStale).toBe(Infinity)
+    expect(parseRequestCacheControl('Max-Stale="5", max-age=60').maxStale).toBe(5)
+    expect(parseRequestCacheControl('max-stale=later').maxStale).toBeUndefined()
+    expect(parseRequestCacheControl('no-cache').maxStale).toBeUndefined()
+  })
+
   it('reads min-fresh as whole seconds, and ignores a value that is not a number', () => {
     expect(parseRequestCacheControl('min-fresh=30').minFresh).toBe(30)
     expect(parseRequestCacheControl('Min-Fresh="5", max-age=60').minFresh).toBe(5)

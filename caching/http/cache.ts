@@ -368,16 +368,30 @@ export function attachCacheHooks(
         return miss(request, reply, key, directives, 'stale-for-request', !readFailed)
       }
 
-      // Past its ttl, yet not past what the route allows: kept for the store hook to replay over a 5xx, and
-      // served as it is to whoever arrives while the handler is already running for this key.
-      if (requestAccepts(age, directives) && !directives.onlyIfCached) {
-        if (sieSeconds !== undefined && age <= ttlSeconds! + sieSeconds) {
-          request.cacheStale = cached
+      // Past its ttl, yet not past what the route allows.
+      if (requestAccepts(age, directives)) {
+        // RFC 9111 §5.2.1.2 — a client that accepts a stale entry takes the one the route keeps, at once, and
+        // waits on nobody; an `only-if-cached` request too. Never where the route requires revalidation.
+        if (
+          staleAllowed &&
+          directives.maxStale !== undefined &&
+          age - ttlSeconds! <= directives.maxStale &&
+          age <= retentionSeconds!
+        ) {
+          return serve(request, reply, cached, age, false, true)
         }
-        if (swrSeconds !== undefined && age <= ttlSeconds! + swrSeconds && lockable && !readFailed) {
-          const flight = flights!.get(key)
-          if (flight !== undefined) {
-            return serve(request, reply, cached, age, false, true)
+
+        // Kept for the store hook to replay over a 5xx, and served as it is to whoever arrives while the handler
+        // is already running for this key.
+        if (!directives.onlyIfCached) {
+          if (sieSeconds !== undefined && age <= ttlSeconds! + sieSeconds) {
+            request.cacheStale = cached
+          }
+          if (swrSeconds !== undefined && age <= ttlSeconds! + swrSeconds && lockable && !readFailed) {
+            const flight = flights!.get(key)
+            if (flight !== undefined) {
+              return serve(request, reply, cached, age, false, true)
+            }
           }
         }
       }

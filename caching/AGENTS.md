@@ -196,7 +196,10 @@ entry (`replace`): the entry's status, its headers written over the error's (`ap
 `'replacement'` mode), `Content-Length` and `Retry-After` removed, a `HEAD` given the entry's length and no body,
 `onStaleIfError` reported, and the flight settled `'rescued'` so followers re-read and are served the entry. Nothing
 is refreshed in the background: without a handler run there is nobody to pay. The store keeps an entry for `ttl`
-plus the longest window (`retentionSeconds`); freshness is decided in the hooks from `storedAt`.
+plus the longest window (`retentionSeconds`); freshness is decided in the hooks from `storedAt`. A request that
+sends `max-stale` (RFC 9111 §5.2.1.2) is served an entry past `ttl` at once and starts no flight: within
+`retentionSeconds`, stale by no more than the directive's value, under the same `staleAllowed` rule, and
+`only-if-cached` then gets the entry rather than `504`.
 
 ## Observer
 
