@@ -180,8 +180,15 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
                 }
 
                 if (r === undefined) {
-                  res.send()
-                  return
+                  // The handler either answered the request itself — `ctx.redirect(...)`, then nothing — or had
+                  // nothing to answer with. The reply covers both: the server waits on a send already in flight
+                  // instead of starting a second over it, which is what `undefined` here would do while an
+                  // `onSend` hook that awaits keeps `reply.sent` false. On a reply already out it returns at once.
+                  if (!req.httpContext.sent) {
+                    res.send()
+                  }
+
+                  return res
                 }
 
                 return r
@@ -189,7 +196,12 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
             }
 
             if (result === undefined) {
-              res.send()
+              // As above, minus the reply: the server sends nothing of its own over a handler that returned
+              // synchronously, so there is no second send here to make it wait for.
+              if (!req.httpContext.sent) {
+                res.send()
+              }
+
               return
             }
 

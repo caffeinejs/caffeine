@@ -97,8 +97,9 @@ export function authenticationPlugin(): FastifyPluginAsync {
         }
 
         // challenge()/forbid() only set status/headers (or a redirect). Sending flushes the reply, and not
-        // calling done() is what ends the lifecycle before the handler.
-        if (!reply.sent) {
+        // calling done() is what ends the lifecycle before the handler. A scheme that answered for itself has
+        // already sent, which `reply.sent` does not yet show while an `onSend` hook holds that send open.
+        if (!request.httpContext.sent) {
           reply.send()
         }
       }, done)

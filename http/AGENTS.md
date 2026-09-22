@@ -135,6 +135,26 @@ by the timeout is replaced by the reply itself, which Fastify awaits until the `
 open by such a hook — is Fastify's to fix. `req.signal` is read on timed routes only: on any other, the read would
 create a controller per request.
 
+## A handler that answers for itself
+
+The route handler's default is to send: a handler returning `undefined` gets an empty response, which is what
+makes a `@Post('/logout')` that only redirects, or a `@Delete` that only deletes, work at all. A handler that
+answered the request itself and then returned — `await auth.signOut(ctx); ctx.redirect('/', 303)` — must not be
+answered over, so the handler asks `ctx.sent` first, and in the asynchronous path hands the reply back rather
+than `undefined`: Fastify reads `undefined` from a promise as a request to send.
+
+`ctx.sent` is the context's own record that `body`, `redirect` or a status shorthand has sent, falling back to
+Fastify's `reply.sent`. Fastify's alone is not enough. It is `raw.writableEnded`, which stays false for as long
+as an `onSend` hook that awaits — `@Compress`, `@caffeinejs/caching` storing an entry — holds the first send
+open, and a send started in that window is not the logged `FST_ERR_REP_ALREADY_SENT` of a response already out:
+it runs the hook chain a second time and writes headers over headers. Both halves are load-bearing, and
+`_tests/handler_answered.test.ts` counts the hook's runs to hold them there. A handler reaching past the context
+to `ctx.platform.reply.send(...)`, or hijacking, is outside that record and is seen only once the response has
+ended.
+
+The same question is asked the same way wherever this package sends on somebody else's behalf: the error
+handler's `respond` (`error/plugin.ts`), and the authentication gate after a scheme challenged.
+
 ## The adapter owns its types
 
 Everything that belongs to the server library behind an adapter is named once, in an `AdapterTypes` descriptor

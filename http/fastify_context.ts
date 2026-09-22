@@ -46,6 +46,12 @@ export class FastifyContext<
   #reply: REPLY
   #store: ConfigStore<unknown>
 
+  // Set once one of this context's own answers has called `send`, which is earlier than Fastify's `reply.sent`:
+  // that one is `raw.writableEnded`, and an `onSend` hook that awaits — a compressor, a cache storing the entry
+  // — holds the send open with it still false. Asked in that window whether the request has been answered, the
+  // honest answer is yes, or a second send starts over the first.
+  #answered = false
+
   constructor(request: FastifyRequest, reply: REPLY, store: ConfigStore<unknown>) {
     this.#reply = reply
     this.#fastifyRequest = request
@@ -83,8 +89,9 @@ export class FastifyContext<
     this.#fastifyRequest.user = user
   }
 
+  /** @see {@link Context.sent} */
   get sent(): boolean {
-    return this.#reply.sent
+    return this.#answered || this.#reply.sent
   }
 
   /**
@@ -141,6 +148,7 @@ export class FastifyContext<
 
   body(body?: unknown): this {
     this.#reply.send(body)
+    this.#answered = true
     return this
   }
 
@@ -162,6 +170,7 @@ export class FastifyContext<
 
   redirect(url: string, status?: number): this {
     this.#reply.redirect(url, status)
+    this.#answered = true
     return this
   }
 
@@ -182,8 +191,7 @@ export class FastifyContext<
    * error shape from `@Catch` and a different one from `ctx.notFound()`.
    */
   #fail(statusCode: number, code: string, body?: unknown): this {
-    this.#reply.code(statusCode).send(body ?? statusErrorBody(statusCode, code))
-    return this
+    return this.status(statusCode).body(body ?? statusErrorBody(statusCode, code))
   }
 }
 

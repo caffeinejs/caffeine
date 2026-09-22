@@ -93,11 +93,14 @@ example\:devtools:
 	@npx tsx examples/02-devtools-basic/index.ts
 
 .PHONY: example\:petstore
+# A target-specific export, not a recipe line: make 3.81 (the macOS system make) ignores .ONESHELL, so an
+# `export` written in the recipe dies with the line's own shell and never reaches npm.
+example\:petstore: export DATABASE_URL ?= postgresql://petstore:petstore@localhost:5432/petstore?schema=public
 example\:petstore: build\:cli ## run the petstore example (Postgres in Docker, app on host at http://localhost:9999)
 	@docker compose -f examples/03-petstore/docker-compose.yml up -d postgres
 	@echo "waiting for postgres ..."
 	@until docker compose -f examples/03-petstore/docker-compose.yml exec -T postgres pg_isready -U petstore -d petstore >/dev/null 2>&1; do sleep 1; done
-	@export DATABASE_URL=postgresql://petstore:petstore@localhost:5432/petstore?schema=public
+	@npm run build
 	@npm run build -w @caffeinejs/example-petstore
 	@npm run db:migrate -w @caffeinejs/example-petstore
 	@npm run db:seed -w @caffeinejs/example-petstore

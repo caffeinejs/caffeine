@@ -132,7 +132,14 @@ export interface Context<
    */
   auth?: AuthenticationState
 
-  /** Whether the response has already been written. A middleware checks it before answering itself. */
+  /**
+   * Whether this request has been answered: one of this context's own answers has sent, or the reply went out
+   * some other way. A middleware checks it before answering itself.
+   *
+   * It turns true when `body`, `redirect` or a status shorthand sends, not when the bytes leave — a hook that
+   * holds the response open has not unanswered the request. Code reaching past the context to the server's own
+   * reply is outside that record, and is seen here only once the response has actually ended.
+   */
   get sent(): boolean
 
   /**

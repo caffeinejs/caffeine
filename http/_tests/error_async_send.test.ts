@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Controller, Get, createWebApplication } from '../index.js'
+import { Catch, Controller, Get, createWebApplication, type Context } from '../index.js'
 
 /**
  * The global error handler is asynchronous and, on the default path, sends the reply itself. An `onSend` hook
@@ -69,5 +69,57 @@ describe('the global error handler under an asynchronous onSend hook', () => {
     }
 
     expect(unhandled).toEqual([])
+  })
+
+  // The other way an error is answered: a `@Catch` handler that redirects and hands nothing back. The send is
+  // the context's, so the runner must wait on it rather than read the handler's `undefined` as one of its own.
+  it('leaves the response to a @Catch handler that answered from the context', async () => {
+    @Controller('/err-async-redirect')
+    class RedirectingController {
+      @Get('/boom')
+      async boom(): Promise<never> {
+        await sleep(1)
+        throw new Error('boom')
+      }
+
+      @Catch(Error)
+      async onError(ctx: Context): Promise<void> {
+        ctx.redirect('/oops', 303)
+      }
+    }
+    void [RedirectingController]
+
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+
+    let runs = 0
+
+    try {
+      const slowSend: FastifyPluginAsync = async instance => {
+        instance.addHook('onSend', async (_request, _reply, payload) => {
+          runs++
+          await sleep(20)
+          return payload
+        })
+      }
+      const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
+      close = () => app.close()
+      await app.ready()
+
+      const res = await app.fetch('/err-async-redirect/boom')
+
+      expect(res.status).toBe(303)
+      expect(res.headers.get('location')).toBe('/oops')
+
+      // Long enough for a second send, were there one, to fail and be reported.
+      await sleep(50)
+      await new Promise(resolve => setImmediate(resolve))
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+
+    expect(unhandled).toEqual([])
+    expect(runs).toBe(1)
   })
 })
