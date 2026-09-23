@@ -1,6 +1,6 @@
 import { Configuration, OnLifecycle, Provides } from '@caffeinejs/di'
-import { PrismaClient } from '@prisma/client'
 
+import { PrismaClient } from '../../../generated/prisma/client.js'
 import { prisma } from './prisma.js'
 
 // Registers the shared PrismaClient under the `PrismaClient` token so repositories can inject it

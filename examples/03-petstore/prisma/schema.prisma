@@ -3,12 +3,12 @@
 // feature's `*.schemas.ts`, which is also what the OpenAPI document is generated from.
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 enum Species {

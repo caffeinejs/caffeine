@@ -33,7 +33,7 @@
     "plugins/*"
   ],
   "overrides": {
-    "fastify": "5.12.3"
+    "fastify": "5.12.4"
   },
   "scripts": {
     "build": "tsc --build tsconfig.build.json",

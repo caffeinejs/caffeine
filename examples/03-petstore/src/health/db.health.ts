@@ -1,6 +1,7 @@
 import { Injectable } from '@caffeinejs/di'
 import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std'
-import { PrismaClient } from '@prisma/client'
+
+import { PrismaClient } from '../../generated/prisma/client.js'
 
 /**
  * Reports whether the database is reachable, on the **readiness** probe only.

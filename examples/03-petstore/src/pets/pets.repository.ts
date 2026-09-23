@@ -1,6 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
-import { Prisma, PrismaClient, type Pet as PetRow } from '@prisma/client'
 
+import { Prisma, PrismaClient, type Pet as PetRow } from '../../generated/prisma/client.js'
 import type {
   CreatePetDTO,
   MedicalInfo,

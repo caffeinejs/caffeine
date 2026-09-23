@@ -20,6 +20,7 @@
     "benchmarks/di/testdata/third_party_legacy/**",
     "di/_tests/deno/**",
     "fetchy/fetchy/_benchmarks/generated/**",
+    "examples/03-petstore/generated/**",
     "package-lock.json"
   ]
 }

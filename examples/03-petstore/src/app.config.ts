@@ -14,9 +14,9 @@ import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
  * TypeScript identifiers they feed still follow the repository's acronym rules, so `clientId` is handed to
  * `.clientID(...)`.
  *
- * `DATABASE_URL` is the one value outside this schema, and on purpose: `prisma/schema.prisma` reads it itself,
- * for the client and for the `prisma migrate` and seed commands, so it has no `PETSTORE_` prefix and nothing here
- * declares it. `main.ts` and `prisma.config.ts` load `.env` for it.
+ * `DATABASE_URL` is the one value outside this schema, and on purpose. `prisma.config.ts` reads it for
+ * `prisma migrate` and the seed, and the driver adapter in `src/util/db/prisma.ts` reads it for the client.
+ * It has no `PETSTORE_` prefix and nothing here declares it. `main.ts` and `prisma.config.ts` load `.env` for it.
  */
 export const ConfigSchema = $t.Object({
   // What the server listens on. Handed to `.server(...)` as the listen options, so the keys are Fastify's.
