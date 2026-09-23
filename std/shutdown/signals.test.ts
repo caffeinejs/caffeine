@@ -68,10 +68,6 @@ describe('processSignalDispatcher', () => {
 
     expect(emit).toHaveBeenCalledWith('something to know about', WARNING_TYPE)
   })
-
-  it('reports the host process id', () => {
-    expect(processSignalDispatcher().pid).toBe(process.pid)
-  })
 })
 
 describe('noopSignalDispatcher', () => {
@@ -86,7 +82,5 @@ describe('noopSignalDispatcher', () => {
       noopSignalDispatcher.warn('ignored')
       noopSignalDispatcher.error('ignored', new Error('ignored'))
     }).not.toThrow()
-
-    expect(noopSignalDispatcher.pid).toBeUndefined()
   })
 })

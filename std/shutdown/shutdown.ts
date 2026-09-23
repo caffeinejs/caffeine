@@ -53,8 +53,6 @@ export class GracefulShutdown {
       this.#handlers.set(signal, handler)
       this.#dispatcher.on(signal, handler)
     }
-
-    this.#warnAboutInit()
   }
 
   /** Removes every installed handler, so a closed application leaves nothing behind on the process. */
@@ -84,20 +82,6 @@ export class GracefulShutdown {
         this.#dispatcher.error('Caffeine: graceful shutdown failed', error)
         this.#dispatcher.setExitCode(1)
       },
-    )
-  }
-
-  // As PID 1 there is no init to reap or forward signals, and a shell-form entrypoint (`CMD npm start`) leaves the
-  // signal with the shell instead of the process installed above. The drain then silently never runs.
-  #warnAboutInit(): void {
-    if (this.#dispatcher.pid !== 1) {
-      return
-    }
-
-    this.#dispatcher.warn(
-      'Running as PID 1: signal delivery depends on the container entrypoint. Use the exec form ' +
-        '(CMD ["node", "server.js"]) or an init such as tini, otherwise SIGTERM may never reach this process and ' +
-        'the graceful shutdown will not run',
     )
   }
 }

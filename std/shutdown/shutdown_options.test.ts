@@ -1,9 +1,8 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
 import { ErrShutdownConfiguration } from './errors.js'
 import {
   defaultShutdownOptions,
-  emitShutdownWarnings,
   isKubernetes,
   isTestEnvironment,
   mergeShutdownConfig,
@@ -11,10 +10,6 @@ import {
   validateShutdownOptions,
 } from './shutdown_options.js'
 import { noopSignalDispatcher } from './signals.js'
-
-afterEach(() => {
-  vi.restoreAllMocks()
-})
 
 describe('toMillis', () => {
   // parseDuration returns seconds for a string and passes a number through, so the conversion has to be explicit.
@@ -51,13 +46,16 @@ describe('defaultShutdownOptions', () => {
     const options = defaultShutdownOptions({})
 
     expect(options.drainDelayMs).toBe(0)
-    expect(options.shutdownTimeoutMs).toBe(25_000)
+    expect(options.shutdownTimeoutMs).toBe(28_000)
     expect(options.terminationGracePeriodMs).toBe(30_000)
     expect(options.signals).toEqual(['SIGTERM', 'SIGINT'])
   })
 
-  it('waits for the routing table inside a pod', () => {
-    expect(defaultShutdownOptions({ KUBERNETES_SERVICE_HOST: '10.0.0.1' }).drainDelayMs).toBe(5_000)
+  it('waits for the routing table inside a pod, and hands the teardown what the wait left', () => {
+    const options = defaultShutdownOptions({ KUBERNETES_SERVICE_HOST: '10.0.0.1' })
+
+    expect(options.drainDelayMs).toBe(5_000)
+    expect(options.shutdownTimeoutMs).toBe(23_000)
   })
 
   it('keeps a static grace period regardless of the environment', () => {
@@ -71,7 +69,7 @@ describe('defaultShutdownOptions', () => {
 
 describe('mergeShutdownConfig', () => {
   it('falls back to the defaults for what the slice does not set', () => {
-    expect(mergeShutdownConfig({})).toMatchObject({ shutdownTimeoutMs: 25_000, terminationGracePeriodMs: 30_000 })
+    expect(mergeShutdownConfig({})).toMatchObject({ shutdownTimeoutMs: 28_000, terminationGracePeriodMs: 30_000 })
   })
 
   it('normalizes durations and keeps the supplied dispatcher', () => {
@@ -136,13 +134,44 @@ describe('validateShutdownOptions', () => {
   })
 })
 
-describe('emitShutdownWarnings', () => {
-  it('emits each warning as a capturable node warning', () => {
-    const emit = vi.spyOn(process, 'emitWarning').mockImplementation(() => {})
+describe('the shipped defaults', () => {
+  // The regression this guards: the shutdown timeout was a constant that did not fit the pod-default drain
+  // delay, so an application that configured nothing was warned at boot that its own budget was too large.
+  it.each([
+    ['outside an orchestrator', {}],
+    ['inside a pod', { KUBERNETES_SERVICE_HOST: '10.0.0.1' }],
+  ])('fit the grace period with no configuration, %s', (_where, env) => {
+    const defaults = defaultShutdownOptions(env)
+    const validated = validateShutdownOptions(defaults, env)
 
-    emitShutdownWarnings(['first', 'second'])
+    expect(validated.warnings).toEqual([])
+    expect(validated.options.shutdownTimeoutMs).toBe(defaults.shutdownTimeoutMs)
+  })
 
-    expect(emit).toHaveBeenCalledTimes(2)
-    expect(emit).toHaveBeenCalledWith('first', 'CaffeineShutdownWarning')
+  // The drain delay is the one shutdown setting the documentation names, and what both examples set.
+  // Configuring it must not produce a warning about a teardown budget nobody touched.
+  it('fit the grace period when only the drain delay is configured', () => {
+    const merged = mergeShutdownConfig({ drainDelay: '5s' })
+
+    expect(merged.shutdownTimeoutMs).toBe(23_000)
+    expect(validateShutdownOptions(merged, {}).warnings).toEqual([])
+  })
+
+  // Mirroring a shorter terminationGracePeriodSeconds has to move the derived budget, not overrun it. The drain
+  // delay is spelled out because `mergeShutdownConfig` reads the real environment for its defaults.
+  it('follow a narrowed grace period', () => {
+    const merged = mergeShutdownConfig({ drainDelay: 0, terminationGracePeriod: '10s' })
+
+    expect(merged.shutdownTimeoutMs).toBe(8_000)
+    expect(validateShutdownOptions(merged, {}).warnings).toEqual([])
+  })
+
+  // The derived timeout is floored at 0, so a budget check alone would read a drain delay that has eaten the
+  // whole grace period as fitting inside it.
+  it('still fail fast when the drain delay alone cannot fit', () => {
+    const merged = mergeShutdownConfig({ drainDelay: '30s', terminationGracePeriod: '20s' })
+
+    expect(merged.shutdownTimeoutMs).toBe(0)
+    expect(() => validateShutdownOptions(merged, {})).toThrow(ErrShutdownConfiguration)
   })
 })

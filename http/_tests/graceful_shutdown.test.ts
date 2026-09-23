@@ -1,9 +1,8 @@
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
-import type { ShutdownBuilder } from '@caffeinejs/std'
+import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std'
 import { describe, it, expect, beforeEach } from 'vitest'
 
 import type { WebApplication } from '../application.js'
-import { ErrShutdownTimeout } from '../error/common.js'
 import { health } from '../health/health.js'
 import { Controller, Get, createWebApplication } from '../index.js'
 
@@ -11,12 +10,12 @@ const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(r
 
 // A container OnDestroy hook runs inside `container.dispose()`, which Application calls only after the
 // drain delay and after the server has stopped. `onDestroyHook` lets a test observe when that happens.
-let onDestroyHook: (() => void) | undefined
+let onDestroyHook: (() => void | Promise<void>) | undefined
 
 @Injectable()
 class ShutdownProbe implements OnDestroy {
   onDestroy() {
-    onDestroyHook?.()
+    return onDestroyHook?.()
   }
 }
 
@@ -160,6 +159,20 @@ describe('graceful shutdown', () => {
     await Promise.all([app.close(), app.close()])
 
     expect(hooks).toBe(1)
+  })
+
+  // The budget covers the container as well as the server. It used to bound the Fastify teardown alone, so a
+  // destroy hook could run for as long as it liked on top of the window validated against the grace period —
+  // and the overrun was never reported.
+  it('holds the container disposal inside the teardown budget too', async () => {
+    const app = await start(s => s.drainDelay(0).shutdownTimeout(100))
+
+    onDestroyHook = () => sleep(400)
+
+    const error = (await app.close().catch((error: unknown) => error)) as AggregateError
+
+    expect(error).toBeInstanceOf(AggregateError)
+    expect(error.errors.filter(e => e instanceof ErrShutdownTimeout)).toHaveLength(1)
   })
 
   it('installs no signal handlers under a test environment', async () => {

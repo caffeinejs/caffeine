@@ -15,9 +15,6 @@ export type ShutdownSignal = (typeof SHUTDOWN_SIGNALS)[number]
  * implementation, and lets an adapter supply native handling of its own.
  */
 export interface SignalDispatcher {
-  /** The process id, when the runtime has one. Used only for the PID-1 diagnostic. */
-  readonly pid: number | undefined
-
   on(signal: ShutdownSignal, handler: () => void): void
   off(signal: ShutdownSignal, handler: () => void): void
 
@@ -35,7 +32,6 @@ export interface SignalDispatcher {
 export const WARNING_TYPE = 'CaffeineShutdownWarning'
 
 interface ProcessLike {
-  pid?: number
   exitCode?: number | string | null
   on(signal: string, handler: () => void): unknown
   removeListener(signal: string, handler: () => void): unknown
@@ -55,9 +51,6 @@ export function processSignalDispatcher(): SignalDispatcher {
   const host = (globalThis as unknown as { process: ProcessLike }).process
 
   return {
-    get pid(): number | undefined {
-      return host.pid
-    },
     on(signal, handler) {
       host.on(signal, handler)
     },
@@ -85,7 +78,6 @@ export function processSignalDispatcher(): SignalDispatcher {
 
 /** A dispatcher for runtimes without signals: every operation is a no-op, so nothing throws on startup. */
 export const noopSignalDispatcher: SignalDispatcher = {
-  pid: undefined,
   on() {
     // No signals to subscribe to.
   },

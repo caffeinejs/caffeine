@@ -59,7 +59,12 @@ export interface ShutdownOptions {
    * not rejected.
    */
   drainDelayMs: number
-  /** The budget for in-flight work to finish once teardown starts. */
+  /**
+   * The budget for in-flight work to finish once teardown starts.
+   *
+   * Defaults to whatever {@link terminationGracePeriodMs} has left after the drain delay, so only a value
+   * somebody configured can overrun it.
+   */
   shutdownTimeoutMs: number
   /**
    * The pod's `terminationGracePeriodSeconds`. Used only to validate the drain budget at boot; it cannot be read
@@ -106,17 +111,27 @@ const DEFAULT_GRACE_PERIOD_MS = 30_000
 /** Margin left between the end of the drain budget and the orchestrator's `SIGKILL`. */
 const GRACE_MARGIN_MS = 2_000
 
+/** What is left of the grace period once the drain delay and the `SIGKILL` margin are taken out. */
+function remainingBudget(drainDelayMs: number, terminationGracePeriodMs: number): number {
+  return Math.max(0, terminationGracePeriodMs - drainDelayMs - GRACE_MARGIN_MS)
+}
+
 /**
  * The policy an application gets with no configuration.
  *
  * `drainDelayMs` is `5_000` under an orchestrator and `0` otherwise — outside a routing table there is nothing
  * to propagate, so waiting would only slow local restarts down. An explicit `.drainDelay(0)` still disables it.
  * `signals` is suppressed under a test runner (see {@link isTestEnvironment}).
+ *
+ * `shutdownTimeoutMs` is whatever the grace period has left once the drain delay and the `SIGKILL` margin are
+ * taken out, so the defaults fit their own budget and {@link validateShutdownOptions} has nothing to clamp.
  */
 export function defaultShutdownOptions(env: EnvLike = hostEnv()): ShutdownOptions {
+  const drainDelayMs = isKubernetes(env) ? 5_000 : 0
+
   return {
-    drainDelayMs: isKubernetes(env) ? 5_000 : 0,
-    shutdownTimeoutMs: 25_000,
+    drainDelayMs,
+    shutdownTimeoutMs: remainingBudget(drainDelayMs, DEFAULT_GRACE_PERIOD_MS),
     terminationGracePeriodMs: DEFAULT_GRACE_PERIOD_MS,
     signals: isTestEnvironment(env) ? false : ['SIGTERM', 'SIGINT'],
     dispatcher: detectSignalDispatcher(),
@@ -138,11 +153,14 @@ export function mergeShutdownConfig(
   options: { dispatcher?: SignalDispatcher } = {},
 ): ShutdownOptions {
   const defaults = defaultShutdownOptions()
+  // Resolved before the timeout, which is derived from both of them when nothing configured it.
+  const drainDelayMs = pick(config.drainDelay, defaults.drainDelayMs)
+  const terminationGracePeriodMs = pick(config.terminationGracePeriod, defaults.terminationGracePeriodMs)
 
   return {
-    drainDelayMs: pick(config.drainDelay, defaults.drainDelayMs),
-    shutdownTimeoutMs: pick(config.shutdownTimeout, defaults.shutdownTimeoutMs),
-    terminationGracePeriodMs: pick(config.terminationGracePeriod, defaults.terminationGracePeriodMs),
+    drainDelayMs,
+    shutdownTimeoutMs: pick(config.shutdownTimeout, remainingBudget(drainDelayMs, terminationGracePeriodMs)),
+    terminationGracePeriodMs,
     signals: config.signals ?? defaults.signals,
     dispatcher: options.dispatcher ?? defaults.dispatcher,
   }
@@ -160,31 +178,34 @@ export interface ShutdownValidation {
  *
  * `drainDelayMs + shutdownTimeoutMs` must fit inside `terminationGracePeriodMs`, otherwise `SIGKILL` arrives
  * mid-drain and the in-flight work the budget was protecting is dropped anyway. An overrun is clamped rather
- * than rejected; only a grace period that cannot fit the drain delay at all is fatal.
+ * than rejected, and the default timeout is derived from the grace period, so the warning always names a value
+ * somebody set. A drain delay that does not fit the grace period on its own is fatal, whatever the timeout
+ * came out as.
  */
 export function validateShutdownOptions(options: ShutdownOptions, env: EnvLike = hostEnv()): ShutdownValidation {
   const warnings: string[] = []
   const budget = options.drainDelayMs + options.shutdownTimeoutMs
+  const remaining = remainingBudget(options.drainDelayMs, options.terminationGracePeriodMs)
+
+  // Checked on the drain delay alone: a derived timeout is floored at 0, so a budget that fits says nothing
+  // about a drain delay that has already eaten the whole grace period.
+  if (remaining <= 0) {
+    throw new ErrShutdownConfiguration(
+      `Cannot configure graceful shutdown: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms` +
+        solutions(
+          'Lower the drain delay with .drainDelay(...)',
+          'Raise terminationGracePeriodSeconds on the pod spec and mirror it with .terminationGracePeriod(...)',
+        ),
+    )
+  }
 
   if (budget + GRACE_MARGIN_MS > options.terminationGracePeriodMs) {
-    const clamped = options.terminationGracePeriodMs - options.drainDelayMs - GRACE_MARGIN_MS
-
-    if (clamped <= 0) {
-      throw new ErrShutdownConfiguration(
-        `Cannot configure graceful shutdown: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms` +
-          solutions(
-            'Lower the drain delay with .drainDelay(...)',
-            'Raise terminationGracePeriodSeconds on the pod spec and mirror it with .terminationGracePeriod(...)',
-          ),
-      )
-    }
-
     warnings.push(
       `Shutdown budget (${budget}ms) exceeds the termination grace period (${options.terminationGracePeriodMs}ms); ` +
-        `the shutdown timeout was clamped to ${clamped}ms so in-flight work is not cut short by SIGKILL`,
+        `the shutdown timeout was clamped to ${remaining}ms so in-flight work is not cut short by SIGKILL`,
     )
 
-    options = { ...options, shutdownTimeoutMs: clamped }
+    options = { ...options, shutdownTimeoutMs: remaining }
   }
 
   if (options.drainDelayMs === 0 && isKubernetes(env)) {
@@ -197,19 +218,18 @@ export function validateShutdownOptions(options: ShutdownOptions, env: EnvLike =
   return { options, warnings }
 }
 
-/** Emits the validation warnings through the dispatcher, so they are capturable rather than console noise. */
-export function emitShutdownWarnings(
-  warnings: readonly string[],
-  dispatcher: SignalDispatcher = detectSignalDispatcher(),
-): void {
-  for (const warning of warnings) {
-    dispatcher.warn(warning)
-  }
-}
-
-/** Validates a merged policy and emits whatever the check had to say. */
+/**
+ * Validates a merged policy and emits whatever the check had to say.
+ *
+ * The warnings go through the dispatcher rather than straight to the console, so they are capturable — under
+ * Node that tags them `CaffeineShutdownWarning`.
+ */
 export function finalizeShutdownOptions(options: ShutdownOptions): ShutdownOptions {
   const validated = validateShutdownOptions(options)
-  emitShutdownWarnings(validated.warnings, options.dispatcher)
+
+  for (const warning of validated.warnings) {
+    options.dispatcher.warn(warning)
+  }
+
   return validated.options
 }

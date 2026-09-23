@@ -15,7 +15,7 @@ import type { AdapterTypes } from './adapter_types.js'
 import { CookieBuilder } from './cookies.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
-import { ErrConfiguration, ErrShutdownTimeout } from './error/common.js'
+import { ErrConfiguration } from './error/common.js'
 import { solutions } from './error/util.js'
 import type { FastifyTypes } from './fastify_types.js'
 import { kFeatureServer, type HTTPFeature } from './feature.js'
@@ -691,40 +691,12 @@ export class WebApplication<
     return super.run() as Promise<WebRunInfo>
   }
 
-  /**
-   * Tears the adapter down under the shutdown budget. When it expires, connections are forced shut rather than
-   * left for the orchestrator's `SIGKILL` — which would arrive moments later and take the rest of the process
-   * with it, logs included.
-   */
-  protected override async stop(): Promise<void> {
-    const timeoutMs = this.shutdownOptions().shutdownTimeoutMs
-    const teardown = this.#adapter.teardown()
+  protected override stop(): Promise<void> {
+    return this.#adapter.teardown()
+  }
 
-    if (timeoutMs <= 0) {
-      return teardown
-    }
-
-    // The race subscribes to the teardown, so a rejection arriving after the timeout is still observed.
-    const completed = teardown.then(() => 'done' as const)
-
-    let timer: NodeJS.Timeout | undefined
-    const expired = new Promise<'timeout'>(resolve => {
-      timer = setTimeout(() => resolve('timeout'), timeoutMs)
-      timer.unref?.()
-    })
-
-    try {
-      if ((await Promise.race([completed, expired])) === 'done') {
-        return
-      }
-
-      await this.#adapter.forceTeardown?.()
-      await teardown.catch(() => undefined)
-
-      throw new ErrShutdownTimeout(timeoutMs)
-    } finally {
-      clearTimeout(timer)
-    }
+  protected override async forceStop(): Promise<void> {
+    await this.#adapter.forceTeardown?.()
   }
 }
 

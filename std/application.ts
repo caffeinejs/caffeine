@@ -28,6 +28,7 @@ import { kAddConfigurer, type FeatureConfigurer } from './feature_builder.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { logToken, LoggerBuilder, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
+import { ErrShutdownTimeout } from './shutdown/errors.js'
 import { GracefulShutdown } from './shutdown/shutdown.js'
 import { ShutdownBuilder } from './shutdown/shutdown_builder.js'
 import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from './shutdown/shutdown_options.js'
@@ -444,19 +445,7 @@ export class Application<TConfig = unknown> {
       await delay(options.drainDelayMs)
     }
 
-    const errors: unknown[] = []
-
-    try {
-      await this.stop()
-    } catch (error) {
-      errors.push(error)
-    }
-
-    try {
-      await this.#container.dispose()
-    } catch (error) {
-      errors.push(error)
-    }
+    const errors = await this.#teardown(options.shutdownTimeoutMs)
 
     this.#availability.markBroken('closed')
     // Removed last, not first: until the shutdown actually finishes, a second signal must still reach the handler
@@ -481,9 +470,74 @@ export class Application<TConfig = unknown> {
     return this.#shutdownPolicy ?? defaultShutdownOptions()
   }
 
+  /**
+   * Stops the platform and disposes the container, inside one shared budget, and hands back whatever either
+   * step threw.
+   *
+   * One budget rather than one each: what the boot-time check validated against the termination grace period is
+   * `drainDelayMs + shutdownTimeoutMs`, so a full budget for disposal on top of one for the platform would put
+   * `SIGKILL` inside the window that check promised. A budget of `0` waits indefinitely.
+   *
+   * On expiry {@link forceStop} cuts whatever the platform is still waiting on, and the teardown is then awaited
+   * so the logs describing the overrun get out — the alternative at that point is `SIGKILL`, which truncates
+   * them. The timeout leads the errors because it is the cause; anything the forced teardown then threw follows.
+   */
+  async #teardown(budgetMs: number): Promise<unknown[]> {
+    const errors: unknown[] = []
+
+    // Never rejects: both phases are caught, so the race below needs no rejection handler and disposal still
+    // runs when `stop()` throws.
+    const finished = (async (): Promise<void> => {
+      try {
+        await this.stop()
+      } catch (error) {
+        errors.push(error)
+      }
+
+      try {
+        await this.#container.dispose()
+      } catch (error) {
+        errors.push(error)
+      }
+    })()
+
+    if (budgetMs <= 0) {
+      await finished
+      return errors
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const expired = new Promise<'expired'>(resolve => {
+      timer = setTimeout(() => resolve('expired'), budgetMs)
+      timer.unref?.()
+    })
+
+    try {
+      if ((await Promise.race([finished.then(() => 'done' as const), expired])) === 'done') {
+        return errors
+      }
+
+      await this.forceStop()
+      await finished
+
+      errors.unshift(new ErrShutdownTimeout(budgetMs))
+      return errors
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */
   protected beforeDrain(): void | Promise<void> {
     // Nothing to invalidate in a bare application.
+  }
+
+  /**
+   * Abandons whatever {@link stop} is still waiting on, once the teardown budget is spent. Called only then, at
+   * which point the orchestrator's `SIGKILL` is the alternative.
+   */
+  protected forceStop(): void | Promise<void> {
+    // Nothing in flight in a bare application.
   }
 
   /** Assembles the {@link RunInfo} that {@link run} resolves to. Subclasses override to widen it. */

@@ -11,8 +11,6 @@ class FakeDispatcher implements SignalDispatcher {
   exitedWith: number | undefined
   exitCode: number | undefined
 
-  constructor(readonly pid: number | undefined = 1234) {}
-
   on(signal: ShutdownSignal, handler: () => void): void {
     const set = this.handlers.get(signal) ?? new Set()
     set.add(handler)
@@ -52,7 +50,7 @@ class FakeDispatcher implements SignalDispatcher {
 
 describe('GracefulShutdown', () => {
   it('installs one handler per signal and removes them all', () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const shutdown = new GracefulShutdown(() => Promise.resolve(), dispatcher)
 
     shutdown.install(['SIGTERM', 'SIGINT'])
@@ -67,7 +65,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('installs nothing when signals are disabled', () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
 
     new GracefulShutdown(() => Promise.resolve(), dispatcher).install(false)
 
@@ -75,7 +73,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('does not install the same signal twice', () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const shutdown = new GracefulShutdown(() => Promise.resolve(), dispatcher)
 
     shutdown.install(['SIGTERM'])
@@ -85,7 +83,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('closes once and records a clean exit code without terminating', async () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const close = vi.fn(() => Promise.resolve())
     const shutdown = new GracefulShutdown(close, dispatcher)
 
@@ -100,7 +98,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('reports a failed shutdown and exits non-zero', async () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const failure = new Error('dispose blew up')
     const shutdown = new GracefulShutdown(() => Promise.reject(failure), dispatcher)
 
@@ -112,7 +110,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('exits immediately on a second signal, with the conventional code', () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const close = vi.fn(() => new Promise<void>(() => {}))
     const shutdown = new GracefulShutdown(close, dispatcher)
 
@@ -127,7 +125,7 @@ describe('GracefulShutdown', () => {
   })
 
   it('uses the signal that arrived second for the exit code', () => {
-    const dispatcher = new FakeDispatcher(100)
+    const dispatcher = new FakeDispatcher()
     const shutdown = new GracefulShutdown(() => new Promise<void>(() => {}), dispatcher)
 
     shutdown.install(['SIGTERM', 'SIGINT'])
@@ -135,21 +133,6 @@ describe('GracefulShutdown', () => {
     dispatcher.send('SIGINT')
 
     expect(dispatcher.exitedWith).toBe(130)
-  })
-
-  it('warns about signal delivery only when running as PID 1', () => {
-    const asInit = new FakeDispatcher(1)
-    new GracefulShutdown(() => Promise.resolve(), asInit).install(['SIGTERM'])
-    expect(asInit.warnings[0]).toContain('Running as PID 1')
-
-    const normal = new FakeDispatcher(4321)
-    new GracefulShutdown(() => Promise.resolve(), normal).install(['SIGTERM'])
-    expect(normal.warnings).toEqual([])
-
-    // A runtime with no process id at all must not be mistaken for an init process.
-    const runtimeless = new FakeDispatcher(undefined)
-    new GracefulShutdown(() => Promise.resolve(), runtimeless).install(['SIGTERM'])
-    expect(runtimeless.warnings).toEqual([])
   })
 
   it('is inert on a runtime without signals', async () => {

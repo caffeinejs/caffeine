@@ -52,7 +52,12 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
-  /** The budget for in-flight work to finish once teardown starts. */
+  /**
+   * The budget for in-flight work to finish once teardown starts.
+   *
+   * Replaces the default, which is whatever the termination grace period has left after the drain delay — so
+   * this is the only value the boot-time budget check can clamp.
+   */
   shutdownTimeout(timeout: Duration): this {
     this.#values.shutdownTimeout = timeout
     return this

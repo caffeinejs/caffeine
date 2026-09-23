@@ -2,13 +2,13 @@ import { CaffeineIoC, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
 import { createApplication } from './application.js'
+import { ErrShutdownTimeout } from './shutdown/errors.js'
 import type { SignalDispatcher, ShutdownSignal } from './shutdown/signals.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 /** Records signal wiring without touching the real process. */
 class FakeDispatcher implements SignalDispatcher {
-  readonly pid = 4321
   readonly handlers = new Map<ShutdownSignal, () => void>()
   exitCode: number | undefined
 
@@ -120,6 +120,28 @@ describe('headless application shutdown', () => {
     expect(process.listenerCount('SIGTERM')).toBe(before)
 
     await app.close()
+  })
+
+  // The teardown budget used to be the HTTP application's alone, so a headless consumer whose destroy hook hung
+  // rode straight past the termination grace period into SIGKILL with nothing said about it.
+  it('reports a destroy hook that overruns the teardown budget', async () => {
+    class Slow implements OnDestroy {
+      async onDestroy() {
+        await sleep(400)
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Slow, t => t.toSelf())
+
+    const app = createApplication({ container }).shutdown(s => s.drainDelay(0).shutdownTimeout(100))
+    await app.run()
+
+    const error = (await app.close().catch((error: unknown) => error)) as AggregateError
+
+    expect(error).toBeInstanceOf(AggregateError)
+    expect(error.errors[0]).toBeInstanceOf(ErrShutdownTimeout)
+    expect((error.errors[0] as ErrShutdownTimeout).timeoutMs).toBe(100)
   })
 
   it('still disposes the container when a destroy hook throws', async () => {

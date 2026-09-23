@@ -53,7 +53,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // routing-table lag while requests keep being served normally, and only then does the server close. No
       // preStop sleep in the manifest. Signals are on by default.
       //
-      // Tests never need the 25s production shutdown budget; a hung Fastify close would sit on it until
+      // Tests never need the production shutdown budget; a hung Fastify close would sit on it until
       // hookTimeout. shutdownTimeout(0) waits forever — a small positive budget still force-tears down.
       .shutdown(s => {
         if (process.env.VITEST !== undefined) {
