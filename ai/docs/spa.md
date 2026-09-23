@@ -57,15 +57,29 @@ app
   .mount(apiMisses, pages)
 ```
 
-`spaMount()` is `{ wildcard: false, index: false, globIgnore: ['index.html'] }`. `wildcard: false` is
-load-bearing, not a tuning knob: the default registers `GET <prefix>*`, which is the application's own
-client-route path, and the two collide at start-up.
+`spaMount()` is
+`{ wildcard: false, index: false, globIgnore: ['index.html', '**/*.br', '**/*.gz', '**/*.deflate'] }`.
+`wildcard: false` is load-bearing, not a tuning knob: the default registers `GET <prefix>*`, which is the
+application's own client-route path, and the two collide at start-up.
+
+`preCompressed: true` needs no further setup. It finds `app-HASH.js.br` on the file system rather than through
+the router, so the compressed siblings are served without being routes — which is why `spaMount()` ignores
+them. It applies to `sendFile` too, so the shell served from a compiled route is compressed as well. Overriding
+`globIgnore` **replaces** the list above rather than extending it, so restate whatever still applies.
 
 `{ anonymous: true }` marks every file the mount registers exempt from authentication. Under
 `requireAuthenticatedByDefault()` it is what keeps the public page's scripts loading — **forget it and the page
 renders while every script answers 401**, which is loud in the browser and silent in the logs.
 
 ## Authentication, and protected client routes
+
+**Use `addCookie`, not `addJWTBearer`.** A same-origin single-page application and its API want one scheme,
+and the cookie scheme is it: its session cookie is an encrypted JWT, `HttpOnly` so no token sits in
+JavaScript, and its challenge adapts to the caller — a browser navigation is redirected to `loginPath`, a
+`fetch` gets 401 with the login URL in the body. The browser attaches the cookie to same-origin `fetch` on its
+own, so the API needs no second credential. `addJWTBearer` reads `Authorization` only and never redirects, so
+it cannot gate a page a browser navigates to; reach for it when the caller is cross-origin or a machine, and
+register both with `forward(...)` if you need each.
 
 One `authorize` per tier, on the application's own routers, over the same bundle:
 
@@ -92,9 +106,12 @@ The bundle stays public here: one bundle serves the public and the protected rou
 it. The data is protected by the API.
 
 **Two routes per gated subtree** — `/dashboard` and `/dashboard/*`. find-my-way does not match `/dashboard`
-against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path. The same
-applies to a prefixed application: register `/app` on an unprefixed router, because `newRouter('/app')` with a
-route at `/` composes to `/app/`.
+against `/dashboard/*`; the wildcard covers `/dashboard/` with an empty match, but not the bare path.
+
+A prefixed router needs no special handling for the bare path: `newRouter('/app')` with a route at `/`
+composes to `/app`, not `/app/`. So the pair is the ordinary one, written on the prefixed router —
+`newRouter('/app').get('/', shellDocument).get('/*', clientRoute)`. Registering the routes on an unprefixed
+router instead is a choice, not a workaround.
 
 ## A separate application whose bundle must be gated too
 

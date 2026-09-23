@@ -7,9 +7,9 @@ import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION
 /**
  * Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`.
  *
- * The application registers `/app` itself rather than relying on a prefixed router: `newRouter('/app')` with
- * a route at `/` composes to `/app/`, and find-my-way does not match `/app` against it. `/app/` needs no
- * route of its own — `/app/*` matches it with an empty wildcard.
+ * The client routes are written on a prefixed router: `newRouter('/app')` with a route at `/` composes to
+ * `/app`, so the bare path is covered by the pair every subtree needs anyway. `/app/` needs no route of its
+ * own — `/app/*` matches it with an empty wildcard. See `http/_tests/group_root_path.test.ts`.
  */
 function site(): WebApplication {
   return isolated()
@@ -22,12 +22,12 @@ function site(): WebApplication {
     )
     .mount(
       newRouter().get('/', ctx => ctx.header('content-type', 'text/html').body('<h1>home</h1>')),
-      newRouter()
+      newRouter('/app')
         .detail('http', { internal: true })
         .authorize({ allowAnonymous: true })
-        .get('/app', shellOf(dist))
-        .get('/app/index.html', shellOf(dist))
-        .get('/app/*', clientRouteOf(dist)),
+        .get('/', shellOf(dist))
+        .get('/index.html', shellOf(dist))
+        .get('/*', clientRouteOf(dist)),
     ) as WebApplication
 }
 

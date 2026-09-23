@@ -67,11 +67,21 @@ describe('isDocumentRequest', () => {
 describe('spaMount', () => {
   // `wildcard: false` is load-bearing: the default catch-all collides with the application's own.
   it('turns the wildcard off and keeps the shell document off the mount', () => {
-    expect(spaMount()).toEqual({ wildcard: false, index: false, globIgnore: ['index.html'] })
+    expect(spaMount()).toEqual({
+      wildcard: false,
+      index: false,
+      globIgnore: ['index.html', '**/*.br', '**/*.gz', '**/*.deflate'],
+    })
   })
 
   it('ignores the document it was told about', () => {
-    expect(spaMount('app.html').globIgnore).toEqual(['app.html'])
+    expect(spaMount('app.html').globIgnore).toContain('app.html')
+    expect(spaMount('app.html').globIgnore).not.toContain('index.html')
+  })
+
+  // `preCompressed` finds these on the file system, so routing them would only expose the raw bytes.
+  it('keeps the compressed siblings off the mount, for every encoding @fastify/static tries', () => {
+    expect(spaMount().globIgnore).toEqual(expect.arrayContaining(['**/*.br', '**/*.gz', '**/*.deflate']))
   })
 })
 

@@ -245,11 +245,33 @@ describe('CookieAuthenticationHandler', () => {
     })
 
     // Not loginPath: the caller is already signed in, so sending them to log in again is a loop.
-    it('redirects to accessDeniedPath when configured', async () => {
-      const { ctx, status, header } = makeCtx()
+    it('redirects a navigation to accessDeniedPath when configured', async () => {
+      const { ctx, status, header } = makeNavCtx()
       await makeHandler(o => o.loginPath('/login').accessDeniedPath('/denied')).forbid(ctx)
       expect(status).toHaveBeenCalledWith(302)
       expect(header).toHaveBeenCalledWith('location', '/denied')
+    })
+
+    // A page and an API on one scheme need different answers: redirecting a fetch would hand it a 200 and
+    // the access-denied page's HTML instead of the status it has to act on.
+    it('answers 403 to a caller that is not a navigation, even with accessDeniedPath configured', async () => {
+      const { ctx, status, header } = makeCtx()
+      await makeHandler(o => o.loginPath('/login').accessDeniedPath('/denied')).forbid(ctx)
+      expect(status).toHaveBeenCalledWith(403)
+      expect(header).not.toHaveBeenCalledWith('location', '/denied')
+    })
+
+    it('honours challengeMode over the request, as challenge does', async () => {
+      const denied = (mode: 'redirect' | 'status') =>
+        makeHandler(o => o.loginPath('/login').accessDeniedPath('/denied').challengeMode(mode))
+
+      const forced = makeCtx()
+      await denied('redirect').forbid(forced.ctx)
+      expect(forced.status).toHaveBeenCalledWith(302)
+
+      const refused = makeNavCtx()
+      await denied('status').forbid(refused.ctx)
+      expect(refused.status).toHaveBeenCalledWith(403)
     })
   })
 

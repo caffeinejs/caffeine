@@ -83,7 +83,14 @@ function namesAFile(url: string): boolean {
  * `index` and `globIgnore` keep the shell document off the mount, so one route of the application's own
  * serves every spelling of it and they all carry the same `ETag`.
  *
- * Spread it and override whatever else the mount needs.
+ * `globIgnore` also drops the compressed siblings `preCompressed` serves. That option resolves them on the
+ * file system rather than through the router, so a route per `.br` costs nothing and gains nothing — and
+ * leaving them enumerated would triple the route count and make `GET /assets/app-HASH.js.br` answer with raw
+ * brotli under `application/octet-stream` and no `Content-Encoding`. A mount that means to serve a compressed
+ * file as its own URL spells `globIgnore` out itself.
+ *
+ * Spread it and override whatever else the mount needs. Overriding `globIgnore` **replaces** this list, so
+ * restate the entries that still apply.
  *
  * @example
  * ```ts
@@ -91,7 +98,7 @@ function namesAFile(url: string): boolean {
  * ```
  */
 export function spaMount(index = 'index.html'): Pick<StaticMount, 'wildcard' | 'index' | 'globIgnore'> {
-  return { wildcard: false, index: false, globIgnore: [index] }
+  return { wildcard: false, index: false, globIgnore: [index, '**/*.br', '**/*.gz', '**/*.deflate'] }
 }
 
 /**

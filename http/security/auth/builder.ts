@@ -319,6 +319,25 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this.#register(name, 'basic', BASIC_KIND, optsFn)
   }
 
+  /**
+   * Registers a session-cookie scheme, named `Cookie` unless given one.
+   *
+   * The cookie is an **encrypted JWT** — `dir` + `A256GCM` under a key derived per scheme and purpose, so the
+   * principal's claims are not readable by whoever holds the cookie — and it is `HttpOnly`, so script cannot
+   * reach it either. `sameSite`, `secure` and `maxAge` are the tunable parts.
+   *
+   * Prefer this for a browser-first application, including a single-page application and its API on one
+   * origin: the challenge adapts to the caller, so an anonymous **navigation** is redirected to `loginPath`
+   * while an anonymous `fetch` gets 401 with the login URL in the body, and one scheme serves both. The
+   * browser sends the cookie on same-origin `fetch` on its own, so the API needs no second credential.
+   *
+   * Prefer {@link addJWTBearer} instead when the caller cannot hold a cookie — a cross-origin front end, a
+   * mobile client, or a machine calling the API with `Authorization: Bearer`. The two can be registered
+   * together, with {@link forward} choosing per request.
+   *
+   * Sign-in is `AuthenticationService.persist`, not a method here: verify the credentials in a route (see
+   * {@link addCredentials}) and persist the resulting principal.
+   */
   addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
   addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
   addCookie(
