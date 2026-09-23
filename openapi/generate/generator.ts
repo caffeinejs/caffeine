@@ -42,7 +42,8 @@ export interface GenerateInput {
  * leaves the door open for a CLI that emits the document without starting a server.
  *
  * The package's own document-serving routes reach `routeGroups` like any other registered route; their group
- * is marked hidden, so it is skipped here the way any hidden group is.
+ * is marked hidden, so it is skipped here the way any hidden group is. A group or route another feature marked
+ * `detail.http.internal` — a single-page application's shell — is skipped the same way.
  */
 export function generateDocument(input: GenerateInput): OpenAPIDocument {
   const { options } = input
@@ -56,7 +57,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
 
   for (const router of input.routeGroups) {
     const group = router.detail?.openapi
-    if (group?.hidden === true) {
+    if (group?.hidden === true || router.detail?.http?.internal === true) {
       continue
     }
 
@@ -67,7 +68,7 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
 
     for (const route of router.routes) {
       const detail = route.detail?.openapi
-      if (detail?.hidden === true) {
+      if (detail?.hidden === true || route.detail?.http?.internal === true) {
         continue
       }
 

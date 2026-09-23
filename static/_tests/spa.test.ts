@@ -1,3 +1,4 @@
+import { relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
@@ -6,6 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticConfigurer, staticFiles } from '../index.js'
 
 const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
+const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
 const empty = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
 
 // Declared at module scope: the container snapshots the controller registry when it is constructed, so a
@@ -44,6 +46,18 @@ describe('SPA fallback', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
     expect(await res.text()).toContain('<div id="root">')
+  })
+
+  // One server for the shell, so the three spellings of it carry the same headers.
+  it('serves the shell by its file name with the same headers as a client route', async () => {
+    const started = await start(s => s.spa(dist))
+
+    const named = await started.fetch('/index.html')
+    const route = await started.fetch('/convite/abc')
+
+    expect(named.status).toBe(200)
+    expect(named.headers.get('cache-control')).toBe('no-cache')
+    expect(named.headers.get('etag')).toBe(route.headers.get('etag'))
   })
 
   it('serves the shell for a client-side route, revalidated', async () => {
@@ -141,6 +155,29 @@ describe('SPA fallback', () => {
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
   })
 
+  // The shell used to be sent through `reply.sendFile`, which whichever mount came first had decorated with its
+  // own headers; a shell behind a plain mount lost its cache policy, and one behind a mount that declined to
+  // decorate could not be sent at all.
+  it('keeps the shell’s headers whatever mount comes before it', async () => {
+    const started = await start(s => s.serve(fixtures, { prefix: '/one', decorateReply: false }).spa(dist))
+
+    const page = await started.fetch('/convite/abc')
+    expect(page.status).toBe(200)
+    expect(page.headers.get('cache-control')).toBe('no-cache')
+
+    const file = await started.fetch('/one/hello.txt')
+    expect(file.status).toBe(200)
+  })
+
+  it('accepts a root relative to the working directory', async () => {
+    const started = await start(s => s.spa(relative(process.cwd(), dist)))
+
+    const res = await started.fetch('/convite/abc')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-cache')
+  })
+
   it('serves the API alone when the shell is missing and onMissingIndex is skip', async () => {
     const started = await start(s => s.spa(empty, { onMissingIndex: 'skip' }))
 
@@ -155,26 +192,27 @@ describe('SPA fallback', () => {
     await failing.close()
   })
 
-  // Two `.spa()` calls cannot both be right, and the answer does not depend on anything configuration might
-  // say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
-  it('refuses a second SPA mount', async () => {
+  // Two shells at one prefix cannot both be right, and the answer does not depend on anything configuration
+  // might say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
+  it('refuses a second SPA mount at the same prefix', async () => {
     const rejected = createWebApplication({}).with(staticFiles(s => s.spa(dist).spa(dist)))
 
     await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
   })
 
-  // The shell is served from the not-found handler, and Fastify allows one per context: a handler the caller
-  // already set would silently stop the shell, so start-up fails instead.
-  it('refuses to start when the server already has a not-found handler', async () => {
-    const rejected = createWebApplication({})
+  // The shell is a route, not the not-found handler, so the one handler a Fastify context allows stays the
+  // application's own.
+  it('starts next to a not-found handler the application set, and both answer', async () => {
+    app = createWebApplication({})
       .server(undefined, server => {
         server.setNotFoundHandler((_req, reply) => {
-          void reply.code(404).send()
+          void reply.code(418).send()
         })
       })
       .with(staticFiles(s => s.spa(dist)))
+    await app.ready()
 
-    await expect(rejected.ready()).rejects.toThrow(/Not found handler already set/)
-    await rejected.close()
+    expect((await app.fetch('/convite/abc', { method: 'POST' })).status).toBe(418)
+    expect((await app.fetch('/convite/abc')).status).toBe(200)
   })
 })

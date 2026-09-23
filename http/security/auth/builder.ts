@@ -4,7 +4,6 @@ import type { FastifyInstance } from 'fastify'
 
 import { Context } from '../../context.js'
 import { HTTPFeatureBuilder } from '../../feature.js'
-import { ServerOwnedPaths } from '../../server_owned_paths.js'
 import { authenticationPlugin } from '../authentication_plugin.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
@@ -52,13 +51,6 @@ import { RefreshTokenService } from './refresh/refresh_token_service.js'
 import { RefreshTokenStore } from './refresh/refresh_token_store.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
-
-/** The OIDC/OAuth callback paths, so a SPA fallback does not treat them as unmatched client routes. */
-class OIDCOwnedPaths extends ServerOwnedPaths {
-  constructor(readonly paths: readonly string[]) {
-    super()
-  }
-}
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -640,15 +632,9 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
 
-      // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
-      // existing rather than as a flag it would have to read back and check.
+      // Set only here, so "no OIDC strategy was configured" is expressed as the routes plugin not existing
+      // rather than as a flag it would have to read back and check.
       this.#oidcMeta = meta
-      kit.container.bind(OIDCOwnedPaths, t =>
-        t
-          .toValue(new OIDCOwnedPaths(meta.handlers.map(h => h.callbackPath)))
-          .extends(ServerOwnedPaths)
-          .internal(),
-      )
     }
   }
 

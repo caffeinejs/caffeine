@@ -1,3 +1,4 @@
+import { isNavigation } from '../../../../navigation.js'
 import { ErrOAuthConfiguration } from './errors.js'
 
 /** Secrets shorter than this leave the derived cookie keys brute-forceable. */
@@ -45,22 +46,15 @@ export function challengeHeaders(ctx: { req: { header(key: string): string | und
 /**
  * Whether a challenge should redirect rather than answer a status.
  *
- * Fetch Metadata (`Sec-Fetch-Mode` / `Sec-Fetch-Dest`) is the direct answer and every current browser
- * sends it, so when present it decides — including when it says *no*. `Accept` is consulted only in its
- * absence, which is real: browsers omit Fetch Metadata outside secure contexts, so plain-http development
- * depends on the fallback. Consulting `Accept` unconditionally instead would redirect htmx and any `fetch`
- * asking for an HTML fragment, both of which send `Sec-Fetch-Mode: cors` alongside `Accept: text/html`.
+ * The question is {@link isNavigation}'s; a request that says neither way is answered with a status, since a
+ * redirect is only followable by a browser.
  */
 export function shouldRedirectChallenge(mode: ChallengeMode, headers: ChallengeRequestHeaders): boolean {
   if (mode !== 'auto') {
     return mode === 'redirect'
   }
 
-  if (headers.secFetchMode !== undefined || headers.secFetchDest !== undefined) {
-    return headers.secFetchMode === 'navigate' || headers.secFetchDest === 'document'
-  }
-
-  return headers.accept?.includes('text/html') ?? false
+  return isNavigation(headers) ?? false
 }
 
 /**

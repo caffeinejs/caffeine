@@ -1,14 +1,14 @@
 import { ErrCaffeineWebApplication } from '@caffeinejs/http'
 
 /**
- * ErrDuplicateSPAMount is thrown at start-up when `spa()` is called more than once.
+ * ErrDuplicateSPAMount is thrown at start-up when `spa()` is called twice for the same prefix.
  *
- * A second shell has no meaning: the fallback serves one document for every client route, so the second call
- * either duplicates the first or silently loses to it.
+ * Two shells at one prefix have no meaning: the route serving that prefix answers with one document, so the
+ * second call either duplicates the first or silently loses to it. Shells at different prefixes are fine.
  */
 export class ErrDuplicateSPAMount extends ErrCaffeineWebApplication {
-  constructor(roots: readonly string[]) {
-    super(`Cannot configure more than one SPA mount: "${roots.join('", "')}"`, 'ERR_DUPLICATE_SPA_MOUNT')
+  constructor(prefix: string) {
+    super(`Cannot configure two SPA mounts at the same prefix "${prefix}"`, 'ERR_DUPLICATE_SPA_MOUNT')
     this.name = 'ErrDuplicateSPAMount'
   }
 }

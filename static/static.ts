@@ -1,22 +1,33 @@
 import { existsSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { isAbsolute, join, relative, sep } from 'node:path'
+import type { Readable } from 'node:stream'
 
 import {
+  $p,
   collectRouteGroups,
-  deriveServerOwnedPaths,
   ErrHTTPNotFound,
   HTTPPluginFactory,
-  isServerOwned,
-  ServerOwnedPaths,
-  serverOwnedPaths,
+  isNavigation,
+  kAuthenticationExempt,
+  RouteBuilder,
+  type Context,
   type HTTPPluginConfigurer,
 } from '@caffeinejs/http'
+import send from '@fastify/send'
 import fastifyStatic from '@fastify/static'
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { deriveServerOwnedPaths, isServerOwned } from './_owned.js'
 import { StaticBuilder, kBuild } from './builder.js'
-import { normalizePrefix, underPrefix, type SPASettings, type ResolvedStatic, type StaticMount } from './config.js'
+import {
+  normalizePrefix,
+  underPrefix,
+  type ResolvedSPA,
+  type ResolvedStatic,
+  type SPASettings,
+  type StaticMount,
+} from './config.js'
 import { ErrSPAIndexMissing } from './errors.js'
 
 /** The slice of `reply` the per-file cache policy needs. */
@@ -30,6 +41,9 @@ export type StaticConfigurer<C = unknown> = HTTPPluginConfigurer<StaticBuilder, 
 /**
  * Serves static files over `@fastify/static`, as an ordinary Fastify plugin factory:
  * `.with(staticFiles(s => s.serve(root)))`. http does not depend on this package.
+ *
+ * A shell configured with `.spa(...)` is served from a compiled route the plugin adds with `$route`, so it is
+ * authorized, error-handled and described like any route the application wrote.
  */
 export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPPluginFactory<C> {
   return context => {
@@ -39,29 +53,50 @@ export function staticFiles<C = unknown>(configure?: StaticConfigurer<C>): HTTPP
   }
 }
 
-function staticPlugin({ mounts, spa }: ResolvedStatic): FastifyPluginAsync {
+function staticPlugin({ mounts, spas }: ResolvedStatic): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    const serveSPA = spa === undefined ? false : checkShell(instance, spa)
-
     for (let i = 0; i < mounts.length; i++) {
       const mount = mounts[i]
-      const decorateReply = i === 0 ? (mount.decorateReply ?? true) : false
-      const isSPAMount = spa !== undefined && mount.root === spa.root && mount.wildcard === false
 
-      if (isSPAMount && !serveSPA) {
-        continue
-      }
-
+      // `@fastify/static` decorates `reply.sendFile` once per server, so the first plain mount does.
       await instance.register(fastifyStatic, {
         ...mount,
-        decorateReply,
-        ...(isSPAMount && spa.cache !== false ? { setHeaders: cacheHeaders(spa) } : {}),
+        decorateReply: i === 0 ? (mount.decorateReply ?? true) : false,
       })
     }
 
-    if (spa !== undefined && serveSPA) {
-      installShell(instance, spa, mounts)
+    const shells = spas.filter(spa => checkShell(instance, spa.settings))
+
+    if (shells.length === 0) {
+      return
     }
+
+    // A shell's files are raw Fastify routes, so an application's fallback policy would gate them like any
+    // route that declared nothing: a public shell whose scripts answer 401. The files of a shell anyone may
+    // load are therefore exempt from authentication, marked as they register. `@fastify/static` forwards no
+    // route config of its own, so the hook is the only way to reach them; it fires for exactly the mount
+    // being registered, since a mount registers every file before its registration resolves.
+    let exempt = false
+    instance.addHook('onRoute', route => {
+      if (exempt && route.config !== undefined) {
+        route.config[kAuthenticationExempt] = true
+      }
+    })
+
+    for (const { settings, mount } of shells) {
+      exempt = settings.authorize.allowAnonymous === true
+      await instance.register(fastifyStatic, {
+        ...mount,
+        ...(settings.cache !== false ? { setHeaders: cacheHeaders(settings) } : {}),
+      })
+      exempt = false
+    }
+
+    installShells(
+      instance,
+      shells.map(shell => shell.settings),
+      mounts,
+    )
   }
 
   return fp(plugin, { name: '@caffeinejs/static' })
@@ -90,69 +125,142 @@ function checkShell(instance: FastifyInstance, spa: SPASettings): boolean {
 }
 
 /**
- * Takes the server's not-found handler to serve the shell for a client-side route.
+ * Registers one compiled route per shell, `GET <prefix>/*`, through which every client-side route is served.
  *
- * A request the shell does not answer becomes an {@link ErrHTTPNotFound}, so it renders through the error
- * pipeline like a 404 a handler threw.
+ * A route rather than the server's not-found handler, so the shell is authorized like any route, so the
+ * application's own not-found handler is untouched, and so several shells can share one origin: routing picks
+ * the longest static prefix. A request the shell does not answer becomes an {@link ErrHTTPNotFound}, so it
+ * renders through the error pipeline like a 404 a handler threw.
  */
-function installShell(instance: FastifyInstance, spa: SPASettings, mounts: readonly StaticMount[]): void {
-  // A miss under another static mount is a missing file, not a client route.
-  const otherMountPrefixes = mounts
-    .filter(mount => mount.root !== spa.root || mount.wildcard !== false)
+function installShells(
+  instance: FastifyInstance,
+  shells: readonly SPASettings[],
+  mounts: readonly StaticMount[],
+): void {
+  // A miss under a plain mount is a missing file, not a client route.
+  const mountPrefixes = mounts
     .map(mount => normalizePrefix(typeof mount.prefix === 'string' ? mount.prefix : '/'))
+    .filter(prefix => prefix !== '')
 
   const routeGroups = collectRouteGroups(instance)
 
-  // Derived once every route has registered, which is before any request can reach the handler.
-  let owned: readonly string[] = []
+  // Derived once every route has registered, which is before any request can reach a handler. Shared by the
+  // shells, and mutated in place so the handlers closed over it see it.
+  const owned: string[] = []
+  const none: readonly string[] = []
+
   instance.addHook('onReady', async () => {
-    owned = spa.derive
-      ? deriveServerOwnedPaths(routeGroups(), serverOwnedPaths(instance.$container.getManyOptional(ServerOwnedPaths)))
-      : []
-
-    report(instance, spa, otherMountPrefixes, owned)
-  })
-
-  instance.setNotFoundHandler(async (req, reply) => {
-    const path = req.url.split('?')[0] ?? ''
-
-    if (!shouldServeShell(req, path, spa, owned, otherMountPrefixes)) {
-      throw new ErrHTTPNotFound(`Route ${req.method}:${req.url} not found`)
+    if (shells.some(spa => spa.derive)) {
+      // A shell's own group, or any other a feature registered on the application's behalf, owns no API prefix.
+      owned.push(...deriveServerOwnedPaths(routeGroups().filter(group => group.detail?.http?.internal !== true)))
     }
 
-    // Through `sendFile`, not a raw stream, so the shell gets the same ETag, range and cache-header handling
-    // as every other file the mount serves.
-    return reply.sendFile(spa.index, spa.root)
+    for (const spa of shells) {
+      report(instance, spa, mountPrefixes, spa.derive ? owned : none, shells)
+    }
   })
+
+  for (const spa of shells) {
+    const ownedFor = spa.derive ? owned : none
+    // `/app/*` does not match `/app` itself, so a prefixed shell answers at its prefix too. The root shell's
+    // `/*` matches `/`, and a route of its own there would collide with an application's `GET /`.
+    const paths = spa.prefix === '' ? ['/*'] : [spa.prefix, `${spa.prefix}/*`]
+
+    instance.$route(`spa:${spa.prefix || '/'}`, router => {
+      router.detail('http', { internal: true })
+      router.routes(
+        paths.map(path =>
+          new RouteBuilder()
+            .method('GET')
+            .path(path)
+            .authorize(spa.authorize)
+            .parameters($p.context())
+            .handle((ctx: unknown) => serveShell(spa, ownedFor, mountPrefixes, ctx as Context)),
+        ),
+      )
+    })
+  }
 }
 
 /**
- * Whether a request that matched no route gets the shell.
+ * Answers one request that reached a shell's route: the shell document, or a 404 through the error pipeline.
  *
- * The order of the checks is the design. A history fallback that answers every 404 with `index.html` poisons
+ * Sent with `@fastify/send`, the library under `@fastify/static`, so the shell gets the same `ETag`,
+ * `Last-Modified`, conditional-request and `HEAD` handling as every file the mount serves, without depending
+ * on which mount decorated `reply.sendFile`. `Cache-Control` is the shell's own.
+ */
+async function serveShell(
+  spa: SPASettings,
+  owned: readonly string[],
+  mountPrefixes: readonly string[],
+  ctx: Context,
+): Promise<Readable> {
+  const path = requestPath(ctx.req.url)
+
+  if (path === undefined || !shouldServeShell(ctx, path, spa, owned, mountPrefixes)) {
+    throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
+  }
+
+  const result = await send(ctx.req.raw as Readable, encodeURI(`/${spa.index}`), {
+    root: spa.root,
+    index: false,
+    cacheControl: false,
+    acceptRanges: false,
+  })
+
+  if (result.type !== 'file') {
+    // The shell was there at start-up and is gone now: a deploy removed it under a running server.
+    if (result.type === 'error' && result.statusCode !== 404) {
+      throw result.metadata.error
+    }
+
+    throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
+  }
+
+  ctx.status(result.statusCode).headers(result.headers)
+
+  if (spa.cache !== false) {
+    ctx.header('cache-control', spa.cache.shell)
+  }
+
+  return result.stream
+}
+
+/**
+ * The request path as the router matched it: decoded, without the query, duplicate slashes collapsed.
+ *
+ * Read from the URL rather than from `new URL(...)`, whose parser would take `//api//typo` for a host. A path
+ * that cannot be decoded matched nothing the application registered, so it is not a client route either.
+ */
+function requestPath(url: string): string | undefined {
+  const raw = url.split('?', 1)[0] ?? ''
+
+  try {
+    return decodeURIComponent(raw).replace(/\/{2,}/g, '/')
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Whether a request that reached the shell's route gets the shell.
+ *
+ * The order of the checks is the design. A history fallback that answers every miss with `index.html` poisons
  * everything it touches: a missing hashed asset comes back as HTML served under a JavaScript content type,
  * and an API typo comes back as a document. So the shell is the *last* thing tried, and only for a request
- * that looks like a browser navigating to a path the server does not own and that names no file.
+ * that looks like a browser navigating to a path the server does not own and that names no file. The method
+ * needs no check: the route is `GET`, and Fastify's `HEAD` twin is the only other way in.
  */
 function shouldServeShell(
-  req: FastifyRequest,
+  ctx: Context,
   path: string,
   spa: SPASettings,
   owned: readonly string[],
-  otherMountPrefixes: readonly string[],
+  mountPrefixes: readonly string[],
 ): boolean {
-  // A navigation is a GET. A POST to a client route is a mistake, and answering it with a document hides it.
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    return false
-  }
-
-  if (!underPrefix(path, spa.prefix)) {
-    return false
-  }
-
   // `include` is the deliberate override, so it is checked before anything that could exclude the path.
   if (spa.include.some(prefix => underPrefix(path, prefix))) {
-    return looksLikeDocument(req, path, spa)
+    return looksLikeDocument(ctx, path, spa)
   }
 
   if (isServerOwned(owned, path)) {
@@ -163,15 +271,34 @@ function shouldServeShell(
     return false
   }
 
-  if (otherMountPrefixes.some(prefix => prefix !== '' && underPrefix(path, prefix))) {
+  if (mountPrefixes.some(prefix => underPrefix(path, prefix))) {
     return false
   }
 
-  return looksLikeDocument(req, path, spa)
+  return looksLikeDocument(ctx, path, spa)
 }
 
-function looksLikeDocument(req: FastifyRequest, path: string, spa: SPASettings): boolean {
-  return !namesAFile(path) && (!spa.navigationOnly || isNavigation(req))
+/**
+ * A request for a document: one naming no file, and — unless the shell answers everything — a navigation by
+ * the framework's one definition of it. A request that says neither way is given the shell, so a test or a
+ * tool sending no headers at all sees the page.
+ */
+function looksLikeDocument(ctx: Context, path: string, spa: SPASettings): boolean {
+  if (namesAFile(path)) {
+    return false
+  }
+
+  if (!spa.navigationOnly) {
+    return true
+  }
+
+  return (
+    isNavigation({
+      secFetchMode: ctx.req.header('sec-fetch-mode'),
+      secFetchDest: ctx.req.header('sec-fetch-dest'),
+      accept: ctx.req.header('accept'),
+    }) ?? true
+  )
 }
 
 /**
@@ -193,29 +320,6 @@ function namesAFile(path: string): boolean {
 }
 
 /**
- * Whether the request is a document navigation rather than a programmatic fetch.
- *
- * `Sec-Fetch-Dest` is the reliable signal and every current browser sends it: `document` for a navigation,
- * `empty` for `fetch()`/XHR. `Accept` is the fallback for older clients, and a request carrying neither is
- * something like curl or a test, which is allowed through rather than second-guessed.
- */
-function isNavigation(req: FastifyRequest): boolean {
-  const dest = req.headers['sec-fetch-dest']
-
-  if (dest != null) {
-    return dest === 'document'
-  }
-
-  const accept = req.headers.accept
-
-  if (accept != null) {
-    return accept.includes('text/html') || accept.includes('*/*')
-  }
-
-  return true
-}
-
-/**
  * States, once every route has registered, which paths will never receive the shell.
  *
  * The failure mode of a history fallback is silence — an API route starts answering with HTML and nothing
@@ -225,10 +329,14 @@ function isNavigation(req: FastifyRequest): boolean {
 function report(
   instance: FastifyInstance,
   spa: SPASettings,
-  otherMountPrefixes: readonly string[],
+  mountPrefixes: readonly string[],
   derived: readonly string[],
+  shells: readonly SPASettings[],
 ): void {
-  const neverShell = [...new Set([...derived, ...spa.exclude, ...otherMountPrefixes.filter(p => p !== '')])]
+  // Another shell nested under this one takes its own prefix by routing; it is listed so the picture is whole.
+  const siblings = shells.filter(other => other !== spa && other.prefix !== '').map(other => other.prefix)
+  const neverShell = [...new Set([...derived, ...spa.exclude, ...mountPrefixes, ...siblings])]
+    .filter(prefix => underPrefix(prefix, spa.prefix) || spa.prefix === '')
     .filter(prefix => !spa.include.some(included => underPrefix(prefix, included)))
     .sort()
 
@@ -241,40 +349,34 @@ function report(
   if (spa.cache !== false) {
     instance.log.info(`[static]   immutable: ${spa.cache.immutable.join(', ') || '(none)'}`)
   }
-
-  for (const excluded of spa.exclude) {
-    if (!derived.some(prefix => underPrefix(prefix, excluded) || underPrefix(excluded, prefix))) {
-      instance.log.warn(`[static] SPA exclude "${excluded}" matches no registered route: it may be stale or misspelled`)
-    }
-  }
 }
 
 /**
- * Per-file `Cache-Control`, which `maxAge` cannot express: it is per mount, and a SPA needs the shell
- * revalidated on every navigation while its content-hashed assets are cached indefinitely.
+ * Per-file `Cache-Control` for the shell's files, which `maxAge` cannot express: it is per mount, and a SPA
+ * needs its content-hashed assets cached indefinitely while everything else is revalidated within the hour.
+ *
+ * Applies only to files under the shell's root: `@fastify/static` runs the callback of whichever mount is
+ * sending, and a file outside this root is not this shell's to describe.
  */
 function cacheHeaders(spa: SPASettings): (reply: HeaderCapableReply, path: string) => void {
   const cache = spa.cache as Exclude<SPASettings['cache'], false>
-  const indexPath = join(spa.root, spa.index)
 
   return (reply, path) => {
-    if (path === indexPath) {
-      reply.header('cache-control', cache.shell)
+    const rel = relative(spa.root, path)
+
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) {
       return
     }
 
-    // Compared against the path *within* the mount, so `/assets` means the site's assets directory rather
-    // than any directory of that name higher up the filesystem.
-    const relative = `/${path.startsWith(spa.root) ? path.slice(spa.root.length) : path}`
-      .replace(/\/+/g, '/')
-      .split(sep)
-      .join('/')
+    // Compared against the path *within* the root, so `/assets` means the site's assets directory rather than
+    // any directory of that name higher up the filesystem.
+    const within = `/${rel.split(sep).join('/')}`
 
     reply.header(
       'cache-control',
-      cache.immutable.some(prefix => underPrefix(relative, prefix))
-        ? 'public, max-age=31536000, immutable'
-        : cache.other,
+      cache.immutable.some(prefix => underPrefix(within, prefix)) ? 'public, max-age=31536000, immutable' : cache.other,
     )
   }
 }
+
+export type { ResolvedSPA }
