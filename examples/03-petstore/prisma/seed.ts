@@ -1,6 +1,9 @@
-import { Prisma, PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
-const prisma = new PrismaClient()
+import { Prisma, PrismaClient } from '../generated/prisma/client.js'
+
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL })
+const prisma = new PrismaClient({ adapter })
 
 // Idempotent-ish seed: only inserts when the pet table is empty, plus one demo user for login.
 async function main() {

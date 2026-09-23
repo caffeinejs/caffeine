@@ -1,6 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
-import { PrismaClient, type User as UserRow } from '@prisma/client'
 
+import { PrismaClient, type User as UserRow } from '../../generated/prisma/client.js'
 import type { CreateUserDTO, UpdateUserDTO, UserDTO } from './users.schemas.js'
 
 /** Maps a row to the API DTO, dropping the write-only `password`. */

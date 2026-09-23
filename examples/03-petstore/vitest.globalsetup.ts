@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url'
 // layout is regenerated deliberately, with `npm run generate -w @caffeinejs/example-petstore`.
 export default function setup(): void {
   const cwd = dirname(fileURLToPath(import.meta.url))
-  const prismaClient = join(cwd, '../../node_modules/.prisma/client')
+  const prismaClient = join(cwd, 'generated/prisma')
   if (existsSync(prismaClient)) {
     return
   }

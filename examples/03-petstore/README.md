@@ -18,8 +18,9 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 - **Multipart upload** (`$multipart.file()`), and the OpenAPI 3.2 **QUERY** search verb.
 - **Generated API docs** via `@caffeinejs/openapi`: an OpenAPI 3.2 document derived from the routes themselves —
   controllers and routers alike — plus a Scalar UI at `/docs`.
-- **Configuration** in one schema, one file: `src/app.config.ts`. The application reads nothing from
-  `process.env`; Prisma reads `DATABASE_URL` for itself.
+- **Configuration** in one schema, one file: `src/app.config.ts`. The application does not read
+  `process.env` for its own settings. `DATABASE_URL` is Prisma's: the CLI reads it from `prisma.config.ts`,
+  and the client reads it through the driver adapter.
 - **Structured logging** with pino, at a level the configuration chooses.
 - **Kubernetes probes** via `.with(health())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
@@ -114,9 +115,9 @@ Everything this app reads from its environment is declared once, in [src/app.con
 the server address, the log level, the docs credentials and the GitHub OAuth settings. Nothing in the
 application reads `process.env`.
 
-The one variable outside that schema is `DATABASE_URL`, and it is Prisma's: `prisma/schema.prisma` reads it
-directly, for the client and for `prisma migrate` and the seed, which is why it carries no `PETSTORE_` prefix.
-`src/main.ts` and `prisma.config.ts` load `.env` so it is set for both.
+The one variable outside that schema is `DATABASE_URL`. It has no `PETSTORE_` prefix. `prisma.config.ts`
+reads it for `prisma migrate` and the seed. The driver adapter in `src/util/db/prisma.ts` reads it for the
+client. `src/main.ts` and `prisma.config.ts` load `.env` so it is set for both.
 
 Every block is optional. A block nobody sets resolves to its field defaults, so `npm start` works with no `.env`
 at all — see [.env.example](.env.example) for the variables and their defaults. A double underscore separates
@@ -130,7 +131,7 @@ path segments, and each segment folds to lower case, which is why the keys are s
 | `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials               |
 | `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`              |
 | `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`           |
-| `DATABASE_URL`                        | Prisma's datasource, not the schema |
+| `DATABASE_URL`                        | Prisma CLI and the driver adapter   |
 
 > Earlier revisions of this example used a `PETSTOREDEMO_AUTH_GITHUB_*` prefix with single underscores. If you
 > have an old `.env`, rename those four variables.
