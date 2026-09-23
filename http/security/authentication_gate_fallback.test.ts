@@ -12,7 +12,7 @@ import {
   Principal,
   createWebApplication,
   health,
-  kAuthenticationExempt,
+  authenticationExempt,
   newRouter,
 } from '../index.js'
 
@@ -58,7 +58,7 @@ function plainRoutes() {
         instance.get('/admin-ui/users', ok)
         instance.get('/assets/app.js', ok)
         instance.get('/assets-but-not-really', ok)
-        instance.get('/metrics', { config: { [kAuthenticationExempt]: true } }, async request => ({
+        instance.get('/metrics', { config: authenticationExempt() }, async request => ({
           user: request.user,
         }))
       },
@@ -143,6 +143,29 @@ describe('the authentication gate and routes registered straight on the server',
       const running = await build()
 
       expect((await running.fetch('/no-such-route')).status).toBe(404)
+    })
+
+    // The not-found context is the one route config no `onRoute` hook reaches, so the gate finds no `$caffeine`
+    // on it and falls through to the policy, which excuses it. Authenticating is the half that must survive: the
+    // handler answering an unmatched URL is where the shell is served, and it renders a signed-in caller
+    // differently from an anonymous one.
+    it('still establishes a principal for a URL no route matches', async () => {
+      const app = await ready(
+        createWebApplication()
+          .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
+          .authorization(authz => authz.requireAuthenticatedByDefault())
+          .with(() =>
+            fp(
+              async (instance: FastifyInstance) => {
+                instance.setNotFoundHandler(async request => ({ user: request.user.authenticated }))
+              },
+              { name: 'echoing-not-found' },
+            ),
+          ),
+      )
+
+      expect(await (await app.fetch('/no-such-route', signedIn)).json()).toEqual({ user: true })
+      expect(await (await app.fetch('/no-such-route')).json()).toEqual({ user: false })
     })
   })
 

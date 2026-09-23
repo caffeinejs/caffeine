@@ -24,10 +24,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md) and [`http/AGENTS.md`](../http/AGENT
   document, and — unless `navigationOnly` is off — only a browser navigation is, by `isNavigation` from
   `@caffeinejs/http`. It is for a **wildcard**; a path the application declared answers any client.
   Do not read `Sec-Fetch-*` or `Accept` anywhere else.
-- **`{ anonymous: true }` on a mount** marks its routes `kAuthenticationExempt` from an `onRoute` hook while
-  that one mount registers. It fires for exactly that mount, since a mount registers every file before its
-  registration resolves. A bundle that must be _gated_ rather than exempt is served from compiled routes
-  instead — the gate can exempt a raw route but cannot give it a policy (see [`http/AGENTS.md`](../http/AGENTS.md)).
+- **`{ anonymous: true }` on a mount** calls `exemptFromAuthentication` on its routes from an `onRoute` hook
+  while that one mount registers. It fires for exactly that mount, since a mount registers every file before its
+  registration resolves. It covers the **wildcard** route and the redirect as well as the per-file ones:
+  `@fastify/static` gives only the per-file routes a config of their own, so reaching the rest depends on the
+  adapter having stamped one first. A bundle that must be _gated_ rather than exempt is served from compiled
+  routes instead — the gate can exempt a raw route but cannot give it a policy (see
+  [`http/AGENTS.md`](../http/AGENTS.md)).
 - **Scenario tests** (`_tests/scenarios/`) use `newRouter` chains and a `CaffeineIoC({ decorators: false })`
   container so no route leaks between the applications each file builds. `app.test.ts` is the exception and
   the reason: it builds **one** application from `@Controller` classes at module scope, and it is the test

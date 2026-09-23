@@ -146,7 +146,7 @@ declarations **add up**: none replaces another, on one route or across the level
 - `authz.requireAuthenticatedByDefault()` (or `fallbackPolicy(...)`) gates every route that declares nothing —
   the ones a plugin registered straight on Fastify included. Open under it: a route declared public, the health
   probes, OAuth callbacks, a URL no route matches (404), the prefixes in `{ except: ['/assets/'] }`, and a plain
-  Fastify route registered with `config: { [kAuthenticationExempt]: true }`.
+  Fastify route registered with `config: authenticationExempt()`.
 - A route naming several `schemes` advertises every one of them on a 401. A custom handler adds its challenge with
   `ctx.appendHeader('WWW-Authenticate', ...)`, not `ctx.header(...)`, which would replace the others'.
 - A policy must hold at least one requirement. `addPolicy('x', p => {})` fails at start-up

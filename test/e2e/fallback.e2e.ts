@@ -1,4 +1,4 @@
-import { health, kAuthenticationExempt, newRouter } from '@caffeinejs/http'
+import { authenticationExempt, health, newRouter } from '@caffeinejs/http'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -36,7 +36,7 @@ describe('a fallback policy in front of routes a plugin registered on the server
               instance.get('/admin-ui/users', ok)
               instance.get('/assets/app.js', ok)
               instance.get('/assets-but-not-really', ok)
-              instance.get('/metrics', { config: { [kAuthenticationExempt]: true } }, ok)
+              instance.get('/metrics', { config: authenticationExempt() }, ok)
             },
             { name: 'e2e-plain-routes' },
           ),

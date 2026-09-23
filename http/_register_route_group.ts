@@ -17,6 +17,7 @@ import type { AdapterExtensions } from './adapter_extension.js'
 import { ErrCaffeineWebApplication } from './error/common.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/plugin.js'
 import { solutions } from './error/util.js'
+import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './fastify_route_config.js'
 import { attachGuardHook } from './guards/fastify.js'
 import { joinPaths } from './internal/paths/index.js'
 import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
@@ -116,7 +117,9 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         }
         const hasHeader = header.length > 0
 
-        config.$caffeine = {
+        // Read by the handler below off this very binding rather than off the route config, so the per-request
+        // lookup is gone; every `onRoute` reader still finds it under `config.$caffeine.compiled`.
+        const compiled: CompiledRouteMetadata<REQ> = {
           route,
           group: router,
           hasStatus,
@@ -126,6 +129,11 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           hasHeader,
           header,
           catchBy: route.catchBy,
+        }
+
+        config.$caffeine = {
+          compiled,
+          skipAuthentication: false,
           // The authentication middleware is registered once, for the whole server, so what a route
           // declared has to travel with the route rather than be closed over per registration.
           auth: {
@@ -133,7 +141,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
             allowAnonymous: route.authorization.options?.allowAnonymous === true,
             authorizer: route.authorization.authorizer,
           },
-        }
+        } satisfies CaffeineRouteConfig<REQ>
 
         const url = joinPaths(basePath, route.path)
 
@@ -147,21 +155,19 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           config,
           ...options,
           handler: function (req, res) {
-            const config = req.routeOptions.config.$caffeine
-
-            if (config.hasHeader) {
-              for (let i = 0; i < config.header.length; i++) {
-                const item = config.header[i]
+            if (compiled.hasHeader) {
+              for (let i = 0; i < compiled.header.length; i++) {
+                const item = compiled.header[i]
                 res.header(item[0], item[1])
               }
             }
 
-            if (config.hasContentType) {
-              res.type(config.contentType)
+            if (compiled.hasContentType) {
+              res.type(compiled.contentType)
             }
 
-            if (config.hasStatus) {
-              res.code(config.status)
+            if (compiled.hasStatus) {
+              res.code(compiled.status)
             }
 
             const result = handle(req as REQ, res)

@@ -71,28 +71,43 @@ groups in the adapter (`assertAuthenticationConfigured`), because the case being
 gate exists.
 
 The gate runs for every request, a route registered straight on Fastify included: a root `onRequest` hook reaches
-root routes whatever order they registered in, so install order exempts nothing. A compiled route carries what it
-declared on `config.$caffeine.auth`. A route without `$caffeine` is gated by the application's `fallbackPolicy`
-when there is one — it has no `@Authorize` anyone could have forgotten — except a URL nothing matched
-(`request.is404`: no route, so no route policy to apply), the path prefixes the application listed in
-`fallbackPolicy(policy, { except })`, and a route whose config carries `kAuthenticationExempt`. That marker makes
-the gate return before authenticating at all, so `request.user` stays `null` on such a route. The health probes
-and the OAuth callback and sign-in routes set it, and so does `@caffeinejs/static` for a mount the application
+root routes whatever order they registered in, so install order exempts nothing. It reads one thing,
+`config.$caffeine`, because the adapter stamps one onto **every route its server registers** — an `onRoute` hook
+added before anything else can declare a route, filling in `{ skipAuthentication: false }` where a route brought
+nothing. A compiled route carries what it declared on `$caffeine.auth`; a route that declared nothing carries no
+`auth`, and that absence is what the application's `fallbackPolicy` answers, since such a route has no
+`@Authorize` anyone could have forgotten. Out of its reach: the path prefixes listed in
+`fallbackPolicy(policy, { except })`, a URL nothing matched, and `$caffeine.skipAuthentication`.
+
+`skipAuthentication` makes the gate return before authenticating at all, so `request.user` stays `null` on such a
+route. `authenticationExempt()` is how a caller registering its own route sets it, and
+`exemptFromAuthentication(route)` how a plugin that only gets an `onRoute` hook does. The health probes and the
+OAuth callback and sign-in routes use the first, `@caffeinejs/static` the second, for a mount the application
 declared `{ anonymous: true }`. A first-party plugin whose route must answer before anyone is signed in sets it
 too.
 
-`kAuthenticationExempt` is **not** `$caffeine.auth` with `allowAnonymous`, and the two must not be merged.
-`$caffeine`'s _absence_ is how a raw route is recognised, here and in `health/probes_route.ts` and
-`oidc_routes.ts`; its `route` and `group` are required, so a partial one is a `TypeError` from an `onRoute`
-hook; and `allowAnonymous: true` still **authenticates** — it establishes `ctx.user` and only then skips
-authorization. "Anyone may call this" and "do not spend work working out who is calling" are different claims,
-and a liveness probe polled every second, or the dozens of assets a page pulls, want the second.
+`skipAuthentication` is **not** `auth.allowAnonymous`, and the two must not be merged. `allowAnonymous: true`
+still **authenticates** — it establishes `ctx.user` and only then skips authorization. "Anyone may call this" and
+"do not spend work working out who is calling" are different claims, and a liveness probe polled every second, or
+the dozens of assets a page pulls, want the second.
 
-The gap that leaves: the gate can _exempt_ a raw route but cannot give one a **policy**, so files that must be
-protected by a specific policy cannot be served from a `@fastify/static` mount at all — they are served from
-compiled routes instead, which is what `@caffeinejs/static`'s `serve: false` mount is for. If this is ever
-closed, do not overload `$caffeine`: split the auth slice into its own symbol-keyed config key carrying a full
-`GatedRoute`, with "do not authenticate" as one of its states, and deprecate `kAuthenticationExempt` into it.
+`$caffeine` is an invariant of route **registration**, not of every request, and the gate's one `?.` is that
+difference. Fastify builds the not-found context directly rather than as a route, so no `onRoute` hook reaches it
+and an unmatched URL carries no stamp. That falls to the fallback, whose own `request.is404` check excuses it —
+excuses it from _authorization_. It is still authenticated, which is what keeps `ctx.user` populated in the
+handler answering an unmatched URL, where a single-page application's shell is served. Do not type `$caffeine` as
+non-optional on the strength of the word invariant: every 404 would be a `TypeError` in the gate.
+
+Telling a compiled route from a raw one is `$caffeine.compiled`, never `$caffeine` itself — here, in
+`health/probes_route.ts`, in `oidc_routes.ts` and in `route_collector.ts`. Both collision guards depend on it:
+each adds its `onRoute` hook before registering its own routes, so without the `compiled` check they would trip
+their own guard and fail `ready()`. `compiled` holds `route` and `group` as required members, so one nullable
+object narrows all of it at once and a partial stamp cannot reach a reader.
+
+That leaves `auth` as the slot for something the gate cannot do yet: give a **raw** route a policy rather than
+only exempting it. Nothing first-party writes it from an `onRoute` hook, and nothing should grow a helper for it
+until something needs one — files that must be protected by a specific policy are served from compiled routes,
+which is what `@caffeinejs/static`'s `serve: false` mount is for.
 
 Whether a request is a browser navigation is one question with one answer, `isNavigation` (`navigation.ts`):
 Fetch Metadata when the request carries it, `Accept` naming `text/html` otherwise, `undefined` when it says
@@ -147,8 +162,11 @@ hands the framework a Fastify instance: the adapter constructs it inside `setup(
 returned, once configuration has resolved and the container has initialized. `.server(configure, customize)`
 is the whole surface. `configure` gets the `HTTPSetupContext` a plugin factory gets and returns
 `{ factory, listener }` — Fastify's constructor options and its listen options; `customize` is handed the bare
-instance right after construction, before `$container`, the request decorations, the hooks, the form parser and
-every plugin, so it is where a pre-registered plugin, an `onRoute` hook, a raw route or a not-found handler goes.
+instance right after construction, before `$container`, the request decorations, the rest of the hooks, the form
+parser and every plugin, so it is where a pre-registered plugin, an `onRoute` hook, a raw route or a not-found
+handler goes. One hook precedes it, the adapter's `$caffeine` stamp, because Fastify runs `onRoute` as a route is
+declared rather than when it loads — so a raw route written here is stamped, and an `onRoute` hook added here
+runs behind the stamp and reads it.
 Calls accumulate: sections shallow-merge in call order, customizers run in call order. The old builder feature
 (`ServerBuilder`, `kServerOptions`, `serverConfigSchema`) is gone; an application declares its own `server` block
 and hands the node over as the `listener`.
@@ -229,12 +247,13 @@ instance.
 
 ## Reading the routes from a plugin
 
-Every route the adapter registers carries what Caffeine compiled for it on `routeOptions.config.$caffeine`:
-`route` (the compiled `Route`) and `group` (the `RouteGroup` it was compiled in), next to the fields the
-handler and the authentication gate read per request. There is no server decoration holding the route table.
+Every route the adapter registers carries what Caffeine compiled for it on
+`routeOptions.config.$caffeine.compiled`: `route` (the compiled `Route`) and `group` (the `RouteGroup` it was
+compiled in), next to the fields the handler reads. There is no server decoration holding the route table.
 Compiled routes register after every plugin, so a plugin that needs them adds an `onRoute` hook, as any
-Fastify plugin would; `$caffeine` is absent on a route registered straight on Fastify, which is how the hook
-tells the two apart. A per-route check throws from the hook (`app.ready()` rejects with it); a decision that
+Fastify plugin would; `compiled` is absent on a route registered straight on Fastify, which is how the hook
+tells the two apart. `$caffeine` itself is on both — the adapter stamps it — so testing that instead sees
+every route there is. A per-route check throws from the hook (`app.ready()` rejects with it); a decision that
 needs every route waits for `onReady`. `collectRouteGroups(instance)` is that pattern packaged — it regroups
 what registered and counts a GET route's automatic HEAD twin once — and the SPA shell and `@caffeinejs/openapi`
 use it.

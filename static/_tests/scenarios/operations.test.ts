@@ -1,6 +1,6 @@
 import { gunzipSync } from 'node:zlib'
 
-import { health, kAuthenticationExempt, newRouter, type WebApplication } from '@caffeinejs/http'
+import { authenticationExempt, health, newRouter, type WebApplication } from '@caffeinejs/http'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
@@ -9,7 +9,18 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { spaMount, staticFiles } from '../../index.js'
-import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
+import {
+  clientRouteOf,
+  dist,
+  expectNotFoundJSON,
+  fixtures,
+  HeaderAuthenticationHandler,
+  isolated,
+  NAVIGATION,
+  notFound,
+  PROBE,
+  shellOf,
+} from './_headers.js'
 
 const api = () =>
   newRouter('/api')
@@ -124,7 +135,7 @@ describe('a single-page application next to the plugins an application runs in p
       .with(() =>
         fp(
           async (instance: FastifyInstance) => {
-            instance.get('/metrics', { config: { [kAuthenticationExempt]: true } }, async () => 'up 1')
+            instance.get('/metrics', { config: authenticationExempt() }, async () => 'up 1')
           },
           { name: 'metrics' },
         ),
@@ -159,6 +170,23 @@ describe('a single-page application next to the plugins an application runs in p
       .mount(api(), pages()) as WebApplication
 
     await expect(app.ready()).rejects.toThrow(/already declared/)
+  })
+
+  // `@fastify/static` forwards a route config only on the per-file routes it registers: the wildcard it
+  // registers by default, and the redirect beside it, arrive without one. Marking an `anonymous` mount from an
+  // `onRoute` hook has to reach those too, or a mount serving on the default `wildcard: true` — where the
+  // wildcard *is* every route it has — is exempt in name only and answers 401 for the whole bundle.
+  it('exempts the wildcard route of an anonymous mount, not only its per-file routes', async () => {
+    app = isolated()
+      .authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler()))
+      .authorization(authz => authz.requireAuthenticatedByDefault())
+      .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
+    await app.ready()
+
+    const asset = await app.fetch('/bundle/hello.txt', { headers: PROBE })
+
+    expect(asset.status).toBe(200)
+    expect(await asset.text()).toContain('hello static world')
   })
 
   // A second mount that also wants the decoration is refused earlier still, by Fastify itself.

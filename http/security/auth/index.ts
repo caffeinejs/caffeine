@@ -45,7 +45,7 @@ export {
   type JWTServiceOptions,
   type JWTSignOptions,
 } from './jwt/index.js'
-export { kAuthenticationExempt, kAuthSchemeDescriptors } from './keys.js'
+export { kAuthSchemeDescriptors } from './keys.js'
 export {
   OAuth2AuthenticationHandler,
   type OAuth2AuthenticationOptions,

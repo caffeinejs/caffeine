@@ -3,9 +3,9 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
+import { type GatedRoute } from '../fastify_route_config.js'
 import type { RouteGroup } from '../route.js'
 import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
-import { kAuthenticationExempt } from './auth/keys.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
 import { kAuthzHandlers, kAuthzOpts } from './authz/keys.js'
@@ -68,7 +68,7 @@ export function authenticationPlugin(): FastifyPluginAsync {
     // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
     // to the decorator that caused it, not a support ticket.
     instance.addHook('onRoute', route => {
-      for (const scheme of route.config?.$caffeine?.route.authorization.options?.schemes ?? []) {
+      for (const scheme of route.config?.$caffeine?.compiled?.route.authorization.options?.schemes ?? []) {
         if (schemeProvider.schemeFor(scheme) === undefined) {
           throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
         }
@@ -81,14 +81,17 @@ export function authenticationPlugin(): FastifyPluginAsync {
     // Callback style, not `async`: a synchronous pass still needs the authenticate promise, but keeping the
     // hook itself callback-shaped is what a hand-written Fastify hook does and matches the guard hook.
     instance.addHook('onRequest', (request, reply, done) => {
-      const config = request.routeOptions.config
+      // Absent only on the not-found context, which Fastify builds directly rather than as a route, so no
+      // `onRoute` hook ever stamped it. That falls to the fallback below, whose own `is404` check answers it —
+      // and answers it the way it always did, by authenticating and authorizing nothing.
+      const meta = request.routeOptions.config.$caffeine
 
-      if (config[kAuthenticationExempt] === true) {
+      if (meta?.skipAuthentication === true) {
         done()
         return
       }
 
-      const route = config.$caffeine === undefined ? fallback?.for(request) : config.$caffeine.auth
+      const route = meta?.auth ?? fallback?.for(request)
 
       authenticateAndAuthorize(request.httpContext, service, defaultScheme, route).then(passed => {
         if (passed) {
@@ -107,13 +110,6 @@ export function authenticationPlugin(): FastifyPluginAsync {
   }
 
   return fp(plugin, { name: 'caffeine-authentication' })
-}
-
-/** What the gate has to know about the route a request matched. */
-interface GatedRoute {
-  schemes?: readonly string[]
-  allowAnonymous: boolean
-  authorizer?: AuthzRouteService
 }
 
 /**

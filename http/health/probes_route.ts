@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
-import { kAuthenticationExempt } from '../security/auth/keys.js'
+import { authenticationExempt } from '../fastify_route_config.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthOptions } from './options.js'
 import type { ProbeEndpoint, ProbeQuery, ProbeResponse } from './probes.js'
@@ -14,7 +14,7 @@ interface ProbeRequestQuery {
 /**
  * Mounts the three probes on the root server, before any controller is registered.
  *
- * The probes are marked {@link kAuthenticationExempt}, so the authentication gate does not run for them: a
+ * The probes are marked {@link authenticationExempt}, so the authentication gate does not run for them: a
  * fallback policy cannot make the kubelet see a 401, and an authentication scheme that is failing cannot make it
  * see a 500.
  */
@@ -31,7 +31,7 @@ function mount(server: FastifyInstance, path: string, handle: (query: ProbeQuery
   server.route({
     method: ['GET', 'HEAD'],
     url: path,
-    config: { [kAuthenticationExempt]: true },
+    config: authenticationExempt(),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
       const response = await handle(probeQuery(request.query as ProbeRequestQuery))
 
@@ -66,7 +66,7 @@ function assertNoCollision(server: FastifyInstance, probePaths: readonly string[
   const taken = new Set(probePaths)
 
   server.addHook('onRoute', route => {
-    if (route.config?.$caffeine === undefined || !taken.has(route.url)) {
+    if (route.config?.$caffeine?.compiled === undefined || !taken.has(route.url)) {
       return
     }
 

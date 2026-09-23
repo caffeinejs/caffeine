@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { authenticationExempt } from '../../../fastify_route_config.js'
 import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
-import { kAuthenticationExempt } from '../keys.js'
 import type { OIDCMeta } from './index.js'
 
 /**
@@ -24,7 +24,7 @@ export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
  * routes.
  *
  * Both are where a user who is not signed in yet arrives — sent back by the identity provider, or on the way to
- * it — so they are marked {@link kAuthenticationExempt}: no fallback policy may stand in front of them.
+ * it — so they are marked {@link authenticationExempt}: no fallback policy may stand in front of them.
  */
 export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void {
   const ownPaths = new Set(oidc.handlers.flatMap(({ callbackPath, handler }) => [callbackPath, handler.loginPath]))
@@ -32,7 +32,7 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
 
   // Compiled routes register after the callback routes, so each is checked as it registers.
   server.addHook('onRoute', route => {
-    const meta = route.config?.$caffeine
+    const meta = route.config?.$caffeine?.compiled
     if (meta === undefined) {
       return
     }
@@ -74,13 +74,13 @@ export function installOIDCRoutes(server: FastifyInstance, oidc: OIDCMeta): void
   for (const { handler } of oidc.handlers) {
     // A failure here — the provider cannot be reached — goes to the application-wide error handler, which answers
     // with the error's public message.
-    server.get(handler.loginPath, { config: { [kAuthenticationExempt]: true } }, async req => {
+    server.get(handler.loginPath, { config: authenticationExempt() }, async req => {
       await handler.startSignIn(req.httpContext)
     })
   }
 
   for (const { callbackPath, handler } of oidc.handlers) {
-    server.get(callbackPath, { config: { [kAuthenticationExempt]: true } }, async (req, reply) => {
+    server.get(callbackPath, { config: authenticationExempt() }, async (req, reply) => {
       try {
         await handler.processCallback(req.httpContext)
       } catch (e) {

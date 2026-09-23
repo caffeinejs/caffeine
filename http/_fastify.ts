@@ -1,10 +1,8 @@
 import { type Container } from '@caffeinejs/di'
 
 import { type FastifyContext } from './fastify_context.js'
-import { type CatchByMap, type Route, type RouteGroup } from './route.js'
+import { type CaffeineRouteConfig } from './fastify_route_config.js'
 import { type RouteGroupBuilder } from './routing/builder.js'
-import { type kAuthenticationExempt } from './security/auth/keys.js'
-import { type AuthzRouteService } from './security/authz/route_service.js'
 import { type Principal } from './security/identity.js'
 import { Keys } from './symbols.js'
 
@@ -25,38 +23,13 @@ declare module 'fastify' {
   }
 
   interface FastifyContextConfig {
-    /** Set on a route the authentication gate must leave alone. See {@link kAuthenticationExempt}. */
-    [kAuthenticationExempt]?: boolean
-
     /**
-     * What Caffeine compiled for the route. Present on every route the framework registers and absent on one
-     * registered straight on Fastify, so a plugin's `onRoute` hook tells them apart by it.
+     * What Caffeine compiled for the route, and what the authentication gate does with it.
+     *
+     * Stamped by the adapter onto every route its server registers, so a plugin's `onRoute` hook tells a
+     * compiled route from one registered straight on Fastify by {@link CaffeineRouteConfig.compiled}, not by
+     * this field's presence.
      */
-    $caffeine?: {
-      /**
-       * The compiled route: schema, authorization, constraints, detail. A GET route's automatic HEAD twin
-       * carries the same object, so an enrichment written to `detail` is observed by both spellings.
-       */
-      route: Route<FastifyRequest>
-      /** The group the route was compiled in: its path, prefix, name, target and detail. */
-      group: RouteGroup<FastifyRequest>
-      hasStatus: boolean
-      status: number
-      hasContentType: boolean
-      contentType: string
-      hasHeader: boolean
-      header: Array<[string, string | string[]]>
-      catchBy?: CatchByMap
-      /**
-       * What the route declared about authentication and authorization, carried here because the
-       * authentication hook is added once for the whole server and only learns which route it is on at
-       * request time.
-       */
-      auth?: {
-        schemes?: readonly string[]
-        allowAnonymous: boolean
-        authorizer?: AuthzRouteService
-      }
-    }
+    $caffeine?: CaffeineRouteConfig
   }
 }

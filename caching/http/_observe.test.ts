@@ -13,7 +13,12 @@ function routeDef(
     method,
     url: '/api/pets/:id',
     handler: () => {},
-    config: caffeine && { $caffeine: { group: { name: caffeine.group }, route: { name: caffeine.route } } },
+    config: caffeine && {
+      $caffeine: {
+        skipAuthentication: false,
+        compiled: { group: { name: caffeine.group }, route: { name: caffeine.route } },
+      },
+    },
   } as unknown as AdapterRouteOptions
 }
 

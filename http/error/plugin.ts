@@ -135,7 +135,7 @@ export function installRouteGroupErrorHandler(
     const err = error instanceof Error ? error : new Error(String(error))
 
     // routeOptions is populated before validation, so route-level handlers also see schema errors.
-    const routeCatchBy = req.routeOptions.config?.$caffeine?.catchBy
+    const routeCatchBy = req.routeOptions.config?.$caffeine?.compiled?.catchBy
     const handler =
       (routeCatchBy ? resolveByErrorChain(routeCatchBy, err) : undefined) ??
       (routerCatchBy ? resolveByErrorChain(routerCatchBy, err) : undefined)

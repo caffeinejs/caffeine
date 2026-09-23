@@ -1,4 +1,4 @@
-import fastify, { type FastifyInstance } from 'fastify'
+import fastify, { type FastifyInstance, type RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -9,6 +9,7 @@ import {
   Router,
   collectRouteGroups,
   createWebApplication,
+  type CaffeineRouteConfig,
   type HTTPPluginFactory,
   type Route,
   type RouteGroup,
@@ -17,8 +18,8 @@ import {
 
 /**
  * A plugin learns the application's routes the way any Fastify plugin does — from `onRoute` — and finds what
- * Caffeine compiled on `config.$caffeine`. There is no route table decorated on the server, so if the adapter
- * stops stamping the metadata, nothing else can hand it over and these fail.
+ * Caffeine compiled on `config.$caffeine.compiled`. There is no route table decorated on the server, so if the
+ * adapter stops stamping the metadata, nothing else can hand it over and these fail.
  */
 
 @Controller('/meta-controller')
@@ -36,6 +37,21 @@ interface Seen {
   url: string
   route: Route | undefined
   group: RouteGroup | undefined
+  /** The whole stamp, so a route carrying none is told from one carrying a stamp without compiled metadata. */
+  stamp: CaffeineRouteConfig | undefined
+}
+
+/** Records one route, with whatever `$caffeine` metadata it carries. */
+function record(seen: Seen[]): (options: RouteOptions) => void {
+  return options => {
+    seen.push({
+      method: [options.method].flat().join('|'),
+      url: options.url,
+      route: options.config?.$caffeine?.compiled?.route,
+      group: options.config?.$caffeine?.compiled?.group,
+      stamp: options.config?.$caffeine,
+    })
+  }
 }
 
 /** Records every route registered after it, with whatever `$caffeine` metadata the route carries. */
@@ -43,14 +59,7 @@ function observer(seen: Seen[]): HTTPPluginFactory {
   return () =>
     fp(
       async (instance: FastifyInstance) => {
-        instance.addHook('onRoute', options => {
-          seen.push({
-            method: [options.method].flat().join('|'),
-            url: options.url,
-            route: options.config?.$caffeine?.route,
-            group: options.config?.$caffeine?.group,
-          })
-        })
+        instance.addHook('onRoute', record(seen))
       },
       { name: 'observer' },
     )
@@ -101,6 +110,29 @@ describe('route metadata on config.$caffeine', () => {
 
     expect(get('/meta-raw')).toBeDefined()
     expect(get('/meta-raw')?.route).toBeUndefined()
+
+    // The adapter stamps every route it registers, so a raw one carries the gate's slice and no compiled
+    // metadata. Four readers tell the two apart by `compiled`, not by `$caffeine` itself.
+    expect(get('/meta-raw')?.stamp).toEqual({ skipAuthentication: false })
+    expect(get('/meta-controller/hello')?.stamp?.compiled).toBeDefined()
+  })
+
+  // The stamp hook is added before the application's customizer runs, because Fastify runs `onRoute` as a route
+  // is declared rather than when it is loaded. Without that ordering this route registers unstamped and the gate
+  // reads it as a URL nothing matched.
+  it('stamps a raw route registered from a server customizer', async () => {
+    const seen: Seen[] = []
+    app = createWebApplication().server(undefined, instance => {
+      // Second in the hook array, behind the adapter's: a customizer runs after the stamp hook is added, which
+      // is what lets this one read the stamp of a route declared alongside it.
+      instance.addHook('onRoute', record(seen))
+      instance.get('/meta-customized', async () => ({ ok: true }))
+    }) as WebApplication
+    await app.ready()
+
+    const customized = seen.find(s => s.url === '/meta-customized' && s.method === 'GET')
+
+    expect(customized?.stamp).toEqual({ skipAuthentication: false })
   })
 
   it('hands the automatic HEAD twin of a GET route the same compiled route', async () => {

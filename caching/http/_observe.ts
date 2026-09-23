@@ -11,7 +11,7 @@ export function cacheRouteOf(routeDef: AdapterRouteOptions): CacheRoute {
   const url = routeDef.url
 
   // Absent on a route registered straight on Fastify. A programmatic group or route may be unnamed.
-  const caffeine = routeDef.config?.$caffeine
+  const caffeine = routeDef.config?.$caffeine?.compiled
   const group = caffeine?.group.name
   const name = caffeine?.route.name
 

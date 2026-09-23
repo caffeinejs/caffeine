@@ -118,8 +118,17 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // the address has to stop moving once the socket is bound.
     this.#listener = listener === undefined ? undefined : { ...listener }
 
-    // The application's turn on the bare server, ahead of everything this adapter decorates, hooks or registers:
-    // a plugin registered here loads before every feature's, and a not-found handler set here is kept.
+    // Ahead of `customize` below, and it is the one thing that is: Fastify runs `onRoute` synchronously as a
+    // route is declared, so a raw route written in a customizer would otherwise register unstamped and the gate
+    // would read it as a URL nothing matched. `??=` throughout — a compiled route and an `authenticationExempt()`
+    // one arrive carrying their own.
+    fastify.addHook('onRoute', route => {
+      const config = (route.config ??= {})
+      config.$caffeine ??= { skipAuthentication: false }
+    })
+
+    // The application's turn on the bare server, ahead of everything else this adapter decorates, hooks or
+    // registers: a plugin registered here loads before every feature's, and a not-found handler set here is kept.
     await input.customize?.(fastify)
 
     // Decorating the server

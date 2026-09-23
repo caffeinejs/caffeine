@@ -88,7 +88,7 @@ export class AuthorizationBuilder implements Feature {
    * on the server included, since there is no decorator on those for anyone to forget.
    *
    * What stays open under it: a route declared public, a health probe, the callback an OAuth strategy receives
-   * its redirect on, a route carrying `kAuthenticationExempt`, the prefixes listed in
+   * its redirect on, a route registered with `authenticationExempt()`, the prefixes listed in
    * {@link FallbackPolicyOptions.except}, and a URL no route matches, which is answered 404 as it always was.
    *
    * Off by default, because turning it on changes what an *undecorated* route means and that has to be a

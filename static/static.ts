@@ -1,4 +1,4 @@
-import { HTTPPluginFactory, kAuthenticationExempt, type HTTPPluginConfigurer } from '@caffeinejs/http'
+import { HTTPPluginFactory, exemptFromAuthentication, type HTTPPluginConfigurer } from '@caffeinejs/http'
 import fastifyStatic from '@fastify/static'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -29,15 +29,19 @@ function staticPlugin({ mounts }: ResolvedStatic): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const decorating = decoratingMount(mounts)
 
-    // `@fastify/static` forwards no route config of its own, so an `onRoute` hook is the only way to reach the
-    // routes an `anonymous` mount registers. It fires for exactly the mount being registered, since a mount
+    // `@fastify/static` takes no route config from its caller, so an `onRoute` hook is the only way to reach
+    // the routes an `anonymous` mount registers. It fires for exactly the mount being registered, since a mount
     // registers every file before its registration resolves.
+    //
+    // It reaches the wildcard route and the redirect beside it as well as the per-file ones, which is the whole
+    // bundle when a mount serves on the default `wildcard: true`. Only the per-file routes build a config of
+    // their own; the rest arrive with the one the adapter stamped, before any plugin's hook runs.
     let exempt = false
 
     if (mounts.some(({ anonymous }) => anonymous)) {
       instance.addHook('onRoute', route => {
-        if (exempt && route.config !== undefined) {
-          route.config[kAuthenticationExempt] = true
+        if (exempt) {
+          exemptFromAuthentication(route)
         }
       })
     }
