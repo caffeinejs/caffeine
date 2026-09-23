@@ -124,14 +124,14 @@ at all — see [.env.example](.env.example) for the variables and their defaults
 path segments, and each segment folds to lower case, which is why the keys are spelled `clientId` and
 `callbackUrl`:
 
-| Variable                              | Sets                                |
-| ------------------------------------- | ----------------------------------- |
-| `PETSTORE_SERVER__PORT`               | `server.port`                       |
-| `PETSTORE_LOG__LEVEL`                 | `log.level`                         |
-| `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials               |
-| `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`              |
-| `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`           |
-| `DATABASE_URL`                        | Prisma CLI and the driver adapter   |
+| Variable                              | Sets                              |
+| ------------------------------------- | --------------------------------- |
+| `PETSTORE_SERVER__PORT`               | `server.port`                     |
+| `PETSTORE_LOG__LEVEL`                 | `log.level`                       |
+| `PETSTORE_DOCS__USER` / `__PASSWORD`  | the Basic credentials             |
+| `PETSTORE_AUTH__GITHUB__CLIENT_ID`    | `auth.github.clientId`            |
+| `PETSTORE_AUTH__GITHUB__CALLBACK_URL` | `auth.github.callbackUrl`         |
+| `DATABASE_URL`                        | Prisma CLI and the driver adapter |
 
 > Earlier revisions of this example used a `PETSTOREDEMO_AUTH_GITHUB_*` prefix with single underscores. If you
 > have an old `.env`, rename those four variables.
