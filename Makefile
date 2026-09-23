@@ -63,6 +63,10 @@ lint-markdown: ## lint markdown
 licensecheck: ## check production dependency licenses against the allowlist
 	@npm run license:check
 
+.PHONY: tools
+tools: ## install external contributor tools
+	@go install github.com/uwu-tools/scorecard-mcp/cmd/scorecard-mcp@latest
+
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npx oxlint --fix $*
 	@npx oxfmt $*
