@@ -22,9 +22,7 @@ export interface CompressOptions {}
  * Needs `@fastify/compress` registered on the server — this is the per-route half of it.
  *
  * ```ts
- * .with(({ config }) =>
- *   fp(async instance => instance.register(fastifyCompress, config.app.compress.options), { name: 'compress' }),
- * )
+ * .with(({ config }) => [fastifyCompress, config.app.compress.options])
  * ```
  */
 export function compress(options: CompressOptions | false): AnyRouteExtension {

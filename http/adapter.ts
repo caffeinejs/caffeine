@@ -16,7 +16,12 @@ import Fastify, {
 } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { assertFastifyPlugin, assertPluginNotRegistered, registerCompiledRouteGroup } from './_register_route_group.js'
+import {
+  assertFastifyPlugin,
+  assertPluginNotRegistered,
+  registerCompiledRouteGroup,
+  resolveExtension,
+} from './_register_route_group.js'
 import type { AdapterExtensionEntry, AdapterExtensions } from './adapter_extension.js'
 import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn, ServerAddress } from './application.js'
@@ -29,7 +34,7 @@ import type { FastifyTypes } from './fastify_types.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares } from './middleware/fastify.js'
 import { installNotFoundHandler } from './not_found.js'
-import { pluginName, type AnyFastifyPlugin } from './plugin.js'
+import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
 import type { RouteGroup } from './route.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import type { RouteCompilers } from './routing/dispatch.js'
@@ -181,10 +186,11 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     installFormBodyParser(fastify)
 
     for (const entry of input.extensions.root()) {
-      const plugin = entry.kind === 'feature' ? featurePlugin(entry) : entry.extension
+      const { plugin, options } =
+        entry.kind === 'feature' ? { plugin: featurePlugin(entry), options: {} } : resolveExtension(entry.extension)
       assertFastifyPlugin(plugin)
       assertPluginNotRegistered(fastify, plugin)
-      await fastify.register(plugin)
+      await fastify.register(plugin, options)
     }
 
     // After every plugin, so one that took the not-found handler keeps it.
@@ -384,7 +390,7 @@ function featurePlugin<S extends FastifyInstance>(
 function assertRouteFeaturesInstalled(
   server: FastifyInstance,
   routeGroups: readonly RouteGroup<any>[],
-  extensions: Pick<AdapterExtensions<unknown, AnyFastifyPlugin>, 'of'>,
+  extensions: Pick<AdapterExtensions<unknown, FastifyExtension>, 'of'>,
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {
     for (const group of routeGroups) {
@@ -392,7 +398,10 @@ function assertRouteFeaturesInstalled(
         route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
       )
       const installed = (group.scopes ?? []).some(scope =>
-        extensions.of(scope).some(plugin => typeof plugin === 'function' && pluginName(plugin) === CACHING_PLUGIN),
+        extensions.of(scope).some(extension => {
+          const { plugin } = resolveExtension(extension)
+          return typeof plugin === 'function' && pluginName(plugin as AnyFastifyPlugin) === CACHING_PLUGIN
+        }),
       )
 
       if (cached && !installed) {

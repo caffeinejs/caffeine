@@ -1,3 +1,4 @@
+import type { HTTPPluginFactory } from '@caffeinejs/http'
 import csrfProtection from '@fastify/csrf-protection'
 import helmet from '@fastify/helmet'
 import type { FastifyReply, FastifyRequest } from 'fastify'
@@ -7,12 +8,13 @@ import fp from 'fastify-plugin'
  * The two official Fastify plugins this application registers itself.
  *
  * `@caffeinejs/http` ships no wrapper for either, by design — security headers and CSRF are the application's
- * to choose, exactly like CORS and compression. `.with(...)` takes a factory returning a plugin and registers
- * it with no options argument, so the options are closed over here.
+ * to choose, exactly like CORS and compression.
  *
- * The outer `fastify-plugin` is not decoration: without it the wrapper gets its own encapsulation context,
- * and since both plugins declare `skip-override` their hooks and decorators would stay inside it and reach no
- * routes at all.
+ * The two are registered differently, and the difference is the point. `securityHeaders` hands `helmet` back
+ * *with* its options: `@fastify/helmet` already wraps itself in `fastify-plugin`, so registering it directly is
+ * what puts its hooks on every route, and a wrapper written only to carry the options would take an
+ * encapsulation context of its own and cover nothing. `csrf` is a plugin in its own right — it registers a
+ * plugin *and* adds a hook of its own — so it is wrapped, for exactly that reason.
  *
  * Both are installed **before** `.authentication(...)` in `app.ts`. Hook *coverage* does not depend on order —
  * Fastify binds route contexts at `preReady` — but hook *execution* does, and a hook registered after the
@@ -29,28 +31,28 @@ import fp from 'fastify-plugin'
  * demo runs over plain http, where `upgrade-insecure-requests` would rewrite every subresource to `https:` on
  * any host that is not localhost, and HSTS would be a footgun rather than a protection. Behind TLS, drop both
  * overrides.
+ *
+ * The annotation is load-bearing: it is what types the pair as a pair. Without it the array literal widens to
+ * `(plugin | options)[]`, since nothing at this point contextually types the return.
  */
-export const securityHeaders = () =>
-  fp(
-    async instance => {
-      await instance.register(helmet, {
-        contentSecurityPolicy: {
-          useDefaults: true,
-          directives: {
-            'script-src': ["'self'"],
-            'style-src': ["'self'"],
-            'img-src': ["'self'", 'data:'],
-            'connect-src': ["'self'"],
-            'manifest-src': ["'self'"],
-            'frame-ancestors': ["'none'"],
-            'upgrade-insecure-requests': null,
-          },
-        },
-        strictTransportSecurity: false,
-      })
+export const securityHeaders: HTTPPluginFactory = () => [
+  helmet,
+  {
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        'script-src': ["'self'"],
+        'style-src': ["'self'"],
+        'img-src': ["'self'", 'data:'],
+        'connect-src': ["'self'"],
+        'manifest-src': ["'self'"],
+        'frame-ancestors': ["'none'"],
+        'upgrade-insecure-requests': null,
+      },
     },
-    { name: 'security-headers' },
-  )
+    strictTransportSecurity: false,
+  },
+]
 
 /** Methods that change nothing, so nothing to forge. */
 const SAFE = new Set(['GET', 'HEAD', 'OPTIONS'])

@@ -5,7 +5,7 @@ import type { FastifyHttpOptions, FastifyInstance, FastifyListenOptions, Fastify
 
 import type { AdapterTypes, ContextPlatform } from './adapter_types.js'
 import type { FastifyMiddlewareHook } from './middleware/fastify.js'
-import type { AnyFastifyPlugin } from './plugin.js'
+import type { FastifyExtension } from './plugin.js'
 
 /**
  * What `ctx.platform` is under the Fastify adapter: the request and the reply Fastify is serving.
@@ -49,7 +49,7 @@ export interface FastifyTypes<
 > extends AdapterTypes {
   instance: S
   request: REQ
-  extension: AnyFastifyPlugin
+  extension: FastifyExtension
   hook: FastifyMiddlewareHook
   raw: IncomingMessage
   cookieOptions: CookieSerializeOptions

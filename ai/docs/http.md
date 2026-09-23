@@ -92,10 +92,12 @@ app.mount(pets) // before app.ready()
 - `.plugin(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
   it. Only a router bound to Fastify takes one, so it is created with `newRouter(path)` rather than
   `new Router(path)` —
-  `newRouter('/pets').plugin(() => fp(instance => instance.register(fastifyCors, { origin: 'https://pets.example' }), { name: 'cors' }))`.
+  `newRouter('/pets').plugin(() => [fastifyCors, { origin: 'https://pets.example' }])`.
   A router from `new Router(path)` is bound to no adapter and mounts on any application.
   There is no `corsPlugin`/`compressPlugin` wrapper — register the third-party plugin directly, the same as any
-  other Fastify plugin. The same on a controller is
+  other Fastify plugin. A factory returns the plugin, or the plugin paired with the options to register it
+  with; an official plugin already wraps itself in `fastify-plugin`, so a wrapper written only to carry its
+  options would be encapsulated and reach no routes. The same on a controller is
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
   deduplicated: two groups wanting different settings pass two factories. The factory's context carries
   `config` as `LiveConfig<unknown>` — a router does not know which application it will be mounted into.

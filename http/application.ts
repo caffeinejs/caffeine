@@ -302,9 +302,14 @@ export class WebApplication<
    * ```ts
    * createWebApplication()
    *   .with(staticFiles(s => s.serve('public')))
-   *   .with(({ config }) => corsPlugin(config.app.cors.options))
+   *   .with(({ config }) => [fastifyCors, config.app.cors.options])
    *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
+   *
+   * A factory needing to configure its plugin hands the plugin back together with its options, rather than
+   * wrapping it in one that closes over them: an official plugin already wraps itself in `fastify-plugin`, so
+   * registering it directly is what puts its hooks on every route, while a wrapper would take an encapsulation
+   * context of its own and cover nothing.
    *
    * A feature is deduplicated by name — see {@link Application.with}. A factory is never deduplicated — two
    * calls register two plugins. A `fastify-plugin` name already on that instance is refused at register time.
@@ -729,7 +734,7 @@ export class WebApplication<
  * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
  * called at any point in the chain before `ready()`. Configuration is built separately with
  * `newConfiguration` and passed in as `{ config }`. A plugin factory is
- * `.with(({ config }) => corsPlugin(config.app.cors.options))`.
+ * `.with(({ config }) => [fastifyCors, config.app.cors.options])`.
  *
  * ```ts
  * createWebApplication()

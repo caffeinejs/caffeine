@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
+import type { FastifyPluginAsync, FastifyPluginCallback, FastifyPluginOptions } from 'fastify'
 
 import type { AdapterExtensionFactory } from './adapter_extension.js'
 import type { HTTPSetupContext } from './setup_context.js'
@@ -10,9 +10,36 @@ import type { HTTPSetupContext } from './setup_context.js'
 export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
 
 /**
+ * A plugin and the options to register it with, handed back together by the factory that built them.
+ *
+ * The options are built inside the factory, so they can come from the application's configuration or from
+ * something resolved out of the container. Handing the plugin over rather than a wrapper closing over its
+ * options is what keeps the plugin's own `fastify-plugin` wrapping doing its job: a wrapper is encapsulated, and
+ * the hooks and decorations of the plugin inside it stay there.
+ *
+ * The plugin's own options type is not carried across to `options`, since `.with(...)` is not generic in it and
+ * making it so would decide the application's configuration type from the wrong argument. Write
+ * `options satisfies FastifyStaticOptions` where the exact shape matters. This is also the only form that takes
+ * a plugin whose options are *required*, such as `@fastify/static` and its `root`: {@link AnyFastifyPlugin}
+ * describes one that can be registered with none.
+ */
+export type FastifyPluginWithOptions = readonly [
+  plugin: FastifyPluginCallback<any> | FastifyPluginAsync<any>,
+  options: FastifyPluginOptions,
+]
+
+/** What the Fastify adapter installs: a plugin, or a plugin together with the options to register it with. */
+export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
+
+/**
  * Produces a Fastify plugin from what the application resolved at start-up: its configuration, its container and
  * its logger. What `.with(...)` takes on a Fastify application when the argument is a function, and how a
  * third-party Fastify plugin is configured from the application's own settings.
+ *
+ * A plugin taking options is handed back **with** them, as a pair, rather than wrapped in a plugin that closes
+ * over them. `@fastify/cors` and every other official plugin already wraps itself in `fastify-plugin`, so
+ * registering one directly is what puts its hooks on every route; a wrapper written only to carry the options
+ * would be encapsulated, and the plugin inside it would reach no routes at all.
  *
  * A plugin needing nothing from the context is written `.with(() => myPlugin)` — `myPlugin` itself may be
  * callback-style or async, this package's own or a third party's untouched.
@@ -34,12 +61,12 @@ export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * the route and the group it was compiled in, or calls {@link collectRouteGroups}.
  *
  * ```ts
- * .with(({ config }) => corsPlugin(config.app.cors.options))
- * .with(({ config, container }) => rateLimitPlugin(container.get(Redis), config.app.limits))
+ * .with(({ config }) => [fastifyCors, config.app.cors.options])
+ * .with(({ config, container }) => [rateLimit, { redis: container.get(Redis), ...config.app.limits }])
  * .with(() => cors)
  * ```
  */
-export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<AnyFastifyPlugin, C>
+export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExtension, C>
 
 /**
  * Authors a plugin's options through its builder, handed the same {@link HTTPSetupContext} the factory that

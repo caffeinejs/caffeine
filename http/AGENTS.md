@@ -16,6 +16,14 @@ leave it unwrapped and they stay inside the plugin, covering only what the plugi
 plugin does not pick that context — the application registers it on the root server, and `router.plugin(...)`
 / `@Use(...)` register it inside one route group's context. Every first-party plugin here is wrapped.
 
+So is every official `@fastify/*` plugin, by its own author — which is the half of the rule that catches people
+out. `@fastify/cors`, `@fastify/helmet` and the rest are already `fastify-plugin`-wrapped, so registering one
+**directly** puts its hooks on every route and needs nothing added. A wrapper an application writes around one
+is not wrapped, and the wrapped plugin inside it hoists only as far as that wrapper's own context — a sibling of
+every route group, so its hooks reach nothing at all. That is why a factory hands a plugin back **with** its
+options rather than closing over them in a wrapper, and why a wrapper that does have a body of its own — one
+registering a plugin _and_ adding a hook — still needs its `fp()`.
+
 `.with(...)` takes either a feature or a plugin factory `({ config, container, logger }) => <plugin>` — never a
 bare plugin, so `.with(() => myPlugin)` is how a plugin needing no configuration is written. The factory's one
 argument is `HTTPSetupContext`, the same object a feature's server hook and a middleware factory get — the hook
@@ -23,7 +31,17 @@ declares that type, so the container it is handed resolves. Both shapes
 land in the same list, so they register in the order the calls were written. A feature is installed once per name. A
 plugin factory is never deduplicated, so two calls register two plugins; a `fastify-plugin` name already
 registered on that Fastify instance is refused with `ERR_HTTP_DUPLICATE_PLUGIN` rather than hanging inside a
-re-declared decorator.
+re-declared decorator — and registering a plugin rather than a wrapper is what makes that check read the
+plugin's own name.
+
+A plugin taking options is handed back **with** them — `({ config }) => [myPlugin, { ...config.app.thing }]` —
+and the adapter registers the pair. They are built inside the factory, so they can come from configuration or
+from the container, and a plugin whose options are _required_, such as `@fastify/static` and its `root`, is only
+registrable this way. The pair is told apart by nothing but `Array.isArray`: a Fastify plugin is a function,
+never an array. The options are not type-checked against the plugin — `.with(...)` is not generic in them, and
+making it so would decide the application's configuration type from the wrong argument — so write `satisfies`
+where the exact shape matters. `router.plugin(...)` and `@Use(...)` take the pair too: all three read the one
+`extension` member of the adapter's types.
 
 Order is install order and nothing else: no bands, no `kExtensionStage`, no sort. `WebApplication.configurers()`
 holds the only framework slot — `ErrorHandlingBuilder` leads — and everything after it, this package's
@@ -281,7 +299,7 @@ dependency on `@fastify/cors` or `@fastify/compress`, and http does not ship a p
 register the third-party plugin yourself, exactly like any other Fastify plugin —
 
 ```ts
-.with(({ config }) => fp(async instance => instance.register(fastifyCors, config.app.cors.options), { name: 'cors' }))
+.with(({ config }) => [fastifyCors, config.app.cors.options])
 ```
 
 `CorsOptions` and `CompressOptions` are deliberately empty interfaces: this package has no dependency on

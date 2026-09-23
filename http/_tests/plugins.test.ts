@@ -1,5 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName, newConfiguration, $t } from '@caffeinejs/std'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -8,7 +9,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { kFeatureServer, type HTTPFeature } from '../feature.js'
-import { createWebApplication, type WebApplication } from '../index.js'
+import { healthConfigSchema } from '../health/options.js'
+import { createWebApplication, health, type WebApplication } from '../index.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -456,5 +458,119 @@ describe('scoped plugin registration', () => {
     expect(petsRes.headers.get('x-inst-orders')).toBeNull()
     expect(ordersRes.headers.get('x-inst-orders')).toBe('yes')
     expect(ordersRes.headers.get('x-inst')).toBeNull()
+  })
+})
+
+/**
+ * A plugin taking options, as a third-party one does: the header it stamps is named by what it was registered
+ * with rather than by what it closed over.
+ */
+function configurable(name: string): FastifyPluginAsync<{ header: string }> {
+  return async (instance, options) => {
+    instance.addHook('onRequest', (_request, reply, done) => {
+      reply.header(options.header, 'yes')
+      done()
+    })
+  }
+}
+
+/**
+ * A factory handing back a plugin together with the options to register it with.
+ *
+ * This is what removes the wrapper an application would otherwise write only to close over the options — and
+ * with it the `fastify-plugin` that wrapper needed. `@fastify/cors` and every other official plugin already
+ * wraps itself, so registering one directly is what puts its hooks on every route.
+ */
+describe('a plugin registered with its options', () => {
+  // Mounting a router gives the application its route types back, which a bare `WebApplication` cannot hold.
+  let app: WebApplication<any, any, any, any> | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  it('hands the options the factory built to the plugin', async () => {
+    const seen: string[] = []
+    const recording: FastifyPluginAsync<{ header: string }> = async (_instance, options) => {
+      seen.push(options.header)
+    }
+
+    app = createWebApplication().with(() => [fp(recording, { name: 'recording' }), { header: 'x-from-options' }])
+
+    await app.ready()
+
+    expect(seen).toEqual(['x-from-options'])
+  })
+
+  // The reason the pair form exists. A wrapper written to carry the options is itself unwrapped, so it takes an
+  // encapsulation context of its own; the plugin inside it lands there, and the route groups — registered on the
+  // root, as siblings of that context — never see its hooks. Registering the plugin itself keeps its own
+  // `fastify-plugin` doing the job it was wrapped for.
+  it('covers a compiled route, with no wrapper left to encapsulate it', async () => {
+    const pets = newRouter('/pair-pets').get('/', () => ({ ok: true }))
+
+    app = createWebApplication()
+      .with(() => [fp(configurable('pair'), { name: 'pair' }), { header: 'x-pair' }])
+      .mount(pets)
+
+    await app.ready()
+
+    expect((await app.fetch('/pair-pets')).headers.get('x-pair')).toBe('yes')
+  })
+
+  // Encapsulation stays the plugin author's call: the pair form changes where the options come from, never
+  // whether the plugin is wrapped. An unwrapped one keeps its hooks to itself exactly as it does alone.
+  it('leaves an unwrapped plugin covering nothing', async () => {
+    const pets = newRouter('/pair-unwrapped').get('/', () => ({ ok: true }))
+
+    app = createWebApplication()
+      .with(() => [configurable('loose'), { header: 'x-loose' }])
+      .mount(pets)
+
+    await app.ready()
+
+    expect((await app.fetch('/pair-unwrapped')).headers.get('x-loose')).toBeNull()
+  })
+
+  it('reaches only its own group when a router installed the pair', async () => {
+    const pets = newRouter('/pair-scoped-pets')
+      .plugin(() => [fp(configurable('scoped'), { name: 'scoped' }), { header: 'x-scoped' }])
+      .get('/', () => ({ ok: true }))
+    const orders = newRouter('/pair-scoped-orders').get('/', () => ({ ok: true }))
+
+    app = createWebApplication().mount(pets, orders)
+
+    await app.ready()
+
+    expect((await app.fetch('/pair-scoped-pets')).headers.get('x-scoped')).toBe('yes')
+    expect((await app.fetch('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
+  })
+
+  // The one test that has to keep compiling. `.with(...)` is a single signature over a union deliberately: a
+  // feature's callback takes its `config` type from it, and an overload — or a type parameter inferred from the
+  // same argument — would decide that type from the wrong place and silently hand the callback `unknown`.
+  // Widening the union's factory arm to accept a pair must not disturb that, so both arms are exercised on one
+  // typed application: if `C` ever regresses, `config.health` and `config.security` stop type-checking and
+  // `npm run test:typecheck` fails.
+  it('types both a feature callback and a pair against the application configuration', async () => {
+    const schema = $t.Object({ security: $t.Object({ header: $t.String() }), health: healthConfigSchema })
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigSource({ security: { header: 'x-from-config' } }))
+      .build()
+
+    const pets = newRouter('/pair-typed').get('/', () => ({ ok: true }))
+
+    app = createWebApplication({ config: conf })
+      .with(health((h, { config }) => h.config(config.health)))
+      .with(({ config }) => [fp(configurable('typed'), { name: 'typed' }), { header: config.security.header }])
+      .mount(pets)
+
+    await app.ready()
+
+    expect((await app.fetch('/pair-typed')).headers.get('x-from-config')).toBe('yes')
+    // Mounted rather than absent, so the feature really installed. What it then reports is health's own test.
+    expect((await app.fetch('/readyz')).status).not.toBe(404)
   })
 })
