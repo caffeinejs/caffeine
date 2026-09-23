@@ -94,6 +94,42 @@ jobs:
           files: coverage/junit.xml
           fail_ci_if_error: false
 
+      # Handed to the `sonar` job below, so the analysis reports the coverage this job already computed
+      # instead of running the suite a second time.
+      - name: Share coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          retention-days: 1
+          if-no-files-found: error
+
+  sonar:
+    name: Scan
+    runs-on: ubuntu-latest
+    needs: test
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Coverage
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: coverage
+          path: coverage
+
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
   e2e:
     name: E2E
     runs-on: ubuntu-latest

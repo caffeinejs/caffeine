@@ -4,7 +4,6 @@ import type { FastifyInstance } from 'fastify'
 
 import { Context } from '../../context.js'
 import { HTTPFeatureBuilder } from '../../feature.js'
-import { ServerOwnedPaths } from '../../server_owned_paths.js'
 import { authenticationPlugin } from '../authentication_plugin.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
@@ -52,13 +51,6 @@ import { RefreshTokenService } from './refresh/refresh_token_service.js'
 import { RefreshTokenStore } from './refresh/refresh_token_store.js'
 import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticationService } from './service.js'
-
-/** The OIDC/OAuth callback paths, so a SPA fallback does not treat them as unmatched client routes. */
-class OIDCOwnedPaths extends ServerOwnedPaths {
-  constructor(readonly paths: readonly string[]) {
-    super()
-  }
-}
 
 export interface AuthenticationOptions {
   defaultAuthenticateScheme: string
@@ -327,6 +319,25 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this.#register(name, 'basic', BASIC_KIND, optsFn)
   }
 
+  /**
+   * Registers a session-cookie scheme, named `Cookie` unless given one.
+   *
+   * The cookie is an **encrypted JWT** — `dir` + `A256GCM` under a key derived per scheme and purpose, so the
+   * principal's claims are not readable by whoever holds the cookie — and it is `HttpOnly`, so script cannot
+   * reach it either. `sameSite`, `secure` and `maxAge` are the tunable parts.
+   *
+   * Prefer this for a browser-first application, including a single-page application and its API on one
+   * origin: the challenge adapts to the caller, so an anonymous **navigation** is redirected to `loginPath`
+   * while an anonymous `fetch` gets 401 with the login URL in the body, and one scheme serves both. The
+   * browser sends the cookie on same-origin `fetch` on its own, so the API needs no second credential.
+   *
+   * Prefer {@link addJWTBearer} instead when the caller cannot hold a cookie — a cross-origin front end, a
+   * mobile client, or a machine calling the API with `Authorization: Bearer`. The two can be registered
+   * together, with {@link forward} choosing per request.
+   *
+   * Sign-in is `AuthenticationService.persist`, not a method here: verify the credentials in a route (see
+   * {@link addCredentials}) and persist the resulting principal.
+   */
   addCookie(opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
   addCookie(name: string, opts: (opts: CookieAuthenticationOptionsBuilder) => void): this
   addCookie(
@@ -640,15 +651,9 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
 
-      // Registered only here, so "no OIDC strategy was configured" is expressed as the extension not
-      // existing rather than as a flag it would have to read back and check.
+      // Set only here, so "no OIDC strategy was configured" is expressed as the routes plugin not existing
+      // rather than as a flag it would have to read back and check.
       this.#oidcMeta = meta
-      kit.container.bind(OIDCOwnedPaths, t =>
-        t
-          .toValue(new OIDCOwnedPaths(meta.handlers.map(h => h.callbackPath)))
-          .extends(ServerOwnedPaths)
-          .internal(),
-      )
     }
   }
 

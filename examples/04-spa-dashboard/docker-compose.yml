@@ -1,0 +1,35 @@
+services:
+  spa-dashboard:
+    # Docker's built-in init (tini) becomes PID 1: it forwards SIGTERM to the app and reaps zombies. Without it
+    # node runs as PID 1, where the default signal dispositions do not apply, and the graceful shutdown this
+    # example configures would never start.
+    init: true
+    build:
+      context: ../..
+      dockerfile: examples/04-spa-dashboard/Dockerfile
+    environment:
+      # The schema default is 127.0.0.1, which inside a container is reachable only from inside it.
+      SPA_SERVER__HOST: 0.0.0.0
+      SPA_SERVER__PORT: 9010
+      # SPA_AUTH__SESSION_SECRET and SPA_AUTH__COOKIE_SECRET are left at their demo defaults, as .env.example
+      # says. A deployment sets both, and SPA_AUTH__SECURE_COOKIE=true once there is TLS in front.
+    # Compose's own stop timeout is shorter than this application's 5s drain delay, so without this the
+    # container is SIGKILLed mid-shutdown (exit 137) and nothing graceful happens. 30s is what the framework
+    # assumes when nothing says otherwise — std/shutdown/shutdown_options.ts defaults terminationGracePeriodMs
+    # to the Kubernetes default, because a process cannot read its own grace period.
+    stop_grace_period: 30s
+    ports:
+      - '9010:9010'
+    healthcheck:
+      # The application's own readiness probe, which is what turns false while it drains. node -e rather than
+      # curl, which bookworm-slim does not ship.
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:9010/readyz').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

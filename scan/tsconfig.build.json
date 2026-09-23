@@ -3,5 +3,17 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "exclude": ["dist", "node_modules", "**/_testdata/", "**/*.test.ts", "**/*.spec.ts", "*.config.ts"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/_tests/**",
+    "**/_testdata/**",
+    "**/*.test.ts",
+    "**/*.test-d.ts",
+    "**/*.spec.ts",
+    "**/*.testkit.ts",
+    "**/*.e2e.ts",
+    "vitest.config.ts",
+    "*.config.ts"
+  ]
 }

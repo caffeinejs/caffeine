@@ -56,27 +56,49 @@ The gate runs for every request, a route registered straight on Fastify included
 root routes whatever order they registered in, so install order exempts nothing. A compiled route carries what it
 declared on `config.$caffeine.auth`. A route without `$caffeine` is gated by the application's `fallbackPolicy`
 when there is one — it has no `@Authorize` anyone could have forgotten — except a URL nothing matched
-(`request.is404`, where a SPA shell is served from), the path prefixes the application listed in
+(`request.is404`: no route, so no route policy to apply), the path prefixes the application listed in
 `fallbackPolicy(policy, { except })`, and a route whose config carries `kAuthenticationExempt`. That marker makes
 the gate return before authenticating at all, so `request.user` stays `null` on such a route. The health probes
-and the OAuth callback and sign-in routes set it. A first-party plugin whose route must answer before anyone is signed in sets
-it too; do not reach for `ServerOwnedPaths` for that, which says "the server answers here", not "anyone may ask".
+and the OAuth callback and sign-in routes set it, and so does `@caffeinejs/static` for a mount the application
+declared `{ anonymous: true }`. A first-party plugin whose route must answer before anyone is signed in sets it
+too.
+
+`kAuthenticationExempt` is **not** `$caffeine.auth` with `allowAnonymous`, and the two must not be merged.
+`$caffeine`'s _absence_ is how a raw route is recognised, here and in `health/probes_route.ts` and
+`oidc_routes.ts`; its `route` and `group` are required, so a partial one is a `TypeError` from an `onRoute`
+hook; and `allowAnonymous: true` still **authenticates** — it establishes `ctx.user` and only then skips
+authorization. "Anyone may call this" and "do not spend work working out who is calling" are different claims,
+and a liveness probe polled every second, or the dozens of assets a page pulls, want the second.
+
+The gap that leaves: the gate can _exempt_ a raw route but cannot give one a **policy**, so files that must be
+protected by a specific policy cannot be served from a `@fastify/static` mount at all — they are served from
+compiled routes instead, which is what `@caffeinejs/static`'s `serve: false` mount is for. If this is ever
+closed, do not overload `$caffeine`: split the auth slice into its own symbol-keyed config key carrying a full
+`GatedRoute`, with "do not authenticate" as one of its states, and deprecate `kAuthenticationExempt` into it.
+
+Whether a request is a browser navigation is one question with one answer, `isNavigation` (`navigation.ts`):
+Fetch Metadata when the request carries it, `Accept` naming `text/html` otherwise, `undefined` when it says
+neither. A scheme deciding between a redirect and a `401` reads it (`shouldRedirectChallenge`), and so does
+`@caffeinejs/static`'s `isDocumentRequest`, which an application's client-route wildcard calls; each defaults
+the undecided case its own way. They must agree, or a request is redirected to sign in by one and answered
+`404` by the other. Do not read `Sec-Fetch-*` or `Accept` for that purpose anywhere else.
 
 A route naming several schemes is challenged by each in the order named, each **appending** its
 `WWW-Authenticate` (`ctx.appendHeader`, never `ctx.header`), until one answers the request itself — a redirect
 status or a sent reply.
 
-A feature that answers on URLs outside the compiled routing binds a `ServerOwnedPaths` provider with
-`.extends(ServerOwnedPaths)`, and a plugin serving unmatched URLs reads them with
-`container.getManyOptional(ServerOwnedPaths)`. `health` does not participate in this: its plugin factory only
-runs post-`container.init()` (see below), where `bind()` is no longer legal, so a static SPA shell combined
-with an installed-but-disabled `health()` plugin serves the shell at `/livez` rather than 404 — a known,
-accepted gap, not an oversight.
+A catch-all belongs to the **application**, not to a feature. A single-page application writes `GET /*` on a
+router of its own, marks it `detail('http', { internal: true })` so `@caffeinejs/openapi` skips it, and throws
+`ErrHTTPNotFound` for what it does not answer, so those misses reach `@Catch` like any handler's. It is
+authorized like any route because it is one, and the API owns its own misses with
+`newRouter('/api').get('/*', …)`. There is no registry of "server-owned paths", no derivation of them, and no
+feature that installs a catch-all on the application's behalf — `@caffeinejs/static` serves files and nothing
+else. The recipes are [`../ai/docs/spa.md`](../ai/docs/spa.md).
 
-A plugin that serves unmatched URLs calls Fastify's `setNotFoundHandler` itself and throws `ErrHTTPNotFound` for
-what it does not answer, so those misses still reach `@Catch`. The adapter installs its default only when no
-handler is set yet. There is no fallback chain: one not-found handler per context, and a second fails at start-up
-with Fastify's own error.
+The not-found handler is therefore the adapter's own, or the application's. A plugin that still wants to answer
+unmatched URLs itself may call `setNotFoundHandler` and throw `ErrHTTPNotFound` for what it does not answer;
+the adapter installs its default only when no handler is set yet, and a second one fails at start-up with
+Fastify's own error.
 
 Health (`/livez`, `/readyz`, `/startupz`) is **not** a feature and is **not** registered by `WebApplication` —
 it is an ordinary opt-in `HTTPPluginFactory`, `.with(health(...))`, exactly like `HTTPCaching()`. Installing it
@@ -92,8 +114,8 @@ from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered uncondition
 `createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, { config }) => …)`.
 It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown.
 
-The resolved options of the built-ins that remain container bindings — `kStaticOptions` — are
-container bindings, not configuration keys (health no longer has one). There is no `featureConfigKey` and
+A built-in's resolved options that other code must read are container bindings, not configuration keys (health
+has none). There is no `featureConfigKey` and
 `ctx.config` is not callable — a package that needs its settings on a request either binds them and resolves
 them, or decorates the Fastify instance as `@caffeinejs/html` does.
 
@@ -193,8 +215,13 @@ Compiled routes register after every plugin, so a plugin that needs them adds an
 Fastify plugin would; `$caffeine` is absent on a route registered straight on Fastify, which is how the hook
 tells the two apart. A per-route check throws from the hook (`app.ready()` rejects with it); a decision that
 needs every route waits for `onReady`. `collectRouteGroups(instance)` is that pattern packaged — it regroups
-what registered and counts a GET route's automatic HEAD twin once — and not-found, the SPA report and
-`@caffeinejs/openapi` use it.
+what registered and counts a GET route's automatic HEAD twin once — and the SPA shell and `@caffeinejs/openapi`
+use it.
+
+`RouteDetail` and `RouteGroupDetail` are empty and keyed by owner; the one namespace this package owns there
+is `http`. `detail('http', { internal: true })` says a route or group is served by the framework or a feature on
+the application's behalf and is not part of its API, and a reader describing the application's routes skips
+it: `@caffeinejs/openapi` does, next to its own `openapi.hidden`. The SPA shell sets it.
 
 A route-wide hook whose work depends on the routes — the constraint `Vary` header — is added unconditionally
 while its plugin registers, because a route takes the hooks in place when it registers. It returns immediately
@@ -285,7 +312,7 @@ Version is a **routing key**, not a runtime `switch`: two handlers for the same 
 - `@Version(v)` / `version(v)` — sugar for the `version` constraint, hardcoding `Accept-Version` as its header. `version` needs no strategy: it's Fastify's built-in semver matcher. It is **not** a path — `@Prefix('/v1')` is URI versioning and stays a separate concern.
 - `.with(() => constraints([strategy]))` — the one plugin behind all of it: registers custom find-my-way constraint strategies (synchronous only), resolves every route's declared constraints, and sets `Vary`. `.with(() => constraints())` when only `version` is used — `version` needs no strategy, but it does need the plugin. Opt-in, exactly like wiring in CORS or Compress; no `app.constraints(...)`. A route declaring a constraint with the plugin missing fails at start-up (`ErrConfiguration`, a scan in the adapter next to the `@CacheControl` one) rather than matching every request.
 
-Group constraints inherit to routes that do not set the same key — for free, via the generic `config` merge (route wins, same as any other `config`/`options` key), not a dedicated mechanism. `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails when the route registers, in the `constraints()` plugin, rather than disagreeing silently. The plugin adds every constraint header to `Vary` when any route is constrained, through `appendVary` (`vary.ts`) — the one writer of `Vary`, which merges into what is there and assigns only `*`, which covers it; `@caffeinejs/caching` uses it too. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. `ServerOwnedPaths` (probes, OIDC callbacks) never carry a constraint.
+Group constraints inherit to routes that do not set the same key — for free, via the generic `config` merge (route wins, same as any other `config`/`options` key), not a dedicated mechanism. `fst({ constraints: { … } })` still works for `host` and anything the framework has no opinion about; a `constraints` key set **both** through `fst` and first-class fails when the route registers, in the `constraints()` plugin, rather than disagreeing silently. The plugin adds every constraint header to `Vary` when any route is constrained, through `appendVary` (`vary.ts`) — the one writer of `Vary`, which merges into what is there and assigns only `*`, which covers it; `@caffeinejs/caching` uses it too. A constraint miss is Fastify's 404 — it does not reach `@Catch`, and no default version is invented. A route registered straight on Fastify (probes, OIDC callbacks) never carries a constraint.
 
 Do not add a version argument to the inline verb form, an app-level `enableVersioning()` switch, a `VERSION_NEUTRAL` catch-all, or a global default version.
 

@@ -3,6 +3,9 @@ codecov:
 
 ignore:
   - 'api/**'
+  - '**/_tests/**'
+  - '**/_testdata/**'
+  - '**/*.testkit.ts'
   - 'benchmarks/**'
   - 'docs/**'
   - 'examples/**'

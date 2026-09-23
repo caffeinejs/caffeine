@@ -181,6 +181,28 @@ describe('openapi endpoints', () => {
     expect(Object.keys(document.paths ?? {})).toContain('/late/hello')
   })
 
+  // A route a feature registers on the application's behalf — a single-page application's shell — is not part
+  // of the API it describes. `detail('http', { internal: true })` is http's own marker for that.
+  it('does not describe a group another feature marked internal', async () => {
+    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
+      instance.$route('shell', router => {
+        router.detail('http', { internal: true })
+        router.routes([
+          new RouteBuilder()
+            .method('GET')
+            .path('/*')
+            .handle(() => 'shell'),
+        ])
+      })
+    }) as WebApplication
+    await app.ready()
+
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+
+    expect(Object.keys(document.paths ?? {})).not.toContain('/{wildcard}')
+    expect(Object.keys(document.paths ?? {})).toContain('/pets')
+  })
+
   it('serves the document as YAML', async () => {
     app = buildApp(o => o.info({ title: 'Petstore', version: '1.0.0' }).docs(false).public())
     await app.ready()

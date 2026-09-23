@@ -15,7 +15,17 @@
  * Routing carries the value through untouched, which is what lets a package describe a route without this
  * one knowing the package exists.
  */
-export interface RouteDetail {}
+export interface RouteDetail {
+  /** The one namespace this package owns. See {@link RouteGroupDetail.http}. */
+  http?: {
+    /**
+     * The route is served by the framework or a feature on the application's behalf and is not part of the
+     * application's API: a single-page application's shell, for one. A reader that describes the
+     * application's routes skips it.
+     */
+    internal?: boolean
+  }
+}
 
 /**
  * The group-level counterpart of {@link RouteDetail}.
@@ -24,4 +34,13 @@ export interface RouteDetail {}
  * reads the two levels separately. A group nested inside another does inherit, which is the one merge
  * `inheritGroupSpec` performs.
  */
-export interface RouteGroupDetail {}
+export interface RouteGroupDetail {
+  /**
+   * The one namespace this package owns. `internal` marks a group the framework or a feature registered on
+   * the application's behalf, which a reader describing the application's API skips; `@caffeinejs/openapi`
+   * honours it the way it honours its own `openapi.hidden`.
+   */
+  http?: {
+    internal?: boolean
+  }
+}

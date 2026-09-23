@@ -9,7 +9,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov', 'json-summary'],
-      exclude: ['examples/**', '**/*.testkit.ts', '**/dist/**'],
+      exclude: ['examples/**', '**/_tests/**', '**/_testdata/**', '**/*.testkit.ts', '**/dist/**'],
     },
     pool: 'threads',
     maxWorkers: 4,
@@ -38,6 +38,7 @@ export default defineConfig({
       './brewer/vitest.config.ts',
       './plugins/eslint/vitest.config.ts',
       './examples/03-petstore/vitest.config.ts',
+      './examples/04-spa-dashboard/vitest.config.ts',
       './test/vitest.config.ts',
     ],
   },

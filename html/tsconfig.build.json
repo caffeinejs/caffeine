@@ -14,10 +14,15 @@
   "exclude": [
     "dist",
     "node_modules",
+    "**/_tests/**",
+    "**/_testdata/**",
     "**/*.test.ts",
-    "**/*.test.tsx",
+    "**/*.test-d.ts",
     "**/*.spec.ts",
-    "**/*.spec.tsx",
-    "vitest.config.ts"
+    "**/*.testkit.ts",
+    "**/*.e2e.ts",
+    "vitest.config.ts",
+    "**/*.test.tsx",
+    "**/*.spec.tsx"
   ]
 }

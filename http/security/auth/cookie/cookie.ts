@@ -37,12 +37,19 @@ interface SessionPayload {
 }
 
 /**
- * Stateful cookie session scheme.
+ * Cookie session scheme, carrying the principal in an encrypted JWT.
  *
- * `persist` is sign-in (seal the principal into an encrypted cookie), `revoke` is sign-out (clear it),
+ * `persist` is sign-in (seal the principal into the cookie), `revoke` is sign-out (clear it),
  * `authenticate` reads and unseals the cookie back into a principal. A login endpoint verifies
  * credentials with `CredentialsService` and then persists the session via `AuthenticationService`.
  * Requires the Fastify cookie plugin to be registered on the instance.
+ *
+ * The session is the sealed cookie itself, so between issue and expiry nothing server-side is consulted —
+ * `validatePrincipal` is the hook for applications that need a say. Durable remember-me is the one part that
+ * keeps state.
+ *
+ * `challenge` and `forbid` both answer a browser navigation with a redirect and everything else with a
+ * status, so one scheme can serve a page and an API.
  *
  * With durable remember-me enabled (`rememberMe()` option + a bound `RememberMeTokenStore` and
  * `UserProvider`), a persistent series+token credential survives session-cookie expiry, rotates on
@@ -221,18 +228,27 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   /**
-   * Sends an authenticated-but-not-permitted caller to `accessDeniedPath`, or answers 403.
+   * Sends an authenticated-but-not-permitted **navigation** to `accessDeniedPath`, and answers everything
+   * else 403.
    *
    * Distinct from `challenge`: the caller proved who they are and it did not help, so pointing them back
    * at the login page invites a loop where signing in again changes nothing. Challenge and forbid are
    * therefore separate, with `accessDeniedPath` alongside `loginPath`.
+   *
+   * The redirect is decided the same way `challenge` decides its own, by `challengeMode` over
+   * `isNavigation`. A page and an API served by one scheme need different answers to the same refusal: a
+   * browser wants the access-denied page, while `fetch` wants the status — redirecting it would hand the
+   * caller a 200 and the page's HTML in place of the 403 it has to act on.
    */
   override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }
 
-    if (this.options.accessDeniedPath !== undefined) {
+    if (
+      this.options.accessDeniedPath !== undefined &&
+      shouldRedirectChallenge(this.options.challengeMode ?? 'auto', challengeHeaders(ctx))
+    ) {
       ctx.status(302).header('location', this.options.accessDeniedPath)
       return
     }

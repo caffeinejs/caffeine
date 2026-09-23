@@ -140,8 +140,8 @@ function fallbackFor(container: Container): { for(request: FastifyRequest): Gate
 
   return {
     for(request) {
-      // A URL nothing matched is answered by the not-found handler, which is where a single-page application's
-      // shell is served from. Gating it would turn a login page that is a client-side route into a redirect loop.
+      // A URL nothing matched has no route, so there is no route policy to apply: the not-found handler answers
+      // it, for anyone. What a policy protects is a route, and an unknown URL is not one.
       if (request.is404) {
         return undefined
       }

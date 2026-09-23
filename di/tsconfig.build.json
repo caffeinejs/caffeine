@@ -7,12 +7,16 @@
   "exclude": [
     "dist",
     "node_modules",
-    "**/_tests/",
-    "**/_testdata/",
+    "**/_tests/**",
+    "**/_testdata/**",
+    "**/*.test.ts",
+    "**/*.test-d.ts",
+    "**/*.spec.ts",
+    "**/*.testkit.ts",
+    "**/*.e2e.ts",
+    "vitest.config.ts",
     "**/examples/",
     "**/tools/",
-    "**/*.spec.ts",
-    "**/*.test.ts",
     "*.config.ts"
   ]
 }

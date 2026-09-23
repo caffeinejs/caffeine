@@ -63,6 +63,10 @@ lint-markdown: ## lint markdown
 licensecheck: ## check production dependency licenses against the allowlist
 	@npm run license:check
 
+.PHONY: tools
+tools: ## install external contributor tools
+	@go install github.com/uwu-tools/scorecard-mcp/cmd/scorecard-mcp@v0.0.0-20260901030057-f95e5d8e4180
+
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npx oxlint --fix $*
 	@npx oxfmt $*
@@ -109,6 +113,15 @@ example\:petstore: ## run the petstore example (Postgres in Docker, app on host 
 	@npm run db:migrate -w @caffeinejs/example-petstore
 	@npm run db:seed -w @caffeinejs/example-petstore
 	@npm start -w @caffeinejs/example-petstore
+
+.PHONY: example\:spa-dashboard
+# Not a prerequisite: make 3.81 keeps the backslash in a prerequisite name, so `build\:cli` there names a target
+# that does not exist and the CLI is never built; `$(MAKE)` resolves the name the way the command line does.
+example\:spa-dashboard: ## run the SPA dashboard example (app on host at http://127.0.0.1:9010)
+	@$(MAKE) build:cli
+	@npm run build
+	@npm run build -w @caffeinejs/example-spa-dashboard
+	@npm start -w @caffeinejs/example-spa-dashboard
 
 # .
 # End-to-End Toolchain
@@ -208,3 +221,4 @@ help: ## show help
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt-check:<package>" "check formatting of a single package (e.g. fmt-check:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "bench:<type>" "build and run a benchmark (e.g. bench:helloworld)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore" "run the petstore example (Postgres in Docker, app on host at http://localhost:9999)"
+	@printf "\033[36m%-20s\033[0m %s\n" "example:spa-dashboard" "run the SPA dashboard example (app on host at http://127.0.0.1:9010)"

@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "lib": ["esnext", "Decorators", "esnext.decorators"],
+    "types": ["node"],
+    "composite": false
+  },
+  "include": ["."],
+  "exclude": ["vitest.config.ts", "web", "node_modules"]
+}

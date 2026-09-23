@@ -11,7 +11,8 @@ Agents: this is not the NestJS or Express you were trained on. Read `docs/rules.
 - [HTTP](docs/http.md): Controllers, programmatic routers, `@Catch`, the `brewer` typed client, static files vs unmatched 404 vs SPA
 - [DI](docs/di.md): Container, plugins, builders
 - [Kafka](docs/kafka.md): `KafkaTemplate`, `@KafkaListener` — not `@MessagePattern`
-- [Errors](docs/errors.md): Thrown vs unmatched vs SPA fallback
+- [Errors](docs/errors.md): Thrown vs unmatched vs client routes
+- [SPA](docs/spa.md): Serving a single-page application as routing the application writes
 - [Error messages](docs/messages/README.md): One file per `ERR_*` (pattern)
 
 ## Skills

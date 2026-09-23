@@ -1,15 +1,7 @@
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import {
-  Controller,
-  ErrHTTPNotFound,
-  Get,
-  createWebApplication,
-  deriveServerOwnedPaths,
-  isServerOwned,
-} from '../index.js'
-import type { Route, RouteGroup } from '../route.js'
+import { Controller, ErrHTTPNotFound, Get, createWebApplication } from '../index.js'
 
 @Controller('/pets')
 class PetsController {
@@ -100,41 +92,5 @@ describe('unmatched routes', () => {
     expect(await res.json()).toEqual({ mine: true })
 
     await app.close()
-  })
-})
-
-describe('deriveServerOwnedPaths', () => {
-  const route = (path: string): Route<any> => ({ path }) as Route<any>
-  const router = (path: string, routes: string[], prefix?: string): RouteGroup<any> =>
-    ({ path, prefix, routes: routes.map(route) }) as RouteGroup<any>
-
-  it('takes the controller base, so a sibling miss stays owned', () => {
-    // `@Controller('/api')` with only `@Get('/')` still owns all of /api — otherwise /api/typo escapes.
-    expect(deriveServerOwnedPaths([router('/api', ['/'])])).toEqual(['/api'])
-  })
-
-  it('includes the @Prefix', () => {
-    expect(deriveServerOwnedPaths([router('/users', ['/list'], '/v1')])).toEqual(['/v1/users'])
-  })
-
-  it('truncates at the first dynamic segment', () => {
-    expect(deriveServerOwnedPaths([router('/users/:id/photos', ['/'])])).toEqual(['/users'])
-  })
-
-  it('falls back to route paths for a controller mounted at the root', () => {
-    expect(deriveServerOwnedPaths([router('/', ['/health', '/metrics'])])).toEqual(['/health', '/metrics'])
-  })
-
-  it('includes health probe paths', () => {
-    expect(deriveServerOwnedPaths([], ['/livez', '/readyz'])).toEqual(['/livez', '/readyz'])
-  })
-
-  it('matches by segment, so /apifoo is not under /api', () => {
-    const owned = ['/api']
-
-    expect(isServerOwned(owned, '/api')).toBe(true)
-    expect(isServerOwned(owned, '/api/pets')).toBe(true)
-    expect(isServerOwned(owned, '/apifoo')).toBe(false)
-    expect(isServerOwned(owned, '/apifoo/bar')).toBe(false)
   })
 })
