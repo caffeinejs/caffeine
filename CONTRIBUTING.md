@@ -3,6 +3,7 @@
 - Agent behavior: [`AGENTS.md`](AGENTS.md)
 - Coding conventions: [`CONVENTIONS.md`](CONVENTIONS.md)
 - AI-assisted contributions: [`AI_POLICY.md`](AI_POLICY.md)
+- Analysis MCP servers: [`docs/internal/analysis-mcp.md`](docs/internal/analysis-mcp.md)
 
 ## Prerequisites
 
