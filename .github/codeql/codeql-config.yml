@@ -1,0 +1,13 @@
+name: 'Caffeine CodeQL config'
+
+paths-ignore:
+  - benchmarks
+  - examples
+  - di/examples
+  - docs
+  - test
+  - tools
+  - ai
+  - coverage
+  - '**/*.test.ts'
+  - '**/_testdata'
