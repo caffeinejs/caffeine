@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { describe, it, beforeAll, expect, vi } from 'vitest'
+import { describe, it, beforeAll, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -12,14 +12,17 @@ import { token } from '../key.js'
 
 describe('Class', function () {
   describe('when using dependencies with default configurations', function () {
-    const spy = vi.fn()
+    let constructed = 0
+    function constructedOnce() {
+      constructed += 1
+    }
 
     @Injectable()
     class SeeYaService {
       readonly id: string = randomUUID()
 
       constructor() {
-        spy()
+        constructedOnce()
       }
 
       bye(): string {
@@ -32,7 +35,7 @@ describe('Class', function () {
       readonly id: string = randomUUID()
 
       constructor(private readonly seeYaService: SeeYaService) {
-        spy()
+        constructedOnce()
       }
 
       ok(): string {
@@ -48,7 +51,7 @@ describe('Class', function () {
         readonly seeYaService: SeeYaService,
         readonly okService: OkService,
       ) {
-        spy()
+        constructedOnce()
       }
     }
 
@@ -65,7 +68,7 @@ describe('Class', function () {
       expect(new CaffeineIoC().has(Root)).toBeTruthy()
       expect(root.seeYaService.bye()).toEqual('bye-bye')
       expect(root.okService.ok()).toEqual('ok-bye-bye')
-      expect(spy).toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
+      expect(constructed).toBe(3) // there are 3 dependencies: SeeYaService, OkService, Root
     })
 
     it('should return singleton instance as default', function () {
@@ -74,7 +77,7 @@ describe('Class', function () {
 
       expect(root1).toEqual(root2)
       expect(root1.id).toEqual(root2.id)
-      expect(spy).toHaveBeenCalledTimes(3) // there are 3 dependencies: SeeYaService, OkService, Root
+      expect(constructed).toBe(3) // there are 3 dependencies: SeeYaService, OkService, Root
     })
   })
 
