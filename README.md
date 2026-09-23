@@ -13,6 +13,7 @@
 <p align="center">
   <a href="https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml"><img src="https://github.com/caffeinejs/caffeine/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://codecov.io/gh/caffeinejs/caffeine"><img src="https://codecov.io/gh/caffeinejs/caffeine/graph/badge.svg?token=CH1MHCDV1J" alt="codecov"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/caffeinejs/caffeine"><img src="https://api.scorecard.dev/projects/github.com/caffeinejs/caffeine/badge" alt="OpenSSF Scorecard"></a>
   <img src="https://img.shields.io/badge/status-work%20in%20progress-F2A93B" alt="Status: work in progress">
 </p>
 
