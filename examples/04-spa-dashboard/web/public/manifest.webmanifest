@@ -1,0 +1,14 @@
+{
+  "name": "Caffeine SPA Dashboard",
+  "short_name": "Caffeine SPA",
+  "description": "A single-page application and its API, served by Caffeine.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfaf8",
+  "theme_color": "#6f4e37",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.svg", "sizes": "180x180", "type": "image/svg+xml" }
+  ]
+}

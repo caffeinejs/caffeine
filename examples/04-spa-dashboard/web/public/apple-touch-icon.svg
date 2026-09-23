@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" role="img" aria-label="Caffeine">
+  <rect width="180" height="180" fill="#6f4e37" />
+  <path
+    d="M45 62h73a22 22 0 0 1 0 44h-6v6a22 22 0 0 1-22 22H67a22 22 0 0 1-22-22V62Zm67 11v22h6a11 11 0 0 0 0-22h-6Z"
+    fill="#fbfaf8"
+  />
+</svg>

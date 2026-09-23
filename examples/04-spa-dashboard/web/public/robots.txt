@@ -1,0 +1,11 @@
+# The client routes are real routes, so a crawler that follows them gets the shell and a 200.
+User-agent: *
+Allow: /$
+Allow: /about
+Disallow: /api/
+Disallow: /auth/
+Disallow: /dashboard
+Disallow: /projects
+Disallow: /admin
+
+Sitemap: /sitemap.xml
