@@ -24,6 +24,8 @@ else, and every client route is a route the application wrote.
 
 ```
 examples/04-spa-dashboard/
+├── Dockerfile                one stage: build the workspace, build web/dist, run api/main.ts
+├── docker-compose.yml        the whole example in a container, on :9010
 ├── web/                      the front end
 │   ├── build.mjs             esbuild → web/dist, then gzip + brotli every file
 │   ├── index.html            template; build.mjs substitutes the hashed names
@@ -54,6 +56,15 @@ two controller bases, and every future one. Without it a browser typing `/api/ty
 
 ## Run it
 
+One command, from the repository root:
+
+```sh
+make example:spa-dashboard
+```
+
+That builds the CLI, the workspace packages and the front-end bundle, then starts the server. Step by
+step, it is:
+
 ```sh
 npm install                                   # from the repository root
 npm run build:cli                             # once: the module-graph generator
@@ -63,30 +74,52 @@ npm start -w @caffeinejs/example-spa-dashboard
 
 Then open <http://127.0.0.1:9010> and sign in.
 
-| Account | Password   | Roles            | Can reach          |
-| ------- | ---------- | ---------------- | ------------------ |
-| `admin` | `admin123` | `admin`,`member` | everything         |
+| Account | Password   | Roles            | Can reach               |
+| ------- | ---------- | ---------------- | ----------------------- |
+| `admin` | `admin123` | `admin`,`member` | everything              |
 | `user`  | `user123`  | `member`         | everything but `/admin` |
+
+## Run it (Docker)
+
+```sh
+docker compose -f examples/04-spa-dashboard/docker-compose.yml up --build
+```
+
+One service and no database: the image builds the workspace packages and the front-end bundle, then serves on
+**http://localhost:9010** with the same two accounts. `SPA_SERVER__HOST` is `0.0.0.0` there — the schema
+default `127.0.0.1` binds an interface nothing outside the container can reach.
+
+The healthcheck polls the application's own `/readyz`, so `docker compose ps` calls the container healthy only
+once it is accepting traffic, and unhealthy while it drains on `docker compose stop`.
+
+`stop_grace_period: 30s` is load-bearing. On `SIGTERM` the application refuses readiness and then keeps
+serving for its 5s drain delay before closing the socket, and Compose's own stop timeout is shorter than
+that — without the line the container is `SIGKILL`ed mid-drain and exits `137`. Thirty seconds is also what
+the framework assumes when nothing tells it otherwise, because a process cannot read its own grace period.
+
+`CMD` execs `tsx` rather than running `npm start` for the same reason: npm does not forward `SIGTERM` to the
+process it spawned, so the drain would never begin. `init: true` covers the other half, giving the container
+a PID 1 that forwards signals and reaps orphans.
 
 ## Pages and endpoints
 
-| Path                | Who                | What                                            |
-| ------------------- | ------------------ | ----------------------------------------------- |
-| `/`, `/about`       | anyone             | client routes, served as the shell               |
-| `/login`            | anyone             | the sign-in form. Gating it would loop           |
-| `/forbidden`        | anyone             | where a navigation lands on a 403                |
-| `/dashboard`        | signed in          | reads `/api/profile`                             |
-| `/projects`         | signed in          | reads `/api/projects`                            |
-| `/admin`            | role `admin`       | reads `/api/admin/users`                         |
-| `/api/profile`      | signed in          | the principal                                    |
-| `/api/projects`     | signed in          | programmatic router, with schemas                |
-| `/api/admin/users`  | role `admin`       | the account directory                            |
-| `/auth/csrf`        | anyone             | a CSRF token; the `_csrf` cookie is `HttpOnly`   |
-| `/auth/login`       | anyone             | sets the session cookie, rotates the CSRF secret |
-| `/auth/logout`      | anyone             | clears both cookies                              |
-| `/auth/me`          | signed in          | the principal, for the client's own state        |
-| `/openapi.json`     | signed in          | the document, `.secure('Cookie')`                |
-| `/livez`, `/readyz` | anyone             | probes, exempt from authentication entirely      |
+| Path                | Who          | What                                             |
+| ------------------- | ------------ | ------------------------------------------------ |
+| `/`, `/about`       | anyone       | client routes, served as the shell               |
+| `/login`            | anyone       | the sign-in form. Gating it would loop           |
+| `/forbidden`        | anyone       | where a navigation lands on a 403                |
+| `/dashboard`        | signed in    | reads `/api/profile`                             |
+| `/projects`         | signed in    | reads `/api/projects`                            |
+| `/admin`            | role `admin` | reads `/api/admin/users`                         |
+| `/api/profile`      | signed in    | the principal                                    |
+| `/api/projects`     | signed in    | programmatic router, with schemas                |
+| `/api/admin/users`  | role `admin` | the account directory                            |
+| `/auth/csrf`        | anyone       | a CSRF token; the `_csrf` cookie is `HttpOnly`   |
+| `/auth/login`       | anyone       | sets the session cookie, rotates the CSRF secret |
+| `/auth/logout`      | anyone       | clears both cookies                              |
+| `/auth/me`          | signed in    | the principal, for the client's own state        |
+| `/openapi.json`     | signed in    | the document, `.secure('Cookie')`                |
+| `/livez`, `/readyz` | anyone       | probes, exempt from authentication entirely      |
 
 Try the split that one scheme buys:
 
@@ -107,19 +140,19 @@ curl -si -H 'accept-encoding: br' localhost:9010/assets/main-*.js | grep -i cont
 
 Every value has a default, so the example runs with nothing set. Copy `.env.example` to `.env` to override.
 
-| Variable                   | Sets                                                        |
-| -------------------------- | ----------------------------------------------------------- |
-| `SPA_SERVER__HOST/PORT`    | what the server listens on                                   |
-| `SPA_LOG__LEVEL`           | the log level                                                |
-| `SPA_AUTH__SESSION_SECRET` | seals the session cookie. At least 32 characters             |
-| `SPA_AUTH__COOKIE_SECRET`  | signs the CSRF cookie. Separate, so neither opens the other's |
+| Variable                   | Sets                                                           |
+| -------------------------- | -------------------------------------------------------------- |
+| `SPA_SERVER__HOST/PORT`    | what the server listens on                                     |
+| `SPA_LOG__LEVEL`           | the log level                                                  |
+| `SPA_AUTH__SESSION_SECRET` | seals the session cookie. At least 32 characters               |
+| `SPA_AUTH__COOKIE_SECRET`  | signs the CSRF cookie. Separate, so neither opens the other's  |
 | `SPA_AUTH__SECURE_COOKIE`  | `true` behind TLS. On plain http a Secure cookie never returns |
 
 ## Security notes
 
 - **No token in JavaScript.** The session is an `HttpOnly` cookie, which is the argument for this shape over a
   bearer token in `localStorage`: a cross-site script cannot read it.
-- **CSRF is layered on `SameSite=Lax`, not replaced by it.** `Lax` is scoped to the *site* rather than the
+- **CSRF is layered on `SameSite=Lax`, not replaced by it.** `Lax` is scoped to the _site_ rather than the
   origin — a sibling subdomain is same-site — it exempts top-level `GET` navigations, and it does nothing in a
   client that does not enforce it. Unsafe methods therefore carry `x-csrf-token` as well.
 - **The CSRF secret is rotated when a session begins**, so a token minted before sign-in cannot be replayed
