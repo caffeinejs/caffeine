@@ -83,9 +83,9 @@ Default to surfacing uncertainty, not hiding it.
 
 ## Analysis MCP
 
-[`.mcp.json`](.mcp.json) is the base server list. Copy it when a client needs its own file, and change only that client's env syntax.
+[`.mcp.json`](.mcp.json) is the base server list, and the only one in the repository. A client that needs its own file gets a **local, git-ignored** copy — change only that client's env syntax.
 
-Claude Code loads `.mcp.json` directly and expands `${CAFFEINE_SONARQUBE_TOKEN}`. Cursor loads [`.cursor/mcp.json`](.cursor/mcp.json), the same list with `${env:CAFFEINE_SONARQUBE_TOKEN}`. Cursor launches `scorecard-mcp` from `${userHome}/go/bin`, the default `go install` location, because the app does not inherit the shell `PATH`.
+Claude Code loads `.mcp.json` directly and expands `${CAFFEINE_SONARQUBE_TOKEN}`. Cursor reads `.cursor/mcp.json`, which `.gitignore` excludes: copy `.mcp.json` there yourself, write the token as `${env:CAFFEINE_SONARQUBE_TOKEN}`, and point `scorecard-mcp` at `${userHome}/go/bin/scorecard-mcp` — the default `go install` location, needed because the app does not inherit the shell `PATH`.
 
 Export `CAFFEINE_SONARQUBE_TOKEN` to a SonarQube Cloud user token (My Account → Security) in the environment that launches the client. A shell profile is not visible to a desktop-launched app. Do not reuse the GitHub Actions analysis secret `SONAR_TOKEN`.
 

@@ -1,19 +1,37 @@
 import { newRouter, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { staticFiles } from '../../index.js'
-import { dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION, SCRIPT } from './_headers.js'
+import { immutableAssets, spaMount, staticFiles } from '../../index.js'
+import { clientRouteOf, dist, expectNotFoundJSON, fixtures, isolated, NAVIGATION, SCRIPT, shellOf } from './_headers.js'
 
-/** Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`. */
+/**
+ * Server-rendered pages at the root, a plain file mount at `/static`, and the application under `/app`.
+ *
+ * The application registers `/app` itself rather than relying on a prefixed router: `newRouter('/app')` with
+ * a route at `/` composes to `/app/`, and find-my-way does not match `/app` against it. `/app/` needs no
+ * route of its own — `/app/*` matches it with an empty wildcard.
+ */
 function site(): WebApplication {
-  const pages = newRouter().get('/', ctx => ctx.header('content-type', 'text/html').body('<h1>home</h1>'))
-
   return isolated()
-    .with(staticFiles(s => s.serve(fixtures, { prefix: '/static' }).spa(dist, { prefix: '/app' })))
-    .mount(pages) as WebApplication
+    .with(
+      staticFiles(s =>
+        s
+          .serve(fixtures, { prefix: '/static' })
+          .serve(dist, { ...spaMount(), prefix: '/app', setHeaders: immutableAssets(dist) }, { anonymous: true }),
+      ),
+    )
+    .mount(
+      newRouter().get('/', ctx => ctx.header('content-type', 'text/html').body('<h1>home</h1>')),
+      newRouter()
+        .detail('http', { internal: true })
+        .authorize({ allowAnonymous: true })
+        .get('/app', shellOf(dist))
+        .get('/app/index.html', shellOf(dist))
+        .get('/app/*', clientRouteOf(dist)),
+    ) as WebApplication
 }
 
-describe('a shell mounted under a prefix', () => {
+describe('an application mounted under a prefix', () => {
   let app: WebApplication
 
   afterEach(async () => {
@@ -38,7 +56,6 @@ describe('a shell mounted under a prefix', () => {
       const res = await app.fetch(path, { headers: NAVIGATION })
 
       expect(res.status, path).toBe(200)
-      expect(res.headers.get('cache-control'), path).toBe('no-cache')
       expect(await res.text(), path).toContain('<div id="root">')
     }
   })
@@ -57,9 +74,7 @@ describe('a shell mounted under a prefix', () => {
     app = site()
     await app.ready()
 
-    const file = await app.fetch('/static/hello.txt')
-    expect(file.status).toBe(200)
-
+    expect((await app.fetch('/static/hello.txt')).status).toBe(200)
     await expectNotFoundJSON(await app.fetch('/static/missing.txt', { headers: NAVIGATION }))
   })
 

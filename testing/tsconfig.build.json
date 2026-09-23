@@ -17,5 +17,16 @@
       "path": "../http/tsconfig.build.json"
     }
   ],
-  "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.test-d.ts", "**/*.spec.ts", "vitest.config.ts"]
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/_tests/**",
+    "**/_testdata/**",
+    "**/*.test.ts",
+    "**/*.test-d.ts",
+    "**/*.spec.ts",
+    "**/*.testkit.ts",
+    "**/*.e2e.ts",
+    "vitest.config.ts"
+  ]
 }

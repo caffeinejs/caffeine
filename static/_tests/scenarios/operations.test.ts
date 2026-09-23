@@ -8,12 +8,25 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { staticFiles } from '../../index.js'
-import { dist, expectNotFoundJSON, isolated, NAVIGATION, PROBE } from './_headers.js'
+import { spaMount, staticFiles } from '../../index.js'
+import { clientRouteOf, dist, expectNotFoundJSON, isolated, NAVIGATION, notFound, PROBE, shellOf } from './_headers.js'
 
-const api = () => newRouter('/api').get('/pets', () => ({ pets: [] }))
+const api = () =>
+  newRouter('/api')
+    .get('/pets', () => ({ pets: [] }))
+    .get('/*', notFound)
 
-describe('the shell next to the plugins an application runs in production', () => {
+const pages = () =>
+  newRouter()
+    .detail('http', { internal: true })
+    .authorize({ allowAnonymous: true })
+    .get('/', shellOf(dist))
+    .get('/index.html', shellOf(dist))
+    .get('/*', clientRouteOf(dist))
+
+const files = () => staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }))
+
+describe('a single-page application next to the plugins an application runs in production', () => {
   let app: WebApplication
 
   afterEach(async () => {
@@ -21,10 +34,7 @@ describe('the shell next to the plugins an application runs in production', () =
   })
 
   it('leaves the health probes to the health plugin', async () => {
-    app = isolated()
-      .with(health())
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+    app = isolated().with(health()).with(files()).mount(api(), pages()) as WebApplication
     await app.ready()
 
     const live = await app.fetch('/livez', { headers: PROBE })
@@ -40,8 +50,8 @@ describe('the shell next to the plugins an application runs in production', () =
   it('does not answer a disabled probe with the shell', async () => {
     app = isolated()
       .with(health(h => h.enabled(false)))
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
     await app.ready()
 
     await expectNotFoundJSON(await app.fetch('/livez', { headers: PROBE }))
@@ -54,8 +64,8 @@ describe('the shell next to the plugins an application runs in production', () =
           name: 'cors',
         }),
       )
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
     await app.ready()
 
     const preflight = await app.fetch('/api/pets', {
@@ -77,19 +87,19 @@ describe('the shell next to the plugins an application runs in production', () =
           name: 'compress',
         }),
       )
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
     await app.ready()
 
     const res = await app.fetch('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('gzip')
-    expect(res.headers.get('cache-control')).toBe('no-cache')
     expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toContain('<div id="root">')
   })
 
-  // The shell is a route, so the one not-found handler a Fastify context allows stays the application's.
+  // The client routes are ordinary routes, so the one not-found handler a Fastify context allows stays the
+  // application's own.
   it('leaves a not-found handler the application set on the server itself', async () => {
     app = isolated()
       .server(undefined, server => {
@@ -97,19 +107,18 @@ describe('the shell next to the plugins an application runs in production', () =
           void reply.code(418).send({ mine: true })
         })
       })
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
     await app.ready()
 
-    const mine = await app.fetch('/nope', { method: 'POST' })
-    expect(mine.status).toBe(418)
+    expect((await app.fetch('/nope', { method: 'POST' })).status).toBe(418)
 
     const page = await app.fetch('/dashboard', { headers: NAVIGATION })
     expect(page.status).toBe(200)
     expect(await page.text()).toContain('<div id="root">')
   })
 
-  // Installed before the static plugin on purpose: a raw route needs to declare nothing for the shell to respect it.
+  // Installed before the static plugin on purpose: a raw route needs to declare nothing to be respected.
   it('respects a raw Fastify route a plugin registered before it', async () => {
     app = isolated()
       .with(() =>
@@ -120,38 +129,49 @@ describe('the shell next to the plugins an application runs in production', () =
           { name: 'metrics' },
         ),
       )
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
     await app.ready()
 
     const metrics = await app.fetch('/metrics', { headers: PROBE })
     expect(metrics.status).toBe(200)
     expect(await metrics.text()).toBe('up 1')
 
+    // An exact URL that matched a route never reaches the client-route wildcard; a miss beside it does, and
+    // a probe is not a browser.
     await expectNotFoundJSON(await app.fetch('/metrics/x', { headers: PROBE }))
   })
 
-  // Refused by the adapter's duplicate-plugin check, before the two shells could even collide as routes.
-  it('refuses a second staticFiles', async () => {
-    app = isolated()
-      .with(staticFiles(s => s.spa(dist)))
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
-
-    await expect(app.ready()).rejects.toThrow(/already registered/)
-  })
-
-  // `@fastify/static`'s default wildcard used to make the shell silently unreachable; a duplicate route is loud.
+  // `@fastify/static`'s default wildcard registers `GET /*`, which is the application's own client-route
+  // path. That used to make the shell silently unreachable; now it is a duplicate route at start-up. This is
+  // what `spaMount()` turns off, and why it is not a tuning knob.
   it('refuses to start next to a catch-all static mount the application registered itself', async () => {
     app = isolated()
       .with(() =>
-        fp(async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist }), {
+        fp(
+          async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, decorateReply: false }),
+          {
+            name: 'my-static',
+          },
+        ),
+      )
+      .with(files())
+      .mount(api(), pages()) as WebApplication
+
+    await expect(app.ready()).rejects.toThrow(/already declared/)
+  })
+
+  // A second mount that also wants the decoration is refused earlier still, by Fastify itself.
+  it('refuses a second mount that also asks to decorate the reply', async () => {
+    app = isolated()
+      .with(() =>
+        fp(async (instance: FastifyInstance) => instance.register(fastifyStatic, { root: dist, prefix: '/mine' }), {
           name: 'my-static',
         }),
       )
-      .with(staticFiles(s => s.spa(dist)))
-      .mount(api()) as WebApplication
+      .with(files())
+      .mount(api(), pages()) as WebApplication
 
-    await expect(app.ready()).rejects.toThrow(/already declared/)
+    await expect(app.ready()).rejects.toThrow(/has already been added/)
   })
 })

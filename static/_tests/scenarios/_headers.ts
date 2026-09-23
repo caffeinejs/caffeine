@@ -7,10 +7,13 @@ import {
   BaseAuthenticationHandler,
   Claim,
   createWebApplication,
+  ErrHTTPNotFound,
   Identity,
   Principal,
   type Context,
 } from '@caffeinejs/http'
+
+import { isDocumentRequest, sendFile } from '../../index.js'
 
 /** The built site every scenario serves: `index.html` with `<div id="root">` and one hashed asset. */
 export const dist = fileURLToPath(new URL('../_testdata/spa', import.meta.url))
@@ -129,4 +132,24 @@ export async function expectNotFoundJSON(res: Response): Promise<void> {
   if (body.statusCode !== 404 || body.code !== 'ERR_HTTP_NOT_FOUND') {
     throw new Error(`expected the ERR_HTTP_NOT_FOUND envelope, got ${JSON.stringify(body)}`)
   }
+}
+
+// The two handlers every recipe is built from. Kept here so each scenario shows its own *routing* — which is
+// the part under test — rather than repeating the handlers.
+
+/** Refuses a request the way a handler does, so the miss renders through the error pipeline. */
+export function notFound(ctx: Context): never {
+  throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
+}
+
+/** Sends `root`'s shell document. For a path the application declared, which answers any client. */
+export function shellOf(root: string) {
+  return (ctx: Context) => sendFile(ctx, 'index.html', root)
+}
+
+/** Sends `root`'s shell document to a document request, and refuses anything else. For a wildcard. */
+export function clientRouteOf(root: string) {
+  const shell = shellOf(root)
+
+  return (ctx: Context) => (isDocumentRequest(ctx) ? shell(ctx) : notFound(ctx))
 }

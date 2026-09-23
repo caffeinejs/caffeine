@@ -65,7 +65,7 @@ licensecheck: ## check production dependency licenses against the allowlist
 
 .PHONY: tools
 tools: ## install external contributor tools
-	@go install github.com/uwu-tools/scorecard-mcp/cmd/scorecard-mcp@latest
+	@go install github.com/uwu-tools/scorecard-mcp/cmd/scorecard-mcp@v0.0.0-20260901030057-f95e5d8e4180
 
 lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npx oxlint --fix $*

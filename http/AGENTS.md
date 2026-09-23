@@ -59,26 +59,41 @@ when there is one — it has no `@Authorize` anyone could have forgotten — exc
 (`request.is404`: no route, so no route policy to apply), the path prefixes the application listed in
 `fallbackPolicy(policy, { except })`, and a route whose config carries `kAuthenticationExempt`. That marker makes
 the gate return before authenticating at all, so `request.user` stays `null` on such a route. The health probes
-and the OAuth callback and sign-in routes set it, and so does `@caffeinejs/static` on the file routes of a shell
-anyone may load. A first-party plugin whose route must answer before anyone is signed in sets it too.
+and the OAuth callback and sign-in routes set it, and so does `@caffeinejs/static` for a mount the application
+declared `{ anonymous: true }`. A first-party plugin whose route must answer before anyone is signed in sets it
+too.
+
+`kAuthenticationExempt` is **not** `$caffeine.auth` with `allowAnonymous`, and the two must not be merged.
+`$caffeine`'s _absence_ is how a raw route is recognised, here and in `health/probes_route.ts` and
+`oidc_routes.ts`; its `route` and `group` are required, so a partial one is a `TypeError` from an `onRoute`
+hook; and `allowAnonymous: true` still **authenticates** — it establishes `ctx.user` and only then skips
+authorization. "Anyone may call this" and "do not spend work working out who is calling" are different claims,
+and a liveness probe polled every second, or the dozens of assets a page pulls, want the second.
+
+The gap that leaves: the gate can _exempt_ a raw route but cannot give one a **policy**, so files that must be
+protected by a specific policy cannot be served from a `@fastify/static` mount at all — they are served from
+compiled routes instead, which is what `@caffeinejs/static`'s `serve: false` mount is for. If this is ever
+closed, do not overload `$caffeine`: split the auth slice into its own symbol-keyed config key carrying a full
+`GatedRoute`, with "do not authenticate" as one of its states, and deprecate `kAuthenticationExempt` into it.
 
 Whether a request is a browser navigation is one question with one answer, `isNavigation` (`navigation.ts`):
 Fetch Metadata when the request carries it, `Accept` naming `text/html` otherwise, `undefined` when it says
-neither. A scheme deciding between a redirect and a `401` reads it (`shouldRedirectChallenge`), and so does the
-SPA shell deciding whether an unmatched URL is a client route; each defaults the undecided case its own way. Do
-not read `Sec-Fetch-*` or `Accept` for that purpose anywhere else.
+neither. A scheme deciding between a redirect and a `401` reads it (`shouldRedirectChallenge`), and so does
+`@caffeinejs/static`'s `isDocumentRequest`, which an application's client-route wildcard calls; each defaults
+the undecided case its own way. They must agree, or a request is redirected to sign in by one and answered
+`404` by the other. Do not read `Sec-Fetch-*` or `Accept` for that purpose anywhere else.
 
 A route naming several schemes is challenged by each in the order named, each **appending** its
 `WWW-Authenticate` (`ctx.appendHeader`, never `ctx.header`), until one answers the request itself — a redirect
 status or a sent reply.
 
-A feature that serves a catch-all — `@caffeinejs/static`'s SPA shell — registers a compiled wildcard route
-through `$route` (`GET <prefix>/*`), marked `detail('http', { internal: true })`, and throws `ErrHTTPNotFound`
-for what it does not answer, so those misses reach `@Catch` like any handler's. It is authorized like any route,
-yields to every more specific route, and a second catch-all at the same path fails at start-up as a duplicate
-route. It derives the prefixes the application's API owns from `collectRouteGroups` alone: a route registered
-straight on Fastify declares nothing, since an exact URL that matched never reaches a wildcard. There is no
-registry of "server-owned paths" and no side channel between a feature and the shell.
+A catch-all belongs to the **application**, not to a feature. A single-page application writes `GET /*` on a
+router of its own, marks it `detail('http', { internal: true })` so `@caffeinejs/openapi` skips it, and throws
+`ErrHTTPNotFound` for what it does not answer, so those misses reach `@Catch` like any handler's. It is
+authorized like any route because it is one, and the API owns its own misses with
+`newRouter('/api').get('/*', …)`. There is no registry of "server-owned paths", no derivation of them, and no
+feature that installs a catch-all on the application's behalf — `@caffeinejs/static` serves files and nothing
+else. The recipes are [`../ai/docs/spa.md`](../ai/docs/spa.md).
 
 The not-found handler is therefore the adapter's own, or the application's. A plugin that still wants to answer
 unmatched URLs itself may call `setNotFoundHandler` and throw `ErrHTTPNotFound` for what it does not answer;

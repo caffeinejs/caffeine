@@ -2,25 +2,34 @@
 
 Follow the root [`AGENTS.md`](../AGENTS.md) and [`http/AGENTS.md`](../http/AGENTS.md). What is load-bearing here:
 
-- **The shell is a compiled route, not a not-found handler.** `.spa(root)` registers `GET <prefix>/*` (and
-  `GET <prefix>` for a prefixed shell) through `instance.$route`, marked `detail('http', { internal: true })` so
-  `@caffeinejs/openapi` does not describe it. It is authorized like any route through `authorize`, public by
-  default, and a request it refuses throws `ErrHTTPNotFound` into the ordinary error pipeline. The adapter's
-  default not-found handler, and any the application set, are untouched. Do not reach for `setNotFoundHandler`.
-- **The shell document is sent with `@fastify/send`**, never through `reply.sendFile`: which mount decorated
-  the reply is nobody's business, and `GET /`, `GET /index.html` and `GET /settings` all carry the same headers.
-  `@fastify/static` serves the shell's files with `wildcard: false`, `index: false`, `decorateReply: false` and
-  the shell document ignored; its default `GET /*` would collide with the route.
-- **Owned prefixes come from `collectRouteGroups` alone**, derived once in `onReady` by `_owned.ts`. Raw
-  Fastify routes declare nothing and need nothing: an exact URL that matched a route never reaches the shell.
-  Groups marked `http.internal` own no prefix.
-- **Assets follow the shell.** The file routes of a shell with `allowAnonymous` are marked
-  `kAuthenticationExempt` from an `onRoute` hook while that one mount registers. A gated shell's files fall under
-  the application's fallback policy like any raw route.
-- **Navigation is `isNavigation` from `@caffeinejs/http`**, the same rule a scheme redirects on. Do not
-  reintroduce a local reading of `Sec-Fetch-*` or `Accept`.
-- **Several shells per origin** are one `.spa()` call per prefix; the longest prefix wins by routing.
-  `ErrDuplicateSPAMount` is for two shells at one prefix only.
+- **This package serves files. It has no single-page-application feature.** There is no `.spa()`, no shell
+  registry, no owned-prefix derivation and no `SPAOptions`. A SPA is routing the application writes, so its
+  prefix, its `authorize` and its ordering stay with the rest of its routing. The recipes are
+  [`ai/docs/spa.md`](../ai/docs/spa.md), and the scenario suite runs them. Do not grow a builder back: an
+  options bag on an SPA helper regrows `index`, `exclude`, `include`, `navigationOnly` and `cache` one release
+  at a time and lands back where this started.
+- **Every `@fastify/static` option reaches the mount untouched.** `.serve(root, options, mount)` passes
+  `options` through as given; only `root` is normalized and only `decorateReply` is decided by the plugin.
+  That is the whole reason the SPA feature is gone — a wrapper owes parity with upstream forever, and this one
+  had drifted to eight blocked keys and a hand-rolled send that silently dropped `preCompressed` and
+  `allowedPath` for the one file that mattered.
+- **`sendFile` / `download` delegate to the reply decorators**, never to `@fastify/send` directly. Going
+  through `pumpSendToReply` is what gives a handler `preCompressed`, `allowedPath`, `setHeaders`, conditional
+  requests and the `..` / non-canonical-path guards. Reimplementing is the mistake that was just undone.
+- **The decorating mount is chosen, not assumed.** `@fastify/static` decorates once per server; the first
+  mount that explicitly asked wins, else the first that did not decline. A `serve: false` mount registers no
+  routes and exists only to decorate and to name a root — which is how a fully gated application serves its
+  own bundle from compiled routes.
+- **`isDocumentRequest` is a pure predicate with no options bag.** Two rules: a path naming a file is never a
+  document, and — unless `navigationOnly` is off — only a browser navigation is, by `isNavigation` from
+  `@caffeinejs/http`. It is for a **wildcard**; a path the application declared answers any client.
+  Do not read `Sec-Fetch-*` or `Accept` anywhere else.
+- **`{ anonymous: true }` on a mount** marks its routes `kAuthenticationExempt` from an `onRoute` hook while
+  that one mount registers. It fires for exactly that mount, since a mount registers every file before its
+  registration resolves. A bundle that must be _gated_ rather than exempt is served from compiled routes
+  instead — the gate can exempt a raw route but cannot give it a policy (see [`http/AGENTS.md`](../http/AGENTS.md)).
 - **Scenario tests** (`_tests/scenarios/`) use `newRouter` chains and a `CaffeineIoC({ decorators: false })`
-  container, never a `@Controller`, so no route leaks between applications built in one file. Header sets live
-  in `_tests/scenarios/_headers.ts` and mirror the e2e browser simulator's.
+  container so no route leaks between the applications each file builds. `app.test.ts` is the exception and
+  the reason: it builds **one** application from `@Controller` classes at module scope, and it is the test
+  that keeps the recipes honest. Header sets live in `_tests/scenarios/_headers.ts` and mirror the e2e
+  browser simulator's.

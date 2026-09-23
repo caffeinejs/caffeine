@@ -73,6 +73,30 @@ references the sibling build projects it depends on. `X/tsconfig.json` type-chec
 its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsconfig.json` holds the shared
 `compilerOptions` and nothing else.
 
+Every `X/tsconfig.build.json` carries the same `exclude`, and a new package copies it verbatim:
+
+```json
+[
+  "dist",
+  "node_modules",
+  "**/_tests/**",
+  "**/_testdata/**",
+  "**/*.test.ts",
+  "**/*.test-d.ts",
+  "**/*.spec.ts",
+  "**/*.testkit.ts",
+  "**/*.e2e.ts",
+  "vitest.config.ts"
+]
+```
+
+Package-specific entries go after those, never instead of them. Excluding a test **helper** matters as much as
+excluding a test: a helper under `_tests/` is not `*.test.ts`, so without `**/_tests/**` it is compiled into
+the published `dist/`. The check project still sees all of it — `X/tsconfig.json` keeps `include: ["**/*.ts"]`,
+so tests and helpers are type-checked and only emission stops. The same three patterns are excluded from
+coverage in root [`vitest.config.ts`](vitest.config.ts) and [`codecov.yml`](codecov.yml), and from analysis in
+[`sonar-project.properties`](sonar-project.properties); change them together.
+
 Two solution files drive them: `npm run build` is `tsc --build tsconfig.build.json`, and
 `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental; do not edit `dist/`
 by hand.

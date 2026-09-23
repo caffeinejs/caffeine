@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import { newRouter } from '@caffeinejs/http'
-import { staticFiles } from '@caffeinejs/static'
+import { ErrHTTPNotFound, newRouter, type Context } from '@caffeinejs/http'
+import { isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -16,14 +16,54 @@ const dist = fileURLToPath(new URL('../../static/_tests/_testdata/spa', import.m
 
 const SCRIPT = { accept: '*/*', 'sec-fetch-mode': 'no-cors', 'sec-fetch-dest': 'script' }
 
+const shellDocument = (ctx: Context) => sendFile(ctx, 'index.html', dist)
+const notFound = (ctx: Context): never => {
+  throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
+}
+const clientRoute = (ctx: Context) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
+
+/** The client routes, public or behind the provider, which is one `authorize` and nothing else. */
+function pages(gated: boolean) {
+  return newRouter()
+    .detail('http', { internal: true })
+    .authorize(gated ? {} : { allowAnonymous: true })
+    .get('/', shellDocument)
+    .get('/index.html', shellDocument)
+    .get('/*', clientRoute)
+}
+
+/**
+ * The built site.
+ *
+ * Public: an ordinary mount whose files are anonymous, because the page that has not signed in yet still has
+ * to load its scripts. Gated: no file routes at all (`serve: false` leaves only the decoration), and the
+ * bundle is served from a compiled route carrying the same policy as the page.
+ */
+function site(gated: boolean) {
+  return gated
+    ? staticFiles(s => s.serve(dist, { serve: false }))
+    : staticFiles(s => s.serve(dist, spaMount(), { anonymous: true }))
+}
+
+function assets() {
+  return newRouter()
+    .detail('http', { internal: true })
+    .authorize({})
+    .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
+}
+
 function api() {
-  return newRouter('/api')
-    .get('/me', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value])))
-    .mount(
-      newRouter('/admin')
-        .authorize({ roles: ['admin'] })
-        .get('/', () => ({ ok: true })),
-    )
+  return (
+    newRouter('/api')
+      .get('/me', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value])))
+      .mount(
+        newRouter('/admin')
+          .authorize({ roles: ['admin'] })
+          .get('/', () => ({ ok: true })),
+      )
+      // The API owns its own misses, so a browser navigating to `/api/typo` never reaches the client routes.
+      .get('/*', notFound)
+  )
 }
 
 /**
@@ -32,8 +72,8 @@ function api() {
  */
 async function bff(provider: StubProvider, gatedShell: boolean): Promise<RunningApp> {
   return startApp(
-    app =>
-      app
+    app => {
+      const configured = app
         .authentication(auth =>
           auth.addOAuth2('stub', o =>
             o
@@ -49,8 +89,11 @@ async function bff(provider: StubProvider, gatedShell: boolean): Promise<Running
           ),
         )
         .authorization(z => z.requireAuthenticatedByDefault())
-        .with(staticFiles(s => (gatedShell ? s.spa(dist, { authorize: {} }) : s.spa(dist))))
-        .mount(api()),
+        .with(site(gatedShell))
+
+      // A gated site serves its own bundle from a compiled route, so the assets carry the page's policy.
+      return gatedShell ? configured.mount(api(), assets(), pages(true)) : configured.mount(api(), pages(false))
+    },
     { port: PORT },
   )
 }

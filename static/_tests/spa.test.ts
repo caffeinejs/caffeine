@@ -1,218 +1,107 @@
-import { relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
-import { afterEach, describe, expect, it } from 'vitest'
+import { immutableAssets, isDocumentRequest, spaMount } from '../spa.js'
 
-import { ErrDuplicateSPAMount, ErrSPAIndexMissing, type StaticConfigurer, staticFiles } from '../index.js'
+/** A request as `isDocumentRequest` reads one: a URL and whatever headers the client sent. */
+const request = (url: string, headers: Record<string, string> = {}) => ({
+  req: { url, header: (key: string) => headers[key] },
+})
 
-const dist = fileURLToPath(new URL('./_testdata/spa', import.meta.url))
-const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
-const empty = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
-
-// Declared at module scope: the container snapshots the controller registry when it is constructed, so a
-// controller declared inside a test would not be routed.
-@Controller('/api')
-class APIController {
-  @Get('/pets')
-  pets(): unknown {
-    return { pets: [] }
-  }
+const NAVIGATION = {
+  accept: 'text/html,application/xhtml+xml',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-dest': 'document',
 }
-void [APIController]
+const XHR = { accept: 'application/json', 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty' }
+const CURL = { accept: '*/*' }
 
-describe('SPA fallback', () => {
-  let app: WebApplication | undefined
+describe('isDocumentRequest', () => {
+  it('answers a browser navigation', () => {
+    expect(isDocumentRequest(request('/settings', NAVIGATION))).toBe(true)
+  })
 
-  const start = async (configure: StaticConfigurer) => {
-    app = createWebApplication({}).with(staticFiles(configure))
-    await app.ready()
+  it('answers a framed document, whose destination is not `document`', () => {
+    expect(isDocumentRequest(request('/settings', { ...NAVIGATION, 'sec-fetch-dest': 'iframe' }))).toBe(true)
+  })
 
-    return app
+  it('refuses a programmatic fetch, even when it asks for HTML', () => {
+    expect(isDocumentRequest(request('/settings', { ...XHR, accept: 'text/html' }))).toBe(false)
+  })
+
+  // `*/*` is what curl, axios and kube-probe send, and none of them can do anything with a document.
+  it('does not take a bare wildcard Accept for a document request', () => {
+    expect(isDocumentRequest(request('/settings', CURL))).toBe(false)
+  })
+
+  // A client that said nothing has not refused either, so a test or a tool sending no headers sees the page.
+  it('answers a request that says nothing about what it wants', () => {
+    expect(isDocumentRequest(request('/settings'))).toBe(true)
+  })
+
+  // This is what keeps a missing hashed asset a real 404 instead of HTML under a JavaScript content type.
+  it('refuses a path naming a file, whatever the client asked for', () => {
+    expect(isDocumentRequest(request('/assets/app-eZr2sdaR.js', NAVIGATION))).toBe(false)
+    expect(isDocumentRequest(request('/favicon.ico', NAVIGATION))).toBe(false)
+  })
+
+  it('allows .html through, since /about.html is a plausible client route', () => {
+    expect(isDocumentRequest(request('/about.html', NAVIGATION))).toBe(true)
+  })
+
+  it('reads the path without its query', () => {
+    expect(isDocumentRequest(request('/settings?tab=app.js', NAVIGATION))).toBe(true)
+    expect(isDocumentRequest(request('/app.js?v=2', NAVIGATION))).toBe(false)
+  })
+
+  it('takes a dotfile and a trailing dot for a path, not a file name', () => {
+    expect(isDocumentRequest(request('/.well-known', NAVIGATION))).toBe(true)
+    expect(isDocumentRequest(request('/', NAVIGATION))).toBe(true)
+  })
+
+  it('answers anything that names no file when navigationOnly is off', () => {
+    expect(isDocumentRequest(request('/settings', CURL), false)).toBe(true)
+    expect(isDocumentRequest(request('/assets/app.js', CURL), false)).toBe(false)
+  })
+})
+
+describe('spaMount', () => {
+  // `wildcard: false` is load-bearing: the default catch-all collides with the application's own.
+  it('turns the wildcard off and keeps the shell document off the mount', () => {
+    expect(spaMount()).toEqual({ wildcard: false, index: false, globIgnore: ['index.html'] })
+  })
+
+  it('ignores the document it was told about', () => {
+    expect(spaMount('app.html').globIgnore).toEqual(['app.html'])
+  })
+})
+
+describe('immutableAssets', () => {
+  const header = (root: string, path: string, prefixes?: readonly string[]) => {
+    let value: string | undefined
+    immutableAssets(root, prefixes)(
+      { header: (_: string, v: string) => (value = v) } as never,
+      path,
+      undefined as never,
+    )
+
+    return value
   }
 
-  afterEach(async () => {
-    if (app !== undefined) {
-      await app.close()
-      app = undefined
-    }
+  it('pins a content-hashed asset and revalidates everything else', () => {
+    expect(header('/site', '/site/assets/app-eZr2sdaR.js')).toBe('public, max-age=31536000, immutable')
+    expect(header('/site', '/site/index.html')).toBe('public, max-age=3600')
   })
 
-  it('serves the shell at the root', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
-    expect(await res.text()).toContain('<div id="root">')
+  // `/assets` means the site's assets directory, not any directory of that name higher up the filesystem.
+  it('compares within the root', () => {
+    expect(header('/srv/assets/site', '/srv/assets/site/main.js')).toBe('public, max-age=3600')
   })
 
-  // One server for the shell, so the three spellings of it carry the same headers.
-  it('serves the shell by its file name with the same headers as a client route', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const named = await started.fetch('/index.html')
-    const route = await started.fetch('/convite/abc')
-
-    expect(named.status).toBe(200)
-    expect(named.headers.get('cache-control')).toBe('no-cache')
-    expect(named.headers.get('etag')).toBe(route.headers.get('etag'))
+  it('leaves a file outside the root alone', () => {
+    expect(header('/site', '/elsewhere/app.js')).toBeUndefined()
   })
 
-  it('serves the shell for a client-side route, revalidated', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/convite/abc')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
-    expect(res.headers.get('cache-control')).toBe('no-cache')
-    expect(await res.text()).toContain('<div id="root">')
-  })
-
-  it('caches a hashed asset indefinitely', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/assets/app-eZr2sdaR.js')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
-    expect(await res.text()).toContain('spa bundle')
-  })
-
-  it('404s a missing asset instead of serving HTML', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/assets/app-deadbeef.js')
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-    expect(await res.json()).toMatchObject({ statusCode: 404, code: 'ERR_HTTP_NOT_FOUND' })
-  })
-
-  it('keeps an unmatched API path a JSON 404, with no exclude configured', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/api/typo')
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-    expect(await res.json()).toMatchObject({ statusCode: 404, error: 'Not Found' })
-  })
-
-  it('still routes the real API route', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/api/pets')
-
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ pets: [] })
-  })
-
-  it('does not answer a non-GET with the shell', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/convite/abc', { method: 'POST' })
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-  })
-
-  it('does not answer a programmatic fetch with the shell', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/convite/abc', { headers: { 'sec-fetch-dest': 'empty' } })
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-  })
-
-  it('answers a browser navigation with the shell', async () => {
-    const started = await start(s => s.spa(dist))
-
-    const res = await started.fetch('/convite/abc', { headers: { 'sec-fetch-dest': 'document' } })
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
-  })
-
-  it('honours an explicit exclude', async () => {
-    const started = await start(s => s.spa(dist, { exclude: ['/webhooks'] }))
-
-    const res = await started.fetch('/webhooks/stripe')
-
-    expect(res.status).toBe(404)
-    expect(res.headers.get('content-type')).toMatch(/^application\/json/)
-  })
-
-  it('include wins over a derived server-owned prefix', async () => {
-    const started = await start(s => s.spa(dist, { include: ['/api/docs'] }))
-
-    const res = await started.fetch('/api/docs')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toMatch(/^text\/html/)
-  })
-
-  // The shell used to be sent through `reply.sendFile`, which whichever mount came first had decorated with its
-  // own headers; a shell behind a plain mount lost its cache policy, and one behind a mount that declined to
-  // decorate could not be sent at all.
-  it('keeps the shell’s headers whatever mount comes before it', async () => {
-    const started = await start(s => s.serve(fixtures, { prefix: '/one', decorateReply: false }).spa(dist))
-
-    const page = await started.fetch('/convite/abc')
-    expect(page.status).toBe(200)
-    expect(page.headers.get('cache-control')).toBe('no-cache')
-
-    const file = await started.fetch('/one/hello.txt')
-    expect(file.status).toBe(200)
-  })
-
-  it('accepts a root relative to the working directory', async () => {
-    const started = await start(s => s.spa(relative(process.cwd(), dist)))
-
-    const res = await started.fetch('/convite/abc')
-
-    expect(res.status).toBe(200)
-    expect(res.headers.get('cache-control')).toBe('no-cache')
-  })
-
-  it('serves the API alone when the shell is missing and onMissingIndex is skip', async () => {
-    const started = await start(s => s.spa(empty, { onMissingIndex: 'skip' }))
-
-    expect((await started.fetch('/api/pets')).status).toBe(200)
-    expect((await started.fetch('/convite/abc')).status).toBe(404)
-  })
-
-  it('refuses to start when the shell is missing', async () => {
-    const failing = createWebApplication({}).with(staticFiles(s => s.spa(empty)))
-
-    await expect(failing.ready()).rejects.toThrow(ErrSPAIndexMissing)
-    await failing.close()
-  })
-
-  // Two shells at one prefix cannot both be right, and the answer does not depend on anything configuration
-  // might say. The configure callback runs when the application bootstraps, so it surfaces from `ready()`.
-  it('refuses a second SPA mount at the same prefix', async () => {
-    const rejected = createWebApplication({}).with(staticFiles(s => s.spa(dist).spa(dist)))
-
-    await expect(rejected.ready()).rejects.toThrow(ErrDuplicateSPAMount)
-  })
-
-  // The shell is a route, not the not-found handler, so the one handler a Fastify context allows stays the
-  // application's own.
-  it('starts next to a not-found handler the application set, and both answer', async () => {
-    app = createWebApplication({})
-      .server(undefined, server => {
-        server.setNotFoundHandler((_req, reply) => {
-          void reply.code(418).send()
-        })
-      })
-      .with(staticFiles(s => s.spa(dist)))
-    await app.ready()
-
-    expect((await app.fetch('/convite/abc', { method: 'POST' })).status).toBe(418)
-    expect((await app.fetch('/convite/abc')).status).toBe(200)
+  it('takes the prefixes it is given', () => {
+    expect(header('/site', '/site/static/app.js', ['/static'])).toBe('public, max-age=31536000, immutable')
   })
 })

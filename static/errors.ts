@@ -1,34 +1,22 @@
-import { ErrCaffeineWebApplication } from '@caffeinejs/http'
+import { ErrCaffeineWebApplication, solutions } from '@caffeinejs/http'
 
 /**
- * ErrDuplicateSPAMount is thrown at start-up when `spa()` is called twice for the same prefix.
+ * ErrSendFileUnavailable is thrown when {@link sendFile} or {@link download} is called and no static mount
+ * decorated the reply.
  *
- * Two shells at one prefix have no meaning: the route serving that prefix answers with one document, so the
- * second call either duplicates the first or silently loses to it. Shells at different prefixes are fine.
+ * `@fastify/static` decorates `reply.sendFile` and `reply.download` once per server, so the helpers need
+ * `staticFiles(...)` installed with a mount that took the decoration.
  */
-export class ErrDuplicateSPAMount extends ErrCaffeineWebApplication {
-  constructor(prefix: string) {
-    super(`Cannot configure two SPA mounts at the same prefix "${prefix}"`, 'ERR_DUPLICATE_SPA_MOUNT')
-    this.name = 'ErrDuplicateSPAMount'
-  }
-}
-
-/**
- * ErrSPAIndexMissing is thrown at start-up when the shell document is not on disk.
- *
- * Almost always a build that did not run, and the alternative is an application that starts and answers every
- * client route with a 404 nobody can explain.
- */
-export class ErrSPAIndexMissing extends ErrCaffeineWebApplication {
-  constructor(indexPath: string) {
+export class ErrSendFileUnavailable extends ErrCaffeineWebApplication {
+  constructor(decorator: string) {
     super(
-      `Cannot serve the SPA: the shell document does not exist: "${indexPath}"` +
-        '\nPossible Solutions:' +
-        '\n  - Build the site so the shell and its assets exist before the server starts' +
-        '\n  - Point spa() at the directory holding index.html' +
-        '\n  - Pass { onMissingIndex: "skip" } to start without the site, serving the API alone',
-      'ERR_SPA_INDEX_MISSING',
+      `Cannot send a file: "${decorator}" is not decorated on the reply` +
+        solutions(
+          'Install staticFiles(...) with at least one .serve(...) mount',
+          'Leave decorateReply unset on the mount whose settings these helpers should use',
+        ),
+      'ERR_SEND_FILE_UNAVAILABLE',
     )
-    this.name = 'ErrSPAIndexMissing'
+    this.name = 'ErrSendFileUnavailable'
   }
 }

@@ -1,8 +1,8 @@
 /** The request headers {@link isNavigation} reads, each `undefined` when the request did not send it. */
 export interface NavigationHeaders {
-  secFetchMode?: string | undefined
-  secFetchDest?: string | undefined
-  accept?: string | undefined
+  secFetchMode?: string
+  secFetchDest?: string
+  accept?: string
 }
 
 /**
