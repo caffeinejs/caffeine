@@ -32,7 +32,12 @@ export interface CookieAuthenticationOptions {
    * restores strict single-use.
    */
   rememberMeRotationGraceSeconds?: number
-  /** Path to redirect to on challenge for browser apps. When unset, challenge returns a bare 401. */
+  /**
+   * Path to redirect to on challenge for browser apps. When unset, challenge returns a bare 401.
+   *
+   * Written as the application sees it: the request's `ctx.req.basePath` is put in front of a path on this
+   * origin. An absolute URL is used as it is.
+   */
   loginPath?: string
   /**
    * Whether a challenge redirects to {@link loginPath} or answers 401. Default `'auto'`.
@@ -46,6 +51,8 @@ export interface CookieAuthenticationOptions {
    *
    * Separate from {@link loginPath} on purpose: sending a signed-in user back to the login page to fix a
    * permissions problem produces a loop in which signing in again never helps.
+   *
+   * Written as the application sees it, like {@link loginPath}.
    */
   accessDeniedPath?: string
   /** Query parameter carrying the post-login destination on the {@link loginPath} redirect. Default `'returnUrl'`. */
@@ -62,8 +69,13 @@ export interface CookieAuthenticationOptions {
    * user load.
    */
   validatePrincipal?: (ctx: Context, principal: Principal) => Promise<Principal | null> | Principal | null
-  /** Overrides the default 403 on an authorization failure. Takes precedence over {@link accessDeniedPath}. */
-  onForbid?: (ctx: Context) => Promise<void> | void
+  /**
+   * Overrides the default 403 on an authorization failure. Takes precedence over {@link accessDeniedPath}.
+   *
+   * Handed the URL a navigation would have been sent to — {@link accessDeniedPath} with the base path in front —
+   * or `undefined` when none is configured.
+   */
+  onForbid?: (ctx: Context, accessDeniedURL: string | undefined) => Promise<void> | void
   /**
    * Told about a session cookie that was presented and could not be read — expired, tampered with, sealed under
    * another secret — and about a remember-me credential that was refused. The request goes on unauthenticated
@@ -84,11 +96,24 @@ export interface CookieAuthenticationOptions {
   secure?: boolean
   /** `SameSite` cookie flag. Default `'lax'`. */
   sameSite?: CookieSameSite
-  /** Cookie `Path`. Default `'/'`. */
+  /**
+   * Cookie `Path`. Default: the application's base path as the request came in, or `/` without one, so applications
+   * sharing an origin under different bases keep their sessions apart. A `__Host-` cookie name keeps `/`, the only
+   * path a browser accepts it at.
+   *
+   * Scoped to the base, a session signed in through it is not sent to a request that came without it; `'/'`
+   * shares one session across both.
+   */
   path?: string
   /** Claim type treated as the role claim on the rebuilt identity. Default `'roles'`. */
   roleClaimType?: string
-  onChallenge?: (ctx: Context) => Promise<void> | void
+  /**
+   * Overrides the challenge.
+   *
+   * Handed the URL a navigation would have been sent to — {@link loginPath} with the base path in front and the
+   * return URL on it — or `undefined` when no `loginPath` is configured.
+   */
+  onChallenge?: (ctx: Context, loginURL: string | undefined) => Promise<void> | void
 }
 
 const EIGHT_HOURS = 8 * 60 * 60
@@ -158,6 +183,7 @@ export class CookieAuthenticationOptionsBuilder {
     return this
   }
 
+  /** Overrides the 403, handed the access-denied URL a navigation would have been sent to. See the option docs. */
   onForbid(onForbid: NonNullable<CookieAuthenticationOptions['onForbid']>): this {
     this.#options.onForbid = onForbid
     return this
@@ -198,6 +224,7 @@ export class CookieAuthenticationOptionsBuilder {
     return this
   }
 
+  /** Overrides the challenge, handed the login URL a navigation would have been sent to. See the option docs. */
   onChallenge(onChallenge: NonNullable<CookieAuthenticationOptions['onChallenge']>): this {
     this.#options.onChallenge = onChallenge
     return this
@@ -235,7 +262,7 @@ export class CookieAuthenticationOptionsBuilder {
       rememberMeMaxAge: this.#options.rememberMeMaxAge ?? THIRTY_DAYS,
       secure: this.#options.secure ?? true,
       sameSite: this.#options.sameSite ?? 'lax',
-      path: this.#options.path ?? '/',
+      path: this.#options.path,
       roleClaimType: this.#options.roleClaimType ?? 'roles',
       onChallenge: this.#options.onChallenge,
     }

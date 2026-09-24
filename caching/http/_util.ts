@@ -73,7 +73,10 @@ export function defaultCacheKey(
   vary?: readonly string[],
   varyByQuery?: ReadonlySet<string>,
 ): string {
-  return buildCacheKey(request.method, request.url, vary, name => request.headers[name], varyByQuery)
+  // Keyed by the URL as the browser asked for it, base path included: a page answering `/api/x` may link under
+  // `/api`, and must not be replayed to `/x`. Without a base path the key is the URL alone, as it always was.
+  const basePath = request.httpContext?.req.basePath ?? ''
+  return buildCacheKey(request.method, basePath + request.url, vary, name => request.headers[name], varyByQuery)
 }
 
 /** The request directives the cache acts on. */

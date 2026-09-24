@@ -125,7 +125,8 @@ function normalizationOptions(server: FastifyInstance): NormalizationOptions {
 
 function stampRaw(request: FastifyRequest, reply: FastifyReply): void {
   const raw = request.raw as IncomingMessage & Record<string, unknown>
-  raw.originalUrl = raw.url
+  // Kept when already set: Fastify saved the full URL there before a base path was taken off `url`.
+  raw.originalUrl ??= raw.url
   raw.id = request.id
   raw.hostname = request.hostname
   raw.protocol = request.protocol

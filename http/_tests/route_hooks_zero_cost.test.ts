@@ -46,3 +46,33 @@ describe('route hook slots', () => {
     expect(route.onSend).toBeUndefined()
   })
 })
+
+describe('route hook slots under a base path', () => {
+  const underBase = new Map<string, RouteOptions>()
+  let based: WebApplication
+
+  beforeAll(async () => {
+    based = createWebApplication()
+      .basePath('/api')
+      .serverCallback((_context, server) => {
+        server.addHook('onRoute', route => {
+          underBase.set(`${route.method} ${route.url}`, route as RouteOptions)
+        })
+      })
+    await based.ready()
+  })
+
+  afterAll(async () => {
+    await based?.close()
+  })
+
+  // The base comes off a request before routing, in the server's URL rewrite — not in a hook — so a route is
+  // registered where the application declared it and pays nothing more than it did without one.
+  it('registers the route where it was declared and leaves both slots empty', () => {
+    const route = underBase.get('GET /hooks/plain')!
+
+    expect(route).toBeDefined()
+    expect(route.onRequest).toBeUndefined()
+    expect(route.onSend).toBeUndefined()
+  })
+})

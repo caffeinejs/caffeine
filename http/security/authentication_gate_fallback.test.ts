@@ -199,6 +199,25 @@ describe('the authentication gate and routes registered straight on the server',
     expect((await app.fetch('/admin-ui/users')).status).toBe(200)
   })
 
+  // The server takes the base path off a request before routing, so a route is registered where the application
+  // declared it, and an excepted prefix is written the way the application writes its routes: without the base.
+  it('matches excepted prefixes relative to the application under a base path', async () => {
+    const app = await ready(
+      createWebApplication()
+        .basePath('/api')
+        .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
+        .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets'] }))
+        .with(health())
+        .with(plainRoutes()),
+    )
+
+    expect((await app.fetch('/api/assets/app.js')).status).toBe(200)
+    expect((await app.fetch('/api/admin-ui/users')).status).toBe(401)
+    expect((await app.fetch('/api/admin-ui/users', signedIn)).status).toBe(200)
+    // The probes are still the orchestrator's.
+    expect((await app.fetch('/api/livez')).status).not.toBe(401)
+  })
+
   it('refuses a path to except that is not absolute', () => {
     const building = createWebApplication()
 

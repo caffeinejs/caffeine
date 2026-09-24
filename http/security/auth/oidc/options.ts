@@ -122,6 +122,9 @@ export interface ResolvedOIDCAuthenticationOptions {
    *
    * A challenge that cannot redirect answers `401` with this URL as `loginURL`. Nothing is started until a browser
    * goes there.
+   *
+   * Like `callbackURL`, it is the path the browser sees, so it includes the application's base path. The route is
+   * registered without it.
    */
   loginPath?: string
 
@@ -245,7 +248,7 @@ export interface ResolvedOIDCAuthenticationOptions {
   /**
    * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
    *
-   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
@@ -431,6 +434,11 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
+  /**
+   * Where the browser lands after signing in when it asked for nowhere safe. `/` unless set.
+   *
+   * Written as the application sees it: the request's `ctx.req.basePath` is put in front.
+   */
   defaultRedirectPath(path: string): this {
     this.#options.defaultRedirectPath = path
     return this
@@ -571,7 +579,12 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
-  /** The path of the route that starts a sign-in. `<callback path>/login` unless set. */
+  /**
+   * The path of the route that starts a sign-in. `<callback path>/login` unless set.
+   *
+   * On `callbackURL`'s origin and as the browser sees it, base path included — unlike the cookie scheme's
+   * `loginPath`, which is written as the application sees it.
+   */
   loginPath(path: string): this {
     this.#options.loginPath = path
     return this

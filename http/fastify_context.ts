@@ -4,6 +4,7 @@ import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
 import type { CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
+import { kRawBasePath, resolveAppURL, type BasePathCarrier } from './base_path.js'
 import {
   ContextState,
   type Context,
@@ -171,7 +172,7 @@ export class FastifyContext<
 
   redirect(url: string, status?: number): this {
     this.#answered = true
-    this.#reply.redirect(url, status)
+    this.#reply.redirect(resolveAppURL(url, this.req.basePath), status)
     return this
   }
 
@@ -212,6 +213,10 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
 
   get url(): string {
     return this.request.url
+  }
+
+  get basePath(): string {
+    return (this.request.raw as IncomingMessage & BasePathCarrier)[kRawBasePath] ?? ''
   }
 
   get method(): string {

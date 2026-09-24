@@ -20,6 +20,7 @@ import {
   type SeriesTokenRotation,
   UserProvider,
   createWebApplication,
+  newRouter,
   $p,
 } from '../../../index.js'
 
@@ -446,5 +447,125 @@ describe('durable remember-me (server-side revocable)', () => {
     expect(out.status).toBe(200)
     expect(cleared(out, 'caf.session')).toBeDefined()
     expect(store.records.size).toBe(1)
+  })
+})
+
+/**
+ * Behind a gateway forwarding `/api/...`, every URL cookie sign-in sends the browser to has to carry the base path
+ * the server took off before routing, or the browser leaves the application: the login page, the page it came
+ * from, the access-denied page.
+ */
+describe('cookie sign-in under a base path', () => {
+  const NAVIGATION = { 'sec-fetch-mode': 'navigate' }
+
+  async function buildBasedApp() {
+    const container = new CaffeineIoC()
+    container.bind(TestUserProvider, t => t.toSelf().extends())
+    container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
+    const app = createWebApplication({ container })
+      .basePath('/api')
+      .authentication(auth =>
+        auth
+          .addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login').accessDeniedPath('/denied'))
+          .addCredentials(),
+      )
+      .mount(
+        newRouter('/audit')
+          .authorize({ roles: ['auditor'] })
+          .get('/', () => ({ audited: true })),
+        // A catch-all, as a single-page application's shell is: it is what `/api//evil.example` reaches.
+        newRouter()
+          .authorize({})
+          .get('/*', () => ({ shell: true })),
+      )
+    await app.ready()
+    return app
+  }
+
+  async function signIn(app: Awaited<ReturnType<typeof buildBasedApp>>): Promise<string> {
+    const res = await app.fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'alice', password: 's3cret' }),
+    })
+    expect(res.status).toBe(200)
+    return sessionCookie(res.headers.get('set-cookie'))
+  }
+
+  it('sends a navigation to a protected route to the login path under the base, and back', async () => {
+    const app = await buildBasedApp()
+    const res = await app.fetch('/api/me?tab=1', { headers: NAVIGATION })
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2Fme%3Ftab%3D1')
+    await app.close()
+  })
+
+  it('sends a request that came without the base back without it', async () => {
+    const app = await buildBasedApp()
+    const res = await app.fetch('/me', { headers: NAVIGATION })
+
+    expect(res.headers.get('location')).toBe('/login?returnUrl=%2Fme')
+    await app.close()
+  })
+
+  it('answers a script with 401 and the login URL under the base', async () => {
+    const app = await buildBasedApp()
+    const res = await app.fetch('/api/me', { headers: { accept: 'application/json' } })
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2Fme')
+    expect(await res.json()).toEqual({ error: 'authentication_required', loginURL: '/api/login?returnUrl=%2Fapi%2Fme' })
+    await app.close()
+  })
+
+  it('echoes a doubled slash behind the base as a path here, and drops it without the base', async () => {
+    const app = await buildBasedApp()
+
+    const underBase = await app.fetch('/api//evil.example/pwn', { headers: NAVIGATION })
+    expect(underBase.status).toBe(302)
+    expect(underBase.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2F%2Fevil.example%2Fpwn')
+
+    const direct = await app.fetch('//evil.example/pwn', { headers: NAVIGATION })
+    expect(direct.status).toBe(302)
+    expect(direct.headers.get('location')).toBe('/login')
+    await app.close()
+  })
+
+  // Behind one gateway, applications under other bases write their own `caf.session`: scoped to this base, the
+  // browser keeps them apart instead of letting one overwrite another.
+  it('scopes the session cookie to the base it was signed in under', async () => {
+    const app = await buildBasedApp()
+    const res = await app.fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'alice', password: 's3cret' }),
+    })
+
+    const session = res.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
+    expect(session).toMatch(/;\s*Path=\/api(;|$)/i)
+    await app.close()
+  })
+
+  it('signs in under the base, and the session reaches the protected route under it', async () => {
+    const app = await buildBasedApp()
+    const cookie = await signIn(app)
+
+    const res = await app.fetch('/api/me', { headers: { cookie } })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ sub: 'alice', admin: true })
+    await app.close()
+  })
+
+  it('sends a signed-in navigation it refuses to the access-denied path under the base', async () => {
+    const app = await buildBasedApp()
+    const cookie = await signIn(app)
+
+    const res = await app.fetch('/api/audit', { headers: { ...NAVIGATION, cookie } })
+
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe('/api/denied')
+    await app.close()
   })
 })

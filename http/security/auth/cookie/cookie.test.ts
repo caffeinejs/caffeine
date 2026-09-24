@@ -21,11 +21,11 @@ function makeHandler(configure: (o: CookieAuthenticationOptionsBuilder) => void 
 }
 
 /** A context whose headers say "browser navigation" — the case a `loginPath` redirect is meant for. */
-function makeNavCtx(url?: string) {
-  return makeCtx(undefined, url, { 'sec-fetch-mode': 'navigate' })
+function makeNavCtx(url?: string, basePath = '') {
+  return makeCtx(undefined, url, { 'sec-fetch-mode': 'navigate' }, basePath)
 }
 
-function makeCtx(cookieValue?: string, url?: string, headers: Record<string, string> = {}) {
+function makeCtx(cookieValue?: string, url?: string, headers: Record<string, string> = {}, basePath = '') {
   const setCookie = vi.fn().mockReturnThis()
   const deleteCookie = vi.fn().mockReturnThis()
   const header = vi.fn().mockReturnThis()
@@ -34,6 +34,7 @@ function makeCtx(cookieValue?: string, url?: string, headers: Record<string, str
   const ctx = {
     req: {
       url,
+      basePath,
       cookie: (name: string) => (name === 'caf.session' ? cookieValue : undefined),
       header: (name: string) => headers[name],
     },
@@ -232,7 +233,7 @@ describe('CookieAuthenticationHandler', () => {
       const onChallenge = vi.fn()
       const { ctx, status } = makeCtx()
       await makeHandler(o => o.loginPath('/login').onChallenge(onChallenge)).challenge(ctx)
-      expect(onChallenge).toHaveBeenCalledWith(ctx)
+      expect(onChallenge).toHaveBeenCalledWith(ctx, '/login')
       expect(status).not.toHaveBeenCalled()
     })
   })
@@ -272,6 +273,160 @@ describe('CookieAuthenticationHandler', () => {
       const refused = makeNavCtx()
       await denied('status').forbid(refused.ctx)
       expect(refused.status).toHaveBeenCalledWith(403)
+    })
+  })
+
+  // The server took the application's base path off the request before routing, so the paths the application
+  // declared are relative to it. The browser is sent to where they really are, and back to the URL it asked for.
+  describe('under a base path', () => {
+    it('sends a navigation to the login path under the base, returning to the URL the browser asked for', async () => {
+      const { ctx, status, header } = makeNavCtx('/reports?year=2026', '/api')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+      expect(status).toHaveBeenCalledWith(302)
+      expect(header).toHaveBeenCalledWith('location', '/api/login?returnUrl=%2Fapi%2Freports%3Fyear%3D2026')
+    })
+
+    it('uses an explicit redirectURI as given, never adding the base twice', async () => {
+      const { ctx, header } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '/api/dashboard' })
+      expect(header).toHaveBeenCalledWith('location', '/api/login?returnUrl=%2Fapi%2Fdashboard')
+    })
+
+    it("keeps the login path's own query and a custom parameter name", async () => {
+      const { ctx, header } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('/login?mode=sso').returnURLParameter('next')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', '/api/login?mode=sso&next=%2Fapi%2Freports')
+    })
+
+    it('answers a caller that is not a navigation with the login URL under the base', async () => {
+      const { ctx, status, header, body } = makeCtx(undefined, '/reports', { 'sec-fetch-mode': 'cors' }, '/api')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+
+      expect(status).toHaveBeenCalledWith(401)
+      expect(header).toHaveBeenCalledWith('location', '/api/login?returnUrl=%2Fapi%2Freports')
+      expect(body).toHaveBeenCalledWith({
+        error: 'authentication_required',
+        loginURL: '/api/login?returnUrl=%2Fapi%2Freports',
+      })
+    })
+
+    it('leaves a login page on another origin as it was configured', async () => {
+      const { ctx, header } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('https://sso.example/login')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', 'https://sso.example/login?returnUrl=%2Fapi%2Freports')
+    })
+
+    // `/api//evil.example/pwn` reaches a catch-all as `//evil.example/pwn`. Echoed bare, that is a
+    // protocol-relative URL and an open redirect once the user signs in; with the base in front it is a path here.
+    it('never turns a path the base came off into a protocol-relative return URL', async () => {
+      const { ctx, header } = makeNavCtx('//evil.example/pwn', '/api')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', '/api/login?returnUrl=%2Fapi%2F%2Fevil.example%2Fpwn')
+    })
+
+    it('still drops a protocol-relative URL when there is no base to put in front of it', async () => {
+      const { ctx, header } = makeNavCtx('//evil.example/pwn')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx)
+      expect(header).toHaveBeenCalledWith('location', '/login')
+    })
+
+    it('sends a denied navigation to the access-denied path under the base', async () => {
+      const { ctx, status, header } = makeNavCtx(undefined, '/api')
+      await makeHandler(o => o.loginPath('/login').accessDeniedPath('/denied')).forbid(ctx)
+      expect(status).toHaveBeenCalledWith(302)
+      expect(header).toHaveBeenCalledWith('location', '/api/denied')
+    })
+
+    // An application naming where to come back to writes it as it writes its routes, and says so with `~/`.
+    it('resolves a redirectURI written with "~/" against the base', async () => {
+      const { ctx, header } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '~/dashboard' })
+      expect(header).toHaveBeenCalledWith('location', '/api/login?returnUrl=%2Fapi%2Fdashboard')
+    })
+
+    it('resolves a redirectURI written with "~/" to the root when there is no base', async () => {
+      const { ctx, header } = makeNavCtx('/reports')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '~/dashboard' })
+      expect(header).toHaveBeenCalledWith('location', '/login?returnUrl=%2Fdashboard')
+    })
+
+    it('drops a "~//" redirectURI rather than resolving it off the origin', async () => {
+      const { ctx, header } = makeNavCtx('/reports')
+      await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '~//evil.example/pwn' })
+      expect(header).toHaveBeenCalledWith('location', '/login')
+    })
+  })
+
+  // A hook standing in for the default answer may still send the browser where the default would have; it is handed
+  // that URL rather than left to rebuild the base path and the return URL, and lose one of them.
+  describe('hooks', () => {
+    it('hands onChallenge the login URL under the base, return URL included', async () => {
+      const onChallenge = vi.fn()
+      const { ctx, status } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('/login').onChallenge(onChallenge)).challenge(ctx)
+      expect(onChallenge).toHaveBeenCalledWith(ctx, '/api/login?returnUrl=%2Fapi%2Freports')
+      expect(status).not.toHaveBeenCalled()
+    })
+
+    it('hands onChallenge no URL when no loginPath is configured', async () => {
+      const onChallenge = vi.fn()
+      const { ctx } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.onChallenge(onChallenge)).challenge(ctx)
+      expect(onChallenge).toHaveBeenCalledWith(ctx, undefined)
+    })
+
+    it('hands onForbid the access-denied URL under the base', async () => {
+      const onForbid = vi.fn()
+      const { ctx, status } = makeNavCtx(undefined, '/api')
+      await makeHandler(o => o.accessDeniedPath('/denied').onForbid(onForbid)).forbid(ctx)
+      expect(onForbid).toHaveBeenCalledWith(ctx, '/api/denied')
+      expect(status).not.toHaveBeenCalled()
+    })
+
+    it('hands onForbid no URL when no accessDeniedPath is configured', async () => {
+      const onForbid = vi.fn()
+      const { ctx } = makeNavCtx(undefined, '/api')
+      await makeHandler(o => o.onForbid(onForbid)).forbid(ctx)
+      expect(onForbid).toHaveBeenCalledWith(ctx, undefined)
+    })
+
+    it('still runs a hook written to take the context alone', async () => {
+      const seen: Context[] = []
+      const { ctx } = makeNavCtx('/reports', '/api')
+      await makeHandler(o => o.loginPath('/login').onChallenge(c => void seen.push(c))).challenge(ctx)
+      expect(seen).toEqual([ctx])
+    })
+  })
+
+  // Applications sharing an origin under different bases — several behind one gateway — each write `caf.session`.
+  // At `Path=/` they overwrite each other's; scoped to the base, each keeps its own.
+  describe('cookie Path', () => {
+    async function writtenPath(basePath: string, configure?: (o: CookieAuthenticationOptionsBuilder) => void) {
+      const { ctx, setCookie } = makeCtx(undefined, '/x', {}, basePath)
+      await makeHandler(configure).persist(ctx, new AuthenticationTicket(principal(), 'Cookie'))
+      return (setCookie.mock.calls[0] as [string, string, Record<string, unknown>])[2].path
+    }
+
+    it('scopes the session cookie to the base the request came in under', async () => {
+      expect(await writtenPath('/api')).toBe('/api')
+    })
+
+    it('writes it at "/" when there is no base', async () => {
+      expect(await writtenPath('')).toBe('/')
+    })
+
+    it('keeps a configured path under a base', async () => {
+      expect(await writtenPath('/api', o => o.path('/'))).toBe('/')
+    })
+
+    it('keeps a "__Host-" cookie at "/", the only path a browser accepts it at', async () => {
+      expect(await writtenPath('/api', o => o.cookieName('__Host-sess'))).toBe('/')
+    })
+
+    it('clears the session cookie at the path it set it at', async () => {
+      const { ctx, deleteCookie } = makeCtx(undefined, '/x', {}, '/api')
+      await makeHandler().revoke(ctx)
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', { ...CLEARED_WITH, path: '/api' })
     })
   })
 

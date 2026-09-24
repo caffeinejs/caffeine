@@ -11,6 +11,7 @@ import {
   Claim,
   Args,
   createWebApplication,
+  newRouter,
   $p,
 } from '../../../index.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
@@ -24,15 +25,22 @@ const CALLBACK_PATH = '/oidc/callback'
 /** Cookie names and derived keys are namespaced by the strategy this app registers. */
 const SCHEME = 'Google'
 
-function makeOIDCApp(jwksResolver?: (uri: string) => JWTVerifyGetKey) {
+function makeOIDCApp(
+  jwksResolver?: (uri: string) => JWTVerifyGetKey,
+  { basePath, callbackURL = CALLBACK_URL }: { basePath?: string; callbackURL?: string } = {},
+) {
   const builder = createWebApplication()
+  if (basePath !== undefined) {
+    builder.basePath(basePath)
+  }
+
   builder.authentication(auth =>
     auth.addOIDC('Google', opts => {
       opts
         .clientID(CLIENT_ID)
         .clientSecret('oidc-client-secret')
         .sessionSecret(SESSION_SECRET)
-        .callbackURL(CALLBACK_URL)
+        .callbackURL(callbackURL)
         .authorizationEndpoint(`${ISSUER}/auth`)
         .tokenEndpoint(`${ISSUER}/token`)
         .jwksURI(`${ISSUER}/jwks`)
@@ -45,9 +53,9 @@ function makeOIDCApp(jwksResolver?: (uri: string) => JWTVerifyGetKey) {
   return builder
 }
 
-async function makeStateCookie(nonce: string, state = 'oidc-st') {
+async function makeStateCookie(nonce: string, state = 'oidc-st', returnTo = '/dashboard') {
   return encodeState(
-    { state, nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo: '/dashboard', scheme: SCHEME, issuer: ISSUER },
+    { state, nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo, scheme: SCHEME, issuer: ISSUER },
     SESSION_SECRET,
     SCHEME,
   )
@@ -149,6 +157,114 @@ describe('OIDC integration', () => {
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('/dashboard')
       expect(res.headers.get('set-cookie')).toContain('__Host-oidc_Google_session=')
+    })
+
+    /**
+     * Behind a gateway forwarding `/api/...`: `callbackURL` is the URL the provider sends the browser back to, so it
+     * carries the base, while the server takes the base off before routing. The callback route has to be where the
+     * stripped request lands, and every page the browser is sent on to has to carry the base again.
+     */
+    describe('under a base path', () => {
+      const BASED_CALLBACK_URL = 'https://oidc-app.example.com/api/oidc/callback'
+      const stateCookieHeader = (cookie: string) => ({ cookie: `__Host-oidc_Google_state.oidc-st=${cookie}` })
+
+      function basedApp(callbackURL = BASED_CALLBACK_URL) {
+        return makeOIDCApp(jwksResolver, { basePath: '/api', callbackURL })
+      }
+
+      it('answers the callback the gateway forwards, and comes back to the page under the base', async () => {
+        const nonce = 'based-nonce'
+        mockTokenEndpoint(nonce)
+        const app = basedApp()
+        await app.ready()
+
+        const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
+          headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
+        })
+
+        expect(res.status).toBe(302)
+        expect(res.headers.get('location')).toBe('/api/dashboard')
+
+        // Unlike the cookie scheme's, a remote strategy's cookies stay at `/` under a base: a `__Host-` cookie is
+        // refused anywhere else. Applications sharing an origin tell them apart by name.
+        const session = res.headers.getSetCookie().find(cookie => cookie.startsWith('__Host-oidc_Google_session='))
+        expect(session).toMatch(/;\s*Path=\/(;|$)/i)
+      })
+
+      it('answers the callback without the base as well, as any route is', async () => {
+        const nonce = 'direct-nonce'
+        mockTokenEndpoint(nonce)
+        const app = basedApp()
+        await app.ready()
+
+        const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
+          headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
+        })
+
+        expect(res.status).toBe(302)
+        expect(res.headers.get('location')).toBe('/api/dashboard')
+      })
+
+      it('lands on the default path under the base when the state names nowhere safe', async () => {
+        const nonce = 'unsafe-nonce'
+        mockTokenEndpoint(nonce)
+        const app = basedApp()
+        await app.ready()
+
+        const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
+          headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '//evil.example/phish')),
+        })
+
+        expect(res.status).toBe(302)
+        expect(res.headers.get('location')).toBe('/api/')
+      })
+
+      it('challenges with the base callback URL, and a sign-in URL coming back under the base', async () => {
+        const app = basedApp().mount(
+          newRouter('/based-private')
+            .authorize({})
+            .get('/', () => ({ ok: true })),
+        )
+        await app.ready()
+
+        const navigation = await app.fetch('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
+        expect(navigation.status).toBe(302)
+        expect(new URL(navigation.headers.get('location')!).searchParams.get('redirect_uri')).toBe(BASED_CALLBACK_URL)
+        // The state cookie has to reach the callback wherever `callbackURL` puts it, so it stays at `/`.
+        const state = navigation.headers.getSetCookie().find(cookie => cookie.startsWith('__Host-oidc_Google_state.'))
+        expect(state).toMatch(/;\s*Path=\/(;|$)/i)
+
+        const script = await app.fetch('/api/based-private', { headers: { accept: 'application/json' } })
+        expect(script.status).toBe(401)
+        expect(script.headers.get('location')).toBe(
+          `${BASED_CALLBACK_URL}/login?returnTo=${encodeURIComponent('/api/based-private')}`,
+        )
+      })
+
+      it('starts a sign-in at the login route under the base', async () => {
+        const app = basedApp()
+        await app.ready()
+
+        const res = await app.fetch('/api/oidc/callback/login?returnTo=/api/x')
+
+        expect(res.status).toBe(302)
+        expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
+      })
+
+      it('takes nothing off a callback path outside the base, the base ending on a segment boundary', async () => {
+        const app = basedApp('https://oidc-app.example.com/apix/cb')
+        await app.ready()
+
+        // No state cookie: the route answers with its own refusal, which is what shows it is there.
+        expect((await app.fetch('/apix/cb?code=code&state=oidc-st')).status).toBe(400)
+        expect((await app.fetch('/cb?code=code&state=oidc-st')).status).toBe(404)
+      })
+
+      it('refuses a route of the application at the callback path, both being relative to it', async () => {
+        const app = basedApp().mount(newRouter('/oidc').get('/callback', () => ({ ok: true })))
+
+        await expect(app.ready()).rejects.toThrow(/"\/oidc\/callback" conflicts with a registered controller route/)
+      })
     })
 
     it('callback with state mismatch → 400', async () => {

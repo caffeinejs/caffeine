@@ -1,3 +1,5 @@
+import { joinURL } from '@caffeinejs/brewer'
+
 import type { RouterDescriptor } from './types.js'
 
 // Joins prefix + controller path + route path into a single leading-slash path template,
@@ -10,10 +12,10 @@ export function joinRoutePath(router: RouterDescriptor, routePath: string): stri
   return trimTrailingSlash(rawPath)
 }
 
+// Joined, not resolved: `new URL('/tasks', 'https://gateway.example/api/')` is `https://gateway.example/tasks`, and a
+// base URL naming the application's base path has to keep it.
 export function resolveRouteURL(baseURL: string, router: RouterDescriptor, routePath: string): string {
-  const origin = baseURL.replace(/\/+$/, '')
-  const path = joinRoutePath(router, routePath)
-  return new URL(path, `${origin}/`).toString()
+  return new URL(joinURL(baseURL.replace(/\/+$/, ''), joinRoutePath(router, routePath))).toString()
 }
 
 export function mergeRequest(request: Request, overrides: { method: string; url: string }): Request {

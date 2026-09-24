@@ -51,7 +51,7 @@ class FakeUserProvider extends UserProvider {
   )
 }
 
-function makeCtx(initial: Record<string, string> = {}) {
+function makeCtx(initial: Record<string, string> = {}, basePath = '') {
   const jar: Record<string, string> = { ...initial }
   const setCookie = vi.fn((name: string, value: string) => {
     jar[name] = value
@@ -62,7 +62,7 @@ function makeCtx(initial: Record<string, string> = {}) {
   const status = vi.fn().mockReturnThis()
   const header = vi.fn().mockReturnThis()
   const ctx = {
-    req: { cookie: (name: string) => jar[name] },
+    req: { cookie: (name: string) => jar[name], basePath },
     cookie: setCookie,
     deleteCookie,
     status,
@@ -196,6 +196,29 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
 
     expect(store.remove).toHaveBeenCalledWith(series)
     const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' }
+    expect(deleteCookie).toHaveBeenCalledWith(SESSION, clearedWith)
+    expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, clearedWith)
+  })
+
+  // The two cookies are one sign-in: scoped to the base the request came in under together, and cleared there
+  // together, or signing out leaves the remember-me credential behind at the path it was written at.
+  it('writes and clears the remember-me cookie at the base the request came in under', async () => {
+    const { handler } = makeHandler()
+    const signIn = makeCtx({}, '/api')
+    await handler.persist(signIn.ctx, new AuthenticationTicket(principal(), 'Cookie', { isPersistent: true }))
+
+    const written = new Map(
+      (signIn.setCookie.mock.calls as unknown as Array<[string, string, Record<string, unknown>]>).map(
+        ([name, , options]) => [name, options.path],
+      ),
+    )
+    expect(written.get(SESSION)).toBe('/api')
+    expect(written.get(REMEMBER)).toBe('/api')
+
+    const { ctx, deleteCookie } = makeCtx({ [SESSION]: signIn.jar[SESSION], [REMEMBER]: signIn.jar[REMEMBER] }, '/api')
+    await handler.revoke(ctx)
+
+    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/api' }
     expect(deleteCookie).toHaveBeenCalledWith(SESSION, clearedWith)
     expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, clearedWith)
   })

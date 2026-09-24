@@ -40,6 +40,7 @@ function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OI
 function makeCtx(
   overrides: Partial<{
     url: string
+    basePath: string
     cookies: Record<string, string>
     query: Record<string, string>
     headers: Record<string, string>
@@ -68,6 +69,7 @@ function makeCtx(
   const ctx = {
     req: {
       url: overrides.url ?? '/dashboard',
+      basePath: overrides.basePath ?? '',
       cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
       query: (key?: string) => (key === undefined ? query : query[key]),
       header: (name?: string) => (name === undefined ? headers : headers[name]),
@@ -323,6 +325,23 @@ describe('OIDCAuthenticationHandler', () => {
         )
       })
 
+      // The sign-in URL is derived from `callbackURL`, which is already the URL the browser sees, so a base path
+      // adds nothing to it; only the page to come back to carries the base.
+      it('hands a caller that is not a navigation a sign-in URL returning under the base path', async () => {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+        const { ctx, header } = makeCtx({
+          url: '/reports?tab=1',
+          basePath: '/api',
+          headers: { accept: 'application/json' },
+        })
+
+        await handler.challenge(ctx)
+
+        expect(authorizationURL(header)).toBe(
+          `https://app.example.com${CALLBACK_PATH}/login?returnTo=${encodeURIComponent('/api/reports?tab=1')}`,
+        )
+      })
+
       // A page that polls while signed out is challenged on every poll. A state cookie each, good for ten minutes,
       // outgrows the request headers a server accepts; and a provider that is down has nothing to do with saying 401.
       it('starts nothing for a 401: no state cookie, and the provider is not asked', async () => {
@@ -525,6 +544,30 @@ describe('OIDCAuthenticationHandler', () => {
       const { decodeState } = await import('../internal/remote/state_store.js')
       const stored = await decodeState(stateCookieJWT, SESSION_SECRET, SCHEME)
       expect(stored.returnTo).toBe('/dashboard?tab=settings')
+    })
+
+    // The browser comes back to the URL it asked for, and that carried the base the server took off before routing.
+    it('stores returnTo as the browser sent it, base path included', async () => {
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+      const { ctx, cookie } = makeCtx({ url: '/dashboard?tab=settings', basePath: '/api' })
+      await handler.challenge(ctx)
+
+      const [, stateCookieJWT] = cookie.mock.calls[0] as [string, string]
+      const { decodeState } = await import('../internal/remote/state_store.js')
+      const stored = await decodeState(stateCookieJWT, SESSION_SECRET, SCHEME)
+      expect(stored.returnTo).toBe('/api/dashboard?tab=settings')
+    })
+
+    // An application naming where to come back to writes it as it writes its routes, and says so with `~/`.
+    it('stores a redirectURI written with "~/" resolved against the base', async () => {
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+      const { ctx, cookie } = makeCtx({ url: '/reports', basePath: '/api' })
+      await handler.challenge(ctx, { redirectURI: '~/dashboard' })
+
+      const [, stateCookieJWT] = cookie.mock.calls[0] as [string, string]
+      const { decodeState } = await import('../internal/remote/state_store.js')
+      const stored = await decodeState(stateCookieJWT, SESSION_SECRET, SCHEME)
+      expect(stored.returnTo).toBe('/api/dashboard')
     })
   })
 
@@ -2560,7 +2603,7 @@ describe('OIDCAuthenticationHandler', () => {
     })
 
     describe('returnTo open-redirect guard', () => {
-      async function callbackWithReturnTo(returnTo: string) {
+      async function callbackWithReturnTo(returnTo: string, basePath = '') {
         const nonce = 'redirect-nonce'
         const stateCookieJWT = await encodeState(
           { state: 'st', nonce, codeVerifier: 'cv', pkceMethod: 'S256', returnTo, scheme: SCHEME, issuer: ISSUER },
@@ -2573,6 +2616,7 @@ describe('OIDCAuthenticationHandler', () => {
         const { ctx, redirect } = makeCtx({
           cookies: { '__oidc_state.st': stateCookieJWT },
           query: { code: 'c', state: 'st' },
+          basePath,
         })
 
         await handler.processCallback(ctx)
@@ -2593,6 +2637,20 @@ describe('OIDCAuthenticationHandler', () => {
 
       it('rejects an absolute off-site URL', async () => {
         expect(await callbackWithReturnTo('https://evil.com/phish')).toBe('/')
+      })
+
+      describe('under a base path', () => {
+        it('comes back to a stored returnTo as it is, never adding the base twice', async () => {
+          expect(await callbackWithReturnTo('/api/dashboard?tab=1', '/api')).toBe('/api/dashboard?tab=1')
+        })
+
+        it('falls back to the default path under the base', async () => {
+          expect(await callbackWithReturnTo('//evil.com/phish', '/api')).toBe('/api/')
+        })
+
+        it('falls back rather than sending the browser to the callback itself', async () => {
+          expect(await callbackWithReturnTo(CALLBACK_PATH, '/api')).toBe('/api/')
+        })
       })
     })
 

@@ -12,7 +12,17 @@ Follow the root [`AGENTS.md`](../AGENTS.md) and [`http/AGENTS.md`](../http/AGENT
   `options` through as given; only `root` is normalized and only `decorateReply` is decided by the plugin.
   That is the whole reason the SPA feature is gone — a wrapper owes parity with upstream forever, and this one
   had drifted to eight blocked keys and a hand-rolled send that silently dropped `preCompressed` and
-  `allowedPath` for the one file that mattered.
+  `allowedPath` for the one file that mattered. The one exception is a `list.render` under a base path: it is
+  wrapped so the links it is handed carry `$basePath`, since `render` sees no request.
+- **Under a base path, what `@fastify/static` sends the browser gets the base back.** It builds a redirect's
+  `Location` from the URL the adapter took the base off, so a mount with `redirect: true` gets a route-level
+  `onSend` — from the same flag-scoped `onRoute` hook as `anonymous` — that puts the request's `basePath` in
+  front. A mount that does not redirect, or an application with no base path, gets no hook at all. The hook
+  rebases `@fastify/static`'s directory redirect alone — a 301 to the request's own path with `/` added — because
+  the gate's sign-in challenge passes through the same route with the base already on it. `sendFile` and
+  `download` reach the same redirect from an application's route, whose hooks are fixed at registration, so they
+  shadow `redirect` on that one reply instead, and only for a request that came under the base. Do not replace
+  either with a server-wide hook: every route would pay for it.
 - **`sendFile` / `download` delegate to the reply decorators**, never to `@fastify/send` directly. Going
   through `pumpSendToReply` is what gives a handler `preCompressed`, `allowedPath`, `setHeaders`, conditional
   requests and the `..` / non-canonical-path guards. Reimplementing is the mistake that was just undone.

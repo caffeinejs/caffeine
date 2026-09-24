@@ -1,6 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Delete, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { ErrNoRoutesForController, newURL, controllerClient } from './index.js'
 
@@ -155,5 +155,54 @@ describe('controllerClient()', () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ id: created.id, name: 'findme' })
+  })
+})
+
+// Through a gateway, the base URL names the application's base path, and every request has to stay under it.
+describe('controllerClient() against a base URL naming a base path', () => {
+  const BASE = 'http://gw.test/api'
+
+  function capturing(): string[] {
+    const seen: string[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (request: Request) => {
+        seen.push(request.url)
+        return new Response('[]')
+      }),
+    )
+    return seen
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('sends a route under the base path', async () => {
+    const seen = capturing()
+
+    await controllerClient(TaskController, BASE).list()
+
+    expect(seen).toEqual([`${BASE}/tasks`])
+  })
+
+  it('moves a Request built for another origin under the base path', async () => {
+    const seen = capturing()
+
+    await controllerClient(TaskController, BASE).find(
+      new Request(newURL('/tasks/:id').param('id', 7).query('x', 1).build()),
+    )
+
+    expect(seen).toEqual([`${BASE}/tasks/7?x=1`])
+  })
+
+  it('sends a Request already under the base path as it is, never adding the base twice', async () => {
+    const seen = capturing()
+
+    await controllerClient(TaskController, BASE).find(
+      new Request(newURL('/tasks/:id').param('id', 7).baseURL(BASE).build()),
+    )
+
+    expect(seen).toEqual([`${BASE}/tasks/7`])
   })
 })

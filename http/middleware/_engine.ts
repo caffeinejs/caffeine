@@ -51,7 +51,8 @@ export function createEngine(options: NormalizationOptions): Engine {
 
       const raw = req as RawRequest
       const originalURL = raw.url
-      raw.originalUrl = originalURL
+      // Kept when already set: the server saved the full URL there before taking a base path off `url`.
+      raw.originalUrl ??= originalURL
 
       const sanitized = sanitizeURL(originalURL)
       const suffix = originalURL.slice(sanitized.length)

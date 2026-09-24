@@ -1,4 +1,7 @@
+import { resolveAppURL } from '../../../../base_path.js'
+import type { Context } from '../../../../context.js'
 import { isNavigation } from '../../../../navigation.js'
+import type { AuthenticationProperties } from '../../ticket.js'
 import { ErrOAuthConfiguration } from './errors.js'
 
 /** Secrets shorter than this leave the derived cookie keys brute-forceable. */
@@ -90,6 +93,21 @@ const CONTROL_CHARACTERS = /[\x00-\x1F\x7F]/
  */
 export function isSafeReturnPath(path: string): boolean {
   return path.startsWith('/') && !path.startsWith('//') && !path.startsWith('/\\') && !CONTROL_CHARACTERS.test(path)
+}
+
+/**
+ * Where a challenge sends the browser back to once it has signed in, as the browser will request it: the caller's
+ * `redirectURI`, with a `~/` resolved against the base path, or else the URL the challenge interrupted, base path
+ * included. Not yet checked — the caller still owes it {@link isSafeReturnPath}.
+ */
+export function returnTargetOf(ctx: Context, properties: AuthenticationProperties | undefined): string {
+  const requested = properties?.redirectURI
+  if (requested === undefined) {
+    return ctx.req.basePath + ctx.req.url
+  }
+
+  // A caller written in plain JavaScript may hand over anything; what is not a string fails the check that follows.
+  return typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : requested
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])

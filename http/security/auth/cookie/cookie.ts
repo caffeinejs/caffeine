@@ -5,7 +5,12 @@ import { Claim, Identity, Principal } from '../../index.js'
 import { buildCredentialPrincipal, type UserProvider } from '../credentials/index.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { noStore } from '../internal/no_store.js'
-import { challengeHeaders, isSafeReturnPath, shouldRedirectChallenge } from '../internal/remote/config.js'
+import {
+  challengeHeaders,
+  isSafeReturnPath,
+  returnTargetOf,
+  shouldRedirectChallenge,
+} from '../internal/remote/config.js'
 import {
   newSeriesToken,
   parseToken,
@@ -176,16 +181,19 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * question.
    */
   override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+    // Built ahead of the hook, which is handed it: a hook still sending the browser to sign in need not rebuild
+    // the base path and the return URL.
+    const location = this.options.loginPath === undefined ? undefined : this.#loginLocation(ctx, properties)
+
     if (this.options.onChallenge) {
-      return this.options.onChallenge(ctx)
+      return this.options.onChallenge(ctx, location)
     }
 
-    if (this.options.loginPath === undefined) {
+    if (location === undefined) {
       ctx.status(401)
       return
     }
 
-    const location = this.#loginLocation(ctx, properties)
     noStore(ctx)
 
     // `?? 'auto'` rather than `!`: the builder defaults it, but a directly-constructed handler leaves it
@@ -216,15 +224,17 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * caller-supplied case is not more trustworthy than the request-derived one.
    */
   #loginLocation(ctx: Context, properties?: AuthenticationProperties): string {
+    const loginPath = withBasePath(ctx, this.options.loginPath!)
+
     // Fails closed to the bare login path: an off-origin or unparseable target is dropped rather than
     // echoed, since this value becomes a `Location` after sign-in.
-    const target = properties?.redirectURI ?? ctx.req.url
+    const target = returnTargetOf(ctx, properties)
     if (typeof target !== 'string' || !isSafeReturnPath(target)) {
-      return this.options.loginPath!
+      return loginPath
     }
 
-    const separator = this.options.loginPath!.includes('?') ? '&' : '?'
-    return `${this.options.loginPath!}${separator}${this.options.returnURLParameter!}=${encodeURIComponent(target)}`
+    const separator = loginPath.includes('?') ? '&' : '?'
+    return `${loginPath}${separator}${this.options.returnURLParameter!}=${encodeURIComponent(target)}`
   }
 
   /**
@@ -241,15 +251,18 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * caller a 200 and the page's HTML in place of the 403 it has to act on.
    */
   override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
+    const location =
+      this.options.accessDeniedPath === undefined ? undefined : withBasePath(ctx, this.options.accessDeniedPath)
+
     if (this.options.onForbid) {
-      return this.options.onForbid(ctx)
+      return this.options.onForbid(ctx, location)
     }
 
     if (
-      this.options.accessDeniedPath !== undefined &&
+      location !== undefined &&
       shouldRedirectChallenge(this.options.challengeMode ?? 'auto', challengeHeaders(ctx))
     ) {
-      ctx.status(302).header('location', this.options.accessDeniedPath)
+      ctx.status(302).header('location', location)
       return
     }
 
@@ -279,7 +292,11 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     )
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
-    ctx.cookie(this.options.cookieName!, sealed, this.#cookieOpts(persistent ? ttl : undefined))
+    ctx.cookie(
+      this.options.cookieName!,
+      sealed,
+      this.#cookieOpts(ctx, this.options.cookieName!, persistent ? ttl : undefined),
+    )
     noStore(ctx)
   }
 
@@ -373,29 +390,54 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   #setRememberCookie(ctx: Context, token: string): void {
-    ctx.cookie(this.options.rememberMeCookieName!, token, this.#cookieOpts(this.options.rememberMeMaxAge))
+    ctx.cookie(
+      this.options.rememberMeCookieName!,
+      token,
+      this.#cookieOpts(ctx, this.options.rememberMeCookieName!, this.options.rememberMeMaxAge),
+    )
     noStore(ctx)
   }
 
   // A cookie is cleared with the attributes it was set with. A browser refuses a `__Host-` or `__Secure-` cookie
   // that arrives without `Secure` — the clearing one included, so signing out would leave it in place.
   #clearSessionCookie(ctx: Context): void {
-    ctx.deleteCookie(this.options.cookieName!, this.#cookieOpts())
+    ctx.deleteCookie(this.options.cookieName!, this.#cookieOpts(ctx, this.options.cookieName!))
     noStore(ctx)
   }
 
   #clearRememberCookie(ctx: Context): void {
-    ctx.deleteCookie(this.options.rememberMeCookieName!, this.#cookieOpts())
+    ctx.deleteCookie(this.options.rememberMeCookieName!, this.#cookieOpts(ctx, this.options.rememberMeCookieName!))
     noStore(ctx)
   }
 
-  #cookieOpts(maxAge?: number): Record<string, unknown> {
+  #cookieOpts(ctx: Context, name: string, maxAge?: number): Record<string, unknown> {
     return {
       httpOnly: true,
       secure: this.options.secure,
       sameSite: this.options.sameSite,
-      path: this.options.path,
+      path: this.#cookiePath(ctx, name),
       ...(maxAge !== undefined ? { maxAge } : {}),
     }
   }
+
+  /**
+   * The configured `path`, or else the application's base path as this request came in, so applications sharing
+   * an origin under different bases keep their sessions apart. A `__Host-` cookie stays at `/`: a browser refuses
+   * one set anywhere else.
+   */
+  #cookiePath(ctx: Context, name: string): string {
+    if (this.options.path !== undefined) {
+      return this.options.path
+    }
+
+    return name.startsWith('__Host-') ? '/' : ctx.req.basePath || '/'
+  }
+}
+
+/**
+ * A path on this origin, as the application declared it, with the request's base path put back in front — the
+ * browser is sent there. Anything else, such as a login page on another origin, is left as it was configured.
+ */
+function withBasePath(ctx: Context, path: string): string {
+  return isSafeReturnPath(path) ? ctx.req.basePath + path : path
 }

@@ -140,6 +140,15 @@ Path safety is `@fastify/static`'s: it rejects `..` and non-canonical paths befo
 Two applications on one origin are these two side by side. `/admin/*` beats `/*` by static-prefix length, so
 nothing coordinates them.
 
+## Under a base path
+
+Behind a gateway forwarding `/app/...`, `.basePath('/app')` takes the base off before routing, so every route
+above is written as it is, `ctx.req.url` included. What the browser loads is not: the shell's asset URLs come
+from the build, so the bundler's own base (`base: '/app/'` in Vite) has to name it too. A redirect writes
+`ctx.redirect('~/login')`, and a link or a form rendered by the server writes `ctx.req.basePath + '/login'`.
+Cookie sign-in's `loginPath` and `accessDeniedPath` are written as the application sees them and get the base on
+their own, and its session cookie is scoped to the base.
+
 ## Do not
 
 - Return `index.html` from `@Catch(ErrHTTPNotFound)`. Client routes are routes; write them.

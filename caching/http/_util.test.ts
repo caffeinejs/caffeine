@@ -13,6 +13,7 @@ import {
   assertTags,
   buildCacheControl,
   buildCacheKey,
+  defaultCacheKey,
   durationSeconds,
   generateETag,
   isNotModified,
@@ -317,5 +318,27 @@ describe('generateETag', () => {
 
   it('hands the bytes to a custom generator and uses what it returns', async () => {
     expect(await generateETag('abc', buf => `W/"${buf.length}"`)).toBe('W/"3"')
+  })
+})
+
+// A route served under a base path answers two URLs: `/api/x` through the gateway and `/x` straight to the
+// application. What it renders may link under the base, so the two must not share an entry.
+describe('defaultCacheKey under a base path', () => {
+  const at = (url: string, basePath?: string): AdapterRequest =>
+    ({
+      method: 'GET',
+      url,
+      headers: {},
+      ...(basePath === undefined ? {} : { httpContext: { req: { basePath } } }),
+    }) as unknown as AdapterRequest
+
+  it('keys a request by the URL the browser asked for, base path included', () => {
+    expect(defaultCacheKey(at('/x', '/api'))).not.toBe(defaultCacheKey(at('/x', '')))
+    expect(defaultCacheKey(at('/x', '/api'))).toBe(defaultCacheKey(at('/api/x', '')))
+  })
+
+  it('keys a request with no base path by its URL alone, as it always has', () => {
+    expect(defaultCacheKey(at('/x', ''))).toBe(defaultCacheKey(at('/x')))
+    expect(defaultCacheKey(at('/x'))).toBe(buildCacheKey('GET', '/x', undefined, () => undefined))
   })
 })

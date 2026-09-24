@@ -30,6 +30,7 @@ const XHR: Record<string, string> = { accept: 'application/json' }
 function makeCtx(
   overrides: Partial<{
     url: string
+    basePath: string
     cookies: Record<string, string>
     query: Record<string, string>
     headers: Record<string, string>
@@ -47,6 +48,7 @@ function makeCtx(
   const ctx = {
     req: {
       url: overrides.url ?? '/api/me',
+      basePath: overrides.basePath ?? '',
       cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
       query: (key?: string) => (key === undefined ? query : query[key]),
       header: (name?: string) => (name === undefined ? headers : headers[name]),
@@ -195,6 +197,28 @@ describe('OAuth2AuthenticationHandler', () => {
         expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/home')
       },
     )
+
+    // `defaultRedirectPath` is written as the application sees it; the browser is sent to where it really is.
+    it('comes back to the default path under the base path when the query names nowhere safe', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo: '//evil.example/steal' }, basePath: '/api' })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/api/home')
+    })
+
+    // A `returnTo` on the query is already a URL the browser sees, as the challenge that wrote it made it one.
+    it('keeps a safe returnTo from the query as given, never adding the base twice', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo: '/api/reports' }, basePath: '/api' })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/api/reports')
+    })
 
     it('completes through the callback', async () => {
       vi.stubGlobal(

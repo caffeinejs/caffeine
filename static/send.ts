@@ -1,6 +1,7 @@
 import type { SendOptions } from '@fastify/static'
 import type { FastifyReply } from 'fastify'
 
+import { rebaseDirectoryRedirect } from './_redirect.js'
 import { ErrSendFileUnavailable } from './errors.js'
 
 /**
@@ -18,6 +19,7 @@ export type DownloadOptions = SendOptions & { root?: string }
  * fits without variance trouble, and a context built by another adapter does not compile.
  */
 export interface StaticContext {
+  readonly req: { readonly basePath: string }
   readonly platform: { readonly reply: FastifyReply }
 }
 
@@ -31,6 +33,9 @@ export interface StaticContext {
  * The decorating mount's `preCompressed`, `allowedPath` and `setHeaders` govern — `@fastify/static` is
  * `fastify-plugin`-wrapped, so there is one decoration per server — and `options` overrides only the
  * `@fastify/send`-level settings.
+ *
+ * When the decorating mount has `redirect: true`, the redirect sent for a directory carries the request's base
+ * path, as a mount's own does.
  *
  * @throws {@link ErrSendFileUnavailable} when no mount decorated the reply
  * @example
@@ -88,12 +93,25 @@ export function download(
  *
  * A named error rather than the `TypeError` a missing decorator would otherwise raise from inside the
  * handler, where nothing names the cause.
+ *
+ * Under a base path, the reply's own `redirect` is shadowed so the directory redirect `@fastify/static` builds
+ * from the path the base was taken off gets it back. An application route's hooks are fixed when it registers,
+ * and a server-wide hook would charge every route, so it is this one reply that is changed, and only for a
+ * request that came under the base.
  */
 function decorated(ctx: StaticContext, name: 'sendFile' | 'download'): FastifyReply {
   const reply = ctx.platform.reply
 
   if (typeof reply[name] !== 'function') {
     throw new ErrSendFileUnavailable(name)
+  }
+
+  const basePath = ctx.req.basePath
+
+  if (basePath !== '') {
+    const redirect = reply.redirect.bind(reply)
+
+    reply.redirect = (url, code) => redirect(rebaseDirectoryRedirect(url, code, reply.request.raw.url, basePath), code)
   }
 
   return reply

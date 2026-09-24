@@ -164,6 +164,27 @@ describe('an application on an adapter that is not Fastify', () => {
 
     await app.close()
   })
+
+  // The application resolves and normalizes the base path whatever the server: taking it off a request is all
+  // an adapter is left to do, so every adapter reads the same value.
+  it.each([
+    ['/api/', '/api'],
+    ['/', undefined],
+    [undefined, undefined],
+  ])('hands the adapter the base path %s as %s', async (given, expected) => {
+    const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
+    const app = onFake(adapter)
+    if (given !== undefined) {
+      app.basePath(given)
+    }
+
+    await app.ready()
+
+    expect(adapter.input).toBeDefined()
+    expect(adapter.input!.basePath).toBe(expected)
+
+    await app.close()
+  })
 })
 
 describe('adapter types', () => {

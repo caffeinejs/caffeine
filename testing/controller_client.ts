@@ -1,3 +1,4 @@
+import { joinURL } from '@caffeinejs/brewer'
 import { getRouteGroup } from '@caffeinejs/http'
 
 import { mergeRequest, resolveRouteURL } from './_util.js'
@@ -31,13 +32,11 @@ export function controllerClient<ROUTER extends RouterCtor>(
 
     client[route.name] = async (input?: Request | RequestInit) => {
       // A Request carries its own concrete path (e.g. built via newURL for a param route): honor it,
-      // rebasing path + query onto the client's origin so remote/in-process targeting is preserved.
+      // rebasing path + query onto the client's origin so remote/in-process targeting is preserved. One already
+      // under that origin — base path included — goes as it is, or the base would be put in twice.
       // A RequestInit has no URL, so resolve the route's template path (parameterless routes).
       if (input instanceof Request) {
-        const incoming = new URL(input.url, `${origin}/`)
-        const url = new URL(incoming.pathname + incoming.search, `${origin}/`).toString()
-
-        return fetcher(mergeRequest(input, { method: input.method, url }))
+        return fetcher(mergeRequest(input, { method: input.method, url: rebase(input.url, origin) }))
       }
 
       const method = (input?.method ?? defaultMethod).toUpperCase()
@@ -49,4 +48,19 @@ export function controllerClient<ROUTER extends RouterCtor>(
   }
 
   return client as ControllerTestClient<ROUTER>
+}
+
+/**
+ * A request's URL, moved onto `origin`: its path and query joined under it, since `origin` may name the
+ * application's base path. A URL already under `origin` is returned as it is.
+ */
+function rebase(url: string, origin: string): string {
+  const base = origin.replace(/\/+$/, '')
+
+  if (url === base || url.startsWith(`${base}/`) || url.startsWith(`${base}?`)) {
+    return url
+  }
+
+  const incoming = new URL(url, `${base}/`)
+  return new URL(`${joinURL(base, incoming.pathname)}${incoming.search}`).toString()
 }
