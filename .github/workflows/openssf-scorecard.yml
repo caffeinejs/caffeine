@@ -1,9 +1,14 @@
 name: OpenSSF - Scorecard
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.vscode/**'
+      - 'docs/**'
+      - '**.md'
   schedule:
     - cron: '30 1 * * 6'
 

@@ -5,7 +5,15 @@ on:
     branches:
       - main
       - '[0-9]+.x'
+    paths-ignore:
+      - '.vscode/**'
+      - 'docs/**'
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - '.vscode/**'
+      - 'docs/**'
+      - '**.md'
 
 concurrency:
   group: license-check-${{ github.workflow }}-${{ github.ref }}
