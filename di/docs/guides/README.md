@@ -71,7 +71,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
   longer-lived components using `provide()` and `Provider<T>`; scope validation options.
 
 - [Async Bindings](./async-bindings.md) — bind keys to async factories using
-  `toAsyncFactory()`, `@UseAsyncFactory`, or `@Async` + `@Provides`; constraints
+  `toAsyncFactory()`, `@UseAsyncFactory`, or `@ProvidesAsync`; constraints
   and ordering rules.
 
 - [Testing](./testing.md) — write isolated tests with `TestContainer`: override

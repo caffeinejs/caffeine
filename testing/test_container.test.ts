@@ -1,6 +1,5 @@
 import {
   $i,
-  Async,
   CaffeineIoC,
   Configuration,
   ErrUnresolvableDependencies,
@@ -8,6 +7,7 @@ import {
   Injectable,
   Profile,
   Provides,
+  ProvidesAsync,
   token,
 } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
@@ -214,8 +214,7 @@ describe('TestContainer', function () {
 
     @Configuration()
     class InfraConfig {
-      @Provides(kConn)
-      @Async()
+      @ProvidesAsync(kConn)
       async connection(): Promise<string> {
         return 'live-connection'
       }
@@ -440,14 +439,12 @@ describe('TestContainer', function () {
         return 'postgres://test'
       }
 
-      @Async()
-      @Provides(kCgDbPool, [kCgConnStr])
+      @ProvidesAsync(kCgDbPool, [kCgConnStr])
       async dbPool(cs: string): Promise<CgDbPool> {
         return new CgDbPool(cs)
       }
 
-      @Async()
-      @Provides(kCgDbConn, [kCgDbPool])
+      @ProvidesAsync(kCgDbConn, [kCgDbPool])
       async dbConn(pool: CgDbPool): Promise<CgDbConn> {
         return new CgDbConn(pool)
       }
@@ -457,8 +454,7 @@ describe('TestContainer', function () {
         return 'redis://test'
       }
 
-      @Async()
-      @Provides(kCgCache, [kCgRedisURL])
+      @ProvidesAsync(kCgCache, [kCgRedisURL])
       async cacheClient(url: string): Promise<CgCacheClient> {
         return new CgCacheClient(url)
       }

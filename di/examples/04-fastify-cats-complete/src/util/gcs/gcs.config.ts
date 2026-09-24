@@ -1,4 +1,4 @@
-import { Async, Configuration, Lifetime, Provides, Scopes } from '@caffeinejs/di'
+import { Configuration, Lifetime, Provides, ProvidesAsync, Scopes } from '@caffeinejs/di'
 import { Storage } from '@google-cloud/storage'
 
 import { AppConfig } from '../../app.config.js'
@@ -16,9 +16,8 @@ export class GcsConfig {
     })
   }
 
-  @Async()
   @Lifetime(Scopes.REFRESH)
-  @Provides(DataConfig, [Storage, AppConfig])
+  @ProvidesAsync(DataConfig, [Storage, AppConfig])
   async dataConfig(storage: Storage, config: AppConfig): Promise<DataConfig> {
     const file = storage.bucket(config.gcsBucket).file(config.gcsObject)
     const [exists] = await file.exists()

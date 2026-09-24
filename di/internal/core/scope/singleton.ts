@@ -1,10 +1,15 @@
 import { Binding } from '../../../binding.js'
-import { ErrIllegalScopeState } from '../../../errors.js'
+import { ErrIllegalScopeState, ErrInvalidBinding } from '../../../errors.js'
 import { Factory } from '../../../factory.js'
 import { keyStr } from '../../../key.js'
 import { ResolutionContext } from '../../../resolution_context.js'
 import { Scope, ScopedInstance } from '../../../scope.js'
+import { solutions } from '../../util/errutil/index.js'
 import { nextSequence } from './_sequence.js'
+
+function isThenable(value: unknown): boolean {
+  return typeof (value as { then?: unknown })?.then === 'function'
+}
 
 export class SingletonScope implements Scope {
   protected readonly _cachedInstances = new Map<number, unknown>()
@@ -35,6 +40,18 @@ export class SingletonScope implements Scope {
     }
 
     const resolved = unscoped(ctx)
+
+    // The type system refuses a promise-returning `@Provides`, but a JavaScript caller never sees that, and
+    // neither does anything that laundered the factory through `any`. Caching the promise would inject it
+    // unresolved into every dependant, and the failure would only surface on first use. Past the cache hit
+    // above, this runs once per binding.
+    if (ctx.binding.configuration && isThenable(resolved)) {
+      throw new ErrInvalidBinding(
+        `Cannot provide "${keyStr(ctx.key)}": the factory returned a promise and the binding is not async` +
+          solutions('Declare the factory with @ProvidesAsync instead of @Provides'),
+      )
+    }
+
     this._cachedInstances.set(ctx.binding.id, resolved)
     this._created.set(ctx.binding.id, { binding: ctx.binding, sequence: nextSequence() })
 

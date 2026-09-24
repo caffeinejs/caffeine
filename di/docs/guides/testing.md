@@ -140,7 +140,7 @@ const di = new TestContainer(appContainer).skip(Analytics, MetricsReporter).buil
 
 ## Dropping async bindings
 
-Async bindings (created with `@UseAsyncFactory` or `@Async`) hold network or I/O
+Async bindings (created with `@UseAsyncFactory` or `@ProvidesAsync`) hold network or I/O
 connections and often have real latency. `.skipAsyncBindings()` removes all of
 them, so the container boots instantly in environments where those connections are
 not needed.

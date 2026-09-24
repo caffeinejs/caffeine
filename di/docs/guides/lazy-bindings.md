@@ -151,7 +151,7 @@ await di.init()
 ## Async bindings
 
 Async bindings cannot be lazy. Combining `@Lazy()` with `@UseAsyncFactory` or
-`@Async` + `@Provides` throws `ErrInvalidBinding` at container construction time.
+`@ProvidesAsync` throws `ErrInvalidBinding` at container construction time.
 
 ```ts
 // throws ErrInvalidBinding — async bindings cannot be deferred

@@ -42,7 +42,7 @@ identical in both flavours; differences are noted inline where they exist.
 - [@OnLifecycle](#onlifecycle)
 - [@Configuration](#configuration)
 - [@Provides](#provides)
-- [@Async](#async)
+- [@ProvidesAsync](#providesasync)
 - [Lifecycle interfaces](#lifecycle-interfaces)
 - [@Inject](#inject)
 
@@ -388,20 +388,26 @@ a `@Configuration` class.
 Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@Fallback`,
 `@Lazy`, and `@Interceptor`.
 
-### @Async
+### @ProvidesAsync
 
 ```ts
-@Async()
+@ProvidesAsync(key)
+@ProvidesAsync(key, dependencies)
+@ProvidesAsync(key, name)
+@ProvidesAsync(key, name, dependencies)
 ```
 
-Marks a `@Provides` method as returning a `Promise`. The container awaits the
-result during `init()`.
+Declares a `@Configuration` method as an asynchronous factory. The container
+awaits the promise during `init()` and caches what it resolved to, so a
+dependant is injected the value and never the promise.
+
+`@Provides` accepts only a synchronous factory: a promise-returning method does
+not compile there, which is what keeps an unawaited binding out of the container.
 
 ```ts
 @Configuration()
 class RemoteConfig {
-  @Provides(Config)
-  @Async()
+  @ProvidesAsync(Config)
   async config(): Promise<Config> {
     return fetchFromVault()
   }

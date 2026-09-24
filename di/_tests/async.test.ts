@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { Async } from '../decorators/async.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Provides } from '../decorators/provides.js'
+import { ProvidesAsync } from '../decorators/provides_async.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
 import { ErrInvalidBinding } from '../errors.js'
 import { token } from '../key.js'
@@ -20,8 +20,7 @@ describe('Async bindings via decorators', function () {
 
     @Configuration()
     class AppConfig {
-      @Provides(DatabaseConnection)
-      @Async()
+      @ProvidesAsync(DatabaseConnection)
       async provideDb(): Promise<DatabaseConnection> {
         return new Promise(resolve => setTimeout(() => resolve(new DatabaseConnection('postgres://localhost')), 10))
       }
@@ -49,14 +48,12 @@ describe('Async bindings via decorators', function () {
 
     @Configuration()
     class AsyncDepConfig {
-      @Provides(DbConnection, [ConfigValue])
-      @Async()
+      @ProvidesAsync(DbConnection, [ConfigValue])
       async provideDb(cfg: ConfigValue): Promise<DbConnection> {
         return new DbConnection(cfg)
       }
 
-      @Async()
-      @Provides(ConfigValue, [kConnectionString])
+      @ProvidesAsync(ConfigValue, [kConnectionString])
       async provideConfig(connectionString: string): Promise<ConfigValue> {
         return new ConfigValue(connectionString)
       }
@@ -103,14 +100,12 @@ describe('Async bindings via decorators', function () {
 
     @Configuration()
     class ReversedConfig {
-      @Async()
-      @Provides(Db, [Cfg])
+      @ProvidesAsync(Db, [Cfg])
       async provideDb(cfg: Cfg): Promise<Db> {
         return new Db(cfg)
       }
 
-      @Async()
-      @Provides(Cfg, [kConnStr])
+      @ProvidesAsync(Cfg, [kConnStr])
       async provideCfg(url: string): Promise<Cfg> {
         return new Cfg(url)
       }
@@ -383,14 +378,12 @@ describe('resetInstance() with async bindings', function () {
 
     @Configuration()
     class AsyncDepConfig {
-      @Async()
-      @Provides(DepA)
+      @ProvidesAsync(DepA)
       async provideA(): Promise<DepA> {
         return new Promise(resolve => setTimeout(() => resolve(new DepA(++aCount)), 10))
       }
 
-      @Async()
-      @Provides(DepB, [DepA])
+      @ProvidesAsync(DepB, [DepA])
       async provideB(a: DepA): Promise<DepB> {
         return new Promise(resolve => setTimeout(() => resolve(new DepB(a, ++bCount)), 10))
       }
@@ -652,5 +645,33 @@ describe('resetInstance() — mixed async + sync bindings under the same key', f
     di.get(SyncSvc)
     expect(asyncCallCount).toBe(2)
     expect(syncCallCount).toBe(2)
+  })
+})
+
+// The type system refuses a promise-returning `@Provides`, but a JavaScript caller never sees that check and
+// neither does anything that laundered the factory through `any`. Caching the promise would inject it
+// unresolved into every dependant and surface only on first use, which is the defect this guards.
+describe('a @Provides factory that returns a promise anyway', function () {
+  it('refuses to cache the promise, and names the decorator to use instead', async function () {
+    class DataSource {
+      query(): void {}
+    }
+
+    @Configuration()
+    class SneakyConfig {
+      // Typed as synchronous, so the compiler is satisfied; the body returns a promise regardless.
+      @Provides(DataSource)
+      dataSource(): DataSource {
+        return Promise.resolve(new DataSource()) as unknown as DataSource
+      }
+    }
+    void SneakyConfig
+
+    // A singleton is eager, so the promise is caught while the container initializes rather than on the
+    // first resolution — which is the whole point: nothing is ever handed the unresolved value.
+    const di = new CaffeineIoC()
+
+    await expect(di.init()).rejects.toThrow(ErrInvalidBinding)
+    await expect(di.init()).rejects.toThrow(/@ProvidesAsync/)
   })
 })

@@ -67,36 +67,34 @@ class DatabasePool {}
 Note that `@UseAsyncFactory` replaces the constructor — the class body is not
 called. The decorator must appear above `@Injectable`.
 
-### @Async + @Provides inside @Configuration
+### @ProvidesAsync inside @Configuration
 
-Use `@Async` on a `@Provides` method when grouping related factory methods in
-a configuration class:
+Use `@ProvidesAsync` when grouping related factory methods in a configuration
+class:
 
 ```ts
-import { Configuration, Provides, Async } from '@caffeinejs/di/decorators'
+import { Configuration, ProvidesAsync } from '@caffeinejs/di'
 
 @Configuration([AppConfig])
 class InfraConfig {
   constructor(private readonly config: AppConfig) {}
 
-  @Async()
-  @Provides(DatabasePool)
+  @ProvidesAsync(DatabasePool)
   async databasePool(): Promise<DatabasePool> {
     const pool = await createPool(this.config.databaseUrl)
     return new DatabasePool(pool)
   }
 
-  @Async()
-  @Provides(RedisClient)
+  @ProvidesAsync(RedisClient)
   async redisClient(): Promise<RedisClient> {
     return RedisClient.connect(this.config.redisUrl)
   }
 }
 ```
 
-The order of `@Async` and `@Provides` on the same method does not matter. The
-method's return type must be `Promise<T>`, where `T` is the type registered for
-the key.
+The method's return type must be `Promise<T>`, where `T` is the type registered
+for the key. `@Provides` rejects a promise-returning factory at compile time, so
+the mistake cannot reach the container.
 
 ## Ordering between async bindings
 
@@ -106,14 +104,12 @@ calling `init()` — you do not need to declare or enforce the order manually.
 ```ts
 @Configuration()
 class InfraConfig {
-  @Async()
-  @Provides(DatabasePool)
+  @ProvidesAsync(DatabasePool)
   async databasePool(): Promise<DatabasePool> {
     return createPool(process.env.DATABASE_URL)
   }
 
-  @Async()
-  @Provides(UserRepository, [DatabasePool])
+  @ProvidesAsync(UserRepository, [DatabasePool])
   async userRepository(pool: DatabasePool): Promise<UserRepository> {
     // pool is already resolved — CaffeineIoC awaited databasePool() first
     return new UserRepository(pool)

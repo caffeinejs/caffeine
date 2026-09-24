@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { Async } from '../decorators/async.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Lazy } from '../decorators/index.js'
@@ -12,6 +11,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { PostConstruct } from '../decorators/post_construct.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
+import { ProvidesAsync } from '../decorators/provides_async.js'
 import { HookListener } from '../hooks.js'
 import { token } from '../key.js'
 
@@ -165,8 +165,7 @@ describe('Hooks', function () {
       @Configuration()
       @Profile('hook-init-fail-async')
       class FailAsyncConf {
-        @Async()
-        @Provides(FailAsyncSvc)
+        @ProvidesAsync(FailAsyncSvc)
         async provideFailAsyncSvc(): Promise<FailAsyncSvc> {
           throw new Error('async fail')
         }
@@ -218,8 +217,7 @@ describe('Hooks', function () {
       @Configuration()
       @Profile('hook-init-async')
       class AsyncConf {
-        @Async()
-        @Provides(AsyncSvc)
+        @ProvidesAsync(AsyncSvc)
         async provideAsyncSvc(): Promise<AsyncSvc> {
           return new AsyncSvc('ready')
         }

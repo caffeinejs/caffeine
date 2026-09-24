@@ -38,7 +38,7 @@ type AsyncFactory<T> = (ctx: ResolutionContext) => Promise<T>
 ```
 
 An async factory function. Used with `toAsyncFactory()`, `@UseAsyncFactory`, and
-`@Async` + `@Provides` inside `@Configuration` classes.
+`@ProvidesAsync` inside `@Configuration` classes.
 
 CaffeineIoC awaits the promise during `init()` — by the time `container.get()` is
 called, the instance is already resolved.
@@ -75,8 +75,7 @@ class RemoteConfig {}
 class InfraConfig {
   constructor(private readonly config: AppConfig) {}
 
-  @Async()
-  @Provides(DatabasePool)
+  @ProvidesAsync(DatabasePool)
   async databasePool(): Promise<DatabasePool> {
     return createPool(this.config.databaseUrl)
   }

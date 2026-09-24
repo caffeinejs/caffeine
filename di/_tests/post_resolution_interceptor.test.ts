@@ -1,12 +1,12 @@
 import { describe, it, beforeEach, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { Async } from '../decorators/async.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
+import { ProvidesAsync } from '../decorators/provides_async.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
 import { PostResolutionInterceptor } from '../post_resolution_interceptor.js'
 
@@ -88,8 +88,7 @@ describe('Post Resolution Interceptor', function () {
       @Configuration()
       @Profile('pri-async-provides')
       class AsyncConf {
-        @Async()
-        @Provides(AsyncToken)
+        @ProvidesAsync(AsyncToken)
         @Interceptor(interceptorSpy as PostResolutionInterceptor<AsyncToken>)
         async provideToken(): Promise<AsyncToken> {
           return new AsyncToken('async-value')
