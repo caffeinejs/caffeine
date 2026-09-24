@@ -22,7 +22,7 @@ bag type; `$i.object(spec)` returns `InjectionDescriptor<InjectedOf<typeof spec>
 ## Basic example
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { $i, type InjectedOf } from '@caffeinejs/di'
 
 class UserRepository {

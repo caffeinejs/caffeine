@@ -10,7 +10,7 @@ which profiles are active — the same semantics Docker Compose uses for its
 profiles.
 
 ```ts
-import { Profile } from '@caffeinejs/di/decorators'
+import { Profile } from '@caffeinejs/di'
 ```
 
 :::tip
@@ -106,7 +106,7 @@ skipped unless the profile is active — the same cascade behaviour as `@Conditi
 on a configuration class.
 
 ```ts
-import { Configuration, Provides, Profile } from '@caffeinejs/di/decorators'
+import { Configuration, Provides, Profile } from '@caffeinejs/di'
 
 @Configuration()
 @Profile('test')

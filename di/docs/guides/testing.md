@@ -8,7 +8,7 @@ and only replace components at the infrastructure boundary (databases, HTTP clie
 message queues, and other I/O).
 
 ```ts
-import { TestContainer, newTestContainer } from '@caffeinejs/di/testing'
+import { TestContainer, newTestContainer } from '@caffeinejs/testing'
 ```
 
 ## Mental model
@@ -211,7 +211,7 @@ init and dispose.
 ```ts
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import type { FastifyInstance } from 'fastify'
-import { TestContainer } from '@caffeinejs/di/testing'
+import { TestContainer } from '@caffeinejs/testing'
 import { appContainer } from '../app.container.js'
 import { buildApp } from '../app.js'
 

@@ -14,7 +14,7 @@ The following documents cover the APIs you will use most often:
   returned by `di.bind()`.
 
 - [Decorators](./decorators.md) — every decorator exported from
-  `@caffeinejs/di/decorators`, with signatures and examples.
+  `@caffeinejs/di`, with signatures and examples.
 
 - [Injection](./injection.md) — the `Injection` type, `InjectionDescriptor`,
   and all injection helpers: `allOf`, `optional`, `provide`, `mapped`,

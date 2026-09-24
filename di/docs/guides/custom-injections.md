@@ -45,7 +45,7 @@ Marks a dependency as optional. If no binding is registered for the key the
 container injects `undefined` instead of throwing.
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { optional } from '@caffeinejs/di'
 
 @Injectable([optional(FeatureFlags)])
@@ -66,7 +66,7 @@ Use this to inject a shorter-lived dependency into a longer-lived component
 without triggering a scope violation.
 
 ```ts
-import { Injectable, Lifetime } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime } from '@caffeinejs/di'
 import { provide } from '@caffeinejs/di'
 import { Scopes, Provider } from '@caffeinejs/di'
 
@@ -93,7 +93,7 @@ a circular module import would cause the class reference to be `undefined` at
 declaration time.
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { defer } from '@caffeinejs/di'
 
 @Injectable([defer(() => B)])
@@ -118,7 +118,7 @@ Injects a constant value directly. No container binding is required — the valu
 is passed to the constructor as-is.
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { useValue } from '@caffeinejs/di'
 
 @Injectable([useValue('localhost'), useValue(5432)])

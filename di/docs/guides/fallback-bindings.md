@@ -9,7 +9,7 @@ where a component can ship with a built-in implementation that application code
 (or other library users) can silently replace without any configuration change.
 
 ```ts
-import { Fallback } from '@caffeinejs/di/decorators'
+import { Fallback } from '@caffeinejs/di'
 ```
 
 ---

@@ -13,7 +13,7 @@ or any runtime condition you can express as a boolean.
 ## How `@ConditionalOn` works
 
 ```ts
-import { ConditionalOn } from '@caffeinejs/di/decorators'
+import { ConditionalOn } from '@caffeinejs/di'
 ```
 
 The decorator takes a `Conditional` — a function receiving a `ConditionContext`
@@ -54,7 +54,7 @@ A realistic pattern: different infrastructure implementations are loaded based o
 region-specific class registers only when its region matches.
 
 ```ts
-import { Injectable, Extends, Fallback, ConditionalOn } from '@caffeinejs/di/decorators'
+import { Injectable, Extends, Fallback, ConditionalOn } from '@caffeinejs/di'
 ```
 
 ### Define the contract
@@ -217,7 +217,7 @@ condition fails, **all** `@Provides` methods inside that class are skipped — t
 are treated as if they were never declared.
 
 ```ts
-import { Configuration, Provides, ConditionalOn } from '@caffeinejs/di/decorators'
+import { Configuration, Provides, ConditionalOn } from '@caffeinejs/di'
 
 @Configuration()
 @ConditionalOn(() => process.env.REGION === 'eu')

@@ -24,7 +24,7 @@ export const kRepository = token<Repository>(Symbol('Repository'))
 Register an implementation under that token:
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 
 @Injectable(kRepository)
 class InMemoryRepository implements Repository {
@@ -54,7 +54,7 @@ Register multiple implementations under the same symbol token, then collect all 
 them with `allOf`.
 
 ```ts
-import { Injectable, Named } from '@caffeinejs/di/decorators'
+import { Injectable, Named } from '@caffeinejs/di'
 import { allOf } from '@caffeinejs/di'
 
 interface Processor {
@@ -112,7 +112,7 @@ name or token.
 ## Selecting a single implementation with `@Primary`
 
 ```ts
-import { Injectable, Named, Primary } from '@caffeinejs/di/decorators'
+import { Injectable, Named, Primary } from '@caffeinejs/di'
 
 interface UserRepository {
   findById(id: string): Promise<User | undefined>
@@ -159,7 +159,7 @@ class UserService {
 Assign each implementation a distinct name for targeted injection or runtime dispatch.
 
 ```ts
-import { Injectable, Named } from '@caffeinejs/di/decorators'
+import { Injectable, Named } from '@caffeinejs/di'
 import { mapped } from '@caffeinejs/di'
 
 interface NotificationSender {
@@ -211,7 +211,7 @@ class NotificationRouter {
 ## Conditional implementations with `@ConditionalOn`
 
 ```ts
-import { Injectable, Named, Primary, ConditionalOn } from '@caffeinejs/di/decorators'
+import { Injectable, Named, Primary, ConditionalOn } from '@caffeinejs/di'
 
 interface CacheStore {
   get(key: string): Promise<string | undefined>

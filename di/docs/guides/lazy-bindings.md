@@ -5,7 +5,7 @@ eagerly — during `init()`. A lazy binding defers that construction until the b
 is first resolved via `get()`.
 
 ```ts
-import { Lazy } from '@caffeinejs/di/decorators'
+import { Lazy } from '@caffeinejs/di'
 ```
 
 ---

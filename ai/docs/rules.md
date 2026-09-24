@@ -6,6 +6,8 @@ Caffeine is not NestJS, Express, or Spring Boot. Do not copy `@Module`, `forRoot
 
 TC39 (Stage 3) only. `tsconfig` must include `"lib": ["Decorators", "esnext.decorators"]`. Never set `experimentalDecorators` or `emitDecoratorMetadata`. Never add `reflect-metadata`.
 
+A library that ships only legacy decorators (TypeORM, class-validator) needs its decorator-free API, or its own TypeScript project — see [mixing-decorators.md](mixing-decorators.md). Never relax the flags for the application.
+
 ## Imports
 
 Use the `.js` extension on TypeScript source imports. Group symbols from one module in a single import. Cross-package: import `@caffeinejs/http`, not a relative path into another package. Do not add passthrough re-exports to “stabilize” a path.

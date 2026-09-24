@@ -24,7 +24,7 @@ Complete API documentation for CaffeineIoC.
 
 - [Container](./reference/container.md) — the `CaffeineIoC` class: constructor options, resolution, binding, lifecycle, and inspection.
 - [BindingSpec](./reference/binding-spec.md) — the `BindingSpec` fluent API.
-- [Decorators](./reference/decorators.md) — all decorators exported from `@caffeinejs/di/decorators`.
+- [Decorators](./reference/decorators.md) — all decorators exported from `@caffeinejs/di`.
 - [Injection](./reference/injection.md) — injection helpers: `allOf`, `optional`, `provide`, `mapped`, `object`, `defer`, `useValue`, `compose`.
 - [Scopes](./reference/scopes.md) — built-in scope identifiers, the `Scope` interface, and custom scope registry.
 - [Hooks](./reference/hooks.md) — `HookListener` events emitted during container setup and runtime.
@@ -40,4 +40,4 @@ Conceptual background on how and why CaffeineIoC works the way it does.
 - [What is dependency injection?](./explanation/what-is-di.md) — the problem DI solves and why a container helps.
 - [Container lifecycle](./explanation/container-lifecycle.md) — construction, init, resolution, and disposal phases.
 - [Thinking in scopes](./explanation/thinking-in-scopes.md) — mental model for scope selection, scope leaks, and how to fix them.
-- [Decorator modes](./explanation/decorator-modes.md) — stage 3 decorators vs. legacy TypeScript decorators vs. programmatic API.
+- [Decorator modes](./explanation/decorator-modes.md) — stage 3 decorators vs. the programmatic API, and mixing the two.

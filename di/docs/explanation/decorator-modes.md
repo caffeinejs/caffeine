@@ -1,12 +1,11 @@
 # Decorator modes
 
-CaffeineIoC supports three ways to declare dependencies. Choose based on your
-TypeScript version, build tooling, and how much you want metadata to be
-implicit vs explicit.
+CaffeineIoC supports two ways to declare dependencies. Choose based on how much
+you want wiring co-located with the class, and how much you want it centralized.
 
 ---
 
-## ECMAScript stage 3 decorators (recommended)
+## ECMAScript stage 3 decorators
 
 Standard TC39 decorators, available in TypeScript 5+. No `reflect-metadata`
 required. No `experimentalDecorators` flag needed.
@@ -20,10 +19,10 @@ required. No `experimentalDecorators` flag needed.
 }
 ```
 
-Import from `@caffeinejs/di/decorators`:
+Import from `@caffeinejs/di`:
 
 ```ts
-import { Injectable, Lifetime, Scopes } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime, Scopes } from '@caffeinejs/di'
 
 @Injectable([Logger, Database])
 class UserService {
@@ -39,50 +38,6 @@ There is no automatic inference of constructor parameter types.
 
 **Choose this when:** you are starting a new project or can accept the explicit
 dependency lists. It is the long-term standard.
-
----
-
-## Legacy TypeScript decorators with reflect-metadata
-
-Uses TypeScript's `experimentalDecorators` flag and the `reflect-metadata`
-polyfill. The compiler emits type metadata for constructor parameters, so CaffeineIoC
-can infer dependencies without an explicit list.
-
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  }
-}
-```
-
-Install `reflect-metadata` and import it once at the entry point:
-
-```sh
-npm install reflect-metadata
-```
-
-```ts
-import 'reflect-metadata'
-import { Injectable } from '@caffeinejs/di/decorators/legacy'
-
-@Injectable()
-class UserService {
-  // Logger and Database inferred from the parameter types automatically
-  constructor(
-    private readonly logger: Logger,
-    private readonly db: Database,
-  ) {}
-}
-```
-
-**Trade-off:** The `reflect-metadata` API is not a TC39 standard and may be
-removed in future TypeScript versions. Some bundlers and runtimes handle
-`emitDecoratorMetadata` inconsistently.
-
-**Choose this when:** you are migrating an existing codebase that already uses
-legacy decorators, or your team relies on implicit injection.
 
 ---
 
@@ -145,8 +100,9 @@ acts as a factory, keeping third-party constructors free of CaffeineIoC annotati
 
 ## Summary
 
-| Mode               | TypeScript flag                                    | Explicit deps | Package                            |
-| ------------------ | -------------------------------------------------- | ------------- | ---------------------------------- |
-| Stage 3 decorators | none                                               | yes           | `@caffeinejs/di/decorators`        |
-| Legacy decorators  | `experimentalDecorators` + `emitDecoratorMetadata` | no            | `@caffeinejs/di/decorators/legacy` |
-| Programmatic       | none                                               | yes           | `@caffeinejs/di`                   |
+Both ship from `@caffeinejs/di`, and neither needs a TypeScript flag.
+
+| Mode               | Explicit deps | Wiring lives         | Container option    |
+| ------------------ | ------------- | -------------------- | ------------------- |
+| Stage 3 decorators | yes           | next to the class    | default             |
+| Programmatic       | yes           | in a module function | `decorators: false` |

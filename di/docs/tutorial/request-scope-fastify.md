@@ -45,7 +45,7 @@ when the request ends.
 
 ```ts
 // src/request.context.ts
-import { Injectable, Lifetime, PostConstruct } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime, PostConstruct } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
 
 @Injectable()
@@ -116,7 +116,7 @@ on each call.
 ```ts
 // src/cats.service.ts
 import { provide, type Provider } from '@caffeinejs/di'
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { RequestContext } from './request.context.js'
 
 @Injectable([provide(RequestContext)])

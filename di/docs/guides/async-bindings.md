@@ -53,7 +53,7 @@ Use `@UseAsyncFactory` when you want to keep the async wiring co-located with
 the class declaration:
 
 ```ts
-import { Injectable, UseAsyncFactory } from '@caffeinejs/di/decorators'
+import { Injectable, UseAsyncFactory } from '@caffeinejs/di'
 
 @UseAsyncFactory(async ctx => {
   const config = ctx.container.get(AppConfig)
@@ -123,7 +123,7 @@ Async bindings default to singleton scope. To use refresh scope instead, add
 `@Lifetime(Scopes.REFRESH)`:
 
 ```ts
-import { Injectable, UseAsyncFactory, Lifetime, Scopes } from '@caffeinejs/di/decorators'
+import { Injectable, UseAsyncFactory, Lifetime, Scopes } from '@caffeinejs/di'
 
 @Lifetime(Scopes.REFRESH)
 @UseAsyncFactory(async ctx => {

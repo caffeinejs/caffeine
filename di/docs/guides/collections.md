@@ -25,7 +25,7 @@ The order of elements matches the registration order of the bindings.
 ### Example: validation pipeline
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 import { allOf } from '@caffeinejs/di'
 
 abstract class Validator {
@@ -80,7 +80,7 @@ is the resolved instance.
 ### Example: named strategy map
 
 ```ts
-import { Injectable, Named } from '@caffeinejs/di/decorators'
+import { Injectable, Named } from '@caffeinejs/di'
 import { mapped } from '@caffeinejs/di'
 
 interface PaymentGateway {

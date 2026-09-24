@@ -6,21 +6,16 @@ sidebar_label: Decorators
 
 All decorators are exported from:
 
-- **Stage 3 Decorators**: `@caffeinejs/di/decorators`
-- **Legacy TypeScript Decorators**: `@caffeinejs/di/decorators/legacy`
+- **Stage 3 Decorators**: `@caffeinejs/di`
 
 ```ts
-import { Injectable, Lifetime, Inject } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime, Inject } from '@caffeinejs/di'
 
 // or
-
-import { Injectable, Lifetime, Inject } from '@caffeinejs/di/decorators/legacy'
 ```
 
 CaffeineIoC ships two decorator flavours. This document focus on **stage 3 decorators**
-(TypeScript 5.0+, no `experimentalDecorators`). A legacy variant is also available
-at `@caffeinejs/di/decorators/legacy` for projects that use
-`experimentalDecorators: true` and `reflect-metadata`. The decorator API is
+(TypeScript 5.0+, no `experimentalDecorators`). The decorator API is
 identical in both flavours; differences are noted inline where they exist.
 
 - [@Injectable](#injectable)
@@ -87,12 +82,6 @@ class UserService {
   ) {}
 }
 ```
-
-**Legacy decorators:** With `@caffeinejs/di/decorators/legacy`,
-constructor dependencies are inferred from TypeScript's `reflect-metadata` when
-`emitDecoratorMetadata: true` is set, so `deps` is optional even when the class
-has constructor parameters. Pass `deps` explicitly only to override the inferred
-types, when using interface tokens, or when you need additional behaviour applied, like defining an injection as optional.
 
 ### @Lifetime
 
@@ -369,10 +358,6 @@ class InfraConfig {
   }
 }
 ```
-
-**Legacy decorators:** With `@caffeinejs/di/decorators/legacy`,
-`deps` is optional when `emitDecoratorMetadata: true` is enabled — constructor
-parameter types are inferred from `reflect-metadata`.
 
 ### @Provides
 

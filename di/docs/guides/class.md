@@ -10,14 +10,12 @@ Dependencies are injected to the constructor.
 
 For **ECMAScript Stage 3** decorators, dependencies must be explicitly passed to the `@Injectable` decorator, following the order of the parameters in the class constructor.
 
-With **TypeScript Legacy** decorators, injections can be inferred by the parameter type, as long as the class type itself is the injection key.
-
 :::tip
 Constructor injection is the recommended way. Prefer to use it only.
 :::
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 
 @Injectable([Database, Logger])
 class UserService {
@@ -33,52 +31,27 @@ constructor. Swapped tokens, a list that is too short, or `$i.optional(X)` on a
 required `X` parameter are type errors. `$i.optional(X)` belongs on
 `x?: X` / `x: X | undefined`.
 
-**Legacy decorators:** With `@caffeinejs/di/decorators/legacy`,
-constructor dependencies whose key is the class constructor itself are inferred automatically from TypeScript's type metadata — the `deps` array can be omitted:
+A key that is a string or symbol, and an injection modifier such as `$i.allOf` or
+`$i.optional`, go in the same array, in the same positions:
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators/legacy'
+import { $i, Injectable, token } from '@caffeinejs/di'
 
-@Injectable()
-class UserService {
-  constructor(
-    private readonly db: Database,
-    private readonly logger: Logger,
-  ) {}
-}
-```
+const kMySQL = token<Repository>('mysql')
+const kMongo = token<Repository>('mongo')
 
-:::info
-For Legacy Decorators, make sure to enable Experimental decorators and Emit Decorator Metadata options in your tsconfig.json to use this library:
-
-```json
-{
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  }
-}
-```
-
-:::
-
-When a key is a string, symbol, or you need to use an injection modifier (like `allOf`, `optional`), use
-`@Inject(key)` on each parameter instead — inference only covers class
-constructor keys:
-
-```ts
-import { Injectable, Inject } from '@caffeinejs/di/decorators/legacy'
-import { allOf } from '@caffeinejs/di'
-
-@Injectable()
+@Injectable([kMySQL, kMongo, $i.allOf(Repository)])
 class RepositoryService {
   constructor(
-    @Inject('mysql') readonly mysql: Repository,
-    @Inject('mongo') readonly mongo: Repository,
-    @Inject(allOf(Repository)) readonly all: Repository[],
+    readonly mysql: Repository,
+    readonly mongo: Repository,
+    readonly all: Repository[],
   ) {}
 }
 ```
+
+There are no parameter decorators to reach for: TC39 has none, so `@Inject` applies to a
+field, accessor or method, never to a constructor parameter.
 
 ## Property injection
 
@@ -87,7 +60,7 @@ construction. Use the non-null assertion (`!`) because TypeScript cannot see
 that the container will always fill the field.
 
 ```ts
-import { Injectable, Inject } from '@caffeinejs/di/decorators'
+import { Injectable, Inject } from '@caffeinejs/di'
 
 @Injectable()
 class ReportService {
@@ -105,7 +78,7 @@ class ReportService {
 method after all property injections have been applied.
 
 ```ts
-import { Injectable, Inject } from '@caffeinejs/di/decorators'
+import { Injectable, Inject } from '@caffeinejs/di'
 
 @Injectable()
 class ConnectionPool {
@@ -136,7 +109,7 @@ The container does not wait for them during initialization.
 :::
 
 ```ts
-import { Injectable, PostConstruct } from '@caffeinejs/di/decorators'
+import { Injectable, PostConstruct } from '@caffeinejs/di'
 
 @Injectable([Config])
 class CacheService {

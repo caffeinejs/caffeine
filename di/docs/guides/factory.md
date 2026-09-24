@@ -125,8 +125,8 @@ injection alone cannot express — fixed options, external configuration, or wra
 the class before returning.
 
 ```ts
-import { Injectable } from '@caffeinejs/di/decorators'
-import { UseFactory } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
+import { UseFactory } from '@caffeinejs/di'
 
 class AppConfig {
   readonly timeout = Number(process.env.TIMEOUT ?? 5000)

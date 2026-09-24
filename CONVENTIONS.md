@@ -426,6 +426,8 @@ Exceptions:
 
 TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]`. Never add `experimentalDecorators` or `emitDecoratorMetadata` to main-package tsconfigs. The NestJS benchmark configs use the legacy flags for comparison only — do not copy them.
 
+That rule holds for this repository without exception. An **application** that must use a library shipping only legacy decorators (TypeORM, class-validator) reaches for the library's decorator-free API, or compiles those files as a separate TypeScript project and consumes only its output — [`ai/docs/mixing-decorators.md`](ai/docs/mixing-decorators.md).
+
 ## Git discipline
 
 Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.

@@ -13,6 +13,7 @@ Agents: this is not the NestJS or Express you were trained on. Read `docs/rules.
 - [Kafka](docs/kafka.md): `KafkaTemplate`, `@KafkaListener` — not `@MessagePattern`
 - [Errors](docs/errors.md): Thrown vs unmatched vs client routes
 - [SPA](docs/spa.md): Serving a single-page application as routing the application writes
+- [Mixing decorators](docs/mixing-decorators.md): Using TypeORM, class-validator or another legacy-decorator library
 - [Error messages](docs/messages/README.md): One file per `ERR_*` (pattern)
 
 ## Skills

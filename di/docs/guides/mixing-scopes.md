@@ -66,7 +66,7 @@ adds a small overhead compared to a direct injection. This is expected behavior 
 ## Basic example
 
 ```ts
-import { Injectable, Lifetime } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime } from '@caffeinejs/di'
 import { provide } from '@caffeinejs/di'
 import type { Provider } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
@@ -104,7 +104,7 @@ Injecting the request context directly would be a scope leak. Use `provide()` so
 the controller fetches the live context on each request.
 
 ```ts
-import { Injectable, Lifetime } from '@caffeinejs/di/decorators'
+import { Injectable, Lifetime } from '@caffeinejs/di'
 import { provide } from '@caffeinejs/di'
 import type { Provider } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'

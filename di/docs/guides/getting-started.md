@@ -17,7 +17,7 @@ exist and how to build them; the container handles construction and injection.
 
 ```ts
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Extends, Injectable } from '@caffeinejs/di/decorators'
+import { Extends, Injectable } from '@caffeinejs/di'
 
 abstract class Logger {
   abstract log(msg: string): void
@@ -67,7 +67,7 @@ So this example would not work:
 
 ```ts
 // file: product.repository.ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 
 @Injectable()
 export class ProductRepository {}
@@ -75,7 +75,7 @@ export class ProductRepository {}
 
 ```ts
 // file: product.controller.ts
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 
 @Injectable([ProductRepository])
 export class ProductController {
@@ -134,7 +134,7 @@ interfaces do not exist at runtime, a symbol acts as the token.
 
 ```ts
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Injectable } from '@caffeinejs/di/decorators'
+import { Injectable } from '@caffeinejs/di'
 
 interface Logger {
   log(msg: string): void
@@ -335,6 +335,6 @@ svc.greet('world') // Hello, world!
 ## Next steps
 
 - [Modules](./modules.md) — composing bindings with module functions
-- [Decorators](./decorators.md) — stage 3 and legacy decorator setup
+- [Decorators](./decorators.md) — stage 3 decorator setup
 - [Scopes](../reference/scopes.md) — controlling instance lifetime
 - [Testing](./testing.md) — isolated containers for unit and integration tests
