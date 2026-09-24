@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import {
+  AllowAnonymous,
   AuthenticationService,
   Authorize,
   Controller,
@@ -8,7 +9,7 @@ import {
   ErrAuthorizationRequired,
   Get,
   createWebApplication,
-} from '../index.js'
+} from '../../index.js'
 
 // Kept in its own file, protected-route cases last: `WebApplication` snapshots the global `@Controller`
 // registry at construction, and that registry only ever grows within a test file — so an `@Authorize`-
@@ -29,6 +30,26 @@ describe('authorization installation', () => {
     await app.ready()
 
     const res = await app.fetch('/authz-none-needed')
+    expect(res.status).toBe(200)
+  })
+
+  // A route that only opts *out* declares no protection (`declaresAuthzProtection` in `routing/compile.ts`), so
+  // it must not demand an authentication scheme.
+  it('starts when the only authz decorator is @AllowAnonymous', async () => {
+    @Controller('/authz-anon-only')
+    class AnonOnlyController {
+      @Get('/')
+      @AllowAnonymous()
+      list() {
+        return { ok: true }
+      }
+    }
+    void [AnonOnlyController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/authz-anon-only')
     expect(res.status).toBe(200)
   })
 

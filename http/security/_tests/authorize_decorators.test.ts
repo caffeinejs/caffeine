@@ -16,7 +16,7 @@ import {
   Roles,
   createWebApplication,
   $p,
-} from '../index.js'
+} from '../../index.js'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -49,23 +49,6 @@ function successTicket(claims: Array<{ type: string; value: string }> = [], sche
 // ---------------------------------------------------------------------------
 
 describe('auth configurer (fake handler)', () => {
-  it('does not restrict routes with no @Authorize', async () => {
-    @Controller('/auth-open')
-    class OpenController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-    void [OpenController]
-
-    const app = createWebApplication()
-    await app.ready()
-
-    const res = await app.fetch('/auth-open')
-    expect(res.status).toBe(200)
-  })
-
   it('returns 401 when @Authorize is on the class and handler returns none', async () => {
     @Authorize()
     @Controller('/auth-class-401')

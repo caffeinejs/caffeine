@@ -13,7 +13,7 @@ import {
   kFeatureServer,
   type Context,
   type HTTPFeature,
-} from '../index.js'
+} from '../../index.js'
 
 /**
  * Where the authentication gate sits among the plugins, which is wherever `.authentication(...)` was written.
@@ -108,13 +108,5 @@ describe('the authentication gate registers where it was written', () => {
     } finally {
       await app.close()
     }
-  })
-
-  // The assertion the gate used to carry. It is checked whether or not `.authentication(...)` was ever
-  // called — which is the case it exists for, and the reason it does not live in the gate any more.
-  it('refuses to start when a route is protected and nothing configured authentication', async () => {
-    const app = createWebApplication()
-
-    await expect(app.ready()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
   })
 })

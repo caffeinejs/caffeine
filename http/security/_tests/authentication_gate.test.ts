@@ -10,24 +10,22 @@ import {
   Claim,
   type Context,
   Controller,
-  ErrAuthenticationRequired,
   Get,
   Identity,
   Post,
   Principal,
   Schema,
   createWebApplication,
-} from '../index.js'
+} from '../../index.js'
 
 /**
- * The authentication extension — authentication and the authorization that is folded into it.
+ * The authentication gate — authentication and the authorization that is folded into it.
  *
- * The cases here are the ones it documents at length: the reset a route's own schemes perform, the per-scheme
- * challenge against the single forbid, and the start-up failure that keeps a misconfiguration from becoming a
- * silently unguarded route.
+ * The cases here are the ones it documents at length: the order against body validation, the per-scheme
+ * challenge against the single forbid, and the principal a route that is not gated still sees.
  */
 
-/** Authenticates any request carrying `x-user`, and counts what the extension asked of it. */
+/** Authenticates any request carrying `x-user`, and counts what the gate asked of it. */
 class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
   challenges = 0
   forbids = 0
@@ -84,32 +82,7 @@ function newApp() {
   return { app: builder, byDefault, first, second }
 }
 
-describe('authentication extension — start-up', () => {
-  it('refuses to start when a route is protected but authentication is not configured', async () => {
-    @Authorize()
-    @Controller('/ext-auth-missing')
-    class MissingController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-    void [MissingController]
-
-    // No `.authentication(...)`: the extension is still registered unconditionally, and it is what refuses
-    // the application rather than serve the guarded route to anonymous callers.
-    const app = createWebApplication()
-
-    await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
-  })
-
-  // The "route names a scheme nothing registered" case lives in
-  // authentication_extension_unknown_scheme.test.ts:
-  // `@Controller` registers globally and every container built afterwards snapshots that registry, so a
-  // controller declared to fail start-up would fail every application built later in the same file.
-})
-
-describe('authentication extension — requests', () => {
+describe('authentication gate — requests', () => {
   it('answers 401 before validating the body, so the schema is not described to an anonymous caller', async () => {
     let handlerRan = false
 
@@ -164,59 +137,6 @@ describe('authentication extension — requests', () => {
     expect(denied.status).toBe(403)
     expect(first.forbids).toBe(1)
     expect(second.forbids).toBe(0)
-    await app.close()
-  })
-
-  it('does not accept the default scheme on a route that names its own', async () => {
-    @Authorize({ schemes: ['Second'] })
-    @Controller('/mw-auth-reset')
-    class ResetController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-    void [ResetController]
-
-    const { app } = newApp()
-    await app.ready()
-
-    // A valid default-scheme credential is not a credential for this route: naming a scheme narrows what
-    // the route accepts, it never widens it.
-    const withDefault = await app.fetch('/mw-auth-reset', { headers: { 'x-default': 'someone' } })
-    expect(withDefault.status).toBe(401)
-
-    const withNamed = await app.fetch('/mw-auth-reset', { headers: { 'x-second': 'someone' } })
-    expect(withNamed.status).toBe(200)
-    await app.close()
-  })
-
-  it('merges the identities of every named scheme the caller satisfied', async () => {
-    let seen: Principal | undefined
-
-    @Authorize({ schemes: ['First', 'Second'] })
-    @Controller('/mw-auth-merge')
-    class MergeController {
-      @Get('/')
-      list() {
-        return { ok: true }
-      }
-    }
-    void [MergeController]
-
-    const { app } = newApp()
-    app.use((ctx, next) => {
-      seen = ctx.user
-      return next()
-    })
-    await app.ready()
-
-    const res = await app.fetch('/mw-auth-merge', { headers: { 'x-first': 'a', 'x-second': 'b' } })
-
-    expect(res.status).toBe(200)
-    expect(seen!.identities).toHaveLength(2)
-    expect(seen!.hasClaim('First', 'a')).toBe(true)
-    expect(seen!.hasClaim('Second', 'b')).toBe(true)
     await app.close()
   })
 

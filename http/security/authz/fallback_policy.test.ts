@@ -18,7 +18,7 @@ import {
 /**
  * `fallbackPolicy` — the posture switch that makes an undecorated route protected rather than public.
  *
- * Its own file for the same reason as `authorization_configurer_open.test.ts`: `@Controller` registers into
+ * Its own file for the same reason as `../_tests/authorization_installation.test.ts`: `@Controller` registers into
  * a process-global registry at decoration time, so every application built in a module sees every
  * controller the module decorated. These tests turn on a policy that gates *undecorated* routes, which
  * would otherwise reach into any neighbouring test's controllers.

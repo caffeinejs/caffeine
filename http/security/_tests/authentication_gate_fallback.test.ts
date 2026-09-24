@@ -14,7 +14,7 @@ import {
   health,
   authenticationExempt,
   newRouter,
-} from '../index.js'
+} from '../../index.js'
 
 /**
  * The authentication gate in front of routes the application's router did not compile, and the ways a route stays

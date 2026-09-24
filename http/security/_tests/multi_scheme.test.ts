@@ -344,6 +344,6 @@ describe('per-route authentication schemes', () => {
     void [TypoSchemeController]
 
     app = buildApp()
-    await expect(app.ready()).rejects.toThrow(/Beaerer/)
+    await expect(app.ready()).rejects.toThrow('Cannot resolve authentication scheme "Beaerer"')
   })
 })
