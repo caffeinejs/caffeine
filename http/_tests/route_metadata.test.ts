@@ -122,7 +122,7 @@ describe('route metadata on config.$caffeine', () => {
   // reads it as a URL nothing matched.
   it('stamps a raw route registered from a server customizer', async () => {
     const seen: Seen[] = []
-    app = createWebApplication().server(undefined, instance => {
+    app = createWebApplication().serverCallback((_context, instance) => {
       // Second in the hook array, behind the adapter's: a customizer runs after the stamp hook is added, which
       // is what lets this one read the stamp of a route declared alongside it.
       instance.addHook('onRoute', record(seen))

@@ -24,8 +24,9 @@ const app = createWebApplication().server(({ config }) => ({ listener: config.se
 await app.run() // or app.run({ port: 3000 })
 ```
 
-The adapter builds the Fastify instance itself; `.server(configure, customize)` is how it is configured — `factory` for
-Fastify's constructor options, `listener` for `listen()`, and `customize` for the bare instance before anything registers.
+The adapter builds the Fastify instance itself; `.server(configure)` is how it is configured — `factory` for
+Fastify's constructor options, `listener` for `listen()`. `.serverCallback(callback)` gets the setup context and the
+bare instance before anything registers.
 
 Side-effect-import the controller file from `main.ts` so `@Controller` registers.
 

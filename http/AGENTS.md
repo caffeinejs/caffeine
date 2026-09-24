@@ -58,7 +58,7 @@ neither registers `@fastify/cookie` nor orders it, and the authentication gate c
 reading its credential from a cookie can no longer be registered ahead of the parsing. An application states the
 plugin's options with `.cookie(...)`, wherever in the chain it likes — a `secret` is the one that matters, since
 `ctx.req.signedCookie()` has nothing to verify with otherwise. The two ways out of the registration: a server whose
-`.server(_, customize)` callback registered the plugin itself keeps its own (the feature stands down rather than
+`.serverCallback(...)` registered the plugin itself keeps its own (the feature stands down rather than
 failing on the duplicate decorators, and that application owns its cookie settings entirely), and
 `.cookie(k => k.enabled(false))`, which leaves the plugin unregistered so `ctx.req.cookie()` fails rather than
 answering `undefined`.
@@ -159,15 +159,15 @@ them, or decorates the Fastify instance as `@caffeinejs/html` does.
 
 `fastifyAdapterFactory()` takes nothing, and `createWebApplication()` runs on it when no adapter is named. Nobody
 hands the framework a Fastify instance: the adapter constructs it inside `setup()`, from what `.server(...)`
-returned, once configuration has resolved and the container has initialized. `.server(configure, customize)`
-is the whole surface. `configure` gets the `HTTPSetupContext` a plugin factory gets and returns
-`{ factory, listener }` — Fastify's constructor options and its listen options; `customize` is handed the bare
-instance right after construction, before `$container`, the request decorations, the rest of the hooks, the form
+returned, once configuration has resolved and the container has initialized. `.server(configure)` and
+`.serverCallback(callback)` are the whole surface. `configure` gets the `HTTPSetupContext` a plugin factory gets and
+returns `{ factory, listener }` — Fastify's constructor options and its listen options; `callback` is handed that
+same context and then the bare instance right after construction, before `$container`, the request decorations, the rest of the hooks, the form
 parser and every plugin, so it is where a pre-registered plugin, an `onRoute` hook, a raw route or a not-found
 handler goes. One hook precedes it, the adapter's `$caffeine` stamp, because Fastify runs `onRoute` as a route is
 declared rather than when it loads — so a raw route written here is stamped, and an `onRoute` hook added here
 runs behind the stamp and reads it.
-Calls accumulate: sections shallow-merge in call order, customizers run in call order. The old builder feature
+Calls accumulate: sections shallow-merge in call order, callbacks run in call order. The old builder feature
 (`ServerBuilder`, `kServerOptions`, `serverConfigSchema`) is gone; an application declares its own `server` block
 and hands the node over as the `listener`.
 

@@ -921,7 +921,7 @@ describe('zero_cost', () => {
   let app: WebApplication
 
   beforeAll(async () => {
-    app = createWebApplication().server(undefined, server => {
+    app = createWebApplication().serverCallback((_context, server) => {
       server.addHook('onRoute', route => {
         registered.set(`${route.method} ${route.url}`, route as RouteOptions)
       })

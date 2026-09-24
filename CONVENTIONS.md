@@ -206,9 +206,9 @@ higher band quietly outranks. Configuration reaches a feature because the applic
 wired it — `.shutdown((s, { config }) => s.config(config.app.shutdown))` — and by no other path. Where the more
 specific of the two is named, the more specific wins: a setter beats the block `config(...)` handed over.
 
-The server's own construction and listen settings are not a feature. `.server(configure, customize)` hands them
-to the adapter — `configure` resolves them against the setup context, `customize` is handed the bare instance —
-and the adapter builds the server from them in `setup()`, once the container has initialized.
+The server's own construction and listen settings are not a feature. `.server(configure)` hands them to the
+adapter, resolved against the setup context, and the adapter builds the server from them in `setup()`, once the
+container has initialized. `.serverCallback(callback)` is handed that setup context and then the bare instance.
 
 Exceptions, where `config(...)` overlays what the fluent methods set:
 

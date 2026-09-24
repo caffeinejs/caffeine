@@ -100,10 +100,13 @@ export type ServerConfigurer<T extends AdapterTypes, C = unknown> = (
 ) => T['serverOptions'] | Promise<T['serverOptions']>
 
 /**
- * The callback `.server(_, customize)` takes: handed the server right after the adapter constructs it, before
- * anything is decorated or registered on it.
+ * The callback `.serverCallback(...)` takes: handed the same context a plugin factory gets, then the server right
+ * after the adapter constructs it, before anything is decorated or registered on it.
  */
-export type ServerCustomizer<T extends AdapterTypes> = (instance: T['instance']) => void | Promise<void>
+export type ServerCustomizer<T extends AdapterTypes, C = unknown> = (
+  context: HTTPSetupContext<C>,
+  instance: T['instance'],
+) => void | Promise<void>
 
 /** What an application hands its adapter to set the server up with. */
 export interface AdapterIn<T extends AdapterTypes> {
@@ -118,7 +121,7 @@ export interface AdapterIn<T extends AdapterTypes> {
   extensions: AdapterExtensions<T['instance'], T['extension']>
   /** What every `.server(configure)` resolved to, merged section by section. Empty when none was made. */
   server: T['serverOptions']
-  /** Every `.server(_, customize)` callback folded into one that runs them in call order. `undefined` when none. */
+  /** Every `.serverCallback(...)` callback folded into one that runs them in call order. `undefined` when none. */
   customize: ServerCustomizer<T> | undefined
 }
 

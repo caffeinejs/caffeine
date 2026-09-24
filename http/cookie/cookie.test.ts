@@ -163,7 +163,7 @@ describe('ctx.req.cookie()', () => {
 
     const app = await ready(
       createWebApplication()
-        .server(undefined, server => {
+        .serverCallback((_context, server) => {
           server.register(FastifyCookie, { secret })
         })
         .mount(reads()),

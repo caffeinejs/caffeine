@@ -54,7 +54,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication().server(undefined, server => {
+const app = createWebApplication().serverCallback((_context, server) => {
   server.addHook('preHandler', (req, reply, done) => {
     if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
       reply.code(401).send({ error: 'Unauthorized' })

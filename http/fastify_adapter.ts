@@ -228,7 +228,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     // The application's turn on the bare server, ahead of everything else this adapter decorates, hooks or
     // registers: a plugin registered here loads before every feature's, and a not-found handler set here is kept.
-    await input.customize?.(fastify)
+    await input.customize?.(input.context, fastify)
 
     // Decorating the server
     fastify.decorate('$container', container)

@@ -117,22 +117,18 @@ describe('the server .server(...) configures', () => {
     expect(app.address?.host).toBe('127.0.0.1')
   })
 
-  it('folds several calls: sections merge in call order, customizers run in call order on the bare server', async () => {
+  it('folds several calls: sections merge in call order, server callbacks run in call order on the bare server', async () => {
     const seen: string[] = []
 
     app = createWebApplication()
-      .server(
-        () => ({ listener: { host: '0.0.0.0' } }),
-        instance => {
-          seen.push(`first:${instance.hasDecorator('$container')}`)
-        },
-      )
-      .server(
-        () => ({ listener: { host: '127.0.0.1', port: 0 }, factory: { bodyLimit: 2048 } }),
-        () => {
-          seen.push('second')
-        },
-      )
+      .server(() => ({ listener: { host: '0.0.0.0' } }))
+      .serverCallback((_context, instance) => {
+        seen.push(`first:${instance.hasDecorator('$container')}`)
+      })
+      .server(() => ({ listener: { host: '127.0.0.1', port: 0 }, factory: { bodyLimit: 2048 } }))
+      .serverCallback(() => {
+        seen.push('second')
+      })
 
     await app.run()
 
@@ -140,6 +136,32 @@ describe('the server .server(...) configures', () => {
     expect(app.instance.hasDecorator('$container')).toBe(true)
     expect(app.address?.host).toBe('127.0.0.1')
     expect(app.instance.initialConfig.bodyLimit).toBe(2048)
+  })
+
+  it('hands a server callback the context a plugin factory gets, typed by the configuration, then the bare server', async () => {
+    const conf = newConfiguration(schema, kConfig).build()
+    let factoryContext: unknown
+    let callbackContext: unknown
+    let dbURL: string | undefined
+    let decorated: boolean | undefined
+
+    app = createWebApplication({ config: conf })
+      .with(context => {
+        factoryContext = context
+        return async () => {}
+      })
+      .serverCallback((context, instance) => {
+        callbackContext = context
+        // Compiles only because the application's configuration type reaches the callback.
+        dbURL = context.config.db.url
+        decorated = instance.hasDecorator('$container')
+      })
+
+    await app.ready()
+
+    expect(callbackContext).toBe(factoryContext)
+    expect(dbURL).toBe('x')
+    expect(decorated).toBe(false)
   })
 
   it('constructs Fastify with the factory section', async () => {

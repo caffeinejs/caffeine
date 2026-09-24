@@ -113,7 +113,7 @@ describe('a single-page application next to the plugins an application runs in p
   // application's own.
   it('leaves a not-found handler the application set on the server itself', async () => {
     app = isolated()
-      .server(undefined, server => {
+      .serverCallback((_context, server) => {
         server.setNotFoundHandler((_req, reply) => {
           void reply.code(418).send({ mine: true })
         })

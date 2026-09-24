@@ -91,7 +91,7 @@ export class WebApplication<
   readonly #extensions = new AdapterExtensions<T['instance'], T['extension']>()
   readonly #installs: Install<T, C>[] = []
   readonly #serverConfigurers: ServerConfigurer<T, C>[] = []
-  readonly #serverCustomizers: ServerCustomizer<T>[] = []
+  readonly #serverCustomizers: ServerCustomizer<T, C>[] = []
   #runArgs: T['runArgs'] | undefined
   #routeGroups: RouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
@@ -346,31 +346,40 @@ export class WebApplication<
    * Configures the server the adapter builds at {@link ready}.
    *
    * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
-   * under Fastify `{ factory, listener }`, the constructor options and the listen options. `customize` is handed
-   * the server right after it is constructed, before the adapter decorates or registers anything on it: a plugin
-   * registered there loads ahead of every feature, and a not-found handler set there is kept.
+   * under Fastify `{ factory, listener }`, the constructor options and the listen options. To reach the server
+   * itself, use {@link serverCallback}.
    *
-   * Calls accumulate: the settings shallow-merge section by section in call order, and the customizers run in
-   * call order. A configuration node handed over as a section is copied, never mutated.
+   * Calls accumulate: the settings shallow-merge section by section in call order. A configuration node handed
+   * over as a section is copied, never mutated.
    *
    * ```ts
    * .server(({ config }) => ({ listener: config.app.server }))
-   * .server(undefined, instance => instance.addHook('onRoute', seen))
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
-  server(configure?: ServerConfigurer<T, C>, customize?: ServerCustomizer<T>): this {
+  server(configure: ServerConfigurer<T, C>): this {
     this.assertConfigurable()
+    this.#serverConfigurers.push(configure)
+    return this
+  }
 
-    if (configure !== undefined) {
-      this.#serverConfigurers.push(configure)
-    }
-
-    if (customize !== undefined) {
-      this.#serverCustomizers.push(customize)
-    }
-
+  /**
+   * Hands `callback` the setup context and then the server the adapter builds at {@link ready}, right after it is
+   * constructed and before the adapter decorates or registers anything on it: a plugin registered here loads ahead
+   * of every feature, and a not-found handler set here is kept.
+   *
+   * Calls accumulate and run in call order.
+   *
+   * ```ts
+   * .serverCallback(({ logger }, instance) => instance.addHook('onRoute', r => logger.debug(r.url)))
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   */
+  serverCallback(callback: ServerCustomizer<T, C>): this {
+    this.assertConfigurable()
+    this.#serverCustomizers.push(callback)
     return this
   }
 
@@ -581,7 +590,7 @@ export class WebApplication<
     return merged as T['serverOptions']
   }
 
-  /** Every `.server(_, customize)` callback as one, run in call order; `undefined` when there is none. */
+  /** Every `.serverCallback(...)` callback as one, run in call order; `undefined` when there is none. */
   #serverCustomizer(): ServerCustomizer<T> | undefined {
     if (this.#serverCustomizers.length === 0) {
       return undefined
@@ -589,9 +598,9 @@ export class WebApplication<
 
     const customizers = [...this.#serverCustomizers]
 
-    return async instance => {
+    return async (context, instance) => {
       for (const customize of customizers) {
-        await customize(instance)
+        await customize(context as HTTPSetupContext<C>, instance)
       }
     }
   }

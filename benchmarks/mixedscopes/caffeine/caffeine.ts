@@ -80,7 +80,7 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication().server(undefined, server => {
+const app = createWebApplication().serverCallback((_context, server) => {
   server.addHook('onRequest', (_req, reply, done) => {
     reply.header('x-request-id', Math.random().toString(36).slice(2))
     done()

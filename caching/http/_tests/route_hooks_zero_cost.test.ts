@@ -48,7 +48,7 @@ let app: WebApplication
 beforeAll(async () => {
   app = createWebApplication()
     // onRoute sees the route definition exactly as it was handed to Fastify, after everything attached to it.
-    .server(undefined, server => {
+    .serverCallback((_context, server) => {
       server.addHook('onRoute', route => {
         registered.set(`${route.method} ${route.url}`, route as RouteOptions)
       })

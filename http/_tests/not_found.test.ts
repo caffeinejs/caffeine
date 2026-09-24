@@ -79,7 +79,7 @@ describe('unmatched routes', () => {
   })
 
   it('keeps a not-found handler the application set on the server itself', async () => {
-    const app = createWebApplication().server(undefined, server => {
+    const app = createWebApplication().serverCallback((_context, server) => {
       server.setNotFoundHandler((_req, reply) => {
         void reply.code(418).send({ mine: true })
       })

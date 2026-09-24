@@ -289,7 +289,7 @@ describe('what the cache says about a response', () => {
     void [VaryController]
 
     const app = createWebApplication()
-      .server(undefined, server => {
+      .serverCallback((_context, server) => {
         server.addHook('onRequest', async (request, reply) => {
           reply.header('Vary', 'Origin')
           reply.header('Access-Control-Allow-Origin', String(request.headers.origin))
@@ -436,7 +436,7 @@ describe('a request authenticated without an Authorization header', () => {
 
   function signedIn(observer?: CacheObserver) {
     return createWebApplication()
-      .server(undefined, server => {
+      .serverCallback((_context, server) => {
         server.addHook('onRequest', async request => {
           if (request.headers.cookie?.includes('session=')) {
             request.user = new Principal(true, [])

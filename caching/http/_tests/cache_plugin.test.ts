@@ -38,7 +38,7 @@ describe('cache plugin wiring', () => {
     void [ContribController]
 
     const app = createWebApplication()
-      .server(undefined, server => {
+      .serverCallback((_context, server) => {
         server.addHook('onRoute', route => {
           registered.set(`${route.method} ${route.url}`, route as RouteOptions)
         })

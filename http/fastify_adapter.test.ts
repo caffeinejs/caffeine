@@ -11,7 +11,7 @@ describe('Fastify Adapter', () => {
   // flaky.
   it('binds a real listener and serves it over the network', { retry: 2 }, async () => {
     let seen: FastifyInstance | undefined
-    const app = createWebApplication().server(undefined, server => {
+    const app = createWebApplication().serverCallback((_context, server) => {
       seen = server
       server.get('/', () => ({ ok: true }))
     })
@@ -32,7 +32,7 @@ describe('Fastify Adapter', () => {
   })
 
   it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
-    const app = createWebApplication().server(undefined, server => {
+    const app = createWebApplication().serverCallback((_context, server) => {
       server.get('/', () => ({ ok: true }))
     })
     await app.ready()

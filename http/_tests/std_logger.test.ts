@@ -100,7 +100,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     void [LoggingController]
 
     const recorder = new Recorder()
-    const app = createWebApplication({ logger: recorder as unknown as Logger }).server(undefined, instance => {
+    const app = createWebApplication({ logger: recorder as unknown as Logger }).serverCallback((_context, instance) => {
       instance.addHook('onRequest', (req, _reply, done) => {
         req.log.warn({ from: 'request' }, 'per-request record')
         done()
@@ -146,7 +146,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     void [WiredController]
 
     const recorder = new Recorder()
-    const app = createWebApplication({ logger: recorder as unknown as Logger }).server(undefined, instance => {
+    const app = createWebApplication({ logger: recorder as unknown as Logger }).serverCallback((_context, instance) => {
       instance.addHook('onRequest', (req, _reply, done) => {
         req.log.warn({ from: 'request' }, 'wired per-request record')
         done()
@@ -179,7 +179,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     let perRequestLevel: string | undefined
     const app = createWebApplication()
       .logger(l => l.level('debug'))
-      .server(undefined, instance => {
+      .serverCallback((_context, instance) => {
         instance.addHook('onRequest', (req, _reply, done) => {
           perRequestLevel = req.log.level
           done()
