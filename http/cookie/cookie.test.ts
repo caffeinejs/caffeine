@@ -6,7 +6,16 @@ import { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { cookieConfigSchema, createWebApplication, newRouter } from '../index.js'
+import {
+  $p,
+  Args,
+  Controller,
+  cookieConfigSchema,
+  createWebApplication,
+  FastifyContext,
+  Get,
+  newRouter,
+} from '../index.js'
 
 const schema = $t.Object({ app: $t.Object({ cookie: cookieConfigSchema }) })
 
@@ -191,5 +200,174 @@ describe('ctx.req.cookie()', () => {
     expect(text).not.toContain('@fastify/cookie')
 
     expect(logged.some(entry => entry.msg?.includes('@fastify/cookie plugin is not registered'))).toBe(true)
+  })
+})
+
+// The cookie feature registers @fastify/cookie, so an application that signs cookies states the secret with
+// .cookie(...) rather than registering the plugin a second time — which Fastify refuses, the decorators
+// being there.
+describe('Cookies', () => {
+  it('injects a named cookie via cookie() picker', async () => {
+    @Controller('/ck')
+    class NamedCookieController {
+      @Get('/session')
+      @Args([$p.cookie('session')])
+      get(session: string | undefined) {
+        return { session }
+      }
+    }
+    void [NamedCookieController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ session: 'abc123' })
+  })
+
+  it('injects all cookies via cookie() picker without a name', async () => {
+    @Controller('/ck')
+    class AllCookiesController {
+      @Get('/all')
+      @Args([$p.cookie()])
+      get(cookies: Record<string, string | undefined>) {
+        return cookies
+      }
+    }
+    void [AllCookiesController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ a: '1', b: '2' })
+  })
+
+  it('injects a signed cookie via signedCookie() picker', async () => {
+    const SECRET = 'test-secret'
+    const signed = sign('myvalue', SECRET)
+
+    @Controller('/ck')
+    class SignedController {
+      @Get('/signed')
+      @Args([$p.signedCookie('tok')])
+      get(tok: string | false | undefined) {
+        return { tok }
+      }
+    }
+    void [SignedController]
+
+    const app = createWebApplication().cookie(k => k.secret(SECRET))
+    await app.ready()
+
+    const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ tok: 'myvalue' })
+  })
+
+  it('returns false for a tampered signed cookie via signedCookie() picker', async () => {
+    @Controller('/ck')
+    class TamperedController {
+      @Get('/tampered')
+      @Args([$p.signedCookie('tok')])
+      get(tok: string | false | undefined) {
+        return { valid: tok !== false }
+      }
+    }
+    void [TamperedController]
+
+    const app = createWebApplication().cookie(k => k.secret('test-secret'))
+    await app.ready()
+
+    const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ valid: false })
+  })
+
+  it('setCookie helper sets a Set-Cookie header on the response', async () => {
+    @Controller('/ck')
+    class SetCookieController {
+      @Get('/set')
+      @Args([$p.context()])
+      get(ctx: FastifyContext) {
+        ctx.cookie('session', 'hello', { httpOnly: true, path: '/' })
+        return { ok: true }
+      }
+    }
+    void [SetCookieController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/ck/set')
+    expect(res.status).toBe(200)
+    const setCookieHeader = res.headers.get('set-cookie')
+    expect(setCookieHeader).toMatch(/session=hello/)
+    expect(setCookieHeader).toMatch(/HttpOnly/)
+  })
+
+  it('getCookie helper reads a cookie from the request via context', async () => {
+    @Controller('/ck')
+    class GetCookieController {
+      @Get('/get')
+      @Args([$p.context()])
+      get(ctx: FastifyContext) {
+        return { value: ctx.req.cookie('token') }
+      }
+    }
+    void [GetCookieController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ value: 'secret' })
+  })
+
+  it('ctx.req.signedCookie() reads a signed cookie from the request', async () => {
+    const SECRET = 'req-signed-secret'
+    const signed = sign('reqvalue', SECRET)
+
+    @Controller('/ck')
+    class ReqSignedCookieController {
+      @Get('/read')
+      @Args([$p.context()])
+      read(ctx: FastifyContext) {
+        return { value: ctx.req.signedCookie('tok') }
+      }
+    }
+    void [ReqSignedCookieController]
+
+    const app = createWebApplication().cookie(k => k.secret(SECRET))
+    await app.ready()
+
+    const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ value: 'reqvalue' })
+  })
+
+  it('deleteCookie helper clears a cookie', async () => {
+    @Controller('/ck')
+    class DeleteCookieController {
+      @Get('/delete')
+      @Args([$p.context()])
+      get(ctx: FastifyContext) {
+        ctx.deleteCookie('session')
+        return { ok: true }
+      }
+    }
+    void [DeleteCookieController]
+
+    const app = createWebApplication()
+    await app.ready()
+
+    const res = await app.fetch('/ck/delete')
+    expect(res.status).toBe(200)
+    const setCookieHeader = res.headers.get('set-cookie')
+    expect(setCookieHeader).toMatch(/session=/)
+    expect(setCookieHeader).toMatch(/Max-Age=0/)
   })
 })

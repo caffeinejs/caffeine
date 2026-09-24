@@ -51,7 +51,7 @@ and do not add a third direct `install*()` call: anything a feature can own belo
 place. Do not move server wiring back into `bootstrap`: bootstrap hooks run concurrently, before the adapter has
 decorated the server.
 
-Cookies are parsed for every request, ahead of every plugin. `CookieBuilder` (`cookies.ts`) is an ordinary
+Cookies are parsed for every request, ahead of every plugin. `CookieBuilder` (`cookie/cookie.ts`) is an ordinary
 `HTTPFeatureBuilder` that `WebApplication` registers unconditionally in its constructor, which is what puts it
 first in the install list — only the error handler precedes it, and it reads no cookies. So an application
 neither registers `@fastify/cookie` nor orders it, and the authentication gate carries no cookie check: a scheme

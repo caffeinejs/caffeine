@@ -2,7 +2,7 @@ import { $t, kFeatureName } from '@caffeinejs/std'
 import FastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 
-import { HTTPFeatureBuilder } from './feature.js'
+import { HTTPFeatureBuilder } from '../feature.js'
 
 /** How the cookie feature registers `@fastify/cookie`. */
 export interface CookieOptions {

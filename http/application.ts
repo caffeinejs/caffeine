@@ -12,7 +12,7 @@ import {
 import { AdapterExtensions, type AdapterExtensionFactory } from './adapter_extension.js'
 import { fastifyAdapterFactory } from './adapter_factory.js'
 import type { AdapterTypes } from './adapter_types.js'
-import { CookieBuilder } from './cookies.js'
+import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
