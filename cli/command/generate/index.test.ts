@@ -19,7 +19,10 @@ describe('generate run()', () => {
     const dir = join(tmpdir(), `caffeine-test-${randomUUID()}`)
     dirs.push(dir)
     await mkdir(join(dir, 'src/orders'), { recursive: true })
-    await Bun.write(join(dir, 'src/orders/order.ts'), '@Injectable()\nexport class Order {}\n')
+    await Bun.write(
+      join(dir, 'src/orders/order.ts'),
+      "import { Injectable } from '@caffeinejs/di'\n@Injectable()\nexport class Order {}\n",
+    )
     await Bun.write(join(dir, '.caffeinerc.ts'), `export default ${JSON.stringify(config)}\n`)
     return dir
   }

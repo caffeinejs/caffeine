@@ -87,9 +87,14 @@ export async function generateModuleGraph(
       const abs = join(opts.cwd, cwdRel)
       const text = await Bun.file(abs).text()
       const handwritten = isHandwrittenMod(rel)
-      const classes = handwritten ? { exported: [], unexported: [] } : parseDecoratedClasses(text)
+      const classes = handwritten ? { exported: [], unexported: [], foreign: [] } : parseDecoratedClasses(text)
       for (const name of classes.unexported) {
         console.warn(`[caffeine] skipped decorated class "${name}" in "${cwdRel}": it is not exported`)
+      }
+      for (const { name, decorator } of classes.foreign) {
+        console.warn(
+          `[caffeine] skipped decorated class "${name}" in "${cwdRel}": "@${decorator}" is not imported from a Caffeine package`,
+        )
       }
       fileInfo.set(rel, {
         abs,

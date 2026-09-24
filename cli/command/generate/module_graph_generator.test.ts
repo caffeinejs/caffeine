@@ -6,6 +6,10 @@ import { join } from 'node:path'
 
 import { generateModuleGraph } from './module_graph_generator.js'
 
+// Fixtures must import the decorator: the generator only provides a class whose decorator
+// resolves to the Caffeine package that exports it.
+const DI = "import { Injectable } from '@caffeinejs/di'\n"
+
 function tempDir(): string {
   return join(tmpdir(), `caffeine-test-${randomUUID()}`)
 }
@@ -32,15 +36,14 @@ describe('generateModuleGraph()', () => {
     dirs.push(dir)
 
     await writeTree(dir, {
-      'src/app.ts': '@Injectable()\nexport class App {}\n',
-      'src/app.di.ts': '@Injectable()\nexport class AppDi {}\n',
-      'src/orders/order.service.ts':
-        "import { User } from '../users/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n",
-      'src/users/user.service.ts': '@Injectable()\nexport class User {}\n',
-      'src/libs/db/client.ts': '@Injectable()\nexport class Db {}\n',
-      'src/libs/cache/cache.ts': '@Injectable()\nexport class Cache {}\n',
-      'src/libs/util.ts': '@Injectable()\nexport class Util {}\n',
-      'src/vendor/skip.ts': '@Injectable()\nexport class Skip {}\n',
+      'src/app.ts': `${DI}@Injectable()\nexport class App {}\n`,
+      'src/app.di.ts': `${DI}@Injectable()\nexport class AppDi {}\n`,
+      'src/orders/order.service.ts': `${DI}import { User } from '../users/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n`,
+      'src/users/user.service.ts': `${DI}@Injectable()\nexport class User {}\n`,
+      'src/libs/db/client.ts': `${DI}@Injectable()\nexport class Db {}\n`,
+      'src/libs/cache/cache.ts': `${DI}@Injectable()\nexport class Cache {}\n`,
+      'src/libs/util.ts': `${DI}@Injectable()\nexport class Util {}\n`,
+      'src/vendor/skip.ts': `${DI}@Injectable()\nexport class Skip {}\n`,
       'src/orders/orders.mod.ts': "export const extraOrdersModule = { name: 'extra' }\n",
     })
 
@@ -121,7 +124,7 @@ describe('generateModuleGraph()', () => {
     dirs.push(dir)
     const handwritten = "export const ordersModule = { name: 'hand' }\n"
     await writeTree(dir, {
-      'src/orders/order.service.ts': '@Injectable()\nexport class OrderService {}\n',
+      'src/orders/order.service.ts': `${DI}@Injectable()\nexport class OrderService {}\n`,
       'src/orders/orders.mod.ts': handwritten,
     })
 
@@ -138,8 +141,8 @@ describe('generateModuleGraph()', () => {
     const dir = tempDir()
     dirs.push(dir)
     await writeTree(dir, {
-      'src/orders/order.service.ts': '@Injectable()\nexport class OrderService {}\n',
-      'src/orders/hidden.ts': '@Injectable()\nclass Hidden {}\nvoid [Hidden]\n',
+      'src/orders/order.service.ts': `${DI}@Injectable()\nexport class OrderService {}\n`,
+      'src/orders/hidden.ts': `${DI}@Injectable()\nclass Hidden {}\nvoid [Hidden]\n`,
     })
 
     const warnings: string[] = []
@@ -161,12 +164,64 @@ describe('generateModuleGraph()', () => {
     expect(orders).not.toContain('./hidden.js')
   })
 
+  // The reason this check exists: an entity is built by the data source and its file may be compiled by a
+  // separate project, so importing it from a generated module breaks the build it was kept out of.
+  it('provides only classes whose decorator comes from a Caffeine package', async () => {
+    const dir = tempDir()
+    dirs.push(dir)
+    await writeTree(dir, {
+      'src/orders/order.controller.ts':
+        "import { Controller } from '@caffeinejs/http'\n@Controller('/orders')\nexport class OrderController {}\n",
+      'src/orders/order.entity.ts':
+        "import { Entity } from 'typeorm'\n@Entity('orders')\nexport class OrderEntity {}\n",
+    })
+
+    const warnings: string[] = []
+    const warn = console.warn
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(' '))
+    try {
+      await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
+    } finally {
+      console.warn = warn
+    }
+
+    expect(warnings).toEqual([])
+
+    const orders = await Bun.file(join(dir, 'src/orders/orders.gen.mod.ts')).text()
+    expect(orders).toContain(['  provides: () => [', '    OrderController,', '  ],'].join('\n'))
+    expect(orders).not.toContain('OrderEntity')
+    expect(orders).not.toContain('./order.entity.js')
+  })
+
+  it('warns when a registering decorator name does not come from its Caffeine package', async () => {
+    const dir = tempDir()
+    dirs.push(dir)
+    await writeTree(dir, {
+      'src/orders/order.service.ts': `${DI}@Injectable()\nexport class OrderService {}\n`,
+      'src/orders/local.ts': "import { Injectable } from './decorators.js'\n@Injectable()\nexport class Local {}\n",
+    })
+
+    const warnings: string[] = []
+    const warn = console.warn
+    console.warn = (...args: unknown[]) => void warnings.push(args.join(' '))
+    try {
+      await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
+    } finally {
+      console.warn = warn
+    }
+
+    expect(warnings).toEqual([
+      '[caffeine] skipped decorated class "Local" in "src/orders/local.ts": "@Injectable" is not imported from a Caffeine package',
+    ])
+    expect(await Bun.file(join(dir, 'src/orders/orders.gen.mod.ts')).text()).not.toContain('Local')
+  })
+
   it('drops files deeper than maxDepth', async () => {
     const dir = tempDir()
     dirs.push(dir)
     await writeTree(dir, {
-      'src/orders/order.ts': '@Injectable()\nexport class Order {}\n',
-      'src/a/b/c/d/deep.ts': '@Injectable()\nexport class Deep {}\n',
+      'src/orders/order.ts': `${DI}@Injectable()\nexport class Order {}\n`,
+      'src/a/b/c/d/deep.ts': `${DI}@Injectable()\nexport class Deep {}\n`,
     })
 
     await generateModuleGraph({
@@ -184,7 +239,7 @@ describe('generateModuleGraph()', () => {
     const dir = tempDir()
     dirs.push(dir)
     await writeTree(dir, {
-      'src/orders/order.ts': '@Injectable()\nexport class Order {}\n',
+      'src/orders/order.ts': `${DI}@Injectable()\nexport class Order {}\n`,
     })
 
     await generateModuleGraph({
@@ -205,7 +260,7 @@ describe('generateModuleGraph()', () => {
     const dir = tempDir()
     dirs.push(dir)
     await writeTree(dir, {
-      'src/orders/order.ts': '@Injectable()\nexport class Order {}\n',
+      'src/orders/order.ts': `${DI}@Injectable()\nexport class Order {}\n`,
     })
     const config = { include: ['src/**/*.ts'], root: 'src' as const }
     await generateModuleGraph({ cwd: dir, config })
@@ -218,9 +273,8 @@ describe('generateModuleGraph()', () => {
     dirs.push(dir)
     await writeTree(dir, {
       'tsconfig.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@app/*': ['src/app/*'] } } }),
-      'src/app/user.service.ts': '@Injectable()\nexport class User {}\n',
-      'src/orders/order.service.ts':
-        "import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n",
+      'src/app/user.service.ts': `${DI}@Injectable()\nexport class User {}\n`,
+      'src/orders/order.service.ts': `${DI}import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService { constructor(private user: User) {} }\n`,
     })
 
     await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })
@@ -236,9 +290,8 @@ describe('generateModuleGraph()', () => {
     const dir = tempDir()
     dirs.push(dir)
     await writeTree(dir, {
-      'src/app/user.service.ts': '@Injectable()\nexport class User {}\n',
-      'src/orders/order.service.ts':
-        "import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService {}\n",
+      'src/app/user.service.ts': `${DI}@Injectable()\nexport class User {}\n`,
+      'src/orders/order.service.ts': `${DI}import { User } from '@app/user.service.js'\n@Injectable()\nexport class OrderService {}\n`,
     })
 
     await generateModuleGraph({ cwd: dir, config: { include: ['src/**/*.ts'], root: 'src' } })

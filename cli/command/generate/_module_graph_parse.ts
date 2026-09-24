@@ -4,36 +4,66 @@ const FROM_SRC = String.raw`(?:^|[\n;])\s*(import|export)(\s+type\b)?\s*([\s\S]{
 const SIDE_SRC = String.raw`(?:^|[\n;])\s*import\s+['"]([^'"]+)['"]`
 const EXPORT_CONST_SRC = String.raw`export\s+const\s+(\w+)`
 
+// Class decorators whose application registers a container binding, keyed by the package exporting them.
+// Each one reaches `defineInjectable` in di/decorators/registrar/registrar.ts, directly or through
+// `Injectable()`, which is what makes the container own the class — that is the bar for a new entry here.
+// Decorators that only write to the routing, fetchy or caching registries are deliberately absent, so a
+// class carrying nothing but `@APIGroup`, `@Authorize` or fetchy's `@API` is not a binding.
+const REGISTERING_DECORATORS = new Map<string, Set<string>>([
+  ['@caffeinejs/di', new Set(['Injectable', 'Configuration', 'Extends', 'Aspect'])],
+  ['@caffeinejs/http', new Set(['Controller', 'Catch'])],
+  ['@caffeinejs/kafka', new Set(['KafkaHandler'])],
+  ['@caffeinejs/messaging', new Set(['MessageHandler'])],
+])
+
+const REGISTERING_NAMES = new Set([...REGISTERING_DECORATORS.values()].flatMap(names => [...names]))
+
 /**
- * Top-level decorated classes of a module, split by whether they carry a named export.
+ * Top-level decorated classes of a module, split by what the generator can do with them.
  *
- * Only `exported` names can be referenced from a generated module. `unexported` exists so the
- * caller can report what it had to drop.
+ * Only `exported` names can be referenced from a generated module. `unexported` and `foreign` exist so
+ * the caller can report what it had to drop.
  */
 export interface DecoratedClasses {
   exported: string[]
   unexported: string[]
+  foreign: Array<{ name: string; decorator: string }>
+}
+
+/** Where a local identifier came from. `imported` is empty for a namespace binding. */
+export interface ImportBinding {
+  imported: string
+  spec: string
+  namespace: boolean
 }
 
 /**
- * Finds the top-level decorated classes in a TypeScript source.
+ * Finds the top-level classes a generated module should provide.
  *
- * Both decorator placements are recognised: `@Dec export class C` and `export @Dec class C`.
- * Decorators on class members are ignored — only the class itself can be provided. A decorated
- * `export default class` counts as unexported: it has no named binding to import.
+ * A class qualifies when one of its decorators both carries a name in {@link REGISTERING_DECORATORS} and
+ * resolves to an import from the package that exports it. The name alone is not enough: an application's
+ * own `@Controller`, or one re-exported through a local barrel, is reported in `foreign` instead, because
+ * the generator cannot tell whether it registers anything. A decorator from any other package —
+ * TypeORM's `@Entity`, fetchy's `@API` — is ignored silently, which is the common case.
+ *
+ * Both decorator placements are recognised: `@Dec export class C` and `export @Dec class C`. Decorators on
+ * class members are ignored — only the class itself can be provided. A decorated `export default class`
+ * counts as unexported: it has no named binding to import.
  */
 export function parseDecoratedClasses(text: string): DecoratedClasses {
   const exported: string[] = []
   const unexported: string[] = []
+  const foreign: Array<{ name: string; decorator: string }> = []
+  const imports = parseImportBindings(text)
 
   let index = 0
   let braceDepth = 0
-  let decorated = false
+  let pending: string[] = []
   let isExport = false
   let isDefault = false
 
   function reset(): void {
-    decorated = false
+    pending = []
     isExport = false
     isDefault = false
   }
@@ -71,8 +101,9 @@ export function parseDecoratedClasses(text: string): DecoratedClasses {
       continue
     }
     if (char === '@') {
-      index = skipDecorator(text, index)
-      decorated = true
+      const decorator = skipDecorator(text, index)
+      index = decorator.end
+      pending.push(decorator.name)
       continue
     }
     if (char === ';') {
@@ -100,11 +131,16 @@ export function parseDecoratedClasses(text: string): DecoratedClasses {
         index++
       }
       const name = text.slice(nameStart, index)
-      if (decorated) {
+      if (pending.some(decorator => isRegistering(decorator, imports))) {
         if (isExport && !isDefault && name) {
           exported.push(name)
         } else {
           unexported.push(name || 'default')
+        }
+      } else {
+        const shadowed = pending.find(decorator => isShadowed(decorator, imports))
+        if (shadowed) {
+          foreign.push({ name: name || 'default', decorator: shadowed })
         }
       }
       reset()
@@ -126,7 +162,51 @@ export function parseDecoratedClasses(text: string): DecoratedClasses {
     reset()
   }
 
-  return { exported, unexported }
+  return { exported, unexported, foreign }
+}
+
+/**
+ * Maps every local identifier an `import` statement binds to the export it came from.
+ *
+ * `{ A }`, `{ A as B }` and `* as ns` are bound; type-only imports and a default binding are not, since
+ * neither can name a decorator this generator recognises. The whole source is scanned rather than matched
+ * with {@link FROM_SRC}, whose clause is capped at 400 characters — a longer one would leave every
+ * decorator in the file unresolved.
+ */
+export function parseImportBindings(text: string): Map<string, ImportBinding> {
+  const bindings = new Map<string, ImportBinding>()
+
+  let index = 0
+  while (index < text.length) {
+    const char = text[index]
+
+    if (char === '/' && text[index + 1] === '/') {
+      index = skipLineComment(text, index)
+      continue
+    }
+    if (char === '/' && text[index + 1] === '*') {
+      index = skipBlockComment(text, index)
+      continue
+    }
+    if (char === "'" || char === '"' || char === '`') {
+      index = skipString(text, index)
+      continue
+    }
+    if (!isIdentStart(char)) {
+      index++
+      continue
+    }
+
+    const wordStart = index
+    while (index < text.length && isIdentPart(text[index])) {
+      index++
+    }
+    if (text.slice(wordStart, index) === 'import' && startsStatement(text, wordStart)) {
+      index = readImportStatement(text, index, bindings)
+    }
+  }
+
+  return bindings
 }
 
 /**
@@ -175,16 +255,158 @@ export function parseExportedConsts(text: string): string[] {
   return names
 }
 
+// Resolves `@Name` or `@ns.Name` to the package and export it came from, or undefined when nothing in
+// this file binds its root identifier.
+function resolveDecorator(
+  dotted: string,
+  imports: Map<string, ImportBinding>,
+): { pkg: string; name: string } | undefined {
+  const dot = dotted.indexOf('.')
+  const root = dot === -1 ? dotted : dotted.slice(0, dot)
+  const binding = imports.get(root)
+  if (!binding) {
+    return undefined
+  }
+  const name = binding.namespace ? (dot === -1 ? '' : dotted.slice(dot + 1).split('.')[0]) : binding.imported
+  return { pkg: packageOf(binding.spec), name }
+}
+
+function isRegistering(dotted: string, imports: Map<string, ImportBinding>): boolean {
+  const resolved = resolveDecorator(dotted, imports)
+  return resolved !== undefined && (REGISTERING_DECORATORS.get(resolved.pkg)?.has(resolved.name) ?? false)
+}
+
+// True for a decorator spelled like one that registers but reaching this file by another route — a local
+// declaration or a re-export. Worth a warning, because the class silently stops being provided.
+function isShadowed(dotted: string, imports: Map<string, ImportBinding>): boolean {
+  const name = dotted.slice(dotted.lastIndexOf('.') + 1)
+  return REGISTERING_NAMES.has(name) && !isRegistering(dotted, imports)
+}
+
+// `@caffeinejs/di/internals` is still `@caffeinejs/di`; a relative specifier names no package.
+function packageOf(spec: string): string {
+  if (spec.startsWith('.')) {
+    return ''
+  }
+  const parts = spec.split('/')
+  return spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]
+}
+
+function startsStatement(text: string, start: number): boolean {
+  for (let index = start - 1; index >= 0; index--) {
+    const char = text[index]
+    if (char === '\n' || char === ';' || char === '{' || char === '}') {
+      return true
+    }
+    if (!/\s/u.test(char)) {
+      return false
+    }
+  }
+  return true
+}
+
+// Reads from just past the `import` keyword to the end of the statement, recording what it binds.
+function readImportStatement(text: string, start: number, bindings: Map<string, ImportBinding>): number {
+  let index = skipSpace(text, start)
+  const char = text[index]
+  if (char === '(') {
+    return index
+  }
+  if (char === "'" || char === '"') {
+    return skipString(text, index)
+  }
+
+  const clauseStart = index
+  let clauseEnd = -1
+  let depth = 0
+  while (index < text.length) {
+    const current = text[index]
+    if (current === '/' && text[index + 1] === '/') {
+      index = skipLineComment(text, index)
+      continue
+    }
+    if (current === '/' && text[index + 1] === '*') {
+      index = skipBlockComment(text, index)
+      continue
+    }
+    if (current === "'" || current === '"' || current === '`') {
+      index = skipString(text, index)
+      continue
+    }
+    if (current === '{') {
+      depth++
+      index++
+      continue
+    }
+    if (current === '}') {
+      depth--
+      index++
+      continue
+    }
+    if (depth === 0 && isIdentStart(current)) {
+      const wordStart = index
+      while (index < text.length && isIdentPart(text[index])) {
+        index++
+      }
+      if (text.slice(wordStart, index) === 'from') {
+        clauseEnd = wordStart
+        break
+      }
+      continue
+    }
+    index++
+  }
+  if (clauseEnd === -1) {
+    return index
+  }
+
+  const quote = skipSpace(text, index)
+  if (text[quote] !== "'" && text[quote] !== '"') {
+    return quote
+  }
+  const specEnd = skipString(text, quote)
+  addBindings(text.slice(clauseStart, clauseEnd), text.slice(quote + 1, specEnd - 1), bindings)
+  return specEnd
+}
+
+function addBindings(clause: string, spec: string, bindings: Map<string, ImportBinding>): void {
+  const trimmed = clause.trim()
+  if (trimmed === 'type' || /^type\s/u.test(trimmed)) {
+    return
+  }
+
+  for (const match of trimmed.matchAll(/\*\s*as\s+([A-Za-z_$][\w$]*)/gu)) {
+    bindings.set(match[1], { imported: '', spec, namespace: true })
+  }
+
+  const open = trimmed.indexOf('{')
+  const close = trimmed.lastIndexOf('}')
+  if (open === -1 || close < open) {
+    return
+  }
+  for (const raw of trimmed.slice(open + 1, close).split(',')) {
+    const part = raw.trim()
+    if (!part || part === 'type' || /^type\s/u.test(part)) {
+      continue
+    }
+    const match = /^([A-Za-z_$][\w$]*)(?:\s+as\s+([A-Za-z_$][\w$]*))?$/u.exec(part)
+    if (match) {
+      bindings.set(match[2] ?? match[1], { imported: match[1], spec, namespace: false })
+    }
+  }
+}
+
 // Skips `@Name.Ns(...)` including nested parens, strings and comments inside the argument list,
 // so `@Controller('/cats', [Svc])` and `@Injectable(token<T>('x'))` both terminate correctly.
-function skipDecorator(text: string, start: number): number {
+function skipDecorator(text: string, start: number): { end: number; name: string } {
   let index = start + 1
   while (index < text.length && (isIdentPart(text[index]) || text[index] === '.')) {
     index++
   }
+  const name = text.slice(start + 1, index)
   const parenStart = skipSpace(text, index)
   if (text[parenStart] !== '(') {
-    return index
+    return { end: index, name }
   }
 
   let depth = 0
@@ -208,12 +430,12 @@ function skipDecorator(text: string, start: number): number {
     } else if (char === ')') {
       depth--
       if (depth === 0) {
-        return index + 1
+        return { end: index + 1, name }
       }
     }
     index++
   }
-  return index
+  return { end: index, name }
 }
 
 function isIdentStart(char: string): boolean {
