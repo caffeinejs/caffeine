@@ -244,6 +244,12 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
       expect(minimal().defaultRedirectPath('/home').build(SCHEME).defaultRedirectPath).toBe('/home')
     })
 
+    // Written as the application sees it, the path gets the base path in front already, so `~/` means nothing here.
+    // Taken as it is, it would reach the browser as a relative URL.
+    it('rejects a path written with "~/"', () => {
+      expect(() => minimal().defaultRedirectPath('~/home').build(SCHEME)).toThrow('must be a same-site absolute path')
+    })
+
     // Regression, found by options.prop.test.ts. The URL parser strips tab/LF/CR before
     // resolving, so these clear a naive prefix check and then resolve to //evil.com.
     it.each(['/\t/evil.com', '/\n/evil.com', '/\r/evil.com'])(

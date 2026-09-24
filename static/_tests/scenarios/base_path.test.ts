@@ -110,6 +110,18 @@ describe('a redirecting mount under a base path', () => {
     expect((await app.fetch('/files')).headers.get('location')).toBe('/files/')
   })
 
+  // The hook runs for every reply the mount's routes send, and nearly all of them are files, not redirects.
+  it('sends a file from the mount as it always has, with no Location', async () => {
+    app = site()
+    await app.ready()
+
+    const res = await app.fetch('/api/files/index.html')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe(readFileSync(join(dist, 'index.html'), 'utf8'))
+    expect(res.headers.get('location')).toBeNull()
+  })
+
   // The hook belongs to the mount's routes, so a redirect the application builds itself — carrying the base
   // already — is never given a second one.
   it("leaves the application's own redirects alone", async () => {

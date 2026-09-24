@@ -355,6 +355,18 @@ describe('CookieAuthenticationHandler', () => {
       await makeHandler(o => o.loginPath('/login')).challenge(ctx, { redirectURI: '~//evil.example/pwn' })
       expect(header).toHaveBeenCalledWith('location', '/login')
     })
+
+    // A configured path is written as the application sees it and gets the base in front already. Written with
+    // `~/`, it would reach the browser as it is, which resolves it against whatever page it is on.
+    it.each(['loginPath', 'accessDeniedPath'] as const)(
+      'refuses a %s written with "~/", naming the path to write instead',
+      option => {
+        const configure = (o: CookieAuthenticationOptionsBuilder) => o[option]('~/signed-out')
+
+        expect(() => makeHandler(configure)).toThrow(`${option} "~/signed-out"`)
+        expect(() => makeHandler(configure)).toThrow('"/signed-out"')
+      },
+    )
   })
 
   // A hook standing in for the default answer may still send the browser where the default would have; it is handed

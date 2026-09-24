@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
+import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
 import { Claim, Identity, Principal } from '../../../index.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
@@ -325,15 +326,16 @@ export abstract class RemoteAuthenticationHandler<
   /**
    * Answers {@link loginPath}: starts a sign-in and sends the browser to the provider.
    *
-   * `returnTo` on the query string is where the user lands afterwards. It is anybody's to write, so one that would
+   * `returnTo` on the query string is where the user lands afterwards, as the browser will request it: a leading
+   * `~/` resolves against the base path, as it does in `redirectURI`. It is anybody's to write, so one that would
    * leave this origin is dropped in favour of `defaultRedirectPath`.
    */
   async startSignIn(ctx: Context): Promise<void> {
+    // Checked for a string, not for `undefined`: a parameter given twice arrives as an array.
     const requested = ctx.req.query('returnTo')
+    const target = typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : undefined
     const returnTo =
-      requested !== undefined && isSafeReturnPath(requested)
-        ? requested
-        : ctx.req.basePath + this.options.defaultRedirectPath
+      target !== undefined && isSafeReturnPath(target) ? target : ctx.req.basePath + this.options.defaultRedirectPath
 
     noStore(ctx)
     ctx.redirect(await this.#startFlow(ctx, returnTo), 302)

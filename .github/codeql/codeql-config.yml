@@ -9,5 +9,9 @@ paths-ignore:
   - tools
   - ai
   - coverage
+  - '**/dist/**'
+  - '**/_tests/**'
   - '**/*.test.ts'
+  - '**/*.testkit.ts'
   - '**/_testdata'
+  - '**/_testdata/**'

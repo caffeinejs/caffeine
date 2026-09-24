@@ -229,7 +229,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     // Fails closed to the bare login path: an off-origin or unparseable target is dropped rather than
     // echoed, since this value becomes a `Location` after sign-in.
     const target = returnTargetOf(ctx, properties)
-    if (typeof target !== 'string' || !isSafeReturnPath(target)) {
+    if (!isSafeReturnPath(target)) {
       return loginPath
     }
 
@@ -421,9 +421,9 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   }
 
   /**
-   * The configured `path`, or else the application's base path as this request came in, so applications sharing
-   * an origin under different bases keep their sessions apart. A `__Host-` cookie stays at `/`: a browser refuses
-   * one set anywhere else.
+   * The configured `path`, or else the application's base path as this request came in — `/` for one that came
+   * without it — so applications sharing an origin under different bases keep their sessions apart. A `__Host-`
+   * cookie stays at `/`: a browser refuses one set anywhere else.
    */
   #cookiePath(ctx: Context, name: string): string {
     if (this.options.path !== undefined) {

@@ -408,8 +408,8 @@ export class WebApplication<
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.
-   * @throws ErrConfiguration from {@link ready}, when the base path does not start with "/" or holds a "?" or a
-   *   "#".
+   * @throws ErrConfiguration from {@link ready}, when the base path does not start with a single "/" (never "//"
+   *   or "/\"), or holds a "?", a "#" or a control character.
    */
   basePath(basePath: string | BasePathConfigurer<C>): this {
     this.assertConfigurable()

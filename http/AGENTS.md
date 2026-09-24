@@ -186,12 +186,16 @@ Fastify registers for a `/` route without running `onRoute`. The middleware engi
 when it is set, since that is where Fastify saved the full URL.
 
 A URL an application hands over for the browser is sent as written, except that a leading `~/` resolves against
-the request's base (`resolveAppURL`). That is `ctx.redirect(...)` and `AuthenticationProperties.redirectURI`, and
-nothing else: a header, a body and a configured option are not rewritten. `~/` followed by `/`, `\` or a control
-character is left alone, since a browser would read the result as protocol-relative. The cookie scheme's
-cookies default to `Path=` the request's base, so applications sharing an origin do not share a session; a
-`__Host-` name keeps `/`. The remote strategies' cookies stay at `/` for the same `__Host-` reason, and the state
-cookie must reach a callback that may sit outside the base — co-hosted applications name them apart instead.
+the request's base (`resolveAppURL`). That is `ctx.redirect(...)`, `AuthenticationProperties.redirectURI` and the
+`returnTo` query a remote strategy's sign-in route reads, and nothing else: a header, a body and a configured option
+are not rewritten. A configured path is written as the application sees it and gets the base in front already, so
+one written with `~/` is refused when its scheme builds rather than sent out as a relative URL. `~/` followed by `/`,
+`\` or a control character is left alone, since a browser would read the result as protocol-relative. The cookie
+scheme's cookies default to `Path=` the request's base, so applications sharing an origin do not share a session
+begun under their bases; one begun on a request without the base is written at `/`, since the base follows the
+request here as it does in every redirect. A `__Host-` name keeps `/`. The remote strategies' cookies stay at `/` for
+the same `__Host-` reason, and the state cookie must reach a callback that may sit outside the base — co-hosted
+applications name them apart instead.
 
 The application's configured logger is the server's `loggerInstance`, with request logging off through a
 `LogController`, unless `factory.logger` or `factory.loggerInstance` is set — Fastify refuses both together, so a

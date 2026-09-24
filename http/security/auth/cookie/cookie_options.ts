@@ -1,4 +1,5 @@
 import type { Context } from '../../../context.js'
+import { solutions } from '../../../error/util.js'
 import type { Principal } from '../../index.js'
 import { type ChallengeMode, MIN_SESSION_SECRET_LENGTH } from '../internal/remote/config.js'
 
@@ -36,7 +37,8 @@ export interface CookieAuthenticationOptions {
    * Path to redirect to on challenge for browser apps. When unset, challenge returns a bare 401.
    *
    * Written as the application sees it: the request's `ctx.req.basePath` is put in front of a path on this
-   * origin. An absolute URL is used as it is.
+   * origin. An absolute URL is used as it is. A path written with `~/` is refused, since the base goes in front
+   * already.
    */
   loginPath?: string
   /**
@@ -101,8 +103,9 @@ export interface CookieAuthenticationOptions {
    * sharing an origin under different bases keep their sessions apart. A `__Host-` cookie name keeps `/`, the only
    * path a browser accepts it at.
    *
-   * Scoped to the base, a session signed in through it is not sent to a request that came without it; `'/'`
-   * shares one session across both.
+   * The scope follows the request that wrote the cookie, as the redirects do. A session signed in under the base is
+   * not sent to a request that came without it, and one signed in on a request without the base is written at `/`,
+   * which every path on the host receives. Setting it pins one scope for both: `'/'` shares one session across them.
    */
   path?: string
   /** Claim type treated as the role claim on the rebuilt identity. Default `'roles'`. */
@@ -242,6 +245,20 @@ export class CookieAuthenticationOptionsBuilder {
       throw new Error(
         `Cannot build CookieAuthenticationOptions: sessionSecret must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
       )
+    }
+
+    // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path
+    // would reach the browser as it is, which resolves it against whatever page it is on.
+    for (const [option, path] of [
+      ['loginPath', this.#options.loginPath],
+      ['accessDeniedPath', this.#options.accessDeniedPath],
+    ] as const) {
+      if (path?.startsWith('~/')) {
+        throw new Error(
+          `Cannot build CookieAuthenticationOptions: ${option} "${path}" starts with "~/"` +
+            solutions(`Write it as "${path.slice(1)}", which is put under the base path already`),
+        )
+      }
     }
 
     return {

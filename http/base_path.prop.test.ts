@@ -1,7 +1,8 @@
 import { fc, it } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
-import { resolveAppURL, stripBasePath } from './base_path.js'
+import { normalizeBasePath, resolveAppURL, stripBasePath } from './base_path.js'
+import { ErrConfiguration } from './error/common.js'
 
 /**
  * The invariants of taking a base path off a request, over bases, paths and queries no one wrote down.
@@ -74,6 +75,33 @@ describe('resolveAppURL (property)', () => {
     fc.pre(!url.startsWith('~/'))
 
     expect(resolveAppURL(url, b)).toBe(url)
+  })
+})
+
+describe('normalizeBasePath (property)', () => {
+  // Drawn from the characters that make a URL name another host once a browser has read it, half of them after the
+  // leading "/" every accepted base starts with.
+  const confusing = fc.string({ unit: fc.constantFrom('/', '\\', '\t', '\n', '\r', '\x00', 'a', '.', '~') })
+  const value = fc.oneof(
+    confusing,
+    confusing.map(rest => `/${rest}`),
+  )
+
+  // Whatever it accepts goes in front of every redirect the framework builds.
+  it.prop([value])('accepts no base that sends a "~/" redirect off the origin', v => {
+    let base: string | undefined
+    try {
+      base = normalizeBasePath(v)
+    } catch (e) {
+      if (e instanceof ErrConfiguration) {
+        return
+      }
+      throw e
+    }
+
+    const resolved = resolveAppURL('~/x', base ?? '').replace(/[\t\n\r]/g, '')
+
+    expect(resolved.startsWith('//') || resolved.startsWith('/\\')).toBe(false)
   })
 })
 

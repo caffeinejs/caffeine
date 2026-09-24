@@ -14,11 +14,14 @@ describe('newURL()', () => {
   })
 
   // A gateway's base URL names the application's base path; resolving the path against it would drop that.
-  it.each(['https://gw.example/api', 'https://gw.example/api/'])('keeps the base path of %s', baseURL => {
-    const url = newURL('/tasks/:id').param('id', 1).query('x', 1).baseURL(baseURL).build()
+  it.each(['https://gw.example/api', 'https://gw.example/api/', 'https://gw.example/api//'])(
+    'keeps the base path of %s',
+    baseURL => {
+      const url = newURL('/tasks/:id').param('id', 1).query('x', 1).baseURL(baseURL).build()
 
-    expect(url).toBe('https://gw.example/api/tasks/1?x=1')
-  })
+      expect(url).toBe('https://gw.example/api/tasks/1?x=1')
+    },
+  )
 
   // `newReq().path(newURL(...).build())` hands a full URL back in as the path; it goes on as it is.
   it('keeps a path that is already a full URL as it is', () => {

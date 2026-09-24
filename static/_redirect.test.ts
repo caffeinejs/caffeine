@@ -8,6 +8,9 @@ describe('rebaseDirectoryRedirect', () => {
     ['/dir/', '/dir', '/api/dir/'],
     ['/dir/?x=1', '/dir?x=1', '/api/dir/?x=1'],
     ['/dir/', '//dir', '/api/dir/'],
+    // A path that parses to one ending in "/" gets none added. `@fastify/static` refuses `/dir/.` before redirecting
+    // today, but its formula keeps the case, and a redirect it builds is only recognized while the two agree.
+    ['/dir/', '/dir/.', '/api/dir/'],
   ])('puts the base in front of the directory redirect %s for %s', (location, url, expected) => {
     expect(rebaseDirectoryRedirect(location, 301, url, '/api')).toBe(expected)
   })

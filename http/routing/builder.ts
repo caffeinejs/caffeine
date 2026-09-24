@@ -326,7 +326,13 @@ export class RouteBuilder {
 }
 
 export function normalizeGroupPath(prefix: string): string {
-  return prefix.replace(/\/+$/, '')
+  // A loop, not `/\/+$/`: that backtracks quadratically over a long run of slashes followed by anything else.
+  let end = prefix.length
+  while (end > 0 && prefix[end - 1] === '/') {
+    end--
+  }
+
+  return prefix.slice(0, end)
 }
 
 export function normalizeRoutePath(path: string): string {

@@ -8,6 +8,7 @@ import {
   Claim,
   type Context,
   Controller,
+  type CookieAuthenticationOptionsBuilder,
   type CredentialUser,
   CredentialsService,
   Get,
@@ -458,7 +459,7 @@ describe('durable remember-me (server-side revocable)', () => {
 describe('cookie sign-in under a base path', () => {
   const NAVIGATION = { 'sec-fetch-mode': 'navigate' }
 
-  async function buildBasedApp() {
+  async function buildBasedApp(cookie: (o: CookieAuthenticationOptionsBuilder) => void = () => {}) {
     const container = new CaffeineIoC()
     container.bind(TestUserProvider, t => t.toSelf().extends())
     container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
@@ -466,7 +467,10 @@ describe('cookie sign-in under a base path', () => {
       .basePath('/api')
       .authentication(auth =>
         auth
-          .addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login').accessDeniedPath('/denied'))
+          .addCookie(o => {
+            o.sessionSecret(SECRET).secure(false).loginPath('/login').accessDeniedPath('/denied')
+            cookie(o)
+          })
           .addCredentials(),
       )
       .mount(
@@ -544,6 +548,43 @@ describe('cookie sign-in under a base path', () => {
 
     const session = res.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
     expect(session).toMatch(/;\s*Path=\/api(;|$)/i)
+    await app.close()
+  })
+
+  // The base follows the request, for the cookie as for the redirects: a sign-in that came without the base is
+  // answered without it, and its session is written where a request without the base sends it back.
+  it('writes the session at "/" for a sign-in that came without the base', async () => {
+    const app = await buildBasedApp()
+    const res = await app.fetch('/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'alice', password: 's3cret' }),
+    })
+
+    const session = res.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
+    expect(session).toMatch(/;\s*Path=\/(;|$)/i)
+    await app.close()
+  })
+
+  // One session for both entries is what `path('/')` is for: it is written and cleared at the one path, whichever
+  // entry signed in and whichever signs out. Cleared at another path, the browser would keep it.
+  it('keeps one session for both entries with path("/"), signed in under the base and out without it', async () => {
+    const app = await buildBasedApp(o => o.path('/'))
+    const signedIn = await app.fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'alice', password: 's3cret' }),
+    })
+    const written = signedIn.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
+    expect(written).toMatch(/;\s*Path=\/(;|$)/i)
+
+    const signedOut = await app.fetch('/auth/logout', {
+      method: 'POST',
+      headers: { cookie: sessionCookie(written ?? null) },
+    })
+    const cleared = signedOut.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
+    expect(cleared).toMatch(/;\s*Path=\/(;|$)/i)
+    expect(cleared).toMatch(/Max-Age=0|Expires=Thu, 01 Jan 1970/i)
     await app.close()
   })
 

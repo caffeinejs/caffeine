@@ -205,4 +205,23 @@ describe('controllerClient() against a base URL naming a base path', () => {
 
     expect(seen).toEqual([`${BASE}/tasks/7`])
   })
+
+  // However many slashes a base URL ends in, it names the same base path.
+  it('sends a route under a base URL ending in slashes as under one ending in none', async () => {
+    const seen = capturing()
+
+    await controllerClient(TaskController, `${BASE}//`).list()
+
+    expect(seen).toEqual([`${BASE}/tasks`])
+  })
+
+  it('moves a Request under a base URL ending in slashes, and sends one already under it as it is', async () => {
+    const seen = capturing()
+    const client = controllerClient(TaskController, `${BASE}//`)
+
+    await client.find(new Request(newURL('/tasks/:id').param('id', 7).query('x', 1).build()))
+    await client.find(new Request(newURL('/tasks/:id').param('id', 7).baseURL(BASE).build()))
+
+    expect(seen).toEqual([`${BASE}/tasks/7?x=1`, `${BASE}/tasks/7`])
+  })
 })

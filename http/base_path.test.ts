@@ -71,6 +71,30 @@ describe('normalizeBasePath', () => {
     expect(err).toBeInstanceOf(ErrConfiguration)
     expect(err.message).toContain(`"${value}" contains "${char}"`)
   })
+
+  // The base goes in front of every redirect the framework builds, so it must never be one a browser reads as naming
+  // another host: `~/done` under `//evil.example` is `//evil.example/done`.
+  it.each([
+    ['//evil.example', '//'],
+    ['/\\evil.example', '/\\'],
+  ])('refuses %s, which a browser reads as another host, naming the fix', (value, start) => {
+    const err = captureError(() => normalizeBasePath(value))
+
+    expect(err).toBeInstanceOf(ErrConfiguration)
+    expect(err.message).toContain(`"${value}" starts with "${start}"`)
+    expect(err.message).toContain('Start it with a single "/"')
+  })
+
+  // A browser drops tabs and line breaks before it reads a URL: `/\t/evil.example` is `//evil.example` to it.
+  it.each([['/\t/evil.example'], ['/\n/evil.example'], ['/api\r'], ['/api\x00']])(
+    'refuses %j, which holds a control character',
+    value => {
+      const err = captureError(() => normalizeBasePath(value))
+
+      expect(err).toBeInstanceOf(ErrConfiguration)
+      expect(err.message).toContain(`${JSON.stringify(value)} contains a control character`)
+    },
+  )
 })
 
 /**

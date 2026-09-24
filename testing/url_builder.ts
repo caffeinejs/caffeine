@@ -1,5 +1,6 @@
 import { joinURL } from '@caffeinejs/brewer'
 
+import { withoutTrailingSlashes } from './_util.js'
 import { ErrMissingRouteParam } from './error.js'
 
 /**
@@ -44,7 +45,7 @@ export class URLBuilder {
     // A path is joined onto the base URL, never resolved against it: the base URL may name the application's base
     // path, and has to keep it. A full URL — what `build()` itself returns — is kept as it is.
     const path = substitute(this.#path, this.#params)
-    const url = URL.canParse(path) ? new URL(path) : new URL(joinURL(this.#baseURL.replace(/\/+$/, ''), path))
+    const url = URL.canParse(path) ? new URL(path) : new URL(joinURL(withoutTrailingSlashes(this.#baseURL), path))
 
     for (const [key, value] of this.#query) {
       url.searchParams.append(key, value)

@@ -1,7 +1,7 @@
 import { joinURL } from '@caffeinejs/brewer'
 import { getRouteGroup } from '@caffeinejs/http'
 
-import { mergeRequest, resolveRouteURL } from './_util.js'
+import { mergeRequest, resolveRouteURL, withoutTrailingSlashes } from './_util.js'
 import { ErrNoRouter } from './error.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
@@ -55,7 +55,7 @@ export function controllerClient<ROUTER extends RouterCtor>(
  * application's base path. A URL already under `origin` is returned as it is.
  */
 function rebase(url: string, origin: string): string {
-  const base = origin.replace(/\/+$/, '')
+  const base = withoutTrailingSlashes(origin)
 
   if (url === base || url.startsWith(`${base}/`) || url.startsWith(`${base}?`)) {
     return url

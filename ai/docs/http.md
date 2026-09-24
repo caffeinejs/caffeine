@@ -44,7 +44,8 @@ application under it — or `.basePath(({ config }) => config.app.basePath)`, re
 The server takes the base off a request's path before routing, so nothing the application declares changes:
 routes from every source, plugin routes such as the health probes and static files, `app.use(path, …)` and
 fallback-policy exceptions are all written as if served from the root. A request without the base is routed as it
-came.
+came, so the base is not an access boundary: every route also answers without it, and keeping a route private is
+the gateway's job or authorization's.
 
 - `ctx.req.url` is the path the application sees; `ctx.req.basePath` is what was taken off (`''` when nothing was),
   so the base follows the request: a request that came without it is answered without it.
@@ -52,10 +53,13 @@ came.
   URL, OAuth/OIDC's return URL and `defaultRedirectPath`, a `@caffeinejs/static` mount's `redirect` and `list`
   links, and the directory redirect of `sendFile` / `download`. A handler's own redirect says so with `~/`:
   `ctx.redirect('~/done')` is `/api/done`, while `ctx.redirect('/done')` is sent as written.
-  `AuthenticationProperties.redirectURI` takes `~/` too. A link in a page writes `ctx.req.basePath + '/done'`.
+  `AuthenticationProperties.redirectURI` and the `returnTo` query of an OAuth/OIDC `loginPath` take `~/` too. A
+  link in a page writes `ctx.req.basePath + '/done'`.
 - The cookie scheme scopes its session and remember-me cookies to the base (`Path=/api`), so applications sharing
-  an origin under different bases keep their sessions apart. `.path('/')` shares one session with requests that
-  come without the base.
+  an origin under different bases keep their sessions apart. The scope follows the request: a sign-in that came
+  without the base writes them at `/`. `.path('/')` shares one session with requests that come without the base.
+  Its `loginPath` and `accessDeniedPath` are written as the application sees them — `/login`, never `~/login`,
+  which is refused.
 - OAuth/OIDC `callbackURL` and `loginPath` are the URLs the browser sees, so they include the base. Their cookies
   stay at `Path=/` — `__Host-` cookies must — so applications sharing an origin give them distinct
   `sessionCookieName(...)` / `stateCookieName(...)`.

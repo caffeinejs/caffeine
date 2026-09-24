@@ -106,8 +106,9 @@ export function returnTargetOf(ctx: Context, properties: AuthenticationPropertie
     return ctx.req.basePath + ctx.req.url
   }
 
-  // A caller written in plain JavaScript may hand over anything; what is not a string fails the check that follows.
-  return typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : requested
+  // A caller written in plain JavaScript may hand over anything. What is not a string is dropped: `''` fails the
+  // check that follows, and names no destination on the callback either.
+  return typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : ''
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])

@@ -499,14 +499,17 @@ function withBasePath(factory: FastifyHttpOptions<Server>, basePath: string | un
   return {
     ...factory,
     rewriteUrl(req) {
-      const stripped = req.url === undefined ? undefined : stripBasePath(req.url, basePath)
+      // A request a server received always has a URL: `url` is optional only because Node types the response a
+      // client receives with the same class.
+      const url = req.url!
+      const stripped = stripBasePath(url, basePath)
 
       if (stripped !== undefined) {
         ;(req as typeof req & BasePathCarrier)[kRawBasePath] = basePath
         req.url = stripped
       }
 
-      return own === undefined ? (req.url ?? '/') : own.call(this, req)
+      return own === undefined ? (stripped ?? url) : own.call(this, req)
     },
   }
 }

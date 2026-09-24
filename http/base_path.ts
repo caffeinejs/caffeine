@@ -24,7 +24,8 @@ export interface BasePathCarrier {
  * Trailing slashes are dropped, so `'/'` and `''` mean no base at all.
  *
  * @throws ErrConfiguration when the value does not start with "/", or holds a "?" or a "#": such a base could
- *   never match the path of a request.
+ *   never match the path of a request. Also when it starts with "//" or "/\", or holds a control character: put in
+ *   front of a redirect, such a base would send the browser off the origin.
  */
 export function normalizeBasePath(value: string | undefined): string | undefined {
   if (value === undefined) {
@@ -40,6 +41,26 @@ export function normalizeBasePath(value: string | undefined): string | undefined
     throw new ErrConfiguration(
       `Cannot set the base path: "${value}" does not start with "/"` + solutions(`Write it as "/${base}"`),
     )
+  }
+
+  // A browser reads a URL starting with `//` or `/\` as naming another host, and drops tabs and line breaks before it
+  // reads one, so a control character can smuggle the same start past the check.
+  const second = base.charCodeAt(1)
+  if (second === SLASH || second === BACKSLASH) {
+    throw new ErrConfiguration(
+      `Cannot set the base path: "${value}" starts with "${base.slice(0, 2)}"` +
+        solutions('Start it with a single "/": a browser reads "//" or "/\\" as the start of another host'),
+    )
+  }
+
+  for (let i = 0; i < base.length; i++) {
+    const code = base.charCodeAt(i)
+    if (code < 0x20 || code === 0x7f) {
+      throw new ErrConfiguration(
+        `Cannot set the base path: ${JSON.stringify(value)} contains a control character` +
+          solutions('Give the base path as path segments only'),
+      )
+    }
   }
 
   for (const char of ['?', '#']) {
