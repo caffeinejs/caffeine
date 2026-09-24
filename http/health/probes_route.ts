@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
-import { authenticationExempt } from '../fastify_route_config.js'
+import { authenticationExempt } from '../routing/fastify/route_config.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthOptions } from './options.js'
 import type { ProbeEndpoint, ProbeQuery, ProbeResponse } from './probes.js'

@@ -1,7 +1,5 @@
 export * from './blend.js'
-export type * from './extension.js'
 export * from './flatten.js'
-export * from './inject.js'
 export * from './new_router.js'
 export * from './route_chain.js'
 export * from './router.js'

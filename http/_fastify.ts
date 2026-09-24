@@ -1,8 +1,8 @@
 import { type Container } from '@caffeinejs/di'
 
 import { type FastifyContext } from './fastify_context.js'
-import { type CaffeineRouteConfig } from './fastify_route_config.js'
 import { type RouteGroupBuilder } from './routing/builder.js'
+import { type CaffeineRouteConfig } from './routing/fastify/route_config.js'
 import { type Principal } from './security/identity.js'
 import { Keys } from './symbols.js'
 

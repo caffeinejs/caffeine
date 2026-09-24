@@ -1,4 +1,4 @@
-import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
+import type { RouteBuilder, RouteGroupBuilder } from './builder.js'
 
 /**
  * A unit of route configuration, written by whoever owns the feature rather than by the router.

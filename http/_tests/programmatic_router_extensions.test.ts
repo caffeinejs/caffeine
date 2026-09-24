@@ -13,12 +13,12 @@ import {
   fst,
   type RouteExtension,
 } from '../index.js'
-import { $p } from '../route_picker.js'
 import { RouteBuilder } from '../routing/builder.js'
+import { $p } from '../routing/picker.js'
 
 // A third party annotating a route it does not own: the namespace is declared here, exactly as
 // `@caffeinejs/openapi` declares its own.
-declare module '../routing/detail.js' {
+declare module '../routing/spec.js' {
   interface RouteDetail {
     testMark?: string
   }

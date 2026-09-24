@@ -2,7 +2,7 @@ import { Container, Ctor, InjectionToken, Provider } from '@caffeinejs/di'
 
 import { Context } from '../context.js'
 import { ActionResult } from '../response.js'
-import type { CatchByMap } from '../route.js'
+import type { CatchByMap } from '../routing/route.js'
 import { ErrConfiguration } from './common.js'
 import { solutions } from './util.js'
 

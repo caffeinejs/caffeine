@@ -4,7 +4,7 @@ import { RouteGroupBuilder, RouteBuilder } from './builder.js'
 
 // The seam a package annotates a route through. Augmented here so the merge semantics below are pinned
 // against a real namespace rather than a cast.
-declare module './detail.js' {
+declare module './spec.js' {
   interface RouteDetail {
     testMerge?: unknown
   }

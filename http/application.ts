@@ -32,12 +32,12 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
-import type { RouteGroup } from './route.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
+import type { RouteGroup } from './routing/route.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import type { HTTPSetupContext } from './setup_context.js'

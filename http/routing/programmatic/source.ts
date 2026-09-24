@@ -1,5 +1,5 @@
-import type { RouteGroup } from '../../route.js'
-import type { RouteBuildContext, RouteSource } from '../source.js'
+import type { RouteGroup } from '../route.js'
+import type { RouteBuildContext, RouteSource } from '../routing.js'
 import { stateOf, type RouterState } from './_state.js'
 import { flattenRouter } from './flatten.js'
 import type { Router } from './router.js'

@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { authenticationExempt } from '../../../fastify_route_config.js'
+import { authenticationExempt } from '../../../routing/fastify/route_config.js'
 import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
 import type { OIDCMeta } from './index.js'
 

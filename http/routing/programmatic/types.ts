@@ -2,7 +2,7 @@ import type { AnySchema, InferSchema } from '@caffeinejs/std'
 
 import type { AdapterTypes, AnyAdapterTypes } from '../../adapter_types.js'
 import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
-import type { RouteValidationSchema } from '../../route.js'
+import type { RouteValidationSchema } from '../spec.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
 export type Simplify<T> = { [K in keyof T]: T[K] } & {}

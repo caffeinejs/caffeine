@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Args, Query, createWebApplication } from '../index.js'
-import { $p } from '../route_picker.js'
+import { $p } from '../routing/picker.js'
 
 // Isolated file: registering a @Query controller forces a QUERY route onto every app built in the
 // same module, the decorator registry being module-global.

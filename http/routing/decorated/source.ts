@@ -4,11 +4,10 @@ import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { solutions } from '../../error/util.js'
-import { kErrorUnhandled, type RouteGroup, type RouteGroupErrorHandler } from '../../route.js'
 import { Keys } from '../../symbols.js'
 import type { RouteGroupMeta } from '../compile.js'
-import type { RouteDispatch } from '../dispatch.js'
-import type { RouteBuildContext, RouteSource } from '../source.js'
+import { kErrorUnhandled, type RouteDispatch, type RouteGroup, type RouteGroupErrorHandler } from '../route.js'
+import type { RouteBuildContext, RouteSource } from '../routing.js'
 import type { RouteSpec, RouteGroupSpec } from '../spec.js'
 
 /** The instance a route is dispatched on, as the adapter stashes it for the request. */

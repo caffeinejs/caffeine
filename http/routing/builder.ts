@@ -3,12 +3,19 @@ import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
-import type { RouteValidationSchema } from '../route.js'
 import { mergeValue } from './_merge.js'
-import type { RouteDetail, RouteGroupDetail } from './detail.js'
-import type { RouteInvoker } from './dispatch.js'
 import { foldAuthz } from './inherit.js'
-import type { BodyMode, RouteAuthz, RouteAuthzOptions, RouteSpec, RouteGroupSpec } from './spec.js'
+import type {
+  BodyMode,
+  RouteAuthz,
+  RouteAuthzOptions,
+  RouteDetail,
+  RouteGroupDetail,
+  RouteGroupSpec,
+  RouteInvoker,
+  RouteSpec,
+  RouteValidationSchema,
+} from './spec.js'
 
 export class RouteGroupBuilder {
   #path?: string

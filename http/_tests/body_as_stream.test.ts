@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Post, Args, createWebApplication, BodyAsStream } from '../index.js'
-import { $p } from '../route_picker.js'
+import { $p } from '../routing/picker.js'
 
 describe('BodyAsStream', () => {
   it('delivers the body as a ReadableStream', async () => {

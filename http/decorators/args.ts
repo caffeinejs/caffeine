@@ -1,4 +1,4 @@
-import type { HTTPPickers } from '../route_picker.js'
+import type { HTTPPickers } from '../routing/picker.js'
 import { type Picks, resolveParams } from './_params.js'
 import { configureRoute } from './registrar/registrar.js'
 

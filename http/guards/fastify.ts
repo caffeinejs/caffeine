@@ -1,6 +1,6 @@
 import type { FastifyRequest } from 'fastify'
 
-import { addRouteHook, type AdapterRouteOptions } from '../route_hooks.js'
+import { addRouteHook, type AdapterRouteOptions } from '../routing/fastify/route_options.js'
 import { runGuards } from './_run.js'
 import type { CompiledGuard } from './compile.js'
 import type { GuardContext, GuardTarget } from './guard.js'

@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, Method, createWebApplication, Args } from './index.js'
-import { $p } from './route_picker.js'
+import { $p } from './routing/picker.js'
 
 describe('Fastify Adapter', () => {
   // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under

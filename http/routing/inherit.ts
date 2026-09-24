@@ -1,6 +1,5 @@
 import { mergeValue } from './_merge.js'
-import type { RouteGroupDetail } from './detail.js'
-import type { RouteAuthz, RouteAuthzOptions, RouteGroupSpec } from './spec.js'
+import type { RouteAuthz, RouteAuthzOptions, RouteGroupDetail, RouteGroupSpec } from './spec.js'
 
 /**
  * Adds one declaration to what a group or a route has declared so far.

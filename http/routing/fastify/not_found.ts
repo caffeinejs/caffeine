@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
-import { ErrHTTPNotFound } from './error/http.js'
+import { ErrHTTPNotFound } from '../../error/http.js'
 
 /**
  * Installs the root not-found handler, which turns an unmatched URL into {@link ErrHTTPNotFound}.

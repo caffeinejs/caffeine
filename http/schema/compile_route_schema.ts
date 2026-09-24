@@ -1,7 +1,7 @@
 import { type AnySchema, type JSONSchema, hasFileSchema, toJSONSchema } from '@caffeinejs/std/schema'
 import type { FastifySchema } from 'fastify'
 
-import type { RouteValidationSchema } from '../route.js'
+import type { RouteValidationSchema } from '../routing/spec.js'
 import { normalizeForAjv } from './_normalize.js'
 
 /** The request slots, in the order they appear in an error message. */

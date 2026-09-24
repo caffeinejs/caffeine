@@ -1,4 +1,4 @@
-import type { RouteExtension } from '../routing/programmatic/extension.js'
+import type { RouteExtension } from '../routing/extension.js'
 import { configureRoute } from './registrar/registrar.js'
 
 /** Reads the request body as a raw `Buffer`, whatever its content type. */

@@ -1,4 +1,4 @@
-import type { RouteExtension } from '../routing/programmatic/extension.js'
+import type { RouteExtension } from '../routing/extension.js'
 import { configureRoute } from './registrar/registrar.js'
 
 /** Hands the handler the request body as a stream, leaving it unparsed. */

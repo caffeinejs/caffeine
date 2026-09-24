@@ -2,8 +2,8 @@ import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { compileArgs } from '../adapter_handler_parameters.js'
-import { $p } from '../route_picker.js'
+import { compileArgs } from '../routing/fastify/parameters.js'
+import { $p } from '../routing/picker.js'
 
 function asReq(partial: object): FastifyRequest {
   return partial as FastifyRequest

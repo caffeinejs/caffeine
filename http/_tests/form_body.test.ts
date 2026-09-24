@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Post, Args, createWebApplication } from '../index.js'
-import { $p } from '../route_picker.js'
+import { $p } from '../routing/picker.js'
 
 const FORM = 'application/x-www-form-urlencoded'
 

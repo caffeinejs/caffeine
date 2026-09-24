@@ -1,15 +1,19 @@
 import { Ctor, Provider } from '@caffeinejs/di'
-import type { AnySchema } from '@caffeinejs/std'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
 
-import type { Context } from './context.js'
-import type { ErrorHandler } from './error/handler.js'
-import type { CompiledGuard } from './guards/compile.js'
-import type { RouteDetail, RouteGroupDetail } from './routing/detail.js'
-import type { RouteDispatch, RouteGroupHook } from './routing/dispatch.js'
-import { BodyMode, RouteAuthz } from './routing/spec.js'
-import { AuthzRouteService } from './security/authz/index.js'
+import type { Context } from '../context.js'
+import type { ErrorHandler } from '../error/handler.js'
+import type { CompiledGuard } from '../guards/compile.js'
+import { AuthzRouteService } from '../security/authz/index.js'
+import type {
+  BodyMode,
+  RouteAuthz,
+  RouteDetail,
+  RouteGroupDetail,
+  RouteInvoker,
+  RouteValidationSchema,
+} from './spec.js'
 
 /** Error types mapped to the handler class that renders them, as declared by `@CatchWith`. */
 export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
@@ -122,24 +126,31 @@ export interface RouteAuthorization {
 }
 
 /**
- * The validation contract of a route, as authored. Every slot takes the `$t` dialect (recommended) or any Standard
- * Schema that converts to JSON Schema.
- *
- * This is the authoring shape, not the runtime one: each slot is compiled to JSON Schema once, while routes are
- * being registered, and Fastify's Ajv does all request-time validation. See `./schema/compile_route_schema.ts` for
- * the compilation and the per-slot strictness policy.
+ * The parameter compilers the adapter owns, handed to a route source so it can build its own dispatch without
+ * knowing how arguments are picked out of a request.
  */
-export interface RouteValidationSchema {
-  params?: AnySchema
-  querystring?: AnySchema
-  headers?: AnySchema
-  body?: AnySchema
-  /**
-   * Response schemas keyed by status code, as Fastify requires: `{ 200: $t.Object({ ... }), '4xx': ErrorBody }`.
-   *
-   * Beware that a response schema *serializes*, it does not validate. Fastify hands it to fast-json-stringify,
-   * which emits only the declared properties — a handler returning a non-conforming object is not rejected, its
-   * extra fields are simply omitted.
-   */
-  response?: Record<number | string, AnySchema>
+export interface RouteCompilers<REQ = unknown, RES = unknown> {
+  /** Compiles the pickers around `fn`, returning the function the adapter installs as the route handler. */
+  handler(parameters: ParameterPickOptions<REQ>[], fn: RouteInvoker): (req: REQ, res: RES) => unknown
+
+  /** Compiles the pickers alone, for a source that resolves its target per request and invokes it itself. */
+  args(parameters: ParameterPickOptions<REQ>[]): (req: REQ, res: RES) => unknown[] | Promise<unknown[]>
 }
+
+/**
+ * Builds a route's dispatch function.
+ *
+ * Called once, while routes are being registered, and never again. A source with several invocation shapes —
+ * a singleton instance, one resolved per request, a plain function — chooses between them here, so the request
+ * path never branches on which source declared the route.
+ */
+export type RouteDispatch<REQ = unknown, RES = unknown> = (
+  compilers: RouteCompilers<REQ, RES>,
+) => (req: REQ, res: RES) => unknown
+
+/**
+ * A request hook covering every route of one group, supplied by the source that built it.
+ *
+ * Registered by the adapter exactly as given, so it costs what the equivalent hand-written hook costs.
+ */
+export type RouteGroupHook<REQ = unknown, RES = unknown> = (req: REQ, res: RES, done: (err?: Error) => void) => void

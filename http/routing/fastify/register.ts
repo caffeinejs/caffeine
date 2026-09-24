@@ -13,19 +13,17 @@ import {
   type RawServerBase,
 } from 'fastify'
 
-import type { AdapterExtensions } from './adapter_extension.js'
-import { ErrCaffeineWebApplication } from './error/common.js'
-import { installRouteGroupErrorHandler, type GlobalErrorHandler } from './error/plugin.js'
-import { solutions } from './error/util.js'
-import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './fastify_route_config.js'
-import { attachGuardHook } from './guards/fastify.js'
-import { joinPaths } from './internal/paths/index.js'
-import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
-import { Responder } from './response.js'
-import type { RouteGroup } from './route.js'
-import { type AdapterRouteOptions } from './route_hooks.js'
-import type { RouteCompilers } from './routing/dispatch.js'
-import { compileRouteSchema } from './schema/compile_route_schema.js'
+import type { AdapterExtensions } from '../../adapter_extension.js'
+import { ErrCaffeineWebApplication } from '../../error/common.js'
+import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
+import { solutions } from '../../error/util.js'
+import { attachGuardHook } from '../../guards/fastify.js'
+import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from '../../plugin.js'
+import { Responder } from '../../response.js'
+import { compileRouteSchema } from '../../schema/compile_route_schema.js'
+import type { RouteCompilers, RouteGroup } from '../route.js'
+import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
+import { type AdapterRouteOptions } from './route_options.js'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
@@ -339,4 +337,10 @@ export function assertPluginNotRegistered(
 /** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
 function isHandlerTimeout(reason: unknown): boolean {
   return (reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
+}
+
+/** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
+function joinPaths(base: string, path: string): string {
+  const joined = `${base}${path}`
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }

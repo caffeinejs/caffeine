@@ -1,5 +1,5 @@
 import { kVersionHeader, VERSION_CONSTRAINT } from '../constraints/constraints.js'
-import type { AnyRouteExtension } from '../routing/programmatic/extension.js'
+import type { AnyRouteExtension } from '../routing/extension.js'
 import { Constraint, constraint } from './constraint.js'
 
 /**

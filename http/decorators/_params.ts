@@ -1,6 +1,6 @@
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
-import { $p, type HTTPPickers } from '../route_picker.js'
+import { $p, type HTTPPickers } from '../routing/picker.js'
 
 /**
  * The picks a route declares.

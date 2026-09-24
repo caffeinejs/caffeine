@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { type Context, Controller, Get, Header, createWebApplication, Args, Post } from '../index.js'
-import { $p } from '../route_picker.js'
+import { $p } from '../routing/picker.js'
 
 describe('Redirect', () => {
   describe('given a router with different redirect strategies', () => {

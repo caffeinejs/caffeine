@@ -3,7 +3,7 @@ import fp from 'fastify-plugin'
 
 import type { FastifyContext } from '../fastify_context.js'
 import { Responder } from '../response.js'
-import { kErrorUnhandled, type RouteGroup } from '../route.js'
+import { kErrorUnhandled, type RouteGroup } from '../routing/route.js'
 import { ErrCaffeineWebApplication } from './common.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from './handler.js'
 import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from './http.js'

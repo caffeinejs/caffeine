@@ -5,7 +5,6 @@ import { solutions } from '../error/util.js'
 import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
-import { Route, RouteGroup, RouteGroupErrorHandler } from '../route.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import {
   AuthorizationOptions,
@@ -17,8 +16,8 @@ import {
   kAuthzOpts,
   PolicyEvaluator,
 } from '../security/authz/index.js'
-import type { RouteDispatch, RouteGroupHook } from './dispatch.js'
 import { mergeAuthz } from './inherit.js'
+import { Route, RouteGroup, RouteGroupErrorHandler, type RouteDispatch, type RouteGroupHook } from './route.js'
 import type { RouteAuthz, RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */

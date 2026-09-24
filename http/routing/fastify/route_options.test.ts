@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { addRouteHook, type AdapterRouteOptions } from './route_hooks.js'
+import { addRouteHook, type AdapterRouteOptions } from './route_options.js'
 
 const newRouteDef = (): AdapterRouteOptions =>
   ({ method: 'GET', url: '/', handler: () => undefined }) as unknown as AdapterRouteOptions

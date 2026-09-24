@@ -99,7 +99,7 @@ handler answering an unmatched URL, where a single-page application's shell is s
 non-optional on the strength of the word invariant: every 404 would be a `TypeError` in the gate.
 
 Telling a compiled route from a raw one is `$caffeine.compiled`, never `$caffeine` itself — here, in
-`health/probes_route.ts`, in `oidc_routes.ts` and in `route_collector.ts`. Both collision guards depend on it:
+`health/probes_route.ts`, in `oidc_routes.ts` and in `routing/fastify/route_config.ts`. Both collision guards depend on it:
 each adds its `onRoute` hook before registering its own routes, so without the `compiled` check they would trip
 their own guard and fail `ready()`. `compiled` holds `route` and `group` as required members, so one nullable
 object narrows all of it at once and a partial stamp cannot reach a reader.
@@ -190,7 +190,7 @@ A server's `factory.handlerTimeout` and a route's `.timeout(ms)` are Fastify's `
 afterwards may still send by `reply.sent`, which is `raw.writableEnded`; an `onSend` hook that awaits — a
 compressor — holds the `503` open, so a handler resolving in that window sends a second time, and
 `ERR_HTTP_HEADERS_SENT` escapes as an unhandled rejection. A plain Fastify server does the same. The route handler
-in `_register_route_group.ts` covers this side: on a timed route, a result arriving after the signal was aborted
+in `routing/fastify/register.ts` covers this side: on a timed route, a result arriving after the signal was aborted
 by the timeout is replaced by the reply itself, which Fastify awaits until the `503` is out
 (`_tests/handler_timeout.test.ts`). The mirror side — the timer firing while the handler's own response is held
 open by such a hook — is Fastify's to fix. `req.signal` is read on timed routes only: on any other, the read would
@@ -230,7 +230,7 @@ their server-specific types off it. A newly found one becomes a member there, ne
 `adapter_types.ts`, `adapter_extension.ts`, `setup_context.ts`, `context.ts`, `middleware/pipeline.ts`,
 `middleware/middleware.ts` and every `guards/` file but one — `guard.ts`, `compile.ts`, `builder.ts`,
 `keys.ts` and the chain runner `_run.ts` — import nothing from `fastify`. Fastify's side lives in
-`fastify_*.ts`, `middleware/fastify.ts`, `guards/fastify.ts` and the adapter. Guards are attached by
+`fastify_*.ts`, `routing/fastify/`, `middleware/fastify.ts`, `guards/fastify.ts` and the adapter. Guards are attached by
 `guards/fastify.ts` alone: it reads `request.httpContext` and hands the chain to `runGuards`, which knows
 only `GuardContext`.
 
@@ -297,7 +297,7 @@ not available to them outside an `onRoute` hook.
 
 ## Two route sources
 
-Routes come from `RouteSource`s, and there are two: `routing/decorated/` reads the `@Controller` registry, `routing/programmatic/` reads the `Router` chains an application mounted. Both produce `RouteGroupSpec` and go through the same `compileRouteGroup`, so a route is configured, guarded and authorized identically whichever way it was written. Common pieces live at the root of `routing/`; a `_`-prefixed file there is private to that directory, so anything both sources need (`inherit.ts`) is not underscore-prefixed.
+Routes come from `RouteSource`s, and there are two: `routing/decorated/` reads the `@Controller` registry, `routing/programmatic/` reads the `Router` chains an application mounted. Both produce `RouteGroupSpec` and go through the same `compileRouteGroup`, so a route is configured, guarded and authorized identically whichever way it was written. Common pieces live at the root of `routing/`; a `_`-prefixed file there is private to that directory, so anything both sources need (`inherit.ts`) is not underscore-prefixed. `spec.ts` is a route as authored, `route.ts` a route as compiled, and `routing/fastify/` turns a compiled group into Fastify routes; outside the barrel, nothing else in `routing/` imports it.
 
 The compiled group the adapter registers is `RouteGroup`, not `Router` — `Router` is the fluent authoring class. Do not reintroduce `Router` as the compiled shape.
 
@@ -311,7 +311,7 @@ The inline forms are implemented by calling `RouteChain` — `chain.handler(fn)`
 
 ## Extending a route from outside http
 
-`RouteExtension` / `RouteGroupExtension` (`routing/programmatic/extension.ts`) are `(builder) => void` — the _same_ function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
+`RouteExtension` / `RouteGroupExtension` (`routing/extension.ts`) are `(builder) => void` — the _same_ function a decorator hands to `configureRoute`. That is the point: a feature is implemented once as an extension, and the decorator calls it. `@Operation` and `openapi`'s `operation()`, `@Compress` and `compress()`, `@BodyAsStream` and `bodyAsStream()` are each one implementation with two spellings. When adding a route-level feature, write the extension first and make the decorator call it — never the other way round, and never two copies.
 
 ## CORS and compression are plugins the application owns, not packages
 
@@ -342,7 +342,7 @@ The factories are resolved in `WebApplication.setup()`, where configuration has 
 
 The factory's context is **not** re-typed against the application's configuration the way `builder.with` is: a router or a controller is written without knowing which application it will end up in, so its `config` is `LiveConfig<unknown>`. A router's binding is checked when it is mounted. A controller's `@Use(...)` never meets the application's type, so the adapter checks what it returned at start-up (`ERR_HTTP_INVALID_PLUGIN`).
 
-`fst({ … })` (`http/fst.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.$caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
+`fst({ … })` (`http/routing/fastify/route_options.ts`) is the Fastify escape hatch, and the only one: there is deliberately no generic `routeOptions(key, value)` on the chain. Its type omits `method`/`url`/`handler`/`schema`/`config`/`bodyLimit`/`handlerTimeout` because the adapter writes those itself — `config` especially, which carries `config.$caffeine` and would break status, headers and per-route auth if clobbered. Do not widen it.
 
 ## Route-selection constraints and API versions
 

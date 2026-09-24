@@ -9,11 +9,9 @@ import {
 import type { AdapterTypes } from '../../adapter_types.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
-import type { RouteValidationSchema } from '../../route.js'
-import type { RouteDetail } from '../detail.js'
-import type { RouteAuthzOptions } from '../spec.js'
+import type { RouteExtension } from '../extension.js'
+import type { RouteAuthzOptions, RouteDetail, RouteValidationSchema } from '../spec.js'
 import type { RouteState } from './_state.js'
-import type { RouteExtension } from './extension.js'
 import type { Router } from './router.js'
 import type { DeclaredRoute, JoinPath, MergeDeps, RouteHandler } from './types.js'
 

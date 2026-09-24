@@ -16,14 +16,7 @@ import Fastify, {
 } from 'fastify'
 import fp from 'fastify-plugin'
 
-import {
-  assertFastifyPlugin,
-  assertPluginNotRegistered,
-  registerCompiledRouteGroup,
-  resolveExtension,
-} from './_register_route_group.js'
 import type { AdapterExtensionEntry, AdapterExtensions } from './adapter_extension.js'
-import { compileArgs, compileHandler } from './adapter_handler_parameters.js'
 import type { Adapter, AdapterIn, AdapterFactoryIn, ServerAddress } from './application.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
 import { ErrApplicationNotReady, ErrConfiguration } from './error/common.js'
@@ -33,11 +26,17 @@ import { FastifyContext } from './fastify_context.js'
 import type { FastifyTypes } from './fastify_types.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares } from './middleware/fastify.js'
-import { installNotFoundHandler } from './not_found.js'
 import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
-import type { RouteGroup } from './route.js'
 import { RouteGroupBuilder } from './routing/builder.js'
-import type { RouteCompilers } from './routing/dispatch.js'
+import { installNotFoundHandler } from './routing/fastify/not_found.js'
+import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
+import {
+  assertFastifyPlugin,
+  assertPluginNotRegistered,
+  registerCompiledRouteGroup,
+  resolveExtension,
+} from './routing/fastify/register.js'
+import type { RouteCompilers, RouteGroup } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
 import { assertAuthenticationConfigured, type Principal } from './security/index.js'
 import { Keys } from './symbols.js'
