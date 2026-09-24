@@ -92,6 +92,11 @@ export interface HTTPErrorBody {
   error: string
   code: string
   message: string
+  /**
+   * The stack, and the chain of causes behind it, present only where the application asked for it with
+   * `.errorHandling(e => e.exposeStacktrace())`.
+   */
+  stacktrace?: string
 }
 
 /**

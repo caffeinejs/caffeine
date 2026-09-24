@@ -12,6 +12,15 @@ const schema = $t.Object({ app: $t.Object({ cookie: cookieConfigSchema }) })
 
 const kConfig = token<InferConfig<typeof schema>>(Symbol('cookie.app.config'))
 
+interface LogEntry {
+  msg?: string
+}
+
+/** Fastify's own logger, writing every line into `logged`. Named in the factory settings, so it is the server's. */
+function pinoTo(logged: LogEntry[], level = 'warn') {
+  return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
+}
+
 /**
  * Reading cookies off the context. The cookie feature registers `@fastify/cookie` ahead of every plugin, so an
  * application neither registers it nor has an order to get right — which used to be its job, and used to surface
@@ -49,10 +58,6 @@ describe('ctx.req.cookie()', () => {
   const routes = () => newRouter('/page').get('/', ctx => ({ session: ctx.req.cookie('session') ?? null }))
 
   const reads = () => newRouter('/read').get('/', ctx => ({ tok: ctx.req.signedCookie('tok') }))
-
-  async function messageOf(response: Response): Promise<string> {
-    return ((await response.json()) as { message: string }).message
-  }
 
   it('reads a cookie with nothing registered by the application', async () => {
     const app = await ready(createWebApplication().mount(routes()))
@@ -162,17 +167,29 @@ describe('ctx.req.cookie()', () => {
   })
 
   // Off means unregistered, so a read fails where it is made instead of answering undefined and letting a
-  // cookie scheme authenticate nobody.
+  // cookie scheme authenticate nobody. The diagnostic naming the plugin is written for whoever runs the
+  // application, so it goes to the log and the caller is told only that the request failed.
   it('fails the read when the application turned cookies off', async () => {
+    const logged: LogEntry[] = []
     const app = await ready(
       createWebApplication()
         .cookie(k => k.enabled(false))
+        .server(() => ({ factory: { logger: pinoTo(logged, 'error') } }))
         .mount(routes()),
     )
 
     const response = await app.fetch('/page', { headers: { cookie: 'session=abc' } })
+    const text = await response.text()
 
     expect(response.status).toBe(500)
-    expect(await messageOf(response)).toContain('@fastify/cookie plugin is not registered')
+    expect(JSON.parse(text)).toEqual({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      code: 'ERR_INTERNAL',
+      message: 'Internal Server Error',
+    })
+    expect(text).not.toContain('@fastify/cookie')
+
+    expect(logged.some(entry => entry.msg?.includes('@fastify/cookie plugin is not registered'))).toBe(true)
   })
 })

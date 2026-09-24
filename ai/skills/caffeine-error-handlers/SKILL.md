@@ -21,7 +21,7 @@ Unmatched URLs do not go through `@Catch`. SPA `index.html` is not an error hand
 5. Optional: `@Catch(ErrType)` on a **controller method** `(ctx, error)` instead of a separate class.
 6. Prefer throwing `ErrHTTPNotFound` in the handler over `ctx.notFound()` if you want `@Catch` to run.
 
-An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as the default JSON envelope.
+An application that never calls `.errorHandling(...)` still renders a thrown `ErrHTTP` as the default JSON envelope, and answers anything it did not anticipate with a generic body — `code: 'ERR_INTERNAL'`, the status phrase as `message` — keeping the real message and its causes in the log. Do not write a `@Catch(Error)` handler to get that; it is the default. `.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` to the bodies this package renders, for a development deployment.
 
 ## Shape
 

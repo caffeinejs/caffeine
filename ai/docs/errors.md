@@ -15,3 +15,7 @@ Three different “404s”. `@Catch` only sees the first.
 Same-origin SPA + `/api` is routing, not error handling: the application writes `GET /*` for its client routes and `newRouter('/api').get('/*', …404)` so the API owns its own misses. See [spa.md](spa.md). Do not return `index.html` from `@Catch(ErrHTTPNotFound)`.
 
 Default thrown `ErrHTTP` body: `{ statusCode, error, code, message }` (`code` e.g. `ERR_HTTP_NOT_FOUND`).
+
+An error the application did not anticipate — a plain `Error`, a driver error, a rejected `fetch` — answers `{ statusCode, error, code: 'ERR_INTERNAL', message: <status phrase> }` and nothing of its own. The status it asked for is kept (a timed-out handler stays 503); its message, and the causes behind it, go to the log only. A 4xx is untouched: its message describes what the caller got wrong, so Fastify's rendering answers and the log records it as information.
+
+`.errorHandling(e => e.exposeStacktrace(config.app.debug))` adds `stacktrace` — the stack plus its chain of causes — to every body this package renders. Off by default, for a development deployment; it is logged as a warning at start-up. A body an `ErrHTTP` carried, anything a `@Catch` handler returned, and Fastify's 4xx are left alone.

@@ -1,5 +1,5 @@
 import { Scopes } from '@caffeinejs/di'
-import { kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import { kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 import type { FastifyInstance } from 'fastify'
 
 import { HTTPFeatureBuilder } from '../feature.js'
@@ -22,10 +22,11 @@ import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './plugin.js'
  * ```
  *
  * A handler that only applies to some deployments is enrolled by the callback that knows, rather than by a
- * condition on the class — the callback is handed the resolved configuration:
+ * condition on the class — the callback is handed the resolved configuration, which is also how the stack
+ * trace is turned on for a development deployment and nowhere else:
  *
  * ```ts
- * .errorHandling((e, { config }) => { if (config.app.debug) e.globalHandlers(StackTraceHandler) })
+ * .errorHandling((e, { config }) => e.exposeStacktrace(config.app.debug))
  * ```
  */
 export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
@@ -35,6 +36,7 @@ export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   // never configured would otherwise reach it unset.
   readonly #ref = new GlobalErrorHandlerRef()
   readonly #handlers: ErrorHandlerRef[] = []
+  #exposeStacktrace = false
 
   /**
    * Enrols handler classes as the application's global error handlers, each rendering the error types its own
@@ -48,6 +50,22 @@ export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    */
   globalHandlers(...handlers: ErrorHandlerRef[]): this {
     this.#handlers.push(...handlers)
+    return this
+  }
+
+  /**
+   * Sends the stack, and the chain of causes behind it, as `stacktrace` on every error body this package
+   * renders — the generic 5xx an unexpected failure answers with, a thrown `ErrHTTP`, and an error naming a
+   * public message.
+   *
+   * Off by default, and meant for a development deployment: a stack names source paths, and a cause names the
+   * hosts and driver detail the generic body exists to withhold. A body an `ErrHTTP` carried, anything a
+   * `@Catch` handler returned, and the 4xx Fastify renders itself are left alone either way.
+   *
+   * Turning it on is logged as a warning at start-up, so a deployment that enabled it by accident says so.
+   */
+  exposeStacktrace(enabled = true): this {
+    this.#exposeStacktrace = enabled
     return this
   }
 
@@ -67,7 +85,16 @@ export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     kit.container.bind(GlobalErrorHandlerRef, t => t.toValue(this.#ref).lifetime(Scopes.SINGLETON).internal())
   }
 
+  protected override bootstrap(kit: BootstrapKit<C>): void {
+    if (this.#exposeStacktrace) {
+      kit.logger.warn(
+        'Error handling is sending stack traces to clients: every error body carries "stacktrace", including ' +
+          'the causes behind it. Leave this off outside a development deployment',
+      )
+    }
+  }
+
   protected override async server(instance: FastifyInstance): Promise<void> {
-    await instance.register(globalErrorHandlerPlugin(this.#ref))
+    await instance.register(globalErrorHandlerPlugin(this.#ref, { exposeStacktrace: this.#exposeStacktrace }))
   }
 }
