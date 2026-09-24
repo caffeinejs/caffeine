@@ -57,9 +57,19 @@ export class RequestBuilder {
             headers.append(param.key, String(value))
           }
           break
-        case 'body':
-          body = (this.meta.requestBodyConverter ?? JSONRequestBodyConverter).convert(value)
+        case 'body': {
+          const converter = this.meta.requestBodyConverter ?? JSONRequestBodyConverter
+          body = converter.convert(value)
+
+          // Without this `fetch` labels a JSON-stringified body `text/plain;charset=UTF-8`, which a strict
+          // server answers with 415. A header the declaration already set wins: the converter only fills a gap.
+          const mediaType = converter.contentType?.(value)
+          if (mediaType !== undefined && !headers.has('content-type')) {
+            headers.set('content-type', mediaType)
+          }
+
           break
+        }
         case 'form-field':
           formFields ??= new URLSearchParams()
           if (value !== undefined && value !== null) {

@@ -1,4 +1,5 @@
 import { ErrFetchyInvalidFormBody } from './errors.js'
+import { MediaTypes } from './media_types.js'
 
 // `BodyInit` is a DOM-lib-only type name, unavailable in this package's `lib` set. `RequestInit`
 // (the standard Fetch API type) is available via `@types/node`'s ambient fetch globals, so its
@@ -8,6 +9,23 @@ type RequestBody = RequestInit['body']
 
 export interface RequestBodyConverter {
   convert(value: unknown): RequestBody
+
+  /**
+   * The media type the body `convert` produces for this value, or `undefined` when the converter has no
+   * opinion about it.
+   *
+   * Asked per value rather than declared once, because a converter that passes some values through untouched
+   * does not describe them all the same way. The request builder sets it only when nothing else already set
+   * `content-type`, so `@ContentType` and `@FormURLEncoded` still win.
+   */
+  contentType?(value: unknown): string | undefined
+}
+
+/** True of a value the JSON converter hands to `fetch` untouched rather than stringifying. */
+function isNativeBody(value: unknown): boolean {
+  return (
+    typeof value === 'string' || value instanceof Blob || value instanceof URLSearchParams || ArrayBuffer.isView(value)
+  )
 }
 
 /**
@@ -20,16 +38,22 @@ export const JSONRequestBodyConverter: RequestBodyConverter = {
       return null
     }
 
-    if (
-      typeof value === 'string' ||
-      value instanceof Blob ||
-      value instanceof URLSearchParams ||
-      ArrayBuffer.isView(value)
-    ) {
+    if (isNativeBody(value)) {
       return value as RequestBody
     }
 
     return JSON.stringify(value)
+  },
+
+  // Only what this converter stringified is JSON. A `Blob` carries its own type, `fetch` labels a
+  // `URLSearchParams` itself, and a string may be anything — claiming JSON for those would be a lie the
+  // server acts on.
+  contentType(value: unknown): string | undefined {
+    if (value === null || value === undefined || isNativeBody(value)) {
+      return undefined
+    }
+
+    return MediaTypes.JSON
   },
 }
 
@@ -75,5 +99,9 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
     }
 
     return value as RequestBody
+  },
+
+  contentType(value: unknown): string | undefined {
+    return value === null || value === undefined ? undefined : MediaTypes.FORM_URL_ENCODED
   },
 }
