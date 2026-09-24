@@ -21,6 +21,7 @@
     "kafka",
     "distlock",
     "resilience",
+    "integrations/*",
     "fetchy/*",
     "cli",
     "devtools",

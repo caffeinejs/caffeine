@@ -26,6 +26,20 @@ export const CustomerEntity = new EntitySchema<Customer>({
 `dataSource.getRepository(CustomerEntity)` returns a `Repository<Customer>` like any other. Relations name their
 target by string (`target: 'Address'`), so entity modules never import each other's values.
 
+[`@caffeinejs/typeorm`](../../integrations/typeorm/README.md) builds on that. The feature owns the
+`DataSource` — opened before `ready()` returns, closed on shutdown — and the repository is injected:
+
+```ts
+import { $typeorm, typeorm } from '@caffeinejs/typeorm'
+
+app.with(typeorm(t => t.dataSource({ type: 'postgres', url, entities: [CustomerEntity] })))
+
+@Injectable([$typeorm.repository(CustomerEntity)])
+class Customers {
+  constructor(private readonly customers: Repository<Customer>) {}
+}
+```
+
 Everything below is for a library with no such escape.
 
 ## Why the code has to be split

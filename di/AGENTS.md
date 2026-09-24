@@ -160,6 +160,12 @@ The helpers that accept a descriptor — `allOf`, `ordered`, `optional`, `provid
 
 The mark is non-enumerable, so it stays out of deep-equality and any dump of a descriptor. A spread therefore drops it: a helper that builds on another must end by calling `encode` rather than by spreading, and `compose` does exactly that.
 
+`encode` itself stays private; `defineInjection<T>(descriptor)` is its public door, and the only way a package
+outside this one can produce an `InjectionResult`. That is what makes `registerStage` usable end to end: a
+package registers its own terminal and returns `defineInjection` from its helper, and the result is accepted
+everywhere an `$i` helper is. `kInjectionResult` is not exported, so the brand cannot be forged — a caller that
+hand-writes the object still gets a bag.
+
 Fields are lazy getters that resolve through the binding on every read. That is what makes one cached bag correct for singleton, transient and request scope alike — never make a field resolve eagerly.
 
 ## Disposal is reverse creation order, one hook at a time

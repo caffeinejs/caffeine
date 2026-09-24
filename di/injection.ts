@@ -95,8 +95,10 @@ export type Injection<T = unknown> = InjectionToken<T> | InjectionDescriptor<T>
 
 /**
  * Helper return type: an {@link InjectionDescriptor} branded with its resolved value `T`.
+ *
+ * The brand itself stays module-private, so {@link defineInjection} is the only way to produce one.
  */
-type InjectionResult<T> = InjectionDescriptor<T> & {
+export type InjectionResult<T> = InjectionDescriptor<T> & {
   readonly [kInjectionResult]: T
   readonly [kInjectionDescriptor]: true
 }
@@ -192,6 +194,30 @@ function encode<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
   // Non-enumerable: the mark is not data, so it stays out of deep-equality, `Object.entries` and any dump of a
   // descriptor. A spread therefore drops it, which is why every helper ends by encoding rather than by spreading.
   return Object.defineProperty(descriptor, kInjectionDescriptor, { value: true }) as InjectionResult<T>
+}
+
+/**
+ * Brands a descriptor as an injection resolving to `T`.
+ *
+ * A package that registers its own stage with `registerStage` builds its helper's return value here, so the
+ * result is accepted wherever the `$i` helpers are: `@Injectable`, `@Inject`, {@link InjectionHelpers.optional},
+ * {@link InjectionHelpers.provide} and an object spec all require the mark, and a hand-written literal is a
+ * nested bag rather than an injection.
+ *
+ * @param descriptor - The key, stages and flags the injection resolves through.
+ *
+ * @example
+ * ```ts
+ * const kMyStage = Symbol('my-package:stage.thing')
+ * registerStage(kMyStage, thingStage, { terminal: true })
+ *
+ * export function thing<T>(key: InjectionToken<T>, arg: string): InjectionResult<Thing<T>> {
+ *   return defineInjection({ key, stages: [{ name: kMyStage, args: arg }] })
+ * }
+ * ```
+ */
+export function defineInjection<T>(descriptor: InjectionDescriptor<any>): InjectionResult<T> {
+  return encode(descriptor)
 }
 
 type InjectedField<V> =
