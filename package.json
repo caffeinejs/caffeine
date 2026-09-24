@@ -28,6 +28,7 @@
     "devtools/ui",
     "testing",
     "brewer",
+    "bff",
     "benchmarks",
     "di/examples/*",
     "examples/*",

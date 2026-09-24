@@ -37,6 +37,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`cli/`](cli/AGENTS.md)                                                             | `@caffeinejs/cli`                        |
 | [`testing/`](testing/AGENTS.md)                                                     | `@caffeinejs/testing`                    |
 | [`brewer/`](brewer/AGENTS.md)                                                       | `@caffeinejs/brewer`                     |
+| [`bff/`](bff/AGENTS.md)                                                             | `@caffeinejs/bff`                        |
 | [`devtools/`](devtools/AGENTS.md)                                                   | `@caffeinejs/devtools`                   |
 | [`integrations/typeorm/`](integrations/typeorm/AGENTS.md)                           | `@caffeinejs/typeorm`                    |
 | [`fetchy/fetchy/`](fetchy/fetchy/AGENTS.md)                                         | `@caffeinejs/fetchy`                     |

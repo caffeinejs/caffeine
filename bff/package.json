@@ -1,0 +1,31 @@
+{
+  "name": "@caffeinejs/bff",
+  "version": "0.0.0",
+  "description": "Functional BFF utilities for Caffeine applications",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/std": "*"
+  },
+  "devDependencies": {
+    "@caffeinejs/resilience": "*"
+  }
+}

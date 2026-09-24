@@ -41,6 +41,9 @@
       "path": "./resilience/tsconfig.build.json"
     },
     {
+      "path": "./bff/tsconfig.build.json"
+    },
+    {
       "path": "./integrations/typeorm/tsconfig.build.json"
     },
     {

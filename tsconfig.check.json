@@ -44,6 +44,9 @@
       "path": "./resilience"
     },
     {
+      "path": "./bff"
+    },
+    {
       "path": "./integrations/typeorm"
     },
     {
