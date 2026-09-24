@@ -113,6 +113,22 @@ export function compileHandler<REQ extends FastifyRequest = FastifyRequest, RES 
 function buildPicker<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply>(
   p: ParameterPickOptions<REQ>,
 ): Picker<REQ, RES> {
+  const base = buildBasePicker<REQ, RES>(p)
+  const transform = p.transform
+  if (transform === undefined) {
+    return base
+  }
+
+  // An async pick settles before the transform sees it, so a transform is written against the value and
+  // never against a promise, whichever pick it was wrapped around.
+  return p.async === true
+    ? (req, res) => Promise.resolve(base(req, res)).then(transform)
+    : (req, res) => transform(base(req, res))
+}
+
+function buildBasePicker<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply>(
+  p: ParameterPickOptions<REQ>,
+): Picker<REQ, RES> {
   if (p.picker) {
     return req => (p.picker as (req: REQ) => unknown)(req)
   }
@@ -143,6 +159,8 @@ function buildPicker<REQ extends FastifyRequest = FastifyRequest, RES extends Fa
       }
     case 'context':
       return req => req.httpContext
+    case 'user':
+      return req => req.httpContext.user
     case 'method':
       return req => req.method
     case 'url':

@@ -12,6 +12,14 @@ export interface HTTPPickers {
   body<R = unknown>(): ParameterPickOptions<R>
   header<R = unknown>(name?: string): ParameterPickOptions<R>
   context<R = unknown>(): ParameterPickOptions<R>
+  /**
+   * The authenticated principal, `ctx.user`.
+   *
+   * Always present: a request nothing authenticated carries the anonymous principal rather than `undefined`.
+   * One claim is read off it — `p.map(p.user(), u => u.findFirst('sub')?.value)` — rather than through a
+   * picker of its own, since `Principal` already exposes `findFirst`, `findAll`, `hasClaim` and `isInRole`.
+   */
+  user<R = unknown>(): ParameterPickOptions<R>
   method<R = unknown>(): ParameterPickOptions<R>
   url<R = unknown>(): ParameterPickOptions<R>
   path<R = unknown>(): ParameterPickOptions<R>
@@ -54,6 +62,10 @@ function header<R = unknown>(name?: string): ParameterPickOptions<R> {
 
 function context<R = unknown>(): ParameterPickOptions<R> {
   return { type: 'context' }
+}
+
+function user<R = unknown>(): ParameterPickOptions<R> {
+  return { type: 'user' }
 }
 
 function method<R = unknown>(): ParameterPickOptions<R> {
@@ -104,17 +116,17 @@ function map<In, Out, R>(
   fn: (value: In) => Out | Promise<Out>,
   opts?: { async?: boolean },
 ): ParameterPickOptions<unknown> {
-  const prev = pick.picker as ParameterPicker<unknown> | undefined
-  if (prev === undefined) {
-    throw new Error('Cannot map: no picker function')
+  const before = pick.transform
+  const transform =
+    before === undefined ? (value: unknown) => fn(value as In) : (value: unknown) => fn(before(value) as In)
+
+  // The pick is carried through as it stands — `type`, `name` and any `picker` — so a built-in, which has no
+  // picker to chain onto, composes exactly as a custom one does.
+  return {
+    ...(pick as ParameterPickOptions<unknown>),
+    transform,
+    async: pick.async === true || opts?.async === true ? true : pick.async,
   }
-
-  const async = pick.async === true || opts?.async === true
-  const picker: ParameterPicker<unknown> = async
-    ? req => Promise.resolve(prev(req)).then(value => fn(value as In))
-    : req => fn(prev(req) as In)
-
-  return { type: 'custom', picker, async: async ? true : pick.async }
 }
 
 function mapAsync<In, Out, R>(
@@ -144,6 +156,7 @@ export const $p = {
   body,
   header,
   context,
+  user,
   method,
   url,
   path,

@@ -15,7 +15,7 @@ If `ai/docs/http.md` or `ai/docs/rules.md` exist in this repo, read them first.
 ## Steps
 
 1. Create a class. Decorate with `@Controller('/path')`. Constructor-inject collaborators (use cases, not the Fastify instance).
-2. Add method decorators (`@Get('/')`, `@Post('/')`, …). Pick args with `@Args([$p.body()])` / `$p.param('id')` as needed.
+2. Add method decorators (`@Get('/')`, `@Post('/')`, …). Pick args with `@Args([$p.body()])` / `$p.param('id')` as needed. `$p.user()` is the authenticated principal; wrap any pick in `$p.map(pick, fn)` to reshape it — `$p.map($p.user(), u => u.findFirst('sub')?.value)` for one claim.
 3. Side-effect-import the file from `main.ts` (or the app entry) so the decorator runs.
 4. `tsconfig` must include `"lib": ["Decorators", "esnext.decorators"]`. Imports use `.js` extensions.
 5. Throw `ErrHTTPNotFound` (etc.) for missing resources. Do not use Nest `HttpException`.

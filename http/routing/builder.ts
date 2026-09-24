@@ -155,7 +155,7 @@ export class RouteBuilder {
   #method?: string[]
   #name?: string | symbol
   #handle?: RouteInvoker
-  #parameters?: ParameterPickOptions<unknown>[]
+  #parameters?: ParameterPickOptions<never>[]
   #consumes?: string[]
   #produces: string = ''
   #schema?: RouteValidationSchema
@@ -197,7 +197,7 @@ export class RouteBuilder {
     return this
   }
 
-  parameters(parameters: ParameterPickOptions<unknown> | ParameterPickOptions<unknown>[]) {
+  parameters(parameters: ParameterPickOptions<never> | ParameterPickOptions<never>[]) {
     this.#parameters ??= []
     this.#parameters.push(...(Array.isArray(parameters) ? parameters : [parameters]))
     return this
@@ -299,7 +299,7 @@ export class RouteBuilder {
       method: [...(this.#method ?? [])],
       accept: [...(this.#consumes ?? [])],
       contentType: this.#produces ?? '',
-      parameters: [...(this.#parameters ?? [])],
+      parameters: [...(this.#parameters ?? [])] as ParameterPickOptions<R>[],
       name: this.#name ?? '',
       handle: this.#handle,
       schema: this.#schema,
