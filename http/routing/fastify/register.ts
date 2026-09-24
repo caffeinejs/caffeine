@@ -3,9 +3,6 @@ import { Readable } from 'node:stream'
 import { Ctor } from '@caffeinejs/di'
 import {
   type FastifyInstance,
-  type FastifyPluginAsync,
-  type FastifyPluginCallback,
-  type FastifyPluginOptions,
   type FastifyReply,
   type FastifyRequest,
   type RawReplyDefaultExpression,
@@ -13,12 +10,8 @@ import {
   type RawServerBase,
 } from 'fastify'
 
-import type { AdapterExtensions } from '../../adapter.js'
-import { ErrCaffeineWebApplication } from '../../error/common.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
-import { solutions } from '../../error/util.js'
 import { attachGuardHook } from '../../guards/fastify.js'
-import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from '../../plugin.js'
 import { Responder } from '../../response.js'
 import { compileRouteSchema } from '../../schema/compile_route_schema.js'
 import type { RouteCompilers, RouteGroup } from '../route.js'
@@ -30,8 +23,11 @@ type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error
 
 /** What is the same for every group on one server, resolved once before any of them registers. */
 export interface RouteGroupRegistration<REQ> {
-  /** What each router or controller installs in front of its own routes. */
-  extensions: Pick<AdapterExtensions<unknown, FastifyExtension>, 'of'>
+  /**
+   * Installs what `scope` (a mounted router, or a controller class) asked for with `.plugin(...)` /
+   * `@Use(...)` on the context it is handed, refusing what the root server would refuse.
+   */
+  installScope: (server: FastifyInstance, scope: object) => Promise<void>
   compilers: RouteCompilers<REQ>
   globalErrorHandler: GlobalErrorHandler
   /** The server's own `handlerTimeout`, when it set one. */
@@ -50,7 +46,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   router: RouteGroup<REQ>,
   registration: RouteGroupRegistration<REQ>,
 ): void {
-  const { extensions, compilers, globalErrorHandler, handlerTimeout } = registration
+  const { installScope, compilers, globalErrorHandler, handlerTimeout } = registration
   const basePath = router.path
   const routes = router.routes
 
@@ -62,12 +58,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
       // plugin as an application-level one, registered in this group's context instead of on the root
       // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
       for (const scope of router.scopes ?? []) {
-        for (const extension of extensions.of(scope)) {
-          const { plugin, options } = resolveExtension(extension)
-          assertFastifyPlugin(plugin)
-          assertPluginNotRegistered(server, plugin)
-          await server.register(plugin, options)
-        }
+        await installScope(server, scope)
       }
 
       // Whatever preparation the source that built this group needs — resolving the instance a `@Catch`
@@ -282,56 +273,6 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
     },
     { prefix: router.prefix },
   )
-}
-
-/**
- * Splits what a factory produced into the plugin to register and the options to register it with.
- *
- * A Fastify plugin is a function and never an array, so the pair form is told apart by nothing else. The value
- * is still unchecked here — a controller's `@Use(...)` never met the application's type — so the caller asserts
- * on the plugin this hands back, not on what it was given.
- */
-export function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPluginOptions } {
-  return Array.isArray(value) ? { plugin: value[0], options: value[1] ?? {} } : { plugin: value, options: {} }
-}
-
-/**
- * Refuses anything but a plugin function, which is all Fastify can register.
- *
- * What reaches here from a controller's `@Use(...)` was never checked against the application's adapter, since a
- * decorator never meets the application's type.
- */
-export function assertFastifyPlugin(value: unknown): asserts value is AnyFastifyPlugin {
-  if (typeof value !== 'function') {
-    throw new ErrCaffeineWebApplication(
-      `Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}` +
-        solutions('Return the plugin from the factory, or a [plugin, options] pair, not the object it configures'),
-      'ERR_HTTP_INVALID_PLUGIN',
-    )
-  }
-}
-
-/**
- * Refuses a second `fastify-plugin`-wrapped plugin of the same name before Fastify ever sees it.
- *
- * Fastify has no such check itself: a plugin factory is never deduplicated (two calls means two plugins, by
- * design), but a first-party plugin (`cors`, `html`, `caching`, …) wraps a fixed name, and a second one on the
- * same server would otherwise fail deep inside whatever it decorates — `@fastify/cors` re-declaring a request
- * decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on it.
- */
-export function assertPluginNotRegistered(
-  instance: FastifyInstance,
-  plugin: FastifyPluginCallback | FastifyPluginAsync,
-): void {
-  const name = pluginName(plugin)
-
-  if (name !== undefined && instance.hasPlugin(name)) {
-    throw new ErrCaffeineWebApplication(
-      `Cannot register plugin "${name}": it is already registered` +
-        solutions(`Extend "${name}" once, or give the factory that produces it a different name`),
-      'ERR_HTTP_DUPLICATE_PLUGIN',
-    )
-  }
 }
 
 /** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */

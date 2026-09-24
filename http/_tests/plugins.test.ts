@@ -439,6 +439,45 @@ describe('scoped plugin registration', () => {
     await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
   })
 
+  // What a factory produced is only checked by the adapter, at start-up: a factory handing back the options
+  // object instead of the plugin fails there, naming the problem, rather than inside Fastify.
+  it('refuses an application factory that produced something other than a plugin', async () => {
+    // Cast: the factory's result is deliberately not a Fastify extension.
+    app = createWebApplication().with((() => ({ origin: '*' })) as never)
+
+    await expect(app.ready()).rejects.toMatchObject({
+      code: 'ERR_HTTP_INVALID_PLUGIN',
+      message: expect.stringMatching(/expected a Fastify plugin, got object/),
+    })
+  })
+
+  // A group installs its plugins through the same checks as the root server. A controller's `@Use(...)` takes
+  // this path too, and never meets the application's type, so this check is all that stands in its way.
+  it('refuses a router factory that produced something other than a plugin', async () => {
+    // Cast: the factory's result is deliberately not a Fastify extension.
+    const bad = newRouter('/bad-plugin')
+      .plugin((() => ({ origin: '*' })) as never)
+      .get('/', () => ({ ok: true }))
+
+    app = createWebApplication().mount(bad)
+
+    await expect(app.ready()).rejects.toMatchObject({
+      code: 'ERR_HTTP_INVALID_PLUGIN',
+      message: expect.stringMatching(/expected a Fastify plugin, got object/),
+    })
+  })
+
+  it('refuses a second plugin a router installs under the same fastify-plugin name', async () => {
+    const twice = newRouter('/twice-group')
+      .plugin(stamping('twice-group', 'x-twice'))
+      .plugin(stamping('twice-group', 'x-twice'))
+      .get('/', () => ({ ok: true }))
+
+    app = createWebApplication().mount(twice)
+
+    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice-group": it is already registered/)
+  })
+
   it('keeps the plugins of two routers apart, one per group', async () => {
     const pets = newRouter('/inst-pets')
       .plugin(stamping('inst', 'x-inst'))

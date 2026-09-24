@@ -11,6 +11,8 @@ import Fastify, {
   type FastifyInstance,
   type FastifyListenOptions,
   type FastifyPluginAsync,
+  type FastifyPluginCallback,
+  type FastifyPluginOptions,
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify'
@@ -28,7 +30,7 @@ import type {
   ServerAddress,
 } from './adapter.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
-import { ErrApplicationNotReady, ErrConfiguration } from './error/common.js'
+import { ErrApplicationNotReady, ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { solutions } from './error/util.js'
 import { FastifyContext } from './fastify_context.js'
@@ -38,12 +40,7 @@ import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plug
 import { RouteGroupBuilder } from './routing/builder.js'
 import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
-import {
-  assertFastifyPlugin,
-  assertPluginNotRegistered,
-  registerCompiledRouteGroup,
-  resolveExtension,
-} from './routing/fastify/register.js'
+import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
 import type { RouteCompilers, RouteGroup } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
@@ -297,11 +294,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     installFormBodyParser(fastify)
 
     for (const entry of input.extensions.root()) {
-      const { plugin, options } =
-        entry.kind === 'feature' ? { plugin: featurePlugin(entry), options: {} } : resolveExtension(entry.extension)
-      assertFastifyPlugin(plugin)
-      assertPluginNotRegistered(fastify, plugin)
-      await fastify.register(plugin, options)
+      await installExtension(fastify, entry.kind === 'feature' ? featurePlugin(entry) : entry.extension)
     }
 
     // After every plugin, so one that took the not-found handler keeps it.
@@ -322,7 +315,11 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     // The same for every group, so it is built once here rather than per registration.
     const registration = {
-      extensions: input.extensions,
+      installScope: async (server: FastifyInstance, scope: object): Promise<void> => {
+        for (const extension of input.extensions.of(scope)) {
+          await installExtension(server, extension)
+        }
+      },
       compilers: this.#compilers,
       globalErrorHandler,
       handlerTimeout: factory.handlerTimeout,
@@ -494,6 +491,68 @@ function featurePlugin<S extends FastifyInstance>(
     },
     { name: `@caffeinejs/http:feature:${entry.name}` },
   )
+}
+
+/**
+ * Registers what a factory produced on `server`, refusing what Fastify cannot register or already has.
+ *
+ * The one path every plugin takes — the application's, a router's, a controller's — so each is refused the same way.
+ */
+async function installExtension(server: FastifyInstance, extension: unknown): Promise<void> {
+  const { plugin, options } = resolveExtension(extension)
+  assertFastifyPlugin(plugin)
+  assertPluginNotRegistered(server, plugin)
+  await server.register(plugin, options)
+}
+
+/**
+ * Splits what a factory produced into the plugin to register and the options to register it with.
+ *
+ * A Fastify plugin is a function and never an array, so the pair form is told apart by nothing else. The value
+ * is still unchecked here — a controller's `@Use(...)` never met the application's type — so the caller asserts
+ * on the plugin this hands back, not on what it was given.
+ */
+function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPluginOptions } {
+  return Array.isArray(value) ? { plugin: value[0], options: value[1] ?? {} } : { plugin: value, options: {} }
+}
+
+/**
+ * Refuses anything but a plugin function, which is all Fastify can register.
+ *
+ * What reaches here from a controller's `@Use(...)` was never checked against the application's adapter, since a
+ * decorator never meets the application's type.
+ */
+function assertFastifyPlugin(value: unknown): asserts value is AnyFastifyPlugin {
+  if (typeof value !== 'function') {
+    throw new ErrCaffeineWebApplication(
+      `Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}` +
+        solutions('Return the plugin from the factory, or a [plugin, options] pair, not the object it configures'),
+      'ERR_HTTP_INVALID_PLUGIN',
+    )
+  }
+}
+
+/**
+ * Refuses a second `fastify-plugin`-wrapped plugin of the same name before Fastify ever sees it.
+ *
+ * Fastify has no such check itself: a plugin factory is never deduplicated (two calls means two plugins, by
+ * design), but a first-party plugin (`cors`, `html`, `caching`, …) wraps a fixed name, and a second one on the
+ * same server would otherwise fail deep inside whatever it decorates — `@fastify/cors` re-declaring a request
+ * decorator, tens of seconds later, once avvio's own boot timeout gives up waiting on it.
+ */
+function assertPluginNotRegistered(
+  instance: FastifyInstance,
+  plugin: FastifyPluginCallback | FastifyPluginAsync,
+): void {
+  const name = pluginName(plugin)
+
+  if (name !== undefined && instance.hasPlugin(name)) {
+    throw new ErrCaffeineWebApplication(
+      `Cannot register plugin "${name}": it is already registered` +
+        solutions(`Extend "${name}" once, or give the factory that produces it a different name`),
+      'ERR_HTTP_DUPLICATE_PLUGIN',
+    )
+  }
 }
 
 /**
