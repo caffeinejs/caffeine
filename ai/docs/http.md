@@ -35,6 +35,35 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 - `@Prefix` is a Fastify plugin prefix; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
 - Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, then enrol it with `.errorHandling(e => e.globalHandlers(H))`; or leave it unenrolled and name it with `@CatchWith`, or use a `@Catch` method on the controller. Enrolling two handlers for the same class fails at boot. See [errors.md](errors.md).
 
+## HTTPS and HTTP/2
+
+TLS and HTTP/2 are `factory` options, so configuration can switch them at `ready()`:
+
+```ts
+createWebApplication({ config })
+  .server(({ config }) => ({
+    factory: { https: { key: config.tls.key, cert: config.tls.cert } },
+    listener: config.server,
+  }))
+```
+
+- `https: { key, cert, ... }` serves TLS over HTTP/1.1.
+- `http2: true` with `https` serves HTTP/2 over TLS. Add `allowHTTP1: true` to the TLS options to also answer
+  HTTP/1.1 clients. Without `https`, `http2: true` is cleartext HTTP/2 (h2c), which browsers do not speak.
+- `app.address.origin` starts with `https://` when the server serves TLS.
+
+`app.instance` is a `FastifyInstance` whichever server was built. Narrow to reach what only the TLS server has:
+`if (app.instance.server instanceof https.Server) app.instance.server.setSecureContext({ key, cert })` rotates a
+certificate without a restart. Under HTTP/2, `ctx.req.raw` and `ctx.platform.reply.raw` are Node's
+`Http2ServerRequest` and `Http2ServerResponse`, typed as their HTTP/1 counterparts. Narrow them with `instanceof`
+for `stream`.
+
+Two things differ under HTTP/2:
+
+- HTTP/2 has no connection-specific headers. Node refuses or drops `Connection`, `Keep-Alive`,
+  `Transfer-Encoding` and `Upgrade`, so do not set them with `@Header(...)` or `ctx.header(...)`.
+- The host is in the `:authority` pseudo-header, not `host`. A custom constraint strategy has to read both.
+
 ## Serving under a base path
 
 Behind a gateway or proxy that forwards `/api/...` with the prefix intact, `.basePath('/api')` serves the whole

@@ -84,8 +84,9 @@ export interface ServerAddress {
   /** The bound port. Never `0`. */
   readonly port: number
   /**
-   * An origin that can be connected to. A wildcard {@link host} is rendered as the matching loopback address,
-   * since `0.0.0.0` is an address to accept on, not one to dial.
+   * An origin that can be connected to: `https:` when the server serves TLS, `http:` otherwise. A wildcard
+   * {@link host} is rendered as the matching loopback address, since `0.0.0.0` is an address to accept on, not one
+   * to dial.
    */
   readonly origin: string
 }

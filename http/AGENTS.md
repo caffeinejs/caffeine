@@ -167,6 +167,15 @@ parser and every plugin, so it is where a pre-registered plugin, an `onRoute` ho
 handler goes. One hook precedes it, the adapter's `$caffeine` stamp, because Fastify runs `onRoute` as a route is
 declared rather than when it loads — so a raw route written here is stamped, and an `onRoute` hook added here
 runs behind the stamp and reads it.
+`factory` takes `https` and `http2` too, and the instance is `FastifyInstance` whichever server they build. That
+is deliberate: TLS is switched by configuration at `ready()`, long after the application's type was fixed, so no
+type parameter could follow it. `https.Server` is an `http.Server` to `@types/node`, so HTTPS is typed exactly
+enough. Under HTTP/2 the server and the raw request and reply are Node's HTTP/2 objects behind HTTP/1 types, and
+a reader narrows with `instanceof`. Do not add a second adapter type for a TLS or HTTP/2 server. `address.origin`
+reads the scheme off the server (`instanceof tls.Server`), not off the options, so a TLS server built by
+`serverFactory` reports `https:` too. An HTTP/2 server has no `closeAllConnections()`, so the adapter keeps its
+sockets from `'connection'` and `forceTeardown()` destroys them. The graceful path needs nothing, because on Node
+24 `server.close()` closes the HTTP/2 sessions itself.
 Calls accumulate: sections shallow-merge in call order, callbacks run in call order. The old builder feature
 (`ServerBuilder`, `kServerOptions`, `serverConfigSchema`) is gone; an application declares its own `server` block
 and hands the node over as the `listener`.

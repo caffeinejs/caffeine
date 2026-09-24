@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { IncomingMessage, Server } from 'node:http'
+import type { IncomingMessage, Server, ServerOptions } from 'node:http'
+import type { SecureServerOptions } from 'node:http2'
+import type { ServerOptions as HTTPSServerOptions } from 'node:https'
+import type { Socket } from 'node:net'
+import { Server as TLSServer } from 'node:tls'
 
 import { Container, Scopes } from '@caffeinejs/di'
 import { ConfigStore } from '@caffeinejs/std/config'
@@ -15,6 +19,7 @@ import Fastify, {
   type FastifyPluginOptions,
   type FastifyReply,
   type FastifyRequest,
+  type FastifyServerOptions,
 } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -69,10 +74,15 @@ export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extend
 export interface FastifyServerSettings {
   /**
    * What `Fastify(...)` is constructed with. The application's configured logger is the server's, with request
-   * logging off, unless `logger` or `loggerInstance` is set here. `https` and `http2` are not accepted: they
-   * change the instance type.
+   * logging off, unless `logger` or `loggerInstance` is set here.
+   *
+   * `https` serves TLS. `http2: true` serves HTTP/2: over TLS with `https`, which may also set `allowHTTP1`, and in
+   * cleartext without it. The instance is typed `FastifyInstance` whichever server is built, so TLS can be switched
+   * by configuration: narrow `instance.server` with `instanceof https.Server` to reach `setSecureContext`. Under
+   * HTTP/2 the raw request and response are Node's `Http2ServerRequest` and `Http2ServerResponse`, still typed as
+   * their HTTP/1 counterparts; narrow them with `instanceof` for what only HTTP/2 has, such as `stream`.
    */
-  factory?: FastifyHttpOptions<Server>
+  factory?: FastifyFactoryOptions
 
   /**
    * What `listen()` is called with. What `run(options)` is given is merged over it, key by key. With neither,
@@ -80,6 +90,17 @@ export interface FastifyServerSettings {
    * Node, so write `port: 0` for an OS-assigned port.
    */
   listener?: FastifyListenOptions
+}
+
+/**
+ * Fastify's constructor options with every server it can build: HTTP/1, HTTPS and HTTP/2. Fastify types each apart
+ * by the server it returns, and the adapter's instance is one type whatever the server.
+ */
+type FastifyFactoryOptions = FastifyServerOptions<Server> & {
+  http?: ServerOptions | null
+  https?: HTTPSServerOptions | SecureServerOptions | null
+  http2?: boolean
+  http2SessionTimeout?: number
 }
 
 /** The Fastify adapter's {@link AdapterTypes}. */
@@ -175,6 +196,8 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   #fastify: FastifyInstance | undefined
   /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
   #listener: FastifyListenOptions | undefined
+  /** What {@link forceTeardown} cuts on a server with no `closeAllConnections()`. `undefined` on one that has it. */
+  #sockets: Set<Socket> | undefined
   #container: Container
   readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
 
@@ -216,8 +239,25 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
-    const fastify = Fastify(withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath))
+    // Fastify's HTTP/1 overload whatever `factory` asks for: the instance is one type whichever server it builds.
+    const fastify = Fastify(
+      withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
+    )
     this.#fastify = fastify
+
+    // An HTTP/2 server has no `closeAllConnections()`, so the adapter keeps its connections for `forceTeardown()`.
+    // `close()` ends HTTP/2 sessions only gracefully — Node's own and Fastify's `forceCloseConnections` alike
+    // call `session.close()`, which waits for the streams still open — so a stream that overran the budget is
+    // cut here or not at all. A socket is what an HTTP/2 session and an `allowHTTP1` connection both run on, and
+    // destroying it ends either.
+    if (typeof fastify.server.closeAllConnections !== 'function') {
+      const sockets = new Set<Socket>()
+      fastify.server.on('connection', (socket: Socket) => {
+        sockets.add(socket)
+        socket.once('close', () => sockets.delete(socket))
+      })
+      this.#sockets = sockets
+    }
 
     // Copied and read once: `listen()` writes into what it is handed, a live configuration node refuses that, and
     // the address has to stop moving once the socket is bound.
@@ -350,7 +390,14 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
    * interrupted mid-request by the orchestrator.
    */
   forceTeardown(): Promise<void> {
-    this.#fastify?.server.closeAllConnections()
+    if (this.#sockets === undefined) {
+      this.#fastify?.server.closeAllConnections()
+    } else {
+      for (const socket of this.#sockets) {
+        socket.destroy()
+      }
+    }
+
     return Promise.resolve()
   }
 
@@ -359,15 +406,19 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   }
 
   get address(): ServerAddress | undefined {
-    const bound = this.#fastify?.server.address()
+    const server = this.#fastify?.server
+    const bound = server?.address()
 
     // `undefined` before the server is built; `null` when nothing is listening; a string when bound to a unix
     // socket or a named pipe, which has no host/port to report.
-    if (bound == null || typeof bound === 'string') {
+    if (server === undefined || bound == null || typeof bound === 'string') {
       return undefined
     }
 
-    return { host: bound.address, port: bound.port, origin: originOf(bound.address, bound.port) }
+    // Both HTTPS and HTTP/2 over TLS servers are TLS servers, whether `factory` or its `serverFactory` built them.
+    const scheme = server instanceof TLSServer ? 'https' : 'http'
+
+    return { host: bound.address, port: bound.port, origin: originOf(scheme, bound.address, bound.port) }
   }
 
   /** @throws ErrApplicationNotReady before {@link setup} built the server. */
@@ -469,7 +520,7 @@ export function fastifyAdapterFactory(): AdapterFactory<FastifyTypes> {
  * Annotated rather than inferred on purpose: `loggerInstance` typed as the application's logger would make
  * `Fastify()` infer its logger parameter from it, and the instance would no longer be a plain `FastifyInstance`.
  */
-function withApplicationLogger(factory: FastifyHttpOptions<Server>, logger: Logger): FastifyHttpOptions<Server> {
+function withApplicationLogger(factory: FastifyFactoryOptions, logger: Logger): FastifyFactoryOptions {
   if (factory.logger !== undefined || factory.loggerInstance !== undefined) {
     return factory
   }
@@ -489,7 +540,7 @@ function withApplicationLogger(factory: FastifyHttpOptions<Server>, logger: Logg
  * request. Fastify has saved the full URL in `request.originalUrl` before this runs, and a `rewriteUrl` the
  * application set itself runs after it, on the path the application sees.
  */
-function withBasePath(factory: FastifyHttpOptions<Server>, basePath: string | undefined): FastifyHttpOptions<Server> {
+function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefined): FastifyFactoryOptions {
   if (basePath === undefined) {
     return factory
   }
@@ -649,14 +700,14 @@ function assertRouteFeaturesInstalled(
  * `0.0.0.0` and `::` are addresses to accept connections on, not addresses to dial, so an origin built from
  * them is not reliably reachable. Both map to their loopback equivalent; IPv6 is bracketed.
  */
-function originOf(host: string, port: number): string {
+function originOf(scheme: 'http' | 'https', host: string, port: number): string {
   if (host === '0.0.0.0') {
-    return `http://127.0.0.1:${port}`
+    return `${scheme}://127.0.0.1:${port}`
   }
 
   if (host === '::' || host === '::1') {
-    return `http://[::1]:${port}`
+    return `${scheme}://[::1]:${port}`
   }
 
-  return host.includes(':') ? `http://[${host}]:${port}` : `http://${host}:${port}`
+  return host.includes(':') ? `${scheme}://[${host}]:${port}` : `${scheme}://${host}:${port}`
 }
