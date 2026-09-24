@@ -12,6 +12,9 @@ export interface AuthenticationProperties {
    * the post-callback destination instead of the URL the challenge happened to interrupt. Always
    * revalidated against the same-origin rule before use — a caller-supplied redirect target is exactly the
    * shape of an open redirect.
+   *
+   * It is the URL the browser will request, so it carries the application's base path. Written `~/dashboard`, it
+   * is resolved against the base path the way `ctx.redirect` resolves it.
    */
   redirectURI?: string
   /**

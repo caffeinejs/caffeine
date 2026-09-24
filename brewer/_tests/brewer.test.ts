@@ -4,6 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
 import { ErrBrewPathParam } from '../errors.js'
+import { joinURL } from '../url.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
 
@@ -224,6 +225,33 @@ describe('brewer against an application in process', () => {
     })
   })
 
+  // A gateway serves the application under `/api`. The base belongs in the client's base URL, as it belongs in an
+  // OpenAPI document's `servers`; the routes stay the ones the application declares.
+  describe('given a base URL naming the base path the application is served under', () => {
+    it.each(['http://localhost/api', 'http://localhost/api/'])(
+      'should keep it in every request, from %s',
+      async baseURL => {
+        const based = createWebApplication().basePath('/api').mount(pets)
+        await based.ready()
+
+        try {
+          const calls: string[] = []
+          const client = brewer<typeof based>(baseURL, {
+            fetch: (input, init) => {
+              calls.push(String(input))
+              return based.fetch(input as string, init)
+            },
+          })
+
+          expect(await (await client.pets({ id: 7 }).get()).json()).toEqual({ id: 7, name: 'Rex' })
+          expect(calls).toEqual(['http://localhost/api/pets/7'])
+        } finally {
+          await based.close()
+        }
+      },
+    )
+  })
+
   describe('given anything else that answers like fetch', () => {
     it('should use it, since the target is structural', async () => {
       const stub: Fetchable = { fetch: async () => Response.json({ id: 9, name: 'Stub' }) }
@@ -241,5 +269,18 @@ describe('fillPath', () => {
 
       expect(() => client.$request('GET', '/pets/:id', { params: {} as never })).toThrow(ErrBrewPathParam)
     })
+  })
+})
+
+// Joined, never resolved: `new URL('/pets', 'https://gw.example/api')` is `https://gw.example/pets`, and a base URL
+// naming the application's base path has to keep it.
+describe('joinURL', () => {
+  it.each([
+    ['https://gw.example/api', '/pets/7', 'https://gw.example/api/pets/7'],
+    ['https://gw.example/api/', '/pets/7', 'https://gw.example/api/pets/7'],
+    ['https://gw.example/api', '/', 'https://gw.example/api'],
+    ['https://gw.example', '/pets', 'https://gw.example/pets'],
+  ])('should join %s and %s into %s', (baseURL, path, expected) => {
+    expect(joinURL(baseURL, path)).toBe(expected)
   })
 })

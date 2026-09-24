@@ -1,3 +1,7 @@
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import {
   $p,
   AllowAnonymous,
@@ -284,6 +288,88 @@ describe('openapi endpoints', () => {
     const html = await (await app.fetch('/docs')).text()
 
     expect(html).toContain('https://relay.internal')
+  })
+})
+
+/**
+ * Behind a gateway forwarding `/api/...`, where the server takes the base off a request before routing. The
+ * document describes the routes as the application declares them and names the base as the server they are on;
+ * the documentation page's links are followed by a browser, so they carry the base.
+ */
+describe('openapi under a base path', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  async function documentOf(running: WebApplication, url = '/api/openapi.json'): Promise<OpenAPIDocument> {
+    const res = await running.fetch(url)
+    expect(res.status).toBe(200)
+    return (await res.json()) as OpenAPIDocument
+  }
+
+  it('names the base path as the server, keeping the paths as the application declares them', async () => {
+    app = newBuilder(o => o.docs(false).public()).basePath('/api') as WebApplication
+    await app.ready()
+
+    const document = await documentOf(app)
+
+    expect(document.servers).toEqual([{ url: '/api' }])
+    expect(operationAt(document, '/pets')).toBeDefined()
+    expect(document.paths?.['/api/pets']).toBeUndefined()
+  })
+
+  it('keeps the servers the application declared, adding none of its own', async () => {
+    app = newBuilder(o => o.server('https://api.example.com/v1').docs(false).public()).basePath(
+      '/api',
+    ) as WebApplication
+    await app.ready()
+
+    expect((await documentOf(app)).servers).toEqual([{ url: 'https://api.example.com/v1' }])
+  })
+
+  it('names no server without a base path, as it always has', async () => {
+    app = buildApp(o => o.docs(false).public())
+    await app.ready()
+
+    expect('servers' in (await documentOf(app, '/openapi.json'))).toBe(false)
+  })
+
+  it('leaves an imported document as it was written', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'openapi-base-'))
+    const path = join(dir, 'spec.yaml')
+    writeFileSync(path, 'openapi: 3.1.1\ninfo:\n  title: Imported\n  version: 1.0.0\npaths: {}\n')
+
+    app = newBuilder(o => o.specification({ path }).docs(false).public()).basePath('/api') as WebApplication
+    await app.ready()
+
+    expect('servers' in (await documentOf(app))).toBe(false)
+  })
+
+  it('links the documentation page to its document and bundle under the base', async () => {
+    app = newBuilder(o => o.public()).basePath('/api') as WebApplication
+    await app.ready()
+
+    const html = await (await app.fetch('/api/docs')).text()
+
+    expect(html).toContain('data-url="/api/openapi.json"')
+    expect(html).toContain('src="/api/docs/_scalar.js"')
+    // Followed through the gateway, and just as well straight to the application.
+    for (const url of ['/api/openapi.json', '/api/docs/_scalar.js', '/openapi.json', '/docs/_scalar.js']) {
+      expect((await app.fetch(url)).status).toBe(200)
+    }
+  })
+
+  it('puts the base path in front of a configured endpoint base', async () => {
+    app = newBuilder(o => o.base('/internal').public()).basePath('/api') as WebApplication
+    await app.ready()
+
+    const html = await (await app.fetch('/api/internal/docs')).text()
+
+    expect(html).toContain('data-url="/api/internal/openapi.json"')
+    expect(html).toContain('src="/api/internal/docs/_scalar.js"')
   })
 })
 

@@ -44,7 +44,19 @@ export interface Req<
   TBody = unknown,
 > {
   get raw(): RAW
+
+  /** The request's path and query as the application sees it: without the {@link basePath} the server took off. */
   get url(): string
+
+  /**
+   * What the server took off the front of the request's path before routing it — the application's
+   * `.basePath(...)` — or `''` when there is none, or when the request came without it.
+   *
+   * A URL the browser is sent to puts it back — `ctx.redirect('~/signed-out')` does it for a redirect, and
+   * `ctx.req.basePath + '/signed-out'` anywhere else, such as a link in a page.
+   */
+  get basePath(): string
+
   get method(): string
 
   /**
@@ -174,6 +186,13 @@ export interface Context<
 
   internalServerError(body: unknown): this
 
+  /**
+   * Sends the browser to `url`, with `status` or a `302`.
+   *
+   * `url` is sent as it is written, except that a leading `~/` is resolved against the application's base path:
+   * `~/done` is `/api/done` under `.basePath('/api')`, and `/done` with none. A URL the application builds for
+   * itself is written that way, since `/done` is sent as `/done` and leaves the base behind.
+   */
   redirect(url: string, status?: number): this
 }
 

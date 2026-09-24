@@ -85,7 +85,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
         options.source === undefined
           ? generateDocument({
               routeGroups: routeGroups() as Array<RouteGroup<unknown>>,
-              options,
+              options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
               onWarning: message => warnings.push(message),
             })
@@ -110,7 +110,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
     })
 
     const paths = resolvePaths(options)
-    const { docsPage, asset } = ui(options, paths)
+    const { docsPage, asset } = ui(options, paths, instance.$basePath)
 
     const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
 
@@ -173,8 +173,21 @@ function publicURL(base: string, path: string): string {
   return joinPaths(base === '/' ? '' : base, path)
 }
 
-/** Builds the documentation page and its bundle, or nothing when no UI is served. */
-function ui(options: OpenAPIOptions, paths: EndpointPaths): { docsPage?: string; asset?: string } {
+/**
+ * The options a generated document is built from, naming the application's base path as its server when the
+ * application named none: the paths describe the routes as the application declares them, and the server is where
+ * a client finds them.
+ */
+function withBasePathServer(options: OpenAPIOptions, basePath: string): OpenAPIOptions {
+  return basePath === '' || options.servers.length > 0 ? options : { ...options, servers: [{ url: basePath }] }
+}
+
+/**
+ * Builds the documentation page and its bundle, or nothing when no UI is served.
+ *
+ * The page's links are followed by a browser, so they carry the application's base path.
+ */
+function ui(options: OpenAPIOptions, paths: EndpointPaths, basePath: string): { docsPage?: string; asset?: string } {
   const { docs, asset, json } = paths
   if (docs === undefined || asset === undefined) {
     return {}
@@ -185,8 +198,8 @@ function ui(options: OpenAPIOptions, paths: EndpointPaths): { docsPage?: string;
   return {
     docsPage: scalarPage({
       title: options.info.title,
-      specURL: publicURL(base, json),
-      assetURL: publicURL(base, asset),
+      specURL: basePath + publicURL(base, json),
+      assetURL: basePath + publicURL(base, asset),
       configuration: options.ui,
     }),
     asset: readScalarBundle(),

@@ -30,6 +30,7 @@ const XHR: Record<string, string> = { accept: 'application/json' }
 function makeCtx(
   overrides: Partial<{
     url: string
+    basePath: string
     cookies: Record<string, string>
     query: Record<string, string>
     headers: Record<string, string>
@@ -47,6 +48,7 @@ function makeCtx(
   const ctx = {
     req: {
       url: overrides.url ?? '/api/me',
+      basePath: overrides.basePath ?? '',
       cookie: (name?: string) => (name === undefined ? cookies : cookies[name]),
       query: (key?: string) => (key === undefined ? query : query[key]),
       header: (name?: string) => (name === undefined ? headers : headers[name]),
@@ -162,6 +164,40 @@ describe('OAuth2AuthenticationHandler', () => {
 
       expect(mocks.deleteCookie).not.toHaveBeenCalled()
     })
+
+    // A caller written in plain JavaScript can hand over anything as the destination. One that is not a path here
+    // is dropped, as an unsafe one is, and the challenge still answers.
+    it('drops a redirectURI that is not a string, telling a script where to sign in without it', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
+      const mocks = makeCtx({ headers: XHR })
+
+      await handler.challenge(mocks.ctx, { redirectURI: 42 as unknown as string })
+
+      expect(loginURL(mocks).toString()).toBe('https://app.example.com/auth/provider/login')
+    })
+
+    it('drops a redirectURI that is not a string, bringing a navigation back to the default path', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => ({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(url.endsWith('/token') ? { access_token: 'at' } : { id: 7 }),
+        })),
+      )
+
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const started = makeCtx({ headers: NAVIGATION })
+      await handler.challenge(started.ctx, { redirectURI: 42 as unknown as string })
+
+      const callback = makeCtx({
+        cookies: cookiesSetBy(started),
+        query: { code: 'c', state: loginURL(started).searchParams.get('state')! },
+      })
+      await handler.processCallback(callback.ctx)
+
+      expect(callback.redirect).toHaveBeenCalledWith('/home', 302)
+    })
   })
 
   describe('startSignIn() — the route a script sends the browser to', () => {
@@ -183,18 +219,69 @@ describe('OAuth2AuthenticationHandler', () => {
     })
 
     // The query string is anybody's to write, in a link mailed to the user for one.
-    it.each(['https://evil.example/steal', '//evil.example/steal', '/\\evil.example', undefined])(
-      'comes back to the default path when asked for %s',
-      async returnTo => {
-        const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
-        const mocks = makeCtx({ query: returnTo === undefined ? {} : { returnTo } })
+    it.each([
+      'https://evil.example/steal',
+      '//evil.example/steal',
+      '/\\evil.example',
+      '~//evil.example/steal',
+      undefined,
+    ])('comes back to the default path when asked for %s', async returnTo => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: returnTo === undefined ? {} : { returnTo } })
 
-        await handler.startSignIn(mocks.ctx)
+      await handler.startSignIn(mocks.ctx)
 
-        const [name] = Object.keys(cookiesSetBy(mocks))
-        expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/home')
-      },
-    )
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/home')
+    })
+
+    // `defaultRedirectPath` is written as the application sees it; the browser is sent to where it really is.
+    it('comes back to the default path under the base path when the query names nowhere safe', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo: '//evil.example/steal' }, basePath: '/api' })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/api/home')
+    })
+
+    // A `returnTo` on the query is already a URL the browser sees, as the challenge that wrote it made it one.
+    it('keeps a safe returnTo from the query as given, never adding the base twice', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo: '/api/reports' }, basePath: '/api' })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/api/reports')
+    })
+
+    // A link written the way the application writes its own redirects says "under the base" with `~/`, as
+    // `redirectURI` does. Any other path is already the URL the browser sees, and comes back as it was written.
+    it.each([
+      ['~/reports', '/api/reports'],
+      ['/dashboard', '/dashboard'],
+    ])('comes back to returnTo %s under the base path as %s', async (returnTo, expected) => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo }, basePath: '/api' })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe(expected)
+    })
+
+    // Fastify parses a parameter given twice to an array, whatever the query's type says, and anyone can send one.
+    it('comes back to the default path when returnTo is given twice', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ defaultRedirectPath: '/home' }))
+      const mocks = makeCtx({ query: { returnTo: ['/a', '/b'] as unknown as string } })
+
+      await handler.startSignIn(mocks.ctx)
+
+      const [name] = Object.keys(cookiesSetBy(mocks))
+      expect((await decodeState(cookiesSetBy(mocks)[name], SESSION_SECRET, SCHEME)).returnTo).toBe('/home')
+    })
 
     it('completes through the callback', async () => {
       vi.stubGlobal(

@@ -171,6 +171,32 @@ Calls accumulate: sections shallow-merge in call order, callbacks run in call or
 (`ServerBuilder`, `kServerOptions`, `serverConfigSchema`) is gone; an application declares its own `server` block
 and hands the node over as the `listener`.
 
+`.basePath(value)` is the one other input the server is built from. The application resolves and normalizes it
+(`base_path.ts`) and hands it over as `AdapterIn.basePath`; the adapter adds a `rewriteUrl` that takes it off a
+request's path before routing and records it on the raw request for `ctx.req.basePath`, and an application's own
+`rewriteUrl` then runs on the path the application sees. With no base path there is no `rewriteUrl` at all. Routing
+never sees the base, so nothing registers differently: every route, `app.use(path)`, the fallback policy's
+`except` and both collision guards stay relative to the application, and a request without the base is routed as
+it came. Only what builds a URL a browser follows puts the base back — per request with `ctx.req.basePath` (the
+cookie and remote authentication redirects), or at start-up with the `$basePath` decoration (the OIDC routes,
+whose paths come from a `callbackURL` the browser sees, and `@caffeinejs/openapi`'s `servers` and page links).
+Do not prefix at registration instead. A `register({ prefix })` around the plugins moves every one of them off the
+root server; rewriting `url` in `onRoute` leaves `routeOptions.url` stale and misses the trailing-slash twin
+Fastify registers for a `/` route without running `onRoute`. The middleware engine leaves `raw.originalUrl` alone
+when it is set, since that is where Fastify saved the full URL.
+
+A URL an application hands over for the browser is sent as written, except that a leading `~/` resolves against
+the request's base (`resolveAppURL`). That is `ctx.redirect(...)`, `AuthenticationProperties.redirectURI` and the
+`returnTo` query a remote strategy's sign-in route reads, and nothing else: a header, a body and a configured option
+are not rewritten. A configured path is written as the application sees it and gets the base in front already, so
+one written with `~/` is refused when its scheme builds rather than sent out as a relative URL. `~/` followed by `/`,
+`\` or a control character is left alone, since a browser would read the result as protocol-relative. The cookie
+scheme's cookies default to `Path=` the request's base, so applications sharing an origin do not share a session
+begun under their bases; one begun on a request without the base is written at `/`, since the base follows the
+request here as it does in every redirect. A `__Host-` name keeps `/`. The remote strategies' cookies stay at `/` for
+the same `__Host-` reason, and the state cookie must reach a callback that may sit outside the base — co-hosted
+applications name them apart instead.
+
 The application's configured logger is the server's `loggerInstance`, with request logging off through a
 `LogController`, unless `factory.logger` or `factory.loggerInstance` is set — Fastify refuses both together, so a
 `logger` named there is passed through untouched, request logging and level included. The instance is built
@@ -359,7 +385,7 @@ Do not add a version argument to the inline verb form, an app-level `enableVersi
 
 ## Route-type accumulation
 
-`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `WebApplication`. It is groundwork for a typed client; there is no client yet, and the flat union is deliberate so the client's shape can be decided later.
+`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `WebApplication`. `@caffeinejs/brewer` is the client built on it: it reads `__routes` structurally, without importing this package, so the flat union is its contract now. The paths are the ones the application declares. A `.basePath(...)` is where the application is deployed, not what it declares — a callback can decide it at `ready()` — so it is not in the type; it belongs in the client's base URL, as it belongs in an OpenAPI document's `servers`.
 
 The carrier is the **return value**, not the variable: `.handler()` gives back the router re-typed with the route just closed, so a chain accumulates. Statement style leaves one handle per statement, each naming the same router with one route in its type; `blend(...)` (or `mount(...)`, or `app.mount(...)`) unions them. The variable the routes were opened from stays `never`, and the verb methods cannot mutate a shared type — do not try to "fix" either.
 

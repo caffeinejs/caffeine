@@ -35,6 +35,37 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 - `@Prefix` is a Fastify plugin prefix; `@Controller('/api/pets')` is the URL path, not a 404-scoped `/api` bubble.
 - Errors: throw `ErrHTTPNotFound` (etc.). Render with `@Catch(ErrType)` on an `ErrorHandler` class, then enrol it with `.errorHandling(e => e.globalHandlers(H))`; or leave it unenrolled and name it with `@CatchWith`, or use a `@Catch` method on the controller. Enrolling two handlers for the same class fails at boot. See [errors.md](errors.md).
 
+## Serving under a base path
+
+Behind a gateway or proxy that forwards `/api/...` with the prefix intact, `.basePath('/api')` serves the whole
+application under it — or `.basePath(({ config }) => config.app.basePath)`, resolved at `ready()`. Under Watt:
+`.basePath(() => getBasePath({ throwOnMissing: false }))`.
+
+The server takes the base off a request's path before routing, so nothing the application declares changes:
+routes from every source, plugin routes such as the health probes and static files, `app.use(path, …)` and
+fallback-policy exceptions are all written as if served from the root. A request without the base is routed as it
+came, so the base is not an access boundary: every route also answers without it, and keeping a route private is
+the gateway's job or authorization's.
+
+- `ctx.req.url` is the path the application sees; `ctx.req.basePath` is what was taken off (`''` when nothing was),
+  so the base follows the request: a request that came without it is answered without it.
+- Redirects the framework builds carry the base: cookie sign-in's `loginPath` / `accessDeniedPath` and the return
+  URL, OAuth/OIDC's return URL and `defaultRedirectPath`, a `@caffeinejs/static` mount's `redirect` and `list`
+  links, and the directory redirect of `sendFile` / `download`. A handler's own redirect says so with `~/`:
+  `ctx.redirect('~/done')` is `/api/done`, while `ctx.redirect('/done')` is sent as written.
+  `AuthenticationProperties.redirectURI` and the `returnTo` query of an OAuth/OIDC `loginPath` take `~/` too. A
+  link in a page writes `ctx.req.basePath + '/done'`.
+- The cookie scheme scopes its session and remember-me cookies to the base (`Path=/api`), so applications sharing
+  an origin under different bases keep their sessions apart. The scope follows the request: a sign-in that came
+  without the base writes them at `/`. `.path('/')` shares one session with requests that come without the base.
+  Its `loginPath` and `accessDeniedPath` are written as the application sees them — `/login`, never `~/login`,
+  which is refused.
+- OAuth/OIDC `callbackURL` and `loginPath` are the URLs the browser sees, so they include the base. Their cookies
+  stay at `Path=/` — `__Host-` cookies must — so applications sharing an origin give them distinct
+  `sessionCookieName(...)` / `stateCookieName(...)`.
+- `@caffeinejs/openapi` names the base as the document's server when the application named none, and links the
+  docs page under it. A typed client takes the base in its URL: `brewer<App>('https://gateway.example/api')`.
+
 ## Programmatic routers
 
 The second way to declare routes. Same compilation as a controller — same guards, authorization, validation, error
@@ -178,6 +209,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 - A verb ends the chain. Returns a `Response` whose `.json()` is typed — checking `res.ok` is yours.
 - `brewer<typeof app>`, `brewer<typeof someRouter>` and `brewer<RoutesOf<typeof app>>` all work, so a package can
   ship a client for just its own routes.
+- The routes are the ones the application declares. An application served under a `.basePath(...)` puts the base
+  in the URL — `brewer<App>('https://gateway.example/api')` — which the path is joined onto, never resolved
+  against.
 - Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
   URL is written. The application must be `ready()` first, or every call answers 404:

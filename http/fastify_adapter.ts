@@ -29,6 +29,7 @@ import type {
   ContextPlatform,
   ServerAddress,
 } from './adapter.js'
+import { kRawBasePath, stripBasePath, type BasePathCarrier } from './base_path.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
 import { ErrApplicationNotReady, ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
@@ -116,6 +117,11 @@ declare module './adapter.js' {
 declare module 'fastify' {
   interface FastifyInstance {
     get $container(): Container
+    /**
+     * The application's `.basePath(...)`, or `''` when it set none. The server takes it off every request's path
+     * before routing, so a plugin building, at start-up, a URL a browser will follow puts it in front.
+     */
+    get $basePath(): string
     $route(name: string, build: (router: RouteGroupBuilder) => void): void
   }
 
@@ -210,7 +216,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
-    const fastify = Fastify(withApplicationLogger(factory, input.context.logger))
+    const fastify = Fastify(withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath))
     this.#fastify = fastify
 
     // Copied and read once: `listen()` writes into what it is handed, a live configuration node refuses that, and
@@ -232,6 +238,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     // Decorating the server
     fastify.decorate('$container', container)
+    fastify.decorate('$basePath', input.basePath ?? '')
 
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
@@ -471,6 +478,39 @@ function withApplicationLogger(factory: FastifyHttpOptions<Server>, logger: Logg
     ...factory,
     loggerInstance: logger,
     logController: factory.logController ?? new LogController({ disableRequestLogging: true }),
+  }
+}
+
+/**
+ * Takes the application's base path off every request's path before Fastify routes it, and records what it took
+ * on the raw request for `ctx.req.basePath`. A request without it is routed as it came.
+ *
+ * Returns the settings untouched when there is no base path, so an application without one pays nothing per
+ * request. Fastify has saved the full URL in `request.originalUrl` before this runs, and a `rewriteUrl` the
+ * application set itself runs after it, on the path the application sees.
+ */
+function withBasePath(factory: FastifyHttpOptions<Server>, basePath: string | undefined): FastifyHttpOptions<Server> {
+  if (basePath === undefined) {
+    return factory
+  }
+
+  const own = factory.rewriteUrl
+
+  return {
+    ...factory,
+    rewriteUrl(req) {
+      // A request a server received always has a URL: `url` is optional only because Node types the response a
+      // client receives with the same class.
+      const url = req.url!
+      const stripped = stripBasePath(url, basePath)
+
+      if (stripped !== undefined) {
+        ;(req as typeof req & BasePathCarrier)[kRawBasePath] = basePath
+        req.url = stripped
+      }
+
+      return own === undefined ? (stripped ?? url) : own.call(this, req)
+    },
   }
 }
 

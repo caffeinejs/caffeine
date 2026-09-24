@@ -123,6 +123,11 @@ export interface AdapterIn<T extends AdapterTypes> {
   server: T['serverOptions']
   /** Every `.serverCallback(...)` callback folded into one that runs them in call order. `undefined` when none. */
   customize: ServerCustomizer<T> | undefined
+  /**
+   * What `.basePath(...)` resolved to, normalized: `/api`, never `/api/`. `undefined` when the application set
+   * none. The adapter strips it from a request's path before routing, and reports it as `ctx.req.basePath`.
+   */
+  basePath: string | undefined
 }
 
 /**

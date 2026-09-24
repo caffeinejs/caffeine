@@ -19,6 +19,7 @@ import {
   type ServerConfigurer,
   type ServerCustomizer,
 } from './adapter.js'
+import { normalizeBasePath } from './base_path.js'
 import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
@@ -92,6 +93,7 @@ export class WebApplication<
   readonly #installs: Install<T, C>[] = []
   readonly #serverConfigurers: ServerConfigurer<T, C>[] = []
   readonly #serverCustomizers: ServerCustomizer<T, C>[] = []
+  #basePath: BasePathConfigurer<C> | undefined
   #runArgs: T['runArgs'] | undefined
   #routeGroups: RouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
@@ -384,6 +386,38 @@ export class WebApplication<
   }
 
   /**
+   * Serves the whole application under `basePath`, for one placed behind a gateway or a proxy that forwards a
+   * path prefix with the request.
+   *
+   * The server takes the base off a request's path before routing, so everything the application declares stays
+   * written as if it were served from the root: routes from any source, plugin routes such as the health probes,
+   * `app.use(path, …)` paths and fallback-policy exceptions. `ctx.req.url` is that path, and `ctx.req.basePath`
+   * is what was taken off. The redirects this package builds — a sign-in challenge, its return URL, a denied
+   * access — add the base back; one a handler builds itself writes `ctx.req.basePath + '/somewhere'`.
+   *
+   * A request without the base is routed as it is, and its `ctx.req.basePath` is `''`. The base must end on a
+   * segment boundary (`/api` matches `/api/pets`, never `/apix`) and is compared with the path as sent:
+   * case-sensitively, and percent-encoded.
+   *
+   * `basePath` may be a callback, resolved once at {@link ready} against the same context `.server(...)` gets.
+   * Resolving to `undefined`, `''` or `'/'` means no base path. The last call wins.
+   *
+   * ```ts
+   * .basePath('/api')
+   * .basePath(({ config }) => config.app.basePath)
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link ready} has already started.
+   * @throws ErrConfiguration from {@link ready}, when the base path does not start with a single "/" (never "//"
+   *   or "/\"), or holds a "?", a "#" or a control character.
+   */
+  basePath(basePath: string | BasePathConfigurer<C>): this {
+    this.assertConfigurable()
+    this.#basePath = typeof basePath === 'string' ? () => basePath : basePath
+    return this
+  }
+
+  /**
    * Configures the cookie parsing every application gets: the signing secret, the serialization defaults, and
    * whether cookies are parsed at all. The feature is registered either way, so this only overrides the
    * defaults — and it is registered ahead of every plugin, so where in the chain the call is written makes no
@@ -554,6 +588,7 @@ export class WebApplication<
     // The server's own settings first: they describe what everything below registers onto, and a callback that
     // fails should do so before a factory with side effects has run.
     const server = await this.#resolveServerOptions(context as HTTPSetupContext<C>)
+    const basePath = normalizeBasePath(await this.#basePath?.(context as HTTPSetupContext<C>))
     await this.#registerExtensions(context as HTTPSetupContext<C>)
     await this.#registerScopedExtensions(context)
 
@@ -565,6 +600,7 @@ export class WebApplication<
       extensions: this.#extensions,
       server,
       customize: this.#serverCustomizer(),
+      basePath,
     })
   }
 
@@ -702,6 +738,9 @@ type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R, any> ? R 
  * application that mounted one report `undefined` as its dependencies. It contributes nothing instead.
  */
 type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D extends undefined ? never : D) : never
+
+/** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */
+type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | undefined | Promise<string | undefined>
 
 /** One entry in the order `.with(...)` was called: a feature, or a factory producing the adapter's extension. */
 type Install<T extends AdapterTypes, C> =

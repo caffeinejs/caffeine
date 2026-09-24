@@ -1,11 +1,18 @@
 import { randomBytes } from 'node:crypto'
 
+import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
 import { Claim, Identity, Principal } from '../../../index.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
 import { noStore } from '../no_store.js'
-import { challengeHeaders, type ChallengeMode, isSafeReturnPath, shouldRedirectChallenge } from './config.js'
+import {
+  challengeHeaders,
+  type ChallengeMode,
+  isSafeReturnPath,
+  returnTargetOf,
+  shouldRedirectChallenge,
+} from './config.js'
 import { ErrOAuthCallback, ErrOAuthConfiguration, ErrOAuthSession } from './errors.js'
 import { redactPii } from './pii.js'
 import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
@@ -95,7 +102,7 @@ export interface RemoteAuthenticationOptions {
   /**
    * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
    *
-   * On a failed callback it may answer the request — `ctx.redirect('/sign-in?failed=1')` — and what it answered is
+   * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
   onFail?: (ctx: Context, error: Error) => Promise<void> | void
@@ -278,8 +285,9 @@ export abstract class RemoteAuthenticationHandler<
   override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
     // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
     // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
-    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to.
-    const returnTo = properties?.redirectURI ?? ctx.req.url
+    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to. Either is kept as the
+    // browser will request it, base path included, since the browser is sent back there.
+    const returnTo = returnTargetOf(ctx, properties)
 
     noStore(ctx)
 
@@ -318,13 +326,16 @@ export abstract class RemoteAuthenticationHandler<
   /**
    * Answers {@link loginPath}: starts a sign-in and sends the browser to the provider.
    *
-   * `returnTo` on the query string is where the user lands afterwards. It is anybody's to write, so one that would
+   * `returnTo` on the query string is where the user lands afterwards, as the browser will request it: a leading
+   * `~/` resolves against the base path, as it does in `redirectURI`. It is anybody's to write, so one that would
    * leave this origin is dropped in favour of `defaultRedirectPath`.
    */
   async startSignIn(ctx: Context): Promise<void> {
+    // Checked for a string, not for `undefined`: a parameter given twice arrives as an array.
     const requested = ctx.req.query('returnTo')
+    const target = typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : undefined
     const returnTo =
-      requested !== undefined && isSafeReturnPath(requested) ? requested : this.options.defaultRedirectPath
+      target !== undefined && isSafeReturnPath(target) ? target : ctx.req.basePath + this.options.defaultRedirectPath
 
     noStore(ctx)
     ctx.redirect(await this.#startFlow(ctx, returnTo), 302)
@@ -665,7 +676,7 @@ export abstract class RemoteAuthenticationHandler<
 
     await this.writeSession(ctx, identity)
 
-    const fallback = this.options.defaultRedirectPath
+    const fallback = ctx.req.basePath + this.options.defaultRedirectPath
     const returnTo =
       stored.returnTo && stored.returnTo !== this.#callbackPath && isSafeReturnPath(stored.returnTo)
         ? stored.returnTo
