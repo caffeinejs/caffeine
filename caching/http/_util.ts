@@ -12,7 +12,7 @@ import {
 } from '@caffeinejs/http'
 import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std'
 
-import { CacheControlOptions, ETagGenerator } from './cache.js'
+import { CacheControlOptions, ETagGenerator } from './cache_control.js'
 
 // A route definition's methods as one label, `GET|POST`. `onRoute` hands over an array for a framework route and
 // a string for Fastify's own HEAD twin.

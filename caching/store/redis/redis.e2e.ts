@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { HTTPCaching, cacheControl, cacheInvalidate } from '../../http/index.js'
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { RedisHTTPCacheStore, type RedisHTTPCacheClient } from './index.js'
+import { RedisHTTPCacheStore, type RedisHTTPCacheClient } from './redis.js'
 
 // Copies of `test/e2e/internal`'s two helpers: this spec is inside the package's check project, which takes no
 // file from outside the package.

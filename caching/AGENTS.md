@@ -240,7 +240,7 @@ single-key delete or a batch, and a lock or a wait verb belongs to a later, sepa
 `MemoryHTTPCacheStore` in its unit test, `RedisHTTPCacheStore` twice: in its unit test over an in-memory fake of
 the four commands it sends, and in `store/redis/redis.e2e.ts` against real servers, which the e2e Vitest project
 (`test/e2e/vitest.config.ts`) picks up. A new store runs it before anything else. The generic `Cache` in
-`caching/store.ts` is not what the HTTP cache runs on; it is kept as it is, with no implementation, until its
+`caching/cache.ts` is not what the HTTP cache runs on; it is kept as it is, with no implementation, until its
 own design.
 
 A tag is a generation counter in both stores. `put` records the counter of each of its tags with the entry,

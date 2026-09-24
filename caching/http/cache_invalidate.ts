@@ -2,7 +2,7 @@ import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRoute
 
 import { cacheRouteOf } from './_observe.js'
 import { assertTags } from './_util.js'
-import type { CacheDeps } from './cache.js'
+import type { CacheDeps } from './cache_control.js'
 import { withStoreSignal } from './store_signal.js'
 
 export interface CacheInvalidateOptions {

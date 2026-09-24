@@ -2,7 +2,7 @@ import { LRUCache } from 'lru-cache'
 import { describe, expect, it } from 'vitest'
 
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { MemoryHTTPCacheStore, type MemoryHTTPCacheRecord } from './index.js'
+import { MemoryHTTPCacheStore, type MemoryHTTPCacheRecord } from './memory.js'
 
 describeHTTPCacheStoreContract('MemoryHTTPCacheStore', () => new MemoryHTTPCacheStore())
 

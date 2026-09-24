@@ -10,7 +10,7 @@ import {
   type RedisHTTPCacheClient,
   type RedisHTTPCacheCommands,
   type RedisHTTPCacheView,
-} from './index.js'
+} from './redis.js'
 
 // CRC16/XMODEM over the hash tag when the key has one, modulo 16384: how a cluster places a key.
 function slotOf(key: string): number {

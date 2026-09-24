@@ -1,6 +1,6 @@
 import { token } from '@caffeinejs/di'
 
-import type { ETagGenerator } from './cache.js'
+import type { ETagGenerator } from './cache_control.js'
 import type { HTTPCacheStore } from './store.js'
 
 /**
