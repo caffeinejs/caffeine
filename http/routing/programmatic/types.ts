@@ -1,6 +1,6 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
 
-import type { AdapterTypes, AnyAdapterTypes } from '../../adapter_types.js'
+import type { AdapterTypes, AnyAdapterTypes } from '../../adapter.js'
 import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
 import type { RouteValidationSchema } from '../spec.js'
 

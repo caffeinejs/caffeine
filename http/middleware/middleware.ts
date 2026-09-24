@@ -2,8 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
+import type { HTTPSetupContext } from '../adapter.js'
 import type { Context } from '../context.js'
-import type { HTTPSetupContext } from '../setup_context.js'
 
 /**
  * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the

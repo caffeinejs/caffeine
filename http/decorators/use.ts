@@ -1,5 +1,4 @@
-import type { AdapterExtensionFactory } from '../adapter_extension.js'
-import type { AnyAdapterExtension } from '../adapter_types.js'
+import type { AdapterExtensionFactory, AnyAdapterExtension } from '../adapter.js'
 
 const PluginRegistry = new WeakMap<Function, AdapterExtensionFactory<AnyAdapterExtension>[]>()
 

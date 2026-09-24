@@ -222,20 +222,21 @@ runs the next layer (`middleware/_engine.ts`). A handler that answered and then 
 ## The adapter owns its types
 
 Everything that belongs to the server library behind an adapter is named once, in an `AdapterTypes` descriptor
-(`adapter_types.ts`): the instance, the request, the extension unit `.with(factory)` installs, the hook names
+(`adapter.ts`): the instance, the request, the extension unit `.with(factory)` installs, the hook names
 `app.use(..., { hook })` accepts, the raw request, cookie options and `ctx.platform`. `FastifyTypes`
-(`fastify_types.ts`) is Fastify's. `Adapter<T>`, `WebApplication<T>`, `Router<…, T>` and `Context<V, C, T>` read
+(`fastify_adapter.ts`) is Fastify's. `Adapter<T>`, `WebApplication<T>`, `Router<…, T>` and `Context<V, C, T>` read
 their server-specific types off it. A newly found one becomes a member there, never another type parameter.
 
-`adapter_types.ts`, `adapter_extension.ts`, `setup_context.ts`, `context.ts`, `middleware/pipeline.ts`,
+`adapter.ts` (the contract every adapter implements), `context.ts`, `middleware/pipeline.ts`,
 `middleware/middleware.ts` and every `guards/` file but one — `guard.ts`, `compile.ts`, `builder.ts`,
 `keys.ts` and the chain runner `_run.ts` — import nothing from `fastify`. Fastify's side lives in
-`fastify_*.ts`, `routing/fastify/`, `middleware/fastify.ts`, `guards/fastify.ts` and the adapter. Guards are attached by
+`fastify_*.ts` — the adapter itself is `fastify_adapter.ts` — `routing/fastify/`, `middleware/fastify.ts` and
+`guards/fastify.ts`. Guards are attached by
 `guards/fastify.ts` alone: it reads `request.httpContext` and hands the chain to `runGuards`, which knows
 only `GuardContext`.
 
 `AdapterRegistry` is augmentable and holds every adapter in the compilation; the Fastify entry is declared in
-`fastify_types.ts`. What is written without knowing its adapter is typed against all of them: `@Use(...)` takes
+`fastify_adapter.ts`. What is written without knowing its adapter is typed against all of them: `@Use(...)` takes
 any registered extension, and `ctx.platform` on a plain `Context` is any registered platform. With a second
 entry, every un-narrowed `ctx.platform` read stops compiling until it checks `ctx.platform.name`. That is
 intended.

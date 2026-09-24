@@ -15,7 +15,7 @@ import {
   type UnsignedCookie,
 } from './context.js'
 import { statusErrorBody } from './error/http.js'
-import type { FastifyPlatform, FastifyTypes } from './fastify_types.js'
+import type { FastifyPlatform, FastifyTypes } from './fastify_adapter.js'
 import type { RouteValidationSchema } from './routing/spec.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'

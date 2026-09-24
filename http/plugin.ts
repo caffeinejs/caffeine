@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync, FastifyPluginCallback, FastifyPluginOptions } from 'fastify'
 
-import type { AdapterExtensionFactory } from './adapter_extension.js'
-import type { HTTPSetupContext } from './setup_context.js'
+import type { AdapterExtensionFactory, HTTPSetupContext } from './adapter.js'
 
 /**
  * Any Fastify plugin, callback- or async-style — a bare third-party one (`@fastify/cors`, `@fastify/cookie`,

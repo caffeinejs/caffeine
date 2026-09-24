@@ -1,6 +1,6 @@
 import type { ObjectInjectionSpec } from '@caffeinejs/di'
 
-import type { AdapterExtensionFactory } from '../../adapter_extension.js'
+import type { AdapterExtensionFactory } from '../../adapter.js'
 import type { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteInvoker } from '../spec.js'
 

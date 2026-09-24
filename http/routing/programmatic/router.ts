@@ -6,8 +6,7 @@ import {
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
 
-import type { AdapterExtensionFactory } from '../../adapter_extension.js'
-import type { AdapterTypes } from '../../adapter_types.js'
+import type { AdapterExtensionFactory, AdapterTypes } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'

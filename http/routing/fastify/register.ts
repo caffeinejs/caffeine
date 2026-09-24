@@ -13,7 +13,7 @@ import {
   type RawServerBase,
 } from 'fastify'
 
-import type { AdapterExtensions } from '../../adapter_extension.js'
+import type { AdapterExtensions } from '../../adapter.js'
 import { ErrCaffeineWebApplication } from '../../error/common.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
 import { solutions } from '../../error/util.js'

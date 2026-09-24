@@ -1,4 +1,4 @@
-import type { FastifyRouterTypes } from '../../fastify_types.js'
+import type { FastifyRouterTypes } from '../../fastify_adapter.js'
 import { Router } from './router.js'
 
 /**

@@ -6,6 +6,7 @@ import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import type { HTTPSetupContext } from '../adapter.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
 import { kFeatureServer, type HTTPFeature } from '../feature.js'
@@ -14,7 +15,6 @@ import { createWebApplication, health, type WebApplication } from '../index.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
-import type { HTTPSetupContext } from '../setup_context.js'
 
 /**
  * What an application installs on its server: the plugins its factories produce and its features' server hooks.

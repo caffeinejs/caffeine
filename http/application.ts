@@ -1,4 +1,3 @@
-import type { Container } from '@caffeinejs/di'
 import {
   Application,
   kAddConfigurer,
@@ -9,15 +8,23 @@ import {
   type RunInfo,
 } from '@caffeinejs/std'
 
-import { AdapterExtensions, type AdapterExtensionFactory } from './adapter_extension.js'
-import { fastifyAdapterFactory } from './adapter_factory.js'
-import type { AdapterTypes } from './adapter_types.js'
+import {
+  AdapterExtensions,
+  type Adapter,
+  type AdapterExtensionFactory,
+  type AdapterFactory,
+  type AdapterTypes,
+  type HTTPSetupContext,
+  type ServerAddress,
+  type ServerConfigurer,
+  type ServerCustomizer,
+} from './adapter.js'
 import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
 import { solutions } from './error/util.js'
-import type { FastifyTypes } from './fastify_types.js'
+import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
 import { kFeatureServer, type HTTPFeature } from './feature.js'
 import { GuardsBuilder } from './guards/builder.js'
 import {
@@ -32,7 +39,6 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
-import type { RouteGroupCompiler } from './routing/compile.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
@@ -40,56 +46,7 @@ import { FluentRouteSource, routerStates } from './routing/programmatic/source.j
 import type { RouteGroup } from './routing/route.js'
 import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
-import type { HTTPSetupContext } from './setup_context.js'
 import { Keys } from './symbols.js'
-
-/**
- * Where the server ended up listening, as reported by the bound socket — which is not what was asked for:
- * port `0` becomes an OS-assigned port, and a wildcard host stays a wildcard.
- */
-export interface ServerAddress {
-  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. */
-  readonly host: string
-  /** The bound port. Never `0`. */
-  readonly port: number
-  /**
-   * An origin that can be connected to. A wildcard {@link host} is rendered as the matching loopback address,
-   * since `0.0.0.0` is an address to accept on, not one to dial.
-   */
-  readonly origin: string
-}
-
-/**
- * The callback `.server(configure)` takes: resolves the server's settings against the same context a plugin
- * factory gets, so `config` is the resolved tree and the container resolves. Returns the adapter's own shape —
- * under Fastify, `{ factory, listener }`.
- */
-export type ServerConfigurer<T extends AdapterTypes, C = unknown> = (
-  context: HTTPSetupContext<C>,
-) => T['serverOptions'] | Promise<T['serverOptions']>
-
-/**
- * The callback `.server(_, customize)` takes: handed the server right after the adapter constructs it, before
- * anything is decorated or registered on it.
- */
-export type ServerCustomizer<T extends AdapterTypes> = (instance: T['instance']) => void | Promise<void>
-
-/** What an application hands its adapter to set the server up with. */
-export interface AdapterIn<T extends AdapterTypes> {
-  routeGroups: RouteGroup<T['request']>[]
-  /** The compiler {@link buildRouting} built the groups above with — reused by `$route` for a late one. */
-  compileRouteGroup: RouteGroupCompiler
-  /** What the application hands everything it builds at start-up. The middleware factories run against it. */
-  context: HTTPSetupContext
-  /** What `app.use()` registered, for the adapter to resolve and attach to its hooks. */
-  middlewares: MiddlewarePipeline<T['hook']>
-  /** What the features and factories contributed, in the order they were installed. */
-  extensions: AdapterExtensions<T['instance'], T['extension']>
-  /** What every `.server(configure)` resolved to, merged section by section. Empty when none was made. */
-  server: T['serverOptions']
-  /** Every `.server(_, customize)` callback folded into one that runs them in call order. `undefined` when none. */
-  customize: ServerCustomizer<T> | undefined
-}
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
 export interface WebRunInfo extends RunInfo {
@@ -100,40 +57,6 @@ export interface WebRunInfo extends RunInfo {
    */
   readonly address: ServerAddress | undefined
 }
-
-/**
- * What drives the server behind a {@link WebApplication}. `T` names every type that belongs to that server, and is
- * what the application, its routers and each request's context are typed with.
- */
-export interface Adapter<T extends AdapterTypes> {
-  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
-  get instance(): T['instance']
-
-  /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
-  get address(): ServerAddress | undefined
-
-  /** Builds the server from `input.server`, hands it to `input.customize`, then wires everything else onto it. */
-  setup(input: AdapterIn<T>): Promise<void>
-  /** Starts listening. The arguments are what {@link WebApplication.run} was given, untouched. */
-  run(...args: T['runArgs']): Promise<void>
-  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
-
-  teardown(): Promise<void>
-
-  /**
-   * Abandons whatever is still in flight so a pending {@link teardown} can finish. Called only when the graceful
-   * shutdown budget is exhausted, at which point the orchestrator's `SIGKILL` is the alternative. Adapters that
-   * cannot force connections shut may leave it undefined.
-   */
-  forceTeardown?(): Promise<void>
-}
-
-export interface AdapterFactoryIn {
-  container: Container
-}
-
-export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) => Adapter<T>
 
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
 

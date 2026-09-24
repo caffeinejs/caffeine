@@ -1,7 +1,7 @@
 import { type InjectionToken, Scopes } from '@caffeinejs/di'
 
+import type { HTTPSetupContext } from '../adapter.js'
 import { ErrConfiguration } from '../error/common.js'
-import type { HTTPSetupContext } from '../setup_context.js'
 import { rawContext } from './_raw_context.js'
 import { ErrNextCalledTwice, ErrPipelineSealed } from './errors.js'
 import {

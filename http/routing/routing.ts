@@ -32,7 +32,7 @@ export interface RouteBuildContext {
 export interface BuiltRouting<R> {
   routeGroups: RouteGroup<R>[]
   /**
-   * The same compiler every source built through — reused by `$route` (`http/adapter.ts`) to compile a group
+   * The same compiler every source built through — reused by `$route` (`http/fastify_adapter.ts`) to compile a group
    * accumulated after this pass, so a guard shared between an ordinary route and a `$route` one resolves
    * through the one cache, not a second one.
    */

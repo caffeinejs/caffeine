@@ -1,7 +1,7 @@
 import { FeatureBuilder, type Feature } from '@caffeinejs/std'
 import type { FastifyInstance } from 'fastify'
 
-import type { HTTPSetupContext } from './setup_context.js'
+import type { HTTPSetupContext } from './adapter.js'
 
 /** The key an {@link HTTPFeature}'s server hook hangs off, kept off the builder's fluent surface. */
 export const kFeatureServer = Symbol('caffeine.http.feature.server')

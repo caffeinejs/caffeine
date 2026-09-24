@@ -1,7 +1,7 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std'
 import type { ConfigSnapshot } from '@caffeinejs/std/config'
 
-import type { AdapterTypes, AnyAdapterTypes } from './adapter_types.js'
+import type { AdapterTypes, AnyAdapterTypes } from './adapter.js'
 import type { RouteValidationSchema } from './routing/spec.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'

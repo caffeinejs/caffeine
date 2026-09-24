@@ -13,11 +13,18 @@ import { InlineConfigSource, type InferConfig, type LiveConfig } from '@caffeine
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import type { AdapterExtensionFactory } from '../adapter_extension.js'
-import type { AdapterTypes, AnyAdapterTypes, ContextPlatform } from '../adapter_types.js'
-import { createWebApplication, type Adapter, type AdapterFactory, type AdapterIn } from '../application.js'
+import type {
+  Adapter,
+  AdapterExtensionFactory,
+  AdapterFactory,
+  AdapterIn,
+  AdapterTypes,
+  AnyAdapterTypes,
+  ContextPlatform,
+} from '../adapter.js'
+import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
-import type { FastifyRouterTypes, FastifyTypes } from '../fastify_types.js'
+import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
 import { HTTPFeatureBuilder, kFeatureServer, type HTTPFeature } from '../feature.js'
 import { health } from '../health/health.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
