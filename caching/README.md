@@ -324,6 +324,9 @@ payloads and headers (`'512kb'`, `'64MB'`, or a number of bytes). It also takes 
 settings those two do not cover. Each replica has its own, so an eviction on one replica does not reach the
 others.
 
+Needs `lru-cache`, an optional peer loaded only when you import this path. Your application owns the copy, which
+is what lets a pre-built `LRUCache` you construct be recognised as one.
+
 ### `RedisHTTPCacheStore`
 
 For Redis 8.0 or later, or Valkey 9.0 or later: entries are written with `HSETEX`, and an older server rejects
@@ -356,6 +359,53 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 - `prefix` is put in front of every key as given, with no separator of the store's own: `''` puts nothing in
   front. It may not contain `{` or `}`, and neither may a tag: `ErrRedisCache`.
 
+### Key-value stores (cache-manager, Keyv)
+
+`KeyValueHTTPCacheStore` runs on any key-value cache. A cache-manager cache and a `Keyv` both fit as they come,
+so the only thing you supply is the cache:
+
+```ts
+import { createCache } from 'cache-manager'
+import { KeyValueHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+
+const store = new KeyValueHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
+```
+
+Bind it where the rest of your wiring lives, and hand `HTTPCaching` the token:
+
+```ts
+@Configuration()
+class CacheConfig {
+  @Provides(kHTTPCacheStore, [kCacheManager])
+  httpCacheStore(cache: Cache): HTTPCacheStore {
+    return new KeyValueHTTPCacheStore(cache)
+  }
+}
+
+app.with(HTTPCaching(b => b.store(kHTTPCacheStore)))
+```
+
+Both backends live behind the one `store/keyv` path — cache-manager's own `stores` are `Keyv`s, so there is
+nothing separate to import for it. Each is an optional peer: bring whichever one your application already uses,
+and neither is installed for you. The ranges are `cache-manager@^7` and `keyv@^5`, which is what the store's ttl
+handling is written against.
+
+- The cache is yours. The store never creates, connects or disconnects it.
+- An entry is one JSON string, so any Keyv adapter — Redis, SQLite, a compression layer — round-trips it. A
+  `Buffer` payload travels as base64 and comes back byte for byte.
+- Keys are `${prefix}e:${key}` for entries and `${prefix}t:${tag}` for tag markers. `prefix` is put in front as
+  given, with no separator of the store's own, and `''` puts nothing in front.
+- A tag is a marker rather than a counter, since neither library has an atomic increment: an eviction writes a
+  fresh value for the tag, and entries recording the old one read as absent.
+- `tagTtl` is how long a tag marker is kept, and defaults to never expiring. Set it only to bound the marker
+  keyspace, and keep it above your longest `ttl` plus the longest stale window — a marker that expires while an
+  entry written under it is still alive takes that entry down too. You lose a cache hit, never correctness.
+- Neither library takes an `AbortSignal`. A call the cache has given up on still runs to completion in the
+  background; `storeTimeout` bounds the request, not the work.
+- Both hide failures by default, which costs you the cache's error reporting. cache-manager's `get` reads a
+  broken store as a miss, so `observer.onError` never hears about it. Keyv resolves rather than rejects unless
+  you build it with `throwOnErrors: true` — do that if you want store failures observed.
+
 ### Your own
 
 Implement `HTTPCacheStore` from `@caffeinejs/caching/http`:
@@ -380,8 +430,11 @@ interface HTTPCacheStore {
 - A call whose signal is aborted stops what it can and rejects; one made with a signal already aborted rejects
   and does nothing.
 
-`describeHTTPCacheStoreContract` in `caching/http/store.testkit.ts` is the contract as a Vitest suite; both
-stores pass it.
+If your backend is a key-value cache, `KeyValueHTTPCacheClient` is the smaller seam to implement instead:
+`get(key)` and `set(key, value, ttl)`, with `KeyValueHTTPCacheStore` doing the rest.
+
+`describeHTTPCacheStoreContract` in `caching/http/store.testkit.ts` is the contract as a Vitest suite; every
+store here passes it.
 
 ## When the store fails
 

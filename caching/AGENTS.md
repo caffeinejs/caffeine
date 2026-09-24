@@ -239,15 +239,35 @@ single-key delete or a batch, and a lock or a wait verb belongs to a later, sepa
 `http/store.testkit.ts` (`describeHTTPCacheStoreContract`) is the contract every store passes —
 `MemoryHTTPCacheStore` in its unit test, `RedisHTTPCacheStore` twice: in its unit test over an in-memory fake of
 the four commands it sends, and in `store/redis/redis.e2e.ts` against real servers, which the e2e Vitest project
-(`test/e2e/vitest.config.ts`) picks up. A new store runs it before anything else. The generic `Cache` in
+(`test/e2e/vitest.config.ts`) picks up. `KeyValueHTTPCacheStore` three times — over a recording fake, over a real
+`Keyv`, and over a real cache-manager cache — and no e2e: it speaks no wire protocol and needs no server feature,
+so `new Keyv()` and `createCache()` in its unit tests already are the real implementations. A new store runs the
+contract before anything else. The generic `Cache` in
 `caching/cache.ts` is not what the HTTP cache runs on; it is kept as it is, with no implementation, until its
 own design.
 
-A tag is a generation counter in both stores. `put` records the counter of each of its tags with the entry,
-`get` reads a mismatch as absent, `evictByTag` bumps. An entry the counter left behind is dropped when next
-read, overwritten, or expired. A tag-to-keys index was rejected: on Redis it needs `SMEMBERS` and cleanup, in
-memory a `dispose` a caller's `LRUCache` would not have. `MemoryHTTPCacheStore` keeps its counters in a `Map`
-beside the `LRUCache`, whose values are `{ entry, tags }`; static tags keep that map bounded by the code.
+A tag is a generation marker in every store. `put` records the marker of each of its tags with the entry, `get`
+reads a mismatch as absent, `evictByTag` moves it. An entry a marker left behind is dropped when next read,
+overwritten, or expired. A tag-to-keys index was rejected: on Redis it needs `SMEMBERS` and cleanup, in memory a
+`dispose` a caller's `LRUCache` would not have. `MemoryHTTPCacheStore` keeps its markers in a `Map` beside the
+`LRUCache`, whose values are `{ entry, tags }`; static tags keep that map bounded by the code.
+
+`lru-cache` is an **optional peer**, like `@redis/client`, and not a dependency of this package —
+`store/memory` is reachable from no barrel, so an application that does not import it never loads the library.
+Being a peer is also what keeps the copy single: the constructor takes a pre-built `LRUCache` and branches on
+`options instanceof LRUCache`, and a second, nested copy would make a caller's own cache fail that check and be
+read as an options object instead. The cost is that a missing optional peer draws no warning from npm, so an
+application that imports `store/memory` without it fails at import.
+
+What the marker **is** differs by what the backend can do atomically. Memory and Redis count — a `Map` and
+`INCR`. A key-value backend cannot: neither cache-manager nor Keyv has an atomic increment, and a read-modify-write
+would lose an eviction. So `KeyValueHTTPCacheStore` writes a **unique value** instead, one `set` of a
+`randomUUID()` per tag, which is atomic per key and needs no coordination between concurrent evictors. An absent
+marker reads as the sentinel `'0'`, so an entry under a never-evicted tag stays readable, and a UUID can never
+equal it. A marker also cannot come round again, so the counter hazard below — a counter the server evicted,
+restarting the tag's count — has no analogue there. The inverse scheme, a marker holding an eviction timestamp
+compared against `storedAt`, was rejected: a lost marker then makes a should-be-evicted entry readable, which is
+the wrong direction to fail.
 
 `RedisHTTPCacheStore` is at `@caffeinejs/caching/store/redis`, reachable from no barrel, so an application that
 does not import it never loads `@redis/client` — an **optional** peer for that reason, as in `distlock`. It takes
@@ -283,7 +303,51 @@ typeMapping, abortSignal })` on a cluster client, which has no `withAbortSignal`
   drops connections and refuses new ones — and asserts every request is answered by the handler meanwhile. The
   clusters are not rows there: a cluster client dials the addresses the nodes announce, past any relay.
 
-Two limits are known and accepted; do not report them as new. The entry `HMGET` and the counter `GET`s of a read
-are separate commands, so an eviction from another connection landing between them is missed by that one read.
-And `buildCacheKey` does not escape the `vary` values it joins, so two requests crafted with the separator in a
-header value can share a key; a request without it cannot be reached, and escaping would change every key.
+`KeyValueHTTPCacheStore` is at `@caffeinejs/caching/store/keyv` and runs on **any** key-value cache through a
+two-method structural seam, `KeyValueHTTPCacheClient` — `get(key)` and `set(key, value, ttl)`. A cache-manager
+`Cache` and a `Keyv` both satisfy it as they come, which two `expectTypeOf` pins hold; if one ever stops
+holding, wrap it at the call site rather than widening the seam. The path is named for Keyv because that is the
+backend the ecosystem is built on — cache-manager's own `stores` are `Keyv`s — and cache-manager support lives
+there too rather than under a second entry point. One class serves both: the two backends are
+indistinguishable at the only two methods used, and `mget` / `getMany` never comes up because this package
+batches with `Promise.all` of single-key calls. The cache is the caller's — the store never creates, connects or
+disconnects it, and `HTTPCacheStore` grew no `close` for it.
+
+- `cache-manager` and `keyv` are **optional peers**, as `@redis/client` is, and devDependencies as well so the
+  tests can run the contract against the real backends. The reason is not an import — this store imports neither
+  package at runtime _or_ as a type, and nothing about them reaches the published `dist/`. It is the version
+  range: the store runs on behavior these libraries pin to a major, and `set(key, value, 0)` meaning "never
+  expires" is the load-bearing one, with ttl-in-milliseconds and the shape of `Cache` / `Keyv` behind it. An
+  application on a major that does not answer to that would otherwise hand over an object that type-checks
+  structurally and misbehaves at run time. Widen the range only after re-reading those three things in the new
+  major.
+- Keys are `${prefix}e:${key}` and `${prefix}t:${tag}`, `prefix` verbatim as in the Redis store. The split is
+  load-bearing rather than decoration: the contract stores under the key `plain` and evicts the tag `plain`, and
+  without it the eviction would overwrite the entry. No brace check — hash slots are a Redis concern.
+- One entry is one JSON envelope, written whole on every `set`, its payload base64 when it is bytes (`k` says
+  which). We serialize it ourselves because a Keyv adapter's own serializer is not ours to rely on —
+  `createCache()` even disables serialization on its default Keyv — and a string is the one thing every adapter
+  round-trips. A new field goes **inside** the envelope. Writing it whole is also what makes "leaves the optional
+  fields of the entry it replaces behind" free, with no `HSETEX` partial-field hazard to work around.
+- `ttl` is required on the seam and always in milliseconds, so a backend's configured default `ttl` never reaches
+  anything this store writes. `tagTtl` defaults to `0` — never expires, matching the Redis counters. Both
+  backends read `set(k, v, 0)` as "never expires", which is exactly why a `ttl` that is not positive must return
+  before any call: an entry is not to be kept forever, and nothing is read for it either.
+- A finite `tagTtl` bounds the marker keyspace and buys a risk: a marker that expires while an entry written
+  under it is alive takes that entry down, since the recorded UUID no longer matches the sentinel. That is
+  over-eviction — a lost hit, never a stale response — and it is the direction this store fails in on purpose.
+- Neither backend takes an `AbortSignal`. An already-aborted call is refused (`throwIfAborted`), but one already
+  issued runs to completion in the background; `storeTimeout` bounds the request, not the work. Unlike the Redis
+  store there is no queued command to take back.
+- Both backends hide failures by default, which costs the cache its reporting rather than its correctness.
+  cache-manager's `get` catches per store and returns `undefined`, so a broken store reads as a miss and
+  `observer.onError` is never told; its `set` does reject. Keyv's `throwOnErrors` defaults to `false`, so both
+  verbs resolve. An application that wants the observer to see store failures builds its Keyv with
+  `throwOnErrors: true`.
+
+Two limits are known and accepted; do not report them as new. A read's entry and marker lookups are separate
+calls in every store that has them — the Redis `HMGET` and its counter `GET`s, the key-value `get`s — so an
+eviction from elsewhere landing between them is missed by that one read, and one landing between a `put`'s marker
+read and its write leaves an entry under the older marker, which reads as absent. And `buildCacheKey` does not
+escape the `vary` values it joins, so two requests crafted with the separator in a header value can share a key;
+a request without it cannot be reached, and escaping would change every key.

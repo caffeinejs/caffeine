@@ -23,6 +23,10 @@
       "types": "./dist/store/redis/index.d.ts",
       "default": "./dist/store/redis/index.js"
     },
+    "./store/keyv": {
+      "types": "./dist/store/keyv/index.d.ts",
+      "default": "./dist/store/keyv/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -34,22 +38,34 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
-    "lru-cache": "^11.5.2"
-  },
   "peerDependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*",
     "@redis/client": "^6.2.1",
-    "fastify": "^5.0.0"
+    "cache-manager": "^7.2.9",
+    "fastify": "^5.0.0",
+    "keyv": "^5.6.0",
+    "lru-cache": "^11.5.2"
   },
   "peerDependenciesMeta": {
     "@redis/client": {
       "optional": true
+    },
+    "cache-manager": {
+      "optional": true
+    },
+    "keyv": {
+      "optional": true
+    },
+    "lru-cache": {
+      "optional": true
     }
   },
   "devDependencies": {
-    "fastify": "^5.12.4"
+    "cache-manager": "^7.2.9",
+    "fastify": "^5.12.4",
+    "keyv": "^5.6.0",
+    "lru-cache": "^11.5.2"
   }
 }
