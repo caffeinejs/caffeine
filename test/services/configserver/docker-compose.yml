@@ -1,5 +1,6 @@
 services:
   configserver:
+    image: caffeine-e2e-configserver:local
     build: .
     ports:
       - '8888:8888'

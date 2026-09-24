@@ -1,5 +1,6 @@
 services:
   oauthserver:
+    image: caffeine-e2e-oauthserver:local
     build: .
     ports:
       - '9000:9000'
