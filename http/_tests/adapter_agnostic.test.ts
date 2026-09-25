@@ -28,6 +28,7 @@ import { HTTPFeatureBuilder, kFeatureServer, type HTTPFeature } from '../feature
 import { health } from '../health/health.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
 import type { ResolvedMiddleware } from '../middleware/pipeline.js'
+import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { blend } from '../routing/programmatic/blend.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -195,7 +196,7 @@ describe('adapter types', () => {
     // @ts-expect-error a feature written for another server
     createWebApplication().with(fakeFeature('elsewhere'))
 
-    // @ts-expect-error a Fastify plugin factory on an application that does not run Fastify
+    // @ts-expect-error a Fastify feature on an application that does not run Fastify
     onFake().with(health())
 
     // @ts-expect-error a Fastify plugin on an application that does not run Fastify
@@ -316,6 +317,15 @@ describe('configure callback typing', () => {
     return new ServerSideBuilder<C>(configure as never)
   }
 
+  class PluginSideBuilder {}
+
+  function pluginSide<C = unknown>(configure: HTTPPluginConfigurer<PluginSideBuilder, C>): HTTPPluginFactory<C> {
+    return context => {
+      configure(new PluginSideBuilder(), context)
+      return noop
+    }
+  }
+
   // `.with(...)` is overloaded, and only the overload TypeScript tries first contextually types a callback. Each
   // call shape must still reach the application's configuration type rather than fall back to `unknown` — a
   // feature through its `FeatureConfigureKit`, a plugin factory's builder through its `HTTPSetupContext`.
@@ -325,7 +335,7 @@ describe('configure callback typing', () => {
     const app = createWebApplication({ config: conf })
       .with(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
       .with(serverSide((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
-      .with(health((_h, context) => expectTypeOf(context.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .with(pluginSide((_b, context) => expectTypeOf(context.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
 
     expect(app).toBeDefined()
   })

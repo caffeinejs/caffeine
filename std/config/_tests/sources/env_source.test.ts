@@ -25,7 +25,7 @@ describe('EnvConfigSource', () => {
   })
 
   it('reaches a camelCase key, which is how features spell their settings', () => {
-    expect(load({ env: { HEALTH__DRAIN_DELAY: '5s' } }).data).toEqual({ health: { drainDelay: '5s' } })
+    expect(load({ env: { SHUTDOWN__DRAIN_DELAY: '5s' } }).data).toEqual({ shutdown: { drainDelay: '5s' } })
   })
 
   it('leaves a single-word segment alone', () => {

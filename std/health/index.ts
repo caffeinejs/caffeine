@@ -1,2 +1,7 @@
 export * from './availability.js'
+export * from './errors.js'
+export * from './health.js'
 export * from './indicator.js'
+export * from './load.js'
+export * from './options.js'
+export * from './registry.js'

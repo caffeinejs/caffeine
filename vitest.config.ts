@@ -41,6 +41,7 @@ export default defineConfig({
       './plugins/eslint/vitest.config.ts',
       './examples/03-petstore/vitest.config.ts',
       './examples/04-spa-dashboard/vitest.config.ts',
+      './examples/05-watt/vitest.config.ts',
       './test/vitest.config.ts',
     ],
   },

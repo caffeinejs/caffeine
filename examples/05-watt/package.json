@@ -1,0 +1,21 @@
+{
+  "name": "@caffeinejs/example-watt",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.build.json",
+    "start": "wattpm start",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
+    "@platformatic/globals": "^3.70.0",
+    "@platformatic/node": "^3.70.0",
+    "fastify": "^5.12.4",
+    "wattpm": "^3.70.0"
+  },
+  "devDependencies": {
+    "@platformatic/runtime": "^3.70.0"
+  }
+}

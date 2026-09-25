@@ -1,4 +1,5 @@
 import { type Duration, toMillis } from '@caffeinejs/std/duration'
+import { defaultHealthRegistryOptions } from '@caffeinejs/std/health'
 import { $t } from '@caffeinejs/std/schema'
 import { isKubernetes } from '@caffeinejs/std/shutdown'
 
@@ -17,7 +18,7 @@ export interface HealthPaths {
   startup: string
 }
 
-/** The resolved, millisecond-normalized health configuration. Snapshotted once at `ready()`. */
+/** The resolved, millisecond-normalized health configuration. Resolved once, when `health()` configures. */
 export interface HealthOptions {
   /** Whether the probe routes are mounted at all. */
   enabled: boolean
@@ -41,30 +42,35 @@ export const DEFAULT_HEALTH_PATHS: HealthPaths = {
 }
 
 /**
- * The configuration `.health()` produces with no calls on the builder.
+ * What every setting falls back to. The budgets are the ones `ApplicationHealth` runs on when `health()` is not
+ * installed at all.
  *
  * `enabled` is the only environment-dependent default: outside an orchestrator there is nothing polling the
- * probes, so mounting them by default would only widen the surface for nothing.
+ * probes, so mounting them by default would only widen the surface for nothing. `health()` passes a default of its
+ * own, so this one only reaches a caller of {@link mergeHealthConfig} that names none.
  */
 export function defaultHealthOptions(env: EnvLike = hostEnv()): HealthOptions {
   return {
     enabled: isKubernetes(env),
     paths: { ...DEFAULT_HEALTH_PATHS },
-    indicatorTimeoutMs: 2_000,
-    probeDeadlineMs: 3_000,
-    cacheTTLMs: 1_000,
+    ...defaultHealthRegistryOptions(),
     verbose: false,
     exclude: false,
   }
 }
 
-/** The health slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds. */
+/**
+ * The health slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds.
+ *
+ * Every key is spelled the way its environment variable folds, so `HEALTH__CACHE_TTL` sets `cacheTtl`: that is
+ * the key the builder's `cacheTTL(...)` stands for.
+ */
 export interface HealthConfig {
   enabled?: boolean
   paths?: Partial<HealthPaths>
   indicatorTimeout?: Duration
   probeDeadline?: Duration
-  cacheTTL?: Duration
+  cacheTtl?: Duration
   verbose?: boolean
   exclude?: boolean
 }
@@ -90,7 +96,7 @@ export const healthConfigSchema = $t.Object({
   ),
   indicatorTimeout: $t.Optional(duration()),
   probeDeadline: $t.Optional(duration()),
-  cacheTTL: $t.Optional(duration()),
+  cacheTtl: $t.Optional(duration()),
   verbose: $t.Optional($t.Boolean()),
   exclude: $t.Optional($t.Boolean()),
 })
@@ -98,10 +104,9 @@ export const healthConfigSchema = $t.Object({
 /**
  * Folds a resolved health slice onto the defaults, producing the millisecond-normalized options.
  *
- * `enabledDefault` is how "was `.health()` called at all" reaches this: reaching the builder is an explicit
- * opt-in that turns the probes on, while an application that never called it falls back to the Kubernetes
- * auto-detection. Either way an explicit `enabled` in the configuration wins, so `HEALTH__ENABLED=false`
- * switches the probes off without touching code.
+ * `enabledDefault` is what the builder decides `enabled` falls back to: on once `health()` is installed, or the
+ * Kubernetes auto-detection after `.k8s()`. An explicit `enabled` wins over both, so with the block wired through
+ * `h.config(...)`, `HEALTH__ENABLED=false` switches the probes off without touching code.
  */
 export function mergeHealthConfig(config: HealthConfig, options: { enabledDefault?: boolean } = {}): HealthOptions {
   const defaults = defaultHealthOptions()
@@ -111,7 +116,7 @@ export function mergeHealthConfig(config: HealthConfig, options: { enabledDefaul
     paths: { ...defaults.paths, ...config.paths },
     indicatorTimeoutMs: pick(config.indicatorTimeout, defaults.indicatorTimeoutMs),
     probeDeadlineMs: pick(config.probeDeadline, defaults.probeDeadlineMs),
-    cacheTTLMs: pick(config.cacheTTL, defaults.cacheTTLMs),
+    cacheTTLMs: pick(config.cacheTtl, defaults.cacheTTLMs),
     verbose: config.verbose ?? defaults.verbose,
     exclude: config.exclude ?? defaults.exclude,
   }

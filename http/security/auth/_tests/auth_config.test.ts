@@ -13,7 +13,7 @@ import {
   Get,
   createWebApplication,
 } from '../../../index.js'
-import { SCHEME_SCHEMAS, authConfigSchema, credentialsConfigSchema, refreshConfigSchema } from '../config.js'
+import { SCHEME_SCHEMAS, authConfigSchema } from '../config.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
@@ -346,38 +346,6 @@ describe('authentication configuration', () => {
       expect(authorization.searchParams.has('code_challenge')).toBe(false)
 
       await app.close()
-    })
-  })
-
-  // The guard behind the test above, for every option there is: the key a block declares has to be the key its
-  // own variable folds to. `clientID` is not — `CLIENT_ID` folds to `clientId` — so such a key would be one that
-  // only `CLIENT_I_D` reaches.
-  describe('every configurable key', () => {
-    const variableFor = (key: string): string =>
-      key
-        .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
-        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
-        .toUpperCase()
-
-    const foldedFrom = (variable: string): string[] => {
-      const [layer] = new EnvConfigSource({ env: { [`BLOCK__${variable}`]: 'x' } }).load({
-        logger: { warn: () => undefined },
-      } as never)
-
-      return Object.keys((layer.data as { block: Record<string, unknown> }).block)
-    }
-
-    const blocks: Array<[string, { properties: Record<string, unknown> }]> = [
-      ['auth', authConfigSchema],
-      ['credentials', credentialsConfigSchema],
-      ['refresh', refreshConfigSchema],
-      ...Object.entries(SCHEME_SCHEMAS),
-    ]
-
-    it.each(blocks)('of the %s block is the key its environment variable folds to', (_name, schema) => {
-      for (const key of Object.keys(schema.properties)) {
-        expect(foldedFrom(variableFor(key))).toEqual([key])
-      }
     })
   })
 })

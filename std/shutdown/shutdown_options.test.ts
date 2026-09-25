@@ -117,6 +117,17 @@ describe('validateShutdownOptions', () => {
   it('stays quiet about a zero drain delay outside a pod', () => {
     expect(validateShutdownOptions(budget(0, 20_000, 30_000), {}).warnings).toEqual([])
   })
+
+  // A 0 written in code is a decision about an application nothing routes to. Warning about it anyway told every
+  // internal Watt application and headless worker it was dropping requests it never receives.
+  it('takes a zero drain delay set in code as meant, and warns about one from the configuration', () => {
+    const inPod = { KUBERNETES_SERVICE_HOST: '10.0.0.1' }
+
+    expect(validateShutdownOptions(budget(0, 20_000, 30_000), inPod, { drainDelayInCode: true }).warnings).toEqual([])
+    expect(
+      validateShutdownOptions(budget(0, 20_000, 30_000), inPod, { drainDelayInCode: false }).warnings[0],
+    ).toContain('from the configuration')
+  })
 })
 
 describe('the shipped defaults', () => {

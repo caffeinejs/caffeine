@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "dist",
+    "types": ["node"],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["watt.ts", "web", "orders", "worker"]
+}

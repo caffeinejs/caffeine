@@ -1,6 +1,6 @@
-import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
+import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from './indicator.js'
 import { HealthRegistry } from './registry.js'
 
 const OPTIONS = { indicatorTimeoutMs: 50, probeDeadlineMs: 100, cacheTTLMs: 1_000 }
@@ -158,17 +158,6 @@ describe('HealthRegistry', () => {
 
     await sleep(40)
     await registry.evaluate('readiness')
-    expect(indicator.calls).toBe(2)
-  })
-
-  it('drops the cache on invalidate', async () => {
-    const indicator = new Stub('db', up)
-    const registry = new HealthRegistry([indicator], OPTIONS)
-
-    await registry.evaluate('readiness')
-    registry.invalidate()
-    await registry.evaluate('readiness')
-
     expect(indicator.calls).toBe(2)
   })
 

@@ -77,7 +77,6 @@ export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExte
  * which runs earlier and binds rather than resolves.
  *
  * ```ts
- * .with(health((h, { config }) => h.config(config.app.health)))
  * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))
  * ```
  */

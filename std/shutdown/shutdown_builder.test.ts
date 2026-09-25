@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CONFIG_REFRESH_LABEL,
@@ -12,7 +12,7 @@ import {
 import { createApplication, newConfiguration } from '../index.js'
 import { $t } from '../schema/t.js'
 import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'
-import { noopSignalDispatcher } from './signals.js'
+import { noopSignalDispatcher, type SignalDispatcher } from './signals.js'
 
 const appSchema = $t.Object({ shutdown: shutdownConfigSchema })
 type AppConfig = InferConfig<typeof appSchema>
@@ -137,5 +137,72 @@ describe('ShutdownBuilder', () => {
     await app.close()
 
     expect(process.listenerCount('SIGTERM')).toBe(before)
+  })
+})
+
+// Under Kubernetes a drain delay of 0 drops requests on every rolling deploy, but only for an application a Service
+// routes to. Set in code, the 0 is a decision about one nothing routes to; from the configuration it is as likely a
+// copied environment, so only that one is warned about.
+describe('the zero-drain warning under Kubernetes', () => {
+  beforeEach(() => {
+    vi.stubEnv('KUBERNETES_SERVICE_HOST', '10.0.0.1')
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  function recording(): { dispatcher: SignalDispatcher; warnings: string[] } {
+    const warnings: string[] = []
+
+    return { dispatcher: { ...noopSignalDispatcher, warn: message => void warnings.push(message) }, warnings }
+  }
+
+  const configured = (drainDelay: string) =>
+    newConfiguration(appSchema, kAppConfig)
+      .source(new EnvConfigSource({ env: { SHUTDOWN__DRAIN_DELAY: drainDelay } }))
+      .build()
+
+  it('says nothing about a 0 set in code', async () => {
+    const { dispatcher, warnings } = recording()
+    const app = headless().shutdown(s => s.dispatcher(dispatcher).drainDelay(0))
+    await app.ready()
+
+    expect(warnings).toEqual([])
+    await app.close()
+  })
+
+  it('warns about a 0 from the configuration', async () => {
+    const { dispatcher, warnings } = recording()
+    const app = headless(configured('0')).shutdown((s, { config }) => s.dispatcher(dispatcher).config(config.shutdown))
+    await app.ready()
+
+    expect(warnings).toHaveLength(1)
+    expect(warnings[0]).toContain('from the configuration')
+    await app.close()
+  })
+
+  it('says nothing when code sets 0 over a configured delay', async () => {
+    const { dispatcher, warnings } = recording()
+    const app = headless(configured('5s')).shutdown((s, { config }) =>
+      s.dispatcher(dispatcher).config(config.shutdown).drainDelay(0),
+    )
+    await app.ready()
+
+    expect(policyOf(app).drainDelayMs).toBe(0)
+    expect(warnings).toEqual([])
+    await app.close()
+  })
+
+  it('says nothing when code sets a delay over a configured 0', async () => {
+    const { dispatcher, warnings } = recording()
+    const app = headless(configured('0')).shutdown((s, { config }) =>
+      s.dispatcher(dispatcher).config(config.shutdown).drainDelay('5s'),
+    )
+    await app.ready()
+
+    expect(policyOf(app).drainDelayMs).toBe(5_000)
+    expect(warnings).toEqual([])
+    await app.close()
   })
 })

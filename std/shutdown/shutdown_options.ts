@@ -36,7 +36,7 @@ export function isTestEnvironment(env: EnvLike = hostEnv()): boolean {
  * Where the shutdown feature publishes its resolved policy.
  *
  * The application reads it once the container has initialized and shuts down on what it says. The feature is
- * registered unconditionally and binds this at bootstrap, so {@link defaultShutdownOptions} applies only to a
+ * registered unconditionally and binds this when it configures, so {@link defaultShutdownOptions} applies only to a
  * shutdown that starts before the platform finished setting up.
  */
 export const kShutdownPolicy = token<ShutdownOptions>(Symbol('caffeine.shutdown.policy'))
@@ -171,8 +171,15 @@ export interface ShutdownValidation {
  * than rejected, and the default timeout is derived from the grace period, so the warning always names a value
  * somebody set. A drain delay that does not fit the grace period on its own is fatal, whatever the timeout
  * came out as.
+ *
+ * Under Kubernetes a drain delay of 0 is warned about too, unless `origin.drainDelayInCode` says a fluent call set
+ * it: that 0 is taken as meant, for an application nothing routes to.
  */
-export function validateShutdownOptions(options: ShutdownOptions, env: EnvLike = hostEnv()): ShutdownValidation {
+export function validateShutdownOptions(
+  options: ShutdownOptions,
+  env: EnvLike = hostEnv(),
+  origin: { drainDelayInCode?: boolean } = {},
+): ShutdownValidation {
   const warnings: string[] = []
   const budget = options.drainDelayMs + options.shutdownTimeoutMs
   const remaining = remainingBudget(options.drainDelayMs, options.terminationGracePeriodMs)
@@ -198,10 +205,13 @@ export function validateShutdownOptions(options: ShutdownOptions, env: EnvLike =
     options = { ...options, shutdownTimeoutMs: remaining }
   }
 
-  if (options.drainDelayMs === 0 && isKubernetes(env)) {
+  // A 0 written in code is a decision, and a fluent method is the last word. One from the configuration is how a
+  // copied environment turns off the drain of an application a Service does route to.
+  if (options.drainDelayMs === 0 && isKubernetes(env) && origin.drainDelayInCode !== true) {
     warnings.push(
-      'Shutdown drain delay is 0 under Kubernetes: the server will stop accepting before the EndpointSlice ' +
-        'update propagates, dropping in-flight requests on every rolling deploy',
+      'Shutdown drain delay is 0 under Kubernetes, from the configuration: behind a Service, the application stops ' +
+        'accepting before Kubernetes stops routing to it, so every rolling deploy drops requests. For an application ' +
+        'nothing routes to, set .drainDelay(0) in code',
     )
   }
 
@@ -214,8 +224,11 @@ export function validateShutdownOptions(options: ShutdownOptions, env: EnvLike =
  * The warnings go through the dispatcher rather than straight to the console, so they are capturable — under
  * Node that tags them `CaffeineShutdownWarning`.
  */
-export function finalizeShutdownOptions(options: ShutdownOptions): ShutdownOptions {
-  const validated = validateShutdownOptions(options)
+export function finalizeShutdownOptions(
+  options: ShutdownOptions,
+  origin: { drainDelayInCode?: boolean } = {},
+): ShutdownOptions {
+  const validated = validateShutdownOptions(options, hostEnv(), origin)
 
   for (const warning of validated.warnings) {
     options.dispatcher.warn(warning)

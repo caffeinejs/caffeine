@@ -1,0 +1,5 @@
+{
+  "$schema": "https://schemas.platformatic.dev/@platformatic/node/3.70.0.json",
+  "application": { "basePath": "/shop" },
+  "node": { "main": "../dist/web/main.js" }
+}

@@ -14,7 +14,7 @@ const HEALTHY: ReadonlySet<KafkaContainerStatus> = new Set<KafkaContainerStatus>
 
 /**
  * Reports each configured Kafka instance's listener container state to the readiness probe, so "ready" means the
- * process can serve HTTP **and** its consumers are actually running — not just that the port is open.
+ * process's consumers are actually running — not just that it started, or that its port is open.
  *
  * On the readiness group only. A broker outage must never reach liveness: restarting the pod does not fix Kafka,
  * it just removes a consumer that would otherwise resume the moment the group recovers.

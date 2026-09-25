@@ -1,4 +1,4 @@
-import { CaffeineIoC, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
 
 import {
   activeProfiles,
@@ -26,6 +26,10 @@ import {
 } from './feature.js'
 import { kAddConfigurer, type FeatureConfigurer } from './feature_builder.js'
 import { ApplicationAvailability } from './health/availability.js'
+import { ApplicationHealth } from './health/health.js'
+import { loadHealthIndicators } from './health/load.js'
+import { defaultHealthRegistryOptions, kHealthRegistryOptions } from './health/options.js'
+import { HealthRegistry } from './health/registry.js'
 import { logToken, LoggerBuilder, type Logger } from './logger/index.js'
 import { $t } from './schema/t.js'
 import { ErrShutdownTimeout } from './shutdown/errors.js'
@@ -79,6 +83,25 @@ export class ErrApplicationStarted extends ErrCaffeine {
   }
 }
 
+/** Thrown when an application is readied or run once {@link Application.close} has been called. */
+export class ErrApplicationClosed extends ErrCaffeine {
+  constructor() {
+    super(
+      'Cannot start the application: it has been closed',
+      'ERR_APPLICATION_CLOSED',
+      undefined,
+      'An application runs once: create a new one to start again',
+    )
+  }
+}
+
+/** Thrown when {@link Application.run} is called a second time. */
+export class ErrApplicationRunning extends ErrCaffeine {
+  constructor() {
+    super('Cannot run the application: run() has already been called', 'ERR_APPLICATION_RUNNING')
+  }
+}
+
 /**
  * A headless application: owns the DI container, the installed {@link Feature}s, and the lifecycle
  * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
@@ -117,7 +140,10 @@ export class Application<TConfig = unknown> {
   #profiles: string[] = []
   #shutdownPolicy?: ShutdownOptions
   #booting = false
+  #boot?: Promise<void>
   #ready = false
+  #running = false
+  #starting?: Promise<void>
   #shutdown?: GracefulShutdown
   #closing?: Promise<void>
 
@@ -177,7 +203,8 @@ export class Application<TConfig = unknown> {
 
   /**
    * The application's availability: whether it has started, whether it is accepting work, and whether it is
-   * draining. Owned here so every application kind has one, and read — never written — by the HTTP probes.
+   * draining. Owned here so every application kind has one, and read — never written — by
+   * {@link ApplicationHealth}.
    */
   get availability(): ApplicationAvailability {
     return this.#availability
@@ -299,12 +326,22 @@ export class Application<TConfig = unknown> {
    * Configuration loads before any feature configures and while binding is still open, which is what lets a
    * feature be configured from a setting it then consumes at binding time. Loading inside `container.init()`
    * would be too late for both.
+   *
+   * Runs once: a later call — while booting or after — answers with the same promise, so a failed boot is not
+   * retried.
+   *
+   * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
    */
-  async ready(): Promise<void> {
-    if (this.#ready) {
-      return
+  ready(): Promise<void> {
+    if (this.#closing !== undefined) {
+      return Promise.reject(new ErrApplicationClosed())
     }
 
+    this.#boot ??= this.#readyOnce()
+    return this.#boot
+  }
+
+  async #readyOnce(): Promise<void> {
     this.#booting = true
 
     // Decided before anything loads, so the load that follows is profile-aware on its first and only pass. The
@@ -344,6 +381,27 @@ export class Application<TConfig = unknown> {
       // The application's own instance, bound before any feature configures so health (and anything else) can
       // inject it rather than closing over a kit field. The lifecycle writes to this object.
       this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
+
+      // Every application has one probe service, whether or not anything exposes it: `health()` serves the HTTP
+      // probes from it, and anything else injects the same instance, so every caller shares one evaluation. A
+      // singleton even on a container whose default scope is not, for that reason; lazy, so an application that
+      // never asks never snapshots its indicators. The budgets are what `health()` bound, if it was installed.
+      this.#container.bind(ApplicationHealth, t =>
+        t
+          .toFactory(
+            ctx =>
+              new ApplicationHealth(
+                ctx.container.get(ApplicationAvailability),
+                new HealthRegistry(
+                  loadHealthIndicators(ctx.container as Container),
+                  ctx.container.getOptional(kHealthRegistryOptions) ?? defaultHealthRegistryOptions(),
+                ),
+              ),
+          )
+          .lifetime(Scopes.SINGLETON)
+          .lazy()
+          .internal(),
+      )
 
       // Called in order and awaited together: every feature's configure callback — which the builder runs at the
       // top of its hook — has therefore run before the first feature does asynchronous work.
@@ -399,10 +457,33 @@ export class Application<TConfig = unknown> {
     this.#ready = true
   }
 
-  /** Readies the application if needed, starts it, and resolves to its {@link RunInfo}. */
+  /**
+   * Readies the application if needed, starts it, and resolves to its {@link RunInfo}.
+   *
+   * Runs once. A second call is refused, where one to {@link ready} or {@link close} joins the first: a subclass's
+   * `run()` takes start options — the HTTP application's listen options — and joining would drop a second call's
+   * without a word.
+   *
+   * @throws ErrApplicationRunning when `run()` has already been called, whatever became of that call.
+   * @throws ErrApplicationClosed once {@link close} has been called, including while `run()` was still booting.
+   */
   async run(): Promise<RunInfo> {
+    // Ahead of the first await, so a second call is refused even while the first is still booting.
+    if (this.#closing !== undefined) {
+      throw new ErrApplicationClosed()
+    }
+    if (this.#running) {
+      throw new ErrApplicationRunning()
+    }
+    this.#running = true
+
     if (!this.#ready) {
       await this.ready()
+    }
+
+    // A close that arrived during the boot wins: starting now would open what nothing is left to close.
+    if (this.#closing !== undefined) {
+      throw new ErrApplicationClosed()
     }
 
     const options = this.shutdownOptions()
@@ -410,7 +491,9 @@ export class Application<TConfig = unknown> {
     this.#shutdown = new GracefulShutdown(() => this.close(), options.dispatcher)
     this.#shutdown.install(options.signals)
 
-    await this.start()
+    // Held so that a close arriving mid-start lets the start finish, and then stops what it opened.
+    this.#starting = this.start()
+    await this.#starting
 
     this.#availability.markStarted().acceptTraffic()
 
@@ -428,20 +511,71 @@ export class Application<TConfig = unknown> {
    *
    * Step 2 has to precede teardown, which is why it is here and not an `OnDestroy` hook: the container disposes
    * its instances in parallel-safe reverse order with no place to hold a fixed delay ahead of them.
+   *
+   * Safe at any point of the lifecycle, and final: a closed application is not readied or run again. Before
+   * {@link ready} it tears nothing down, since nothing was brought up, and the application is closed all the same;
+   * during it, it waits for the boot to settle first. An application that never served — readied but never run —
+   * skips step 2, having no routing table to wait for. One still starting when the close arrives finishes starting,
+   * so that what it opened is then closed. After a failed {@link ready}, it tears down what the boot brought
+   * up and logs, rather than throws, what that teardown hits: `ready()` already reported the failure, and in a
+   * `finally` a second error would replace it.
+   *
+   * @throws AggregateError when teardown fails or overruns its budget, `ErrShutdownTimeout` first — to the call
+   * that started the shutdown only. Every other call waits for the same shutdown and resolves.
    */
   close(): Promise<void> {
-    // An orchestrator re-sends SIGTERM, and a second close must join the first rather than start another one.
-    this.#closing ??= this.#drainAndClose()
+    // An orchestrator re-sends SIGTERM, and a host may close what it already closed: a later call joins the
+    // shutdown under way rather than starting another, and leaves reporting its outcome to the call that started it.
+    if (this.#closing !== undefined) {
+      return this.#closing.then(
+        () => undefined,
+        () => undefined,
+      )
+    }
+
+    // Nothing was brought up, so nothing is torn down; it still ends where every other close does.
+    if (this.#boot === undefined) {
+      this.#availability.beginDrain()
+      this.#availability.markBroken('closed')
+      this.#closing = Promise.resolve()
+      return this.#closing
+    }
+
+    // Synchronous when booted, so availability refuses before `close()` even returns.
+    this.#closing = this.#ready ? this.#drainAndClose() : this.#closeAfterBoot(this.#boot)
     return this.#closing
+  }
+
+  /** A close that arrived before {@link ready} finished: waits for the boot, then closes what it left. */
+  async #closeAfterBoot(boot: Promise<void>): Promise<void> {
+    const booted = await boot.then(
+      () => true,
+      () => false,
+    )
+
+    if (booted) {
+      return this.#drainAndClose()
+    }
+
+    this.#availability.beginDrain()
+
+    for (const error of await this.#teardown(this.shutdownOptions().shutdownTimeoutMs)) {
+      this.#logger.error({ err: error }, 'cannot tear down what a failed ready() brought up')
+    }
+
+    this.#availability.markBroken('closed')
+    this.#shutdown?.uninstall()
   }
 
   async #drainAndClose(): Promise<void> {
     const options = this.shutdownOptions()
+    // Read before the drain begins: only an application that served has a routing table to wait for.
+    const served = this.#availability.started
 
     this.#availability.beginDrain()
     await this.beforeDrain()
 
-    if (options.drainDelayMs > 0) {
+    if (served && options.drainDelayMs > 0) {
       await delay(options.drainDelayMs)
     }
 
@@ -488,6 +622,10 @@ export class Application<TConfig = unknown> {
     // Never rejects: both phases are caught, so the race below needs no rejection handler and disposal still
     // runs when `stop()` throws.
     const finished = (async (): Promise<void> => {
+      // A start that `run()` has under way finishes first. Stopped mid-start, a platform can open what the stop
+      // already closed.
+      await this.#starting?.catch(() => undefined)
+
       try {
         await this.stop()
       } catch (error) {
@@ -527,9 +665,9 @@ export class Application<TConfig = unknown> {
     }
   }
 
-  /** Ran once availability has started refusing, before the drain delay. Subclasses invalidate caches here. */
+  /** Ran once availability has started refusing, before the drain delay. */
   protected beforeDrain(): void | Promise<void> {
-    // Nothing to invalidate in a bare application.
+    // Nothing to do in a bare application.
   }
 
   /**
