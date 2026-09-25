@@ -38,6 +38,7 @@ export default defineConfig({
       './fetchy/fetchy-undici/vitest.config.ts',
       './testing/vitest.config.ts',
       './brewer/vitest.config.ts',
+      './devtools/vitest.config.ts',
       './plugins/eslint/vitest.config.ts',
       './examples/03-petstore/vitest.config.ts',
       './examples/04-spa-dashboard/vitest.config.ts',

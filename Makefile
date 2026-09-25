@@ -91,14 +91,14 @@ devtools:
 	@npm run build
 	@npm run dev -w @caffeinejs/devtools-ui
 
-.PHONY: example\:devtools
-example\:devtools:
-	@npm run build
-	@npx tsx examples/02-devtools-basic/index.ts
-
 # The example targets that run a server start it with its own command rather than `npm start` or `npx`: Ctrl+C
 # reaches every process in the terminal's group, npm forwards it a second time, and a second signal is an order to
 # exit at once, so the application's graceful shutdown never runs.
+
+.PHONY: example\:devtools
+example\:devtools:
+	@npm run build
+	@node_modules/.bin/tsx examples/02-devtools-basic/index.ts
 
 .PHONY: example\:petstore
 # A target-specific export, not a recipe line: make 3.81 (the macOS system make) ignores .ONESHELL, so an
