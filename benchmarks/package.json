@@ -42,7 +42,7 @@
     "test:caching": "node --import=tsx caching/test.ts",
     "test:fixtures": "npm run test:request && npm run test:fastify && npm run test:authn && npm run test:mixedscopes && npm run test:caching && npm run test:testing"
   },
-  "dependencies": {
+  "devDependencies": {
     "@adonisjs/application": "^9.1.0",
     "@adonisjs/encryption": "^6.0.2",
     "@adonisjs/events": "^10.2.0",
@@ -68,11 +68,18 @@
     "@nestjs/platform-fastify": "^12.0.3",
     "@nestjs/testing": "^12.0.3",
     "@trpc/server": "^11.0.0",
+    "@types/autocannon": "^7.12.7",
+    "@types/bun": "^1.4.2",
+    "@types/express": "^5.0.0",
+    "@types/opossum": "^8.1.9",
+    "@types/passport-jwt": "^4.0.1",
     "ajv": "^8.20.0",
+    "autocannon": "^8.0.0",
     "awilix": "^13.0.3",
     "cache-manager": "^7.2.9",
     "cockatiel": "^4.0.0",
     "elysia": "^1.4.30",
+    "esbuild": "^0.28.2",
     "express": "^5.0.0",
     "fast-json-stringify": "^7.0.1",
     "fastify": "^5.12.4",
@@ -80,23 +87,14 @@
     "injection-js": "^2.6.1",
     "inversify": "^8.2.3",
     "keyv": "^5.6.0",
+    "mitata": "^1.0.34",
     "opossum": "^10.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
+    "tsx": "^4.23.13",
     "tsyringe": "^4.10.0",
     "typedi": "^0.10.0",
     "zod": "^4.6.5"
-  },
-  "devDependencies": {
-    "@types/autocannon": "^7.12.7",
-    "@types/bun": "^1.4.2",
-    "@types/express": "^5.0.0",
-    "@types/opossum": "^8.1.9",
-    "@types/passport-jwt": "^4.0.1",
-    "autocannon": "^8.0.0",
-    "esbuild": "^0.28.2",
-    "mitata": "^1.0.34",
-    "tsx": "^4.23.13"
   }
 }
