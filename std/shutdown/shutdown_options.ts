@@ -67,8 +67,10 @@ export interface ShutdownOptions {
 }
 
 /**
- * The shutdown slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds.
- * The dispatcher is not here — a function cannot travel a configuration tree, so it stays on the builder.
+ * The shutdown slice of the configuration tree. There, a duration is written as text — `'5s'`, `'1h30m'` — and a
+ * bare number is refused, because its unit would be ambiguous. An object handed to `config(...)` from code may give
+ * milliseconds instead. The dispatcher is not here — a function cannot travel a configuration tree, so it stays on
+ * the builder.
  */
 export interface ShutdownConfig {
   drainDelay?: Duration
@@ -77,19 +79,20 @@ export interface ShutdownConfig {
   signals?: readonly ShutdownSignal[] | false
 }
 
-const duration = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
-
 /**
  * The schema governing the shutdown slice.
  *
  * Every member is optional and nothing is defaulted here: the resolved defaults are environment-dependent
  * (`isKubernetes`, the test-runner check) and are applied by {@link mergeShutdownConfig} afterwards. So the tree
  * carries only what somebody actually set, and absence keeps its meaning.
+ *
+ * The durations are `$t.Duration()`: `SHUTDOWN__SHUTDOWN_TIMEOUT=10000` fails validation at `ready()` rather than
+ * becoming a timeout of 0, which waits indefinitely.
  */
 export const shutdownConfigSchema = $t.Object({
-  drainDelay: $t.Optional(duration()),
-  shutdownTimeout: $t.Optional(duration()),
-  terminationGracePeriod: $t.Optional(duration()),
+  drainDelay: $t.Optional($t.Duration()),
+  shutdownTimeout: $t.Optional($t.Duration()),
+  terminationGracePeriod: $t.Optional($t.Duration()),
   // `$t.List` rather than `$t.Array`: `SHUTDOWN__SIGNALS=SIGTERM,SIGINT` should be two signals, not one signal
   // with a comma in its name.
   signals: $t.Optional($t.Union([$t.Literal(false), $t.List($t.UnionEnum(SHUTDOWN_SIGNALS))])),

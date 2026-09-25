@@ -10,7 +10,12 @@ export type HealthGroup = 'liveness' | 'readiness' | 'startup'
 /** The groups an indicator joins when it declares none. */
 export const DEFAULT_HEALTH_GROUPS: readonly HealthGroup[] = ['readiness']
 
-/** One indicator's outcome. `detail` and `data` surface only in a verbose probe response. */
+/**
+ * One indicator's outcome.
+ *
+ * `detail` is what a verbose probe response prints. `data` reaches only in-process callers, through
+ * `ProbeResult.outcomes`: what an operator reading the probe needs belongs in `detail`.
+ */
 export interface HealthReport {
   status: HealthStatus
   detail?: string

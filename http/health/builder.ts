@@ -5,7 +5,9 @@ import { isKubernetes } from '@caffeinejs/std/shutdown'
 import type { FastifyInstance } from 'fastify'
 
 import type { HTTPSetupContext } from '../adapter.js'
+import { solutions } from '../error/util.js'
 import { HTTPFeatureBuilder } from '../feature.js'
+import { ErrHealthConfiguration } from './errors.js'
 import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
 import { installHealthProbes } from './probes_route.js'
 
@@ -105,6 +107,7 @@ export class HealthBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const options = this.resolve()
+    assertBudgets(options)
     this.#options = options
 
     // Bound whether or not the probes are mounted: the budgets govern every caller of `ApplicationHealth`, so an
@@ -142,5 +145,25 @@ export class HealthBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       verbose: this.#values.verbose ?? this.#config?.verbose,
       exclude: this.#values.exclude ?? this.#config?.exclude,
     }
+  }
+}
+
+// A budget of 0 aborts every indicator that awaits on the next turn: readiness would fail for the life of the
+// process, with nothing said at start-up.
+function assertBudgets(options: HealthOptions): void {
+  const { indicatorTimeoutMs, probeDeadlineMs } = options
+
+  if (!(indicatorTimeoutMs > 0)) {
+    throw new ErrHealthConfiguration(
+      `Cannot configure health: an indicator timeout of "${indicatorTimeoutMs}ms" cancels every indicator that awaits` +
+        solutions("Set a budget above 0, such as '2s'"),
+    )
+  }
+
+  if (!(probeDeadlineMs > 0)) {
+    throw new ErrHealthConfiguration(
+      `Cannot configure health: a probe deadline of "${probeDeadlineMs}ms" cancels every indicator that awaits` +
+        solutions("Set a budget above 0, such as '3s'"),
+    )
   }
 }

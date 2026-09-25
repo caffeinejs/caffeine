@@ -57,14 +57,12 @@ export class ApplicationHealth {
    * dependency outage into a restart storm.
    */
   async liveness(options: ProbeOptions = {}): Promise<ProbeResult> {
-    const availability = this.#availability
-    const checks: ProbeCheck[] = [
-      { name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason },
-    ]
+    const outcome = this.#livenessChecks().every(check => check.ok)
+      ? await this.#evaluate('liveness', options)
+      : undefined
 
-    const outcome = availability.live === 'correct' ? await this.#evaluate('liveness', options) : undefined
-
-    return result(checks, outcome)
+    // Read again once the indicators are done: a `markBroken()` that landed meanwhile fails this call too.
+    return result(this.#livenessChecks(), outcome)
   }
 
   /**
@@ -72,16 +70,13 @@ export class ApplicationHealth {
    * first so a draining process answers without touching a single dependency.
    */
   async readiness(options: ProbeOptions = {}): Promise<ProbeResult> {
-    const availability = this.#availability
-    const checks: ProbeCheck[] = [
-      { name: 'started', ok: availability.started, detail: availability.started ? undefined : 'starting' },
-      { name: 'accepting', ok: availability.ready === 'accepting', detail: availability.readinessReason },
-      { name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason },
-    ]
+    const outcome = this.#readinessChecks().every(check => check.ok)
+      ? await this.#evaluate('readiness', options)
+      : undefined
 
-    const outcome = checks.every(check => check.ok) ? await this.#evaluate('readiness', options) : undefined
-
-    return result(checks, outcome)
+    // Read again once the indicators are done: a drain that began meanwhile fails this call too, so no poll made
+    // during the drain reports the application ready.
+    return result(this.#readinessChecks(), outcome)
   }
 
   /** Startup. Passes once boot completed, so a slow boot never gets the container killed mid-initialization. */
@@ -94,6 +89,22 @@ export class ApplicationHealth {
     const outcome = availability.started ? await this.#evaluate('startup', options) : undefined
 
     return result(checks, outcome)
+  }
+
+  #livenessChecks(): ProbeCheck[] {
+    const availability = this.#availability
+
+    return [{ name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason }]
+  }
+
+  #readinessChecks(): ProbeCheck[] {
+    const availability = this.#availability
+
+    return [
+      { name: 'started', ok: availability.started, detail: availability.started ? undefined : 'starting' },
+      { name: 'accepting', ok: availability.ready === 'accepting', detail: availability.readinessReason },
+      { name: 'live', ok: availability.live === 'correct', detail: availability.livenessReason },
+    ]
   }
 
   #evaluate(group: HealthGroup, options: ProbeOptions): Promise<GroupOutcome> | undefined {
