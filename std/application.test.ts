@@ -17,6 +17,7 @@ import {
 import {
   Application,
   ErrApplicationClosed,
+  ErrApplicationNotReady,
   ErrApplicationRunning,
   ErrApplicationStarted,
   ErrFeatureAlreadyInstalled,
@@ -991,5 +992,60 @@ describe('application health', () => {
     } finally {
       await app.close()
     }
+  })
+
+  // One instance however it is reached: a second would split the cache and the coalescing every caller shares.
+  it('reads the instance the container binds', async () => {
+    const app = appWith(container => container.bind(Database, t => t.toSelf().extends(HealthIndicator)))
+    await app.ready()
+
+    try {
+      expect(app.health).toBe(app.container.get(ApplicationHealth))
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('fails until ready() has resolved', async () => {
+    let bootstrapped = false
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    app.addFeature({
+      [kFeatureName]: 'reader',
+      [kFeatureConfigure](): void {
+        // Binds nothing: the bootstrap hook is what reads.
+      },
+      // Runs once the container has initialized, before ready() resolves.
+      [kFeatureBootstrap](): void {
+        expect(() => app.health).toThrow(ErrApplicationNotReady)
+        bootstrapped = true
+      },
+    })
+
+    expect(() => app.health).toThrow(ErrApplicationNotReady)
+
+    await app.ready()
+
+    try {
+      expect(bootstrapped).toBe(true)
+      expect(app.health).toBeInstanceOf(ApplicationHealth)
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A check polled during the drain gets an answer, not an error. Once the container is disposed, there is nothing
+  // left to read.
+  it('answers while the application closes, and fails once it has', async () => {
+    const app = appWith(container => container.bind(Database, t => t.toSelf().extends(HealthIndicator)))
+    await app.run()
+
+    const closing = app.close()
+
+    expect((await app.health.readiness()).ok).toBe(false)
+
+    await closing
+
+    expect(() => app.health).toThrow(ErrApplicationNotReady)
   })
 })

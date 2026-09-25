@@ -30,8 +30,8 @@ export interface ProbeOptions {
  *
  * Every application binds one, headless included, whether or not anything exposes it: `health()` from
  * `@caffeinejs/http` serves its HTTP probes from it, and anything else — a Watt readiness check, a custom route, a
- * test — injects the same instance, so all of them share one evaluation per group. Resolve it once `ready()` has
- * run.
+ * test — gets the same instance, as `app.health` or injected, so all of them share one evaluation per group. Reach
+ * it once `ready()` has run.
  *
  * Readiness and startup stay failing until the application runs: `run()` is what marks it started and accepting.
  * An application served by something else — a host that listens on its instance instead of calling `run()` —
