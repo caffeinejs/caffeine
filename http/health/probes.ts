@@ -20,7 +20,8 @@ const PROBE_HEADERS: Record<string, string> = {
 
 /**
  * Renders a probe's verdict in the plain-text shape `kubectl get --raw /readyz?verbose` already produces: `ok` or
- * `<probe> check failed` in brief, one `[+]`/`[-]` line per check and indicator when `verbose`.
+ * `<probe> check failed` in brief, one `[+]`/`[-]` line per check and indicator when `verbose`. An indicator's
+ * line carries its `detail`, never its `data`.
  */
 export function renderProbe(probe: string, result: ProbeResult, verbose: boolean): ProbeResponse {
   const status = result.ok ? 200 : 503

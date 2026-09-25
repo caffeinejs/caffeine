@@ -1,6 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { createApplication, newConfiguration } from '@caffeinejs/std'
-import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { ErrConfigValidation, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
 import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -50,7 +50,14 @@ const appConfigSchema = $t.Object(
 )
 
 type AppConfig = InferSchema<typeof appConfigSchema>
-type DistLockTree = AppConfig['app']['distlock']
+
+// The slice as a source writes it, before validation decodes the durations into milliseconds.
+interface DistLockTree {
+  ttl?: string
+  wait?: string
+  retryDelay?: string
+  retryJitter?: number
+}
 
 const kConfig = token<InferConfig<typeof appConfigSchema>>(Symbol('distlock.test.config'))
 
@@ -111,7 +118,7 @@ describe('distlock configuration', () => {
   // that does not say are both visible right there.
   it('reads the wait budget out of the configuration tree', async () => {
     const backend = new SpyBackend()
-    const lock = await newLock(backend, { wait: 60, retryDelay: 5 })
+    const lock = await newLock(backend, { wait: '60ms', retryDelay: '5ms' })
     await lock.acquire('k')
 
     const error = await lock.acquire('k').catch((e: unknown) => e)
@@ -121,7 +128,7 @@ describe('distlock configuration', () => {
 
   it('lets a fluent wait win over the same setting in the tree', async () => {
     const backend = new SpyBackend()
-    const lock = await newLock(backend, { wait: 60, retryDelay: 5 }, d => d.wait(30))
+    const lock = await newLock(backend, { wait: '60ms', retryDelay: '5ms' }, d => d.wait(30))
     await lock.acquire('k')
 
     const error = await lock.acquire('k').catch((e: unknown) => e)
@@ -133,7 +140,7 @@ describe('distlock configuration', () => {
   // 5ms across a 200ms budget is tens of attempts, where the 100ms default would be two or three.
   it('reads the retry delay out of the configuration tree', async () => {
     const backend = new SpyBackend()
-    const lock = await newLock(backend, { wait: 200, retryDelay: 5, retryJitter: 0 })
+    const lock = await newLock(backend, { wait: '200ms', retryDelay: '5ms', retryJitter: 0 })
     await lock.acquire('k')
 
     const before = backend.ttls.length
@@ -144,7 +151,7 @@ describe('distlock configuration', () => {
 
   it('lets a fluent retry delay win over the same setting in the tree', async () => {
     const backend = new SpyBackend()
-    const lock = await newLock(backend, { wait: 200, retryDelay: 200, retryJitter: 0 }, d => d.retryDelay(5))
+    const lock = await newLock(backend, { wait: '200ms', retryDelay: '200ms', retryJitter: 0 }, d => d.retryDelay(5))
     await lock.acquire('k')
 
     const before = backend.ttls.length
@@ -163,6 +170,21 @@ describe('distlock configuration', () => {
     )
 
     await expect(app.ready()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+  })
+
+  // A bare number names no unit. Read as duration text it was a lease of 0, which lapses as it is granted.
+  it('refuses a duration the tree gives as a bare number', async () => {
+    const conf = newConfiguration(appConfigSchema, kConfig)
+      .source(new InlineConfigSource({ app: { distlock: { ttl: '30000' } } }))
+      .build()
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
+      distlock<AppConfig>((d, { config }) => d.backend(new MemoryLockBackend()).config(config.app.distlock)),
+    )
+    const booting = app.ready()
+
+    await expect(booting).rejects.toThrow(ErrConfigValidation)
+    await expect(booting).rejects.toThrow('app.distlock.ttl')
   })
 
   it('publishes the schema from the barrel, so an application can compose it', async () => {

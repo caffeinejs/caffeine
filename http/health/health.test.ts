@@ -3,6 +3,7 @@ import { newConfiguration } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
+  ErrConfigValidation,
   InlineConfigSource,
   type InferConfig,
   type ConfigSource,
@@ -13,6 +14,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { WebApplication, createWebApplication } from '../index.js'
 import { HealthBuilder } from './builder.js'
+import { ErrHealthConfiguration } from './errors.js'
 import { health } from './health.js'
 import { healthConfigSchema, type HealthConfig } from './options.js'
 
@@ -141,6 +143,38 @@ describe('health()', () => {
     await app.ready()
 
     expect(app.container.get(kHealthRegistryOptions).cacheTTLMs).toBe(5_000)
+  })
+
+  // A bare number names no unit. Read as duration text it was 0: every indicator that awaits was cancelled on the
+  // next turn, and readiness failed for the life of the process with nothing said at ready().
+  it('refuses a budget the environment gives as a bare number', async () => {
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigSource({ env: { HEALTH__INDICATOR_TIMEOUT: '5000' } }))
+      .build()
+    const booting = createWebApplication({ config: conf })
+      .with(health((h, { config }) => h.config(config.health)))
+      .ready()
+
+    await expect(booting).rejects.toThrow(ErrConfigValidation)
+    await expect(booting).rejects.toThrow('health.indicatorTimeout')
+  })
+
+  // Written as a duration, a 0 fails the same way, whether it comes from code or from the configuration.
+  it('refuses a budget of 0', async () => {
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigSource({ env: { HEALTH__PROBE_DEADLINE: '0s' } }))
+      .build()
+    const fromCode = createWebApplication()
+      .with(health(h => h.indicatorTimeout(0)))
+      .ready()
+    const fromConfig = createWebApplication({ config: conf })
+      .with(health((h, { config }) => h.config(config.health)))
+      .ready()
+
+    await expect(fromCode).rejects.toThrow(ErrHealthConfiguration)
+    await expect(fromCode).rejects.toThrow('an indicator timeout of "0ms"')
+    await expect(fromConfig).rejects.toThrow(ErrHealthConfiguration)
+    await expect(fromConfig).rejects.toThrow('a probe deadline of "0ms"')
   })
 
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.

@@ -33,6 +33,34 @@ class Stub extends HealthIndicator {
   }
 }
 
+// Answers only once the test opens it, so a probe can be caught with its indicators still running.
+class Gated extends HealthIndicator {
+  readonly #answer = Promise.withResolvers<HealthReport>()
+
+  constructor(
+    private readonly id: string,
+    private readonly groupList?: readonly HealthGroup[],
+  ) {
+    super()
+  }
+
+  get name(): string {
+    return this.id
+  }
+
+  override get groups(): readonly HealthGroup[] {
+    return this.groupList ?? super.groups
+  }
+
+  open(report: HealthReport): void {
+    this.#answer.resolve(report)
+  }
+
+  check(): Promise<HealthReport> {
+    return this.#answer.promise
+  }
+}
+
 function booting(indicators: HealthIndicator[] = []): {
   health: ApplicationHealth
   availability: ApplicationAvailability
@@ -91,6 +119,22 @@ describe('ApplicationHealth', () => {
 
       expect((await health.liveness()).ok).toBe(false)
     })
+
+    // A process marked broken while its indicators were running is not reported live: the restart waits for no
+    // further poll.
+    it('fails a call whose indicators were still running when the process was marked broken', async () => {
+      const gated = new Gated('heartbeat', ['liveness'])
+      const { health, availability } = running([gated])
+
+      const pending = health.liveness()
+      availability.markBroken('deadlocked')
+      gated.open(up())
+
+      const result = await pending
+
+      expect(result.ok).toBe(false)
+      expect(result.checks).toEqual([{ name: 'live', ok: false, detail: 'deadlocked' }])
+    })
   })
 
   describe('readiness', () => {
@@ -116,6 +160,22 @@ describe('ApplicationHealth', () => {
       availability.beginDrain()
 
       const result = await health.readiness()
+
+      expect(result.ok).toBe(false)
+      expect(result.checks).toContainEqual({ name: 'accepting', ok: false, detail: 'shutdown' })
+    })
+
+    // The poll the drain delay waits for: one that reported ready would keep routing traffic to a process about to
+    // stop accepting it.
+    it('fails a call whose indicators were still running when the drain began', async () => {
+      const gated = new Gated('db')
+      const { health, availability } = running([gated])
+
+      const pending = health.readiness()
+      availability.beginDrain()
+      gated.open(up())
+
+      const result = await pending
 
       expect(result.ok).toBe(false)
       expect(result.checks).toContainEqual({ name: 'accepting', ok: false, detail: 'shutdown' })

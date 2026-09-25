@@ -60,7 +60,9 @@ export function defaultHealthOptions(env: EnvLike = hostEnv()): HealthOptions {
 }
 
 /**
- * The health slice of the configuration tree. Every duration accepts `'5s'`-style strings or milliseconds.
+ * The health slice of the configuration tree. There, a duration is written as text — `'5s'`, `'1h30m'` — and a
+ * bare number is refused, because its unit would be ambiguous. An object handed to `config(...)` from code may give
+ * milliseconds instead.
  *
  * Every key is spelled the way its environment variable folds, so `HEALTH__CACHE_TTL` sets `cacheTtl`: that is
  * the key the builder's `cacheTTL(...)` stands for.
@@ -75,8 +77,6 @@ export interface HealthConfig {
   exclude?: boolean
 }
 
-const duration = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
-
 /**
  * The schema governing the health slice.
  *
@@ -84,6 +84,9 @@ const duration = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Nu
  * (`isKubernetes`) and are applied by {@link mergeHealthConfig} afterwards. So the tree carries only what
  * somebody actually set — in code, in a file, in the environment or on the command line — and absence keeps its
  * meaning instead of being overwritten by a default written into a low band.
+ *
+ * The budgets are `$t.Duration()`: `HEALTH__INDICATOR_TIMEOUT=5000` or `'5 hours'` fails validation at `ready()`
+ * rather than reaching a timer as 0.
  */
 export const healthConfigSchema = $t.Object({
   enabled: $t.Optional($t.Boolean()),
@@ -94,9 +97,9 @@ export const healthConfigSchema = $t.Object({
       startup: $t.Optional($t.String()),
     }),
   ),
-  indicatorTimeout: $t.Optional(duration()),
-  probeDeadline: $t.Optional(duration()),
-  cacheTtl: $t.Optional(duration()),
+  indicatorTimeout: $t.Optional($t.Duration()),
+  probeDeadline: $t.Optional($t.Duration()),
+  cacheTtl: $t.Optional($t.Duration()),
   verbose: $t.Optional($t.Boolean()),
   exclude: $t.Optional($t.Boolean()),
 })

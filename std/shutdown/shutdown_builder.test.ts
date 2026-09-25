@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
+  ErrConfigValidation,
   InlineConfigSource,
   type ConfigDefinition,
   type ConfigSource,
@@ -76,6 +77,19 @@ describe('ShutdownBuilder', () => {
     expect(policy.drainDelayMs).toBe(40)
     // `$t.List`, so the comma-separated value is two signals, not one with a comma in its name.
     expect(policy.signals).toEqual(['SIGTERM', 'SIGINT'])
+  })
+
+  // A bare number names no unit. Read as duration text it was 0, and a timeout of 0 waits indefinitely, so the
+  // orchestrator's SIGKILL was all that ended a stuck shutdown.
+  it('refuses a duration the environment gives as a bare number', async () => {
+    const conf = newConfiguration(appSchema, kAppConfig)
+      .source(new EnvConfigSource({ env: { SHUTDOWN__SHUTDOWN_TIMEOUT: '10000' } }))
+      .build()
+    const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
+    const booting = app.ready()
+
+    await expect(booting).rejects.toThrow(ErrConfigValidation)
+    await expect(booting).rejects.toThrow('shutdown.shutdownTimeout')
   })
 
   it('keeps the dispatcher on the builder — a function cannot travel the config tree', async () => {
@@ -174,7 +188,7 @@ describe('the zero-drain warning under Kubernetes', () => {
 
   it('warns about a 0 from the configuration', async () => {
     const { dispatcher, warnings } = recording()
-    const app = headless(configured('0')).shutdown((s, { config }) => s.dispatcher(dispatcher).config(config.shutdown))
+    const app = headless(configured('0s')).shutdown((s, { config }) => s.dispatcher(dispatcher).config(config.shutdown))
     await app.ready()
 
     expect(warnings).toHaveLength(1)
@@ -196,7 +210,7 @@ describe('the zero-drain warning under Kubernetes', () => {
 
   it('says nothing when code sets a delay over a configured 0', async () => {
     const { dispatcher, warnings } = recording()
-    const app = headless(configured('0')).shutdown((s, { config }) =>
+    const app = headless(configured('0s')).shutdown((s, { config }) =>
       s.dispatcher(dispatcher).config(config.shutdown).drainDelay('5s'),
     )
     await app.ready()

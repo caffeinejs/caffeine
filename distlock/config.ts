@@ -2,8 +2,9 @@ import { type Duration } from '@caffeinejs/std/duration'
 import { $t } from '@caffeinejs/std/schema'
 
 /**
- * The distributed lock slice of the configuration tree. Every duration accepts `'5s'`-style strings or
- * milliseconds.
+ * The distributed lock slice of the configuration tree. There, a duration is written as text — `'30s'`, `'1m'` —
+ * and a bare number is refused, because its unit would be ambiguous. An object handed to `config(...)` from code may
+ * give milliseconds instead.
  *
  * The backend is not here: it is an object with methods, so it cannot travel a configuration tree. It stays
  * on the builder.
@@ -27,10 +28,13 @@ export interface DistLockConfigSlice {
  * ```ts
  * $t.Object({ distlock: $t.Object(distLockConfigSchema.properties, { default: {} }) })
  * ```
+ *
+ * The durations are `$t.Duration()`: `DISTLOCK__TTL=30000` fails validation at `ready()` rather than becoming a
+ * lease of 0.
  */
 export const distLockConfigSchema = $t.Object({
-  ttl: $t.Optional($t.Union([$t.String(), $t.Number()])),
-  wait: $t.Optional($t.Union([$t.String(), $t.Number()])),
-  retryDelay: $t.Optional($t.Union([$t.String(), $t.Number()])),
+  ttl: $t.Optional($t.Duration()),
+  wait: $t.Optional($t.Duration()),
+  retryDelay: $t.Optional($t.Duration()),
   retryJitter: $t.Optional($t.Number({ minimum: 0, maximum: 1 })),
 })
