@@ -28,7 +28,8 @@ export class HealthBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   #k8s = false
   #config: Partial<HealthConfig> | undefined
   readonly #values: HealthConfig = {}
-  #options: HealthOptions | undefined
+  // Set when the feature configures, which the application does before it runs any server hook.
+  #options!: HealthOptions
 
   /**
    * Reads every setting from a node of the configuration tree, e.g. `config.app.health`.
@@ -123,7 +124,7 @@ export class HealthBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     // Resolved before the `enabled` check: building the service is what rejects a non-singleton indicator, and
     // that belongs to start-up whether or not the probes are mounted.
     const health = kit.container.get(ApplicationHealth)
-    const options = this.#options ?? this.resolve()
+    const options = this.#options
 
     if (options.enabled) {
       installHealthProbes(instance, options, health)
