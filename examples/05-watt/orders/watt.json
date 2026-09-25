@@ -1,0 +1,4 @@
+{
+  "$schema": "https://schemas.platformatic.dev/@platformatic/node/3.70.0.json",
+  "node": { "main": "../dist/orders/main.js" }
+}

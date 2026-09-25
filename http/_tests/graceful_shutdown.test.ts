@@ -1,4 +1,5 @@
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
+import { ErrApplicationClosed, ErrApplicationRunning } from '@caffeinejs/std'
 import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std/shutdown'
 import { describe, it, expect, beforeEach } from 'vitest'
 
@@ -195,5 +196,30 @@ describe('graceful shutdown', () => {
     await app.close()
 
     expect(process.listenerCount('SIGTERM')).toBe(before)
+  })
+})
+
+// An application runs once, and a close is final. A server a late run() opened would outlive the close — the process
+// never exits — and a second run() racing the first would change where the first one listens.
+describe('running once', () => {
+  it('opens no server once the application has been closed', async () => {
+    const app = createWebApplication().shutdown(s => s.drainDelay(0))
+    await app.ready()
+    await app.close()
+
+    await expect(app.run({ host: '127.0.0.1', port: 0 })).rejects.toThrow(ErrApplicationClosed)
+    expect(app.instance.server.listening).toBe(false)
+  })
+
+  it('listens where the first run() asked, refusing a second one made while it boots', async () => {
+    const app = createWebApplication().shutdown(s => s.drainDelay(0))
+
+    const first = app.run({ host: '127.0.0.1', port: 0 })
+
+    await expect(app.run({ host: '127.0.0.1', port: 1 })).rejects.toThrow(ErrApplicationRunning)
+    await first
+
+    expect(portOf(app)).not.toBe(1)
+    await app.close()
   })
 })

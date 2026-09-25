@@ -67,7 +67,8 @@ Two things differ under HTTP/2:
 
 Behind a gateway or proxy that forwards `/api/...` with the prefix intact, `.basePath('/api')` serves the whole
 application under it — or `.basePath(({ config }) => config.app.basePath)`, resolved at `ready()`. Under Watt:
-`.basePath(() => getBasePath({ throwOnMissing: false }))`.
+`.basePath(() => getBasePath({ throwOnMissing: false }) ?? undefined)` — the rest of running under Watt is
+[docs/watt.md](../../docs/watt.md).
 
 The server takes the base off a request's path before routing, so nothing the application declares changes:
 routes from every source, plugin routes such as the health probes and static files, `app.use(path, …)` and
@@ -213,6 +214,30 @@ declarations **add up**: none replaces another, on one route or across the level
   (`ERR_AUTHZ_POLICY_EMPTY`): it would be satisfied by every caller, anonymous included.
 - A policy only asks what it says. `p.assert(...)` alone admits an anonymous caller that satisfies it; add
   `p.requireAuthenticated()` when an identity is part of the rule.
+
+## Health
+
+`.with(health())` mounts `/livez`, `/readyz` and `/startupz`. The probes answer from `ApplicationHealth`
+(`@caffeinejs/std/health`), which every application has — headless ones too — so any other caller, such as a
+readiness check a host polls, a custom route or a test, injects the same instance and shares one evaluation with
+the routes.
+
+```ts
+import { ApplicationHealth } from '@caffeinejs/std/health'
+
+const app = createWebApplication().with(health(h => h.cacheTTL('2s')))
+await app.run()
+
+const readiness = await app.container.get(ApplicationHealth).readiness() // { ok, checks, outcomes }
+```
+
+- An indicator is a singleton bean extending `HealthIndicator`; `@Injectable()` auto-extends it. It joins
+  `readiness` unless its `groups` say otherwise — keep dependencies out of `liveness`. `critical: false` reports
+  `degraded` instead of failing the probe.
+- The budgets set on `health()` — `indicatorTimeout`, `probeDeadline`, `cacheTTL` — apply to every caller, even
+  with `.enabled(false)`. Without `health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
+- Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
+  `ApplicationHealth` as [docs/watt.md](../../docs/watt.md) shows.
 
 ## Typed client — `@caffeinejs/brewer`
 

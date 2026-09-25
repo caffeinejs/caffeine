@@ -1,4 +1,4 @@
-import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from '@caffeinejs/std/health'
+import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from './indicator.js'
 
 /** One indicator's outcome for a single evaluation. */
 export interface IndicatorOutcome {
@@ -74,11 +74,6 @@ export class HealthRegistry {
   /** Whether any indicator contributes to a group. */
   has(group: HealthGroup): boolean {
     return this.#byGroup.has(group)
-  }
-
-  /** Drops every cached evaluation. Called when the application state changes underneath the cache. */
-  invalidate(): void {
-    this.#cache.clear()
   }
 
   /**

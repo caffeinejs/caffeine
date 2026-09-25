@@ -1,8 +1,8 @@
 import { Lifetime, Scopes, type Binding, type Container } from '@caffeinejs/di'
-import { HealthIndicator } from '@caffeinejs/std/health'
 
-import { solutions } from '../error/util.js'
+import { solutions } from '../error.js'
 import { ErrHealthIndicatorNotSingleton } from './errors.js'
+import { HealthIndicator } from './indicator.js'
 
 /**
  * The indicators bound under {@link HealthIndicator}, after confirming each is a singleton.

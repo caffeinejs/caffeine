@@ -1,8 +1,8 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std/health'
 import { describe, expect, it } from 'vitest'
 
 import { ErrHealthIndicatorNotSingleton } from './errors.js'
+import { HealthIndicator, type HealthReport, up } from './indicator.js'
 import { loadHealthIndicators } from './load.js'
 
 class Stub extends HealthIndicator {

@@ -7,6 +7,7 @@ import {
   type InferConfig,
   type ConfigSource,
 } from '@caffeinejs/std/config'
+import { kHealthRegistryOptions } from '@caffeinejs/std/health'
 import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -40,7 +41,7 @@ describe('HealthBuilder.resolve', () => {
   })
 
   it('drives the configuration from a configured block', () => {
-    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
+    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: true }
 
     const options = new HealthBuilder().config(config).resolve()
 
@@ -55,7 +56,7 @@ describe('HealthBuilder.resolve', () => {
   // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
   // block the callback wired.
   it('keeps a code-set duration and takes the rest from the configured block', () => {
-    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: true }
+    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: true }
 
     const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').config(config).resolve()
 
@@ -82,7 +83,7 @@ describe('health()', () => {
   const schema = $t.Object({
     health: $t.Object({
       indicatorTimeout: $t.String(),
-      cacheTTL: $t.String(),
+      cacheTtl: $t.String(),
       verbose: $t.Boolean(),
     }),
   })
@@ -128,6 +129,20 @@ describe('health()', () => {
     expect((await app.fetch('/readyz')).status).toBe(404)
   })
 
+  // The key has to be the one its variable folds to: spelled `cacheTTL`, no variable could reach it, and the
+  // value was dropped at ready() without a word.
+  it('takes the cache budget from HEALTH__CACHE_TTL', async () => {
+    const conf = newConfiguration(rootSchema, kRootConfig)
+      .source(new EnvConfigSource({ env: { HEALTH__CACHE_TTL: '5s' } }))
+      .build()
+
+    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
+
+    await app.ready()
+
+    expect(app.container.get(kHealthRegistryOptions).cacheTTLMs).toBe(5_000)
+  })
+
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
   it('ignores the configured block unless config(...) pointed at it', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
@@ -141,7 +156,7 @@ describe('health()', () => {
   })
 
   it('does not follow a config refresh after the options are resolved', async () => {
-    let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTTL: '9s', verbose: false }
+    let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: false }
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
@@ -152,7 +167,7 @@ describe('health()', () => {
     // Not verbose yet, so `?verbose` is ignored and the body stays the terse form.
     expect(await (await app.fetch('/readyz?verbose')).text()).toBe('ok')
 
-    data = { indicatorTimeout: '30ms', cacheTTL: '12s', verbose: true }
+    data = { indicatorTimeout: '30ms', cacheTtl: '12s', verbose: true }
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The options were read once, when the plugin registered — a refresh afterward does not reach them.

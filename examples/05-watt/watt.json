@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schemas.platformatic.dev/wattpm/3.70.0.json",
+  "entrypoint": "web",
+  "applications": [
+    { "id": "web", "path": "./web" },
+    { "id": "orders", "path": "./orders" },
+    { "id": "worker", "path": "./worker" }
+  ],
+  "server": { "hostname": "127.0.0.1", "port": 3042 },
+  "healthProbes": { "hostname": "127.0.0.1", "port": 9090 }
+}

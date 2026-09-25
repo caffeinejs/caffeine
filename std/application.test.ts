@@ -2,12 +2,22 @@ import { unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { CaffeineIoC, Injectable, Profile, token } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import { InlineConfigSource, JSONConfigSource, type InferConfig } from './config/index.js'
 import {
+  ApplicationHealth,
+  ErrHealthIndicatorNotSingleton,
+  HealthIndicator,
+  type HealthReport,
+  up,
+} from './health/index.js'
+import {
+  Application,
+  ErrApplicationClosed,
+  ErrApplicationRunning,
   ErrApplicationStarted,
   ErrFeatureAlreadyInstalled,
   FeatureBuilder,
@@ -705,5 +715,281 @@ describe('headless application shutdown', () => {
     await sleep(0)
 
     expect(app.availability.live).toBe('broken')
+  })
+})
+
+// A platform whose start can be held open, recording what the lifecycle asked of it and in which order.
+class Platform extends Application {
+  readonly calls: string[] = []
+  readonly listening = Promise.withResolvers<void>()
+
+  protected override async start(): Promise<void> {
+    this.calls.push('start')
+    await this.listening.promise
+    this.calls.push('listening')
+  }
+
+  protected override stop(): Promise<void> {
+    this.calls.push('stop')
+    return Promise.resolve()
+  }
+}
+
+// Counts every handler installed: a second set is what a repeated run() used to leave behind.
+class CountingDispatcher extends FakeDispatcher {
+  installed = 0
+
+  override on(signal: ShutdownSignal, handler: () => void): void {
+    this.installed++
+    super.on(signal, handler)
+  }
+}
+
+// Closing is what every caller does on the way out — a signal handler, a host stopping a worker, a test's
+// cleanup — so it has to be safe wherever the application is in its lifecycle, and to report a failed shutdown once.
+describe('closing at any point of the lifecycle', () => {
+  class Recorder implements OnDestroy {
+    static destroyed = 0
+
+    onDestroy() {
+      Recorder.destroyed++
+    }
+  }
+
+  afterEach(() => {
+    Recorder.destroyed = 0
+  })
+
+  // Nothing was brought up, so there is nothing to tear down — but a close is final all the same, or the rule that
+  // a closed application is not started again would have an exception nobody expects.
+  it('closes an application that was never readied for good, tearing nothing down', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    const dispose = vi.spyOn(container, 'dispose')
+    const app = createApplication({ container })
+
+    await app.close()
+
+    expect(dispose).not.toHaveBeenCalled()
+    expect(app.availability.live).toBe('broken')
+    await expect(app.ready()).rejects.toThrow(ErrApplicationClosed)
+  })
+
+  it('waits for a ready() in flight, then tears down what it brought up', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Recorder, t => t.toSelf())
+    const app = createApplication({ container })
+
+    const booting = app.ready()
+    const closing = app.close()
+
+    await booting
+    await closing
+
+    expect(Recorder.destroyed).toBe(1)
+  })
+
+  // Stopping a platform while it is still starting races the start: under Fastify, the socket then opens after the
+  // close resolved, and the process never exits.
+  it('lets a start under way finish, then stops what it opened', async () => {
+    const app = new Platform()
+
+    const running = app.run()
+    await vi.waitFor(() => expect(app.calls).toEqual(['start']))
+
+    const closing = app.close()
+    app.listening.resolve()
+
+    await running
+    await closing
+
+    expect(app.calls).toEqual(['start', 'listening', 'stop'])
+    expect(app.availability.ready).toBe('refusing')
+  })
+
+  it('starts nothing when the close arrives while run() is still booting', async () => {
+    const dispatcher = new CountingDispatcher()
+    const app = new Platform().shutdown(s => s.signals(['SIGTERM']).dispatcher(dispatcher))
+    app.listening.resolve()
+
+    const running = app.run()
+    const closing = app.close()
+
+    await expect(running).rejects.toThrow(ErrApplicationClosed)
+    await closing
+
+    expect(app.calls).toEqual(['stop'])
+    expect(dispatcher.installed).toBe(0)
+  })
+
+  it('tears down after a failed ready() without replacing its error, logging what the teardown hit', async () => {
+    class Failing implements OnDestroy {
+      onDestroy() {
+        throw new Error('teardown failed')
+      }
+    }
+
+    const logged: unknown[][] = []
+    const logger: Logger = { ...newNoopLogger(), error: (...args: unknown[]) => void logged.push(args) }
+    const failing: Feature = {
+      [kFeatureName]: 'failing',
+      [kFeatureConfigure]() {},
+      [kFeatureBootstrap]() {
+        throw new Error('boot failed')
+      },
+    }
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Failing, t => t.toSelf())
+    const app = createApplication({ container, logger }).with(failing)
+
+    const boot = async (): Promise<void> => {
+      try {
+        await app.ready()
+      } finally {
+        await app.close()
+      }
+    }
+
+    await expect(boot()).rejects.toThrow('boot failed')
+    expect(logged).toHaveLength(1)
+    expect(app.availability.live).toBe('broken')
+  })
+
+  it('skips the drain delay for an application that never served', async () => {
+    const app = createApplication().shutdown(s => s.drainDelay('5s'))
+    await app.ready()
+
+    const startedAt = Date.now()
+    await app.close()
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+    expect(app.availability.draining).toBe(true)
+  })
+
+  it('reports a failed shutdown to the call that started it, and to no other', async () => {
+    class Failing implements OnDestroy {
+      onDestroy() {
+        throw new Error('hook failed')
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Failing, t => t.toSelf())
+    const app = createApplication({ container })
+    await app.run()
+
+    const first = app.close()
+    const joined = app.close()
+
+    await expect(first).rejects.toThrow(AggregateError)
+    await expect(joined).resolves.toBeUndefined()
+    await expect(app.close()).resolves.toBeUndefined()
+  })
+
+  it('boots once when ready() is called again while booting', async () => {
+    let configured = 0
+    const counting: Feature = {
+      [kFeatureName]: 'counting',
+      [kFeatureConfigure]() {
+        configured++
+      },
+    }
+    const app = createApplication().with(counting)
+
+    await Promise.all([app.ready(), app.ready()])
+
+    expect(configured).toBe(1)
+    await app.close()
+  })
+})
+
+// An application runs once. A host that restarts one builds a new one — Watt a new worker, Kubernetes a new process
+// — because nothing it brought up can be brought up again: the container is disposed, the configuration closed and,
+// under Fastify, the server refuses to listen again.
+describe('running once', () => {
+  it('refuses a second run(), even while the first is still booting, and starts once', async () => {
+    const dispatcher = new CountingDispatcher()
+    const app = new Platform().shutdown(s => s.signals(['SIGTERM']).dispatcher(dispatcher))
+    app.listening.resolve()
+
+    const first = app.run()
+
+    await expect(app.run()).rejects.toThrow(ErrApplicationRunning)
+    await first
+
+    expect(app.calls).toEqual(['start', 'listening'])
+    expect(dispatcher.installed).toBe(1)
+
+    await app.close()
+
+    expect(dispatcher.handlers.size).toBe(0)
+  })
+
+  it('refuses to run a closed application, reporting the close rather than the earlier run', async () => {
+    const app = new Platform()
+    app.listening.resolve()
+    await app.run()
+    await app.close()
+
+    await expect(app.run()).rejects.toThrow(ErrApplicationClosed)
+    expect(app.calls).toEqual(['start', 'listening', 'stop'])
+  })
+
+  it('refuses to ready a closed application, while a ready() already under way keeps its outcome', async () => {
+    const app = createApplication()
+
+    const booting = app.ready()
+    const closing = app.close()
+
+    await expect(booting).resolves.toBeUndefined()
+    await closing
+    await expect(app.ready()).rejects.toThrow(ErrApplicationClosed)
+  })
+})
+
+// Health belongs to every application, not to an HTTP server: a headless worker answers the same probes, from the
+// same indicators, to whatever polls it — Watt, a custom endpoint, a test.
+describe('application health', () => {
+  class Database extends HealthIndicator {
+    get name(): string {
+      return 'database'
+    }
+
+    check(): HealthReport {
+      return up()
+    }
+  }
+
+  it('follows the lifecycle, evaluating the indicators bound in the container', async () => {
+    const app = appWith(container => container.bind(Database, t => t.toSelf().extends(HealthIndicator)))
+    await app.ready()
+
+    const health = app.container.get(ApplicationHealth)
+
+    expect((await health.readiness()).ok).toBe(false)
+
+    await app.run()
+    const running = await health.readiness()
+
+    expect(running.ok).toBe(true)
+    expect(running.outcomes.map(outcome => outcome.name)).toEqual(['database'])
+
+    const closing = app.close()
+
+    expect((await health.readiness()).ok).toBe(false)
+
+    await closing
+  })
+
+  it('rejects a non-singleton indicator when the service is first built', async () => {
+    const app = appWith(container =>
+      container.bind(Database, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator)),
+    )
+    await app.ready()
+
+    try {
+      expect(() => app.container.get(ApplicationHealth)).toThrow(ErrHealthIndicatorNotSingleton)
+    } finally {
+      await app.close()
+    }
   })
 })

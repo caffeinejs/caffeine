@@ -172,7 +172,7 @@ anything.
 | `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |
 | `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
 
-`HEALTH__DRAIN_DELAY` reaches `health.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
+`SHUTDOWN__DRAIN_DELAY` reaches `shutdown.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
 Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped, and
 so is a variable whose path another one uses as a parent, with a warning. On the command line that is an error.
 

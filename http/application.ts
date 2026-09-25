@@ -245,9 +245,9 @@ export class WebApplication<
    * @throws ErrApplicationStarted when {@link ready} has already started.
    */
   // One signature taking the union, not one overload per shape. A generic argument such as
-  // `health((h, ctx) => …)` has its callback typed against the first overload TypeScript tries, and those types
-  // stick: whichever shape came second — a factory like `health()`, or an `HTTPFeature` factory — silently
-  // inferred C as unknown instead of the application's configuration type.
+  // `HTTPCaching((b, ctx) => …)` has its callback typed against the first overload TypeScript tries, and those
+  // types stick: whichever shape came second — a factory like `HTTPCaching()`, or an `HTTPFeature` factory such
+  // as `health()` — silently inferred C as unknown instead of the application's configuration type.
   override with(
     featureOrFactory: AdapterExtensionFactory<T['extension'], C> | HTTPFeature<C, T['instance']> | PlainFeature<C>,
   ): this {
@@ -334,6 +334,8 @@ export class WebApplication<
    * Auto-installs authorization when authentication was configured and `.authorization(...)` never was —
    * so a protected route still gets a default policy — before the base class captures the feature list and
    * starts booting. Neither call made means authorization stays off, by design.
+   *
+   * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
    */
   override async ready(): Promise<void> {
     if (this.#authBuilder != null && this.#authzBuilder == null) {
@@ -652,9 +654,15 @@ export class WebApplication<
   /**
    * Readies the application if needed and starts the server with what the adapter's `run` takes — under Fastify,
    * listen options merged over the `listener` that `.server(...)` returned, these winning key by key.
+   *
+   * Runs once: a second call is refused rather than joined, since it would otherwise lose its listen options.
+   *
+   * @throws ErrApplicationRunning when `run()` has already been called, whatever became of that call.
+   * @throws ErrApplicationClosed once {@link close} has been called, including while `run()` was still booting.
    */
   override run(...args: T['runArgs']): Promise<WebRunInfo> {
-    this.#runArgs = args
+    // The first call's: a second one is refused, and must not change what the first listens with while it boots.
+    this.#runArgs ??= args
     // runInfo() is overridden, so what base run() resolves to is already a WebRunInfo.
     return super.run() as Promise<WebRunInfo>
   }

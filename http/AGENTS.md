@@ -133,14 +133,18 @@ unmatched URLs itself may call `setNotFoundHandler` and throw `ErrHTTPNotFound` 
 the adapter installs its default only when no handler is set yet, and a second one fails at start-up with
 Fastify's own error.
 
-Health (`/livez`, `/readyz`, `/startupz`) is **not** a feature and is **not** registered by `WebApplication` —
-it is an ordinary opt-in `HTTPPluginFactory`, `.with(health(...))`, exactly like `HTTPCaching()`. Installing it
-is what enables the probes (default `enabled: true`); `.k8s()` on the builder switches that default to the old
-Kubernetes auto-detection (`KUBERNETES_SERVICE_HOST` present) instead. `WebApplication` holds no reference to
-`http/health` at all. `ProbeEndpoint` and `HealthRegistry` are plain objects built once in the plugin's closure
-from `healthComponents()` (`http/health/components.ts`, itself framework- and DI-agnostic) — neither is a
-container binding, so there is no `kHealthOptions` to read back. `WebApplication.beforeDrain()` no longer
-exists; cache staleness at shutdown is handled by the plugin's own Fastify `onClose` hook instead.
+Health (`/livez`, `/readyz`, `/startupz`) is an opt-in `HTTPFeatureBuilder`, `.with(health(...))`, and is **not**
+registered by `WebApplication`, which holds no reference to `http/health` at all. What the probes answer from is
+not theirs: `ApplicationHealth` from `@caffeinejs/std/health`, which every `Application` binds in `ready()`,
+headless included, so a Watt check or any other caller shares one evaluation with the routes. Installing
+`health()` does two things. It mounts the routes (default `enabled: true`; `.k8s()` switches that default to the
+Kubernetes auto-detection, `KUBERNETES_SERVICE_HOST` present). And it binds `kHealthRegistryOptions`, the budgets
+`ApplicationHealth` evaluates with — even when the routes are off. That binding is why it is a feature and not a
+plugin factory: only `configure` runs before `container.init()`, and a plugin factory runs after, when something
+may already hold the service. Its server hook resolves `ApplicationHealth` before checking `enabled`, because
+building the service is what rejects a non-singleton indicator at start-up. There is no cache invalidation at
+shutdown: readiness reads availability before it reads the cache, and a Fastify `onClose` hook would run only
+after the server stopped answering anyway.
 
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
 from `@caffeinejs/std/shutdown` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
@@ -151,7 +155,7 @@ supplies the two halves (`stop()` tears the adapter down, `forceStop()` cuts its
 `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 
 A built-in's resolved options that other code must read are container bindings, not configuration keys (health
-has none). There is no `featureConfigKey` and
+has one, `kHealthRegistryOptions`). There is no `featureConfigKey` and
 `ctx.config` is not callable — a package that needs its settings on a request either binds them and resolves
 them, or decorates the Fastify instance as `@caffeinejs/html` does.
 

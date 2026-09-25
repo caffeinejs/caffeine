@@ -46,6 +46,9 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
    * How long to keep serving after availability starts refusing, before anything is torn down. Covers the
    * orchestrator's routing-table propagation lag; traffic still arrives during this window and is answered
    * normally.
+   *
+   * `0` turns the wait off. Set here, it is taken as meant, for an application nothing routes to, and draws no
+   * warning under Kubernetes; a `0` from the configuration does.
    */
   drainDelay(delay: Duration): this {
     this.#values.drainDelay = delay
@@ -91,7 +94,9 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   protected override configure(kit: FeatureConfigureKit<C>): void {
     // Validated here, at `ready()` while the logs are still being watched, rather than during the shutdown a
     // bad budget would ruin.
-    const policy = finalizeShutdownOptions(mergeShutdownConfig(this.#inputs(), { dispatcher: this.#dispatcher }))
+    const policy = finalizeShutdownOptions(mergeShutdownConfig(this.#inputs(), { dispatcher: this.#dispatcher }), {
+      drainDelayInCode: this.#values.drainDelay !== undefined,
+    })
 
     kit.container.bind(kShutdownPolicy, t => t.toValue(policy).internal())
   }

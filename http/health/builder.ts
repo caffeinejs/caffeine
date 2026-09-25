@@ -1,10 +1,16 @@
+import { type FeatureConfigureKit, kFeatureName } from '@caffeinejs/std'
 import { type Duration } from '@caffeinejs/std/duration'
+import { ApplicationHealth, kHealthRegistryOptions } from '@caffeinejs/std/health'
 import { isKubernetes } from '@caffeinejs/std/shutdown'
+import type { FastifyInstance } from 'fastify'
 
+import type { HTTPSetupContext } from '../adapter.js'
+import { HTTPFeatureBuilder } from '../feature.js'
 import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
+import { installHealthProbes } from './probes_route.js'
 
 /**
- * Fluently builds the {@link HealthOptions} `health()` resolves once, as its plugin registers.
+ * Fluently builds the {@link HealthOptions} `health()` resolves once, when it configures.
  *
  * What a fluent method sets is final. To let the environment redirect a budget, read it from the
  * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema:
@@ -16,15 +22,18 @@ import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPa
  * Health indicators are not configured here — they are container-managed beans discovered through
  * `HealthIndicator`.
  */
-export class HealthBuilder {
+export class HealthBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
+  readonly [kFeatureName] = 'health'
+
   #k8s = false
   #config: Partial<HealthConfig> | undefined
   readonly #values: HealthConfig = {}
+  #options: HealthOptions | undefined
 
   /**
    * Reads every setting from a node of the configuration tree, e.g. `config.app.health`.
    *
-   * The node is read once, when the plugin registers. A fluent method called alongside this one wins over
+   * The node is read once, when the feature configures. A fluent method called alongside this one wins over
    * what the node carries.
    */
   config(config: Partial<HealthConfig>): this {
@@ -40,7 +49,7 @@ export class HealthBuilder {
 
   /**
    * Opts into the Kubernetes auto-detection for the `enabled` default: on inside a pod
-   * (`KUBERNETES_SERVICE_HOST` present), off elsewhere. Installing the plugin at all already enables the
+   * (`KUBERNETES_SERVICE_HOST` present), off elsewhere. Installing the feature at all already enables the
    * probes by default — call this only to gate that default on the environment instead.
    */
   k8s(): this {
@@ -68,7 +77,7 @@ export class HealthBuilder {
 
   /** How long an evaluation is reused. Bounds the load the probes place on the dependencies they check. */
   cacheTTL(ttl: Duration): this {
-    this.#values.cacheTTL = ttl
+    this.#values.cacheTtl = ttl
     return this
   }
 
@@ -84,13 +93,41 @@ export class HealthBuilder {
     return this
   }
 
-  /** Folds the fluent values and the configured block into {@link HealthOptions}. Called once by `health()`. */
+  /** Folds the fluent values and the configured block into {@link HealthOptions}. */
   resolve(): HealthOptions {
-    // Installing the plugin at all is the opt-in; `.k8s()` is what gates that default on the environment
+    // Installing the feature at all is the opt-in; `.k8s()` is what gates that default on the environment
     // instead. An explicit `enabled` — fluent or configured — always wins over both.
     const enabledDefault = this.#k8s ? isKubernetes() : true
 
     return mergeHealthConfig(this.#inputs(), { enabledDefault })
+  }
+
+  protected override configure(kit: FeatureConfigureKit<C>): void {
+    const options = this.resolve()
+    this.#options = options
+
+    // Bound whether or not the probes are mounted: the budgets govern every caller of `ApplicationHealth`, so an
+    // application polled by something other than HTTP — Watt, say — still tunes them here.
+    kit.container.bind(kHealthRegistryOptions, t =>
+      t
+        .toValue({
+          indicatorTimeoutMs: options.indicatorTimeoutMs,
+          probeDeadlineMs: options.probeDeadlineMs,
+          cacheTTLMs: options.cacheTTLMs,
+        })
+        .internal(),
+    )
+  }
+
+  protected override server(instance: FastifyInstance, kit: HTTPSetupContext<C>): void {
+    // Resolved before the `enabled` check: building the service is what rejects a non-singleton indicator, and
+    // that belongs to start-up whether or not the probes are mounted.
+    const health = kit.container.get(ApplicationHealth)
+    const options = this.#options ?? this.resolve()
+
+    if (options.enabled) {
+      installHealthProbes(instance, options, health)
+    }
   }
 
   /** What a fluent method set, else what the configuration node carries. */
@@ -100,7 +137,7 @@ export class HealthBuilder {
       paths: { ...this.#config?.paths, ...this.#values.paths },
       indicatorTimeout: this.#values.indicatorTimeout ?? this.#config?.indicatorTimeout,
       probeDeadline: this.#values.probeDeadline ?? this.#config?.probeDeadline,
-      cacheTTL: this.#values.cacheTTL ?? this.#config?.cacheTTL,
+      cacheTtl: this.#values.cacheTtl ?? this.#config?.cacheTtl,
       verbose: this.#values.verbose ?? this.#config?.verbose,
       exclude: this.#values.exclude ?? this.#config?.exclude,
     }

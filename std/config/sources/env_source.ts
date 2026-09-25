@@ -22,7 +22,7 @@ export interface EnvConfigSourceOptions {
 }
 
 /**
- * Configuration from environment variables: `HEALTH__DRAIN_DELAY` becomes `health.drainDelay`. The separator splits
+ * Configuration from environment variables: `SHUTDOWN__DRAIN_DELAY` becomes `shutdown.drainDelay`. The separator splits
  * path segments, and underscores within a segment fold into camelCase, so a single-word segment stays as it is.
  *
  * Values stay text. The schema converts them to the types it declares, so `VERSION=1` is `'1'` for a string field

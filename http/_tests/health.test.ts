@@ -1,10 +1,16 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std/health'
+import {
+  ApplicationHealth,
+  ErrHealthIndicatorNotSingleton,
+  HealthIndicator,
+  type HealthReport,
+  down,
+  up,
+} from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import type { HealthBuilder } from '../health/builder.js'
-import { ErrHealthIndicatorNotSingleton } from '../health/errors.js'
 import { health } from '../health/health.js'
 import { Authorize, Controller, Get, createWebApplication } from '../index.js'
 
@@ -39,6 +45,40 @@ class UpIndicator extends HealthIndicator {
 
   check(): HealthReport {
     return up()
+  }
+}
+
+class CountingIndicator extends HealthIndicator {
+  calls = 0
+
+  get name(): string {
+    return 'counted'
+  }
+
+  check(): HealthReport {
+    this.calls++
+    return up()
+  }
+}
+
+/** Passes, but only after far longer than any budget the tests below set. */
+class SlowIndicator extends HealthIndicator {
+  get name(): string {
+    return 'slow'
+  }
+
+  check(signal: AbortSignal): Promise<HealthReport> {
+    return new Promise(resolve => {
+      const timer = setTimeout(() => resolve(up()), 1_000)
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer)
+          resolve(down('aborted'))
+        },
+        { once: true },
+      )
+    })
   }
 }
 
@@ -161,14 +201,63 @@ describe('health probes', () => {
     }
   })
 
-  it('rejects a non-singleton indicator at ready', async () => {
-    const app = createWebApplication().with(health())
+  // A lifetime mistake belongs to start-up, not to the first poll — whether or not the routes are mounted.
+  it.each([
+    ['mounted', true],
+    ['switched off', false],
+  ] as const)('rejects a non-singleton indicator at ready with the probes %s', async (_label, enabled) => {
+    const app = createWebApplication().with(health(h => h.enabled(enabled)))
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
       await expect(app.ready()).rejects.toThrow(ErrHealthIndicatorNotSingleton)
     } finally {
       await app.close().catch(() => undefined)
+    }
+  })
+
+  // One evaluation serves every caller: a second transport polling the same application — Watt, say — must not
+  // double the load the probes put on a dependency.
+  it('answers the routes and in-process callers from one shared evaluation', async () => {
+    const indicator = new CountingIndicator()
+    const app = await start(undefined, indicator)
+
+    try {
+      const [response, result] = await Promise.all([
+        probe(app, '/readyz'),
+        app.container.get(ApplicationHealth).readiness(),
+      ])
+
+      expect(response.status).toBe(200)
+      expect(result.ok).toBe(true)
+      expect(indicator.calls).toBe(1)
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('applies its budgets to every caller of the application health', async () => {
+    const app = await start(h => h.indicatorTimeout(20), SlowIndicator)
+
+    try {
+      const result = await app.container.get(ApplicationHealth).readiness()
+
+      expect(result.ok).toBe(false)
+      expect(result.outcomes).toMatchObject([{ name: 'slow', status: 'down' }])
+    } finally {
+      await app.close()
+    }
+  })
+
+  // An application polled by something other than HTTP still tunes the evaluation here.
+  it('applies its budgets with the probes switched off', async () => {
+    const app = await start(h => h.enabled(false).indicatorTimeout(20), SlowIndicator)
+
+    try {
+      expect((await probe(app, '/readyz')).status).toBe(404)
+      expect((await app.container.get(ApplicationHealth).readiness()).ok).toBe(false)
+    } finally {
+      await app.close()
     }
   })
 

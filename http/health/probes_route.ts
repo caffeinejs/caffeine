@@ -1,10 +1,11 @@
+import type { ApplicationHealth, ProbeOptions, ProbeResult } from '@caffeinejs/std/health'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { solutions } from '../error/util.js'
 import { authenticationExempt } from '../routing/fastify/route_config.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthOptions } from './options.js'
-import type { ProbeEndpoint, ProbeQuery, ProbeResponse } from './probes.js'
+import { renderProbe, type ProbeQuery } from './probes.js'
 
 interface ProbeRequestQuery {
   verbose?: string | string[]
@@ -12,28 +13,40 @@ interface ProbeRequestQuery {
 }
 
 /**
- * Mounts the three probes on the root server, before any controller is registered.
+ * Mounts the three probes on the root server, before any controller is registered, answering from the
+ * application's {@link ApplicationHealth}.
  *
  * The probes are marked {@link authenticationExempt}, so the authentication gate does not run for them: a
  * fallback policy cannot make the kubelet see a 401, and an authentication scheme that is failing cannot make it
  * see a 500.
  */
-export function installHealthProbes(server: FastifyInstance, options: HealthOptions, probes: ProbeEndpoint): void {
+export function installHealthProbes(server: FastifyInstance, options: HealthOptions, health: ApplicationHealth): void {
   const paths = options.paths
   assertNoCollision(server, [paths.live, paths.ready, paths.startup])
 
-  mount(server, paths.live, query => probes.live(query))
-  mount(server, paths.ready, query => probes.ready(query))
-  mount(server, paths.startup, query => probes.startup(query))
+  mount(server, paths.live, 'livez', options, probe => health.liveness(probe))
+  mount(server, paths.ready, 'readyz', options, probe => health.readiness(probe))
+  mount(server, paths.startup, 'startupz', options, probe => health.startup(probe))
 }
 
-function mount(server: FastifyInstance, path: string, handle: (query: ProbeQuery) => Promise<ProbeResponse>): void {
+function mount(
+  server: FastifyInstance,
+  path: string,
+  probe: string,
+  options: HealthOptions,
+  evaluate: (probe: ProbeOptions) => Promise<ProbeResult>,
+): void {
   server.route({
     method: ['GET', 'HEAD'],
     url: path,
     config: authenticationExempt(),
     handler: async (request: FastifyRequest, reply: FastifyReply) => {
-      const response = await handle(probeQuery(request.query as ProbeRequestQuery))
+      const query = probeQuery(request.query as ProbeRequestQuery)
+
+      // An unhonoured `exclude` only ever makes the check stricter, which is the safe direction to fail in. Rejecting
+      // the request instead would let a caller's query string take the pod out of the routing table.
+      const result = await evaluate({ exclude: options.exclude ? query.exclude : undefined })
+      const response = renderProbe(probe, result, options.verbose && query.verbose === true)
 
       return reply
         .code(response.status)
@@ -72,7 +85,7 @@ function assertNoCollision(server: FastifyInstance, probePaths: readonly string[
 
     throw new ErrHealthConfiguration(
       `Cannot mount health probes: a route is already registered at "${route.url}"` +
-        solutions('Move the probe with app.health(h => h.paths({ ... }))', 'Change the conflicting route path'),
+        solutions('Move the probe with health(h => h.paths({ ... }))', 'Change the conflicting route path'),
     )
   })
 }

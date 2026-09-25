@@ -19,8 +19,8 @@ export interface HealthReport {
 
 /**
  * A dependency check contributed to a probe. Extend it and bind the class as a singleton container bean —
- * `@Injectable()` auto-extends the parent, or bind with `.extends(HealthIndicator)` / `@Extends()`. The HTTP
- * application discovers every such bean through `container.getManyOptional(HealthIndicator)`.
+ * `@Injectable()` auto-extends the parent, or bind with `.extends(HealthIndicator)` / `@Extends()`. Every
+ * application collects such beans into its `ApplicationHealth` — the one place they are discovered.
  *
  * The lifetime must be singleton: the registry holds the instances for the process. A request-scoped or
  * transient collaborator is injected as `Provider<T>` via `$i.provide(Dep)`, not by changing this class's

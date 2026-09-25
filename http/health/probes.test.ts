@@ -1,16 +1,17 @@
 import {
   ApplicationAvailability,
+  ApplicationHealth,
   HealthIndicator,
+  HealthRegistry,
   type HealthGroup,
   type HealthReport,
+  defaultHealthRegistryOptions,
   down,
   up,
 } from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
-import { type HealthOptions, defaultHealthOptions } from './options.js'
-import { ProbeEndpoint } from './probes.js'
-import { HealthRegistry } from './registry.js'
+import { renderProbe } from './probes.js'
 
 class Stub extends HealthIndicator {
   constructor(
@@ -39,150 +40,41 @@ class Stub extends HealthIndicator {
   }
 }
 
-function endpoint(
-  indicators: HealthIndicator[] = [],
-  overrides: Partial<HealthOptions> = {},
-): {
-  probes: ProbeEndpoint
+function running(indicators: HealthIndicator[] = []): {
+  health: ApplicationHealth
   availability: ApplicationAvailability
 } {
-  const options = { ...defaultHealthOptions({}), ...overrides }
-  const availability = new ApplicationAvailability()
-  const registry = new HealthRegistry(indicators, options)
+  const availability = new ApplicationAvailability().markStarted().acceptTraffic()
+  const registry = new HealthRegistry(indicators, defaultHealthRegistryOptions())
 
-  return { probes: new ProbeEndpoint(availability, registry, options), availability }
+  return { health: new ApplicationHealth(availability, registry), availability }
 }
 
-function running(
-  indicators: HealthIndicator[] = [],
-  overrides: Partial<HealthOptions> = {},
-): {
-  probes: ProbeEndpoint
-  availability: ApplicationAvailability
-} {
-  const made = endpoint(indicators, overrides)
-  made.availability.markStarted().acceptTraffic()
-  return made
-}
+describe('renderProbe', () => {
+  it('answers ok, uncacheable, when the probe passes', async () => {
+    const { health } = running([new Stub('db', up)])
 
-describe('ProbeEndpoint', () => {
-  describe('livez', () => {
-    it('passes while a readiness indicator is failing', async () => {
-      const { probes } = running([new Stub('db', () => down('connection refused'))])
+    const response = renderProbe('readyz', await health.readiness(), false)
 
-      expect((await probes.live()).status).toBe(200)
-      expect((await probes.ready()).status).toBe(503)
-    })
-
-    it('passes while draining', async () => {
-      const { probes, availability } = running()
-
-      availability.beginDrain()
-
-      expect((await probes.live()).status).toBe(200)
-    })
-
-    it('passes before boot completes', async () => {
-      const { probes } = endpoint()
-
-      expect((await probes.live()).status).toBe(200)
-    })
-
-    it('fails only when the process is explicitly marked broken', async () => {
-      const { probes, availability } = running()
-
-      availability.markBroken('deadlocked')
-
-      expect((await probes.live()).status).toBe(503)
-    })
-
-    it('honours an indicator a user placed in the liveness group', async () => {
-      const { probes } = running([new Stub('deadlock', () => down('stuck'), ['liveness'])])
-
-      expect((await probes.live()).status).toBe(503)
-    })
+    expect(response.status).toBe(200)
+    expect(response.body).toBe('ok')
+    expect(response.headers['cache-control']).toBe('no-store')
   })
 
-  describe('readyz', () => {
-    it('fails before boot completes', async () => {
-      const { probes } = endpoint()
+  it('names only the probe when it fails and verbose is off, so the body leaks no dependency', async () => {
+    const { health } = running([new Stub('db', () => down('connection refused'))])
 
-      expect((await probes.ready()).status).toBe(503)
-    })
+    const response = renderProbe('readyz', await health.readiness(), false)
 
-    it('passes once running', async () => {
-      const { probes } = running()
-
-      const response = await probes.ready()
-
-      expect(response.status).toBe(200)
-      expect(response.body).toBe('ok')
-      expect(response.headers['cache-control']).toBe('no-store')
-    })
-
-    it('fails as soon as draining starts', async () => {
-      const { probes, availability } = running()
-
-      availability.beginDrain()
-
-      const response = await probes.ready()
-
-      expect(response.status).toBe(503)
-      expect(response.body).toBe('readyz check failed')
-    })
-
-    it('does not touch indicators while draining', async () => {
-      let checked = false
-      const indicator = new Stub('db', () => {
-        checked = true
-        return up()
-      })
-      const { probes, availability } = running([indicator])
-
-      availability.beginDrain()
-      await probes.ready()
-
-      expect(checked).toBe(false)
-    })
-
-    it('stays up when a non-critical indicator is down', async () => {
-      const { probes } = running([new Stub('metrics', () => down('unreachable'), undefined, false)])
-
-      expect((await probes.ready()).status).toBe(200)
-    })
-  })
-
-  describe('startupz', () => {
-    it('fails before boot and passes after', async () => {
-      const { probes, availability } = endpoint()
-
-      expect((await probes.startup()).status).toBe(503)
-
-      availability.markStarted()
-
-      expect((await probes.startup()).status).toBe(200)
-    })
-
-    it('keeps passing while draining, so a shutting-down pod is not treated as never-started', async () => {
-      const { probes, availability } = running()
-
-      availability.beginDrain()
-
-      expect((await probes.startup()).status).toBe(200)
-    })
+    expect(response.status).toBe(503)
+    expect(response.body).toBe('readyz check failed')
   })
 
   describe('verbose', () => {
-    it('ignores the query parameter when the feature is disabled', async () => {
-      const { probes } = running([new Stub('db', up)])
+    it('renders kubernetes-style lines', async () => {
+      const { health } = running([new Stub('db', up)])
 
-      expect((await probes.ready({ verbose: true })).body).toBe('ok')
-    })
-
-    it('renders kubernetes-style lines when enabled', async () => {
-      const { probes } = running([new Stub('db', up)], { verbose: true })
-
-      const response = await probes.ready({ verbose: true })
+      const response = renderProbe('readyz', await health.readiness(), true)
 
       expect(response.body).toBe(
         ['[+]started ok', '[+]accepting ok', '[+]live ok', '[+]db ok', 'readyz check passed', ''].join('\n'),
@@ -190,15 +82,12 @@ describe('ProbeEndpoint', () => {
     })
 
     it('names the failing indicator and its reason', async () => {
-      const { probes } = running(
-        [
-          new Stub('db', () => down('connection refused')),
-          new Stub('metrics', () => down('unreachable'), undefined, false),
-        ],
-        { verbose: true },
-      )
+      const { health } = running([
+        new Stub('db', () => down('connection refused')),
+        new Stub('metrics', () => down('unreachable'), undefined, false),
+      ])
 
-      const response = await probes.ready({ verbose: true })
+      const response = renderProbe('readyz', await health.readiness(), true)
 
       expect(response.status).toBe(503)
       expect(response.body).toContain('[-]db failed: connection refused')
@@ -207,26 +96,11 @@ describe('ProbeEndpoint', () => {
     })
 
     it('reports the drain reason', async () => {
-      const { probes, availability } = running([], { verbose: true })
+      const { health, availability } = running()
 
       availability.beginDrain()
 
-      expect((await probes.ready({ verbose: true })).body).toContain('[-]accepting failed: shutdown')
-    })
-  })
-
-  describe('exclude', () => {
-    it('ignores the query parameter when the feature is disabled', async () => {
-      const { probes } = running([new Stub('db', () => down('connection refused'))])
-
-      expect((await probes.ready({ exclude: ['db'] })).status).toBe(503)
-    })
-
-    it('skips the named indicator when enabled', async () => {
-      const { probes } = running([new Stub('db', () => down('connection refused'))], { exclude: true })
-
-      expect((await probes.ready({ exclude: ['db'] })).status).toBe(200)
-      expect((await probes.ready()).status).toBe(503)
+      expect(renderProbe('readyz', await health.readiness(), true).body).toContain('[-]accepting failed: shutdown')
     })
   })
 })
