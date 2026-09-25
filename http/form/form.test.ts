@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication } from '../index.js'
+import { BodyLimit, Controller, Post, Args, createWebApplication } from '../index.js'
 import { $p } from '../routing/picker.js'
 
 const FORM = 'application/x-www-form-urlencoded'
@@ -170,5 +170,69 @@ describe('form url-encoded body', () => {
 
     expect(res.status).not.toBe(415)
     expect(res.status).toBe(200)
+  })
+
+  it('rejects a body over the route bodyLimit with 413', async () => {
+    @Controller('/form-route-limit')
+    class FormRouteLimitController {
+      @BodyLimit(10)
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormRouteLimitController)
+    const res = await app.fetch('/form-route-limit/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${'x'.repeat(20)}`,
+    })
+
+    expect(res.status).toBe(413)
+  })
+
+  it('accepts a body over the 1 MiB default when the route bodyLimit allows it', async () => {
+    @BodyLimit('2mb')
+    @Controller('/form-route-raised')
+    class FormRouteRaisedController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, string>) {
+        return { length: b.name!.length }
+      }
+    }
+
+    const app = await appWith(FormRouteRaisedController)
+    const value = 'x'.repeat(1024 * 1024)
+    const res = await app.fetch('/form-route-raised/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${value}`,
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ length: value.length })
+  })
+
+  it('rejects a body over 1 MiB when the route sets no bodyLimit', async () => {
+    @Controller('/form-default-limit')
+    class FormDefaultLimitController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormDefaultLimitController)
+    const res = await app.fetch('/form-default-limit/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${'x'.repeat(1024 * 1024)}`,
+    })
+
+    expect(res.status).toBe(413)
   })
 })
