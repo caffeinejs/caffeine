@@ -167,11 +167,16 @@ jobs:
           # The docker exporter used by `load` rejects the provenance attestation Buildx turns on in GitHub Actions.
           BUILDX_NO_DEFAULT_ATTESTATIONS: '1'
         with:
+          # Build from the checkout rather than the Git context the action defaults to. Unlike `docker compose`, Bake
+          # resolves a compose file's `build: .` from where it runs, so each target below names its own directory.
+          source: .
           files: |
             test/services/configserver/docker-compose.yml
             test/services/oauthserver/docker-compose.yml
           load: true
           set: |
+            configserver.context=test/services/configserver
+            oauthserver.context=test/services/oauthserver
             configserver.cache-from=type=gha,scope=e2e-configserver
             configserver.cache-to=type=gha,mode=max,scope=e2e-configserver,ignore-error=true
             oauthserver.cache-from=type=gha,scope=e2e-oauthserver
