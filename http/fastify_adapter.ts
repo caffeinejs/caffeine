@@ -6,6 +6,7 @@ import type { Socket } from 'node:net'
 import { Server as TLSServer } from 'node:tls'
 
 import { Container, Scopes } from '@caffeinejs/di'
+import { ErrApplicationNotReady } from '@caffeinejs/std'
 import { ConfigStore } from '@caffeinejs/std/config'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { CookieSerializeOptions } from '@fastify/cookie'
@@ -36,7 +37,7 @@ import type {
 } from './adapter.js'
 import { kRawBasePath, stripBasePath, type BasePathCarrier } from './base_path.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
-import { ErrApplicationNotReady, ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
+import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { solutions } from './error/util.js'
 import { FastifyContext } from './fastify_context.js'
@@ -424,7 +425,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   /** @throws ErrApplicationNotReady before {@link setup} built the server. */
   #server(): FastifyInstance {
     if (this.#fastify === undefined) {
-      throw new ErrApplicationNotReady()
+      throw new ErrApplicationNotReady('reach the server')
     }
 
     return this.#fastify

@@ -1,5 +1,5 @@
 import { token } from '@caffeinejs/di'
-import { newConfiguration } from '@caffeinejs/std'
+import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
@@ -10,7 +10,6 @@ import {
 import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ErrApplicationNotReady } from './error/common.js'
 import { Controller, Get, WebApplication, createWebApplication } from './index.js'
 
 /**

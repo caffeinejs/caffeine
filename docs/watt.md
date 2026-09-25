@@ -34,11 +34,11 @@ of each snippet: an HTTP entrypoint, an internal HTTP application and a headless
 
 ## Answering Watt's checks
 
-Every application already has an `ApplicationHealth` in its container, so answering Watt is a mapping:
+Every application already has an `ApplicationHealth`, `app.health`, so answering Watt is a mapping:
 
 ```ts
 import type { Application } from '@caffeinejs/std'
-import { ApplicationHealth, type ProbeResult } from '@caffeinejs/std/health'
+import type { ProbeResult } from '@caffeinejs/std/health'
 import { getGlobal, hasField, setCustomHealthCheck, setCustomReadinessCheck } from '@platformatic/globals'
 
 interface WattCheckResult {
@@ -56,7 +56,7 @@ export function registerWattChecks(app: Application): void {
     return
   }
 
-  const health = app.container.get(ApplicationHealth)
+  const health = app.health
 
   setCustomReadinessCheck(async () => verdict('readyz', await health.readiness()))
   setCustomHealthCheck(async () => verdict('livez', await health.liveness()))
@@ -67,8 +67,8 @@ function verdict(probe: string, result: ProbeResult): WattCheckResult {
 }
 ```
 
-- **Register after `ready()` and before `run()`.** The container resolves only once `ready()` has run, and until
-  `run()` readiness refuses, so Watt never sees the application ready before it serves.
+- **Register after `ready()` and before `run()`.** `app.health` fails until `ready()` has run, and until `run()`
+  readiness refuses, so Watt never sees the application ready before it serves.
 - **Guard with `hasField`.** The setters throw wherever the global lacks their field: outside Watt, and under a
   runtime older than 3.56, which registers its global without the fields they look up. The guard makes the same code
   a no-op under plain Node, and says so under an older Watt instead of serving with no checks. Reading

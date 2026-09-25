@@ -1,5 +1,5 @@
 import type { Application } from '@caffeinejs/std'
-import { ApplicationHealth, type ProbeResult } from '@caffeinejs/std/health'
+import type { ProbeResult } from '@caffeinejs/std/health'
 import { getGlobal, hasField, setCustomHealthCheck, setCustomReadinessCheck } from '@platformatic/globals'
 
 /** What Watt reads from a check: `status`, and for a failure the status code and body its probe server answers. */
@@ -13,7 +13,7 @@ interface WattCheckResult {
  * Answers Watt's readiness and liveness checks from the application's `ApplicationHealth`, so Watt's probe server
  * (`/ready`, `/status`) reports what `/readyz` and `/livez` would. Does nothing outside Watt.
  *
- * Call it once `ready()` has run — the container resolves only then — and before `run()`, so Watt sees the
+ * Call it once `ready()` has run — `app.health` fails until then — and before `run()`, so Watt sees the
  * application refusing until it actually serves. Every Watt poll lands on the same cached, coalesced evaluation
  * the HTTP probes use, so polling both never doubles the load on a dependency.
  *
@@ -30,7 +30,7 @@ export function registerWattChecks(app: Application): void {
     return
   }
 
-  const health = app.container.get(ApplicationHealth)
+  const health = app.health
 
   setCustomReadinessCheck(async () => verdict('readyz', await health.readiness()))
   setCustomHealthCheck(async () => verdict('livez', await health.liveness()))

@@ -102,6 +102,18 @@ export class ErrApplicationRunning extends ErrCaffeine {
   }
 }
 
+/** Thrown when the application is asked for something it holds only while it is ready. */
+export class ErrApplicationNotReady extends ErrCaffeine {
+  constructor(action: string) {
+    super(
+      `Cannot ${action}: the application is not ready`,
+      'ERR_APPLICATION_NOT_READY',
+      undefined,
+      'Call "ready()" or "run()" first',
+    )
+  }
+}
+
 /**
  * A headless application: owns the DI container, the installed {@link Feature}s, and the lifecycle
  * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
@@ -208,6 +220,22 @@ export class Application<TConfig = unknown> {
    */
   get availability(): ApplicationAvailability {
     return this.#availability
+  }
+
+  /**
+   * The application's {@link ApplicationHealth}: the instance its container binds, which injecting it or
+   * `container.get(ApplicationHealth)` also returns.
+   *
+   * @throws ErrApplicationNotReady until {@link ready} has resolved, and once {@link close} has disposed the
+   *   container.
+   */
+  get health(): ApplicationHealth {
+    // `close()` leaves `#ready` set: the container is what tells a closed application apart.
+    if (!this.#ready || !this.#container.ready) {
+      throw new ErrApplicationNotReady("read the application's health")
+    }
+
+    return this.#container.get(ApplicationHealth)
   }
 
   addFeature(feature: Feature<TConfig>): this {

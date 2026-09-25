@@ -219,8 +219,8 @@ after the logger feature resolved, so there is no level to re-sync.
 merged over `listener` key by key, `run()` winning. With neither, `listen()` is called bare and Fastify's own
 default stands (`localhost`, an OS-assigned port); a `listener` naming a `host` but no `port` is refused by Node
 at `run()`, so `port: 0` is spelled out for an OS-assigned port. `run()` still resolves to `WebRunInfo`.
-`app.instance` and `app.fetch()` throw `ErrApplicationNotReady` before `ready()`; `app.address` is `undefined`
-until `run()` bound the socket.
+`app.instance` and `app.fetch()` throw `ErrApplicationNotReady` (from `@caffeinejs/std`, which `app.health` throws
+too) before `ready()`; `app.address` is `undefined` until `run()` bound the socket.
 
 ## Handler timeouts
 
