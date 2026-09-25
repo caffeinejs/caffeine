@@ -1,5 +1,5 @@
 import { type OnDestroy } from '@caffeinejs/di'
-import { toMillis, type Duration } from '@caffeinejs/std'
+import { toMillis, type Duration } from '@caffeinejs/std/duration'
 import type { Logger } from '@caffeinejs/std/logger'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'

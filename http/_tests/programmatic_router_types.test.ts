@@ -1,5 +1,5 @@
 import { $i, type Provider } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { Router, blend, createWebApplication, fst } from '../index.js'

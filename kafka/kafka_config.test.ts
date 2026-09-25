@@ -1,6 +1,7 @@
 import { token, type Container } from '@caffeinejs/di'
-import { $t, newConfiguration, createApplication } from '@caffeinejs/std'
+import { newConfiguration, createApplication } from '@caffeinejs/std'
 import { EnvConfigSource, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import {

@@ -1,4 +1,4 @@
-import { ApplicationAvailability } from '@caffeinejs/std'
+import { ApplicationAvailability } from '@caffeinejs/std/health'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 

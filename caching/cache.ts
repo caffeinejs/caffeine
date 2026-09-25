@@ -1,4 +1,4 @@
-import type { Duration } from '@caffeinejs/std'
+import type { Duration } from '@caffeinejs/std/duration'
 
 export interface CacheEntry {
   payload: string | Buffer

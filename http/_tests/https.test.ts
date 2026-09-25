@@ -3,8 +3,10 @@ import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
 
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
-import { $t, ErrShutdownTimeout, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
+import { ErrShutdownTimeout } from '@caffeinejs/std/shutdown'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, newRouter, type NodeMiddleware, type WebApplication } from '../index.js'

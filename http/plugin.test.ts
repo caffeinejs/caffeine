@@ -1,6 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
-  $t,
   FeatureBuilder,
   kFeatureName,
   newConfiguration,
@@ -9,6 +8,7 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import { createWebApplication } from './index.js'

@@ -1,5 +1,5 @@
 import { Injectable } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std'
+import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std/health'
 
 import { PrismaClient } from '../../generated/prisma/client.js'
 

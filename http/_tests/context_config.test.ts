@@ -1,6 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import { CONFIG_REFRESH_LABEL, InlineConfigSource, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
+import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { type MiddlewareFn, Router, createWebApplication } from '../index.js'

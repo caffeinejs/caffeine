@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { parseDuration, type Duration } from '@caffeinejs/std'
+import { parseDuration, type Duration } from '@caffeinejs/std/duration'
 
 import type {
   HTTPCacheCallOptions,

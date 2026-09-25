@@ -5,7 +5,7 @@ import {
   type HealthReport,
   down,
   up,
-} from '@caffeinejs/std'
+} from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
 import { type HealthOptions, defaultHealthOptions } from './options.js'

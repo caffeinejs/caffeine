@@ -1,5 +1,5 @@
 import { Router, createWebApplication, blend } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { testClient } from './index.js'

@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
-import { $t, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { expectTypeOf } from 'vitest'
 
 import { createWebApplication, type Context } from '../index.js'

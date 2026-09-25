@@ -1,7 +1,8 @@
 import { token } from '@caffeinejs/di'
 import { authConfigSchema, newRouter } from '@caffeinejs/http'
-import { $t, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'

@@ -1,7 +1,8 @@
 import type { EventEmitter } from 'node:events'
 
 import { DeferredCtor, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, toMillis, type Duration, type FeatureConfigureKit } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import { toMillis, type Duration } from '@caffeinejs/std/duration'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 
 import type { Backend } from './backend.js'

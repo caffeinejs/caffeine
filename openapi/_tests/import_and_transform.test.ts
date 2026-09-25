@@ -12,7 +12,7 @@ import {
   WebApplication,
   createWebApplication,
 } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { openapi } from '../openapi.js'

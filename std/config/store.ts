@@ -1,5 +1,5 @@
+import { toMillis } from '../duration/index.js'
 import type { Logger } from '../logger/logger.js'
-import { toMillis } from '../shutdown/shutdown_options.js'
 import { ChangeNotifier } from './change_notifier.js'
 import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'

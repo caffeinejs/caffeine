@@ -12,7 +12,7 @@ A new behaviour is another function of that shape. `join` does not gain methods,
 
 ## `timeout`
 
-A number is milliseconds. A string is a `Duration`, converted with `toMillis` from `@caffeinejs/std` (`parseDuration` returns seconds). `timeout(1)` is 1ms.
+A number is milliseconds. A string is a `Duration`, converted with `toMillis` from `@caffeinejs/std/duration` (`parseDuration` returns seconds). `timeout(1)` is 1ms.
 
 A string that fails `DURATION_PATTERN`, or a number that is not finite and greater than 0, throws `ErrBFFInvalidTimeout` when `timeout(...)` is called. `parseDuration('nope')` is `0`, and a 0ms timer would abort every call.
 

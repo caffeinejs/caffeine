@@ -1,7 +1,7 @@
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
 import { Guard, type GuardReturn } from '@caffeinejs/http/guards'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ErrTestClientAlreadyReady, ErrTestClientTarget, newTestContainer, testClient } from './index.js'

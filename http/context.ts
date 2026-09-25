@@ -1,5 +1,5 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/std'
 import type { ConfigSnapshot } from '@caffeinejs/std/config'
+import type { AnySchema, InferSchema } from '@caffeinejs/std/schema'
 
 import type { AdapterTypes, AnyAdapterTypes } from './adapter.js'
 import type { RouteValidationSchema } from './routing/spec.js'

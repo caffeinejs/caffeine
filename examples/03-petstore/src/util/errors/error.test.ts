@@ -12,7 +12,7 @@ import {
   Schema,
   createWebApplication,
 } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'

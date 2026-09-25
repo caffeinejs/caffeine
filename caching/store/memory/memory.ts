@@ -1,5 +1,5 @@
-import { parseDuration } from '@caffeinejs/std'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
+import { parseDuration } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 
 import type {

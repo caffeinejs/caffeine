@@ -1,4 +1,6 @@
-import { $t, type Duration, isKubernetes, toMillis } from '@caffeinejs/std'
+import { type Duration, toMillis } from '@caffeinejs/std/duration'
+import { $t } from '@caffeinejs/std/schema'
+import { isKubernetes } from '@caffeinejs/std/shutdown'
 
 interface EnvLike {
   [key: string]: string | undefined

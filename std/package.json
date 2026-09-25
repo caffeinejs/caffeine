@@ -19,9 +19,17 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
+    "./duration": {
+      "types": "./dist/duration/index.d.ts",
+      "default": "./dist/duration/index.js"
+    },
     "./framework": {
       "types": "./dist/framework/index.d.ts",
       "default": "./dist/framework/index.js"
+    },
+    "./health": {
+      "types": "./dist/health/index.d.ts",
+      "default": "./dist/health/index.js"
     },
     "./logger": {
       "types": "./dist/logger/index.d.ts",
@@ -38,6 +46,10 @@
     "./schema": {
       "types": "./dist/schema/index.d.ts",
       "default": "./dist/schema/index.js"
+    },
+    "./shutdown": {
+      "types": "./dist/shutdown/index.d.ts",
+      "default": "./dist/shutdown/index.js"
     },
     "./package.json": "./package.json"
   },

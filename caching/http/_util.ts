@@ -10,7 +10,7 @@ import {
   type AdapterRouteOptions,
   type ResolvedRouteConstraint,
 } from '@caffeinejs/http'
-import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std'
+import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
 
 import { CacheControlOptions, ETagGenerator } from './cache_control.js'
 

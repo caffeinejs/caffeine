@@ -1,4 +1,5 @@
-import { isKubernetes, type Duration } from '@caffeinejs/std'
+import { type Duration } from '@caffeinejs/std/duration'
+import { isKubernetes } from '@caffeinejs/std/shutdown'
 
 import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
 

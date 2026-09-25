@@ -1,4 +1,3 @@
-import { $t } from '@caffeinejs/std'
 import {
   InlineConfigSource,
   loadConfig,
@@ -6,6 +5,7 @@ import {
   type ConfigView,
   type LiveConfig,
 } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { bench, do_not_optimize, group, run, summary } from 'mitata'
 
 // What a configuration read costs on a request path: three property levels, `app.server.port`.

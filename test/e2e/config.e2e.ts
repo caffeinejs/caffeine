@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
-import { $t, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import {
   ConfigStore,
   EnvConfigSource,
@@ -14,6 +14,7 @@ import {
   type ConfigSource,
   type InferConfig,
 } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {

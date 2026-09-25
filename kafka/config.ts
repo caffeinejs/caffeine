@@ -1,5 +1,5 @@
 import type { Ctor } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import type { Deserializers, Message, MessageToProduce, Serializers } from '@platformatic/kafka'
 
 import type { DeadLetterOptions, ErrorClassifier, KafkaRecoverer, RetryPolicy } from './error_handling.js'

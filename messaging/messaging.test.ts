@@ -1,4 +1,5 @@
-import { $t, createApplication } from '@caffeinejs/std'
+import { createApplication } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import type { SchemaIssue } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 

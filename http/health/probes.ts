@@ -1,4 +1,4 @@
-import type { ApplicationAvailability } from '@caffeinejs/std'
+import type { ApplicationAvailability } from '@caffeinejs/std/health'
 
 import type { HealthOptions } from './options.js'
 import type { GroupOutcome, HealthRegistry, IndicatorOutcome } from './registry.js'

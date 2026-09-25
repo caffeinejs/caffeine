@@ -1,4 +1,5 @@
-import { $t, type Duration } from '@caffeinejs/std'
+import { type Duration } from '@caffeinejs/std/duration'
+import { $t } from '@caffeinejs/std/schema'
 
 /**
  * The distributed lock slice of the configuration tree. Every duration accepts `'5s'`-style strings or

@@ -1,5 +1,5 @@
 import { Router, WebApplication, constraints, createWebApplication, version } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'

@@ -8,10 +8,8 @@ import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import { InlineConfigSource, JSONConfigSource, type InferConfig } from './config/index.js'
 import {
-  $t,
   ErrApplicationStarted,
   ErrFeatureAlreadyInstalled,
-  ErrShutdownTimeout,
   FeatureBuilder,
   type BootstrapKit,
   type FeatureConfigureKit,
@@ -20,12 +18,12 @@ import {
   kFeatureConfigure,
   kFeatureName,
   type Feature,
-  type ShutdownSignal,
-  type SignalDispatcher,
   createApplication,
   newConfiguration,
 } from './index.js'
 import { newNoopLogger, type Logger } from './logger/index.js'
+import { $t } from './schema/t.js'
+import { ErrShutdownTimeout, type ShutdownSignal, type SignalDispatcher } from './shutdown/index.js'
 
 // The framework's own block, declared as the application root so a source can be registered against it.
 const caffeineSchema = $t.Object({

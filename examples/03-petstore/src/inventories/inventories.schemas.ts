@@ -1,4 +1,4 @@
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, type InferSchema } from '@caffeinejs/std/schema'
 
 /**
  * An open map rather than fixed keys: the response carries one entry per status that has pets, so the shape is

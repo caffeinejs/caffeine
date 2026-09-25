@@ -1,5 +1,5 @@
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std'
+import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std/health'
 import { describe, expect, it } from 'vitest'
 
 import { ErrHealthIndicatorNotSingleton } from './errors.js'

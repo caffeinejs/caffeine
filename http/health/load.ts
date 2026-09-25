@@ -1,5 +1,5 @@
 import { Lifetime, Scopes, type Binding, type Container } from '@caffeinejs/di'
-import { HealthIndicator } from '@caffeinejs/std'
+import { HealthIndicator } from '@caffeinejs/std/health'
 
 import { solutions } from '../error/util.js'
 import { ErrHealthIndicatorNotSingleton } from './errors.js'

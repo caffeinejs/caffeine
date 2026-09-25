@@ -6,8 +6,8 @@ import {
   type HTTPPluginFactory,
   type HTTPSetupContext,
 } from '@caffeinejs/http'
-import type { Duration } from '@caffeinejs/std'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
+import type { Duration } from '@caffeinejs/std/duration'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'

@@ -1,4 +1,4 @@
-import { parseDuration } from '@caffeinejs/std'
+import { parseDuration } from '@caffeinejs/std/duration'
 import { RESP_TYPES } from '@redis/client'
 
 import type {

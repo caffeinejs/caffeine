@@ -1,4 +1,4 @@
-import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from '@caffeinejs/std'
+import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from '@caffeinejs/std/health'
 
 /** One indicator's outcome for a single evaluation. */
 export interface IndicatorOutcome {

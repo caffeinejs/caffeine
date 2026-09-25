@@ -1,4 +1,4 @@
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { FastifyStaticOptions } from '@fastify/static'
 
 /**

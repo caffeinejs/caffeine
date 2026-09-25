@@ -1,5 +1,5 @@
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
-import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std'
+import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std/shutdown'
 import { describe, it, expect, beforeEach } from 'vitest'
 
 import type { WebApplication } from '../application.js'

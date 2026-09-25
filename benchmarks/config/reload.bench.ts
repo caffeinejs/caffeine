@@ -1,4 +1,3 @@
-import { $t } from '@caffeinejs/std'
 import {
   EnvConfigSource,
   InlineConfigSource,
@@ -6,6 +5,7 @@ import {
   type ConfigSchema,
   type ConfigSource,
 } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import { bench, do_not_optimize, run, summary } from 'mitata'
 
 // What one reload costs: 448 leaves, 4 levels deep, 4 sources, validated against a `$t` schema. One case writes one

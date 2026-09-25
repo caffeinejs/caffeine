@@ -1,4 +1,5 @@
-import { $t, kFeatureName } from '@caffeinejs/std'
+import { kFeatureName } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import FastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 

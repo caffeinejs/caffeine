@@ -1,4 +1,4 @@
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import {

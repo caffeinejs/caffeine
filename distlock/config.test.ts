@@ -1,6 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { $t, createApplication, newConfiguration, type InferSchema } from '@caffeinejs/std'
+import { createApplication, newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'

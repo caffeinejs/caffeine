@@ -1,5 +1,5 @@
 import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'

@@ -1,4 +1,4 @@
-import type { Duration } from '@caffeinejs/std'
+import type { Duration } from '@caffeinejs/std/duration'
 
 /** What the HTTP cache keeps of a response, and replays on a hit. */
 export interface HTTPCacheEntry {

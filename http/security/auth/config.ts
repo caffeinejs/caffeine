@@ -1,6 +1,5 @@
-import { $t } from '@caffeinejs/std'
 import type { ConfigSchema } from '@caffeinejs/std/config'
-import { validateSchema, type AnySchema } from '@caffeinejs/std/schema'
+import { $t, validateSchema, type AnySchema } from '@caffeinejs/std/schema'
 
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'

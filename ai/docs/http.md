@@ -101,7 +101,7 @@ handling — with the configuration written as a chain instead of decorators.
 
 ```ts
 import { $i } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { Router } from '@caffeinejs/http'
 
 const pets = new Router('/pets')

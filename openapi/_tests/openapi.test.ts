@@ -17,7 +17,7 @@ import {
   createWebApplication,
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { type FastifyInstance } from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'

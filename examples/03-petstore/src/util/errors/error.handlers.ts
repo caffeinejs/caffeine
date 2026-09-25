@@ -1,6 +1,6 @@
 import { HTML } from '@caffeinejs/html'
 import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 
 import { ErrorPage } from './html/ErrorPage.js'
 

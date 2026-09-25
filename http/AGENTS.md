@@ -143,12 +143,12 @@ container binding, so there is no `kHealthOptions` to read back. `WebApplication
 exists; cache staleness at shutdown is handled by the plugin's own Fastify `onClose` hook instead.
 
 Graceful shutdown — the drain delay, the teardown budget, the signals — is its own feature, `ShutdownBuilder`
-from `@caffeinejs/std` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
+from `@caffeinejs/std/shutdown` (`[kFeatureName] === 'shutdown'`), registered unconditionally by both
 `createWebApplication()` and headless `createApplication()` and configured with `app.shutdown((s, { config }) => …)`.
 It binds the resolved policy under `kShutdownPolicy`; `Application` reads it. Health does not touch shutdown.
 `Application` also enforces the budget, over `stop()` and `container.dispose()` together — `WebApplication` only
 supplies the two halves (`stop()` tears the adapter down, `forceStop()` cuts its connections), and
-`ErrShutdownTimeout` lives in `@caffeinejs/std`, not `error/common.ts`.
+`ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 
 A built-in's resolved options that other code must read are container bindings, not configuration keys (health
 has none). There is no `featureConfigKey` and

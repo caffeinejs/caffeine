@@ -7,7 +7,7 @@ import {
   type FastifyContextRequest,
   type Principal,
 } from '@caffeinejs/http'
-import type { Duration } from '@caffeinejs/std'
+import type { Duration } from '@caffeinejs/std/duration'
 import type { FastifyRequest } from 'fastify'
 
 import './_fastify.js'

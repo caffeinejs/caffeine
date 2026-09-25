@@ -10,7 +10,7 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 - **Persistence** via **Prisma Client** over **PostgreSQL** (no in-memory store).
 - **Two layers only**: routes → repository. Repositories own every query and the row → API-DTO mapping; routes
   own validation and status codes.
-- **One schema file per feature**, in the `$t` dialect from `@caffeinejs/std`. A `$t` schema is JSON Schema, so
+- **One schema file per feature**, in the `$t` dialect from `@caffeinejs/std/schema`. A `$t` schema is JSON Schema, so
   it compiles straight into a Fastify Ajv validator — and the DTO types are inferred from it with `InferSchema`,
   so nothing is declared twice.
 - **Auth**: two segregated schemes — GitHub OAuth 2.0 as the default, and Basic guarding the API docs.

@@ -1,6 +1,6 @@
 import { $p, type Route } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIOperationConflict } from '../errors.js'

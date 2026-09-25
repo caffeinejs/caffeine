@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
-import { $t, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 
 /**
  * Everything this application reads from its environment, in one schema.

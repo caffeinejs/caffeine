@@ -1,4 +1,4 @@
-import { $t, type InferSchema } from '@caffeinejs/std'
+import { $t, type InferSchema } from '@caffeinejs/std/schema'
 
 /** Every schema this feature declares, and the types inferred from them. */
 

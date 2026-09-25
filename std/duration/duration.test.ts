@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { DURATION_PATTERN, parseDuration } from './index.js'
+import { DURATION_PATTERN, parseDuration, toMillis } from './index.js'
 
 describe('parseDuration', () => {
   describe('numbers', () => {
@@ -78,5 +78,19 @@ describe('DURATION_PATTERN', () => {
     for (const value of ['5 hours', '', 'invalid', '10x', '1h ', 'h', '1']) {
       expect(re.test(value)).toBe(false)
     }
+  })
+})
+
+describe('toMillis', () => {
+  // parseDuration returns seconds for a string and passes a number through, so the conversion has to be explicit.
+  it('treats a bare number as milliseconds', () => {
+    expect(toMillis(5_000)).toBe(5_000)
+  })
+
+  it('converts a duration string to milliseconds', () => {
+    expect(toMillis('5s')).toBe(5_000)
+    expect(toMillis('500ms')).toBe(500)
+    expect(toMillis('2m')).toBe(120_000)
+    expect(toMillis('1m30s')).toBe(90_000)
   })
 })

@@ -1,4 +1,4 @@
-import type { ApplicationAvailability, HealthIndicator } from '@caffeinejs/std'
+import type { ApplicationAvailability, HealthIndicator } from '@caffeinejs/std/health'
 
 import type { HealthOptions } from './options.js'
 import { ProbeEndpoint } from './probes.js'

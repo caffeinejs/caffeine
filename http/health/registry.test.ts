@@ -1,4 +1,4 @@
-import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from '@caffeinejs/std'
+import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
 import { HealthRegistry } from './registry.js'

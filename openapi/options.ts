@@ -1,5 +1,5 @@
 import type { Route, RouteAuthzOptions, RouteGroup } from '@caffeinejs/http'
-import type { AnySchema } from '@caffeinejs/std'
+import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type {
   ComponentsObject,

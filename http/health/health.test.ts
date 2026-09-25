@@ -1,5 +1,5 @@
 import { token } from '@caffeinejs/di'
-import { newConfiguration, type InferSchema, $t } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import {
   CONFIG_REFRESH_LABEL,
   EnvConfigSource,
@@ -7,6 +7,7 @@ import {
   type InferConfig,
   type ConfigSource,
 } from '@caffeinejs/std/config'
+import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { WebApplication, createWebApplication } from '../index.js'

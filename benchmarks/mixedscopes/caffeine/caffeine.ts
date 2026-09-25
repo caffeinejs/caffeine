@@ -1,6 +1,6 @@
 import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
 import { Controller, Get, createWebApplication, Args, Post, Schema, $p, FastifyContext } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)
 

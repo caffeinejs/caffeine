@@ -10,8 +10,7 @@ import {
   type ConfigStore,
   type InferConfig,
 } from './config/index.js'
-import type { Duration } from './duration/index.js'
-import { toMillis } from './shutdown/shutdown_options.js'
+import { type Duration, toMillis } from './duration/index.js'
 
 /**
  * Fluent definition of an application's configuration, started with {@link newConfiguration}.

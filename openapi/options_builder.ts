@@ -1,5 +1,5 @@
 import type { Route, RouteGroup } from '@caffeinejs/http'
-import type { AnySchema } from '@caffeinejs/std'
+import type { AnySchema } from '@caffeinejs/std/schema'
 
 import {
   defaultOpenAPIOptions,

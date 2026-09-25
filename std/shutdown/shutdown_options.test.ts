@@ -6,24 +6,9 @@ import {
   isKubernetes,
   isTestEnvironment,
   mergeShutdownConfig,
-  toMillis,
   validateShutdownOptions,
 } from './shutdown_options.js'
 import { noopSignalDispatcher } from './signals.js'
-
-describe('toMillis', () => {
-  // parseDuration returns seconds for a string and passes a number through, so the conversion has to be explicit.
-  it('treats a bare number as milliseconds', () => {
-    expect(toMillis(5_000)).toBe(5_000)
-  })
-
-  it('converts a duration string to milliseconds', () => {
-    expect(toMillis('5s')).toBe(5_000)
-    expect(toMillis('500ms')).toBe(500)
-    expect(toMillis('2m')).toBe(120_000)
-    expect(toMillis('1m30s')).toBe(90_000)
-  })
-})
 
 describe('isKubernetes', () => {
   it('detects the kubelet-injected service host', () => {

@@ -1,5 +1,5 @@
 import { Controller, Get, createWebApplication, Args, Post, Schema, $p, FastifyContext } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 

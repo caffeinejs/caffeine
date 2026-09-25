@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
-import { $t, newConfiguration } from '@caffeinejs/std'
+import { newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import FastifyCookie, { sign } from '@fastify/cookie'
 import { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'

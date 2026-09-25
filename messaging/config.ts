@@ -1,4 +1,4 @@
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 
 import type { RetryPolicy } from './error_handling.js'
 

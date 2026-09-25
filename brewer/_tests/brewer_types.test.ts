@@ -1,5 +1,5 @@
 import { Router, blend, createWebApplication, type RouteDef, type RoutesOf } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'

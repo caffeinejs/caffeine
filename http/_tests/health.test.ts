@@ -1,5 +1,5 @@
 import { Scopes, type Ctor } from '@caffeinejs/di'
-import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std'
+import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std/health'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'

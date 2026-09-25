@@ -1,6 +1,6 @@
 import type { InjectionToken } from '@caffeinejs/di'
-import type { Duration } from '@caffeinejs/std'
 import type { ByteSize } from '@caffeinejs/std/bytes'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { ETagGenerator } from './cache_control.js'
 import type { CacheObserver } from './observer.js'

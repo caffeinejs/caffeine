@@ -1,5 +1,5 @@
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std'
+import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { Controller, Get, Router, blend, createWebApplication } from '../index.js'

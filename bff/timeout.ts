@@ -1,4 +1,4 @@
-import { DURATION_PATTERN, toMillis, type Duration } from '@caffeinejs/std'
+import { DURATION_PATTERN, toMillis, type Duration } from '@caffeinejs/std/duration'
 
 import type { Call } from './call.js'
 import { ErrBFFInvalidTimeout, ErrBFFTimeout } from './errors.js'

@@ -9,7 +9,8 @@ import {
   type ConfigSource,
   type InferConfig,
 } from '../config/index.js'
-import { $t, createApplication, newConfiguration } from '../index.js'
+import { createApplication, newConfiguration } from '../index.js'
+import { $t } from '../schema/t.js'
 import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'
 import { noopSignalDispatcher } from './signals.js'
 

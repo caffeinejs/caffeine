@@ -1,4 +1,4 @@
-import { toMillis, type Duration } from '@caffeinejs/std'
+import { toMillis, type Duration } from '@caffeinejs/std/duration'
 import type { Logger } from '@caffeinejs/std/logger'
 
 import { extendChannel, publishLost, releaseChannel, traced, type Writable } from './_channels.js'

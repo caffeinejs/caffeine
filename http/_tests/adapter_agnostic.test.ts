@@ -1,15 +1,14 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
-  $t,
   FeatureBuilder,
   kFeatureConfigure,
   kFeatureName,
   newConfiguration,
   type Feature,
   type FeatureConfigurer,
-  type InferSchema,
 } from '@caffeinejs/std'
 import { InlineConfigSource, type InferConfig, type LiveConfig } from '@caffeinejs/std/config'
+import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 

@@ -41,3 +41,13 @@ export function parseDuration(value: Duration): number {
 
   return total
 }
+
+/**
+ * Normalizes a {@link Duration} to milliseconds.
+ *
+ * {@link parseDuration} returns **seconds** for a string and passes a number through untouched, so its output can
+ * never reach a timer directly. A number here is already milliseconds.
+ */
+export function toMillis(value: Duration): number {
+  return typeof value === 'number' ? value : Math.round(parseDuration(value) * 1000)
+}
