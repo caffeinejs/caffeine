@@ -95,7 +95,7 @@ export class ErrApplicationStarted extends ErrCaffeine {
  */
 export class Application<TConfig = unknown> {
   readonly #container: Container
-  readonly #services: Feature[] = []
+  readonly #features: Feature[] = []
   readonly #installed = new Set<string>()
   readonly #availability = new ApplicationAvailability()
   readonly #definition: ConfigDefinition<unknown>
@@ -193,12 +193,12 @@ export class Application<TConfig = unknown> {
    * Records a feature without going through {@link addFeature}, which a subclass overrides — the constructor
    * runs before the subclass's own fields exist, so calling the override from there reads them unset.
    *
-   * This is also the one place the application's configuration type is erased. `#services` is
+   * This is also the one place the application's configuration type is erased. `#features` is
    * `Feature<unknown>[]` because the store behind the kits is `ConfigStore<unknown>` by design, and a feature's
    * hooks take their kit as a method, so the parameter is bivariant and the erasure holds both ways.
    */
   #register(feature: Feature<TConfig>): void {
-    this.#services.push(feature as Feature)
+    this.#features.push(feature as Feature)
   }
 
   addModules(module: Module | ModuleFn, ...modules: Array<Module | ModuleFn>): this {
@@ -375,7 +375,7 @@ export class Application<TConfig = unknown> {
     }
 
     // Concurrent: a bootstrap hook only looks bindings up, so no feature's hook depends on another's.
-    const kit = this.serviceKit()
+    const kit = this.bootstrapKit()
     const bootstrapPending: Promise<void>[] = []
 
     for (const feature of features) {
@@ -568,8 +568,8 @@ export class Application<TConfig = unknown> {
   }
 
   /** The features installed on the application (before any framework-prepended ones). */
-  protected get services(): readonly Feature[] {
-    return this.#services
+  protected get features(): readonly Feature[] {
+    return this.#features
   }
 
   /**
@@ -586,7 +586,7 @@ export class Application<TConfig = unknown> {
   /**
    * The kit passed to {@link kFeatureBootstrap}. Binding is closed; the container exposes lookup only.
    */
-  protected serviceKit(): BootstrapKit {
+  protected bootstrapKit(): BootstrapKit {
     return {
       container: this.#container,
       config: this.configStore.live,
@@ -598,7 +598,7 @@ export class Application<TConfig = unknown> {
 
   /** The features configured then bootstrapped. Subclasses may prepend framework ones. */
   protected configurers(): Feature[] {
-    return [...this.#services]
+    return [...this.#features]
   }
 
   /** Ran during `ready()`, after `container.init()`. Subclasses wire their platform here. */

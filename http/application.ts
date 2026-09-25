@@ -64,7 +64,7 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
 /**
  * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link Adapter}, Fastify's unless
  * another is given. `setup()` builds routing and sets the adapter up; `start()` runs it;
- * `stop()` tears it down. `Application` handles the container, services, and lifecycle hooks.
+ * `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
  *
  * Configures fluently, and is itself the running instance — there is no separate builder:
  *
@@ -463,7 +463,7 @@ export class WebApplication<
    * order `.with(...)` calls were written.
    */
   protected override configurers(): Feature[] {
-    return [this.#errorHandling, ...this.services]
+    return [this.#errorHandling, ...this.features]
   }
 
   /**

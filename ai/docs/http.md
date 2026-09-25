@@ -40,11 +40,10 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 TLS and HTTP/2 are `factory` options, so configuration can switch them at `ready()`:
 
 ```ts
-createWebApplication({ config })
-  .server(({ config }) => ({
-    factory: { https: { key: config.tls.key, cert: config.tls.cert } },
-    listener: config.server,
-  }))
+createWebApplication({ config }).server(({ config }) => ({
+  factory: { https: { key: config.tls.key, cert: config.tls.cert } },
+  listener: config.server,
+}))
 ```
 
 - `https: { key, cert, ... }` serves TLS over HTTP/1.1.
