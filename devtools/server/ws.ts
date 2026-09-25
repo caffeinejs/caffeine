@@ -39,11 +39,19 @@ export class WsBroadcaster {
   }
 
   close(): Promise<void> {
+    const wss = this.wss
+    this.wss = null
+
     return new Promise((resolve, reject) => {
-      if (!this.wss) {
+      if (!wss) {
         return resolve()
       }
-      this.wss.close(err => (err ? reject(err) : resolve()))
+      // `ws` stops accepting on close() but leaves the open connections alone, and the HTTP server under it cannot
+      // close while an open devtools tab still holds one.
+      for (const client of wss.clients) {
+        client.terminate()
+      }
+      wss.close(err => (err ? reject(err) : resolve()))
     })
   }
 }

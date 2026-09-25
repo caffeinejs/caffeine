@@ -62,13 +62,20 @@ export class DevtoolsServer {
     return this
   }
 
+  /**
+   * Disconnects every open devtools tab and closes the server. The container calls it when it is disposed, so it
+   * resolves at once when there is nothing left to stop.
+   */
   stop(): Promise<void> {
+    const server = this.server
+    this.server = null
+
     return new Promise((resolve, reject) => {
       this.ws.close().then(() => {
-        if (!this.server) {
+        if (!server) {
           return resolve()
         }
-        this.server.close(err => (err ? reject(err) : resolve()))
+        server.close(err => (err ? reject(err) : resolve()))
       }, reject)
     })
   }
