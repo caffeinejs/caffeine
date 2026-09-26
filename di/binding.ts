@@ -241,6 +241,36 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
 }
 
 /**
+ * The bindings an injection receives out of the candidates answering to its key.
+ *
+ * A collecting injection receives every candidate but `own`, the consumer's own bindings, which it would otherwise
+ * build while being built. Any other injection receives the only candidate, or the primary among several. Several
+ * with no primary are ambiguous, and all of them are returned.
+ */
+export function injectedBindings(
+  candidates: Iterable<Binding>,
+  collects: boolean,
+  own: Iterable<Binding> = [],
+): Binding[] {
+  const all = [...candidates]
+
+  if (collects) {
+    const excluded = new Set(own)
+
+    return excluded.size === 0 ? all : all.filter(b => !excluded.has(b))
+  }
+
+  if (all.length > 1) {
+    const primary = all.find(b => b.primary)
+    if (primary !== undefined) {
+      return [primary]
+    }
+  }
+
+  return all
+}
+
+/**
  * Returns the unique binding from the given bindings.
  * If no unique binding is found, the onKeyNoFound callback will be called.
  * If no unique binding is found, the onNoUniqueFound callback will be called.
