@@ -191,7 +191,7 @@ export class CaffeineIoC implements Container {
   /**
    * Whether the container has at least one request scoped component.
    */
-  get hasRequestScoped(): boolean {
+  get hasRequestScope(): boolean {
     return this._hasRequestScoped
   }
 

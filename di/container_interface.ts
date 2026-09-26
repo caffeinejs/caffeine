@@ -114,7 +114,7 @@ export interface Container extends AsyncDisposable {
   readonly refresher: Refresher
   readonly requestScopeManager: RequestScopeManager
   readonly ready: boolean
-  readonly hasRequestScoped: boolean
+  readonly hasRequestScope: boolean
 
   readonly [Symbol.toStringTag]: string
 

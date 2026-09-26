@@ -301,7 +301,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       done()
     })
 
-    if (container.hasRequestScoped) {
+    if (container.hasRequestScope) {
       const man = container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
         this.#fastifyCtxAls.run(req.httpContext, () => {
