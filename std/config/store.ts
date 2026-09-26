@@ -54,7 +54,8 @@ export interface SourceState {
 }
 
 interface ViewState<T> {
-  readonly select: (config: ConfigSnapshot<T>) => unknown
+  // A method rather than a function-typed property, so `T` stays covariant as `ConfigStore<out T>` declares.
+  select(config: ConfigSnapshot<T>): unknown
   readonly derive: ((selected: unknown) => unknown) | undefined
   readonly notifier: ChangeNotifier<unknown>
   /** A plain object whose `value` the store assigns, so a read is a property load. */
@@ -75,7 +76,7 @@ interface PendingReload {
  *
  * Instances come from {@link loadConfig}.
  */
-export class ConfigStore<T> {
+export class ConfigStore<out T> {
   /** What `loadConfig()` was given. `ConfigModule` reads the keys off it. */
   readonly definition: ConfigDefinition<T>
   readonly #profiles: readonly string[]

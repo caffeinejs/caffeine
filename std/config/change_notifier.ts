@@ -2,7 +2,9 @@ import type { ConfigChange, ConfigChangeListener } from './types.js'
 
 /** What one listener is owed: the value it last saw, and the newest one it has not seen yet. */
 interface Delivery<V> {
-  readonly listener: ConfigChangeListener<V>
+  // A method rather than a `ConfigChangeListener<V>` property, so `V` stays covariant: a notifier held by a
+  // `ConfigStore<C>` is then one of a `ConfigStore<unknown>`, as its declaration file already says.
+  listener(value: V, previous: V, change: ConfigChange): void | Promise<void>
   delivered: V
   pending: { value: V; change: ConfigChange } | undefined
   running: Promise<void> | undefined
