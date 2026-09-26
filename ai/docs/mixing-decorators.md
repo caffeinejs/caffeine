@@ -30,11 +30,11 @@ target by string (`target: 'Address'`), so entity modules never import each othe
 `DataSource` — opened before `ready()` returns, closed on shutdown — and the repository is injected:
 
 ```ts
-import { $typeorm, typeorm } from '@caffeinejs/typeorm'
+import { $repository, TypeORM } from '@caffeinejs/typeorm'
 
-app.with(typeorm(t => t.dataSource({ type: 'postgres', url, entities: [CustomerEntity] })))
+app.with(TypeORM(t => t.dataSource({ type: 'postgres', url, entities: [CustomerEntity] })))
 
-@Injectable([$typeorm.repository(CustomerEntity)])
+@Injectable([$repository(CustomerEntity)])
 class Customers {
   constructor(private readonly customers: Repository<Customer>) {}
 }

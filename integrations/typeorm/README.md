@@ -13,13 +13,13 @@ Entities are [`EntitySchema`](https://typeorm.io/docs/entity/separating-entity-d
 classes — see [Entities](#entities).
 
 ```ts
-import { $typeorm, typeorm } from '@caffeinejs/typeorm'
+import { $repository, TypeORM } from '@caffeinejs/typeorm'
 
 const app = createApplication().with(
-  typeorm(t => t.dataSource({ type: 'postgres', url: process.env.DATABASE_URL, entities: [UserEntity] })),
+  TypeORM(t => t.dataSource({ type: 'postgres', url: process.env.DATABASE_URL, entities: [UserEntity] })),
 )
 
-@Injectable([$typeorm.repository(UserEntity)])
+@Injectable([$repository(UserEntity)])
 class Users {
   constructor(private readonly users: Repository<User>) {}
 
@@ -41,7 +41,7 @@ reads its own schema and hands the values over:
 
 ```ts
 app.with(
-  typeorm<AppConfig>((t, { config }) =>
+  TypeORM<AppConfig>((t, { config }) =>
     t.dataSource({ type: 'postgres', url: config.app.db.url, entities: [UserEntity] }),
   ),
 )
@@ -54,10 +54,10 @@ An unnamed feature binds its DataSource under TypeORM's `DataSource`. A named on
 
 ```ts
 const app = createApplication()
-  .with(typeorm(t => t.dataSource(mainOptions)))
-  .with(typeorm('reports', t => t.dataSource(reportsOptions)))
+  .with(TypeORM(t => t.dataSource(mainOptions)))
+  .with(TypeORM('reports', t => t.dataSource(reportsOptions)))
 
-@Injectable([$typeorm.repository(UserEntity), $typeorm.repository(EventEntity, 'reports')])
+@Injectable([$repository(UserEntity), $repository(EventEntity, 'reports')])
 class Dashboard {
   constructor(
     private readonly users: Repository<User>,
@@ -74,7 +74,7 @@ instance twice throws `ErrFeatureAlreadyInstalled`.
 
 ## Providing the DataSource yourself
 
-The feature is optional. A `@Configuration` class works just as well, and `$typeorm.repository` finds it the
+The feature is optional. A `@Configuration` class works just as well, and `$repository` finds it the
 same way:
 
 ```ts
@@ -90,16 +90,16 @@ class Datasources {
 
 A second DataSource is `@ProvidesAsync(DataSource, kReports)`, which binds it under `kReports` alone — the
 name on `@Provides` replaces the key rather than qualifying it. Pass that same token as the second argument
-to `$typeorm.repository`. Make it a **symbol** token: a string there is read as an instance name, not as a
+to `$repository`. Make it a **symbol** token: a string there is read as an instance name, not as a
 key.
 
 ## Composing with `$i`
 
-`$typeorm.repository(...)` produces the same kind of value the `$i` helpers do, so it composes with them:
+`$repository(...)` produces the same kind of value the `$i` helpers do, so it composes with them:
 
 ```ts
-$i.optional($typeorm.repository(UserEntity)) // Repository<User> | undefined
-$i.provide($typeorm.repository(UserEntity)) // Provider<Repository<User>>
+$i.optional($repository(UserEntity)) // Repository<User> | undefined
+$i.provide($repository(UserEntity)) // Provider<Repository<User>>
 ```
 
 `$i.allOf` and `$i.mapped` do not: each decides what an injection resolves to, and so does this one, so the

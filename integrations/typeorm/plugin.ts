@@ -15,9 +15,9 @@ export type TypeORMConfigurer<C = unknown> = FeatureConfigurer<TypeORMBuilder<C>
  *
  * @throws {@link ErrMissingDataSourceOptions} at `ready()`, when the callback never calls `dataSource(...)`.
  */
-export function typeorm<C = unknown>(configure: TypeORMConfigurer<C>): Feature<C>
-export function typeorm<C = unknown>(instance: string, configure: TypeORMConfigurer<C>): Feature<C>
-export function typeorm<C = unknown>(
+export function TypeORM<C = unknown>(configure: TypeORMConfigurer<C>): Feature<C>
+export function TypeORM<C = unknown>(instance: string, configure: TypeORMConfigurer<C>): Feature<C>
+export function TypeORM<C = unknown>(
   instanceOrConfigure: string | TypeORMConfigurer<C>,
   maybeConfigure?: TypeORMConfigurer<C>,
 ): Feature<C> {

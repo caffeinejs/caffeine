@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { type FakeRepository, FakeDataSource } from './_testdata/datasource.testkit.js'
 import { type Order, OrderEntity, type User, UserEntity } from './_testdata/entities.testkit.js'
 import { ErrNoDataSource, ErrNoUniqueDataSource } from './errors.js'
-import { $typeorm } from './injection.js'
+import { $repository } from './injection.js'
 import { dataSourceKey } from './keys.js'
 
 /** The fake behind an injected repository, so a test can say which DataSource produced it. */
@@ -17,13 +17,13 @@ class Users {
   constructor(readonly users: Repository<User>) {}
 }
 
-describe('$typeorm.repository()', function () {
+describe('$repository()', function () {
   it('should resolve the entity repository from the DataSource bound under TypeORM class', async function () {
     const source = new FakeDataSource('main')
     const di = new CaffeineIoC({ decorators: false })
 
     di.bind(DataSource, t => t.toValue(source.asDataSource()))
-    di.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    di.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
     await di.init()
 
@@ -49,9 +49,7 @@ describe('$typeorm.repository()', function () {
 
     di.bind(DataSource, t => t.toValue(main.asDataSource()))
     di.bind(kOrders, t => t.toValue(orders.asDataSource()))
-    di.bind(Service, t =>
-      t.toClass(Service, [$typeorm.repository(UserEntity), $typeorm.repository(OrderEntity, kOrders)]),
-    )
+    di.bind(Service, t => t.toClass(Service, [$repository(UserEntity), $repository(OrderEntity, kOrders)]))
 
     await di.init()
 
@@ -68,7 +66,7 @@ describe('$typeorm.repository()', function () {
   it('should fail at init() rather than at first use when no DataSource is bound', async function () {
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    di.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
     // The whole point of deciding this while the container compiles: a misconfigured application never
     // reaches a request handler that would fail one caller at a time.
@@ -78,7 +76,7 @@ describe('$typeorm.repository()', function () {
   it('should name the entity and the key it could not resolve', async function () {
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity, dataSourceKey('reports'))]))
+    di.bind(Users, t => t.toClass(Users, [$repository(UserEntity, dataSourceKey('reports'))]))
 
     // Without both, the message leaves the reader to guess which of several repositories is unwired.
     await expect(di.init()).rejects.toThrow(/"User"/)
@@ -91,7 +89,7 @@ describe('$typeorm.repository()', function () {
 
     di.bind(token<DataSource>(Symbol('a')), t => t.toValue(new FakeDataSource('a').asDataSource()).names(kShared))
     di.bind(token<DataSource>(Symbol('b')), t => t.toValue(new FakeDataSource('b').asDataSource()).names(kShared))
-    di.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity, kShared)]))
+    di.bind(Users, t => t.toClass(Users, [$repository(UserEntity, kShared)]))
 
     // Picking one silently would make which database a write lands in depend on registration order.
     await expect(di.init()).rejects.toThrow(ErrNoUniqueDataSource)
@@ -105,7 +103,7 @@ describe('$typeorm.repository()', function () {
     di.bind(token<DataSource>(Symbol('b')), t =>
       t.toValue(new FakeDataSource('b').asDataSource()).names(kShared).primary(),
     )
-    di.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity, kShared)]))
+    di.bind(Users, t => t.toClass(Users, [$repository(UserEntity, kShared)]))
 
     await di.init()
 
@@ -120,7 +118,7 @@ describe('$typeorm.repository()', function () {
 
     const di = new CaffeineIoC({ decorators: false })
 
-    di.bind(MaybeUsers, t => t.toClass(MaybeUsers, [$i.optional($typeorm.repository(UserEntity))]))
+    di.bind(MaybeUsers, t => t.toClass(MaybeUsers, [$i.optional($repository(UserEntity))]))
 
     await di.init()
 
@@ -136,11 +134,11 @@ describe('$typeorm.repository()', function () {
     const di = new CaffeineIoC({ decorators: false })
 
     di.bind(DataSource, t => t.toValue(new FakeDataSource('main').asDataSource()))
-    di.bind(PropertyUsers, t => t.toSelf().injectProperty('users', $typeorm.repository(UserEntity)))
+    di.bind(PropertyUsers, t => t.toSelf().injectProperty('users', $repository(UserEntity)))
 
     await di.init()
 
-    // The stage runs for a member injection too, which is the path `@Inject($typeorm.repository(...))` takes.
+    // The stage runs for a member injection too, which is the path `@Inject($repository(...))` takes.
     expect(fake(di.get(PropertyUsers).users).source).toEqual('main')
   })
 })

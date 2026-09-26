@@ -11,7 +11,7 @@ upgrade needs no change here. Entities travel in those options — do not add an
 Configuration reaches the feature only through the application's configure callback, which reads the
 application's own schema. This package publishes no configuration key and declares no slice.
 
-## The stage is registered where `$typeorm` is defined
+## The stage is registered where `$repository` is defined
 
 `registerStage(kRepositoryStage, …)` runs at module scope in `injection.ts`, beside the only export that uses
 it, and `package.json` `"sideEffects"` names `./dist/injection.js`. Both matter: the registration is a live
@@ -23,8 +23,8 @@ The stage and the symbol naming it are module-private. Nothing outside `injectio
 
 ## A string names an instance; a symbol is a key
 
-`$typeorm.repository(Entity, 'reports')` folds through `dataSourceKey('reports')`, so the string is the same
-name `typeorm('reports', ...)` was installed under — one name, written the same way on both sides. Anything
+`$repository(Entity, 'reports')` folds through `dataSourceKey('reports')`, so the string is the same
+name `TypeORM('reports', ...)` was installed under — one name, written the same way on both sides. Anything
 else has to be a `NamedToken<DataSource>`, which is what lets a DataSource the application provided itself be
 selected by its own token.
 
