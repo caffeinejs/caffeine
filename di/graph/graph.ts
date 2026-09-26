@@ -166,7 +166,8 @@ export function graphToDot(input: Iterable<[InjectionToken, Binding]> | BindingG
       attrs.push('style=dashed')
     }
 
-    lines.push(`  n${edge.fromID} -> n${edge.toID}${attrs.length > 0 ? ` [${attrs.join(', ')}]` : ''}`)
+    const attrList = attrs.length > 0 ? ` [${attrs.join(', ')}]` : ''
+    lines.push(`  n${edge.fromID} -> n${edge.toID}${attrList}`)
   }
 
   lines.push('}')
@@ -355,8 +356,8 @@ function groupsOf(graph: BindingGraph): { kind: EdgeKind; name: string; ids: num
 
     // Two groups can share a display name, as two symbols can share a description, so a group is a chain, not a
     // name: an edge continuing the previous one belongs to its group.
-    if (last !== undefined && last.kind === edge.kind && last.meta === edge.meta && last.toID === edge.fromID) {
-      groups[groups.length - 1].ids.push(edge.toID)
+    if (last?.kind === edge.kind && last.meta === edge.meta && last.toID === edge.fromID) {
+      groups.at(-1)!.ids.push(edge.toID)
     } else {
       groups.push({ kind: edge.kind, name: edge.meta ?? '', ids: [edge.fromID, edge.toID] })
     }
@@ -367,18 +368,36 @@ function groupsOf(graph: BindingGraph): { kind: EdgeKind; name: string; ids: num
   return groups
 }
 
-/**
- * Each node's dependencies, one label per injection site: the target when the site receives one binding, and the key
- * it asked for when it receives several.
- */
+// Each node's dependencies, one label per injection site.
 function dependencyLabels(
   graph: BindingGraph,
   fmt: (node: GraphNode) => string = node => node.label,
 ): Map<number, string[]> {
   const nodeByID = new Map(graph.nodes.map(n => [n.id, n]))
-  const sites = new Map<number, Map<string, GraphEdge[]>>()
+  const labels = new Map<number, string[]>()
 
-  for (const edge of graph.edges) {
+  for (const [fromID, bySite] of injectionSites(graph.edges)) {
+    const deps = new Set<string>()
+
+    for (const site of bySite.values()) {
+      for (const label of siteLabels([...site], nodeByID, fmt)) {
+        deps.add(label)
+      }
+    }
+
+    if (deps.size > 0) {
+      labels.set(fromID, [...deps])
+    }
+  }
+
+  return labels
+}
+
+// Each node's injection edges, grouped by the site they come from.
+function injectionSites(edges: GraphEdge[]): Map<number, Map<string | undefined, Set<GraphEdge>>> {
+  const sites = new Map<number, Map<string | undefined, Set<GraphEdge>>>()
+
+  for (const edge of edges) {
     if (isGroupEdge(edge)) {
       continue
     }
@@ -389,35 +408,23 @@ function dependencyLabels(
       sites.set(edge.fromID, bySite)
     }
 
-    const site = bySite.get(edge.meta ?? '')
-    if (site === undefined) {
-      bySite.set(edge.meta ?? '', [edge])
-    } else {
-      site.push(edge)
-    }
+    add(bySite, edge.meta, edge)
   }
 
-  const labels = new Map<number, string[]>()
+  return sites
+}
 
-  for (const [fromID, bySite] of sites) {
-    const deps = new Set<string>()
+// What a site shows: the target when it receives one binding, and the key it asked for when it receives several.
+function siteLabels(site: GraphEdge[], nodeByID: Map<number, GraphNode>, fmt: (node: GraphNode) => string): string[] {
+  if (site.length > 1 && site[0].key !== undefined) {
+    return [site[0].key]
+  }
 
-    for (const site of bySite.values()) {
-      if (site.length > 1 && site[0].key !== undefined) {
-        deps.add(site[0].key)
-        continue
-      }
-
-      for (const edge of site) {
-        const target = nodeByID.get(edge.toID)
-        if (target !== undefined) {
-          deps.add(fmt(target))
-        }
-      }
-    }
-
-    if (deps.size > 0) {
-      labels.set(fromID, [...deps])
+  const labels: string[] = []
+  for (const edge of site) {
+    const target = nodeByID.get(edge.toID)
+    if (target !== undefined) {
+      labels.push(fmt(target))
     }
   }
 
@@ -435,20 +442,20 @@ function caption(node: GraphNode, deps: string[], escape: (text: string) => stri
     parts.push('---', ...deps)
   }
 
-  return parts.map(escape).join('\\n')
+  return parts.map(escape).join(String.raw`\n`)
 }
 
 // Mermaid's entity codes. `#` goes first, so the `#` that starts `#quot;` is not escaped again.
 function escapeMermaid(text: string): string {
-  return text.replace(/#/g, '#35;').replace(/"/g, '#quot;')
+  return text.replaceAll('#', '#35;').replaceAll('"', '#quot;')
 }
 
 function escapeDot(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return text.replaceAll('\\', '\\\\').replaceAll('"', String.raw`\"`)
 }
 
 function cell(text: string): string {
-  return text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
+  return text.replaceAll('\\', '\\\\').replaceAll('|', String.raw`\|`)
 }
 
 function listOrDash(values: string[] | undefined): string {

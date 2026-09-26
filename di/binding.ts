@@ -257,7 +257,7 @@ export function injectedBindings(
   if (collects) {
     const excluded = new Set(own)
 
-    return excluded.size === 0 ? all : all.filter(b => !excluded.has(b))
+    return all.filter(b => !excluded.has(b))
   }
 
   if (all.length > 1) {

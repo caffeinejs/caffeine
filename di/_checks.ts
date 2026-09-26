@@ -47,10 +47,8 @@ export function checkCircularReferences(
     const own = collects && ownerKey !== depKey ? bindings.get(ownerKey) : undefined
 
     for (const binding of injectedBindings(bindings.get(depKey) ?? [], collects, own)) {
-      const concrete = bindingIDToKey.get(binding.id)
-      if (concrete != null) {
-        deps.push(concrete)
-      }
+      // Only registered bindings join a key's candidates, so every candidate has a key.
+      deps.push(bindingIDToKey.get(binding.id)!)
     }
   }
 

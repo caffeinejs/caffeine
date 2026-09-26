@@ -949,7 +949,7 @@ export class CaffeineIoC implements Container {
       // module, by hand or by a passing conditional still holds it back.
       if (binding.fallback) {
         if (binding.configuration && binding.conditionals.length > 0) {
-          this._pendingConfigKeys.set(key, binding.keysProvided ?? [])
+          this._pendingConfigKeys.set(key, binding.keysProvided)
         }
 
         this._pendingFallbacks.push({ key, binding, announce: true })
@@ -958,7 +958,7 @@ export class CaffeineIoC implements Container {
 
       if (binding.conditionals.length > 0) {
         if (binding.configuration) {
-          this._pendingConfigKeys.set(key, binding.keysProvided ?? [])
+          this._pendingConfigKeys.set(key, binding.keysProvided)
         }
         this._pendingConditionals.push({ key, binding, fallback: false })
       } else {
