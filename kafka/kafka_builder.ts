@@ -64,6 +64,7 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   #recoverer?: KafkaRecoverer
   #onDeserializationError?: DeserializationErrorHandler
   #onError?: (error: unknown, message: KafkaMessage) => void
+  #health = false
 
   constructor(clients: KafkaClients, name: string = DEFAULT_INSTANCE, configure?: FeatureConfigurer<never, C>) {
     super(configure)
@@ -198,6 +199,17 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     return this
   }
 
+  /**
+   * Adds this instance's consumers to the application's readiness check. Off by default.
+   *
+   * Readiness only, never liveness: restarting the process does not bring a broker back. Each instance decides for
+   * itself, so one can report while another stays out of readiness.
+   */
+  health(enabled = true): this {
+    this.#health = enabled
+    return this
+  }
+
   protected override configure(kit: FeatureConfigureKit<C>): void {
     const config = this.#resolve()
     const rKey = runtimeKey(this.#name)
@@ -221,19 +233,23 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     }
 
     kit.container.bind(containerKey(this.#name), t =>
-      t.toClass(KafkaListenerContainer, [rKey, tKey]).labels(Keys.KAFKA_CONTAINER),
+      t
+        .toClass(KafkaListenerContainer, [rKey, tKey])
+        .labels(Keys.KAFKA_CONTAINER, ...(this.#health ? [Keys.KAFKA_HEALTH] : [])),
     )
 
     // Registered once, covering every configured instance: starts every engine on `container.init()` and
     // stops it on `container.dispose()`. A second named instance binds the same thing again, which replaces the first.
     kit.container.bind(KafkaLifecycle, t => t.toFactory(ctx => new KafkaLifecycle(ctx.container)))
 
-    // Registered once, covering every configured instance, the same way. Checked whenever something asks the
-    // application's `ApplicationHealth` — the HTTP probes, a Watt check — and then it is what makes readiness mean
-    // "consuming".
-    kit.container.bind(KafkaHealthIndicator, t =>
-      t.toFactory(ctx => new KafkaHealthIndicator(ctx.container as Container)).extends(HealthIndicator),
-    )
+    // Registered once, the same way, when any instance enabled it, and it reports those instances. Checked whenever
+    // something asks the application's `ApplicationHealth` — the HTTP probes, a Watt check — and then it is what
+    // makes readiness mean "consuming".
+    if (this.#health) {
+      kit.container.bind(KafkaHealthIndicator, t =>
+        t.toFactory(ctx => new KafkaHealthIndicator(ctx.container as Container)).extends(HealthIndicator),
+      )
+    }
   }
 
   /**
