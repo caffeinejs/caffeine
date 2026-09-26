@@ -1,5 +1,5 @@
 import { Binding } from './binding.js'
-import { Conditional } from './conditional.js'
+import { $cond, conditionOf, type Condition, type ConditionHelpers } from './conditional.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from './errors.js'
 import { AsyncFactory, Factory } from './factory.js'
@@ -530,21 +530,32 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Attaches one or more predicates that must all return `true` for this binding to be active.
+   * Attaches conditions that must all pass for this binding to be registered.
    *
-   * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
-   * decorated bindings. A predicate therefore never sees the binding itself, and a binding already registered under
-   * the key stays unless the predicates pass — which is what lets `!ctx.container.has(key)` make it a default.
+   * The binding is not registered when `bind()` returns: it is held until `compile()`, and decided after every
+   * binding that could answer to a key its conditions check. A condition therefore never sees the binding itself, and
+   * a binding already registered under the key stays unless the conditions pass — which is what lets
+   * `c => c.missing(key)` make it a default.
+   *
+   * @param condition - A condition built with {@link $cond}, several of them, or a callback handed the same helpers.
+   *   The callback runs once, here.
+   *
+   * @throws {@link ErrInvalidBinding} when handed something that is not a condition
    *
    * @example
    * ```ts
-   * container.bind(key, t => t.toClass(ProdService).conditional(ctx => process.env.NODE_ENV === 'production'))
-   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+   * container.bind(key, t => t.toClass(ProdService).conditional(c => c.env('NODE_ENV', 'production')))
+   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
    * ```
    */
-  conditional(fn: Conditional | Conditional[]): this {
-    const fns = Array.isArray(fn) ? fn : [fn]
-    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...fns]
+  conditional(condition: Condition | Condition[] | ((c: ConditionHelpers) => Condition)): this {
+    const invalid = (reason: string) =>
+      new ErrInvalidBinding(`Cannot configure binding "${keyStr(this.key)}" with .conditional(): ${reason}`)
+    const conditions = Array.isArray(condition)
+      ? condition.map(c => conditionOf(c, invalid))
+      : [conditionOf(condition, invalid)]
+
+    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...conditions]
 
     return this
   }
@@ -552,6 +563,9 @@ export class BindingSpec<TValue, K = unknown> {
   /**
    * Restricts this binding to the given profiles. The binding is only active when
    * one of the given profiles is enabled in the container.
+   *
+   * Shorthand for `.conditional(c => c.profile(profile, ...profiles))`: the names given to one call are alternatives,
+   * and two calls must both pass, like any two conditions.
    *
    * @example
    * ```ts
@@ -561,12 +575,7 @@ export class BindingSpec<TValue, K = unknown> {
   profiles(profile: string, ...profiles: string[]): this {
     notNil(profile, `Parameter profile must not be null or undefined`)
 
-    this.binding.profiles.add(profile)
-    for (const p of profiles) {
-      this.binding.profiles.add(p)
-    }
-
-    return this
+    return this.conditional($cond.profile(profile, ...profiles))
   }
 
   /**

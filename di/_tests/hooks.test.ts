@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Lazy } from '../decorators/index.js'
 import { Inject } from '../decorators/inject.js'
@@ -257,45 +257,40 @@ describe('Hooks', function () {
   })
 
   describe('Container Lifetime Listener', function () {
-    const spy = vi.fn()
+    const kTest1 = token<string>(Symbol('test1'))
+    const kTest2 = token<string>(Symbol('test2'))
 
-    // 1
     @Injectable()
     class Dep {}
 
-    // 1
+    // Neither is a binding: no @Injectable, so autoWire() never reads them.
     class Incomplete {
       onDestroy() {}
     }
 
-    // 1
     class IncompleteWithProp {
       @Inject(token<string>(''))
       message!: string
     }
 
-    // 2
     @Injectable()
-    @ConditionalOn(() => false)
+    @Conditional(c => c.when(() => false))
     class NotValid {}
 
-    // 3 - belongs to profile 'test'; invisible to the no-profile container below
+    // Belongs to profile 'test', which the container below never activates.
     @Injectable()
     @Profile('test')
     class OtherProfile {}
 
-    // 4
     @Configuration()
     class Conf {
-      // 5
-      @Provides(token<string>(Symbol('test1')))
-      @ConditionalOn(() => false)
+      @Provides(kTest1)
+      @Conditional(c => c.when(() => false))
       test1() {
         return 'test1'
       }
 
-      // 6
-      @Provides(token<string>(Symbol('test2')))
+      @Provides(kTest2)
       test2() {
         return 'test2'
       }
@@ -303,19 +298,30 @@ describe('Hooks', function () {
 
     it('should call inspector methods on container specific registration steps', async function () {
       const di = new CaffeineIoC({ decorators: false })
+      const events: [event: string, key: unknown][] = []
 
-      di.hooks.on('onSetup', a => spy())
-      di.hooks.on('onBindingRegistered', a => spy())
-      di.hooks.on('onBindingNotRegistered', a => spy())
-      di.hooks.on('onSetupComplete', a => spy())
-      di.hooks.on('onDisposed', a => spy())
+      di.hooks.on('onSetup', a => events.push(['onSetup', a.key]))
+      di.hooks.on('onBindingRegistered', a => events.push(['onBindingRegistered', a.key]))
+      di.hooks.on('onBindingNotRegistered', a => events.push(['onBindingNotRegistered', a.key]))
+      di.hooks.on('onSetupComplete', () => events.push(['onSetupComplete', undefined]))
+      di.hooks.on('onDisposed', () => events.push(['onDisposed', undefined]))
 
       di.autoWire()
       await di.init()
 
       await di.dispose()
 
-      expect(spy).toHaveBeenCalledTimes(12)
+      // Every decorated class in this file is read, so each binding is asserted on its own rather than by a total.
+      const of = (key: unknown) => events.filter(([, k]) => k === key).map(([event]) => event)
+
+      expect(of(Dep)).toEqual(['onSetup', 'onBindingRegistered'])
+      expect(of(NotValid)).toEqual(['onSetup', 'onBindingNotRegistered'])
+      // A profile is a condition: a binding it rejects is read and reported like one any other condition rejects.
+      expect(of(OtherProfile)).toEqual(['onSetup', 'onBindingNotRegistered'])
+      expect(of(Conf)).toEqual(['onSetup', 'onBindingRegistered'])
+      expect(of(kTest1)).toEqual(['onSetup', 'onBindingNotRegistered'])
+      expect(of(kTest2)).toEqual(['onSetup', 'onBindingRegistered'])
+      expect(of(undefined)).toEqual(['onSetupComplete', 'onDisposed'])
     })
   })
 

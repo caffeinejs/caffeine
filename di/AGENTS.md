@@ -2,23 +2,43 @@
 
 ## A binding with conditions waits for `compile()`
 
-A binding carrying conditions registers only once they pass at `compile()`, however it was made. A decorated one
-waits in `_pendingConditionals`. `registerOrHold` puts one made by hand (`bind`, `aspect`, `restore`) there too,
-and step 2 of `evaluatePendingConditionals()` decides it after the decorated ones, in bind order.
+A condition is data (`Condition`, built with `$cond`), not a predicate. `@Conditional` and `.conditional()` resolve a
+callback to that data at once, and reject anything that is not a condition of a known kind. A profile is a condition
+too: `@Profile` and `.profiles()` add a `profile` one, and there is no separate profile pass.
 
-The reason: a condition must never see its own binding. Registered at bind time, a default written as
-`.conditional(ctx => !ctx.container.has(key))` removed itself. Worse, it first replaced the binding it was meant to
-yield to. There is no fallback binding; a default is that pattern, and `@caffeinejs/http` binds its
-`PasswordHasher` with it.
+Every binding whose conditions are non-empty waits in `_pendingConditionals` until `compile()`, however it was made:
+read by `autoWire`, bound by hand (`registerOrHold` for `bind`, `aspect` and modules), or restored undecided.
+`holdsBack` applies the `MetadataReader`'s `conditionals` first, so a binding the reader makes conditional is held
+like any other; there is no eager path and no prune.
 
-- `has()`, `entries()` and `size` do not see a held-back binding until `compile()`.
-- Binding the key again discards a held-back binding, as it replaces a registered one. Only an entry made by hand
-  is discarded; `rebind` is what drops a decorated pending entry.
-- A binding held back by `bind` is matched against the profiles when it is decided, since it never enters the
-  manual profile queue. One held back by `restore` is not: it was matched in the container it came from.
-- `restore()` holds back too, and `snapshot()` records held-back bindings. Otherwise a default that won would meet
-  itself in the prune of `_pendingConditionalKeys`, and a `TestContainer` would lose it.
-- That prune stays for the one eager path left: conditions a `MetadataReader` merges in `configureBinding`.
+Two reasons, both about what a condition sees:
+
+- A condition must never see its own binding. Registered at bind time, a default written as `c => c.missing(key)`
+  removed itself — and first replaced the binding it was meant to yield to.
+- The container orders only what it can see. `present` and `missing` name the key they check, and `config` checks
+  the config provider's key; `when` is handed nothing, so a predicate cannot read the registry behind the order's back.
+
+`evaluatePendingConditionals()` decides the held bindings in `decisionOrder`:
+
+- A binding waits for its held `@Configuration` class, and for every held binding answering — by key, name or base — to
+  a key one of its conditions checks. A configuration class does not wait for its own `@Provides` bindings.
+- Among the free bindings, push order decides; on a cycle, the first pushed of the rest goes, and the others then
+  see it.
+- A `@Provides` binding is tied to its own class through `source` (`_pendingConfigClasses`), never through the key
+  it provides: another class may provide the same key.
+- Within a binding, `profile` conditions go first and `when` last. `config` reads the provider once per compile,
+  through its own factory, which is why the provider must be bound with `toValue()` or `toFactory()`.
+
+A decorated binding decided at `compile()` never lands on a registered key: it throws
+`ErrRepeatedInjectableConfiguration`. So does a binding made by hand that passes after a decorated one took its key,
+so the outcome does not depend on which is decided first. `rebind` drops every held binding of its key, which is how a
+decorated binding is overridden; a binding made by hand replaces another as `bind()` does.
+
+- `has()`, `entries()`, `size` and `getBindingsByLabel()` do not see a held-back binding until `compile()`.
+- Binding the key again discards a held-back binding made by hand, as it replaces a registered one.
+- `snapshot()` records the registered bindings, every held one marked with `kHeld` and its origin, and the active
+  profiles. `restore()` registers a registered binding as it is, without deciding it again; holds a marked one back
+  in place of what this container holds for its key; and activates the snapshot's profiles.
 
 ## `token()` is for injection keys only
 
@@ -57,7 +77,8 @@ after it and the ones extending it. `get` picks the primary out of that list and
 must not depend on the order the bindings were registered in.
 
 - Registering under a key joins the list (`mapUnder`). It never replaces it.
-- Removing a binding (`unref`, for a rejected profile or conditional) takes out that binding alone.
+- Removing a binding (`unref`, which `rebind` calls) takes out that binding alone. A binding rejected by its conditions
+  was never registered: it waited for `compile()` and was never mapped.
 - `rebind(key)` is the one deliberate replacement. It empties the key's list before registering, so overriding an
   abstract key wins over the bindings extending it; those stay registered under their own keys.
 - Registering a key again unmaps the names, labels and base of the configuration it replaces, so they stop
@@ -69,7 +90,7 @@ together with `mapUnder`.
 
 ## Testing and registrar.ts
 
-Do not mutate the module-level state in `decorators/registrar/registrar.ts` (`Bindings`, `ByNamespace`, `ProvidedBindings`, `MetadataWeakMap`, `Injectables`) from tests. These are global singletons shared across all tests in the same process; direct mutation causes test pollution and order-dependent failures.
+Do not mutate the module-level state in `decorators/registrar/registrar.ts` (`Bindings`, `ProvidedBindings`, `MetadataWeakMap`, `Injectables`) from tests. These are global singletons shared across all tests in the same process; direct mutation causes test pollution and order-dependent failures.
 
 Tests must interact with the CaffeineIoC container only through the public API (decorators, `CaffeineIoC`, `Scope`, etc.). If a test needs an isolated registry, use a child scope or a fresh container instance — never reach into the registrar's internal maps.
 

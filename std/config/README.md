@@ -86,7 +86,7 @@ a schema that keeps every key.
 | Read settings in a service                               | Inject the application key: the live object   | Yes, always                                  |
 | One revision across several `await`s, or for one request | `store.current`, or `ctx.config` in a request | No, by design                                |
 | A value built from settings, or a reaction to a change   | `store.view(...)`                             | Yes: `value` is reassigned, `onChange` fires |
-| One value, fixed when the consumer is built              | `$i.value(c => c.database.host)`              | Only when the consumer is rebuilt            |
+| One value, fixed when the consumer is built              | `$i.config(c => c.database.host)`             | Only when the consumer is rebuilt            |
 
 The ordinary way has no wrapper:
 

@@ -67,9 +67,9 @@ describe('InjectionHelpers', function () {
   it('types a bare selector from the bound configuration', function () {
     const i: InjectionHelpers<AppConfig> = $i
 
-    expectTypeOf<InjectedOf<{ host: ReturnType<typeof i.value<AppConfig, string>> }>['host']>().toEqualTypeOf<string>()
+    expectTypeOf<InjectedOf<{ host: ReturnType<typeof i.config<AppConfig, string>> }>['host']>().toEqualTypeOf<string>()
 
-    i.value(config => {
+    i.config(config => {
       expectTypeOf(config).toEqualTypeOf<AppConfig>()
       return config.database.host
     })
@@ -78,7 +78,7 @@ describe('InjectionHelpers', function () {
   it('lets a call name a type of its own over the bound one', function () {
     const i: InjectionHelpers<AppConfig> = $i
 
-    i.value<{ other: number }>(config => {
+    i.config<{ other: number }>(config => {
       expectTypeOf(config).toEqualTypeOf<{ other: number }>()
       return config.other
     })

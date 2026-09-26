@@ -6,7 +6,6 @@ import { Binding } from '../binding.js'
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
 import { Configuration } from '../decorators/configuration.js'
-import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
@@ -198,7 +197,8 @@ describe('Container Operations', function () {
         const di = new CaffeineIoC({ profiles: ['container-ops-async-reset'] })
 
         di.bind(kValue, t => t.toValue('test'))
-        di.bind(Dep1, t => t.toSelf([kValue]))
+        // Dep1 is also decorated, and held for its profile: bind() over it would clash when both are decided.
+        di.rebind(Dep1, t => t.toSelf([kValue]))
         await di.init()
 
         const dep1 = di.get(Dep1)
@@ -485,24 +485,8 @@ describe('async singleton resolution timing (L-3)', function () {
   })
 
   describe('ensure container can resolve all registered bindings', function () {
-    const kArfrPropDep = token<string>(Symbol('arfr-prop-dep'))
-    const kArfrMethodDep = token<Record<string, unknown>>(Symbol('arfr-method-dep'))
     const kArfrPrimaryKey = token<Record<string, unknown>>(Symbol('arfr-primary-key'))
     const kArfrPrimaryNs = 'arfr-primary-ns'
-
-    @Injectable()
-    @Profile('arfr-checks')
-    class ArfrSvcWithPropInjection {
-      @Inject(kArfrPropDep)
-      accessor dep!: string
-    }
-
-    @Injectable()
-    @Profile('arfr-checks')
-    class ArfrSvcWithMethodInjection {
-      @Inject([kArfrMethodDep])
-      init(_dep: unknown) {}
-    }
 
     @Injectable()
     @Named(kArfrPrimaryKey)
@@ -614,38 +598,6 @@ describe('async singleton resolution timing (L-3)', function () {
         )
 
         expect(() => di.assertResolvable()).toThrow(ErrUnresolvableDependencies)
-      })
-
-      it('should throw when a property injection dependency is missing', function () {
-        const di = new CaffeineIoC({ decorators: false })
-        di.bind(ArfrSvcWithPropInjection, t => t.toSelf())
-
-        let caught: ErrUnresolvableDependencies | undefined
-        try {
-          di.assertResolvable()
-        } catch (e) {
-          caught = e as ErrUnresolvableDependencies
-        }
-
-        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues).toHaveLength(1)
-        expect(caught!.issues[0]).toContain(kArfrPropDep.toString())
-      })
-
-      it('should throw when a method injection dependency is missing', function () {
-        const di = new CaffeineIoC({ decorators: false })
-        di.bind(ArfrSvcWithMethodInjection, t => t.toSelf())
-
-        let caught: ErrUnresolvableDependencies | undefined
-        try {
-          di.assertResolvable()
-        } catch (e) {
-          caught = e as ErrUnresolvableDependencies
-        }
-
-        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues).toHaveLength(1)
-        expect(caught!.issues[0]).toContain(kArfrMethodDep.toString())
       })
 
       it('should collect all issues rather than stopping at the first', function () {

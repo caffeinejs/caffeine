@@ -103,7 +103,7 @@ class Pipeline {
 :::warning
 Injecting the token directly — without `allOf` — when multiple implementations are
 registered throws `ErrNoUniqueInjectionForKey`. Mark one implementation `@Primary`,
-use `@ConditionalOn` so only one survives at runtime, or inject by a more specific
+use `@Conditional` so only one survives at runtime, or inject by a more specific
 name or token.
 :::
 
@@ -208,10 +208,10 @@ class NotificationRouter {
 
 ---
 
-## Conditional implementations with `@ConditionalOn`
+## Conditional implementations with `@Conditional`
 
 ```ts
-import { Injectable, Named, Primary, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Named, Conditional } from '@caffeinejs/di'
 
 interface CacheStore {
   get(key: string): Promise<string | undefined>
@@ -220,7 +220,8 @@ interface CacheStore {
 
 const kCacheStore = Symbol('CacheStore')
 
-// Always registered — acts as the default
+// The default: registered only when nothing else answers to kCacheStore
+@Conditional(c => c.missing(kCacheStore))
 @Named(kCacheStore)
 @Injectable()
 class InMemoryCache implements CacheStore {
@@ -234,8 +235,7 @@ class InMemoryCache implements CacheStore {
 }
 
 // Only registered when a RedisClient binding is present in the container
-@Primary()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 @Named(kCacheStore)
 @Injectable()
 class RedisCache implements CacheStore {
@@ -249,8 +249,10 @@ class RedisCache implements CacheStore {
 }
 ```
 
-All bindings are registered before any `@ConditionalOn` predicate runs, so
-`ctx.container.has()` is safe to call for any key.
+A binding is decided after every held binding answering to a key its condition checks, so
+`InMemoryCache` is decided after `RedisCache` whichever is declared first, and
+`c.present(RedisClient)` sees `RedisClient` however it was bound — see
+[Conditionals](./conditional-bindings.md#when-a-condition-is-decided).
 
 ---
 

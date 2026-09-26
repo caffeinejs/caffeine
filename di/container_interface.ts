@@ -156,7 +156,7 @@ export interface Container extends AsyncDisposable {
 
   bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
-  bindValuesProvider<T = unknown>(configure: (spec: BindingSpec<T>) => void): this
+  bindConfigProvider<T = unknown>(configure: (spec: BindingSpec<T>) => void): this
 
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
@@ -218,7 +218,7 @@ export type ContainerBindingOps = Pick<
   | 'hooks'
   | 'postProcessors'
   | 'bind'
-  | 'bindValuesProvider'
+  | 'bindConfigProvider'
   | 'rebind'
   | 'aspect'
   | 'entries'

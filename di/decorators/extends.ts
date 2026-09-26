@@ -1,7 +1,10 @@
 import { ErrInvalidDecorator } from '../errors.js'
 import { check } from '../internal/util/assert/index.js'
 import { AbstractCtor, Ctor } from '../types.js'
-import { defineInjectable, getBindingConfiguration } from './registrar/index.js'
+import { defineInjectable } from './registrar/index.js'
+
+// The classes @Extends has decorated. The base alone cannot tell: @Injectable() sets it too, to the direct superclass.
+const declared = new WeakSet<Function>()
 
 /**
  * Binds a class to a base or abstract class so it can be resolved by that type.
@@ -46,13 +49,13 @@ export function Extends<T>(base?: Ctor<T> | AbstractCtor<T>) {
       )
     }
 
-    const existing = getBindingConfiguration(target)
-
-    if (existing && (existing.keysProvided?.length ?? 0) > 0 && !existing.configuration) {
+    if (declared.has(target)) {
       throw new ErrInvalidDecorator(
         `Cannot apply @${Extends.name} to "${target.name}": @${Extends.name} is already declared on this class`,
       )
     }
+
+    declared.add(target)
 
     const resolvedBase = (base ?? parent) as Ctor | AbstractCtor
 

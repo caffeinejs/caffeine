@@ -26,7 +26,7 @@ export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
           `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
           `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
           `Use @Primary to specify an unique injectable`,
-          `Use @ConditionalOn to conditionally register injectables, leaving only one for the given key`,
+          `Use @Conditional to conditionally register injectables, leaving only one for the given key`,
         ),
       'ERR_NO_UNIQUE_INJECTION',
     )
@@ -142,7 +142,7 @@ export class ErrMultiplePrimary extends CaffeineIoCError {
     super(
       `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one` +
         solutions(
-          `Use @ConditionalOn(condition) to ensure only one primary injectable is active at a time`,
+          `Use @Conditional(condition) to ensure only one primary injectable is active at a time`,
           `Leave only one injectable decorated with @Primary()`,
         ),
       'ERR_MULTIPLE_PRIMARY_SAME_COMPONENT',
@@ -270,16 +270,16 @@ export class ErrMissingInjectionKey extends CaffeineIoCError {
 }
 
 /**
- * ErrNoValuesProvider is thrown when a config value injection is attempted but no ValuesProvider
- * has been registered on the container.
+ * ErrNoConfigProvider is thrown when a configuration value is read — by a `$i.config` injection or a `config`
+ * condition — but no config provider has been registered on the container.
  */
-export class ErrNoValuesProvider extends CaffeineIoCError {
+export class ErrNoConfigProvider extends CaffeineIoCError {
   constructor(context: string) {
     super(
-      `Cannot inject config value: no ValuesProvider is registered — call bindValuesProvider() before init()\n${context}`,
-      'ERR_NO_VALUES_PROVIDER',
+      `Cannot read configuration: no config provider is registered — call bindConfigProvider() before init()\n${context}`,
+      'ERR_NO_CONFIG_PROVIDER',
     )
-    this.name = 'ErrNoValuesProvider'
+    this.name = 'ErrNoConfigProvider'
   }
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Named } from '../decorators/named.js'
@@ -34,7 +34,7 @@ describe('Inject Into Map', function () {
 
   @Injectable(kMap)
   @Named('tschuss')
-  @ConditionalOn(() => false)
+  @Conditional(c => c.when(() => false))
   class Tschuss implements Greeter {
     greet(): string {
       return 'Tschuss'

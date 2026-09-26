@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Inject } from '../decorators/inject.js'
@@ -69,13 +69,13 @@ describe('Real World', function () {
   @Configuration()
   class Events {
     @Provides(EventSender)
-    @ConditionalOn(() => Globals.Env !== 'test')
+    @Conditional(c => c.when(() => Globals.Env !== 'test'))
     rabbitEventSender(): EventSender {
       return new RabbitMqEventSender()
     }
 
     @Provides(EventSender)
-    @ConditionalOn(() => Globals.Env === 'test')
+    @Conditional(c => c.when(() => Globals.Env === 'test'))
     kafkaEventSender(): EventSender {
       return new KafkaEventSender()
     }

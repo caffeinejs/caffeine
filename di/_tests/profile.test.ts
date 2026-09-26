@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -216,7 +216,7 @@ describe('BindingSpec.profiles()', function () {
       t
         .toSelf()
         .profiles('fluent-both')
-        .conditional(() => false),
+        .conditional(c => c.when(() => false)),
     )
     await di.init()
 
@@ -271,19 +271,24 @@ describe('constructor profile evaluation', function () {
   @Profile('ctor-prof')
   class CtorProfBean {}
 
-  it('registers a decorated @Profile type during autoWire when the profile is active', function () {
+  // A profile is a condition like any other: the binding waits for compile() even when its profile is active from the
+  // start. Registered by autoWire instead, it could be replaced by bind() here and not when the profile is added later.
+  it('holds a decorated @Profile type until compile() even when the profile is active at construction', async function () {
     const di = new CaffeineIoC({ profiles: ['ctor-prof'] })
+    expect(di.has(CtorProfBean)).toBe(false)
+
+    await di.init()
     expect(di.has(CtorProfBean)).toBe(true)
   })
 })
 
-describe('Profile + ConditionalOn dual queue', function () {
+describe('Profile + Conditional', function () {
   it('should not run the predicate when the profile misses', async function () {
     const predicate = vi.fn(() => true)
 
     @Injectable()
     @Profile('dual-miss')
-    @ConditionalOn(predicate)
+    @Conditional(c => c.when(predicate))
     class DualMissBean {}
 
     const di = new CaffeineIoC()
@@ -296,12 +301,103 @@ describe('Profile + ConditionalOn dual queue', function () {
   it('should register when both profile and conditional pass', async function () {
     @Injectable()
     @Profile('dual-hit')
-    @ConditionalOn(() => true)
+    @Conditional(c => c.when(() => true))
     class DualHitBean {}
 
     const di = new CaffeineIoC({ profiles: ['dual-hit'] })
     await di.init()
 
     expect(di.has(DualHitBean)).toBe(true)
+  })
+})
+
+// A profile is a condition like any other: @Profile and .profiles() are shorthand for it.
+describe('a profile as a condition', function () {
+  @Injectable()
+  @Profile('prof-cond-a')
+  class ByDecorator {}
+
+  @Injectable()
+  @Conditional(c => c.profile('prof-cond-a'))
+  class ByCondition {}
+
+  @Injectable()
+  @Profile('prof-cond-either', 'prof-cond-or')
+  class EitherProfile {}
+
+  @Injectable()
+  @Profile('prof-cond-both-1')
+  @Profile('prof-cond-both-2')
+  class BothProfiles {}
+
+  it('is what @Profile declares', async function () {
+    const on = new CaffeineIoC({ profiles: ['prof-cond-a'] })
+    await on.init()
+    const off = new CaffeineIoC()
+    await off.init()
+
+    expect([on.has(ByDecorator), on.has(ByCondition)]).toEqual([true, true])
+    expect([off.has(ByDecorator), off.has(ByCondition)]).toEqual([false, false])
+  })
+
+  it('passes on any of the names one @Profile lists', async function () {
+    const di = new CaffeineIoC({ profiles: ['prof-cond-or'] })
+    await di.init()
+
+    expect(di.has(EitherProfile)).toBe(true)
+  })
+
+  it('needs every one of stacked @Profiles, like any stacked conditions', async function () {
+    const one = new CaffeineIoC({ profiles: ['prof-cond-both-1'] })
+    await one.init()
+    const both = new CaffeineIoC({ profiles: ['prof-cond-both-1', 'prof-cond-both-2'] })
+    await both.init()
+
+    expect(one.has(BothProfiles)).toBe(false)
+    expect(both.has(BothProfiles)).toBe(true)
+  })
+
+  it('needs every one of chained .profiles() calls', async function () {
+    class Chained {}
+
+    const one = new CaffeineIoC({ decorators: false, profiles: ['prof-chain-1'] })
+    one.bind(Chained, t => t.toSelf().profiles('prof-chain-1').profiles('prof-chain-2'))
+    await one.init()
+    const both = new CaffeineIoC({ decorators: false, profiles: ['prof-chain-1', 'prof-chain-2'] })
+    both.bind(Chained, t => t.toSelf().profiles('prof-chain-1').profiles('prof-chain-2'))
+    await both.init()
+
+    expect(one.has(Chained)).toBe(false)
+    expect(both.has(Chained)).toBe(true)
+  })
+})
+
+// The profile is not copied onto the @Provides methods while the class is decorated, which missed a @Profile written
+// above @Configuration(): the class is held for its profile, and its @Provides wait for the class.
+describe('@Profile written above @Configuration()', function () {
+  const kAbove = token<string>(Symbol('profile-above-configuration'))
+
+  @Profile('prof-above')
+  @Configuration()
+  class AboveConf {
+    @Provides(kAbove)
+    value(): string {
+      return 'provided'
+    }
+  }
+
+  it('keeps its @Provides out while the profile is inactive', async function () {
+    const di = new CaffeineIoC()
+    await di.init()
+
+    expect(di.has(AboveConf)).toBe(false)
+    expect(di.has(kAbove)).toBe(false)
+  })
+
+  it('registers them once the profile is active', async function () {
+    const di = new CaffeineIoC({ profiles: ['prof-above'] })
+    await di.init()
+
+    expect(di.get(kAbove)).toBe('provided')
   })
 })

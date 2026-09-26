@@ -56,12 +56,12 @@ describe('ConfigModule', () => {
 
     expect(container.has(kConfig)).toBe(false)
     expect(container.get(ConfigStore)).toBe(store)
-    expect(container.has(Keys.kValuesProvider)).toBe(true)
+    expect(container.has(Keys.kConfigProvider)).toBe(true)
   })
 
-  // The values provider is read when a consumer is built, so a transient built after a reload sees the new value.
-  it('lets $i.value read the snapshot current when the consumer is built', async () => {
-    @Injectable([$i.value<AppConfig, string>(c => c.http.host)])
+  // The config provider is read when a consumer is built, so a transient built after a reload sees the new value.
+  it('lets $i.config read the snapshot current when the consumer is built', async () => {
+    @Injectable([$i.config<AppConfig, string>(c => c.http.host)])
     class Client {
       constructor(readonly host: string) {}
     }

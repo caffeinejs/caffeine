@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -35,36 +35,44 @@ describe('@Primary', function () {
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] })).toThrow(ErrMultiplePrimary)
+    // A profile is a condition, so both are held until the container compiles, and decided there.
+    it('should throw ErrMultiplePrimary when the container compiles', async function () {
+      await expect(new CaffeineIoC({ profiles: ['double-primary'] }).init()).rejects.toThrow(ErrMultiplePrimary)
     })
   })
 
-  describe('when two @Provides methods share a key and both are marked @Primary', function () {
+  // Two keys answering to one name: a single key provided twice would be a repeated binding instead.
+  describe('when two @Provides methods answer to one name and both are marked @Primary', function () {
     const kMsg = token<Msg>(Symbol('msg-double-primary'))
+    const kMsgA = token<Msg>(Symbol('msg-double-primary-a'))
+    const kMsgB = token<Msg>(Symbol('msg-double-primary-b'))
 
     class Msg {
       constructor(readonly value: string) {}
     }
 
     @Configuration()
-    @Profile('double-primary')
+    @Profile('double-primary-provides')
     class Cfg {
-      @Provides(Msg, kMsg)
+      @Provides(kMsgA)
+      @Named(kMsg)
       @Primary()
       msgA() {
         return new Msg('a')
       }
 
-      @Provides(Msg, kMsg)
+      @Provides(kMsgB)
+      @Named(kMsg)
       @Primary()
       msgB() {
         return new Msg('b')
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] })).toThrow(ErrMultiplePrimary)
+    it('should throw ErrMultiplePrimary when the container compiles', async function () {
+      await expect(new CaffeineIoC({ profiles: ['double-primary-provides'] }).init()).rejects.toThrow(
+        ErrMultiplePrimary,
+      )
     })
   })
 
@@ -74,7 +82,7 @@ describe('@Primary', function () {
     @Injectable()
     @Named(kActive)
     @Primary()
-    @ConditionalOn(() => false)
+    @Conditional(c => c.when(() => false))
     @Profile('conditional-primary')
     class Excluded {
       name() {

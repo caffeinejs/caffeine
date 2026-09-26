@@ -111,7 +111,7 @@ export class Router<
 
   /**
    * Declares what `ctx.config` is typed as for every route of the group and of the groups nested under it, and
-   * what an `.inject()` callback's `$i.value` selector reads from.
+   * what an `.inject()` callback's `$i.config` selector reads from.
    *
    * ```ts
    * const pets = new Router('/pets').configType<AppConfig>()
@@ -132,7 +132,7 @@ export class Router<
    *
    * A function is handed `$i`, so a group reaching for `optional`, `allOf`, `provide` or `value` does not have to
    * import it. Both forms produce the same dependencies and type the handler the same way, but only the function
-   * form types `$i.value`: the `$i` imported for the object form cannot know which application it is in, so a
+   * form types `$i.config`: the `$i` imported for the object form cannot know which application it is in, so a
    * selector there reads `unknown` unless the call names the type itself.
    *
    * ```ts

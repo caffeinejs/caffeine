@@ -601,3 +601,27 @@ describe('a base bound directly next to a binding extending it', function () {
     })
   }
 })
+
+describe('@Extends declared twice on one class', function () {
+  abstract class Base {}
+
+  it('is rejected', function () {
+    expect(() => {
+      @Extends(Base)
+      @Extends(Base)
+      @Injectable()
+      class Twice extends Base {}
+      void Twice
+    }).toThrow(ErrInvalidDecorator)
+  })
+
+  // @Injectable() records the direct superclass as the base too, so that alone is not a second @Extends.
+  it('is not confused with the base @Injectable() records', function () {
+    expect(() => {
+      @Extends(Base)
+      @Injectable()
+      class Once extends Base {}
+      void Once
+    }).not.toThrow()
+  })
+})

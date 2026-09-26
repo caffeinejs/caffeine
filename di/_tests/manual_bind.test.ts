@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
@@ -246,7 +246,7 @@ describe('Manual Binding', function () {
 
       it('should not be overwritten by a pending conditional binding on the same key', async function () {
         @Injectable()
-        @ConditionalOn(() => true)
+        @Conditional(c => c.when(() => true))
         class Original {}
 
         class Replacement {}
@@ -306,7 +306,7 @@ describe('Manual Binding', function () {
         it('should keep a replacement that is not registered yet', async function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlStore, t => t.toSelf().extends(Store))
-          di.rebind(Store, t => t.toClass(MemoryStore).conditional(() => true))
+          di.rebind(Store, t => t.toClass(MemoryStore).conditional(c => c.when(() => true)))
           di.bind(SqlStore, t => t.toSelf())
           await di.init()
 

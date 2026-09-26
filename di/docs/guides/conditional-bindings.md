@@ -1,63 +1,97 @@
 # Conditionals
 
-`@ConditionalOn` registers a binding only when a predicate returns `true` at
-container initialization. The predicate is evaluated once during `init()` — bindings
-that fail their condition are never added to the container.
+`@Conditional` registers a binding only when its condition passes. The container decides it once, when it compiles
+during `init()` — a binding that fails its condition is never added to the container.
 
-This is the primary tool for environment-driven wiring: selecting the right
-implementation based on a region, a feature flag, the presence of another binding,
-or any runtime condition you can express as a boolean.
+This is the primary tool for environment-driven wiring: selecting the right implementation based on a region, a
+feature flag, the configuration, the presence of another binding, or anything else you can check at start-up.
 
 ---
 
-## How `@ConditionalOn` works
+## Conditions
 
 ```ts
-import { ConditionalOn } from '@caffeinejs/di'
+import { Conditional } from '@caffeinejs/di'
 ```
 
-The decorator takes a `Conditional` — a function receiving a `ConditionContext`
-and returning `boolean` or `Promise<boolean>`.
+A condition is data, not a function. You build it with a helper, most often in a callback that is handed the helpers:
 
 ```ts
-type Conditional = (ctx: ConditionContext) => boolean | Promise<boolean>
-
-interface ConditionContext {
-  container: { has(key: InjectionToken): boolean }
-  key: InjectionToken
-  binding: BindingDecoratorConfig
-}
+@Conditional(c => c.missing(Cache))
+@Injectable()
+@Extends()
+class InMemoryCache extends Cache {}
 ```
 
-| `ctx` field          | Description                                                                                                 |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `container.has(key)` | Whether a binding answers to the key: any binding without conditions, or a conditional one decided already. |
-| `key`                | The key of the binding being tested.                                                                        |
-| `binding`            | Decorator config (scope, name, labels) of the binding being tested.                                         |
+| Helper                       | Passes when                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `c.present(key)`             | Something answers to the key: a binding registered under it, one named after it, or one extending it. |
+| `c.missing(key)`             | Nothing answers to the key. This is how a [default](#defaults) is written.                            |
+| `c.profile(name, ...names)`  | Any of the named profiles is active. `@Profile` is shorthand for it.                                  |
+| `c.config(access)`           | The value read through the config provider is `true`.                                                 |
+| `c.config(access, expected)` | The value read through the config provider equals `expected`.                                         |
+| `c.env(name)`                | The environment variable is set to a non-empty value.                                                 |
+| `c.env(name, expected)`      | The environment variable equals `expected`.                                                           |
+| `c.when(test)`               | `test()` returns `true`. It may be async, and it is handed nothing — the container included.          |
 
-Predicate evaluation order: every binding without conditions is registered first — by hand,
-by a module or by decorators. Bindings with conditions are then decided one at a time during
-`init()`: decorated `@Configuration` classes first, then the other decorated bindings in the
-order they were declared, then the ones bound by hand in the order they were bound. So
-`ctx.container.has()` sees every unconditional binding, but a conditional one only once it
-has been decided.
+The same helpers are exported as `$cond`, for a condition built ahead of time and shared by several bindings:
+
+```ts
+import { $cond } from '@caffeinejs/di'
+
+const onRedis = $cond.config<AppConfig>(c => c.cache.kind, 'redis')
+
+di.bind(Cache, t => t.toClass(RedisCache).conditional(onRedis))
+di.bind(Lock, t => t.toClass(RedisLock).conditional(onRedis))
+```
+
+A callback runs once, when the class is decorated or `.conditional()` is called. What the binding holds is the
+condition it returned.
+
+---
+
+## When a condition is decided
+
+A binding carrying a condition is held back until the container compiles, whether it is decorated or bound by hand.
+Until then `has()`, `entries()`, `size` and `getBindingsByLabel()` do not see it.
+
+At compile time, the held bindings are decided in **dependency order**: a binding whose condition checks for a key is
+decided after every held binding that answers to that key — by the key itself, a name, or a base. A `config` condition
+waits for a held config provider. So the order bindings were declared or bound in does not change the outcome:
+
+```ts
+// Declared first, and still decided after RedisStore: its condition checks for Store, which RedisStore answers to.
+@Conditional(c => c.missing(Store))
+@Injectable()
+@Extends()
+class MemoryStore extends Store {}
+
+@Conditional(c => c.env('STORE', 'redis'))
+@Injectable()
+@Extends()
+class RedisStore extends Store {}
+```
+
+Among the bindings free to be decided, the first declared goes first. When none is — two defaults of one key each wait
+for the other — the first declared goes first, and the other then sees it.
+
+Within one binding, profiles are checked first and `c.when` predicates last, so a predicate of your own runs only once
+every condition the container can check itself has passed.
 
 :::warning
-A binding that fails its condition is completely absent from the container. Any
-hard injection of that key will throw `ErrNoResolutionForKey`. Use `optional()`
-for dependencies that may not be present.
+A binding that fails its condition is completely absent from the container. Any hard injection of that key will throw
+`ErrNoResolutionForKey`. Use `optional()` for dependencies that may not be present.
 :::
 
 ---
 
 ## Region-based implementations
 
-A realistic pattern: different infrastructure implementations are loaded based on a
-`REGION` environment variable. One abstract base defines the contract; each
-region-specific class registers only when its region matches.
+A realistic pattern: different infrastructure implementations are loaded based on a `REGION` environment variable. One
+abstract base defines the contract; each region-specific class registers only when its region matches.
 
 ```ts
-import { Injectable, Extends, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Extends, Conditional } from '@caffeinejs/di'
 ```
 
 ### Define the contract
@@ -73,7 +107,7 @@ abstract class PaymentGateway {
 
 ```ts
 // Loaded only in EU deployments
-@ConditionalOn(() => process.env.REGION === 'eu')
+@Conditional(c => c.env('REGION', 'eu'))
 @Injectable()
 @Extends()
 class StripeEUGateway extends PaymentGateway {
@@ -87,7 +121,7 @@ class StripeEUGateway extends PaymentGateway {
 }
 
 // Loaded only in US deployments
-@ConditionalOn(() => process.env.REGION === 'us')
+@Conditional(c => c.env('REGION', 'us'))
 @Injectable()
 @Extends()
 class BraintreeUSGateway extends PaymentGateway {
@@ -100,8 +134,8 @@ class BraintreeUSGateway extends PaymentGateway {
   }
 }
 
-// Used when no other gateway qualifies — the complement of the conditions above
-@ConditionalOn(() => !['eu', 'us'].includes(process.env.REGION ?? ''))
+// Used when no other gateway qualifies
+@Conditional(c => c.missing(PaymentGateway))
 @Injectable()
 @Extends()
 class MockPaymentGateway extends PaymentGateway {
@@ -127,39 +161,29 @@ class CheckoutService {
 }
 ```
 
-At runtime, exactly one gateway is registered — the one whose condition matches
-`REGION`. `CheckoutService` receives whichever is active without knowing which one.
+At runtime, exactly one gateway is registered — the one whose condition matches `REGION`, or the mock when none does.
+`CheckoutService` receives whichever is active without knowing which one.
 
 ---
 
-## `@Profile` — named activation groups
+## Profiles
 
-For environment or persona-based groupings (`test`, `production`, `eu`), `@Profile`
-is a declarative alternative to `@ConditionalOn`. Instead of writing a predicate,
-you name the group on the binding and activate it at the container level.
+A profile is a condition that checks the container's active profiles. `@Profile('eu')` is shorthand for
+`@Conditional(c => c.profile('eu'))`, and `.profiles('eu')` for `.conditional(c => c.profile('eu'))`. Profiles are
+decided with the other conditions, in the same pass.
 
 See the [Profiles guide](./profiles.md) for full documentation.
-
-**Quick comparison:**
-
-|               | `@Profile`                                     | `@ConditionalOn`                         |
-| ------------- | ---------------------------------------------- | ---------------------------------------- |
-| Activation    | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time         |
-| Style         | Declarative — name a group                     | Imperative — write a function            |
-| Async support | No                                             | Yes                                      |
-| Best for      | Environment / persona groupings                | Feature flags, presence checks, env vars |
 
 ---
 
 ## Stacking multiple conditions
 
-Multiple `@ConditionalOn` decorators on the same class are ANDed — **all** must
-return `true` for the binding to be registered.
+Multiple `@Conditional` decorators on the same class are ANDed — **all** must pass for the binding to be registered.
 
 ```ts
-// Only loaded in EU region AND when Redis is available
-@ConditionalOn(() => process.env.REGION === 'eu')
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+// Only loaded in the EU region AND when Redis is available
+@Conditional(c => c.env('REGION', 'eu'))
+@Conditional(c => c.present(RedisClient))
 @Injectable([RedisClient])
 class RedisEUCache {
   constructor(private readonly client: RedisClient) {}
@@ -167,26 +191,18 @@ class RedisEUCache {
 }
 ```
 
-There is no built-in OR. Model OR logic by splitting it into separate bindings, each
-with its own condition, or by combining multiple checks inside a single predicate.
+There is no built-in OR. Model it by splitting it into separate bindings, each with its own condition, or check both
+alternatives inside one `c.when` predicate.
 
 ---
 
-## Async conditionals
+## Predicates of your own
 
-The predicate can return a `Promise<boolean>`, which is awaited during `init()`.
-Useful for feature flags fetched from a remote service.
+`c.when` takes any predicate, sync or async. The container awaits it while it compiles, which suits a feature flag
+fetched from a remote service:
 
 ```ts
-import type { Conditional } from '@caffeinejs/di'
-
-// featureFlags() is a standalone async function — ctx.container has no .get()
-const isNewPaymentFlowEnabled: Conditional = async () => {
-  const flags = await featureFlags()
-  return flags.isEnabled('new-payment-flow')
-}
-
-@ConditionalOn(isNewPaymentFlowEnabled)
+@Conditional(c => c.when(async () => (await featureFlags()).isEnabled('new-payment-flow')))
 @Injectable()
 @Extends()
 class NewPaymentGateway extends PaymentGateway {
@@ -194,37 +210,43 @@ class NewPaymentGateway extends PaymentGateway {
 }
 ```
 
-A common synchronous variant — conditionally activate a binding in test environments:
+The predicate is handed nothing. Whether a key is bound is asked with `c.present` or `c.missing`: the container orders
+those, and cannot know what an arbitrary function reads.
+
+---
+
+## Reading the configuration
+
+`c.config` reads through the container's config provider — the one `$i.config` injections read — with the same
+selector or dot-separated path:
 
 ```ts
-@ConditionalOn(() => process.env.NODE_ENV === 'test')
+@Conditional(c => c.config('cache.enabled'))
+@Injectable()
+class CacheWarmer {}
+
+@Conditional(c => c.config<AppConfig, string>(cfg => cfg.cache.kind, 'redis'))
 @Injectable()
 @Extends()
-class StubPaymentGateway extends PaymentGateway {
-  async charge(amount: number, currency: string) {
-    return { transactionId: 'test_txn_001' }
-  }
-  async refund(transactionId: string) {}
-}
+class RedisCache extends Cache {}
 ```
 
-Predicates are awaited one at a time, in the order described in
-[How `@ConditionalOn` works](#how-conditionalon-works). A predicate must not depend on
-another's side effects.
+The provider is read once, while the container compiles, so a reload afterwards does not decide the binding again.
+Because nothing is compiled yet at that point, it must be bound with `toValue()` or `toFactory()`; an application built
+with `@caffeinejs/std` has one already. With no provider bound, the container fails with `ErrNoConfigProvider`.
 
 ---
 
 ## Conditional `@Configuration` classes
 
-`@ConditionalOn` can be applied to a `@Configuration` class. When the class-level
-condition fails, **all** `@Provides` methods inside that class are skipped — they
-are treated as if they were never declared.
+A condition on a `@Configuration` class covers its `@Provides` methods too: when the class fails its condition, **all**
+of them are skipped — as if they were never declared.
 
 ```ts
-import { Configuration, Provides, ConditionalOn } from '@caffeinejs/di'
+import { Configuration, Provides, Conditional } from '@caffeinejs/di'
 
 @Configuration()
-@ConditionalOn(() => process.env.REGION === 'eu')
+@Conditional(c => c.env('REGION', 'eu'))
 class EUInfrastructureConfig {
   // Always provided when the class condition passes
   @Provides(PaymentGateway)
@@ -233,14 +255,14 @@ class EUInfrastructureConfig {
   }
 
   // Only provided in EU AND when Redis is available
-  @ConditionalOn(ctx => ctx.container.has(RedisClient))
+  @Conditional(c => c.present(RedisClient))
   @Provides(CacheStore)
   cache(client: RedisClient) {
     return new RedisEUCache(client)
   }
 
   // Only provided in EU AND outside test environments
-  @ConditionalOn(() => process.env.NODE_ENV !== 'test')
+  @Conditional(c => c.when(() => process.env.NODE_ENV !== 'test'))
   @Provides(TaxCalculator)
   taxCalc() {
     return new EUTaxCalculator()
@@ -248,21 +270,21 @@ class EUInfrastructureConfig {
 }
 ```
 
-Each method's effective condition is the AND of the class-level and method-level
-predicates. In the example above:
+Each method's effective condition is the AND of the class-level and method-level conditions. In the example above:
 
 - `gateway` is provided whenever `REGION === 'eu'`
 - `cache` is provided when `REGION === 'eu'` AND `RedisClient` is bound
 - `taxCalc` is provided when `REGION === 'eu'` AND `NODE_ENV !== 'test'`
 
-When the class-level condition fails entirely, none of the methods are evaluated —
-including the method-level predicates.
+The class is decided before its methods. When it fails, none of the methods are evaluated — method-level conditions
+included. A `@Provides` method belongs to its own class: another class providing the same key does not share its fate.
 
 ---
 
 ## Manual bindings with `.conditional()`
 
-The fluent binder exposes `.conditional()` for the same behaviour without decorators.
+The fluent binder exposes `.conditional()` for the same behaviour without decorators. It takes a callback, a condition,
+or several conditions.
 
 ```ts
 import { CaffeineIoC } from '@caffeinejs/di'
@@ -273,21 +295,21 @@ di.bind(StripeEUGateway, t =>
   t
     .toSelf()
     .extends(PaymentGateway)
-    .conditional(() => process.env.REGION === 'eu'),
+    .conditional(c => c.env('REGION', 'eu')),
 )
 
 di.bind(BraintreeUSGateway, t =>
   t
     .toSelf()
     .extends(PaymentGateway)
-    .conditional(() => process.env.REGION === 'us'),
+    .conditional(c => c.env('REGION', 'us')),
 )
 
 di.bind(MockPaymentGateway, t =>
   t
     .toSelf()
     .extends(PaymentGateway)
-    .conditional(() => !['eu', 'us'].includes(process.env.REGION ?? '')),
+    .conditional(c => c.missing(PaymentGateway)),
 )
 
 await di.init()
@@ -295,21 +317,19 @@ await di.init()
 
 Multiple `.conditional()` calls chain as AND, matching the decorator behaviour.
 
-A binding made by hand with `.conditional()` waits for `init()` the way a decorated one does.
-Until then `has()` does not see it, and it leaves a binding already registered under its key
-alone. It replaces that binding only if its predicate passes. Binding the same key again
-discards it, the same way the second of two `bind()` calls replaces the first.
+A binding made by hand with `.conditional()` is held back until `init()` the way a decorated one is, and leaves a
+binding already registered under its key alone. It replaces that binding only if its conditions pass. Binding the same
+key again discards it, the same way the second of two `bind()` calls replaces the first.
 
 ---
 
 ## Defaults
 
-A default is an implementation used only when nothing else provides the key. Give it a
-condition that checks for that:
+A default is an implementation used only when nothing else provides the key. Give it a condition that checks for that:
 
 ```ts
 // Ships with the library — yields to any other Cache
-@ConditionalOn(ctx => !ctx.container.has(Cache))
+@Conditional(c => c.missing(Cache))
 @Injectable()
 @Extends()
 class InMemoryCache extends Cache {
@@ -317,29 +337,38 @@ class InMemoryCache extends Cache {
 }
 ```
 
-The same condition works on a binding made by hand, which is how a feature ships a default
-from its configuration step:
+The same condition works on a binding made by hand, which is how a feature ships a default from its configuration step:
 
 ```ts
-di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
 
-It yields to every binding of `Cache` without conditions, whether bound by hand before or
-after it, by a module or by decorators. It also yields to every conditional one decided
-before it. It cannot see a conditional one decided after it, such as a decorated class
-declared later: that one registers too, and resolving `Cache` fails with
-`ErrNoUniqueInjectionForKey`. When the replacement is conditional, give the default the
-complementary condition, as `MockPaymentGateway` does above. Or keep the default
-unconditional and mark the replacement `@Primary`:
+It yields to every other binding of `Cache` — bound by hand before or after it, by a module or by decorators,
+conditional or not. A conditional one is decided before the default, whichever was declared first.
+
+A `@Configuration` class can be a default for what it provides: its condition does not wait for its own `@Provides`
+methods.
 
 ```ts
-@Primary()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
-@Injectable([RedisClient])
-@Extends()
-class RedisCache extends Cache {
-  // ...
+@Configuration()
+@Conditional(c => c.missing(DataSource))
+class EmbeddedDataSourceConfig {
+  @Provides(DataSource)
+  dataSource() {
+    return new EmbeddedDataSource()
+  }
 }
 ```
 
-Both are registered then, and `Cache` resolves to `RedisCache` whenever it is registered.
+---
+
+## When two bindings claim one key
+
+A decorated binding decided at compile time never replaces a binding registered under its key. When both pass, the
+container fails with `ErrRepeatedInjectableConfiguration` — whichever of the two is decided second, and whether the
+other one was bound by hand or declared by another class. Two unconditional `@Provides` of one key fail the same way.
+
+Two ways out:
+
+- `rebind(key, …)` replaces the decorated binding, and drops it before it is decided.
+- `c.missing(key)` on one of them makes it a default that yields to the other.

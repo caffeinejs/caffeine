@@ -1,6 +1,6 @@
 import type { Binding } from '../../../binding.js'
 import { DeferredCtor } from '../../../deferred_ctor.js'
-import { ErrMissingInjectionKey, ErrNoResolutionForKey, ErrNoValuesProvider } from '../../../errors.js'
+import { ErrMissingInjectionKey, ErrNoConfigProvider, ErrNoResolutionForKey } from '../../../errors.js'
 import type { InjectionMiddleware } from '../../../injection_resolver.js'
 import { Identifier, keyStr, TypedKey } from '../../../key.js'
 import type { Provider } from '../../../provider.js'
@@ -104,14 +104,30 @@ type ConfigArgs = {
 }
 
 /**
- * Resolves a value out of the registered values provider.
+ * Turns what `$i.config` and a `config` condition take — a selector, or a dot-separated path — into the function that
+ * reads the value out of the configuration. A path walks one property per segment and yields `undefined` past a
+ * missing one.
+ */
+export function configSelector(access: ((config: unknown) => unknown) | string): (config: unknown) => unknown {
+  if (typeof access !== 'string') {
+    return access
+  }
+
+  const keys = access.split('.')
+
+  return config =>
+    keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), config)
+}
+
+/**
+ * Resolves a value out of the registered config provider.
  *
- * @throws {@link ErrNoValuesProvider} when no provider is registered and the stage carries no default.
+ * @throws {@link ErrNoConfigProvider} when no provider is registered and the stage carries no default.
  */
 export const configStage: InjectionMiddleware = (ctx, _next, args) => {
   const { access, defaultValue } = args as ConfigArgs
   const hasDefault = defaultValue !== undefined
-  const providerBinding = ctx.container.getBinding(Keys.kValuesProvider) as Binding<unknown> | undefined
+  const providerBinding = ctx.container.getBinding(Keys.kConfigProvider) as Binding<unknown> | undefined
 
   if (!providerBinding) {
     if (hasDefault) {
@@ -119,21 +135,13 @@ export const configStage: InjectionMiddleware = (ctx, _next, args) => {
     }
 
     if (!ctx.descriptor.optional) {
-      throw new ErrNoValuesProvider(describeContext(ctx))
+      throw new ErrNoConfigProvider(describeContext(ctx))
     }
 
     return () => undefined
   }
 
-  const select: (provider: unknown) => unknown =
-    typeof access === 'string'
-      ? (() => {
-          const keys = access.split('.')
-
-          return (provider: unknown) =>
-            keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), provider)
-        })()
-      : (access as (provider: unknown) => unknown)
+  const select = configSelector(access)
 
   return () => {
     const v = select(providerBinding.factory(providerBinding.ctx!))

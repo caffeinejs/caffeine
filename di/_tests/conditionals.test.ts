@@ -1,16 +1,25 @@
-import { describe, it, beforeEach, expect, vi } from 'vitest'
+import { describe, it, afterEach, beforeEach, expect, vi } from 'vitest'
 
+import { $cond, type ConditionHelpers } from '../conditional.js'
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
+import {
+  ErrInvalidBinding,
+  ErrInvalidContainerState,
+  ErrInvalidDecorator,
+  ErrMissingInjectionKey,
+  ErrNoConfigProvider,
+} from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
+import { Scopes } from '../scope.js'
 
 describe('Conditionals', function () {
   describe('using default conditional', function () {
@@ -20,17 +29,17 @@ describe('Conditionals', function () {
     class Managed {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(NonManaged))
+    @Conditional(c => c.present(NonManaged))
     class NoPass {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(NonManaged))
-    @ConditionalOn(() => process.env.NODE === 'test')
+    @Conditional(c => c.present(NonManaged))
+    @Conditional(c => c.env('NODE', 'test'))
     class NoPassToo {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(Managed))
-    @ConditionalOn(() => true)
+    @Conditional(c => c.present(Managed))
+    @Conditional(c => c.when(() => true))
     class Pass {}
 
     @Injectable([Pass])
@@ -86,7 +95,7 @@ describe('Conditionals', function () {
       class ModuleSvc {}
 
       @Injectable()
-      @ConditionalOn(ctx => ctx.container.has(ModuleSvc))
+      @Conditional(c => c.present(ModuleSvc))
       class DependsOnModuleSvc {}
 
       const di = new CaffeineIoC({
@@ -106,7 +115,7 @@ describe('Conditionals', function () {
       class NeverBound {}
 
       @Injectable()
-      @ConditionalOn(ctx => ctx.container.has(NeverBound))
+      @Conditional(c => c.present(NeverBound))
       class DependsOnNeverBound {}
 
       const di = new CaffeineIoC()
@@ -119,7 +128,7 @@ describe('Conditionals', function () {
   describe('async conditional functions', function () {
     it('should register a component when an async conditional resolves to true', async function () {
       @Injectable()
-      @ConditionalOn(async () => true)
+      @Conditional(c => c.when(async () => true))
       class AsyncTrueBean {}
 
       const di = new CaffeineIoC()
@@ -130,7 +139,7 @@ describe('Conditionals', function () {
 
     it('should not register a component when an async conditional resolves to false', async function () {
       @Injectable()
-      @ConditionalOn(async () => false)
+      @Conditional(c => c.when(async () => false))
       class AsyncFalseBean {}
 
       const di = new CaffeineIoC()
@@ -147,7 +156,7 @@ describe('Conditionals', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(PresenceSvc, t => t.toSelf())
-      di.bind(ConditionalSvc, t => t.toSelf().conditional(ctx => ctx.container.has(PresenceSvc)))
+      di.bind(ConditionalSvc, t => t.toSelf().conditional(c => c.present(PresenceSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvc)).toBeTruthy()
@@ -159,7 +168,7 @@ describe('Conditionals', function () {
       class ConditionalSvcFailing {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConditionalSvcFailing, t => t.toSelf().conditional(ctx => ctx.container.has(AbsentSvc)))
+      di.bind(ConditionalSvcFailing, t => t.toSelf().conditional(c => c.present(AbsentSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvcFailing)).toBeFalsy()
@@ -187,7 +196,7 @@ describe('Conditionals', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kChannel, t => t.toClass(FailingChannel).conditional(() => false))
+      di.bind(kChannel, t => t.toClass(FailingChannel).conditional(c => c.when(() => false)))
       di.bind(NamedChannel, t => t.toSelf().names(kChannel))
       await di.init()
 
@@ -198,7 +207,7 @@ describe('Conditionals', function () {
       class AsyncConditionalSvc {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(AsyncConditionalSvc, t => t.toSelf().conditional(async () => true))
+      di.bind(AsyncConditionalSvc, t => t.toSelf().conditional(c => c.when(async () => true)))
       await di.init()
 
       expect(di.has(AsyncConditionalSvc)).toBeTruthy()
@@ -207,7 +216,7 @@ describe('Conditionals', function () {
 
     // A binding made by hand waits for compile() like a decorated one. Registered at bind time, its condition saw the
     // binding itself, and it replaced a binding of its key before the condition ran — so a default written as
-    // `.conditional(ctx => !ctx.container.has(key))` removed itself, or took the application's own binding with it.
+    // `.conditional(c => c.missing(key))` removed itself, or took the application's own binding with it.
     describe('held back until compile()', function () {
       abstract class Hasher {
         abstract kind(): string
@@ -235,7 +244,7 @@ describe('Conditionals', function () {
       }
 
       const bindDefault = (di: CaffeineIoC) =>
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(ctx => !ctx.container.has(Hasher)))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(c => c.missing(Hasher)))
 
       it('should register a default when nothing else answers to its key', async function () {
         const di = new CaffeineIoC({ decorators: false })
@@ -284,7 +293,7 @@ describe('Conditionals', function () {
 
       it('should not be visible before init()', async function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ScryptHasher, t => t.toSelf().conditional(() => true))
+        di.bind(ScryptHasher, t => t.toSelf().conditional(c => c.when(() => true)))
 
         expect(di.has(ScryptHasher)).toBe(false)
 
@@ -295,7 +304,7 @@ describe('Conditionals', function () {
 
       it('should be discarded by a later binding of the same key, as a registered one is replaced', async function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(c => c.when(() => true)))
         di.bind(Hasher, t => t.toClass(ArgonHasher))
         await di.init()
 
@@ -305,7 +314,7 @@ describe('Conditionals', function () {
       it('should leave the earlier binding of its key in place when its condition fails', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.bind(Hasher, t => t.toClass(ArgonHasher))
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => false))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(c => c.when(() => false)))
         await di.init()
 
         expect(di.get(Hasher).kind()).toBe('argon')
@@ -317,7 +326,7 @@ describe('Conditionals', function () {
           t
             .toSelf()
             .profiles('test')
-            .conditional(() => true),
+            .conditional(c => c.when(() => true)),
         )
         await di.init()
 
@@ -355,7 +364,7 @@ describe('Conditionals', function () {
       const kCascadedProvide = token<string>(Symbol('cascadedProvide'))
 
       @Configuration()
-      @ConditionalOn(() => false)
+      @Conditional(c => c.when(() => false))
       class FailingConf {
         @Provides(kCascadedProvide)
         provided() {
@@ -375,7 +384,7 @@ describe('Conditionals', function () {
       const kPassingProvide = token<string>(Symbol('passingProvide'))
 
       @Configuration()
-      @ConditionalOn(() => true)
+      @Conditional(c => c.when(() => true))
       class PassingConf {
         @Provides(kPassingProvide)
         provided() {
@@ -404,16 +413,20 @@ describe('Conditionals', function () {
       const kXML = token<string>(Symbol('xml'))
 
       @Configuration()
-      @ConditionalOn(() => {
-        spy1()
-        return false
-      })
+      @Conditional(c =>
+        c.when(() => {
+          spy1()
+          return false
+        }),
+      )
       class NoConf {
         @Provides(kTxt)
-        @ConditionalOn(() => {
-          spy1()
-          return true
-        })
+        @Conditional(c =>
+          c.when(() => {
+            spy1()
+            return true
+          }),
+        )
         txt() {
           return 'txt'
         }
@@ -425,33 +438,43 @@ describe('Conditionals', function () {
       }
 
       @Configuration()
-      @ConditionalOn(() => {
-        spy2()
-        return true
-      })
+      @Conditional(c =>
+        c.when(() => {
+          spy2()
+          return true
+        }),
+      )
       class Conf {
         @Provides(kJSON)
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
+        @Conditional(c =>
+          c.when(() => {
+            spy2()
+            return true
+          }),
+        )
+        @Conditional(c =>
+          c.when(() => {
+            spy2()
+            return true
+          }),
+        )
         json() {
           return 'json'
         }
 
         @Provides(kXML)
-        @ConditionalOn(() => {
-          spy2()
-          return false
-        })
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
+        @Conditional(c =>
+          c.when(() => {
+            spy2()
+            return false
+          }),
+        )
+        @Conditional(c =>
+          c.when(() => {
+            spy2()
+            return true
+          }),
+        )
         xml() {
           return 'xml'
         }
@@ -477,5 +500,467 @@ describe('Conditionals', function () {
         expect(spy2).toHaveBeenCalledTimes(4)
       })
     })
+  })
+})
+
+// #49: a binding whose condition checks for a key is decided after every held binding answering to that key, whichever
+// order they were declared or bound in.
+describe('decision order', function () {
+  describe('a decorated default declared before a conditional competitor', function () {
+    abstract class Store {
+      abstract kind(): string
+    }
+
+    @Conditional(c => c.missing(Store))
+    @Injectable()
+    @Extends()
+    class MemoryStore extends Store {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    @Conditional(c => c.when(() => true))
+    @Injectable()
+    @Extends()
+    class RedisStore extends Store {
+      kind(): string {
+        return 'redis'
+      }
+    }
+    void RedisStore
+
+    it('yields to the competitor', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['redis'])
+      expect(di.has(MemoryStore)).toBe(false)
+    })
+  })
+
+  describe('a default bound by hand before its competitor', function () {
+    abstract class Queue {
+      abstract kind(): string
+    }
+
+    class MemoryQueue extends Queue {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    class KafkaQueue extends Queue {
+      kind(): string {
+        return 'kafka'
+      }
+    }
+
+    it('yields to the competitor bound after it', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(MemoryQueue, t =>
+        t
+          .toSelf()
+          .extends(Queue)
+          .conditional(c => c.missing(Queue)),
+      )
+      di.bind(KafkaQueue, t =>
+        t
+          .toSelf()
+          .extends(Queue)
+          .conditional(c => c.when(() => true)),
+      )
+      await di.init()
+
+      expect(di.getMany(Queue).map(q => q.kind())).toEqual(['kafka'])
+    })
+  })
+
+  describe('a chain of defaults and presence checks', function () {
+    abstract class DataSource {
+      abstract url(): string
+    }
+
+    class EmbeddedDataSource extends DataSource {
+      url(): string {
+        return 'mem://'
+      }
+    }
+
+    abstract class Repo {
+      abstract kind(): string
+    }
+
+    class JdbcRepo extends Repo {
+      kind(): string {
+        return 'jdbc'
+      }
+    }
+
+    class MemoryRepo extends Repo {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    // Bound in reverse: each is decided after what it checks for, not in the order it was bound.
+    it('decides each binding after the bindings it checks for', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(MemoryRepo, t =>
+        t
+          .toSelf()
+          .extends(Repo)
+          .conditional(c => c.missing(Repo)),
+      )
+      di.bind(JdbcRepo, t =>
+        t
+          .toSelf()
+          .extends(Repo)
+          .conditional(c => c.present(DataSource)),
+      )
+      di.bind(DataSource, t => t.toClass(EmbeddedDataSource).conditional(c => c.missing(DataSource)))
+      await di.init()
+
+      expect(di.get(DataSource).url()).toBe('mem://')
+      expect(di.getMany(Repo).map(r => r.kind())).toEqual(['jdbc'])
+    })
+  })
+
+  describe('two defaults of one key', function () {
+    abstract class Cache {
+      abstract kind(): string
+    }
+
+    class FirstCache extends Cache {
+      kind(): string {
+        return 'first'
+      }
+    }
+
+    class SecondCache extends Cache {
+      kind(): string {
+        return 'second'
+      }
+    }
+
+    // Each waits for the other, so the first declared goes first and the second then sees it.
+    it('registers the one declared first, which the other then yields to', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(FirstCache, t =>
+        t
+          .toSelf()
+          .extends(Cache)
+          .conditional(c => c.missing(Cache)),
+      )
+      di.bind(SecondCache, t =>
+        t
+          .toSelf()
+          .extends(Cache)
+          .conditional(c => c.missing(Cache)),
+      )
+      await di.init()
+
+      expect(di.get(Cache).kind()).toBe('first')
+    })
+  })
+
+  describe('a @Configuration whose condition checks for a key it provides', function () {
+    const kGreeting = token<string>(Symbol('default-greeting'))
+    const kFarewell = token<string>(Symbol('default-farewell'))
+
+    @Configuration()
+    @Conditional(c => c.missing(kGreeting))
+    class DefaultGreeting {
+      @Provides(kGreeting)
+      greeting(): string {
+        return 'default'
+      }
+    }
+    void DefaultGreeting
+
+    @Configuration()
+    @Conditional(c => c.missing(kFarewell))
+    class DefaultFarewell {
+      @Provides(kFarewell)
+      farewell(): string {
+        return 'default'
+      }
+    }
+
+    it('registers when nothing else answers to the key', async function () {
+      const di = new CaffeineIoC()
+      await di.init()
+
+      expect(di.get(kGreeting)).toBe('default')
+    })
+
+    it('yields, class and all, to a conditional binding of the key made by hand', async function () {
+      const di = new CaffeineIoC()
+      di.bind(kFarewell, t => t.toValue('hand').conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kFarewell)).toBe('hand')
+      expect(di.has(DefaultFarewell)).toBe(false)
+    })
+  })
+})
+
+describe('config conditions', function () {
+  type Cfg = { cache: { enabled: boolean; kind: string } }
+  const config: Cfg = { cache: { enabled: true, kind: 'redis' } }
+
+  class Enabled {}
+  class ByPath {}
+  class OnRedis {}
+  class OnMemcached {}
+
+  it('passes on true, or on the expected value, read by a selector or a path', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bindConfigProvider<Cfg>(t => t.toValue(config))
+    di.bind(Enabled, t => t.toSelf().conditional(c => c.config<Cfg>(cfg => cfg.cache.enabled)))
+    di.bind(ByPath, t => t.toSelf().conditional(c => c.config('cache.enabled')))
+    di.bind(OnRedis, t => t.toSelf().conditional(c => c.config<Cfg, string>(cfg => cfg.cache.kind, 'redis')))
+    di.bind(OnMemcached, t => t.toSelf().conditional(c => c.config('cache.kind', 'memcached')))
+    await di.init()
+
+    expect([di.has(Enabled), di.has(ByPath), di.has(OnRedis), di.has(OnMemcached)]).toEqual([true, true, true, false])
+  })
+
+  it('reads a provider bound with a transient factory, the way std binds it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bindConfigProvider<Cfg>(t => t.toFactory(() => config).lifetime(Scopes.TRANSIENT))
+    di.bind(OnRedis, t => t.toSelf().conditional(c => c.config('cache.kind', 'redis')))
+    await di.init()
+
+    expect(di.has(OnRedis)).toBe(true)
+  })
+
+  it('fails the container when no config provider is bound', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Enabled, t => t.toSelf().conditional(c => c.config('cache.enabled')))
+
+    await expect(di.init()).rejects.toThrow(ErrNoConfigProvider)
+  })
+
+  it('refuses a provider that would need compiling to be read', async function () {
+    class ProviderClass {
+      readonly cache = { enabled: true }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bindConfigProvider<ProviderClass>(t => t.toClass(ProviderClass))
+    di.bind(Enabled, t => t.toSelf().conditional(c => c.config('cache.enabled')))
+
+    await expect(di.init()).rejects.toThrow(ErrInvalidBinding)
+  })
+
+  it('waits for a config provider that is itself held back', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Enabled, t => t.toSelf().conditional(c => c.config('cache.enabled')))
+    di.bindConfigProvider<Cfg>(t => t.toValue(config).conditional(c => c.when(() => true)))
+    await di.init()
+
+    expect(di.has(Enabled)).toBe(true)
+  })
+})
+
+describe('env conditions', function () {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  const kEmpty = token<string>('cond-env-empty')
+  const kUnset = token<string>('cond-env-unset')
+  const kOther = token<string>('cond-env-other')
+
+  class WhenSet {}
+  class WhenEqual {}
+
+  it('passes when the variable is set to a non-empty value, or equals the expected one', async function () {
+    vi.stubEnv('CAFFEINE_DI_COND_SET', 'yes')
+    vi.stubEnv('CAFFEINE_DI_COND_EMPTY', '')
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(WhenSet, t => t.toSelf().conditional(c => c.env('CAFFEINE_DI_COND_SET')))
+    di.bind(kEmpty, t => t.toValue('x').conditional(c => c.env('CAFFEINE_DI_COND_EMPTY')))
+    di.bind(kUnset, t => t.toValue('x').conditional(c => c.env('CAFFEINE_DI_COND_NEVER_SET')))
+    di.bind(WhenEqual, t => t.toSelf().conditional(c => c.env('CAFFEINE_DI_COND_SET', 'yes')))
+    di.bind(kOther, t => t.toValue('x').conditional(c => c.env('CAFFEINE_DI_COND_SET', 'no')))
+    await di.init()
+
+    expect([di.has(WhenSet), di.has(kEmpty), di.has(kUnset), di.has(WhenEqual), di.has(kOther)]).toEqual([
+      true,
+      false,
+      false,
+      true,
+      false,
+    ])
+  })
+})
+
+describe('when conditions', function () {
+  class Absent {}
+
+  it('calls the predicate with nothing, the container included', async function () {
+    const test = vi.fn(() => true)
+    class Checked {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Checked, t => t.toSelf().conditional(c => c.when(test)))
+    await di.init()
+
+    expect(test).toHaveBeenCalledTimes(1)
+    expect(test).toHaveBeenCalledWith()
+    expect(di.has(Checked)).toBe(true)
+  })
+
+  it('runs only once every condition the container checks itself has passed', async function () {
+    const test = vi.fn(() => true)
+    class Gated {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Gated, t =>
+      t
+        .toSelf()
+        .conditional(c => c.when(test))
+        .conditional(c => c.present(Absent)),
+    )
+    await di.init()
+
+    expect(test).not.toHaveBeenCalled()
+    expect(di.has(Gated)).toBe(false)
+  })
+})
+
+describe('the forms a condition is given in', function () {
+  class Anchor {}
+  class ByCondition {}
+  class ByCallback {}
+  class ByArray {}
+
+  it('takes a condition, a callback handed the helpers, or several conditions', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Anchor, t => t.toSelf())
+    di.bind(ByCondition, t => t.toSelf().conditional($cond.present(Anchor)))
+    di.bind(ByCallback, t => t.toSelf().conditional(c => c.present(Anchor)))
+    di.bind(ByArray, t => t.toSelf().conditional([$cond.present(Anchor), $cond.when(() => false)]))
+    await di.init()
+
+    expect([di.has(ByCondition), di.has(ByCallback), di.has(ByArray)]).toEqual([true, true, false])
+  })
+
+  // What a binding holds is the data the callback returned, so compile() never calls it again.
+  it('runs a callback once, when the condition is declared', async function () {
+    const callback = vi.fn((c: ConditionHelpers) => c.when(() => true))
+    class Declared {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Declared, t => t.toSelf().conditional(callback))
+    expect(callback).toHaveBeenCalledTimes(1)
+
+    await di.init()
+    expect(callback).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a predicate written for the old API, or anything else that is not a condition', function () {
+    class Old {}
+    const di = new CaffeineIoC({ decorators: false })
+    const readsTheContainer = (ctx: { container: { has(key: unknown): boolean } }) => ctx.container.has(Old)
+
+    expect(() => di.bind(Old, t => t.toSelf().conditional((() => true) as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Old, t => t.toSelf().conditional(readsTheContainer as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Old, t => t.toSelf().conditional({ kind: 'unknown' } as never))).toThrow(ErrInvalidBinding)
+    expect(() => Conditional((() => true) as never)).toThrow(ErrInvalidDecorator)
+  })
+
+  it('lets a helper report its own error', function () {
+    expect(() => Conditional(c => c.missing(undefined as never))).toThrow(ErrMissingInjectionKey)
+  })
+})
+
+describe('conditions from a metadata reader', function () {
+  abstract class ReadHasher {
+    abstract kind(): string
+  }
+
+  class ScryptReadHasher extends ReadHasher {
+    kind(): string {
+      return 'scrypt'
+    }
+  }
+
+  class ArgonReadHasher extends ReadHasher {
+    kind(): string {
+      return 'argon'
+    }
+  }
+
+  const reader = (key: unknown) => (key === ReadHasher ? { conditionals: [$cond.missing(ReadHasher)] } : {})
+
+  // Read when the binding is held rather than when it registers, the reader's condition never sees its own binding:
+  // registered first and checked after, a default removed itself.
+  it('makes a binding a default that registers when nothing else answers to its key', async function () {
+    const di = new CaffeineIoC({ decorators: false, metadataReader: reader })
+    di.bind(ReadHasher, t => t.toClass(ScryptReadHasher))
+    await di.init()
+
+    expect(di.get(ReadHasher).kind()).toBe('scrypt')
+  })
+
+  it('makes it yield to another binding of the key', async function () {
+    const di = new CaffeineIoC({ decorators: false, metadataReader: reader })
+    di.bind(ReadHasher, t => t.toClass(ScryptReadHasher))
+    di.bind(ArgonReadHasher, t => t.toSelf().extends(ReadHasher))
+    await di.init()
+
+    expect(di.getMany(ReadHasher).map(h => h.kind())).toEqual(['argon'])
+  })
+})
+
+describe('snapshot() and restore()', function () {
+  it('restores a registered binding as it is, without deciding its conditions again', async function () {
+    let enabled = true
+    class Flagged {}
+
+    const source = new CaffeineIoC({ decorators: false })
+    source.bind(Flagged, t => t.toSelf().conditional(c => c.when(() => enabled)))
+    await source.init()
+
+    enabled = false
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.restore(source.snapshot())
+    await di.init()
+
+    expect(di.has(Flagged)).toBe(true)
+  })
+
+  it('decides a binding the source still held with the profiles the source had active', async function () {
+    class HeldForProfile {}
+
+    const source = new CaffeineIoC({ decorators: false, profiles: ['snap-held'] })
+    source.bind(HeldForProfile, t => t.toSelf().profiles('snap-held'))
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.restore(source.snapshot())
+    await di.init()
+
+    expect(di.profiles.has('snap-held')).toBe(true)
+    expect(di.has(HeldForProfile)).toBe(true)
+  })
+
+  // What a from-scratch TestContainer does: both containers read the same decorators, and hold the same bindings.
+  it('does not hold a binding twice when the container restored into read the same decorators', async function () {
+    const di = new CaffeineIoC()
+    di.restore(new CaffeineIoC().snapshot())
+
+    await expect(di.init()).resolves.toBeUndefined()
+  })
+
+  it('cannot restore once the container has been compiled', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    await di.compile()
+
+    expect(() => di.restore(new CaffeineIoC({ decorators: false }).snapshot())).toThrow(ErrInvalidContainerState)
   })
 })

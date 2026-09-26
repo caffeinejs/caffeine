@@ -31,7 +31,7 @@
 ## Factory methods
 
 `BindingSpec<TValue, TKey>` is the object handed to the callback of `di.bind(key, …)`,
-`di.rebind(key, …)` and `di.bindValuesProvider(…)`. These methods select _how_ the key is
+`di.rebind(key, …)` and `di.bindConfigProvider(…)`. These methods select _how_ the key is
 resolved.
 
 Every method returns the same instance, so one chain describes the whole binding. The
@@ -323,24 +323,29 @@ di.bind(PaymentService, t => t.toSelf().intercept((ctx, instance) => withMetrics
 ### conditional
 
 ```ts
-conditional(fn)
+conditional(condition: Condition | Condition[] | ((c: ConditionHelpers) => Condition))
 ```
 
-Activates the binding only when all predicates in `fn` return `true`.
-Predicates receive a `ConditionContext` with `container.has()`.
+Activates the binding only when every condition passes. Build a condition with
+[`$cond`](./conditionals.md#cond), or pass a callback handed the same helpers; it runs
+once, here. Several calls stack as AND.
 
 ```ts
-di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
+di.bind(RedisCacheService, t => t.toSelf().conditional(c => c.present(RedisClient)))
 ```
 
-A binding with conditions is not registered when `bind()` returns. It waits for
-`compile()`, where it is decided with the decorated ones. Until then it is not
-visible to `has()`, `entries()` or `size`, and it leaves a binding already
-registered under its key in place. That is what lets a default check for its own key:
+A binding with conditions is not registered when `bind()` returns. It is held until
+`compile()`, and decided after every held binding answering to a key its conditions
+check. Until then it is not visible to `has()`, `entries()` or `size`, and it leaves a
+binding already registered under its key in place. That is what lets a default check
+for its own key:
 
 ```ts
-di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
+
+Anything that is not a condition — a predicate written for the old API included — is
+rejected with `ErrInvalidBinding`.
 
 See [Defaults](../guides/conditional-bindings.md#defaults).
 
@@ -352,6 +357,10 @@ profiles(profile, ...profiles)
 
 Restricts this binding to the given profiles. The binding is only active when
 one of them is enabled on the container.
+
+Shorthand for `.conditional(c => c.profile(profile, ...profiles))`, so the binding is
+held until the container compiles. The names given to one call are alternatives; two
+calls must both pass.
 
 ```ts
 di.bind(MockEmailService, t => t.toSelf().profiles('test', 'development'))

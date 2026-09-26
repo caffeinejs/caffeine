@@ -8,7 +8,6 @@ import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 import { idfy, MemberKind, TypeID } from './types.js'
 
 const Bindings = new Map<InjectionToken, DecoratedBindingConfig>()
-const ByProfile = new Map<string, Set<InjectionToken>>()
 const ProvidedBindings: Array<[InjectionToken, DecoratedBindingConfig]> = []
 const MetadataWeakMap = new WeakMap<TypeID, MemberMetadata>()
 const Injectables = new Set<InjectionToken>()
@@ -185,7 +184,6 @@ export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Bin
  */
 export interface DecoratorRegistrySnapshot {
   readonly bindings: Map<InjectionToken, DecoratedBindingConfig>
-  readonly byProfile: Map<string, Set<InjectionToken>>
   readonly providedBindings: Array<[InjectionToken, DecoratedBindingConfig]>
   readonly injectables: Set<InjectionToken>
 }
@@ -196,7 +194,6 @@ export interface DecoratorRegistrySnapshot {
 export function snapshotDecoratorRegistry(): DecoratorRegistrySnapshot {
   return {
     bindings: new Map(Bindings),
-    byProfile: new Map([...ByProfile.entries()].map(([k, v]) => [k, new Set(v)])),
     providedBindings: [...ProvidedBindings],
     injectables: new Set(Injectables),
   }
@@ -209,11 +206,6 @@ export function restoreDecoratorRegistry(snapshot: DecoratorRegistrySnapshot): v
   Bindings.clear()
   for (const [k, v] of snapshot.bindings) {
     Bindings.set(k, v)
-  }
-
-  ByProfile.clear()
-  for (const [k, v] of snapshot.byProfile) {
-    ByProfile.set(k, new Set(v))
   }
 
   ProvidedBindings.length = 0

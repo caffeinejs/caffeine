@@ -2,7 +2,6 @@ import { ErrInvalidDecorator, ErrScopeMismatchInConfiguration } from '../errors.
 import { Injection, InjectionsFor } from '../injection.js'
 import { isNil } from '../internal/util/assert/index.js'
 import { solutions } from '../internal/util/errutil/index.js'
-import { InjectionToken } from '../key.js'
 import { Ctor } from '../types.js'
 import { Provides } from './provides.js'
 import { addProvidedBindings, defineInjectable, getInjectionMetadata } from './registrar/index.js'
@@ -34,15 +33,12 @@ export function Configuration<T>(injections?: Injection[]) {
     const deps = injections ?? []
     const metadata = getInjectionMetadata(context.metadata)
     const members = metadata.members ?? new Map()
-    const configurations = Array.from(members.entries()).map(([_, options]) => options)
-    const keys = configurations.map(x => x.bindingKey).filter((k): k is InjectionToken => k !== undefined)
 
+    // The class's own conditions, profiles among them, are not copied onto the @Provides bindings: the container holds
+    // each one until it has decided the class, whichever order the class decorators were written in.
     const classBinding = defineInjectable<T>(context.metadata, target, config =>
-      config.dependencies(normalizeInjections(deps)).configuration(true).keysProvided(keys),
+      config.dependencies(normalizeInjections(deps)).configuration(true),
     )
-
-    const effectiveProfiles =
-      classBinding.getProfiles && classBinding.getProfiles.size > 0 ? classBinding.getProfiles : undefined
 
     for (const [method, factory] of members) {
       if (!isNil(classBinding.scopeID) && !isNil(factory.scopeID) && classBinding.scopeID !== factory.scopeID) {
@@ -63,10 +59,6 @@ export function Configuration<T>(injections?: Injection[]) {
         .configuration(true)
         .source(target as unknown as Ctor, method)
         .configuredBy(`${target.name}/${String(method)}`)
-
-      if (effectiveProfiles) {
-        factoryConfig.profiles([...effectiveProfiles])
-      }
 
       const lazy = isNil(classBinding.isLazy) ? factory.isLazy : classBinding.isLazy
       if (lazy !== undefined) {

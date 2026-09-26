@@ -1,5 +1,5 @@
 import { Binding, newBinding } from '../../binding.js'
-import { Conditional } from '../../conditional.js'
+import { Condition } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
@@ -10,11 +10,10 @@ import { Ctor } from '../../types.js'
 import { normalizeInjections, normalizeInjection } from '../util/index.js'
 
 export class DecoratedBindingConfig {
-  #profiles?: Set<string>
   #scopeID?: NamedToken<Scope>
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
-  #conditionals?: Conditional[]
+  #conditionals?: Condition[]
   #key?: InjectionToken
   #dependencies?: InjectionDescriptor[]
   #type?: Function
@@ -25,7 +24,6 @@ export class DecoratedBindingConfig {
   #interceptors?: PostResolutionInterceptor[]
   #tags?: Map<symbol, unknown>
   #configuration?: boolean
-  #keysProvided?: InjectionToken[]
   #extend?: InjectionToken
   #postConstruct?: Identifier | ((value: any) => void)
   #preDestroy?: Identifier | ((value: any) => void | Promise<void>)
@@ -40,10 +38,6 @@ export class DecoratedBindingConfig {
 
   constructor(key?: InjectionToken) {
     this.#key = key
-  }
-
-  get getProfiles(): Set<string> | undefined {
-    return this.#profiles
   }
 
   get scopeID(): NamedToken<Scope> | undefined {
@@ -70,7 +64,7 @@ export class DecoratedBindingConfig {
     return this.#tags
   }
 
-  get getConditionals(): Conditional[] | undefined {
+  get getConditionals(): Condition[] | undefined {
     return this.#conditionals
   }
 
@@ -78,24 +72,8 @@ export class DecoratedBindingConfig {
     return this.#configuration
   }
 
-  get getKeysProvided(): InjectionToken[] | undefined {
-    return this.#keysProvided
-  }
-
   get getSource(): { ctor: Ctor; method: string | symbol } | undefined {
     return this.#source
-  }
-
-  profiles(profiles: string | string[]): this {
-    this.#profiles ??= new Set()
-
-    const incoming = Array.isArray(profiles) ? profiles : [profiles]
-    const newly = new Set(incoming)
-    for (const profile of newly) {
-      this.#profiles.add(profile)
-    }
-
-    return this
   }
 
   scope(scopeID: NamedToken<Scope>): this {
@@ -133,9 +111,9 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  conditional(conditional: Conditional): this {
-    this.#conditionals ??= new Array<Conditional>()
-    this.#conditionals.unshift(conditional)
+  conditional(condition: Condition): this {
+    this.#conditionals ??= new Array<Condition>()
+    this.#conditionals.unshift(condition)
     return this
   }
 
@@ -200,11 +178,6 @@ export class DecoratedBindingConfig {
 
   configuration(configuration = true): this {
     this.#configuration = configuration
-    return this
-  }
-
-  keysProvided(keys: InjectionToken[]): this {
-    this.#keysProvided = keys
     return this
   }
 
@@ -296,12 +269,10 @@ export class DecoratedBindingConfig {
       injectableProperties: this.#injectableProperties,
       injectableMethods: this.#injectableMethods,
       interceptors: this.#interceptors,
-      profiles: this.#profiles,
       scopeID: this.#scopeID,
       names: this.#names,
       factory: this.#factory,
       conditionals: this.#conditionals,
-      keysProvided: this.#keysProvided,
       extend: this.#extend,
       primary: this.#primary,
       type: this.#type,

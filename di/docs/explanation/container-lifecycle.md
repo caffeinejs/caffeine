@@ -18,7 +18,9 @@ During construction:
 - Modules in `options.modules` are queued. They are not executed yet.
 - When `decorators: true` (the default), `autoWire()` is called automatically.
   This scans the global decorator registry and registers every `@Injectable` and
-  `@Configuration` class that has been imported so far.
+  `@Configuration` class that has been imported so far. A class carrying a
+  condition — `@Conditional` or `@Profile` — is held back instead, to be decided
+  at init.
 - No instances are created.
 - The container is not usable for resolution yet.
 
@@ -37,20 +39,19 @@ During init, the container does all its heavy lifting:
 
 1. **Module graph** — collect reachable modules from `Options.modules` /
    `addModules()`, then run each module `fn` once.
-2. **Profile filtering** — bindings whose `@Profile` is not in the active set
-   are dropped.
-3. **Conditional evaluation** — `@ConditionalOn` predicates are evaluated;
-   bindings that return `false` are dropped.
-4. **Scope validation** — the container checks that no binding violates the
+2. **Conditions** — every binding held back for its conditions, profiles
+   included, is decided, each after the held bindings answering to a key its
+   conditions check. Bindings whose conditions fail are dropped.
+3. **Scope validation** — the container checks that no binding violates the
    configured scope rules (e.g. singleton depending on transient).
-5. **Circular dependency detection** — the graph is checked for cycles.
-6. **Injection resolver compilation** — the container compiles the injection
+4. **Circular dependency detection** — the graph is checked for cycles.
+5. **Injection resolver compilation** — the container compiles the injection
    strategy for each binding so resolution is fast.
-7. **Eager instantiation** — all non-lazy singleton bindings are created. Async
+6. **Eager instantiation** — all non-lazy singleton bindings are created. Async
    factories are awaited in dependency order.
-8. **PostConstruct hooks** — `@PostConstruct` (and `.postConstruct()`) callbacks
+7. **PostConstruct hooks** — `@PostConstruct` (and `.postConstruct()`) callbacks
    run after each instance is created.
-9. **Bootstrap hooks** — once every binding is resolved, `OnBootstrap` classes
+8. **Bootstrap hooks** — once every binding is resolved, `OnBootstrap` classes
    (and `@OnLifecycle` `bootstrap` / `.bootstrap()` callbacks) run in dependency
    order, each awaited before the next. Singleton bindings only.
 

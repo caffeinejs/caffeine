@@ -24,7 +24,7 @@ identical in both flavours; differences are noted inline where they exist.
 - [@Primary](#primary)
 - [@Lazy](#lazy)
 - [@Profile](#profile)
-- [@ConditionalOn](#conditionalon)
+- [@Conditional](#conditional)
 - [@Extends](#extends)
 - [@Label](#label)
 - [@Tag](#tag)
@@ -151,6 +151,10 @@ Activates this binding only when one of the given profiles is active. The
 container's active profiles are set via the `profiles` constructor option or
 `addProfiles()`.
 
+Shorthand for `@Conditional(c => c.profile(profile, ...profiles))`: the binding is
+held until the container compiles and decided with its other conditions. Two stacked
+`@Profile` decorators must both pass.
+
 ```ts
 @Injectable()
 @Profile('production')
@@ -159,28 +163,27 @@ class ProductionMailer implements Mailer { ... }
 new CaffeineIoC({ profiles: ['production'] })
 ```
 
-### @ConditionalOn
+### @Conditional
 
 ```ts
-@ConditionalOn(condition: Conditional | Conditional[])
+@Conditional<C = unknown>(condition: Condition | ((c: ConditionHelpers<C>) => Condition))
 ```
 
-Activates this binding only when the predicate returns `true`. The predicate
-receives a `ConditionContext`.
-
-```ts
-interface ConditionContext {
-  container: { has(key: InjectionToken): boolean }
-  key: InjectionToken
-  binding: BindingDecoratorConfig
-}
-```
+Activates this binding only when the condition passes. The condition is built with
+[`$cond`](./conditionals.md#cond), or by a callback handed the same helpers, which runs
+once, when the class is decorated. The binding is held until the container compiles,
+and decided after every held binding answering to a key its condition checks. Stacked,
+every condition must pass. On a `@Configuration` class, it covers every `@Provides`
+method of the class too.
 
 ```ts
 @Injectable()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 class RedisCacheService implements CacheService { ... }
 ```
+
+Anything that is not a condition — a predicate written for the old API included — is
+rejected with `ErrInvalidDecorator`.
 
 ### @Extends
 
@@ -360,7 +363,7 @@ a `@Configuration` class.
 
 `deps` are resolved from the container and passed as method arguments.
 
-Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@ConditionalOn`,
+Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@Conditional`,
 `@Lazy`, and `@Interceptor`.
 
 ### @ProvidesAsync

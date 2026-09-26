@@ -5,6 +5,13 @@ configured with `.profiles()` is only registered when one of those profiles is
 in the container's active set — via the `profiles` constructor option or
 `addProfiles()` before `compile()` / `init()`.
 
+A profile is a condition: `@Profile('test')` is shorthand for
+`@Conditional(c => c.profile('test'))`, and `.profiles('test')` for
+`.conditional(c => c.profile('test'))`. A profiled binding is held back until the
+container compiles, like any conditional one — even when its profile is active from
+the start — and decided there with the other conditions. Until then `has()`,
+`entries()` and `size` do not see it.
+
 Bindings without any profile restriction are always registered, regardless of
 which profiles are active — the same semantics Docker Compose uses for its
 profiles.
@@ -16,8 +23,8 @@ import { Profile } from '@caffeinejs/di'
 :::tip
 For activation logic that cannot be expressed as a simple name — feature flags fetched
 at runtime, presence of another binding, environment variable comparisons — use
-[`@ConditionalOn`](./conditional-bindings.md) instead. See the comparison table at the
-end of this page.
+[`@Conditional`](./conditional-bindings.md) with another condition. See the end of this
+page for combining the two.
 :::
 
 ---
@@ -85,6 +92,18 @@ class VerboseLogger extends Logger {
 }
 ```
 
+Two stacked `@Profile` decorators are two conditions, and both must pass, like any
+stacked conditions:
+
+```ts
+@Profile('eu')
+@Profile('production')
+@Injectable()
+class EUProductionAuditLog extends AuditLog {
+  // registered only when 'eu' AND 'production' are both active
+}
+```
+
 ---
 
 ## Activating multiple profiles simultaneously
@@ -102,8 +121,9 @@ await di.init()
 ## `@Profile` on a `@Configuration` class
 
 When `@Profile` is on a `@Configuration` class, all `@Provides` methods inside are
-skipped unless the profile is active — the same cascade behaviour as `@ConditionalOn`
-on a configuration class.
+skipped unless the profile is active — the same cascade as any condition on a
+configuration class. The class is decided first and its methods wait for it, so the
+order the class decorators are written in does not matter.
 
 ```ts
 import { Configuration, Provides, Profile } from '@caffeinejs/di'
@@ -135,7 +155,8 @@ await di.init()
 
 ## Fluent `.profiles()`
 
-Manual bindings use the same OR semantics as `@Profile`:
+Manual bindings use the same semantics as `@Profile`: the names given to one call are
+alternatives, and two calls must both pass.
 
 ```ts
 di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
@@ -143,34 +164,22 @@ di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 
 ---
 
-## `@Profile` vs `@ConditionalOn`
+## Profiles and other conditions
 
-Both mechanisms control whether a binding is registered at `init()` time. The right
-choice depends on what drives the decision.
-
-|               | `@Profile` / `.profiles()`                     | `@ConditionalOn`                         |
-| ------------- | ---------------------------------------------- | ---------------------------------------- |
-| Activation    | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time         |
-| Style         | Declarative — name a group                     | Imperative — write a function            |
-| Async support | No                                             | Yes                                      |
-| Best for      | Environment / persona groupings                | Feature flags, presence checks, env vars |
-
+A profile is one of the conditions [`@Conditional`](./conditional-bindings.md) takes.
 Use `@Profile` when a binding naturally belongs to a named environment or persona
-(`test`, `production`, `eu`, `staging`). The profile name is the complete activation
-condition — no predicate needed.
+(`test`, `production`, `eu`, `staging`). Use another condition when activation depends
+on something else: whether another binding is present, the configuration, an
+environment variable, or a flag fetched from a remote service.
 
-Use [`@ConditionalOn`](./conditional-bindings.md) when activation depends on runtime
-state: whether another binding is present, the value of an env var, or a flag fetched
-from a remote service.
-
-The two can be combined — `@Profile` and `@ConditionalOn` on the same class are ANDed:
-the binding is registered only when the profile is active **and** the predicate returns
-`true`.
+The two combine like any conditions — `@Profile` and `@Conditional` on the same class
+are ANDed: the binding is registered only when the profile is active **and** the other
+condition passes. The profile is checked first.
 
 ```ts
 // Only in 'eu' profile AND only when RedisClient is bound
 @Profile('eu')
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 @Injectable()
 class RedisEUCache extends CacheStore {
   /* ... */

@@ -1,6 +1,6 @@
 export * from './aspect.js'
 export * from './bypass_post_processors.js'
-export * from './conditional_on.js'
+export * from './conditional.js'
 export * from './configuration.js'
 export * from './extends.js'
 export * from './inject.js'

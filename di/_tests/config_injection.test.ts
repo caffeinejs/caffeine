@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ErrNoValuesProvider } from '../errors.js'
+import { ErrNoConfigProvider } from '../errors.js'
 import { $i } from '../injection.js'
 import { compileChain } from '../internal/core/resolver/index.js'
 import { Scopes } from '../scope.js'
@@ -9,7 +9,7 @@ import { Keys } from '../symbols.js'
 
 function ctx(
   container: CaffeineIoC,
-  descriptor: ReturnType<typeof $i.value> | ReturnType<typeof $i.optional>,
+  descriptor: ReturnType<typeof $i.config> | ReturnType<typeof $i.optional>,
   key: any = 'Consumer',
 ) {
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
@@ -17,29 +17,29 @@ function ctx(
 
 describe('$i.config', function () {
   describe('validation', function () {
-    it('throws ErrNoValuesProvider when no provider is registered and injection is required', function () {
+    it('throws ErrNoConfigProvider when no provider is registered and injection is required', function () {
       const di = new CaffeineIoC({ decorators: false })
 
       expect(() =>
         compileChain(
           ctx(
             di,
-            $i.value(cfg => cfg),
+            $i.config(cfg => cfg),
           ),
         ),
-      ).toThrow(ErrNoValuesProvider)
+      ).toThrow(ErrNoConfigProvider)
     })
 
     it('does not throw when optional and no provider is registered', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      expect(() => compileChain(ctx(di, $i.optional($i.value(cfg => cfg))))).not.toThrow()
+      expect(() => compileChain(ctx(di, $i.optional($i.config(cfg => cfg))))).not.toThrow()
     })
 
     it('returns a resolver that yields undefined when optional and no provider is registered', function () {
       const di = new CaffeineIoC({ decorators: false })
 
-      const resolver = compileChain(ctx(di, $i.optional($i.value(cfg => cfg))))
+      const resolver = compileChain(ctx(di, $i.optional($i.config(cfg => cfg))))
       expect(resolver()).toBeUndefined()
     })
   })
@@ -51,8 +51,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'localhost' }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
+      di.bindConfigProvider<{ host: string }>(t => t.toValue({ host: 'localhost' }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ host: string }>(cfg => cfg.host)]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('localhost')
@@ -64,8 +64,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ port: number }>(t => t.toValue({ port: 5432 }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ port: number }>(cfg => cfg.port)]))
+      di.bindConfigProvider<{ port: number }>(t => t.toValue({ port: 5432 }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ port: number }>(cfg => cfg.port)]))
       await di.init()
 
       expect(di.get(Svc).port).toBe(5432)
@@ -77,8 +77,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ enabled: boolean }>(t => t.toValue({ enabled: true }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ enabled: boolean }>(cfg => cfg.enabled)]))
+      di.bindConfigProvider<{ enabled: boolean }>(t => t.toValue({ enabled: true }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ enabled: boolean }>(cfg => cfg.enabled)]))
       await di.init()
 
       expect(di.get(Svc).enabled).toBe(true)
@@ -95,9 +95,9 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ database: { host: 'db.local', port: 3306 } }))
+      di.bindConfigProvider<Cfg>(t => t.toValue({ database: { host: 'db.local', port: 3306 } }))
       di.bind(Svc, t =>
-        t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.database.host), $i.value<Cfg>(cfg => cfg.database.port)]),
+        t.toClass(Svc, [$i.config<Cfg>(cfg => cfg.database.host), $i.config<Cfg>(cfg => cfg.database.port)]),
       )
       await di.init()
 
@@ -119,8 +119,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppCfg>(t => t.toClass(AppCfg))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<AppCfg>(cfg => cfg.host), $i.value<AppCfg>(cfg => cfg.port)]))
+      di.bindConfigProvider<AppCfg>(t => t.toClass(AppCfg))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<AppCfg>(cfg => cfg.host), $i.config<AppCfg>(cfg => cfg.port)]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('class-host')
@@ -139,9 +139,9 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ a: 'alpha', b: 'beta', c: 'gamma' }))
+      di.bindConfigProvider<Cfg>(t => t.toValue({ a: 'alpha', b: 'beta', c: 'gamma' }))
       di.bind(Svc, t =>
-        t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.a), $i.value<Cfg>(cfg => cfg.b), $i.value<Cfg>(cfg => cfg.c)]),
+        t.toClass(Svc, [$i.config<Cfg>(cfg => cfg.a), $i.config<Cfg>(cfg => cfg.b), $i.config<Cfg>(cfg => cfg.c)]),
       )
       await di.init()
 
@@ -159,7 +159,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value<{ host: string }>(cfg => cfg.host))]))
+      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.config<{ host: string }>(cfg => cfg.host))]))
       await di.init()
 
       expect(di.get(Svc).host).toBeUndefined()
@@ -171,8 +171,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'optional-host' }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value<{ host: string }>(cfg => cfg.host))]))
+      di.bindConfigProvider<{ host: string }>(t => t.toValue({ host: 'optional-host' }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.config<{ host: string }>(cfg => cfg.host))]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('optional-host')
@@ -188,8 +188,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toFactory(() => ({ dsn: 'postgres://localhost/db' })))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.dsn)]))
+      di.bindConfigProvider<Cfg>(t => t.toFactory(() => ({ dsn: 'postgres://localhost/db' })))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<Cfg>(cfg => cfg.dsn)]))
       await di.init()
 
       expect(di.get(Svc).dsn).toBe('postgres://localhost/db')
@@ -197,15 +197,15 @@ describe('$i.config', function () {
   })
 
   describe('error at init time', function () {
-    it('throws ErrNoValuesProvider during init when provider is absent and injection is required', async function () {
+    it('throws ErrNoConfigProvider during init when provider is absent and injection is required', async function () {
       class Svc {
         constructor(readonly host: string) {}
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ host: string }>(cfg => cfg.host)]))
 
-      await expect(di.init()).rejects.toThrow(ErrNoValuesProvider)
+      await expect(di.init()).rejects.toThrow(ErrNoConfigProvider)
     })
   })
 
@@ -216,8 +216,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'path-host' }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('host')]))
+      di.bindConfigProvider<{ host: string }>(t => t.toValue({ host: 'path-host' }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('host')]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('path-host')
@@ -231,8 +231,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ database: { host: 'nested-host' } }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('database.host')]))
+      di.bindConfigProvider<Cfg>(t => t.toValue({ database: { host: 'nested-host' } }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('database.host')]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('nested-host')
@@ -246,8 +246,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ a: { b: { c: 'deep' } } }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('a.b.c')]))
+      di.bindConfigProvider<Cfg>(t => t.toValue({ a: { b: { c: 'deep' } } }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('a.b.c')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('deep')
@@ -259,8 +259,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Record<string, unknown>>(t => t.toValue({}))
-      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value('missing.key'))]))
+      di.bindConfigProvider<Record<string, unknown>>(t => t.toValue({}))
+      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.config('missing.key'))]))
       await di.init()
 
       expect(di.get(Svc).val).toBeUndefined()
@@ -274,8 +274,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host?: string }>(t => t.toValue({}))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host?: string }>(cfg => cfg.host, 'default-host')]))
+      di.bindConfigProvider<{ host?: string }>(t => t.toValue({}))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ host?: string }>(cfg => cfg.host, 'default-host')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('default-host')
@@ -287,8 +287,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Record<string, unknown>>(t => t.toValue({}))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('host', 'path-default')]))
+      di.bindConfigProvider<Record<string, unknown>>(t => t.toValue({}))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('host', 'path-default')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('path-default')
@@ -300,8 +300,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'real-host' }))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('host', 'should-not-appear')]))
+      di.bindConfigProvider<{ host: string }>(t => t.toValue({ host: 'real-host' }))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('host', 'should-not-appear')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('real-host')
@@ -313,7 +313,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('host', 'absent-default')]))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('host', 'absent-default')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('absent-default')
@@ -325,7 +325,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value('host', 'opt-default'))]))
+      di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.config('host', 'opt-default'))]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('opt-default')
@@ -346,8 +346,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<AppConfig>(cfg => cfg.host)]))
+      di.bindConfigProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<AppConfig>(cfg => cfg.host)]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('computed-host')
@@ -366,8 +366,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value('host')]))
+      di.bindConfigProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config('host')]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('path-computed-host')
@@ -387,8 +387,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<AppConfig>(cfg => cfg.baseURL)]))
+      di.bindConfigProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<AppConfig>(cfg => cfg.baseURL)]))
       await di.init()
 
       expect(di.get(Svc).url).toBe('https://example.com')
@@ -404,8 +404,8 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<typeof config>(t => t.toFactory(() => config))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<typeof config>(c => c.host)]).lifetime(Scopes.TRANSIENT))
+      di.bindConfigProvider<typeof config>(t => t.toFactory(() => config))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<typeof config>(c => c.host)]).lifetime(Scopes.TRANSIENT))
       await di.init()
 
       expect(di.get(Svc).host).toBe('initial')
@@ -421,12 +421,12 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ n: number }>(t => t.toFactory(() => ({ n: ++counter })))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ n: number }>(c => c.n)]).lifetime(Scopes.TRANSIENT))
+      di.bindConfigProvider<{ n: number }>(t => t.toFactory(() => ({ n: ++counter })))
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<{ n: number }>(c => c.n)]).lifetime(Scopes.TRANSIENT))
       await di.init()
 
       expect(di.get(Svc).n).toBe(1)
-      await di.resetInstance(Keys.kValuesProvider)
+      await di.resetInstance(Keys.kConfigProvider)
       expect(di.get(Svc).n).toBe(2)
     })
   })

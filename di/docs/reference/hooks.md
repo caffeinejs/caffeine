@@ -100,7 +100,8 @@ container.hooks.on('onBindingRegistered', ({ key, binding }) => {
 ### onBindingNotRegistered
 
 Fired when a binding is evaluated but skipped — for example, because its
-`@Profile` is not active or its `@ConditionalOn` predicate returned `false`.
+`@Profile` is not active or its `@Conditional` condition failed. A `@Provides`
+binding whose configuration class was skipped fires it too.
 
 ```ts
 container.hooks.on('onBindingNotRegistered', ({ key, binding }) => {

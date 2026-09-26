@@ -421,7 +421,7 @@ describe('edges follow what resolution injects', function () {
     }
 
     const di = new CaffeineIoC({ decorators: false })
-    di.bind(Server, t => t.toSelf([$i.value('server.port', 8080)]))
+    di.bind(Server, t => t.toSelf([$i.config('server.port', 8080)]))
     await di.init()
 
     expect(edgesFrom(buildBindingGraph(di), 'Server')).toEqual([])

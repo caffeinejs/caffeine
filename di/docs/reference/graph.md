@@ -47,7 +47,7 @@ answering to its key, or the primary among several; for `allOf`, `ordered` and
 dashed group edges.
 
 Dependencies the container wires outside injections have no edge: `aliasOf`,
-`$i.value`, the configuration class behind a `@Provides` method, and aspects. A
+`$i.config`, the configuration class behind a `@Provides` method, and aspects. A
 key replaced with `rebind` while other bindings still name or extend it shows
 those bindings as candidates too, though the container injects only the
 replacement.

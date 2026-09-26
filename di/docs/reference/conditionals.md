@@ -4,71 +4,93 @@ sidebar_label: Conditionals
 
 # Conditionals
 
-- [Conditional](#conditional)
-- [ConditionContext](#conditioncontext)
+- [$cond](#cond)
+- [ConditionHelpers](#conditionhelpers)
+- [Condition](#condition)
 
-Both types are exported from the main package:
-
-```ts
-import type { Conditional, ConditionContext } from '@caffeinejs/di'
-```
-
----
-
-## Conditional
+All three are exported from the main package:
 
 ```ts
-type Conditional = (ctx: ConditionContext) => boolean | Promise<boolean>
+import { $cond, type Condition, type ConditionHelpers } from '@caffeinejs/di'
 ```
 
-A predicate evaluated once during `init()`. When it returns `false`, the
-binding is skipped — it is not registered in the container for that run.
+A condition is decided once, when the container compiles. When it fails, the binding is not registered for that run.
+Conditions are taken by:
 
-Used by:
-
+- [`@Conditional`](./decorators.md#conditional) — decorator API
 - [`BindingSpec.conditional()`](./binding-spec.md#conditional) — fluent API
-- [`@ConditionalOn`](./decorators.md#conditionalon) — decorator API
+- [`@Profile`](./decorators.md#profile) and [`BindingSpec.profiles()`](./binding-spec.md#profiles), which are shorthand
+  for a `profile` condition
+
+Both `@Conditional` and `.conditional()` take a condition, or a callback handed the helpers. The callback runs once,
+when the condition is declared:
 
 ```ts
-// synchronous
-const hasRedis: Conditional = ctx => ctx.container.has(RedisClient)
-
-// async
-const featureEnabled: Conditional = async ctx => {
-  const flags = ctx.container.get(FeatureFlags)
-  return flags.isEnabled('new-cache')
-}
+@Conditional(c => c.present(RedisClient))
+@Conditional($cond.present(RedisClient)) // the same condition
 ```
-
-Multiple predicates passed to `.conditional()` are ANDed — all must return
-`true` for the binding to be registered.
 
 ---
 
-## ConditionContext
+## $cond
 
 ```ts
-interface ConditionContext {
-  readonly container: {
-    has(key: InjectionToken): boolean
-  }
-  readonly key: InjectionToken
-  readonly binding: BindingDecoratorConfig
-}
+const $cond: ConditionHelpers
 ```
 
-Passed to every `Conditional` predicate at evaluation time.
+The condition helpers, for a condition built ahead of time and shared by several bindings.
 
-| Property        | Description                                                                                                 |
-| --------------- | ----------------------------------------------------------------------------------------------------------- |
-| `container.has` | Checks whether a binding is registered for the given key.                                                   |
-| `key`           | The key of the binding being tested.                                                                        |
-| `binding`       | The full decorator config for the binding: scope, name, labels, tags, and other metadata set by decorators. |
+| Helper                     | Passes when                                                                                           |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `present(key)`             | Something answers to the key: a binding registered under it, one named after it, or one extending it. |
+| `missing(key)`             | Nothing answers to the key. A binding with this condition on its own key is a default.                |
+| `profile(name, ...names)`  | Any of the named profiles is active. With no active profile, it never passes.                         |
+| `config(access)`           | The value read through the config provider is `true`.                                                 |
+| `config(access, expected)` | The value read through the config provider equals `expected`.                                         |
+| `env(name)`                | The environment variable is set to a non-empty value.                                                 |
+| `env(name, expected)`      | The environment variable equals `expected`.                                                           |
+| `when(test)`               | `test()` returns `true`. It may be async, and it is handed nothing — the container included.          |
+
+`config` takes what `$i.config` takes: a selector, or a dot-separated path. It reads the provider once, while the
+container compiles, so the provider must be bound with `toValue()` or `toFactory()`. With none bound, the container
+fails with `ErrNoConfigProvider`.
+
+`env` reads `process.env` where there is one; outside Node without it, it never passes.
 
 ```ts
-// guard on another binding being present
-di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
+const onRedis = $cond.config<AppConfig>(c => c.cache.kind, 'redis')
 
-// inspect the binding's own key
-di.bind(MetricsReporter, t => t.toSelf().conditional(ctx => ctx.key !== Symbol.for('noop')))
+di.bind(Cache, t => t.toClass(RedisCache).conditional(onRedis))
+di.bind(Lock, t => t.toClass(RedisLock).conditional(onRedis))
 ```
+
+---
+
+## ConditionHelpers
+
+```ts
+interface ConditionHelpers<C = unknown>
+```
+
+The type of `$cond`, and of the helpers a callback is handed. `C` names the configuration `config` selects from, so a
+callback typed `ConditionHelpers<AppConfig>` types `c.config(cfg => cfg.cache.enabled)` without naming the type
+again. `@Conditional<AppConfig>(c => …)` binds it.
+
+---
+
+## Condition
+
+```ts
+type Condition =
+  | { readonly kind: 'present'; readonly key: InjectionToken }
+  | { readonly kind: 'missing'; readonly key: InjectionToken }
+  | { readonly kind: 'profile'; readonly profiles: readonly string[] }
+  | { readonly kind: 'config'; readonly access: ((config: unknown) => unknown) | string; readonly expected: unknown }
+  | { readonly kind: 'env'; readonly name: string; readonly expected?: string }
+  | { readonly kind: 'when'; readonly test: () => boolean | Promise<boolean> }
+```
+
+A condition is data rather than a predicate. The container reads its `kind` to know which keys it checks, and decides a
+binding after every held binding answering to one of them: `present` and `missing` check their key, and `config` the
+config provider's. Build one with a helper; `@Conditional` and `.conditional()` reject anything that is not a
+condition of one of these kinds with `ErrInvalidDecorator` / `ErrInvalidBinding`.

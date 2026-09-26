@@ -73,14 +73,18 @@ const di = new CaffeineIoC({ metadataReader: reader })
 
 ### Useful Binding fields to override
 
-| Field          | Type            | Set by decorator |
-| -------------- | --------------- | ---------------- |
-| `scopeId`      | `Identifier`    | `@Lifetime`      |
-| `profiles`     | `Set<string>`   | `@Profile`       |
-| `names`        | `Identifier[]`  | `@Named`         |
-| `lazy`         | `boolean`       | `@Lazy`          |
-| `primary`      | `boolean`       | `@Primary`       |
-| `conditionals` | `Conditional[]` | `@ConditionalOn` |
+| Field          | Type           | Set by decorator           |
+| -------------- | -------------- | -------------------------- |
+| `scopeId`      | `Identifier`   | `@Lifetime`                |
+| `names`        | `Identifier[]` | `@Named`                   |
+| `lazy`         | `boolean`      | `@Lazy`                    |
+| `primary`      | `boolean`      | `@Primary`                 |
+| `conditionals` | `Condition[]`  | `@Conditional`, `@Profile` |
+
+A reader's `conditionals` replace the binding's own, profiles included — a profile is a
+`profile` condition, built with `$cond.profile(...)`. They are read when the container
+decides whether to hold the binding back, so a binding the reader makes conditional
+waits for `compile()` like any other, and its conditions never see the binding itself.
 
 Returning factory-level fields (`factory`, `injections`, `injectionResolvers`)
 from a reader is possible but unusual — prefer the fluent binder API for those.

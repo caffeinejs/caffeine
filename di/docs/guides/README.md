@@ -29,7 +29,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
 
 - [Abstract Classes](./abstract-classes.md) — register multiple implementations
   of an abstract class, inject all of them with `allOf`, and select between them
-  using `@Named`, `@Primary`, and `@ConditionalOn`.
+  using `@Named`, `@Primary`, and `@Conditional`.
 
 - [Interfaces](./interfaces.md) — use symbol tokens as runtime keys for TypeScript
   interfaces, with the same injection patterns as abstract classes.

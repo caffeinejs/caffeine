@@ -1,4 +1,4 @@
-import { Conditional } from './conditional.js'
+import { Condition } from './conditional.js'
 import { ContainerOps } from './container_interface.js'
 import { Factory, AsyncFactory, FactoryCreator } from './factory.js'
 import { InjectionDescriptor } from './injection.js'
@@ -61,12 +61,6 @@ export interface Binding<T = any> {
   interceptors: PostResolutionInterceptor[]
 
   /**
-   * The profiles the binding is associated with.
-   * The container will only consider bindings with profiles that match its active profiles.
-   */
-  profiles: Set<string>
-
-  /**
    * The scope the binding is associated with.
    */
   scopeID: NamedToken<Scope>
@@ -93,9 +87,10 @@ export interface Binding<T = any> {
   factoryCreator?: FactoryCreator<T>
 
   /**
-   * The conditionals for this binding to be evaluated against.
+   * The conditions the binding must pass to be registered, profiles included. A binding carrying any is held back
+   * until the container compiles.
    */
-  conditionals: Conditional[]
+  conditionals: Condition[]
 
   /**
    * The configuration class that generated this binding.
@@ -112,11 +107,6 @@ export interface Binding<T = any> {
    * Whether this binding is a configuration binding.
    */
   configuration?: boolean
-
-  /**
-   * The additional binding keys provided by this binding.
-   */
-  keysProvided: InjectionToken[]
 
   /**
    * Class that this binding extends.
@@ -205,7 +195,6 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     injectableMethods: initial.injectableMethods || new Map(),
     methodResolvers: initial.methodResolvers ?? new Map(),
     interceptors: initial.interceptors || [],
-    profiles: initial.profiles || new Set(),
     names: initial.names || [],
     conditionals: initial.conditionals || [],
     configuredBy: initial.configuredBy,
@@ -215,7 +204,6 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     postConstruct: initial.postConstruct,
     bootstrap: initial.bootstrap,
     configuration: initial.configuration,
-    keysProvided: initial.keysProvided || [],
     extend: initial.extend,
     type: initial.type,
     byPassPostProcessors: initial.byPassPostProcessors,

@@ -164,6 +164,11 @@ const di = new TestContainer(appContainer).profiles('test', 'no-cache').build()
 await di.init()
 ```
 
+A test container starts from the source container's state. A binding the source had
+registered stays registered — its conditions, profiles included, are not decided
+again. One the source still held back is decided when the test container compiles,
+with the source's active profiles plus the ones given here.
+
 ## Adding test modules
 
 Pass extra modules to inject test-specific bindings that do not exist in the
