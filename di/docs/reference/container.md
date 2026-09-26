@@ -277,7 +277,7 @@ entries(): IterableIterator<[InjectionToken, Binding]>
 ```
 
 Returns an iterator over all `[key, binding]` pairs in the container. Use this
-to feed `buildBindingGraph()`.
+to feed `buildBindingGraph()` from `@caffeinejs/di/graph`.
 
 ### size
 

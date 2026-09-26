@@ -1,4 +1,5 @@
-import { buildBindingGraph, type HookListener, type InjectionToken, Binding } from '@caffeinejs/di'
+import { type HookListener, type InjectionToken, Binding } from '@caffeinejs/di'
+import { buildBindingGraph } from '@caffeinejs/di/graph'
 
 import type { DevtoolsStore } from '../store.js'
 import type { BindingSnapshot, DevtoolsEvent } from '../types.js'

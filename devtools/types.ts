@@ -1,6 +1,4 @@
-import type { BindingGraph } from '@caffeinejs/di'
-
-export type { BindingGraph }
+import type { BindingGraph } from '@caffeinejs/di/graph'
 
 export interface BindingSnapshot {
   id: number

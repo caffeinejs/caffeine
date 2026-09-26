@@ -57,6 +57,10 @@ must not depend on the order the bindings were registered in.
 - Registering a key again unmaps the names, labels and base of the configuration it replaces, so they stop
   resolving to it.
 
+`buildBindingGraph` (`graph/graph.ts`) rebuilds these lists from `[key, binding]` pairs, and `injectedBindings`
+(`binding.ts`) picks from a list what an injection receives, for both the graph and the cycle check. Change them
+together with `mapUnder`.
+
 ## Testing and registrar.ts
 
 Do not mutate the module-level state in `decorators/registrar/registrar.ts` (`Bindings`, `ByNamespace`, `ProvidedBindings`, `MetadataWeakMap`, `Injectables`) from tests. These are global singletons shared across all tests in the same process; direct mutation causes test pollution and order-dependent failures.

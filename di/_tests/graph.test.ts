@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
+import {
+  buildBindingGraph,
+  graphToMarkdown,
+  graphToMermaid,
+  graphToDot,
+  graphToJSON,
+  graphToText,
+  type BindingGraph,
+} from '../graph/index.js'
+import * as root from '../index.js'
 import { token } from '../key.js'
 import type { Scope } from '../scope.js'
 import { binding } from './property/helpers/binding_factory.js'
@@ -628,5 +637,66 @@ describe('graphToText', function () {
     const graph = buildBindingGraph([[ServiceA, b]])
     const output = graphToText(graph)
     expect(output).toContain('ServiceA')
+  })
+})
+
+describe('escaping', function () {
+  // Keys and scopes are free text. A quote, a pipe or a Mermaid entity code left raw corrupts the whole diagram or
+  // table, not just the label it sits in.
+  const graph: BindingGraph = {
+    nodes: [
+      {
+        id: 1,
+        label: 'say "hi" #1; a|b',
+        scopeID: 'my"scope#x;',
+        names: [],
+        labels: [],
+        primary: false,
+        lazy: false,
+      },
+    ],
+    edges: [],
+  }
+
+  it('escapes a pipe in a Markdown table cell', function () {
+    const row = graphToMarkdown(graph)
+      .split('\n')
+      .find(l => l.includes('say'))!
+
+    expect(row).toContain('a\\|b')
+    // Seven cells between eight unescaped pipes.
+    expect(row.split(/(?<!\\)\|/)).toHaveLength(9)
+  })
+
+  it('writes quotes and hashes as Mermaid entity codes, in the label and in the scope', function () {
+    const line = graphToMermaid(graph)
+      .split('\n')
+      .find(l => l.startsWith('  n1['))
+
+    expect(line).toBe('  n1["say #quot;hi#quot; #35;1; a|b\\nmy#quot;scope#35;x;"]')
+  })
+
+  it('escapes quotes in a DOT label, in the scope too', function () {
+    const line = graphToDot(graph)
+      .split('\n')
+      .find(l => l.startsWith('  n1 '))
+
+    expect(line).toBe('  n1 [label="say \\"hi\\" #1; a|b\\nmy\\"scope#x;"]')
+  })
+})
+
+describe('the package root', function () {
+  // The graph has its own entry point, @caffeinejs/di/graph.
+  it('exports none of the graph functions', function () {
+    for (const name of [
+      'buildBindingGraph',
+      'graphToDot',
+      'graphToJSON',
+      'graphToMarkdown',
+      'graphToMermaid',
+      'graphToText',
+    ]) {
+      expect(root).not.toHaveProperty(name)
+    }
   })
 })

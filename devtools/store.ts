@@ -1,4 +1,4 @@
-import type { BindingGraph } from '@caffeinejs/di'
+import type { BindingGraph } from '@caffeinejs/di/graph'
 
 import type { BindingSnapshot, DevtoolsEvent, RouteSnapshot } from './types.js'
 
