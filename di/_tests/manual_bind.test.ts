@@ -306,7 +306,7 @@ describe('Manual Binding', function () {
         it('should keep a replacement that is not registered yet', async function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlStore, t => t.toSelf().extends(Store))
-          di.rebind(Store, t => t.toClass(MemoryStore).fallback())
+          di.rebind(Store, t => t.toClass(MemoryStore).conditional(() => true))
           di.bind(SqlStore, t => t.toSelf())
           await di.init()
 

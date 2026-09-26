@@ -138,7 +138,7 @@ void [SessionController, MeController, SchemeScopedMeController]
 async function buildApp() {
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
-  // Fast hasher keeps the test snappy; overrides the fallback ScryptPasswordHasher from addCredentials.
+  // Fast hasher keeps the test snappy; overrides the default ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication({ container })
   builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())

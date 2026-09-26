@@ -4,7 +4,6 @@ import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
-import { Fallback } from '../decorators/fallback.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
 import { Lifetime } from '../decorators/lifetime.js'
@@ -348,61 +347,6 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
 
   @Injectable()
   @Extends()
-  class AcInMemoryCacheB extends AcCacheStoreB {
-    private store = new Map<string, string>()
-    get(key: string) {
-      return this.store.get(key)
-    }
-    set(key: string, value: string) {
-      this.store.set(key, value)
-    }
-  }
-
-  @Primary()
-  @ConditionalOn(ctx => ctx.container.has(AcRedisClientB))
-  @Injectable([AcRedisClientB])
-  @Extends()
-  class AcRedisCacheB extends AcCacheStoreB {
-    constructor(readonly client: AcRedisClientB) {
-      super()
-    }
-    get(key: string) {
-      return this.client.get(key)
-    }
-    set(key: string, value: string) {
-      /* no-op */
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    di.bind(AcRedisClientB, t => t.toValue(new AcRedisClientB()))
-    await di.init()
-  })
-
-  it('uses @Primary RedisCache when RedisClient is bound', function () {
-    expect(di.get(AcCacheStoreB)).toBeInstanceOf(AcRedisCacheB)
-  })
-})
-
-// ─── abstract-classes: @Primary on @Provides wins over @Fallback ───────────────
-
-describe('abstract-classes: @ConditionalOn with fallback — with redis', function () {
-  class AcRedisClientB {
-    get(key: string) {
-      return `redis:${key}`
-    }
-  }
-
-  abstract class AcCacheStoreB {
-    abstract get(key: string): string | undefined
-    abstract set(key: string, value: string): void
-  }
-
-  @Injectable()
-  @Extends()
-  @Fallback()
   class AcInMemoryCacheB extends AcCacheStoreB {
     private store = new Map<string, string>()
     get(key: string) {
@@ -894,96 +838,6 @@ describe('factory-classes: abstract and symbol keys in @Provides', function () {
   })
 })
 
-// ─── factory-classes: @Fallback on @Provides — fallback used ─────────────────
-
-describe('factory-classes: @Fallback on @Provides — fallback used', function () {
-  abstract class FcCacheStoreA {
-    abstract get(key: string): string | undefined
-    abstract set(key: string, value: string): void
-  }
-
-  class FcInMemoryCacheA extends FcCacheStoreA {
-    private store = new Map<string, string>()
-    get(key: string) {
-      return this.store.get(key)
-    }
-    set(key: string, value: string) {
-      this.store.set(key, value)
-    }
-  }
-
-  @Configuration()
-  class FcCacheConfigA {
-    @Fallback()
-    @Provides(FcCacheStoreA)
-    memoryCache(): FcCacheStoreA {
-      return new FcInMemoryCacheA()
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Fallback @Provides method used when no other binding for key', function () {
-    expect(di.get(FcCacheStoreA)).toBeInstanceOf(FcInMemoryCacheA)
-  })
-})
-
-// ─── factory-classes: @Primary on @Provides wins over @Fallback ───────────────
-
-describe('factory-classes: @Primary on @Provides wins over @Fallback', function () {
-  abstract class FcCacheStoreB {
-    abstract get(key: string): string | undefined
-    abstract set(key: string, value: string): void
-  }
-
-  class FcInMemoryCacheB extends FcCacheStoreB {
-    get(key: string) {
-      return undefined
-    }
-    set(key: string, value: string) {
-      /* no-op */
-    }
-  }
-
-  class FcRedisCacheB extends FcCacheStoreB {
-    get(key: string) {
-      return undefined
-    }
-    set(key: string, value: string) {
-      /* no-op */
-    }
-  }
-
-  @Configuration()
-  class FcCacheConfigB {
-    @Fallback()
-    @Provides(FcCacheStoreB)
-    memoryCache(): FcCacheStoreB {
-      return new FcInMemoryCacheB()
-    }
-
-    @Primary()
-    @Provides(FcCacheStoreB)
-    redisCache(): FcCacheStoreB {
-      return new FcRedisCacheB()
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Primary @Provides wins over @Fallback @Provides', function () {
-    expect(di.get(FcCacheStoreB)).toBeInstanceOf(FcRedisCacheB)
-  })
-})
-
 // ─── factory-classes: @Named on @Provides injectable by name ─────────────────
 
 describe('factory-classes: @Named on @Provides injectable by name', function () {
@@ -1420,6 +1274,58 @@ describe('conditional-bindings: @ConditionalOn env-based — eu', function () {
   })
 })
 
+// ─── conditional-bindings: complementary condition for the default ───────────
+
+describe('conditional-bindings: complementary condition for the default', function () {
+  abstract class CbGatewayMock {
+    abstract charge(amount: number): string
+  }
+
+  @ConditionalOn(() => process.env.CB_REGION_MOCK === 'eu')
+  @Injectable()
+  @Extends()
+  class CbStripeGatewayMock extends CbGatewayMock {
+    charge(amount: number) {
+      return `eu:${amount}`
+    }
+  }
+
+  @ConditionalOn(() => !['eu', 'us'].includes(process.env.CB_REGION_MOCK ?? ''))
+  @Injectable()
+  @Extends()
+  class CbMockGateway extends CbGatewayMock {
+    charge(amount: number) {
+      return `mock:${amount}`
+    }
+  }
+
+  let origRegion: string | undefined
+  beforeAll(function () {
+    origRegion = process.env.CB_REGION_MOCK
+  })
+  afterAll(function () {
+    if (origRegion === undefined) {
+      delete process.env.CB_REGION_MOCK
+    } else {
+      process.env.CB_REGION_MOCK = origRegion
+    }
+  })
+
+  it('registers the region gateway alone when a region matches', async function () {
+    process.env.CB_REGION_MOCK = 'eu'
+    const di = new CaffeineIoC()
+    await di.init()
+    expect(di.getMany(CbGatewayMock)).toEqual([expect.any(CbStripeGatewayMock)])
+  })
+
+  it('registers the mock gateway alone when no region matches', async function () {
+    process.env.CB_REGION_MOCK = 'other'
+    const di = new CaffeineIoC()
+    await di.init()
+    expect(di.getMany(CbGatewayMock)).toEqual([expect.any(CbMockGateway)])
+  })
+})
+
 // ─── conditional-bindings: stacked @ConditionalOn (AND) — all pass ───────────
 
 describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', function () {
@@ -1722,312 +1628,6 @@ describe('conditional-bindings: fluent .conditional() API', function () {
     di.bind(CbFluentMockGateway, t => t.toSelf().extends(CbFluentGateway))
     await di.init()
     expect(di.get(CbFluentGateway)).toBeInstanceOf(CbFluentMockGateway)
-  })
-})
-
-// ─── fallback-bindings: @Fallback used alone ─────────────────────────────────
-
-describe('fallback-bindings: @Fallback used alone', function () {
-  abstract class FbLoggerA {
-    abstract log(msg: string): string
-  }
-
-  @Fallback()
-  @Injectable()
-  @Extends()
-  class FbNoopLoggerA extends FbLoggerA {
-    log(_msg: string) {
-      return 'noop'
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Fallback used when no other binding for key exists', function () {
-    expect(di.get(FbLoggerA)).toBeInstanceOf(FbNoopLoggerA)
-  })
-})
-
-// ─── fallback-bindings: @Fallback skipped with override ──────────────────────
-
-describe('fallback-bindings: @Fallback skipped with override', function () {
-  abstract class FbLoggerB {
-    abstract log(msg: string): string
-  }
-
-  @Fallback()
-  @Injectable()
-  @Extends()
-  class FbNoopLoggerB extends FbLoggerB {
-    log(_msg: string) {
-      return 'noop'
-    }
-  }
-
-  @Primary()
-  @Injectable()
-  @Extends()
-  class FbRealLoggerB extends FbLoggerB {
-    log(msg: string) {
-      return `real:${msg}`
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Fallback skipped when another non-fallback binding exists', function () {
-    expect(di.get(FbLoggerB)).toBeInstanceOf(FbRealLoggerB)
-  })
-})
-
-// ─── fallback-bindings: library override pattern ─────────────────────────────
-
-describe('fallback-bindings: library override pattern', function () {
-  abstract class FbCacheLib {
-    abstract get(key: string): unknown
-    abstract set(key: string, value: unknown): void
-  }
-
-  @Fallback()
-  @Injectable()
-  @Extends()
-  class FbInMemoryCacheLib extends FbCacheLib {
-    private readonly store = new Map<string, unknown>()
-    get(key: string) {
-      return this.store.get(key)
-    }
-    set(key: string, value: unknown) {
-      this.store.set(key, value)
-    }
-  }
-
-  @Primary()
-  @Injectable()
-  @Extends()
-  class FbRedisCacheLib extends FbCacheLib {
-    get(key: string) {
-      return `redis:${key}`
-    }
-    set(key: string, value: unknown) {
-      /* no-op */
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('application binding overrides library @Fallback', function () {
-    expect(di.get(FbCacheLib)).toBeInstanceOf(FbRedisCacheLib)
-  })
-})
-
-// ─── fallback-bindings: @Fallback on @Provides — used ────────────────────────
-
-describe('fallback-bindings: @Fallback on @Provides — used', function () {
-  abstract class FbProvidesCacheA {
-    abstract get(key: string): unknown
-  }
-
-  class FbProvidesInMemoryCacheA extends FbProvidesCacheA {
-    private store = new Map<string, unknown>()
-    get(key: string) {
-      return this.store.get(key)
-    }
-  }
-
-  @Configuration()
-  class FbLibConfigA {
-    @Fallback()
-    @Provides(FbProvidesCacheA)
-    cache(): FbProvidesCacheA {
-      return new FbProvidesInMemoryCacheA()
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Fallback @Provides used when no non-fallback binding for key', function () {
-    expect(di.get(FbProvidesCacheA)).toBeInstanceOf(FbProvidesInMemoryCacheA)
-  })
-})
-
-// ─── fallback-bindings: @Fallback on @Provides — overridden ──────────────────
-
-describe('fallback-bindings: @Fallback on @Provides — overridden', function () {
-  abstract class FbProvidesCacheB {
-    abstract get(key: string): unknown
-  }
-
-  class FbProvidesInMemoryCacheB extends FbProvidesCacheB {
-    get(key: string) {
-      return undefined
-    }
-  }
-
-  class FbProvidesRedisCacheB extends FbProvidesCacheB {
-    get(key: string) {
-      return `redis:${key}`
-    }
-  }
-
-  @Configuration()
-  class FbLibConfigB {
-    @Fallback()
-    @Provides(FbProvidesCacheB)
-    cache(): FbProvidesCacheB {
-      return new FbProvidesInMemoryCacheB()
-    }
-  }
-
-  @Configuration()
-  class FbAppConfigB {
-    @Provides(FbProvidesCacheB)
-    cache(): FbProvidesCacheB {
-      return new FbProvidesRedisCacheB()
-    }
-  }
-
-  let di: CaffeineIoC
-  beforeAll(async function () {
-    di = new CaffeineIoC()
-    await di.init()
-  })
-
-  it('@Provides without @Fallback overrides @Fallback @Provides', function () {
-    expect(di.get(FbProvidesCacheB)).toBeInstanceOf(FbProvidesRedisCacheB)
-  })
-})
-
-// ─── fallback-bindings: @Fallback + @ConditionalOn — active ──────────────────
-
-describe('fallback-bindings: @Fallback + @ConditionalOn — active', function () {
-  abstract class FbCondGatewayA {
-    abstract charge(amount: number): string
-  }
-
-  @Fallback()
-  @ConditionalOn(() => process.env.FB_COND_A !== 'test')
-  @Injectable()
-  @Extends()
-  class FbDefaultGatewayA extends FbCondGatewayA {
-    charge(amount: number) {
-      return `default:${amount}`
-    }
-  }
-
-  let origNodeEnv: string | undefined
-  beforeAll(function () {
-    origNodeEnv = process.env.FB_COND_A
-  })
-  afterAll(function () {
-    if (origNodeEnv === undefined) {
-      delete process.env.FB_COND_A
-    } else {
-      process.env.FB_COND_A = origNodeEnv
-    }
-  })
-
-  it('fallback active when condition passes', async function () {
-    process.env.FB_COND_A = 'production'
-    const di = new CaffeineIoC()
-    await di.init()
-    expect(di.has(FbDefaultGatewayA)).toBe(true)
-    expect(di.get(FbCondGatewayA)).toBeInstanceOf(FbDefaultGatewayA)
-  })
-})
-
-// ─── fallback-bindings: @Fallback + @ConditionalOn — inactive ────────────────
-
-describe('fallback-bindings: @Fallback + @ConditionalOn — inactive', function () {
-  abstract class FbCondGatewayB {
-    abstract charge(amount: number): string
-  }
-
-  @Fallback()
-  @ConditionalOn(() => process.env.FB_COND_B !== 'test')
-  @Injectable()
-  @Extends()
-  class FbDefaultGatewayB extends FbCondGatewayB {
-    charge(amount: number) {
-      return `default:${amount}`
-    }
-  }
-
-  let origNodeEnv: string | undefined
-  beforeAll(function () {
-    origNodeEnv = process.env.FB_COND_B
-  })
-  afterAll(function () {
-    if (origNodeEnv === undefined) {
-      delete process.env.FB_COND_B
-    } else {
-      process.env.FB_COND_B = origNodeEnv
-    }
-  })
-
-  it('fallback inactive when condition fails', async function () {
-    process.env.FB_COND_B = 'test'
-    const di = new CaffeineIoC()
-    await di.init()
-    expect(di.has(FbDefaultGatewayB)).toBe(false)
-  })
-})
-
-// ─── fallback-bindings: fluent .fallback() API ───────────────────────────────
-
-describe('fallback-bindings: fluent .fallback() API', function () {
-  abstract class FbFluentCache {
-    abstract get(key: string): string | undefined
-    abstract set(key: string, value: string): void
-  }
-
-  class FbFluentInMemoryCache extends FbFluentCache {
-    private store = new Map<string, string>()
-    get(key: string) {
-      return this.store.get(key)
-    }
-    set(key: string, value: string) {
-      this.store.set(key, value)
-    }
-  }
-
-  class FbFluentRedisCache extends FbFluentCache {
-    get(key: string) {
-      return undefined
-    }
-    set(key: string, value: string) {
-      /* no-op */
-    }
-  }
-
-  it('.fallback() used when no non-fallback binding exists', async function () {
-    const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache).fallback())
-    await di.init()
-    expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentInMemoryCache)
-  })
-
-  it('.fallback() skipped when non-fallback binding exists', async function () {
-    const di = new CaffeineIoC({ decorators: false })
-    di.bind(FbFluentCache, t => t.toClass(FbFluentInMemoryCache).fallback())
-    di.bind(FbFluentCache, t => t.toClass(FbFluentRedisCache))
-    await di.init()
-    expect(di.get(FbFluentCache)).toBeInstanceOf(FbFluentRedisCache)
   })
 })
 

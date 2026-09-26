@@ -22,7 +22,6 @@ identical in both flavours; differences are noted inline where they exist.
 - [@Lifetime](#lifetime)
 - [@Named](#named)
 - [@Primary](#primary)
-- [@Fallback](#fallback)
 - [@Lazy](#lazy)
 - [@Profile](#profile)
 - [@ConditionalOn](#conditionalon)
@@ -133,15 +132,6 @@ class PostgresDatabase { ... }
 
 Marks this binding as preferred when multiple bindings exist for the same key.
 `di.get()` returns this binding instead of throwing `ErrNoUniqueInjectionForKey`.
-
-### @Fallback
-
-```ts
-@Fallback()
-```
-
-Marks this binding as a fallback. It is only used when no non-fallback binding
-exists for the key.
 
 ### @Lazy
 
@@ -370,7 +360,7 @@ a `@Configuration` class.
 
 `deps` are resolved from the container and passed as method arguments.
 
-Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@Fallback`,
+Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@ConditionalOn`,
 `@Lazy`, and `@Interceptor`.
 
 ### @ProvidesAsync

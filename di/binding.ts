@@ -176,12 +176,6 @@ export interface Binding<T = any> {
   source?: { ctor: Ctor; method: string | symbol }
 
   /**
-   * Whether this binding is a fallback binding.
-   * Fallback bindings are used to provide a default implementation for a given key.
-   */
-  fallback?: boolean
-
-  /**
    * The order of this binding when injected as part of an ordered collection via {@link ordered}.
    * Lower values come first. Bindings without an order value are placed last.
    */
@@ -233,7 +227,6 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     tags: initial.tags || new Map(),
     internal: initial.internal ?? false,
     source: initial.source,
-    fallback: initial.fallback,
     order: initial.order,
     async: initial.async,
     ctx: initial.ctx,

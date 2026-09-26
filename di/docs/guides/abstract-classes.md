@@ -209,7 +209,7 @@ class NotificationRouter {
 container initialization. Useful for environment-driven or feature-flag-driven wiring.
 
 ```ts
-import { Injectable, Extends, Primary, ConditionalOn, Fallback } from '@caffeinejs/di'
+import { Injectable, Extends, Primary, ConditionalOn } from '@caffeinejs/di'
 
 abstract class CacheStore {
   abstract get(key: string): Promise<string | undefined>
@@ -219,7 +219,6 @@ abstract class CacheStore {
 // Always registered — acts as the default
 @Injectable()
 @Extends()
-@Fallback()
 class InMemoryCache extends CacheStore {
   private store = new Map<string, string>()
   async get(key: string) {
@@ -231,6 +230,7 @@ class InMemoryCache extends CacheStore {
 }
 
 // Only registered when a RedisClient binding is present in the container
+@Primary()
 @Injectable()
 @Extends()
 @ConditionalOn(ctx => ctx.container.has(RedisClient))
@@ -248,8 +248,10 @@ class RedisCache extends CacheStore {
 When `RedisClient` is bound, `RedisCache` is registered and wins as `@Primary`.
 When absent, the container falls back to `InMemoryCache`.
 
-All bindings are registered before any `@ConditionalOn` predicate runs, so
-`ctx.container.has()` is safe to call for any key.
+Every binding without conditions is registered before any `@ConditionalOn` predicate runs, so
+`ctx.container.has()` sees `RedisClient` whether it was bound by hand, by a module or by
+decorators. A conditional binding is visible only once it has been decided — see
+[Conditionals](./conditional-bindings.md#how-conditionalon-works).
 
 ---
 

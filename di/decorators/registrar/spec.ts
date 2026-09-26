@@ -34,7 +34,6 @@ export class DecoratedBindingConfig {
   #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #configuredBy?: string
   #source?: { ctor: Ctor; method: string | symbol }
-  #fallback?: boolean
   #order?: number
   #async?: boolean
   #metadataMerged?: boolean
@@ -73,10 +72,6 @@ export class DecoratedBindingConfig {
 
   get getConditionals(): Conditional[] | undefined {
     return this.#conditionals
-  }
-
-  get isFallback(): boolean | undefined {
-    return this.#fallback
   }
 
   get isConfiguration(): boolean | undefined {
@@ -269,11 +264,6 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  fallback(fallback = true): this {
-    this.#fallback = fallback
-    return this
-  }
-
   order(order: number): this {
     this.#order = order
     return this
@@ -341,7 +331,6 @@ export class DecoratedBindingConfig {
       configuration: this.#configuration,
       internal: false,
       source: this.#source,
-      fallback: this.#fallback,
       order: this.#order,
       async: this.#async,
       ctx: undefined,
