@@ -32,9 +32,6 @@
   - [builder](#builder)
 - [Validation](#validation)
   - [assertResolvable](#assertresolvable)
-- [Hierarchy](#hierarchy)
-  - [newChild](#newchild)
-  - [parent](#parent)
 - [Testing](#testing)
   - [snapshot](#snapshot)
   - [restore](#restore)
@@ -394,39 +391,6 @@ Call this after `init()` as a startup health check:
 await di.init()
 di.assertResolvable()
 ```
-
----
-
-## Hierarchy
-
-### newChild
-
-```ts
-newChild(): Container
-```
-
-Creates a child container that inherits all bindings from the parent. The child
-can register additional bindings or override existing ones without affecting the
-parent.
-
-Child containers must also be initialized with `await child.init()`.
-
-```ts
-const parent = new CaffeineIoC({ modules: [sharedModule] })
-await parent.init()
-
-const child = parent.newChild()
-child.bind(TenantConfig, t => t.toValue(config))
-await child.init()
-```
-
-### parent
-
-```ts
-readonly parent?: Container
-```
-
-The parent container, if this is a child container.
 
 ---
 

@@ -125,30 +125,6 @@ it enabled surfaces new cycles introduced by future edits.
 
 ---
 
-## `parent`
-
-**Default:** `undefined`
-
-Attaches a parent container. When a key is not found in the child, resolution
-falls through to the parent.
-
-```ts
-const root = new CaffeineIoC()
-await root.init()
-
-const child = root.newChild()
-await child.init()
-
-// child.get(SomeService) → looks in child first, then root
-```
-
-Prefer `newChild()` over passing `parent` directly — `newChild()` copies
-container-scoped bindings and post-processors automatically.
-
-See the [child container section](./modules.md#child-containers) in the Modules guide.
-
----
-
 ## `decorators`
 
 **Default:** `true`
@@ -203,6 +179,5 @@ cover the same ground with less ceremony.
 | `profiles`                  | `string[]`                                      | `[]`                       |
 | `checks.scopes`             | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean`                                       | `true`                     |
-| `parent`                    | `Container`                                     | `undefined`                |
 | `decorators`                | `boolean`                                       | `true`                     |
 | `metadataReader`            | `MetadataReader`                                | `undefined`                |

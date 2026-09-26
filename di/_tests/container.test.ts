@@ -664,17 +664,6 @@ describe('async singleton resolution timing (L-3)', function () {
         expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
         expect(caught!.issues).toHaveLength(2)
       })
-
-      it('should resolve dependencies from a parent container', function () {
-        const kDep = token<string>(Symbol('arfr-parent-dep'))
-        const parent = new CaffeineIoC({ decorators: false })
-        parent.bind(kDep, t => t.toValue('from-parent'))
-
-        const child = parent.newChild()
-        child.bind(token<Record<string, unknown>>('svc'), t => t.toFunction((_: unknown) => ({}), [kDep]))
-
-        expect(() => child.assertResolvable()).not.toThrow()
-      })
     })
   })
 })

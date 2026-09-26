@@ -97,7 +97,7 @@ describe('Label', function () {
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))).toHaveLength(0)
   })
 
-  it('should respect profile when querying labels via child container', async function () {
+  it('should respect profile when querying labels across containers with different profiles', async function () {
     const sym = Symbol('ns-label')
 
     @Label(sym)

@@ -85,14 +85,11 @@ controls construction.
 
 Beyond basic injection, CaffeineIoC provides:
 
-- **Scopes** — control how many instances exist (singleton, per-request,
-  per-child-container).
+- **Scopes** — control how many instances exist (singleton, per-request).
 - **Lifecycle hooks** — run code after construction (`@PostConstruct`), after
   every binding is resolved (`OnBootstrap`), and before shutdown (`OnDestroy`).
 - **Profiles** — activate bindings only in specific environments.
 - **Conditionals** — activate bindings based on arbitrary predicates.
-- **Child containers** — create isolated sub-containers that inherit the
-  parent's bindings.
 - **Testing utilities** — snapshot and restore the binding registry for
   isolated tests.
 

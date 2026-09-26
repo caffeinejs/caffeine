@@ -87,31 +87,6 @@ See the [Lazy guide](../guides/lazy-bindings.md).
 
 ---
 
-### `parent`
-
-```ts
-parent?: Container
-```
-
-**Default:** `undefined`
-
-A parent container. When a key cannot be resolved in the current container,
-resolution falls through to the parent automatically.
-
-Prefer `container.newChild()` over passing `parent` directly — `newChild()`
-copies container-scoped bindings and post-processors automatically.
-
-```ts
-const root = new CaffeineIoC()
-await root.init()
-
-const child = root.newChild()
-// child falls back to root for unregistered keys
-await child.init()
-```
-
----
-
 ### `checks`
 
 ```ts
@@ -255,7 +230,6 @@ const di = new CaffeineIoC({
 | `profiles`                  | `string[]`                  | `[]`                       |
 | `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         |
 | `lazy`                      | `boolean`                   | `false`                    |
-| `parent`                    | `Container`                 | `undefined`                |
 | `checks.scopes`             | `ScopeCheckMode`            | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean`                   | `true`                     |
 | `decorators`                | `boolean`                   | `true`                     |

@@ -82,4 +82,4 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
   dependency graph as text, Markdown, Mermaid, DOT, or JSON.
 
 - [Modules](./modules.md) — organize bindings into reusable module functions,
-  name them for debugging, write async modules, and create child containers.
+  name them for debugging, and write async modules.

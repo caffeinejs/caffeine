@@ -109,24 +109,3 @@ function storageModule(di: ContainerBindingOps) {
 For profile-based or decorator-driven activation, see
 [`@Profile`](../reference/decorators.md#profile) and
 [`@ConditionalOn`](../reference/decorators.md#conditionalon).
-
-## Child containers
-
-A child container inherits all bindings from its parent and can override or
-extend them without affecting the parent. This is useful for request-scoped
-setups or multi-tenant isolation. Children do not inherit the parent's module
-list.
-
-```ts
-const parent = new CaffeineIoC({ modules: [commonModule] })
-await parent.init()
-
-const child = parent.newChild()
-child.bind(TenantConfig, t => t.toValue(tenantConfig))
-await child.init()
-
-const svc = child.get(UserService) // resolved from parent
-```
-
-See the [Container reference](../reference/container.md) for full `newChild()`
-semantics.

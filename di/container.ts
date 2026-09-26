@@ -97,7 +97,6 @@ export class CaffeineIoC implements Container {
 
   readonly postProcessors: Set<PostProcessor> = new Set()
   readonly hooks: HookListener = new HookListener()
-  readonly parent?: Container
   readonly refresher!: Refresher
   readonly requestScopeManager!: RequestScopeManager
 
@@ -130,7 +129,6 @@ export class CaffeineIoC implements Container {
       checks: { ...DEFAULT_OPTIONS.checks, ...options.checks },
     } as Options
 
-    this.parent = opts.parent
     this._profiles = new Set(opts.profiles ?? [])
     this.lazy = opts.lazy
     this.circularReferences = opts.checks?.circularReferences ?? true
@@ -460,10 +458,6 @@ export class CaffeineIoC implements Container {
       return bindings as Binding<T>[]
     }
 
-    if (this.parent) {
-      return this.parent.getBindings(key)
-    }
-
     return []
   }
 
@@ -495,7 +489,7 @@ export class CaffeineIoC implements Container {
 
   /**
    * Checks whether the given key can be resolved: by a binding registered under it, by one bound under a
-   * name it aliases, or by a subclass bound with `.extends(key)`. Falls through to the parent container.
+   * name it aliases, or by a subclass bound with `.extends(key)`.
    *
    * True exactly when {@link get} would resolve, so a key that resolves is never reported absent. Whether a
    * binding is registered *directly* under the key is a different question this does not answer.
@@ -811,27 +805,6 @@ export class CaffeineIoC implements Container {
     for (const p of profiles) {
       this._profiles.add(p)
     }
-  }
-
-  /**
-   * Creates a new child container from this one, sharing the same configuration.
-   */
-  newChild(): CaffeineIoC {
-    const child = new CaffeineIoC({
-      lazy: this.lazy,
-      defaultScopeID: this.scopeID,
-      profiles: [...this.profiles],
-      parent: this,
-      decorators: false,
-      checks: { scopes: this.scopeCheckMode, circularReferences: this.circularReferences },
-      metadataReader: this.metadataReader,
-    })
-
-    for (const value of this.postProcessors) {
-      child.postProcessors.add(value)
-    }
-
-    return child
   }
 
   /**

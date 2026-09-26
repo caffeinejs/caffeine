@@ -44,13 +44,6 @@ export interface Options {
   defaultScopeID?: NamedToken<Scope>
 
   /**
-   * The parent container to use for the container.
-   *
-   * @defaultValue `undefined`
-   */
-  parent?: Container
-
-  /**
    * The default lazy loading behavior for bindings that does not specify one explicitly.
    *
    * @defaultValue `false`
@@ -115,7 +108,6 @@ export interface BindingDescriptor {
  */
 export interface Container extends AsyncDisposable {
   readonly profiles: ReadonlySet<string>
-  readonly parent?: Container
   readonly size: number
   readonly hooks: HookListener
   readonly postProcessors: Set<PostProcessor>
@@ -179,8 +171,6 @@ export interface Container extends AsyncDisposable {
   resetInstance(key: InjectionToken): Promise<void>
 
   resetBinding(binding: Binding): void | Promise<void>
-
-  newChild(): Container
 
   compile(): Promise<void>
 

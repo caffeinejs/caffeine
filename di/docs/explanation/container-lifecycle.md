@@ -110,27 +110,6 @@ own scope block, on the same reverse-creation-order rule, not by `dispose()`.
 
 ---
 
-## Child containers
-
-Child containers share the parent's binding registry but maintain their own
-instance cache. They follow the same four phases:
-
-```ts
-const parent = new CaffeineIoC({ modules: [sharedModule] })
-await parent.init()
-
-const child = parent.newChild()
-child.bind(TenantConfig, t => t.toValue(tenantCfg))
-await child.init()
-
-// child.get(UserService) — resolved against parent bindings
-// child.get(TenantConfig) — resolved from child's own binding
-```
-
-Disposing the parent does not automatically dispose children.
-
----
-
 ## Refresh scope reset
 
 The REFRESH scope sits between init and disposal. You can reset all refresh-
