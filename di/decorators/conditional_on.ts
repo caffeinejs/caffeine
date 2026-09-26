@@ -12,7 +12,7 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  *
  * @example
  * ```ts
- * @ConditionalOn(ctx => ctx.has(FeatureFlags))
+ * @ConditionalOn(ctx => ctx.container.has(FeatureFlags))
  * @Injectable()
  * class ExperimentalService {}
  * ```

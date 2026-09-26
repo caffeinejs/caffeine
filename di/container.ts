@@ -67,17 +67,11 @@ interface PendingBinding {
   key: InjectionToken
   config?: DecoratedBindingConfig
   binding?: Binding
-  fallback: boolean
   providedByConfig?: InjectionToken
   profileRejected?: boolean
-}
-
-interface PendingFallback {
-  key: InjectionToken
-  binding: Binding
-  // A decorated fallback reports through the hooks whether it was registered, as decorated bindings do. One bound by
-  // hand stays silent, as `bind()` does.
-  announce: boolean
+  // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
+  // against the profiles of the container it came from, so only a bound one is matched here.
+  byHand?: 'bind' | 'restore'
 }
 
 /**
@@ -117,7 +111,6 @@ export class CaffeineIoC implements Container {
   private _pendingManualProfiles: PendingBinding[] = []
   private _pendingManualProfileKeys = new Set<InjectionToken>()
   private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
-  private _pendingFallbacks: PendingFallback[] = []
   private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
@@ -677,17 +670,11 @@ export class CaffeineIoC implements Container {
 
     const type = getBindingConfiguration(key)
     const binding = newBinding<TokenValue<K>>(type ? decoratorConfigToBinding(type) : {})
-
-    // Binding a key by hand is an explicit registration, so `@Fallback` on the decorated class is not
-    // inherited — otherwise an override would defer to the very default it is replacing. Only an explicit
-    // `.fallback()` on the spec holds the binding back.
-    binding.fallback = undefined
-
     const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, binding)
 
     configure(spec)
 
-    this.registerOrDeferFallback(key as InjectionToken, spec[kBuildBinding]())
+    this.registerOrHold(key as InjectionToken, spec[kBuildBinding]())
 
     return this
   }
@@ -742,7 +729,6 @@ export class CaffeineIoC implements Container {
     this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
     this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
-    this._pendingFallbacks = this._pendingFallbacks.filter(e => e.key !== key)
 
     return this.bind(key, configure)
   }
@@ -777,7 +763,7 @@ export class CaffeineIoC implements Container {
 
     configure(spec)
 
-    this.registerOrDeferFallback(cls as InjectionToken, spec[kBuildBinding]())
+    this.registerOrHold(cls as InjectionToken, spec[kBuildBinding]())
 
     return this
   }
@@ -828,8 +814,11 @@ export class CaffeineIoC implements Container {
    */
   snapshot(): Snapshot {
     const entries: [InjectionToken, Binding][] = []
+    // A binding made by hand that is still waiting on its conditions belongs to the state as much as a registered one.
+    // restore() holds it back again.
+    const held = this._pendingConditionals.filter(e => e.byHand !== undefined).map(e => [e.key, e.binding!] as const)
 
-    for (const [key, binding] of this.registry) {
+    for (const [key, binding] of [...this.registry, ...held]) {
       if (binding.internal) {
         continue
       }
@@ -867,7 +856,7 @@ export class CaffeineIoC implements Container {
     }
 
     for (const [key, binding] of snap.entries()) {
-      this.configureBinding(key, binding, false)
+      this.registerOrHold(key, binding, 'restore')
     }
   }
 
@@ -945,22 +934,11 @@ export class CaffeineIoC implements Container {
 
       this.hooks.emit('onSetup', { key, binding })
 
-      // A fallback is decided once the rest of the container has settled, so a binding registered afterwards by a
-      // module, by hand or by a passing conditional still holds it back.
-      if (binding.fallback) {
-        if (binding.configuration && binding.conditionals.length > 0) {
-          this._pendingConfigKeys.set(key, binding.keysProvided)
-        }
-
-        this._pendingFallbacks.push({ key, binding, announce: true })
-        continue
-      }
-
       if (binding.conditionals.length > 0) {
         if (binding.configuration) {
           this._pendingConfigKeys.set(key, binding.keysProvided)
         }
-        this._pendingConditionals.push({ key, binding, fallback: false })
+        this._pendingConditionals.push({ key, binding })
       } else {
         this.configureBinding(key, binding)
         this.hooks.emit('onBindingRegistered', { key, binding })
@@ -978,23 +956,13 @@ export class CaffeineIoC implements Container {
 
       this.hooks.emit('onSetup', { key, binding })
 
-      if (binding.fallback) {
-        // One whose configuration class is still pending waits for it, and is queued only if that class registers.
-        if (configKey !== undefined) {
-          this._pendingConditionals.push({ key, binding, fallback: true, providedByConfig: configKey })
-        } else {
-          this._pendingFallbacks.push({ key, binding, announce: true })
-        }
-        continue
-      }
-
       if (configKey !== undefined) {
-        this._pendingConditionals.push({ key, binding, fallback: false, providedByConfig: configKey })
+        this._pendingConditionals.push({ key, binding, providedByConfig: configKey })
         continue
       }
 
       if (binding.conditionals.length > 0) {
-        this._pendingConditionals.push({ key, binding, fallback: false })
+        this._pendingConditionals.push({ key, binding })
       } else {
         if (this.registry.has(key)) {
           throw new ErrRepeatedInjectableConfiguration(
@@ -1299,11 +1267,7 @@ export class CaffeineIoC implements Container {
       !this._pendingManualProfileKeys.has(key)
     ) {
       this._pendingManualProfileKeys.add(key)
-      this._pendingManualProfiles.push({
-        key,
-        binding: canonical,
-        fallback: canonical.fallback === true,
-      })
+      this._pendingManualProfiles.push({ key, binding: canonical })
     }
 
     if (canonical.scopeID === Scopes.REQUEST) {
@@ -1448,12 +1412,7 @@ export class CaffeineIoC implements Container {
 
     const conditionals = config.getConditionals
     const hasConditionals = conditionals !== undefined && conditionals.length > 0
-    const entry: PendingBinding = {
-      key,
-      config,
-      fallback: config.isFallback === true,
-      providedByConfig,
-    }
+    const entry: PendingBinding = { key, config, providedByConfig }
 
     this._pendingProfiles.push(entry)
 
@@ -1531,7 +1490,7 @@ export class CaffeineIoC implements Container {
 
     try {
       for (const entry of this._pendingProfiles) {
-        if (!this.isConfigClass(entry) || entry.fallback) {
+        if (!this.isConfigClass(entry)) {
           continue
         }
 
@@ -1549,7 +1508,7 @@ export class CaffeineIoC implements Container {
       }
 
       for (const entry of this._pendingProfiles) {
-        if (this.isConfigClass(entry) || entry.fallback || entry.providedByConfig !== undefined) {
+        if (this.isConfigClass(entry) || entry.providedByConfig !== undefined) {
           continue
         }
 
@@ -1582,26 +1541,6 @@ export class CaffeineIoC implements Container {
         }
 
         this.registerProfileHit(entry)
-      }
-
-      for (const entry of this._pendingProfiles) {
-        if (!entry.fallback) {
-          continue
-        }
-
-        if (!this.entryMatchesProfiles(entry)) {
-          this.rejectProfile(entry)
-          continue
-        }
-
-        if (this.shouldDeferToConditionals(entry)) {
-          this.leaveForConditionals(entry)
-          continue
-        }
-
-        const binding = this.materializePending(entry)
-        this.hooks.emit('onSetup', { key: entry.key, binding })
-        this._pendingFallbacks.push({ key: entry.key, binding, announce: true })
       }
 
       for (const entry of this._pendingManualProfiles) {
@@ -1775,7 +1714,6 @@ export class CaffeineIoC implements Container {
     await runModules(this.modules, this)
     this.evaluatePendingProfiles()
     await this.evaluatePendingConditionals()
-    await this.evaluatePendingFallbacks()
 
     if (this.circularReferences) {
       checkCircularReferences(this.registry, this.bindings)
@@ -1936,60 +1874,25 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Registers a binding, or holds it back when it is a fallback.
+   * Registers a binding made by hand, or holds it back until {@link compile} when it carries conditions.
    *
-   * A fallback must not overwrite a binding that already covers the key, and the binding it competes with may
-   * be registered later — by a module, or by a conditional that has not been evaluated yet. Holding it until
-   * {@link evaluatePendingFallbacks} is what makes the outcome independent of the order the binds happened in.
+   * Held back, it is decided with the decorated bindings: its conditions never see the binding itself, and a binding
+   * already registered under its key stays until they pass. A default bound with
+   * `.conditional(ctx => !ctx.container.has(key))` relies on both. Binding the key again discards it, the way it would
+   * replace a registered binding.
    */
-  private registerOrDeferFallback(key: InjectionToken, binding: Binding): void {
-    if (binding.fallback === true) {
-      this._pendingFallbacks.push({ key, binding, announce: false })
+  private registerOrHold(key: InjectionToken, binding: Binding, by: 'bind' | 'restore' = 'bind'): void {
+    const held = this._pendingConditionals.findIndex(e => e.byHand !== undefined && e.key === key)
+    if (held !== -1) {
+      this._pendingConditionals.splice(held, 1)
+    }
+
+    if (binding.conditionals.length > 0) {
+      this._pendingConditionals.push({ key, binding, byHand: by })
       return
     }
 
-    this.configureBinding(key, binding)
-  }
-
-  /**
-   * Registers the held-back fallbacks that nothing else answers for.
-   *
-   * Every fallback, decorated or bound by hand, is decided here and nowhere else. This runs after modules, profiles
-   * and conditionals have settled, so a competing binding has either been registered or been removed. The first
-   * fallback in the queue wins; later ones find their keys taken.
-   */
-  private async evaluatePendingFallbacks(): Promise<void> {
-    for (const { key, binding, announce } of this._pendingFallbacks) {
-      const register =
-        !this.isClaimed(key, binding) &&
-        this.isRegistrable(binding) &&
-        (binding.conditionals.length === 0 ||
-          (await this.evalConditionals(binding.conditionals, { container: this, key, binding })))
-
-      if (register) {
-        this.configureBinding(key, binding)
-      }
-
-      if (announce) {
-        this.hooks.emit(register ? 'onBindingRegistered' : 'onBindingNotRegistered', { key, binding })
-      }
-    }
-
-    this._pendingFallbacks = []
-  }
-
-  /**
-   * Whether anything already answers to a key the fallback would answer to: its own key, one of its names, or the
-   * base it extends. A fallback is a last resort, so any of them holds it back.
-   */
-  private isClaimed(key: InjectionToken, binding: Binding): boolean {
-    const answered = (k: InjectionToken | Identifier): boolean => (this.bindings.get(k)?.length ?? 0) > 0
-
-    return (
-      answered(key) ||
-      binding.names.some(answered) ||
-      (binding.extend !== undefined && !binding.configuration && answered(binding.extend))
-    )
+    this.configureBinding(key, binding, by === 'bind')
   }
 
   private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
@@ -2018,7 +1921,7 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      if (!entry.binding.configuration || entry.fallback || entry.providedByConfig !== undefined) {
+      if (!entry.binding.configuration || entry.byHand !== undefined || entry.providedByConfig !== undefined) {
         continue
       }
 
@@ -2036,11 +1939,6 @@ export class CaffeineIoC implements Container {
           }
 
           if (provided.providedByConfig !== entry.key) {
-            continue
-          }
-
-          if (provided.fallback) {
-            this._pendingFallbacks.push({ key: provided.key, binding: provided.binding, announce: true })
             continue
           }
 
@@ -2075,13 +1973,15 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      if (entry.binding.configuration || entry.fallback || entry.providedByConfig !== undefined) {
+      if ((entry.binding.configuration && entry.byHand === undefined) || entry.providedByConfig !== undefined) {
         continue
       }
 
       const binding = entry.binding
       const ctx: ConditionContext = { container: this, key: entry.key, binding }
-      const pass = await evalAll(binding.conditionals, ctx)
+      // One bound by hand never entered the profile queue, so its profiles are matched here.
+      const pass =
+        (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await evalAll(binding.conditionals, ctx))
 
       if (pass) {
         registerEntry(entry.key, binding)
@@ -2089,18 +1989,6 @@ export class CaffeineIoC implements Container {
       } else {
         this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
       }
-    }
-
-    for (const entry of this._pendingConditionals) {
-      if (entry.profileRejected || entry.binding === undefined) {
-        continue
-      }
-
-      if (!entry.fallback || entry.providedByConfig !== undefined) {
-        continue
-      }
-
-      this._pendingFallbacks.push({ key: entry.key, binding: entry.binding, announce: true })
     }
 
     const toUnref: InjectionToken[] = []

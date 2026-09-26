@@ -54,11 +54,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
 
 - [Conditional Bindings](./conditional-bindings.md) — register implementations only
   when a predicate passes at init time: region flags, env vars, feature toggles,
-  or presence of another binding.
-
-- [Fallback Bindings](./fallback-bindings.md) — mark a binding as a last-resort default,
-  active only when no other non-fallback binding is registered for the same key; the
-  standard pattern for overridable library defaults.
+  presence of another binding, or a default that yields to any other implementation.
 
 - [Lazy Bindings](./lazy-bindings.md) — defer construction of a binding until its first
   resolution; reduce startup time for expensive services and break circular dependency

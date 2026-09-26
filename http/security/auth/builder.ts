@@ -354,9 +354,9 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   }
 
   /**
-   * Registers the credential module: a `CredentialsService` (for login endpoints) plus a fallback
-   * `PasswordHasher` (`ScryptPasswordHasher`, overridable). The user must bind a `UserProvider`
-   * implementation to the container. Not a scheme — pair it with `addCookie` for session login.
+   * Registers the credential module: a `CredentialsService` (for login endpoints) plus a default
+   * `PasswordHasher` (`ScryptPasswordHasher`), used unless the application binds its own. The user must bind a
+   * `UserProvider` implementation to the container. Not a scheme — pair it with `addCookie` for session login.
    */
   addCredentials(options: CredentialsServiceOptions = {}): this {
     this.#credentials = options
@@ -611,12 +611,14 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     }
 
     if (this.#credentials !== undefined) {
-      // Default hasher is a fallback so a user-bound PasswordHasher wins. CredentialsService is a
-      // public binding (controllers inject it); it resolves the user-bound UserProvider and the
-      // PasswordHasher, and the configured options ride along in the closure (a value that is not a
-      // container key, so a plain DI injection cannot carry it).
+      // The default hasher registers only when nothing else answers to PasswordHasher, so a user-bound one wins
+      // whether it was bound before or after this. CredentialsService is a public binding (controllers inject it);
+      // it resolves the user-bound UserProvider and the PasswordHasher, and the configured options ride along in the
+      // closure (a value that is not a container key, so a plain DI injection cannot carry it).
       const options = this.#credentials
-      kit.container.bind(PasswordHasher, t => t.toClass(ScryptPasswordHasher).fallback())
+      kit.container.bind(PasswordHasher, t =>
+        t.toClass(ScryptPasswordHasher).conditional(ctx => !ctx.container.has(PasswordHasher)),
+      )
       kit.container.bind(CredentialsService, t =>
         t.toFunction(
           (provider: UserProvider, hasher: PasswordHasher) => new CredentialsService(provider, hasher, options),

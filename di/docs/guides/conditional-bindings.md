@@ -31,13 +31,16 @@ interface ConditionContext {
 
 | `ctx` field          | Description                                                                                                 |
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `container.has(key)` | Whether another binding is registered. Safe to call — all bindings are collected before any predicate runs. |
+| `container.has(key)` | Whether a binding answers to the key: any binding without conditions, or a conditional one decided already. |
 | `key`                | The key of the binding being tested.                                                                        |
 | `binding`            | Decorator config (scope, name, labels) of the binding being tested.                                         |
 
-Predicate evaluation order: all bindings are registered first, then predicates are
-evaluated during `init()`. This means `ctx.container.has()` can safely check for
-any key — including ones registered in modules or manually.
+Predicate evaluation order: every binding without conditions is registered first — by hand,
+by a module or by decorators. Bindings with conditions are then decided one at a time during
+`init()`: decorated `@Configuration` classes first, then the other decorated bindings in the
+order they were declared, then the ones bound by hand in the order they were bound. So
+`ctx.container.has()` sees every unconditional binding, but a conditional one only once it
+has been decided.
 
 :::warning
 A binding that fails its condition is completely absent from the container. Any
@@ -54,7 +57,7 @@ A realistic pattern: different infrastructure implementations are loaded based o
 region-specific class registers only when its region matches.
 
 ```ts
-import { Injectable, Extends, Fallback, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Extends, ConditionalOn } from '@caffeinejs/di'
 ```
 
 ### Define the contract
@@ -97,8 +100,8 @@ class BraintreeUSGateway extends PaymentGateway {
   }
 }
 
-// Optional fallback — used only when no other gateway qualifies
-@Fallback()
+// Used when no other gateway qualifies — the complement of the conditions above
+@ConditionalOn(() => !['eu', 'us'].includes(process.env.REGION ?? ''))
 @Injectable()
 @Extends()
 class MockPaymentGateway extends PaymentGateway {
@@ -205,8 +208,9 @@ class StubPaymentGateway extends PaymentGateway {
 }
 ```
 
-All async predicates run concurrently inside `init()`. Order of evaluation is not
-guaranteed — predicates must not depend on each other's side effects.
+Predicates are awaited one at a time, in the order described in
+[How `@ConditionalOn` works](#how-conditionalon-works). A predicate must not depend on
+another's side effects.
 
 ---
 
@@ -279,9 +283,63 @@ di.bind(BraintreeUSGateway, t =>
     .conditional(() => process.env.REGION === 'us'),
 )
 
-di.bind(MockPaymentGateway, t => t.toSelf().extends(PaymentGateway).fallback())
+di.bind(MockPaymentGateway, t =>
+  t
+    .toSelf()
+    .extends(PaymentGateway)
+    .conditional(() => !['eu', 'us'].includes(process.env.REGION ?? '')),
+)
 
 await di.init()
 ```
 
 Multiple `.conditional()` calls chain as AND, matching the decorator behaviour.
+
+A binding made by hand with `.conditional()` waits for `init()` the way a decorated one does.
+Until then `has()` does not see it, and it leaves a binding already registered under its key
+alone. It replaces that binding only if its predicate passes. Binding the same key again
+discards it, the same way the second of two `bind()` calls replaces the first.
+
+---
+
+## Defaults
+
+A default is an implementation used only when nothing else provides the key. Give it a
+condition that checks for that:
+
+```ts
+// Ships with the library — yields to any other Cache
+@ConditionalOn(ctx => !ctx.container.has(Cache))
+@Injectable()
+@Extends()
+class InMemoryCache extends Cache {
+  // ...
+}
+```
+
+The same condition works on a binding made by hand, which is how a feature ships a default
+from its configuration step:
+
+```ts
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+```
+
+It yields to every binding of `Cache` without conditions, whether bound by hand before or
+after it, by a module or by decorators. It also yields to every conditional one decided
+before it. It cannot see a conditional one decided after it, such as a decorated class
+declared later: that one registers too, and resolving `Cache` fails with
+`ErrNoUniqueInjectionForKey`. When the replacement is conditional, give the default the
+complementary condition, as `MockPaymentGateway` does above. Or keep the default
+unconditional and mark the replacement `@Primary`:
+
+```ts
+@Primary()
+@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Injectable([RedisClient])
+@Extends()
+class RedisCache extends Cache {
+  // ...
+}
+```
+
+Both are registered then, and `Cache` resolves to `RedisCache` whenever it is registered.
