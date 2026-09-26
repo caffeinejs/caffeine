@@ -1,15 +1,16 @@
 # `@caffeinejs/di`
 
-## `.fallback()` is held back until `compile()`
+## Every fallback is held back until `compile()`
 
-A `bind()` call registers as soon as its callback returns — except when the spec called `.fallback()`. Those
-bindings are queued and registered by `evaluatePendingFallbacks()`, after modules, profiles and conditionals
-have settled, and only if nothing else has claimed the key. The first fallback for a key wins.
+A `bind()` call registers as soon as its callback returns — except for a fallback. Every fallback, whether the spec
+called `.fallback()` or a class or `@Provides` method carries `@Fallback`, is queued and decided once by
+`evaluatePendingFallbacks()`, after modules, profiles and conditionals have settled. It registers only if nothing
+answers yet to its key, to a name it carries, or to the base it extends. The first fallback in the queue wins.
 
 Two consequences, both deliberate:
 
 - `has()`, `entries()` and `size` do not see a fallback-only key until `compile()`. Every other binding is
-  still visible the moment `bind()` returns.
+  still visible the moment it is registered.
 - `bind()` does not inherit `@Fallback` from a decorated class. Binding a key by hand is an explicit
   registration, so an override would otherwise defer to the default it is replacing.
 
@@ -41,7 +42,24 @@ exactly this way: the application writes `token<AppConfig>(...)` next to its sch
 
 `has(key)` is true exactly when `get(key)` would resolve — including a key reachable only through
 `.names(...)` or `.extends(Base)`. When you need "is a binding registered _directly_ under this key", read
-`registry` instead, as `rebind` and the fallback registration loops do.
+`registry` instead.
+
+## A key's candidate list is shared
+
+`bindings` holds, for each key, every binding that answers to it: the one registered under the key, the ones named
+after it and the ones extending it. `get` picks the primary out of that list and `allOf` takes all of it, so the list
+must not depend on the order the bindings were registered in.
+
+- Registering under a key joins the list (`mapUnder`). It never replaces it.
+- Removing a binding (`unref`, for a rejected profile or conditional) takes out that binding alone.
+- `rebind(key)` is the one deliberate replacement. It empties the key's list before registering, so overriding an
+  abstract key wins over the bindings extending it; those stay registered under their own keys.
+- Registering a key again unmaps the names, labels and base of the configuration it replaces, so they stop
+  resolving to it.
+
+`buildBindingGraph` (`graph/graph.ts`) rebuilds these lists from `[key, binding]` pairs, and `injectedBindings`
+(`binding.ts`) picks from a list what an injection receives, for both the graph and the cycle check. Change them
+together with `mapUnder`.
 
 ## Testing and registrar.ts
 

@@ -169,6 +169,35 @@ describe('BindingSpec.profiles()', function () {
     expect(di.has(FluentProfFail)).toBe(false)
   })
 
+  it('should leave another binding answering to the key of a removed component', async function () {
+    // Removing the binding registered under a key takes out that binding alone: one named after the key still
+    // answers to it. The whole list under the key used to go with it.
+    interface Store {
+      kind(): string
+    }
+
+    const kStore = token<Store>(Symbol('fluent-prof-store'))
+
+    class DevStore implements Store {
+      kind(): string {
+        return 'dev'
+      }
+    }
+
+    class NamedStore implements Store {
+      kind(): string {
+        return 'named'
+      }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kStore, t => t.toClass(DevStore).profiles('fluent-dev'))
+    di.bind(NamedStore, t => t.toSelf().names(kStore))
+    await di.init()
+
+    expect(di.get(kStore).kind()).toBe('named')
+  })
+
   it('should register when any listed profile is active', async function () {
     class FluentProfOr {}
 

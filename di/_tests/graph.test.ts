@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
 
-import { buildBindingGraph, graphToMarkdown, graphToMermaid, graphToDot, graphToJSON, graphToText } from '../graph.js'
+import {
+  buildBindingGraph,
+  graphToMarkdown,
+  graphToMermaid,
+  graphToDot,
+  graphToJSON,
+  graphToText,
+  type BindingGraph,
+} from '../graph/index.js'
+import * as root from '../index.js'
 import { token } from '../key.js'
 import type { Scope } from '../scope.js'
 import { binding } from './property/helpers/binding_factory.js'
@@ -37,6 +46,12 @@ describe('buildBindingGraph', function () {
     const b = binding(1, { scopeID: TRANSIENT })
     const graph = buildBindingGraph([[ServiceA, b]])
     expect(graph.nodes[0].scopeID).toBe('transient')
+  })
+
+  it('captures a scope registered under a string as it is', function () {
+    const b = binding(1, { scopeID: token<Scope>('tenant') })
+    const graph = buildBindingGraph([[ServiceA, b]])
+    expect(graph.nodes[0].scopeID).toBe('tenant')
   })
 
   it('creates constructor injection edge', function () {
@@ -551,6 +566,12 @@ describe('graphToText', function () {
     expect(line).toContain('svc')
   })
 
+  it('shows labels inline on header line, one without a description included', function () {
+    const b = binding(1, { labels: [Symbol('web'), Symbol()] })
+    const line = graphToText([[ServiceA, b]]).split('\n')[0]
+    expect(line).toContain('labels=[web, Symbol()]')
+  })
+
   it('renders single dep with └─', function () {
     const bA = binding(1, { injections: [{ key: ServiceB }] })
     const bB = binding(2)
@@ -628,5 +649,119 @@ describe('graphToText', function () {
     const graph = buildBindingGraph([[ServiceA, b]])
     const output = graphToText(graph)
     expect(output).toContain('ServiceA')
+  })
+})
+
+describe('escaping', function () {
+  // Keys and scopes are free text. A quote, a pipe or a Mermaid entity code left raw corrupts the whole diagram or
+  // table, not just the label it sits in.
+  const graph: BindingGraph = {
+    nodes: [
+      {
+        id: 1,
+        label: 'say "hi" #1; a|b',
+        scopeID: 'my"scope#x;',
+        names: [],
+        labels: [],
+        primary: false,
+        lazy: false,
+      },
+    ],
+    edges: [],
+  }
+
+  it('escapes a pipe in a Markdown table cell', function () {
+    const row = graphToMarkdown(graph)
+      .split('\n')
+      .find(l => l.includes('say'))!
+
+    expect(row).toContain('a\\|b')
+    // Seven cells between eight unescaped pipes.
+    expect(row.split(/(?<!\\)\|/)).toHaveLength(9)
+  })
+
+  it('keeps a backslash that comes before a pipe in a Markdown table cell', function () {
+    // Markdown reads a backslash before punctuation as an escape. Left raw, the key's backslash would be taken as
+    // escaping the pipe after it and disappear, and the reader would see a|b.
+    const row = graphToMarkdown({ nodes: [{ ...graph.nodes[0], label: String.raw`a\|b` }], edges: [] })
+      .split('\n')
+      .find(l => l.startsWith('| a'))!
+
+    expect(row).toContain(String.raw`| a\\\|b |`)
+  })
+
+  it('writes quotes and hashes as Mermaid entity codes, in the label and in the scope', function () {
+    const line = graphToMermaid(graph)
+      .split('\n')
+      .find(l => l.startsWith('  n1['))
+
+    expect(line).toBe('  n1["say #quot;hi#quot; #35;1; a|b\\nmy#quot;scope#35;x;"]')
+  })
+
+  it('escapes quotes in a DOT label, in the scope too', function () {
+    const line = graphToDot(graph)
+      .split('\n')
+      .find(l => l.startsWith('  n1 '))
+
+    expect(line).toBe('  n1 [label="say \\"hi\\" #1; a|b\\nmy\\"scope#x;"]')
+  })
+})
+
+describe('a graph built by hand', function () {
+  // A graph can reach the renderers from somewhere other than buildBindingGraph, such as devtools after filtering
+  // bindings out of one. Its edges may then name nodes it no longer holds and leave out the optional meta, and
+  // every renderer still has to produce output rather than throw or print "undefined".
+  const node = (id: number, label: string): BindingGraph['nodes'][number] => ({
+    id,
+    label,
+    scopeID: 'singleton',
+    names: [],
+    labels: [],
+    primary: false,
+    lazy: false,
+  })
+
+  const graph: BindingGraph = {
+    nodes: [node(1, 'Api'), node(2, 'Repo')],
+    edges: [
+      { fromID: 1, toID: 2, kind: 'injection' },
+      { fromID: 2, toID: 9, kind: 'injection', meta: 'param[0]' },
+      { fromID: 1, toID: 9, kind: 'named-group' },
+    ],
+  }
+
+  it('renders every format without an undefined value', function () {
+    for (const output of [graphToMarkdown(graph), graphToMermaid(graph), graphToDot(graph), graphToText(graph)]) {
+      expect(output).not.toContain('undefined')
+    }
+  })
+
+  it('draws an edge without meta unlabelled', function () {
+    expect(graphToMermaid(graph).split('\n')).toContain('  n1 --> n2')
+    expect(graphToDot(graph).split('\n')).toContain('  n1 -> n2')
+  })
+
+  it('lists the dependencies it holds nodes for, and a missing group member by its id', function () {
+    const markdown = graphToMarkdown(graph)
+
+    expect(markdown).toContain('| Api | Repo |')
+    expect(markdown).toContain('| Repo | - |')
+    expect(markdown).toMatch(/^- qualifier .*: Api, 9$/m)
+  })
+})
+
+describe('the package root', function () {
+  // The graph has its own entry point, @caffeinejs/di/graph.
+  it('exports none of the graph functions', function () {
+    for (const name of [
+      'buildBindingGraph',
+      'graphToDot',
+      'graphToJSON',
+      'graphToMarkdown',
+      'graphToMermaid',
+      'graphToText',
+    ]) {
+      expect(root).not.toHaveProperty(name)
+    }
   })
 })

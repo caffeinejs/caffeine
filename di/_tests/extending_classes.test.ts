@@ -8,7 +8,7 @@ import { Injectable } from '../decorators/injectable.js'
 import { Lifetime } from '../decorators/lifetime.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
-import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
+import { ErrInvalidBinding, ErrInvalidDecorator, ErrNoUniqueInjectionForKey } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { Scopes } from '../scope.js'
@@ -539,4 +539,65 @@ describe('has() and a polymorphic binding', function () {
     expect(di.has(HasUnextended)).toBe(false)
     expect(di.has(HasChild)).toBe(true)
   })
+})
+
+// The bindings answering to a key form one list. Binding the base directly used to replace that list when it came
+// second and join it when it came first, so the same bindings resolved differently depending on registration order.
+describe('a base bound directly next to a binding extending it', function () {
+  abstract class OrderRepo {
+    abstract kind(): string
+  }
+
+  class SqlOrderRepo extends OrderRepo {
+    kind(): string {
+      return 'sql'
+    }
+  }
+
+  class CachedOrderRepo extends OrderRepo {
+    kind(): string {
+      return 'cached'
+    }
+  }
+
+  function register(di: CaffeineIoC, directFirst: boolean, primary: boolean): void {
+    const extending = () => di.bind(SqlOrderRepo, t => t.toSelf().extends(OrderRepo))
+    const direct = () =>
+      di.bind(OrderRepo, t => (primary ? t.toClass(CachedOrderRepo).primary() : t.toClass(CachedOrderRepo)))
+
+    if (directFirst) {
+      direct()
+      extending()
+    } else {
+      extending()
+      direct()
+    }
+  }
+
+  for (const directFirst of [false, true]) {
+    const order = directFirst ? 'direct binding first' : 'extending binding first'
+
+    it(`keeps both as candidates, ${order}`, async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      register(di, directFirst, false)
+      await di.init()
+
+      expect(
+        di
+          .getMany(OrderRepo)
+          .map(r => r.kind())
+          .sort(),
+      ).toEqual(['cached', 'sql'])
+      expect(() => di.get(OrderRepo)).toThrow(ErrNoUniqueInjectionForKey)
+    })
+
+    it(`resolves a single injection to the primary, ${order}`, async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      register(di, directFirst, true)
+      await di.init()
+
+      expect(di.get(OrderRepo).kind()).toBe('cached')
+      expect(di.getMany(OrderRepo)).toHaveLength(2)
+    })
+  }
 })

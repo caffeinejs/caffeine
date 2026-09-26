@@ -8,7 +8,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { ErrInvalidBinding, ErrNoResolutionForKey } from '../errors.js'
+import { ErrInvalidBinding, ErrMultiplePrimary, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { Provider } from '../provider.js'
@@ -256,6 +256,133 @@ describe('Manual Binding', function () {
         await di.init()
 
         expect(di.get(Original)).toBeInstanceOf(Replacement)
+      })
+
+      it('should replace every binding that answers to an abstract key', async function () {
+        // What TestContainer.override does: the replacement of a base wins over the subclasses bound to it, which
+        // stay resolvable under their own keys.
+        abstract class Store {
+          abstract kind(): string
+        }
+
+        class SqlStore extends Store {
+          kind(): string {
+            return 'sql'
+          }
+        }
+
+        const mock: Store = { kind: () => 'mock' }
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().extends(Store))
+        di.rebind(Store, t => t.toValue(mock))
+        await di.init()
+
+        expect(di.get(Store)).toBe(mock)
+        expect(di.getMany(Store)).toEqual([mock])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
+
+      describe('binding again a binding the key was taken from', function () {
+        // The rebind took the key from SqlStore, so SqlStore is no longer in the key's list. Binding SqlStore again
+        // unmaps it from the key it used to extend, and that must leave the replacement where it is.
+        abstract class Store {}
+
+        class SqlStore extends Store {}
+
+        class MemoryStore extends Store {}
+
+        it('should keep the replacement', async function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlStore, t => t.toSelf().extends(Store))
+          di.rebind(Store, t => t.toClass(MemoryStore))
+          di.bind(SqlStore, t => t.toSelf())
+          await di.init()
+
+          expect(di.get(Store)).toBeInstanceOf(MemoryStore)
+          expect(di.getBindings(Store)).toHaveLength(1)
+        })
+
+        it('should keep a replacement that is not registered yet', async function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlStore, t => t.toSelf().extends(Store))
+          di.rebind(Store, t => t.toClass(MemoryStore).fallback())
+          di.bind(SqlStore, t => t.toSelf())
+          await di.init()
+
+          expect(di.get(Store)).toBeInstanceOf(MemoryStore)
+        })
+      })
+    })
+
+    describe('binding a key twice', function () {
+      // The second binding replaces the first, so whatever only the first one declared must stop resolving to it.
+      // A leftover bootstrap hook used to be called on a binding that no longer had one, and init() threw.
+      it('should drop the names, labels, base and bootstrap hook of the replaced binding', async function () {
+        abstract class Base {
+          abstract kind(): string
+        }
+
+        class Twice extends Base {
+          kind(): string {
+            return 'twice'
+          }
+        }
+
+        const label = Symbol('twice-label')
+        const kOld = token<Twice>(Symbol('twice-old'))
+        const kNew = token<Twice>(Symbol('twice-new'))
+        const bootstrap = vi.fn()
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Twice, t => t.toSelf().names(kOld).labels(label).extends(Base).bootstrap(bootstrap))
+        di.bind(Twice, t => t.toSelf().names(kNew))
+        await di.init()
+
+        expect(di.has(kOld)).toBe(false)
+        expect(di.getBindingsByLabel(label)).toHaveLength(0)
+        expect(di.has(Base)).toBe(false)
+        expect(di.get(kNew)).toBeInstanceOf(Twice)
+        expect(bootstrap).not.toHaveBeenCalled()
+      })
+
+      describe('as primary', function () {
+        // A key's list keeps its primary first, and resolution reads only the first binding. So a key bound again as
+        // primary has to move ahead of the bindings extending it, or get() stays ambiguous.
+        abstract class Repo {}
+
+        class SqlRepo extends Repo {}
+
+        class MemoryRepo extends Repo {}
+
+        it('should put the key ahead of the bindings extending it', async function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlRepo, t => t.toSelf().extends(Repo))
+          di.bind(Repo, t => t.toClass(MemoryRepo))
+          di.bind(Repo, t => t.toClass(MemoryRepo).primary())
+          await di.init()
+
+          expect(di.get(Repo)).toBeInstanceOf(MemoryRepo)
+          expect(di.getMany(Repo).map(repo => repo.constructor)).toEqual([MemoryRepo, SqlRepo])
+        })
+
+        it('should not count a key that is primary already as a second primary', async function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlRepo, t => t.toSelf().extends(Repo))
+          di.bind(Repo, t => t.toClass(MemoryRepo).primary())
+          di.bind(Repo, t => t.toClass(MemoryRepo).primary())
+          await di.init()
+
+          expect(di.get(Repo)).toBeInstanceOf(MemoryRepo)
+        })
+
+        it('should refuse it when a binding extending the key is primary already', function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlRepo, t => t.toSelf().extends(Repo).primary())
+          di.bind(Repo, t => t.toClass(MemoryRepo))
+
+          expect(() => di.bind(Repo, t => t.toClass(MemoryRepo).primary())).toThrow(ErrMultiplePrimary)
+        })
       })
     })
 

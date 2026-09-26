@@ -5,6 +5,7 @@ import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { ErrCircularDependency } from '../errors.js'
 import { $i } from '../injection.js'
+import { token } from '../key.js'
 import { Bar, BarTransient } from './_testdata/circular/Bar.js'
 import { BarFail } from './_testdata/circular/BarFail.js'
 import { Foo, FooTransient } from './_testdata/circular/Foo.js'
@@ -431,5 +432,80 @@ describe('Circular References', function () {
       expect(consumer.deps.handlers.some(h => h instanceof HandlerA)).toBe(true)
       expect(consumer.deps.handlers.some(h => h instanceof HandlerB)).toBe(true)
     })
+  })
+})
+
+// The cycle check follows the bindings an injection receives, as resolution picks them. It used to follow every
+// candidate of a single injection, which reported cycles through bindings that were never injected, and only the
+// binding registered under a key when there was one, which missed cycles through the primary named after it.
+describe('cycles through the bindings an injection receives', function () {
+  abstract class Repo {
+    abstract kind(): string
+  }
+
+  class Consumer {
+    constructor(readonly repo: Repo) {}
+  }
+
+  class SqlRepo extends Repo {
+    kind(): string {
+      return 'sql'
+    }
+  }
+
+  class MongoRepo extends Repo {
+    constructor(readonly consumer: Consumer) {
+      super()
+    }
+
+    kind(): string {
+      return 'mongo'
+    }
+  }
+
+  it('should not report a cycle through a candidate that is never injected', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Consumer, t => t.toSelf([Repo]))
+    di.bind(SqlRepo, t => t.toSelf().extends(Repo).primary())
+    di.bind(MongoRepo, t => t.toSelf([Consumer]).extends(Repo))
+    await di.init()
+
+    expect(di.get(Consumer).repo.kind()).toBe('sql')
+    expect(di.get(MongoRepo).consumer).toBeInstanceOf(Consumer)
+  })
+
+  it('should report a cycle through the primary named after a key registered directly', async function () {
+    interface Dep {
+      kind(): string
+    }
+
+    const kDep = token<Dep>(Symbol('cycle-direct-and-named'))
+
+    class Direct implements Dep {
+      kind(): string {
+        return 'direct'
+      }
+    }
+
+    class NamedConsumer {
+      constructor(readonly dep: Dep) {}
+    }
+
+    class Named implements Dep {
+      constructor(readonly back: NamedConsumer) {}
+
+      kind(): string {
+        return 'named'
+      }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NamedConsumer, t => t.toSelf([kDep]))
+    di.bind(kDep, t => t.toClass(Direct))
+    di.bind(Named, t => t.toSelf([NamedConsumer]).names(kDep).primary())
+
+    // Resolution injects the primary, Named, which needs NamedConsumer back: a real cycle, reported before any
+    // instance is built instead of overflowing the stack.
+    await expect(di.init()).rejects.toThrow(ErrCircularDependency)
   })
 })

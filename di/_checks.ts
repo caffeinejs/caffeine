@@ -1,5 +1,5 @@
 import { kAspectPointcuts, Pointcut } from './aop.js'
-import { Binding } from './binding.js'
+import { Binding, injectedBindings } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
 import { collectsMany, InjectionDescriptor, namesStage, ObjectInjections, stageArgs } from './injection.js'
@@ -24,27 +24,6 @@ export function checkCircularReferences(
     bindingIDToKey.set(binding.id, key)
   }
 
-  const concreteKeys = (depKey: InjectionToken): InjectionToken[] => {
-    if (registry.has(depKey)) {
-      return [depKey]
-    }
-
-    const abstracts = bindings.get(depKey)
-    if (abstracts === undefined) {
-      return []
-    }
-
-    const keys: InjectionToken[] = []
-    for (const b of abstracts) {
-      const concreteKey = bindingIDToKey.get(b.id)
-      if (concreteKey != null) {
-        keys.push(concreteKey)
-      }
-    }
-
-    return keys
-  }
-
   const addEdges = (ownerKey: InjectionToken, desc: InjectionDescriptor, deps: InjectionToken[]): void => {
     // A provider re-resolves on every read, so it never re-enters its target while the consumer is being
     // constructed. Same carve-out the scope check makes.
@@ -61,17 +40,15 @@ export function checkCircularReferences(
       return
     }
 
-    // An optional dependency is only an edge when something is bound to it: an unbound key resolves to
-    // undefined and closes nothing. That falls out of concreteKeys returning an empty list.
-    const excludesSelf = collectsMany(desc) && ownerKey !== depKey
+    // The edges are the bindings the injection receives, picked as resolution picks them. A single injection follows
+    // only the primary among several, not every candidate. A collecting one never receives the consumer's own
+    // bindings. An optional key nothing is bound to has no candidates, so it closes nothing.
+    const collects = collectsMany(desc)
+    const own = collects && ownerKey !== depKey ? bindings.get(ownerKey) : undefined
 
-    for (const concrete of concreteKeys(depKey)) {
-      // A collecting injection never receives the consumer's own bindings, so that edge is not real.
-      if (excludesSelf && concrete === ownerKey) {
-        continue
-      }
-
-      deps.push(concrete)
+    for (const binding of injectedBindings(bindings.get(depKey) ?? [], collects, own)) {
+      // Only registered bindings join a key's candidates, so every candidate has a key.
+      deps.push(bindingIDToKey.get(binding.id)!)
     }
   }
 

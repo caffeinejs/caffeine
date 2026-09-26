@@ -1,7 +1,7 @@
 import { it, fc } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
-import { buildBindingGraph, graphToJSON, graphToDot, graphToMermaid } from '../../graph.js'
+import { buildBindingGraph, graphToJSON, graphToDot, graphToMermaid } from '../../graph/index.js'
 import { binding } from './helpers/binding_factory.js'
 
 class NodeA {}

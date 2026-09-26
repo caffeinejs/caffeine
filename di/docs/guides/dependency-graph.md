@@ -6,14 +6,16 @@ unexpected couplings, and generating architecture diagrams.
 
 ## Rendering formats
 
-Five renderers are available. All accept the container instance or `.entries()` result and return a string.
+Five renderers are available, all from the `@caffeinejs/di/graph` entry point. Each accepts the container, its
+`.entries()` result or a graph from `buildBindingGraph`, and returns a string.
 
 ### Text
 
 A plain-text tree suitable for logging or terminal output.
 
 ```ts
-import { graphToText } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { graphToText } from '@caffeinejs/di/graph'
 
 const container = new CaffeineIoC()
 await container.init()
@@ -26,7 +28,7 @@ console.log(graphToText(container))
 A Markdown table for embedding in documentation or GitHub issues.
 
 ```ts
-import { graphToMarkdown } from '@caffeinejs/di'
+import { graphToMarkdown } from '@caffeinejs/di/graph'
 
 console.log(graphToMarkdown(container))
 ```
@@ -37,7 +39,7 @@ A [Mermaid](https://mermaid.js.org/) diagram for rendering in Markdown
 previews, Notion, or GitHub README files.
 
 ```ts
-import { graphToMermaid } from '@caffeinejs/di'
+import { graphToMermaid } from '@caffeinejs/di/graph'
 
 console.log(graphToMermaid(container))
 ```
@@ -48,7 +50,7 @@ A [DOT](https://graphviz.org/doc/info/lang.html) language file for rendering
 with GraphViz tools (`dot`, `neato`, etc.).
 
 ```ts
-import { graphToDot } from '@caffeinejs/di'
+import { graphToDot } from '@caffeinejs/di/graph'
 
 console.log(graphToDot(container))
 ```
@@ -58,15 +60,16 @@ console.log(graphToDot(container))
 A machine-readable JSON representation of the graph for custom tooling.
 
 ```ts
-import { graphToJson } from '@caffeinejs/di'
+import { graphToJSON } from '@caffeinejs/di/graph'
 
-const json = graphToJson(container)
+const json = graphToJSON(container)
 ```
 
 ## Validating the graph
 
 Call `assertResolvable()` before rendering to ensure every dependency can be
-resolved. It throws if a required key is missing or a cycle is unresolvable.
+resolved. It throws if a required key is missing or resolves to more than one
+binding with none of them primary.
 
 ```ts
 container.assertResolvable()
@@ -80,7 +83,8 @@ startup check:
 
 ```ts
 import { writeFileSync } from 'node:fs'
-import { graphToMermaid } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { graphToMermaid } from '@caffeinejs/di/graph'
 
 const container = new CaffeineIoC()
 await container.init()

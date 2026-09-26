@@ -172,8 +172,9 @@ The binding is registered by the time `bind()` returns, so `has()`, `getBindings
 rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 ```
 
-Removes any existing binding for `key`, then describes a new one. `configure` receives the
-same `BindingSpec` that `bind()` provides.
+Replaces everything that answers to `key`: the binding registered under it, and any
+binding named after it or extending it. Those keep resolving under their own keys.
+`configure` receives the same `BindingSpec` that `bind()` provides.
 
 ```ts
 di.rebind(Logger, t => t.toClass(StructuredLogger))
@@ -276,7 +277,7 @@ entries(): IterableIterator<[InjectionToken, Binding]>
 ```
 
 Returns an iterator over all `[key, binding]` pairs in the container. Use this
-to feed `buildBindingGraph()`.
+to feed `buildBindingGraph()` from `@caffeinejs/di/graph`.
 
 ### size
 

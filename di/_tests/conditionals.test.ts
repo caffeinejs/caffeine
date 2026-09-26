@@ -162,6 +162,35 @@ describe('Conditionals', function () {
       expect(di.has(ConditionalSvcFailing)).toBeFalsy()
     })
 
+    it('should leave another binding answering to the key of a removed component', async function () {
+      // Removing the binding registered under a key takes out that binding alone: one named after the key still
+      // answers to it. The whole list under the key used to go with it.
+      interface Channel {
+        kind(): string
+      }
+
+      const kChannel = token<Channel>(Symbol('conditional-channel'))
+
+      class FailingChannel implements Channel {
+        kind(): string {
+          return 'failing'
+        }
+      }
+
+      class NamedChannel implements Channel {
+        kind(): string {
+          return 'named'
+        }
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kChannel, t => t.toClass(FailingChannel).conditional(() => false))
+      di.bind(NamedChannel, t => t.toSelf().names(kChannel))
+      await di.init()
+
+      expect(di.get(kChannel).kind()).toBe('named')
+    })
+
     it('should support async conditional functions', async function () {
       class AsyncConditionalSvc {}
 
