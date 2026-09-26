@@ -238,6 +238,21 @@ export class Application<TConfig = unknown> {
     return this.#container.get(ApplicationHealth)
   }
 
+  /**
+   * The live configuration features are configured and bootstrapped with. One identity for the life of the
+   * application, and a node read from it follows every reload.
+   *
+   * @throws ErrApplicationNotReady until {@link ready} has resolved.
+   */
+  get config(): LiveConfig<TConfig> {
+    if (!this.#ready) {
+      throw new ErrApplicationNotReady("read the application's configuration")
+    }
+
+    // The store erases `TConfig`; this is the application's own configuration.
+    return this.liveConfig as LiveConfig<TConfig>
+  }
+
   addFeature(feature: Feature<TConfig>): this {
     this.assertConfigurable()
     this.#register(feature)

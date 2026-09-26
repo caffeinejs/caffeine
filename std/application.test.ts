@@ -255,6 +255,35 @@ describe('feature lifecycle', () => {
     expect(app.container.get(token<number | undefined>('widget.size'))).toBe(42)
   })
 
+  // Application code reads the same object a feature was handed. It is not available until `ready()` has
+  // resolved: a feature mid-bootstrap still reads the kit.
+  it('returns the live config features were handed, once ready()', async () => {
+    let handed: FeatureConfigureKit['config'] | undefined
+
+    const app = widgetApp(
+      {
+        get [kFeatureName](): string {
+          return 'reader'
+        },
+        [kFeatureConfigure](kit: FeatureConfigureKit): void {
+          handed = kit.config
+        },
+        [kFeatureBootstrap](kit: BootstrapKit): void {
+          expect(kit.config).toBe(handed)
+          expect(() => app.config).toThrow(ErrApplicationNotReady)
+        },
+      },
+      42,
+    )
+
+    expect(() => app.config).toThrow(ErrApplicationNotReady)
+
+    await app.ready()
+
+    expect(app.config).toBe(handed)
+    expect(app.config.widget.size).toBe(42)
+  })
+
   it('runs a feature that reads no configuration at all', async () => {
     let configured = false
 
