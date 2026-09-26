@@ -160,21 +160,14 @@ class ObservabilityConfig {
 
 ---
 
-## `@Primary`, `@Named`, and `@Fallback` on factory methods
+## `@Primary` and `@Named` on factory methods
 
 Factory methods support the same resolution decorators as `@Injectable` classes.
 
 ```ts
 @Configuration()
 class CacheConfig {
-  // Default — used when no other CacheStore is @Primary
-  @Fallback()
-  @Provides(CacheStore)
-  memoryCache(): CacheStore {
-    return new InMemoryCache()
-  }
-
-  // Preferred when Redis is configured
+  // Wins when other CacheStore bindings are registered too
   @Primary()
   @Provides(CacheStore)
   redisCache(): CacheStore {
@@ -183,8 +176,8 @@ class CacheConfig {
 
   // Named variant — injectable by name
   @Named('local')
-  @Provides(CacheStore)
-  localCache(): CacheStore {
+  @Provides(LocalCache)
+  localCache(): LocalCache {
     return new LocalCache()
   }
 }

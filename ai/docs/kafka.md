@@ -25,4 +25,5 @@ class Orders {
 - Named instances: `.with(kafka('orders', k => …))` and `@KafkaHandler({ instance: 'orders' })`.
 - Without `@KafkaParams`, the method receives the whole `KafkaMessage`.
 - Retry / DLT: builder `retry`, `retryTopics`, `deadLetter`, `classifier` — not Nest `KafkaRetriableException`.
+- Readiness: `k.health()` adds that instance's consumers to readiness. Off by default; each instance opts in.
 - `createWebApplication(...).with(kafka(…))` works the same if the process is already an HTTP app.

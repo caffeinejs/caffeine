@@ -4,10 +4,13 @@ import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
+import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
+import { mod } from '../module.js'
 
 describe('Conditionals', function () {
   describe('using default conditional', function () {
@@ -200,6 +203,150 @@ describe('Conditionals', function () {
 
       expect(di.has(AsyncConditionalSvc)).toBeTruthy()
       expect(di.get(AsyncConditionalSvc)).toBeInstanceOf(AsyncConditionalSvc)
+    })
+
+    // A binding made by hand waits for compile() like a decorated one. Registered at bind time, its condition saw the
+    // binding itself, and it replaced a binding of its key before the condition ran — so a default written as
+    // `.conditional(ctx => !ctx.container.has(key))` removed itself, or took the application's own binding with it.
+    describe('held back until compile()', function () {
+      abstract class Hasher {
+        abstract kind(): string
+      }
+
+      class ScryptHasher extends Hasher {
+        kind(): string {
+          return 'scrypt'
+        }
+      }
+
+      class ArgonHasher extends Hasher {
+        kind(): string {
+          return 'argon'
+        }
+      }
+
+      @Injectable()
+      @Extends()
+      @Profile('conditional-held-back-decorated')
+      class DecoratedHasher extends Hasher {
+        kind(): string {
+          return 'decorated'
+        }
+      }
+
+      const bindDefault = (di: CaffeineIoC) =>
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(ctx => !ctx.container.has(Hasher)))
+
+      it('should register a default when nothing else answers to its key', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        bindDefault(di)
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('scrypt')
+      })
+
+      it('should let a default yield to a binding of its key made before it', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Hasher, t => t.toClass(ArgonHasher))
+        bindDefault(di)
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('argon')
+      })
+
+      it('should let a default yield to a binding of its key made after it', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        bindDefault(di)
+        di.bind(Hasher, t => t.toClass(ArgonHasher))
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('argon')
+      })
+
+      it('should let a default yield to an implementation a module registers', async function () {
+        const di = new CaffeineIoC({
+          decorators: false,
+          modules: [mod('argon-hasher', container => container.bind(ArgonHasher, t => t.toSelf().extends(Hasher)))],
+        })
+        bindDefault(di)
+        await di.init()
+
+        expect(di.getMany(Hasher).map(h => h.kind())).toEqual(['argon'])
+      })
+
+      it('should let a default yield to a decorated implementation', async function () {
+        const di = new CaffeineIoC({ profiles: ['conditional-held-back-decorated'] })
+        bindDefault(di)
+        await di.init()
+
+        expect(di.get(Hasher)).toBeInstanceOf(DecoratedHasher)
+      })
+
+      it('should not be visible before init()', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(ScryptHasher, t => t.toSelf().conditional(() => true))
+
+        expect(di.has(ScryptHasher)).toBe(false)
+
+        await di.init()
+
+        expect(di.has(ScryptHasher)).toBe(true)
+      })
+
+      it('should be discarded by a later binding of the same key, as a registered one is replaced', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
+        di.bind(Hasher, t => t.toClass(ArgonHasher))
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('argon')
+      })
+
+      it('should leave the earlier binding of its key in place when its condition fails', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Hasher, t => t.toClass(ArgonHasher))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => false))
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('argon')
+      })
+
+      it('should still be matched against the active profiles', async function () {
+        const di = new CaffeineIoC({ decorators: false, profiles: ['prod'] })
+        di.bind(ScryptHasher, t =>
+          t
+            .toSelf()
+            .profiles('test')
+            .conditional(() => true),
+        )
+        await di.init()
+
+        expect(di.has(ScryptHasher)).toBe(false)
+      })
+
+      it('should keep a default that won through snapshot() and restore()', async function () {
+        // What TestContainer does with an initialized application container.
+        const source = new CaffeineIoC({ decorators: false })
+        bindDefault(source)
+        await source.init()
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.restore(source.snapshot())
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('scrypt')
+      })
+
+      it('should carry a binding still waiting on its conditions through snapshot() and restore()', async function () {
+        const source = new CaffeineIoC({ decorators: false })
+        bindDefault(source)
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.restore(source.snapshot())
+        await di.init()
+
+        expect(di.get(Hasher).kind()).toBe('scrypt')
+      })
     })
   })
 

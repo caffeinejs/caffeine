@@ -68,7 +68,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
               .loginPath('/login')
               .accessDeniedPath('/forbidden'),
           )
-          // Binds CredentialsService and a fallback ScryptPasswordHasher. The UserProvider it resolves is
+          // Binds CredentialsService and a default ScryptPasswordHasher. The UserProvider it resolves is
           // `auth/users.ts`, which the module graph provides — there is no explicit binding anywhere.
           .addCredentials(),
       )

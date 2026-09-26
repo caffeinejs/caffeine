@@ -151,8 +151,8 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
     )
 
     // Registered once, covering every configured instance: starts every engine on `container.init()` and
-    // stops it on `container.dispose()`. `.fallback()` so a second named instance does not fight the first.
-    kit.container.bind(MessagingLifecycle, t => t.toFactory(ctx => new MessagingLifecycle(ctx.container)).fallback())
+    // stops it on `container.dispose()`. A second named instance binds the same thing again, which replaces the first.
+    kit.container.bind(MessagingLifecycle, t => t.toFactory(ctx => new MessagingLifecycle(ctx.container)))
   }
 }
 

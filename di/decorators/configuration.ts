@@ -106,9 +106,6 @@ export function Configuration<T>(injections?: Injection[]) {
       for (const i of fb.interceptors) {
         factoryConfig.interceptor(i)
       }
-      if (fb.fallback !== undefined) {
-        factoryConfig.fallback(fb.fallback)
-      }
       if (fb.async !== undefined) {
         factoryConfig.async(fb.async)
       }

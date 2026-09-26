@@ -350,20 +350,6 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Marks this binding as a fallback that resolves only when no other binding matches.
-   *
-   * @example
-   * ```ts
-   * container.bind(Logger, t => t.toClass(NoopLogger).fallback())
-   * ```
-   */
-  fallback(fallback = true): this {
-    this.binding.fallback = fallback
-
-    return this
-  }
-
-  /**
    * Sets the sort position of this binding when resolved via {@link ordered}.
    * Bindings with lower values are placed first. Bindings without an order are placed last,
    * preserving their original registration order among themselves.
@@ -546,9 +532,14 @@ export class BindingSpec<TValue, K = unknown> {
   /**
    * Attaches one or more predicates that must all return `true` for this binding to be active.
    *
+   * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
+   * decorated bindings. A predicate therefore never sees the binding itself, and a binding already registered under
+   * the key stays unless the predicates pass — which is what lets `!ctx.container.has(key)` make it a default.
+   *
    * @example
    * ```ts
    * container.bind(key, t => t.toClass(ProdService).conditional(ctx => process.env.NODE_ENV === 'production'))
+   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
    * ```
    */
   conditional(fn: Conditional | Conditional[]): this {

@@ -4,7 +4,6 @@ import { describe, it, beforeEach, expect, vi } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
-import { Fallback } from '../decorators/fallback.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
@@ -54,53 +53,6 @@ describe('A1: @ConditionalOn on @Primary — non-primary wins when condition fai
     // get() resolves correctly from the bindings multi-map.
     await di.init()
     expect(di.get(kA1)).toBeInstanceOf(EC_A1Fallthrough)
-  })
-})
-
-// A2: @Fallback + @Primary on a @Provides method.
-//     The fallback guard runs before primary priority: if another non-fallback
-//     binding already covers the key, the fallback+primary is simply skipped.
-describe('A2: @Fallback + @Primary on @Provides', function () {
-  const NS_A2 = 'ec-a2'
-  const kA2Shared = token<string>(Symbol('ec-a2-shared'))
-  const kA2Alone = token<string>(Symbol('ec-a2-alone'))
-
-  @Configuration()
-  @Profile(NS_A2)
-  class EC_A2ConsumerConf {
-    @Provides(kA2Shared)
-    shared(): string {
-      return 'consumer'
-    }
-  }
-
-  @Configuration()
-  @Profile(NS_A2)
-  class EC_A2LibConf {
-    @Fallback()
-    @Primary()
-    @Provides(kA2Shared)
-    defaultShared(): string {
-      return 'library-default'
-    }
-
-    @Fallback()
-    @Provides(kA2Alone)
-    alone(): string {
-      return 'alone'
-    }
-  }
-
-  it('should skip the fallback+primary when a non-fallback binding already exists', async function () {
-    const di = new CaffeineIoC({ profiles: [NS_A2] })
-    await di.init()
-    expect(di.get(kA2Shared)).toBe('consumer')
-  })
-
-  it('should register the fallback when no other binding exists for the key', async function () {
-    const di = new CaffeineIoC({ profiles: [NS_A2] })
-    await di.init()
-    expect(di.get(kA2Alone)).toBe('alone')
   })
 })
 

@@ -12,11 +12,14 @@ export const DEFAULT_INSTANCE = 'default'
  *
  * - `KAFKA_HANDLER` labels every `@KafkaHandler` class (discovery, like the HTTP `CONTROLLER` label).
  * - `KAFKA_CONTAINER` labels every per-instance `KafkaListenerContainer` so the plugin can start/stop them all.
+ * - `KAFKA_HEALTH` also labels the `KafkaListenerContainer` of every instance that enabled `health()`, the ones
+ *   readiness reports.
  * - `KAFKA_INSTANCE` tags a handler class with the name of the instance it belongs to.
  */
 export const Keys = {
   KAFKA_HANDLER: Symbol.for('@caffeinejs/kafka:handler'),
   KAFKA_CONTAINER: Symbol.for('@caffeinejs/kafka:container'),
+  KAFKA_HEALTH: Symbol.for('@caffeinejs/kafka:health'),
   KAFKA_INSTANCE: Symbol.for('@caffeinejs/kafka:instance'),
 }
 

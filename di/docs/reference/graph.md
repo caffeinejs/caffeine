@@ -37,8 +37,8 @@ Builds the graph the renderers draw: a node for each `[key, binding]` pair, and 
 edge for every binding an injection receives.
 
 The graph describes the pairs it is given. Pass an initialized container, or its
-`entries()`, for a graph that matches resolution: before `init()`, fallbacks,
-profiles and conditionals have not settled yet.
+`entries()`, for a graph that matches resolution: before `init()`, profiles and
+conditionals have not settled yet.
 
 An injection gets an edge to what the container injects there: the only binding
 answering to its key, or the primary among several; for `allOf`, `ordered` and

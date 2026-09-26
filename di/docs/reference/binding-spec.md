@@ -13,7 +13,6 @@
   - [names](#names)
   - [lazy](#lazy)
   - [primary](#primary)
-  - [fallback](#fallback)
   - [byPassPostProcessors](#bypasspostprocessors)
   - [injectProperty](#injectproperty)
   - [injectMethod](#injectmethod)
@@ -222,27 +221,6 @@ same key. `di.get()` returns this binding instead of throwing
 di.bind(Logger, t => t.toClass(FileLogger).primary())
 ```
 
-### fallback
-
-```ts
-fallback(boolean?)
-```
-
-Marks this binding as a fallback. It is only used when no other binding exists
-for the same key.
-
-```ts
-di.bind(Metrics, t => t.toClass(NoOpMetrics).fallback())
-```
-
-Unlike every other binding, a fallback is not registered when `bind()` returns. It
-is held until `compile()`, after modules, profiles and conditionals have settled, so
-the order the binds happened in does not decide the outcome. Until then the key is
-not visible to `has()`, `entries()` or `size`. When two fallbacks target one key, the
-first registers.
-
-See the [Fallback Bindings guide](../guides/fallback-bindings.md).
-
 ### byPassPostProcessors
 
 ```ts
@@ -354,6 +332,17 @@ Predicates receive a `ConditionContext` with `container.has()`.
 ```ts
 di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
 ```
+
+A binding with conditions is not registered when `bind()` returns. It waits for
+`compile()`, where it is decided with the decorated ones. Until then it is not
+visible to `has()`, `entries()` or `size`, and it leaves a binding already
+registered under its key in place. That is what lets a default check for its own key:
+
+```ts
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+```
+
+See [Defaults](../guides/conditional-bindings.md#defaults).
 
 ### profiles
 

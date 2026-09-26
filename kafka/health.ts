@@ -13,8 +13,8 @@ const HEALTHY: ReadonlySet<KafkaContainerStatus> = new Set<KafkaContainerStatus>
 ])
 
 /**
- * Reports each configured Kafka instance's listener container state to the readiness probe, so "ready" means the
- * process's consumers are actually running — not just that it started, or that its port is open.
+ * Reports the listener container state of each Kafka instance that enabled `health()` to the readiness probe, so
+ * "ready" means the process's consumers are actually running — not just that it started, or that its port is open.
  *
  * On the readiness group only. A broker outage must never reach liveness: restarting the pod does not fix Kafka,
  * it just removes a consumer that would otherwise resume the moment the group recovers.
@@ -33,7 +33,7 @@ export class KafkaHealthIndicator extends HealthIndicator {
 
   check(): HealthReport {
     const engines = this.#container
-      .getBindingsByLabel(Keys.KAFKA_CONTAINER)
+      .getBindingsByLabel(Keys.KAFKA_HEALTH)
       .map(({ binding }) => this.#container.wrapBinding<KafkaListenerContainer>(binding).get())
 
     if (engines.length === 0) {

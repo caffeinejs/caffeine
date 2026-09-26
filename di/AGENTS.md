@@ -1,18 +1,24 @@
 # `@caffeinejs/di`
 
-## Every fallback is held back until `compile()`
+## A binding with conditions waits for `compile()`
 
-A `bind()` call registers as soon as its callback returns — except for a fallback. Every fallback, whether the spec
-called `.fallback()` or a class or `@Provides` method carries `@Fallback`, is queued and decided once by
-`evaluatePendingFallbacks()`, after modules, profiles and conditionals have settled. It registers only if nothing
-answers yet to its key, to a name it carries, or to the base it extends. The first fallback in the queue wins.
+A binding carrying conditions registers only once they pass at `compile()`, however it was made. A decorated one
+waits in `_pendingConditionals`. `registerOrHold` puts one made by hand (`bind`, `aspect`, `restore`) there too,
+and step 2 of `evaluatePendingConditionals()` decides it after the decorated ones, in bind order.
 
-Two consequences, both deliberate:
+The reason: a condition must never see its own binding. Registered at bind time, a default written as
+`.conditional(ctx => !ctx.container.has(key))` removed itself. Worse, it first replaced the binding it was meant to
+yield to. There is no fallback binding; a default is that pattern, and `@caffeinejs/http` binds its
+`PasswordHasher` with it.
 
-- `has()`, `entries()` and `size` do not see a fallback-only key until `compile()`. Every other binding is
-  still visible the moment it is registered.
-- `bind()` does not inherit `@Fallback` from a decorated class. Binding a key by hand is an explicit
-  registration, so an override would otherwise defer to the default it is replacing.
+- `has()`, `entries()` and `size` do not see a held-back binding until `compile()`.
+- Binding the key again discards a held-back binding, as it replaces a registered one. Only an entry made by hand
+  is discarded; `rebind` is what drops a decorated pending entry.
+- A binding held back by `bind` is matched against the profiles when it is decided, since it never enters the
+  manual profile queue. One held back by `restore` is not: it was matched in the container it came from.
+- `restore()` holds back too, and `snapshot()` records held-back bindings. Otherwise a default that won would meet
+  itself in the prune of `_pendingConditionalKeys`, and a `TestContainer` would lose it.
+- That prune stays for the one eager path left: conditions a `MetadataReader` merges in `configureBinding`.
 
 ## `token()` is for injection keys only
 

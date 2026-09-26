@@ -80,7 +80,6 @@ const di = new CaffeineIoC({ metadataReader: reader })
 | `names`        | `Identifier[]`  | `@Named`         |
 | `lazy`         | `boolean`       | `@Lazy`          |
 | `primary`      | `boolean`       | `@Primary`       |
-| `fallback`     | `boolean`       | `@Fallback`      |
 | `conditionals` | `Conditional[]` | `@ConditionalOn` |
 
 Returning factory-level fields (`factory`, `injections`, `injectionResolvers`)
