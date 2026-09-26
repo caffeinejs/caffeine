@@ -364,3 +364,18 @@ describe('Method Injections', function () {
     })
   })
 })
+
+describe('method injection arity', function () {
+  const kFirst = token<string>(Symbol('method-arity-first'))
+
+  // Resolved with fewer injections than it takes, the method would run with undefined arguments.
+  it('rejects a method that takes more parameters than it is given injections', function () {
+    class TwoDeps {
+      setDeps(_first: unknown, _second: unknown) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(() => di.bind(TwoDeps, t => t.toSelf().injectMethod('setDeps', kFirst))).toThrow(ErrInvalidBinding)
+  })
+})

@@ -555,7 +555,7 @@ export class BindingSpec<TValue, K = unknown> {
       ? condition.map(c => conditionOf(c, invalid))
       : [conditionOf(condition, invalid)]
 
-    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...conditions]
+    this.binding.conditionals = [...this.binding.conditionals, ...conditions]
 
     return this
   }

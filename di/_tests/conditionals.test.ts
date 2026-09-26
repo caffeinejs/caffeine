@@ -876,6 +876,32 @@ describe('the forms a condition is given in', function () {
   it('lets a helper report its own error', function () {
     expect(() => Conditional(c => c.missing(undefined as never))).toThrow(ErrMissingInjectionKey)
   })
+
+  it('rejects a helper handed something it cannot check', function () {
+    expect(() => $cond.present(null as never)).toThrow(ErrMissingInjectionKey)
+    expect(() => $cond.config(42 as never)).toThrow(ErrInvalidBinding)
+    expect(() => $cond.when('true' as never)).toThrow(ErrInvalidBinding)
+  })
+
+  // Whatever a callback throws that is not the helpers' own error is reported with what it threw, Error or not.
+  it('reports what a callback threw', function () {
+    class Failure {
+      toString(): string {
+        return 'not an error'
+      }
+    }
+
+    class Throws {}
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(() =>
+      di.bind(Throws, t =>
+        t.toSelf().conditional((() => {
+          throw new Failure()
+        }) as never),
+      ),
+    ).toThrow(/the callback threw "not an error"/)
+  })
 })
 
 describe('conditions from a metadata reader', function () {
@@ -955,6 +981,24 @@ describe('snapshot() and restore()', function () {
     di.restore(new CaffeineIoC().snapshot())
 
     await expect(di.init()).resolves.toBeUndefined()
+  })
+
+  it('leaves out a held internal binding, as it leaves out a registered one', function () {
+    const kInternal = token<string>(Symbol('snapshot-held-internal'))
+    const source = new CaffeineIoC({ decorators: false })
+    source.bind(kInternal, t =>
+      t
+        .toValue('x')
+        .internal()
+        .conditional(c => c.when(() => true)),
+    )
+
+    expect(
+      source
+        .snapshot()
+        .entries()
+        .map(([key]) => key),
+    ).not.toContain(kInternal)
   })
 
   it('cannot restore once the container has been compiled', async function () {

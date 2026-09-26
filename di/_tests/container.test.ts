@@ -17,7 +17,7 @@ import { $i } from '../injection.js'
 import { SingletonScope } from '../internal/core/scope/singleton.js'
 import { token } from '../key.js'
 import { ResolutionContext as Ctx } from '../resolution_context.js'
-import { bindScope, unbindScope, type Scope } from '../scope.js'
+import { bindScope, Scopes, unbindScope, type Scope } from '../scope.js'
 
 describe('Scope removal does not affect existing containers', function () {
   it('should successfully dispose even when the scope factory is removed from the registry after container creation', async function () {
@@ -650,5 +650,27 @@ describe('get() / getOptional() / getMany() before init()', function () {
   it('getMany() throws ErrInvalidContainerState before init()', function () {
     const di = new CaffeineIoC({ decorators: false })
     expect(() => di.getMany(token<Record<string, unknown>>('k'))).toThrow(ErrInvalidContainerState)
+  })
+})
+
+describe('laziness', function () {
+  const kOwn = token<string>(Symbol('lazy-own'))
+  const kSingleton = token<string>(Symbol('lazy-singleton'))
+  const kTransient = token<string>(Symbol('lazy-transient'))
+
+  // The binding's own setting wins, then the container's, then its scope's; with none of them, the binding is lazy.
+  it('follows the binding, then the container, then the scope', function () {
+    const unset = new CaffeineIoC({ decorators: false, lazy: undefined })
+    unset.bind(kSingleton, t => t.toValue('singleton'))
+    unset.bind(kTransient, t => t.toValue('transient').lifetime(Scopes.TRANSIENT))
+
+    const eager = new CaffeineIoC({ decorators: false, lazy: false })
+    eager.bind(kOwn, t => t.toValue('own').lazy(true))
+    eager.bind(kTransient, t => t.toValue('transient').lifetime(Scopes.TRANSIENT))
+
+    expect(eager.getBinding(kOwn).lazy).toBe(true)
+    expect(eager.getBinding(kTransient).lazy).toBe(false)
+    expect(unset.getBinding(kSingleton).lazy).toBe(false)
+    expect(unset.getBinding(kTransient).lazy).toBe(true)
   })
 })

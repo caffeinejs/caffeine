@@ -92,7 +92,129 @@ function isConfigurationClass(binding: Binding): boolean {
 // A binding's conditions are tested profiles first and predicates of the application's own last, so a `when` runs only
 // once everything the container can check itself has passed.
 function rank(condition: Condition): number {
-  return condition.kind === 'profile' ? 0 : condition.kind === 'when' ? 2 : 1
+  switch (condition.kind) {
+    case 'profile':
+      return 0
+    case 'when':
+      return 2
+    default:
+      return 1
+  }
+}
+
+// The key a condition checks in the registry: its own for `present` / `missing`, the config provider's for `config`.
+function keyChecked(condition: Condition): InjectionToken | undefined {
+  switch (condition.kind) {
+    case 'present':
+    case 'missing':
+      return condition.key
+    case 'config':
+      return Keys.kConfigProvider
+    default:
+      return undefined
+  }
+}
+
+// For every key, where the held bindings answering to it are — by that key, a name or a base. A configuration binding
+// has no base, as mapAbstract skips it.
+function answeringIndex(entries: readonly PendingBinding[]): Map<InjectionToken | Identifier, number[]> {
+  const answering = new Map<InjectionToken | Identifier, number[]>()
+  const answer = (key: InjectionToken | Identifier, i: number): void => {
+    const list = answering.get(key)
+    if (list === undefined) {
+      answering.set(key, [i])
+    } else {
+      list.push(i)
+    }
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const { key, binding } = entries[i]
+
+    answer(key, i)
+    for (const name of binding.names) {
+      answer(name, i)
+    }
+    if (binding.extend !== undefined && !binding.configuration) {
+      answer(binding.extend, i)
+    }
+  }
+
+  return answering
+}
+
+// Where the held bindings the one at `i` waits for are: its configuration class, and every binding answering to a key
+// its conditions check — never itself, and never, for a configuration class, one of its own @Provides bindings.
+function waitsOf(
+  entries: readonly PendingBinding[],
+  i: number,
+  answering: Map<InjectionToken | Identifier, number[]>,
+): Set<number> {
+  const entry = entries[i]
+  const waits = new Set<number>(entry.providedByConfig === undefined ? [] : answering.get(entry.providedByConfig))
+
+  for (const condition of entry.binding.conditionals) {
+    const key = keyChecked(condition)
+    if (key === undefined) {
+      continue
+    }
+
+    for (const j of answering.get(key) ?? []) {
+      if (entries[j].providedByConfig !== entry.key) {
+        waits.add(j)
+      }
+    }
+  }
+
+  waits.delete(i)
+
+  return waits
+}
+
+/**
+ * Orders the held bindings so that each is decided after every held binding it waits for:
+ *
+ * - the `@Configuration` class it was declared in, when it is a `@Provides` binding;
+ * - every held binding answering — by its key, a name or its base — to a key one of its `present` / `missing`
+ *   conditions checks, which is the config provider's key for a `config` condition.
+ *
+ * A binding does not wait for itself, and a configuration class does not wait for its own `@Provides` bindings, so a
+ * class whose condition checks for a key it provides is a default. Among the bindings free to go, the first declared
+ * goes first; when none is — a cycle, such as two defaults of one key — so does the first declared of the rest, and
+ * the others then see it.
+ */
+function decisionOrder(entries: readonly PendingBinding[]): PendingBinding[] {
+  const answering = answeringIndex(entries)
+  const waiting = new Array<number>(entries.length).fill(0)
+  const dependents = entries.map((): number[] => [])
+
+  for (let i = 0; i < entries.length; i++) {
+    const waits = waitsOf(entries, i, answering)
+
+    waiting[i] = waits.size
+    for (const j of waits) {
+      dependents[j].push(i)
+    }
+  }
+
+  const decided = new Array<boolean>(entries.length).fill(false)
+  const order: PendingBinding[] = []
+
+  while (order.length < entries.length) {
+    let next = waiting.findIndex((count, i) => count === 0 && !decided[i])
+    if (next === -1) {
+      next = decided.indexOf(false)
+    }
+
+    decided[next] = true
+    order.push(entries[next])
+
+    for (const d of dependents[next]) {
+      waiting[d]--
+    }
+  }
+
+  return order
 }
 
 // What a snapshot keeps of a binding: its configuration, without what compile() derives from it.
@@ -111,6 +233,51 @@ function snapshotCopy(key: InjectionToken, binding: Binding): Binding {
     injectionResolvers: [],
     propertyResolvers: new Map(),
     methodResolvers: new Map(),
+  }
+}
+
+// An async binding is resolved once, eagerly, while the container initializes, so it cannot be lazy or re-created per
+// scope, and nothing can be injected into it after its factory resolves.
+function checkAsyncBinding(key: InjectionToken, config: Binding): void {
+  if (config.lazy) {
+    throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
+  }
+
+  const allowed =
+    config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
+  if (!allowed) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
+    )
+  }
+
+  if (config.injectableProperties.size > 0 || config.injectableMethods.size > 0) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding for key "${keyStr(key)}":` +
+        `async bindings cannot have injectable properties or injectable methods.`,
+    )
+  }
+}
+
+function checkInjectableMethods(key: InjectionToken, ctor: Ctor, binding: Binding): void {
+  for (const [methodName, injections] of binding.injectableMethods) {
+    const method = ctor.prototype?.[methodName as string]
+    if (typeof method === 'function' && method.length > injections.length) {
+      throw new ErrInvalidBinding(
+        `Cannot configure "${keyStr(key)}": method "${String(methodName)}" has ${method.length} parameter(s) but ${injections.length} injection key(s) were specified`,
+      )
+    }
+  }
+}
+
+// A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit hook set on the
+// spec (or an @OnLifecycle callback) still wins.
+function adoptLifecycleInterfaces<T>(ctor: Ctor, binding: Binding<T>): void {
+  if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
+    binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
+  }
+  if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
+    binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
   }
 }
 
@@ -1231,24 +1398,7 @@ export class CaffeineIoC implements Container {
     }
 
     if (config.async) {
-      if (config.lazy) {
-        throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
-      }
-
-      const allowed =
-        config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
-      if (!allowed) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
-        )
-      }
-
-      if ((config.injectableProperties?.size ?? 0) > 0 || (config.injectableMethods?.size ?? 0) > 0) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding for key "${keyStr(key)}":` +
-            `async bindings cannot have injectable properties or injectable methods.`,
-        )
-      }
+      checkAsyncBinding(key, config)
     }
 
     const conf = { ...config, ...this.metadataReader(key) }
@@ -1262,23 +1412,8 @@ export class CaffeineIoC implements Container {
       (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
     if (ctor !== undefined) {
-      for (const [methodName, injections] of binding.injectableMethods) {
-        const method = ctor.prototype?.[methodName as string]
-        if (typeof method === 'function' && method.length > injections.length) {
-          throw new ErrInvalidBinding(
-            `Cannot configure "${keyStr(key)}": method "${String(methodName)}" has ${method.length} parameter(s) but ${injections.length} injection key(s) were specified`,
-          )
-        }
-      }
-
-      // A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit
-      // hook set on the spec (or an @OnLifecycle callback) still wins.
-      if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
-        binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
-      }
-      if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
-        binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
-      }
+      checkInjectableMethods(key, ctor, binding)
+      adoptLifecycleInterfaces(ctor, binding)
     }
 
     const scope = this.scopes.get(scopeID)
@@ -1288,12 +1423,8 @@ export class CaffeineIoC implements Container {
 
     binding.scopeID = scopeID
 
-    binding.lazy =
-      binding.lazy === undefined && this.lazy === undefined
-        ? (scope?.lazy ?? true)
-        : binding.lazy === undefined
-          ? this.lazy
-          : binding.lazy
+    // The binding's own setting wins, then the container's, then its scope's; lazy when none says.
+    binding.lazy = binding.lazy ?? this.lazy ?? scope?.lazy ?? true
 
     const canonical = this.registerBinding(key, binding)
 
@@ -1752,7 +1883,7 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Decides every binding held back for its conditions, in the order {@link decisionOrder} computes.
+   * Decides every binding held back for its conditions, in the order `decisionOrder` computes.
    *
    * A decorated binding never lands on a registered key. When two bindings of one key are decided and one of them is
    * decorated, whichever comes second throws rather than silently replacing the other.
@@ -1767,7 +1898,7 @@ export class CaffeineIoC implements Container {
       return config.values
     }
 
-    for (const entry of this.decisionOrder(this._pendingConditionals)) {
+    for (const entry of decisionOrder(this._pendingConditionals)) {
       const { key, binding } = entry
 
       // The class came first; a @Provides binding whose class did not register is not decided at all.
@@ -1804,90 +1935,6 @@ export class CaffeineIoC implements Container {
 
     this._pendingConditionals = []
     this._pendingConfigClasses.clear()
-  }
-
-  /**
-   * Orders the held bindings so that each is decided after every held binding it waits for:
-   *
-   * - the `@Configuration` class it was declared in, when it is a `@Provides` binding;
-   * - every held binding answering — by its key, a name or its base — to a key one of its `present` / `missing`
-   *   conditions checks, which is the config provider's key for a `config` condition.
-   *
-   * A binding does not wait for itself, and a configuration class does not wait for its own `@Provides` bindings, so a
-   * class whose condition checks for a key it provides is a default. Among the bindings free to go, the first declared
-   * goes first; when none is — a cycle, such as two defaults of one key — so does the first declared of the rest, and
-   * the others then see it.
-   */
-  private decisionOrder(entries: readonly PendingBinding[]): PendingBinding[] {
-    const answering = new Map<InjectionToken | Identifier, number[]>()
-    const answer = (key: InjectionToken | Identifier, i: number): void => {
-      const list = answering.get(key)
-      if (list === undefined) {
-        answering.set(key, [i])
-      } else {
-        list.push(i)
-      }
-    }
-
-    for (let i = 0; i < entries.length; i++) {
-      const { key, binding } = entries[i]
-
-      answer(key, i)
-      for (const name of binding.names) {
-        answer(name, i)
-      }
-      if (binding.extend !== undefined && !binding.configuration) {
-        answer(binding.extend, i)
-      }
-    }
-
-    const waiting = new Array<number>(entries.length).fill(0)
-    const dependents = entries.map((): number[] => [])
-
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i]
-      const waits = new Set<number>(entry.providedByConfig === undefined ? [] : answering.get(entry.providedByConfig))
-
-      for (const condition of entry.binding.conditionals) {
-        const read =
-          condition.kind === 'present' || condition.kind === 'missing'
-            ? condition.key
-            : condition.kind === 'config'
-              ? Keys.kConfigProvider
-              : undefined
-
-        for (const j of (read === undefined ? undefined : answering.get(read)) ?? []) {
-          if (entries[j].providedByConfig !== entry.key) {
-            waits.add(j)
-          }
-        }
-      }
-
-      waits.delete(i)
-      waiting[i] = waits.size
-      for (const j of waits) {
-        dependents[j].push(i)
-      }
-    }
-
-    const decided = new Array<boolean>(entries.length).fill(false)
-    const order: PendingBinding[] = []
-
-    for (let n = 0; n < entries.length; n++) {
-      let next = waiting.findIndex((count, i) => count === 0 && !decided[i])
-      if (next === -1) {
-        next = decided.indexOf(false)
-      }
-
-      decided[next] = true
-      order.push(entries[next])
-
-      for (const d of dependents[next]) {
-        waiting[d]--
-      }
-    }
-
-    return order
   }
 
   // Tests the conditions in rank order, stopping at the first that fails; only a `when` that returns a promise is awaited.
@@ -1943,9 +1990,8 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidBinding} when the provider needs compiling to be read
    */
   private readConfigProvider(key: InjectionToken, condition: ConfigCondition): unknown {
-    const context =
-      `condition config(${typeof condition.access === 'string' ? `"${condition.access}"` : 'selector'})` +
-      ` of "${keyStr(key)}"`
+    const access = typeof condition.access === 'string' ? `"${condition.access}"` : 'selector'
+    const context = `condition config(${access}) of "${keyStr(key)}"`
     const provider = this.getBinding(Keys.kConfigProvider)
 
     if (provider === undefined) {
