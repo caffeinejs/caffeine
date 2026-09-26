@@ -8,6 +8,7 @@ import {
   getMetadataOverride,
   token,
 } from '@caffeinejs/di'
+import { ErrGuardConfiguration } from '@caffeinejs/std/framework'
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
@@ -15,7 +16,6 @@ import {
   Catch,
   Claim,
   Controller,
-  ErrConfiguration,
   ErrHTTPUnauthorized,
   ErrorHandler,
   Get,
@@ -27,8 +27,8 @@ import {
   UseGuards,
   createWebApplication,
   type ActionResult,
+  GuardResult,
   type Context,
-  type GuardResult,
   type WebApplication,
 } from '../index.js'
 import type { GuardInput } from './guard.js'
@@ -447,13 +447,13 @@ describe('builder', () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
     const app = createWebApplication().guards(g => g.global(kMissing))
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('rejects an InjectionToken that is not a Guard at start-up', async () => {
     const app = createWebApplication().guards(g => g.global(NotAGuard as never))
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('accepts an abstract key bound to a factory, whose prototype carries no "guard" method', async () => {
@@ -508,6 +508,20 @@ describe('denial', () => {
   }
 
   @Injectable()
+  class UnauthenticatedGuard implements Guard {
+    guard(): GuardResult {
+      return GuardResult.unauthenticated('session expired')
+    }
+  }
+
+  @Injectable()
+  class UnauthenticatedNoReasonGuard implements Guard {
+    guard(): Promise<GuardResult> {
+      return Promise.resolve(GuardResult.unauthenticated(''))
+    }
+  }
+
+  @Injectable()
   class FaultyGuard implements Guard {
     guard(): Promise<boolean> {
       return Promise.reject()
@@ -542,6 +556,18 @@ describe('denial', () => {
       return { ok: true }
     }
 
+    @UseGuards(UnauthenticatedGuard)
+    @Get('/unauthenticated')
+    byUnauthenticated() {
+      return { ok: true }
+    }
+
+    @UseGuards(UnauthenticatedNoReasonGuard)
+    @Get('/unauthenticated-no-reason')
+    byUnauthenticatedNoReason() {
+      return { ok: true }
+    }
+
     @UseGuards(FaultyGuard)
     @Get('/faulty')
     byFault() {
@@ -549,7 +575,15 @@ describe('denial', () => {
     }
   }
 
-  void [FalseGuard, ReasonGuard, UnauthorizedGuard, FaultyGuard, DenialController]
+  void [
+    FalseGuard,
+    ReasonGuard,
+    UnauthorizedGuard,
+    UnauthenticatedGuard,
+    UnauthenticatedNoReasonGuard,
+    FaultyGuard,
+    DenialController,
+  ]
 
   it('renders the default 403 envelope for boolean false', async () => {
     const built = buildApp()
@@ -579,6 +613,45 @@ describe('denial', () => {
       code: 'ERR_HTTP_FORBIDDEN',
       message: 'token expired',
     })
+
+    await built.close()
+  })
+
+  it('answers GuardResult.unauthenticated with 401 rather than 403, and its reason', async () => {
+    // A caller who is not signed in must be told to authenticate, not that they are not allowed.
+    const built = buildApp()
+    await built.ready()
+
+    const res = await built.fetch('/denial/unauthenticated')
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({
+      statusCode: 401,
+      error: 'Unauthorized',
+      code: 'ERR_HTTP_UNAUTHORIZED',
+      message: 'session expired',
+    })
+
+    await built.close()
+  })
+
+  it('falls back to the default 401 message when GuardResult.unauthenticated names no reason', async () => {
+    const built = buildApp()
+    await built.ready()
+
+    const res = await built.fetch('/denial/unauthenticated-no-reason')
+    expect(res.status).toBe(401)
+    expect(await res.json()).toMatchObject({ code: 'ERR_HTTP_UNAUTHORIZED', message: 'Unauthorized' })
+
+    await built.close()
+  })
+
+  it('lets GuardResult.unauthenticated reach @Catch as an ErrHTTPUnauthorized', async () => {
+    const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
+    await built.ready()
+
+    const res = await built.fetch('/denial/unauthenticated')
+    expect(res.status).toBe(401)
+    expect(await res.json()).toEqual({ caught: true, message: 'session expired' })
 
     await built.close()
   })
@@ -999,6 +1072,6 @@ describe('use_guards_unbound', () => {
 
     const app = buildApp()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
   })
 })

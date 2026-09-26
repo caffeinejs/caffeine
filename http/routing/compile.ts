@@ -1,8 +1,8 @@
 import { Container, InjectionToken } from '@caffeinejs/di'
+import { compileGuardKeys, type CompiledGuard } from '@caffeinejs/std/framework'
 
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
 import { solutions } from '../error/util.js'
-import { compileGuardKeys, type CompiledGuard } from '../guards/compile.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
@@ -56,7 +56,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
     ? container.get<Map<string, AuthzRequirementHandler<AuthzRequirement>>>(kAuthzHandlers)
     : undefined
 
-  const compiledGuards = new Map<InjectionToken<Guard>, CompiledGuard>()
+  const compiledGuards = new Map<InjectionToken<Guard>, CompiledGuard<Guard>>()
   // Absent when the application never called `.guards(...)` — no global guards, same as an empty list.
   const globalGuardKeys = container.getOptional(kGlobalGuards) ?? []
   const globalGuards = dedupe(compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards))
@@ -207,12 +207,12 @@ function declaresAuthzProtection(authz: RouteAuthz | undefined): boolean {
 
 function compileRouteGuardChain(
   container: Container,
-  compiledGuards: Map<InjectionToken<Guard>, CompiledGuard>,
-  globalGuards: readonly CompiledGuard[],
+  compiledGuards: Map<InjectionToken<Guard>, CompiledGuard<Guard>>,
+  globalGuards: readonly CompiledGuard<Guard>[],
   routerGuards: InjectionToken<Guard>[] | undefined,
   routeGuards: InjectionToken<Guard>[] | undefined,
   owner: string,
-): readonly CompiledGuard[] | undefined {
+): readonly CompiledGuard<Guard>[] | undefined {
   const routerKeys = routerGuards ?? []
   const routeKeys = routeGuards ?? []
   const local = compileGuardKeys(container, [...routerKeys, ...routeKeys], owner, compiledGuards)
@@ -229,7 +229,7 @@ function compileRouteGuardChain(
 }
 
 // One compiled entry per token, so a guard listed twice for a route runs once, where it first appears.
-function dedupe(chain: CompiledGuard[]): CompiledGuard[] {
+function dedupe(chain: CompiledGuard<Guard>[]): CompiledGuard<Guard>[] {
   return [...new Set(chain)]
 }
 

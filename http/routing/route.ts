@@ -1,10 +1,10 @@
 import { Ctor, Provider } from '@caffeinejs/di'
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
 
 import type { Context } from '../context.js'
 import type { ErrorHandler } from '../error/handler.js'
-import type { CompiledGuard } from '../guards/compile.js'
+import type { Guard } from '../guards/guard.js'
 import { AuthzRouteService } from '../security/authz/index.js'
 import type {
   BodyMode,
@@ -103,7 +103,7 @@ export interface Route<R = FastifyRequest> {
    */
   detail?: RouteDetail
   catchBy?: CatchByMap
-  guards?: readonly CompiledGuard[]
+  guards?: readonly CompiledGuard<Guard>[]
   authorization: RouteAuthorization
 }
 

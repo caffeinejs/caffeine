@@ -1,22 +1,24 @@
-import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes, token, type InjectionToken } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { ErrConfiguration } from '../error/common.js'
 import { compileGuardKeys, type CompiledGuard } from './compile.js'
-import type { Guard, GuardInput } from './guard.js'
+import { ErrGuardConfiguration } from './errors.js'
+import type { BaseGuard } from './guard.js'
 
-// `decorators: false` keeps the global `@Controller` / `@Injectable` registry out of these containers, so
-// nothing another test file declares reaches them, and nothing declared here reaches another.
+type TestGuard = BaseGuard<unknown>
+
+// `decorators: false` keeps the global `@Injectable` registry out of these containers, so nothing another test
+// file declares reaches them, and nothing declared here reaches another.
 function newContainer(): CaffeineIoC {
   return new CaffeineIoC({ decorators: false })
 }
 
-function compile(container: CaffeineIoC, keys: Parameters<typeof compileGuardKeys>[1]): CompiledGuard[] {
+function compile(container: CaffeineIoC, keys: readonly InjectionToken<TestGuard>[]): CompiledGuard<TestGuard>[] {
   return compileGuardKeys(container, keys, 'PetController.list', new Map())
 }
 
-class AllowGuard implements Guard {
-  guard(_input: GuardInput): boolean {
+class AllowGuard implements TestGuard {
+  guard(): boolean {
     return true
   }
 }
@@ -35,12 +37,22 @@ describe('compile_guard_keys', () => {
     container.bind(NotAGuard, t => t.toSelf().lifetime(Scopes.REQUEST))
     await container.init()
 
-    expect(() => compile(container, [NotAGuard as never])).toThrow(ErrConfiguration)
+    expect(() => compile(container, [NotAGuard as never])).toThrow(ErrGuardConfiguration)
     expect(() => compile(container, [NotAGuard as never])).toThrow(/no "guard" method/)
   })
 
+  it('refuses a singleton with no "guard" method, checking the instance it built', async () => {
+    const kNotAGuard = token<TestGuard>(Symbol('not-a-guard'))
+
+    const container = newContainer()
+    container.bind(kNotAGuard, t => t.toValue({ ping: () => true } as never))
+    await container.init()
+
+    expect(() => compile(container, [kNotAGuard])).toThrow(ErrGuardConfiguration)
+  })
+
   it('accepts a request-scoped factory binding, which has no prototype to inspect', async () => {
-    const kGuard = token<Guard>(Symbol('factory-guard'))
+    const kGuard = token<TestGuard>(Symbol('factory-guard'))
 
     const container = newContainer()
     container.bind(kGuard, t => t.toFactory(() => new AllowGuard()).lifetime(Scopes.REQUEST))
@@ -51,12 +63,13 @@ describe('compile_guard_keys', () => {
     expect(compile(container, [kGuard])).toEqual([{ kind: 'provider', provider: expect.anything() }])
   })
 
-  it('names a guard bound under a named token when it cannot be resolved', async () => {
-    const kMissing = token<Guard>(Symbol('audit-guard'))
+  it('names a guard bound under a named token, and what referenced it, when it cannot be resolved', async () => {
+    const kMissing = token<TestGuard>(Symbol('audit-guard'))
 
     const container = newContainer()
     await container.init()
 
+    expect(() => compile(container, [kMissing])).toThrow(ErrGuardConfiguration)
     expect(() => compile(container, [kMissing])).toThrow(/Symbol\(audit-guard\).*PetController\.list/s)
   })
 
@@ -76,14 +89,14 @@ describe('compile_guard_keys', () => {
   })
 
   it('hands back the same compiled entry for a token it already compiled', async () => {
-    // Identity is what the route chain dedupes on, so one token must never compile to two entries.
+    // Identity is what a transport's chain dedupes on, so one token must never compile to two entries.
     const container = newContainer()
     container.bind(AllowGuard, t => t.toSelf().lifetime(Scopes.SINGLETON))
     await container.init()
 
-    const cache = new Map()
-    const [first] = compileGuardKeys(container, [AllowGuard], 'first', cache)
-    const [second] = compileGuardKeys(container, [AllowGuard], 'second', cache)
+    const cache = new Map<InjectionToken<TestGuard>, CompiledGuard<TestGuard>>()
+    const [first] = compileGuardKeys<TestGuard>(container, [AllowGuard], 'first', cache)
+    const [second] = compileGuardKeys<TestGuard>(container, [AllowGuard], 'second', cache)
 
     expect(second).toBe(first)
   })

@@ -12,3 +12,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `.extends(HealthIndicator)` — do not add a registration API beside that. Its budgets
   are whatever `kHealthRegistryOptions` holds, which `health()` from `@caffeinejs/http` binds, else
   `defaultHealthRegistryOptions()`. Nothing here knows about HTTP: rendering and routes stay in `http/health/`.
+- Guards are split the same way. `framework/guards/` holds only what every kind of application shares: the chain
+  runner (`runGuards`), the key compiler (`compileGuardKeys`), `ErrGuardConfiguration`, and the two shapes a
+  transport builds on, `BaseGuard<I>` and `GuardOutcome`. A transport owns everything its users touch: its own
+  `Guard extends BaseGuard<Input>`, an `Input` carrying a literal `kind`, its own `GuardResult` / `GuardReturn` /
+  `GuardTarget`, the `GuardDenial` mapping a denial to its statuses, and how guards attach. Do not add a
+  `GuardResult` or a user-facing `Guard` here: the transport's is the one import path its users have.

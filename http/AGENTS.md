@@ -267,12 +267,20 @@ Everything that belongs to the server library behind an adapter is named once, i
 their server-specific types off it. A newly found one becomes a member there, never another type parameter.
 
 `adapter.ts` (the contract every adapter implements), `context.ts`, `middleware/pipeline.ts`,
-`middleware/middleware.ts` and every `guards/` file but one — `guard.ts`, `compile.ts`, `builder.ts`,
-`keys.ts` and the chain runner `_run.ts` — import nothing from `fastify`. Fastify's side lives in
+`middleware/middleware.ts` and every `guards/` file but one — `guard.ts`, `builder.ts` and `keys.ts` — import
+nothing from `fastify`. Fastify's side lives in
 `fastify_*.ts` — the adapter itself is `fastify_adapter.ts` — `routing/fastify/`, `middleware/fastify.ts` and
 `guards/fastify.ts`. Guards are attached by
-`guards/fastify.ts` alone: it reads `request.httpContext` and hands the chain to `runGuards`, which knows
-only `GuardContext`.
+`guards/fastify.ts` alone: it reads `request.httpContext`, builds the `{ kind: 'http', context, target }` input and
+hands the chain to `runGuards` with `httpGuardDenial`, which turns a denial into `403` or, for
+`GuardResult.unauthenticated`, `401`.
+
+The chain runner and the key compiler are not this package's: `runGuards` and `compileGuardKeys` live in
+`std/framework/guards`, shared with every other kind of application. What stays here is the HTTP side of it —
+`Guard`, `GuardInput`, `GuardResult`, `GuardReturn`, `GuardTarget` and `GuardContext` in `guard.ts`, the global
+list in `builder.ts` and `keys.ts`, and `@UseGuards`. Users import all of it from `@caffeinejs/http`, and nothing
+from std is re-exported to make that so. `GuardInput.kind` is what lets one class also implement another
+transport's guard interface: it takes both inputs and narrows on `kind` (`_tests/guard_kind.test-d.ts`).
 
 `AdapterRegistry` is augmentable and holds every adapter in the compilation; the Fastify entry is declared in
 `fastify_adapter.ts`. What is written without knowing its adapter is typed against all of them: `@Use(...)` takes
