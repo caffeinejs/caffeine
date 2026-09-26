@@ -319,6 +319,24 @@ describe('edges follow what resolution injects', function () {
     expect(lines).toEqual(['- label `web`: WebOne, WebTwo', '- label `web`: WebThree, WebFour'])
   })
 
+  it('lists every binding sharing a name on one group line', async function () {
+    class PrimaryDB {}
+    class ReplicaDB {}
+    class AnalyticsDB {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(PrimaryDB, t => t.toSelf().names('graph-db'))
+    di.bind(ReplicaDB, t => t.toSelf().names('graph-db'))
+    di.bind(AnalyticsDB, t => t.toSelf().names('graph-db'))
+    await di.init()
+
+    const lines = graphToMarkdown(di)
+      .split('\n')
+      .filter(l => l.startsWith('- qualifier `graph-db`'))
+
+    expect(lines).toEqual(['- qualifier `graph-db`: PrimaryDB, ReplicaDB, AnalyticsDB'])
+  })
+
   it('labels a site receiving several bindings with the key it asked for, not a name they share', async function () {
     interface Pool {
       size(): number
@@ -395,5 +413,17 @@ describe('edges follow what resolution injects', function () {
     await di.init()
 
     expect(edgesFrom(buildBindingGraph(di), 'CacheUser')).toEqual([{ to: 'graph-cache', meta: 'param[0]' }])
+  })
+
+  it('draws no edge for a configuration value, which is not a binding', async function () {
+    class Server {
+      constructor(readonly port: number) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Server, t => t.toSelf([$i.value('server.port', 8080)]))
+    await di.init()
+
+    expect(edgesFrom(buildBindingGraph(di), 'Server')).toEqual([])
   })
 })

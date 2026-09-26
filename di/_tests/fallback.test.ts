@@ -688,3 +688,100 @@ describe('@Fallback() on a @Provides method of a conditional @Configuration', fu
     expect(di.get(kPassing)).toBe('by-hand')
   })
 })
+
+// ----- @Fallback() on a conditional @Configuration class ----------------------------
+//
+// A configuration's conditions decide the bindings it provides as well as the class itself, so a rejected one
+// registers neither, fallback or not.
+
+describe('@Fallback() on a conditional @Configuration class', function () {
+  const kFromRejected = token<string>(Symbol('fb-conf-rejected-provided'))
+
+  @Fallback()
+  @Configuration()
+  @ConditionalOn(() => false)
+  @Profile('fb-conf-rejected')
+  class RejectedConf {
+    @Provides(kFromRejected)
+    value(): string {
+      return 'provided'
+    }
+  }
+
+  it('should register neither the class nor what it provides when its condition fails', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-conf-rejected'] })
+    await di.init()
+
+    expect(di.has(RejectedConf)).toBe(false)
+    expect(di.has(kFromRejected)).toBe(false)
+  })
+})
+
+// ----- A fallback whose profile is added after construction -------------------------
+//
+// A decorated class whose profile is inactive when the container is built waits in the profile queue, and
+// addProfiles() can still activate it before init(). A fallback leaving that queue joins the other fallbacks, so it is
+// still decided last and still yields to anything answering to its base.
+
+describe('@Fallback() whose profile is added after construction', function () {
+  abstract class AddedCache {
+    abstract kind(): string
+  }
+
+  @Fallback()
+  @Injectable()
+  @Extends()
+  @Profile('fb-added')
+  class AddedMemoryCache extends AddedCache {
+    kind(): string {
+      return 'memory'
+    }
+  }
+
+  class AddedRedisCache extends AddedCache {
+    kind(): string {
+      return 'redis'
+    }
+  }
+
+  abstract class AddedQueue {
+    abstract kind(): string
+  }
+
+  @Fallback()
+  @Injectable()
+  @Extends()
+  @ConditionalOn(() => true)
+  @Profile('fb-added-cond')
+  class AddedMemoryQueue extends AddedQueue {
+    kind(): string {
+      return 'memory'
+    }
+  }
+
+  it('should be used when nothing else answers to its base', async function () {
+    const di = new CaffeineIoC()
+    di.addProfiles('fb-added')
+    await di.init()
+
+    expect(di.get(AddedCache).kind()).toBe('memory')
+  })
+
+  it('should yield to an implementation of its base bound by hand', async function () {
+    const di = new CaffeineIoC()
+    di.addProfiles('fb-added')
+    di.bind(AddedRedisCache, t => t.toSelf().extends(AddedCache))
+    await di.init()
+
+    expect(di.get(AddedCache).kind()).toBe('redis')
+    expect(di.has(AddedMemoryCache)).toBe(false)
+  })
+
+  it('should be used when its condition passes and nothing else answers to its base', async function () {
+    const di = new CaffeineIoC()
+    di.addProfiles('fb-added-cond')
+    await di.init()
+
+    expect(di.get(AddedQueue)).toBeInstanceOf(AddedMemoryQueue)
+  })
+})
