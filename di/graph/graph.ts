@@ -448,7 +448,7 @@ function escapeDot(text: string): string {
 }
 
 function cell(text: string): string {
-  return text.replace(/\|/g, '\\|')
+  return text.replace(/\\/g, '\\\\').replace(/\|/g, '\\|')
 }
 
 function listOrDash(values: string[] | undefined): string {
