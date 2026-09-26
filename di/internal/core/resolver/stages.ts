@@ -65,9 +65,7 @@ export const mapStage: InjectionMiddleware = ctx => {
     )
   }
 
-  const bindings = ctx.bindings
-
-  if (bindings.length === 0) {
+  if (ctx.bindings.length === 0) {
     if (ctx.descriptor.optional) {
       return () => undefined
     }
@@ -77,6 +75,10 @@ export const mapStage: InjectionMiddleware = ctx => {
         solutions(`- Register a binding for key "${keyStr(ctx.descriptor.key)}"`),
     )
   }
+
+  // After the emptiness check, as the array terminal does: a key the consumer alone answers to is still bound, so
+  // the consumer receives an empty map rather than itself, which it would have to build while being built.
+  const bindings = excludeSelf(ctx.bindings as Binding<unknown>[], ctx.key!, ctx.descriptor.key, ctx.container)
 
   return () => {
     const result = new Map<Identifier, unknown>()

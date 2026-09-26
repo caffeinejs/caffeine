@@ -88,4 +88,48 @@ describe('Inject Into Map', function () {
       expect(welcome.greeters.get('tschuss')).toBeUndefined()
     })
   })
+
+  describe('when the consumer answers to the key it maps', function () {
+    // A registry extending the base it collects is one of that base's bindings. Mapping it into itself would build
+    // it while it is being built, so, as with allOf, it receives every binding but its own.
+    abstract class Widget {}
+
+    class Button extends Widget {}
+
+    class WidgetRegistry extends Widget {
+      constructor(readonly widgets: Map<string, Widget>) {
+        super()
+      }
+    }
+
+    it('should map every other binding and leave the consumer out', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Button, t => t.toSelf().extends(Widget).names('button'))
+      di.bind(WidgetRegistry, t =>
+        t
+          .toSelf([$i.mapped(Widget)])
+          .extends(Widget)
+          .names('registry'),
+      )
+      await di.init()
+
+      const registry = di.get(WidgetRegistry)
+
+      expect([...registry.widgets.keys()]).toEqual(['button'])
+      expect(registry.widgets.get('button')).toBeInstanceOf(Button)
+    })
+
+    it('should inject an empty map when the consumer is the only binding', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(WidgetRegistry, t =>
+        t
+          .toSelf([$i.mapped(Widget)])
+          .extends(Widget)
+          .names('registry'),
+      )
+      await di.init()
+
+      expect(di.get(WidgetRegistry).widgets.size).toBe(0)
+    })
+  })
 })
