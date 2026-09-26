@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Extends } from '../decorators/extends.js'
 import { Fallback } from '../decorators/fallback.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
@@ -421,5 +422,269 @@ describe('@Fallback() + @ConditionalOn() — conditional evaluation', function (
     await di.init()
 
     expect(di.get(FbCondSkip)).toBe('override')
+  })
+})
+
+// ----- A decorated fallback waits for the rest of the container -------------
+//
+// A decorated fallback used to be decided while the container was being constructed, before modules, bindings
+// made by hand and conditionals. An implementation arriving from any of them then made the base ambiguous, which is
+// the opposite of what a default is for.
+
+describe('@Fallback() decided once the rest of the container has settled', function () {
+  abstract class LateCache {
+    abstract kind(): string
+  }
+
+  @Fallback()
+  @Injectable()
+  @Extends()
+  @Profile('fb-late')
+  class LateMemoryCache extends LateCache {
+    kind(): string {
+      return 'memory'
+    }
+  }
+
+  class LateRedisCache extends LateCache {
+    kind(): string {
+      return 'redis'
+    }
+  }
+
+  it('should be used when nothing else answers to its base', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-late'] })
+    await di.init()
+
+    expect(di.get(LateCache).kind()).toBe('memory')
+  })
+
+  it('should yield to an implementation of its base bound by hand', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-late'] })
+    di.bind(LateRedisCache, t => t.toSelf().extends(LateCache))
+    await di.init()
+
+    expect(di.get(LateCache).kind()).toBe('redis')
+    expect(di.has(LateMemoryCache)).toBe(false)
+  })
+
+  it('should yield to an implementation of its base registered by a module', async function () {
+    const di = new CaffeineIoC({
+      profiles: ['fb-late'],
+      modules: [
+        mod('LateRedisCacheModule', container => {
+          container.bind(LateRedisCache, t => t.toSelf().extends(LateCache))
+        }),
+      ],
+    })
+    await di.init()
+
+    expect(di.get(LateCache).kind()).toBe('redis')
+  })
+
+  it('should be decided by init(), as a fallback bound by hand is', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-late'] })
+
+    expect(di.has(LateMemoryCache)).toBe(false)
+
+    await di.init()
+
+    expect(di.has(LateMemoryCache)).toBe(true)
+  })
+
+  describe('next to a conditional implementation', function () {
+    abstract class LateStore {
+      abstract kind(): string
+    }
+
+    @Injectable()
+    @Extends()
+    @Fallback()
+    @Profile('fb-late-cond')
+    class LateMemoryStore extends LateStore {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    @Injectable()
+    @Extends()
+    @ConditionalOn(() => true)
+    @Profile('fb-late-cond')
+    class LateRedisStore extends LateStore {
+      kind(): string {
+        return 'redis'
+      }
+    }
+
+    abstract class LateQueue {
+      abstract kind(): string
+    }
+
+    @Injectable()
+    @Extends()
+    @Fallback()
+    @Profile('fb-late-cond-fail')
+    class LateMemoryQueue extends LateQueue {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    @Injectable()
+    @Extends()
+    @ConditionalOn(() => false)
+    @Profile('fb-late-cond-fail')
+    class LateSqsQueue extends LateQueue {
+      kind(): string {
+        return 'sqs'
+      }
+    }
+
+    it('should yield when the conditional passes', async function () {
+      const di = new CaffeineIoC({ profiles: ['fb-late-cond'] })
+      await di.init()
+
+      expect(di.get(LateStore).kind()).toBe('redis')
+    })
+
+    it('should be used when the conditional fails', async function () {
+      const di = new CaffeineIoC({ profiles: ['fb-late-cond-fail'] })
+      await di.init()
+
+      expect(di.get(LateQueue).kind()).toBe('memory')
+    })
+  })
+})
+
+// ----- The keys a fallback answers to ------------------------------------------
+//
+// A fallback is a last resort for every key it would answer to: its own, a name it carries, and the base it extends.
+// Checking only its own key let a fallback extending a base register next to a real implementation of that base.
+
+describe('.fallback() and every key it answers to', function () {
+  abstract class Log {
+    abstract kind(): string
+  }
+
+  class NoopLog extends Log {
+    kind(): string {
+      return 'noop'
+    }
+  }
+
+  class ConsoleLog extends Log {
+    kind(): string {
+      return 'console'
+    }
+  }
+
+  class FileLog extends Log {
+    kind(): string {
+      return 'file'
+    }
+  }
+
+  it('should yield to an implementation of the base it extends', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NoopLog, t => t.toSelf().extends(Log).fallback())
+    di.bind(ConsoleLog, t => t.toSelf().extends(Log))
+    await di.init()
+
+    expect(di.get(Log).kind()).toBe('console')
+    expect(di.has(NoopLog)).toBe(false)
+  })
+
+  it('should be used when nothing else answers to its base', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NoopLog, t => t.toSelf().extends(Log).fallback())
+    await di.init()
+
+    expect(di.get(Log).kind()).toBe('noop')
+  })
+
+  it('should yield, bound to the base itself, to an implementation extending it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Log, t => t.toClass(NoopLog).fallback())
+    di.bind(ConsoleLog, t => t.toSelf().extends(Log))
+    await di.init()
+
+    expect(di.get(Log).kind()).toBe('console')
+    expect(di.getMany(Log)).toHaveLength(1)
+  })
+
+  it('should yield to a binding carrying the same name', async function () {
+    const kLog = token<Log>(Symbol('fb-named-log'))
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NoopLog, t => t.toSelf().names(kLog).fallback())
+    di.bind(ConsoleLog, t => t.toSelf().names(kLog))
+    await di.init()
+
+    expect(di.get(kLog).kind()).toBe('console')
+  })
+
+  it('should let the first of two fallbacks for one base win', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(NoopLog, t => t.toSelf().extends(Log).fallback())
+    di.bind(FileLog, t => t.toSelf().extends(Log).fallback())
+    await di.init()
+
+    expect(di.get(Log).kind()).toBe('noop')
+    expect(di.getMany(Log)).toHaveLength(1)
+  })
+})
+
+// ----- @Fallback() on a @Provides method of a conditional @Configuration --------
+//
+// The provided-bindings pass skipped fallbacks and the fallback pass skipped provided bindings, so a fallback
+// provided by a conditional configuration was never registered, even when the configuration passed.
+
+describe('@Fallback() on a @Provides method of a conditional @Configuration', function () {
+  const kPassing = token<string>(Symbol('fb-provided-conditional-pass'))
+  const kFailing = token<string>(Symbol('fb-provided-conditional-fail'))
+
+  @Configuration()
+  @ConditionalOn(() => true)
+  @Profile('fb-provided-conditional')
+  class PassingConf {
+    @Fallback()
+    @Provides(kPassing)
+    value(): string {
+      return 'passing-default'
+    }
+  }
+
+  @Configuration()
+  @ConditionalOn(() => false)
+  @Profile('fb-provided-conditional')
+  class FailingConf {
+    @Fallback()
+    @Provides(kFailing)
+    value(): string {
+      return 'failing-default'
+    }
+  }
+
+  it('should register once the configuration passes and nothing else provides the key', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-provided-conditional'] })
+    await di.init()
+
+    expect(di.get(kPassing)).toBe('passing-default')
+  })
+
+  it('should not register when the configuration is rejected', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-provided-conditional'] })
+    await di.init()
+
+    expect(di.has(kFailing)).toBe(false)
+  })
+
+  it('should yield to a binding made by hand for the same key', async function () {
+    const di = new CaffeineIoC({ profiles: ['fb-provided-conditional'] })
+    di.bind(kPassing, t => t.toValue('by-hand'))
+    await di.init()
+
+    expect(di.get(kPassing)).toBe('by-hand')
   })
 })

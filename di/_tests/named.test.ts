@@ -8,7 +8,12 @@ import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrInvalidContainerState, ErrNoResolutionForKey, ErrRepeatedInjectableConfiguration } from '../errors.js'
+import {
+  ErrInvalidContainerState,
+  ErrNoResolutionForKey,
+  ErrNoUniqueInjectionForKey,
+  ErrRepeatedInjectableConfiguration,
+} from '../errors.js'
 import { token } from '../key.js'
 
 describe('Named Dependencies', function () {
@@ -286,4 +291,51 @@ describe('has() and a named binding', function () {
     expect(di.get(kAlias).tag()).toBe('named')
     expect(di.has(kUnused)).toBe(false)
   })
+})
+
+// A key bound directly and a binding named after it both answer to the key, whichever was registered first.
+describe('a key bound directly next to a binding named after it', function () {
+  interface Mailer {
+    via(): string
+  }
+
+  const kMailer = token<Mailer>(Symbol('named-direct-mailer'))
+
+  class SmtpMailer implements Mailer {
+    via(): string {
+      return 'smtp'
+    }
+  }
+
+  class SesMailer implements Mailer {
+    via(): string {
+      return 'ses'
+    }
+  }
+
+  for (const directFirst of [false, true]) {
+    it(`keeps both as candidates, ${directFirst ? 'direct binding first' : 'named binding first'}`, async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      const named = () => di.bind(SmtpMailer, t => t.toSelf().names(kMailer))
+      const direct = () => di.bind(kMailer, t => t.toClass(SesMailer))
+
+      if (directFirst) {
+        direct()
+        named()
+      } else {
+        named()
+        direct()
+      }
+
+      await di.init()
+
+      expect(
+        di
+          .getMany(kMailer)
+          .map(m => m.via())
+          .sort(),
+      ).toEqual(['ses', 'smtp'])
+      expect(() => di.get(kMailer)).toThrow(ErrNoUniqueInjectionForKey)
+    })
+  }
 })

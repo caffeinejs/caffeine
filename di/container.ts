@@ -72,6 +72,14 @@ interface PendingBinding {
   profileRejected?: boolean
 }
 
+interface PendingFallback {
+  key: InjectionToken
+  binding: Binding
+  // A decorated fallback reports through the hooks whether it was registered, as decorated bindings do. One bound by
+  // hand stays silent, as `bind()` does.
+  announce: boolean
+}
+
 /**
  * CaffeineIoC IoC container implementation of the {@link Container} interface.
  * A container must always be initialized before it can be used.
@@ -109,7 +117,7 @@ export class CaffeineIoC implements Container {
   private _pendingManualProfiles: PendingBinding[] = []
   private _pendingManualProfileKeys = new Set<InjectionToken>()
   private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
-  private _pendingFallbacks: Array<[InjectionToken, Binding]> = []
+  private _pendingFallbacks: PendingFallback[] = []
   private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
@@ -723,12 +731,18 @@ export class CaffeineIoC implements Container {
       this.unref(key)
     }
 
+    // Rebinding replaces everything that answers to the key, not only the binding registered under it: a binding
+    // named after the key or extending it would otherwise stay a candidate beside the replacement. Those bindings
+    // stay registered under their own keys.
+    this.bindings.delete(key)
+    this.bindingMembers.delete(key)
+
     this._pendingConditionals = this._pendingConditionals.filter(e => e.key !== key)
     this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
     this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
     this._pendingManualProfileKeys.delete(key)
     this._pendingConfigKeys.delete(key)
-    this._pendingFallbacks = this._pendingFallbacks.filter(([k]) => k !== key)
+    this._pendingFallbacks = this._pendingFallbacks.filter(e => e.key !== key)
 
     return this.bind(key, configure)
   }
@@ -918,9 +932,6 @@ export class CaffeineIoC implements Container {
       throw new ErrInvalidContainerState('Cannot register binding: container is already initialized')
     }
 
-    const pendingFallbacks: [InjectionToken, Binding][] = []
-    const pendingFallbackProvided: [InjectionToken, Binding][] = []
-
     for (const [key, config] of getBindingConfigurations()) {
       if (!hasInjectable(key)) {
         throw new ErrOrphanedBindingConfig(key)
@@ -934,15 +945,14 @@ export class CaffeineIoC implements Container {
 
       this.hooks.emit('onSetup', { key, binding })
 
+      // A fallback is decided once the rest of the container has settled, so a binding registered afterwards by a
+      // module, by hand or by a passing conditional still holds it back.
       if (binding.fallback) {
-        if (binding.conditionals.length > 0) {
-          if (binding.configuration) {
-            this._pendingConfigKeys.set(key, binding.keysProvided ?? [])
-          }
-          this._pendingConditionals.push({ key, binding, fallback: true })
-        } else {
-          pendingFallbacks.push([key, binding])
+        if (binding.configuration && binding.conditionals.length > 0) {
+          this._pendingConfigKeys.set(key, binding.keysProvided ?? [])
         }
+
+        this._pendingFallbacks.push({ key, binding, announce: true })
         continue
       }
 
@@ -969,10 +979,11 @@ export class CaffeineIoC implements Container {
       this.hooks.emit('onSetup', { key, binding })
 
       if (binding.fallback) {
-        if (binding.conditionals.length > 0 || configKey !== undefined) {
+        // One whose configuration class is still pending waits for it, and is queued only if that class registers.
+        if (configKey !== undefined) {
           this._pendingConditionals.push({ key, binding, fallback: true, providedByConfig: configKey })
         } else {
-          pendingFallbackProvided.push([key, binding])
+          this._pendingFallbacks.push({ key, binding, announce: true })
         }
         continue
       }
@@ -994,35 +1005,6 @@ export class CaffeineIoC implements Container {
         this.configureBinding(key, binding)
         this.hooks.emit('onBindingRegistered', { key, binding })
       }
-    }
-
-    for (const [key, binding] of pendingFallbacks) {
-      this.hooks.emit('onSetup', { key, binding })
-
-      if (this.registry.has(key) || !this.isRegistrable(binding)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
-      }
-
-      this.configureBinding(key, binding)
-      this.hooks.emit('onBindingRegistered', { key, binding })
-    }
-
-    for (const [key, binding] of pendingFallbackProvided) {
-      this.hooks.emit('onSetup', { key, binding })
-
-      if (this.registry.has(key)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
-      }
-
-      if (!this.isRegistrable(binding)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
-      }
-
-      this.configureBinding(key, binding)
-      this.hooks.emit('onBindingRegistered', { key, binding })
     }
 
     this.hooks.emit('onSetupComplete')
@@ -1353,6 +1335,20 @@ export class CaffeineIoC implements Container {
       return
     }
 
+    // Only this binding leaves the list under its key: a binding named after the key or extending it still
+    // answers to it.
+    this.unmapMemberships(binding)
+    this.unmapFrom(key, binding)
+
+    this.registry.delete(key)
+    this._pendingConditionalKeys.delete(key)
+    this._bootstrapBindings.delete(key)
+  }
+
+  /**
+   * Takes the binding out of every list it joined through its names, labels and base.
+   */
+  private unmapMemberships(binding: Binding): void {
     for (const label of binding.labels) {
       this.releaseMember(this.labelMembers, label, binding.id)
 
@@ -1369,41 +1365,29 @@ export class CaffeineIoC implements Container {
     }
 
     for (const name of binding.names) {
-      this.releaseMember(this.bindingMembers, name, binding.id)
-
-      const list = this.bindings.get(name)
-      if (list) {
-        const idx = list.findIndex(b => b.id === binding.id)
-        if (idx !== -1) {
-          list.splice(idx, 1)
-        }
-        if (list.length === 0) {
-          this.bindings.delete(name)
-        }
-      }
+      this.unmapFrom(name, binding)
     }
 
     if (binding.extend) {
-      this.releaseMember(this.bindingMembers, binding.extend, binding.id)
+      this.unmapFrom(binding.extend, binding)
+    }
+  }
 
-      const list = this.bindings.get(binding.extend)
-      if (list) {
-        const idx = list.findIndex(b => b.id === binding.id)
-        if (idx !== -1) {
-          list.splice(idx, 1)
-        }
-        if (list.length === 0) {
-          this.bindings.delete(binding.extend)
-        }
-      }
+  private unmapFrom(key: InjectionToken | Identifier, binding: Binding): void {
+    this.releaseMember(this.bindingMembers, key, binding.id)
+
+    const list = this.bindings.get(key)
+    if (list === undefined) {
+      return
     }
 
-    this.registry.delete(key)
-    // Mirrors `bindings.delete(key)`: the whole list under the key goes, so every id mapped there goes with it.
-    this.bindingMembers.delete(key)
-    this.bindings.delete(key)
-    this._pendingConditionalKeys.delete(key)
-    this._bootstrapBindings.delete(key)
+    const idx = list.findIndex(b => b.id === binding.id)
+    if (idx !== -1) {
+      list.splice(idx, 1)
+    }
+    if (list.length === 0) {
+      this.bindings.delete(key)
+    }
   }
 
   private async preDestroyBinding(binding: Binding): Promise<void> {
@@ -1617,14 +1601,7 @@ export class CaffeineIoC implements Container {
 
         const binding = this.materializePending(entry)
         this.hooks.emit('onSetup', { key: entry.key, binding })
-
-        if (this.registry.has(entry.key)) {
-          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-          continue
-        }
-
-        this.configureBinding(entry.key, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
+        this._pendingFallbacks.push({ key: entry.key, binding, announce: true })
       }
 
       for (const entry of this._pendingManualProfiles) {
@@ -1643,16 +1620,24 @@ export class CaffeineIoC implements Container {
   private registerBinding<T>(key: InjectionToken<T>, binding: Binding<T>): Binding<T> {
     const existing = this.registry.get(key)
     if (existing) {
+      // Registering a key again replaces its configuration, so the names, labels, base and bootstrap hook of the
+      // old one must stop pointing at it. configureBinding maps the new ones afterwards.
+      this.unmapMemberships(existing)
+      this._bootstrapBindings.delete(key)
+      this._pendingConditionalKeys.delete(key)
+
       Object.assign(existing, binding, { id: existing.id })
+      this.mapUnder(key, existing)
 
       return existing as Binding<T>
-    } else {
-      this.registry.set(key, binding)
-      this.claimMember(this.bindingMembers, key, binding.id)
-      this.bindings.set(key, [binding])
-
-      return binding
     }
+
+    this.registry.set(key, binding)
+    // Joins the bindings already answering to the key through a name or a base rather than replacing them, so the
+    // order they were registered in does not decide what the key resolves to.
+    this.mapUnder(key, binding)
+
+    return binding
   }
 
   /**
@@ -1706,50 +1691,7 @@ export class CaffeineIoC implements Container {
 
   private mapNamed(binding: Binding): void {
     for (const name of binding.names) {
-      const list = this.bindings.get(name)
-      if (!list) {
-        this.claimMember(this.bindingMembers, name, binding.id)
-        this.bindings.set(name, [binding])
-        continue
-      }
-
-      if (this.claimMember(this.bindingMembers, name, binding.id)) {
-        if (binding.primary) {
-          if (list.some(b => b.primary)) {
-            throw new ErrMultiplePrimary(name)
-          }
-
-          list.unshift(binding)
-        } else {
-          list.push(binding)
-        }
-
-        continue
-      }
-
-      // Already mapped. Only a primary can still need to move, so the index is worth locating only then.
-      if (!binding.primary) {
-        continue
-      }
-
-      const idx = list.findIndex(b => b.id === binding.id)
-      if (idx > 0) {
-        let hasPrimary = false
-
-        for (let i = 0; i < idx; i++) {
-          if (list[i].primary) {
-            hasPrimary = true
-            break
-          }
-        }
-
-        if (hasPrimary) {
-          throw new ErrMultiplePrimary(name)
-        }
-
-        list.splice(idx, 1)
-        list.unshift(binding)
-      }
+      this.mapUnder(name, binding)
     }
   }
 
@@ -1770,17 +1712,27 @@ export class CaffeineIoC implements Container {
       throw new ErrInjectableBase(childName, baseName)
     }
 
-    const list = this.bindings.get(base)
+    this.mapUnder(base, binding)
+  }
+
+  /**
+   * Adds the binding to the list of bindings that answer to `key`, keeping a primary first.
+   *
+   * The list is shared by the binding registered under `key`, the bindings named `key` and the bindings extending
+   * it, whatever order they were registered in.
+   */
+  private mapUnder(key: InjectionToken | Identifier, binding: Binding): void {
+    const list = this.bindings.get(key)
     if (!list) {
-      this.claimMember(this.bindingMembers, base, binding.id)
-      this.bindings.set(base, [binding])
+      this.claimMember(this.bindingMembers, key, binding.id)
+      this.bindings.set(key, [binding])
       return
     }
 
-    if (this.claimMember(this.bindingMembers, base, binding.id)) {
+    if (this.claimMember(this.bindingMembers, key, binding.id)) {
       if (binding.primary) {
         if (list.some(b => b.primary)) {
-          throw new ErrMultiplePrimary(base)
+          throw new ErrMultiplePrimary(key)
         }
 
         list.unshift(binding)
@@ -1796,13 +1748,13 @@ export class CaffeineIoC implements Container {
       return
     }
 
-    const existingIdx = list.findIndex(b => b.id === binding.id)
-    if (existingIdx > 0) {
-      if (list.some((b, i) => b.primary && i !== existingIdx)) {
-        throw new ErrMultiplePrimary(base)
+    const idx = list.findIndex(b => b.id === binding.id)
+    if (idx > 0) {
+      if (list.some((b, i) => b.primary && i !== idx)) {
+        throw new ErrMultiplePrimary(key)
       }
 
-      list.splice(existingIdx, 1)
+      list.splice(idx, 1)
       list.unshift(binding)
     }
   }
@@ -1992,7 +1944,7 @@ export class CaffeineIoC implements Container {
    */
   private registerOrDeferFallback(key: InjectionToken, binding: Binding): void {
     if (binding.fallback === true) {
-      this._pendingFallbacks.push([key, binding])
+      this._pendingFallbacks.push({ key, binding, announce: false })
       return
     }
 
@@ -2000,28 +1952,44 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Registers the held-back fallbacks whose key is still unclaimed.
+   * Registers the held-back fallbacks that nothing else answers for.
    *
-   * Runs after profiles and conditionals have settled, so a competing binding has either taken the key or been
-   * unregistered. The first fallback for a key wins; later ones find the key taken.
+   * Every fallback, decorated or bound by hand, is decided here and nowhere else. This runs after modules, profiles
+   * and conditionals have settled, so a competing binding has either been registered or been removed. The first
+   * fallback in the queue wins; later ones find their keys taken.
    */
   private async evaluatePendingFallbacks(): Promise<void> {
-    for (const [key, binding] of this._pendingFallbacks) {
-      if (this.registry.has(key) || !this.isRegistrable(binding)) {
-        continue
+    for (const { key, binding, announce } of this._pendingFallbacks) {
+      const register =
+        !this.isClaimed(key, binding) &&
+        this.isRegistrable(binding) &&
+        (binding.conditionals.length === 0 ||
+          (await this.evalConditionals(binding.conditionals, { container: this, key, binding })))
+
+      if (register) {
+        this.configureBinding(key, binding)
       }
 
-      if (
-        binding.conditionals.length > 0 &&
-        !(await this.evalConditionals(binding.conditionals, { container: this, key, binding }))
-      ) {
-        continue
+      if (announce) {
+        this.hooks.emit(register ? 'onBindingRegistered' : 'onBindingNotRegistered', { key, binding })
       }
-
-      this.configureBinding(key, binding)
     }
 
     this._pendingFallbacks = []
+  }
+
+  /**
+   * Whether anything already answers to a key the fallback would answer to: its own key, one of its names, or the
+   * base it extends. A fallback is a last resort, so any of them holds it back.
+   */
+  private isClaimed(key: InjectionToken, binding: Binding): boolean {
+    const answered = (k: InjectionToken | Identifier): boolean => (this.bindings.get(k)?.length ?? 0) > 0
+
+    return (
+      answered(key) ||
+      binding.names.some(answered) ||
+      (binding.extend !== undefined && !binding.configuration && answered(binding.extend))
+    )
   }
 
   private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
@@ -2067,7 +2035,12 @@ export class CaffeineIoC implements Container {
             continue
           }
 
-          if (provided.providedByConfig !== entry.key || provided.fallback) {
+          if (provided.providedByConfig !== entry.key) {
+            continue
+          }
+
+          if (provided.fallback) {
+            this._pendingFallbacks.push({ key: provided.key, binding: provided.binding, announce: true })
             continue
           }
 
@@ -2127,21 +2100,7 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      const binding = entry.binding
-      if (this.registry.has(entry.key)) {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-        continue
-      }
-
-      const ctx: ConditionContext = { container: this, key: entry.key, binding }
-      const pass = await evalAll(binding.conditionals, ctx)
-
-      if (pass) {
-        registerEntry(entry.key, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-      } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-      }
+      this._pendingFallbacks.push({ key: entry.key, binding: entry.binding, announce: true })
     }
 
     const toUnref: InjectionToken[] = []

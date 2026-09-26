@@ -257,6 +257,63 @@ describe('Manual Binding', function () {
 
         expect(di.get(Original)).toBeInstanceOf(Replacement)
       })
+
+      it('should replace every binding that answers to an abstract key', async function () {
+        // What TestContainer.override does: the replacement of a base wins over the subclasses bound to it, which
+        // stay resolvable under their own keys.
+        abstract class Store {
+          abstract kind(): string
+        }
+
+        class SqlStore extends Store {
+          kind(): string {
+            return 'sql'
+          }
+        }
+
+        const mock: Store = { kind: () => 'mock' }
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().extends(Store))
+        di.rebind(Store, t => t.toValue(mock))
+        await di.init()
+
+        expect(di.get(Store)).toBe(mock)
+        expect(di.getMany(Store)).toEqual([mock])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
+    })
+
+    describe('binding a key twice', function () {
+      // The second binding replaces the first, so whatever only the first one declared must stop resolving to it.
+      // A leftover bootstrap hook used to be called on a binding that no longer had one, and init() threw.
+      it('should drop the names, labels, base and bootstrap hook of the replaced binding', async function () {
+        abstract class Base {
+          abstract kind(): string
+        }
+
+        class Twice extends Base {
+          kind(): string {
+            return 'twice'
+          }
+        }
+
+        const label = Symbol('twice-label')
+        const kOld = token<Twice>(Symbol('twice-old'))
+        const kNew = token<Twice>(Symbol('twice-new'))
+        const bootstrap = vi.fn()
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Twice, t => t.toSelf().names(kOld).labels(label).extends(Base).bootstrap(bootstrap))
+        di.bind(Twice, t => t.toSelf().names(kNew))
+        await di.init()
+
+        expect(di.has(kOld)).toBe(false)
+        expect(di.getBindingsByLabel(label)).toHaveLength(0)
+        expect(di.has(Base)).toBe(false)
+        expect(di.get(kNew)).toBeInstanceOf(Twice)
+        expect(bootstrap).not.toHaveBeenCalled()
+      })
     })
 
     describe('binding several functions to the same qualifier', function () {
