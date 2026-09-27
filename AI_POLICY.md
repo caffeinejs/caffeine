@@ -1,34 +1,19 @@
 # AI policy
 
-This policy applies to contributions to this repository: issues, pull requests, and commits. Using an assistant locally is not the issue. Submitting the result is.
+Assistants may be used for any contribution to this repository: code, tests, review, and documentation. Using one is not the concern. Submitting output nobody read is.
 
-Agents working in this tree follow [`AGENTS.md`](AGENTS.md) and [`CONVENTIONS.md`](CONVENTIONS.md). This file is the human gate.
+Agents working in this tree follow [`AGENTS.md`](AGENTS.md) and [`CONVENTIONS.md`](CONVENTIONS.md). This file is the human side.
 
-## Allowed
+## Same bar as hand-written work
 
-Assistants may be used for code, tests, review, and documentation. The quality bar is the same as hand-written work: [`CONVENTIONS.md`](CONVENTIONS.md), tests where behavior changes, and CI.
+[`CONVENTIONS.md`](CONVENTIONS.md), tests where behavior changes, and green CI. Maintainers review the change, not the tool that produced it.
 
-## Required human review
+## Human review
 
-A human must read the diff and be able to explain every line they submit. “The agent wrote it” is not a defense.
+The contributor is the author of record. Read the diff before submitting it, stand behind it, and be ready to explain and revise it in review. The MIT license grant, including for AI-assisted parts, is the contributor's.
 
-The contributor is the author of record. The MIT license grant, including for AI-assisted parts, is theirs.
+## Not accepted
 
-## Required pull request disclosure
-
-Every pull request that used an assistant must include this block:
-
-```
-## AI assistance
-- Tool:
-- Scope:
-- Reviewer: I have read and understand every line in this pull request.
-```
-
-`Scope` is what the assistant authored (the whole change, tests only, docs only, named files). Without the block, maintainers may close the pull request or ask for a resubmit.
-
-## Rejected without debate
-
-- Unreviewed dumps
-- Secrets in prompts or in the diff
-- Copyrighted material the contributor cannot grant
+- Output submitted without the contributor reading it
+- Secrets in the diff
+- Material the contributor cannot license under MIT

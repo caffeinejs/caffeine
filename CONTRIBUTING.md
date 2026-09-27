@@ -59,5 +59,5 @@ Keep the description short (under 72 characters), imperative mood, no trailing p
 - Keep PRs focused — one concern per PR
 - Add or update tests for any changed behaviour
 - All checks must pass before requesting review (`make check`, or `make lint-markdown` when every changed file is `*.md`)
-- AI-assisted PRs must follow [`AI_POLICY.md`](AI_POLICY.md) (human review and the disclosure block)
+- AI-assisted PRs must follow [`AI_POLICY.md`](AI_POLICY.md)
 - Link to a related issue when one exists

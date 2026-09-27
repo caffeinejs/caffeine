@@ -26,14 +26,6 @@ wins. See "Third-party skills" in [`AGENTS.md`](../../AGENTS.md).
 | `agents-md`              | `skills/init`                  | Keeping the `AGENTS.md` files short and accurate                          |
 | `skill-optimizer`        | `skills/skill-optimizer`       | Authoring and benchmarking the skills this project writes                 |
 
-Not taken:
-
-- `oauth`: built around `@fastify/oauth2`, which this repository does not use.
-- `nodejs-core`: written for work on nodejs/node itself.
-- `octocat`: bans PR body headings, which rules out the block `AI_POLICY.md` requires.
-- `linting-neostandard-eslint9`: this repository lints with oxlint.
-- `snipgrapher`: not relevant.
-
 Each directory is copied from upstream unchanged, except for the patch above. `skills/fastify` is copied to
 `fastify-best-practices`, because a skill's directory must match its `name`.
 
