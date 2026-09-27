@@ -394,6 +394,16 @@ Voice: sentence case; complete sentences; same acronym rules as identifiers. No 
 /** Takes a schema and returns FastifySchema like Nest ValidationPipe. */
 ```
 
+## Third-party library docs
+
+Before relying on the API of a third-party library, call the Context7 MCP server. Do this while implementing, not only when asked for documentation. Use the version this repository depends on, from that package's `package.json`.
+
+1. `resolve-library-id` with the library name and what to look up.
+2. `query-docs` with the chosen `/org/project` id. One concept per call.
+3. Answer from those docs. Prefer Context7 over web search for a library API.
+
+Skip Context7 for `@caffeinejs/*`, language builtins, and code already in the conversation. First-party behavior is in this file, [`AGENTS.md`](AGENTS.md), and the package `AGENTS.md`.
+
 ## Acronym casing
 
 One consistent case — never JS Title-case. Go convention: `URL`, `ID`, `OIDC`, `HTTP`, `JSON`.

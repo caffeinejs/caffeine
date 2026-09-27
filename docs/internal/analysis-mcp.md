@@ -50,3 +50,9 @@ Fine-grained personal access token only, this repository only, no organization p
 Leave **Workflows**, **Secrets**, **Variables**, **Dependabot secrets**, **Administration**, **Repository security advisories**, **Commit statuses**, **Deployments**, **Environments**, **Pages**, **Webhooks**, **Artifact metadata**, and **Attestations** at No access.
 
 The account that owns the token must already be allowed to see code scanning, Dependabot, and secret scanning alerts. Read-only on the token does not grant that. If those calls return unauthorized, change the account's role on the repo. Do not add write permissions or extra toolsets.
+
+## Context7
+
+Remote server `https://mcp.context7.com/mcp`. The header is `Authorization: Bearer`.
+
+Export `CAFFEINE_CONTEXT7_MCP_API_KEY` in the environment that launches the client. Claude expands `${CAFFEINE_CONTEXT7_MCP_API_KEY}`. Cursor's copy uses `${env:CAFFEINE_CONTEXT7_MCP_API_KEY}`. A shell profile is not visible to a desktop-launched app. Do not commit the key. Do not reuse `CAFFEINE_SONARQUBE_TOKEN` or `CAFFEINE_GITHUB_MCP_TOKEN`.
