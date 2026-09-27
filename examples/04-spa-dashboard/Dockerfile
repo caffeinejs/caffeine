@@ -4,7 +4,7 @@
 # One stage, where the petstore needs three. The difference is codegen: that example's module graph is not
 # committed and `caffeine generate modules` is Bun-only, so it pays for a Bun stage. This example's
 # *.gen.mod.ts are committed, so the CLI never runs here and Bun never enters the picture.
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
 
 WORKDIR /app
 

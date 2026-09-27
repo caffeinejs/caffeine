@@ -1,6 +1,6 @@
 # Build context is the REPO ROOT (see docker-compose.yml) because the example depends on the
 # unpublished @caffeinejs/* workspace packages, which must be built from source.
-FROM node:22-bookworm-slim AS base
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS base
 
 # openssl + ca-certificates are required by Prisma's query engine on Debian slim.
 RUN apt-get update \
@@ -20,7 +20,7 @@ RUN npm run build
 #
 # The whole /app is carried over rather than re-copied from context because .caffeinerc.ts imports
 # '@caffeinejs/cli', which resolves through the workspace symlinks that `npm ci` created above.
-FROM oven/bun:1 AS codegen
+FROM oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS codegen
 WORKDIR /app
 COPY --from=base /app /app
 WORKDIR /app/examples/03-petstore

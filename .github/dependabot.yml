@@ -10,7 +10,13 @@ updates:
     target-branch: main
 
   - package-ecosystem: 'docker'
-    directory: '/'
+    directories:
+      - '/di/_tests/deno'
+      - '/di/examples/04-fastify-cats-complete'
+      - '/examples/03-petstore'
+      - '/examples/04-spa-dashboard'
+      - '/test/services/configserver'
+      - '/test/services/oauthserver'
     schedule:
       interval: 'weekly'
     commit-message:
