@@ -1,1 +1,6 @@
 * text=auto eol=lf
+
+# AI
+skills-lock.json linguist-generated
+.agents/skills/** linguist-generated
+.agents/skills/README.md -linguist-generated
