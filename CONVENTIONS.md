@@ -353,3 +353,13 @@ That rule holds for this repository without exception. An **application** that m
 Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.
 
 Never revert, discard, or `git checkout --` a file outside the current task’s scope — including files a tool (e.g. `oxlint --fix` / `oxfmt`) modified as a side effect. That uncommitted state is other in-progress work. Stop and report it; do not revert it yourself.
+
+## Security
+
+- Pin every GitHub Action to a full commit SHA with the version as a trailing comment: `uses: actions/checkout@<sha> # v7.0.1`. Never a tag or a branch.
+- Pin every container image by digest and keep the tag for readability: `FROM node:26-alpine@sha256:…`, `image: redis:8.10.2-alpine@sha256:…`, `docker://…@sha256:…`. Resolve a digest with `docker buildx imagetools inspect <ref> --format '{{.Manifest.Digest}}'`.
+- `npm run pins:check` (`tools/check-pins.mjs`) enforces both, in `make check` and in CI. Fix the reference; do not edit the check or exempt a file.
+- Dependabot moves the pins (`.github/dependabot.yml`). A new directory with a Dockerfile or a compose file goes under `docker` or `docker-compose` there, or its pin never moves. Never unpin to get updates.
+- A new workflow declares `permissions:` per job, `contents: read` unless a step needs more, and checks out with `persist-credentials: false`.
+- Never disable, skip, narrow or loosen a security workflow (CodeQL, Scorecard, dependency review, license check, pin check) to make CI pass. Report the failure instead.
+- Secrets never enter the repository, a prompt, or a log line. Tokens are fine-grained and read-only.

@@ -35,6 +35,7 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 
 .PHONY: check
 check: ## run all checks
+	@npm run pins:check
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run build
@@ -58,6 +59,10 @@ lint: ## check lint and fix errors
 .PHONY: lint-markdown
 lint-markdown: ## lint markdown
 	@npm run lint:markdown
+
+.PHONY: pincheck
+pincheck: ## check that actions are pinned to a commit SHA and images to a digest
+	@npm run pins:check
 
 .PHONY: licensecheck
 licensecheck: ## check production dependency licenses against the allowlist

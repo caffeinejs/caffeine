@@ -57,7 +57,8 @@
     "fmt": "oxfmt --write",
     "fmt:check": "oxfmt --check",
     "lint:markdown": "markdownlint-cli2",
-    "license:check": "node tools/check-licenses.mjs"
+    "license:check": "node tools/check-licenses.mjs",
+    "pins:check": "node tools/check-pins.mjs"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.5.0",

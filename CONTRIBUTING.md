@@ -62,4 +62,5 @@ Keep the description short (under 72 characters), imperative mood, no trailing p
 - Add or update tests for any changed behaviour
 - All checks must pass before requesting review (`make check`, or `make lint-markdown` when every changed file is `*.md`)
 - AI-assisted PRs must follow [`AI_POLICY.md`](AI_POLICY.md)
+- Pin actions to a commit SHA and images to a digest (`make pincheck`); see [`CONVENTIONS.md`](CONVENTIONS.md) "Security"
 - Link to a related issue when one exists
