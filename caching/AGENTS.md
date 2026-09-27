@@ -7,7 +7,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to thi
 Installing the plugin is the activating act. `.with(HTTPCaching())` attaches the cache hooks, and only then
 do `@CacheControl` / `@CacheInvalidate` (and the `cacheControl()` / `cacheInvalidate()` route extensions) do
 anything. An
-application that decorates routes with them but never installs the plugin fails at `app.ready()` with
+application that decorates routes with them but never installs the plugin fails at `app.bootstrap()` with
 `ErrConfiguration` — a start-up check on the `http/` side, unrelated to anything this package exports.
 
 There is no `enabled` flag. A configuration value that could switch the feature on would let a config file
@@ -110,7 +110,7 @@ lifetime longer than the entry's.
 The key is `buildCacheKey` in `_util.ts`, the one derivation. `varyByQuery`, a route's or the install's, is a
 `Set` resolved at attach and applied before the query is sorted; unset, the whole query counts. Routes that
 share a URL under different constraints share a default key: a constrained route with a `ttl` must list the
-constraint's header in `vary`, or have its own `key`, or `ready()` fails. Tags are checked too (`assertTags`):
+constraint's header in `vary`, or have its own `key`, or `bootstrap()` fails. Tags are checked too (`assertTags`):
 non-empty strings without a brace, since a brace in a Redis key decides its slot.
 
 ## A store that rejects

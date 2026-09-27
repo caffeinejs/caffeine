@@ -12,7 +12,7 @@ import { describe, expect, it } from 'vitest'
 
 // Every configuration key a feature declares has to be one an environment variable reaches. `EnvConfigSource`
 // lowercases each word of a name and camel-cases the rest, so `CACHE_TTL` becomes `cacheTtl`: a key spelled
-// `cacheTTL` is reached by no variable at all, and validation drops the folded one at ready() without a word.
+// `cacheTTL` is reached by no variable at all, and validation drops the folded one at bootstrap() without a word.
 //
 // Schemas are found by name, every `*ConfigSchema` an entry point exports, so one added later is covered without
 // touching this file. A package that starts declaring configuration adds its entry point here.

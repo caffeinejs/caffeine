@@ -27,7 +27,7 @@ export const CustomerEntity = new EntitySchema<Customer>({
 target by string (`target: 'Address'`), so entity modules never import each other's values.
 
 [`@caffeinejs/typeorm`](../../integrations/typeorm/README.md) builds on that. The feature owns the
-`DataSource` — opened before `ready()` returns, closed on shutdown — and the repository is injected:
+`DataSource` — opened before `bootstrap()` returns, closed on shutdown — and the repository is injected:
 
 ```ts
 import { $repository, TypeORM } from '@caffeinejs/typeorm'

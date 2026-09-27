@@ -39,7 +39,7 @@ describe('route constraints', () => {
     const app = createWebApplication()
       .with(() => constraints([flavorStrategy()]))
       .mount(dish)
-    await app.ready()
+    await app.bootstrap()
 
     const spicy = await app.fetch('/dish', { headers: { 'x-flavor': 'spicy' } })
     expect(await spicy.json()).toEqual({ flavor: 'spicy' })
@@ -52,17 +52,17 @@ describe('route constraints', () => {
 
   // Without the plugin nothing turns the declaration into a Fastify constraint, so a lone versioned route would
   // answer every request regardless of Accept-Version. Start-up must refuse that instead.
-  it('fails at ready() when a route is constrained and the constraints plugin is not installed', async () => {
+  it('fails at bootstrap() when a route is constrained and the constraints plugin is not installed', async () => {
     const r = new Router('/v')
     r.get('/')
       .with(version('1.0.0'))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
-    await expect(app.ready()).rejects.toThrow(/the constraints plugin is not installed/)
+    await expect(app.bootstrap()).rejects.toThrow(/the constraints plugin is not installed/)
   })
 
-  it('fails at ready() when a route names a constraint no strategy is registered under', async () => {
+  it('fails at bootstrap() when a route names a constraint no strategy is registered under', async () => {
     const r = new Router('/x')
     r.get('/')
       .with(constraint('nope', 1))
@@ -73,10 +73,10 @@ describe('route constraints', () => {
 
     // find-my-way's own error, surfaced when the route registers — there is no more central registry to
     // check the name against ahead of time.
-    await expect(app.ready()).rejects.toThrow(/no strategy registered for constraint key nope/i)
+    await expect(app.bootstrap()).rejects.toThrow(/no strategy registered for constraint key nope/i)
   })
 
-  it('fails at ready() when fst and version() both set the version constraint on one route', async () => {
+  it('fails at bootstrap() when fst and version() both set the version constraint on one route', async () => {
     const r = new Router('/c')
     r.get('/')
       .with(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
@@ -85,7 +85,7 @@ describe('route constraints', () => {
       .with(() => constraints())
       .mount(r)
 
-    await expect(app.ready()).rejects.toThrow(/constraint "version" is set by both/)
+    await expect(app.bootstrap()).rejects.toThrow(/constraint "version" is set by both/)
   })
 
   it('lets an fst host constraint coexist with a first-class version constraint', async () => {
@@ -97,7 +97,7 @@ describe('route constraints', () => {
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
       .mount(r)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/c', { headers: { 'accept-version': '1.x', host: 'api.example' } })
     expect(await res.json()).toEqual({ ok: true })
@@ -133,7 +133,7 @@ describe('constraint Vary header', () => {
           ])
         })
       })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/late', { headers: { 'x-flavor': 'spicy' } })
 
@@ -151,7 +151,7 @@ describe('constraint Vary header', () => {
     const app = createWebApplication()
       .with(() => constraints())
       .mount(plain)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/plain')
 

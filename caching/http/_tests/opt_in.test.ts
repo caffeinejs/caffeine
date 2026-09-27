@@ -25,13 +25,13 @@ describe('caching is opt-in', () => {
 
     const app = createWebApplication()
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/optin-plain/data')
     expect(res.headers.get('x-cache')).toBeNull()
   })
 
-  it('fails at ready() when a route is decorated but the plugin is not installed', async () => {
+  it('fails at bootstrap() when a route is decorated but the plugin is not installed', async () => {
     @Controller('/optin-missing')
     class MissingController {
       @CacheControl({ ttl: 60 })
@@ -45,7 +45,7 @@ describe('caching is opt-in', () => {
     const app = createWebApplication()
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 
   // A generator someone named and forgot to bind is a mistake, not a request for the default one.
@@ -55,7 +55,7 @@ describe('caching is opt-in', () => {
     )
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(
+    await expect(app.bootstrap()).rejects.toThrow(
       'Cannot install HTTP caching: no binding registered for the given etagGenerator token',
     )
   })
@@ -66,7 +66,7 @@ describe('caching is opt-in', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(kStore)))
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(
+    await expect(app.bootstrap()).rejects.toThrow(
       'Cannot install HTTP caching: no binding registered for the given store token',
     )
   })
@@ -85,7 +85,7 @@ describe('caching is opt-in', () => {
     const app = createWebApplication({}).with(HTTPCaching())
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 
   it('resolves a container-bound store passed as a token', async () => {
@@ -116,7 +116,7 @@ describe('caching is opt-in', () => {
 
     const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/optin-token-store/data')
 
@@ -139,7 +139,7 @@ describe('caching is opt-in', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Edge')),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/optin-header/data')
     expect(res.headers.get('x-edge')).toBe('MISS')

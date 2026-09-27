@@ -69,7 +69,7 @@ describe('middleware pipeline', () => {
       seen.push('mw')
       next()
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -85,7 +85,7 @@ describe('middleware pipeline', () => {
       container.bind(Tagger, t => t.toClass(Tagger, [Tag]))
     })
     app.use(Tagger)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -99,7 +99,7 @@ describe('middleware pipeline', () => {
       container.bind(kTagger, t => t.toClass(Tagger, [Tag]))
     })
     app.use(kTagger)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -114,7 +114,7 @@ describe('middleware pipeline', () => {
       container.bind(Counter, t => t.toClass(Counter).lifetime(Scopes.REQUEST))
     })
     scoped.use(Counter)
-    await scoped.ready()
+    await scoped.bootstrap()
 
     const first = await scoped.fetch('/mw/echo')
     const second = await scoped.fetch('/mw/echo')
@@ -125,7 +125,7 @@ describe('middleware pipeline', () => {
       container.bind(Counter, t => t.toClass(Counter))
     })
     singleton.use(Counter)
-    await singleton.ready()
+    await singleton.bootstrap()
 
     const third = await singleton.fetch('/mw/echo')
     const fourth = await singleton.fetch('/mw/echo')
@@ -148,7 +148,7 @@ describe('middleware pipeline', () => {
       },
       { hook: 'preHandler' },
     )
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/mw/echo')
 
@@ -170,7 +170,7 @@ describe('middleware pipeline', () => {
     app.use((ctx, _next) => {
       ctx.status(401).body({ error: 'anonymous' })
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -185,7 +185,7 @@ describe('middleware pipeline', () => {
     app.use((ctx, _next) => {
       ctx.status(418).body({ answered: 'directly' })
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -216,7 +216,7 @@ describe('middleware pipeline', () => {
       reached.push('second')
       next()
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo')
 
@@ -230,7 +230,7 @@ describe('middleware pipeline', () => {
   it('answers with CORS headers from Node cors() and still runs the handler', async () => {
     const app = newApp()
     app.use(cors({ origin: 'http://example.com' }))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
 
@@ -244,7 +244,7 @@ describe('middleware pipeline', () => {
     const app = newApp()
     app.mount(new Router('/api').get('/echo', () => ({ ok: true })))
     app.use('/api', cors({ origin: 'http://example.com' }))
-    await app.ready()
+    await app.bootstrap()
 
     const inside = await app.fetch('/api/echo', { headers: { Origin: 'http://example.com' } })
     const outside = await app.fetch('/mw/echo', { headers: { Origin: 'http://example.com' } })
@@ -258,7 +258,7 @@ describe('middleware pipeline', () => {
 
   it('refuses a registration after the application is ready', async () => {
     const app = newApp()
-    await app.ready()
+    await app.bootstrap()
 
     expect(() => app.use((_ctx, next) => next())).toThrow(ErrPipelineSealed)
     await app.close()
@@ -286,7 +286,7 @@ describe('middleware pipeline', () => {
       next()
     })
     app.use(Hinted)
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/mw/echo')
 
@@ -316,7 +316,7 @@ describe('middleware pipeline', () => {
       order.push('second')
       next()
     })
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/mw/echo')
 

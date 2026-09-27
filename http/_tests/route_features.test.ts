@@ -45,7 +45,7 @@ describe('routes that declare caching', () => {
   it('are refused when nothing installed the caching plugin', async () => {
     app = createWebApplication().mount(pets())
 
-    const failure = await app.ready().then(
+    const failure = await app.bootstrap().then(
       () => undefined,
       (error: unknown) => error,
     )
@@ -59,7 +59,7 @@ describe('routes that declare caching', () => {
   it('start when the application installed it', async () => {
     app = createWebApplication().with(caching).mount(pets())
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/features-pets')).status).toBe(200)
   })
@@ -73,12 +73,12 @@ describe('routes that declare caching', () => {
         .handler(() => ({ ok: true }))
 
     app = createWebApplication().mount(served())
-    await app.ready()
+    await app.bootstrap()
     expect((await app.fetch('/features-served')).status).toBe(200)
     await app.close()
 
     app = createWebApplication().mount(served(), pets())
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 
   it('are refused when their group installed some other plugin', async () => {
@@ -90,7 +90,7 @@ describe('routes that declare caching', () => {
 
     app = createWebApplication().mount(other)
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 
   it('do not concern a group that declares none', async () => {
@@ -99,7 +99,7 @@ describe('routes that declare caching', () => {
       .handler(() => ({ ok: true }))
 
     app = createWebApplication().mount(plain)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/features-plain')).status).toBe(200)
   })

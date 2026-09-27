@@ -16,7 +16,7 @@ import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
 import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
 
-// Every application a case builds is closed after it, whether or not it got as far as `ready()`.
+// Every application a case builds is closed after it, whether or not it got as far as `bootstrap()`.
 const opened: { close(): Promise<unknown> }[] = []
 
 function createWebApplication(options?: { container: CaffeineIoC }) {
@@ -44,7 +44,7 @@ describe('Cache-Control headers', () => {
       void [TtlNumController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-ttl-num/data')
       expect(res.status).toBe(200)
@@ -63,7 +63,7 @@ describe('Cache-Control headers', () => {
       void [TtlStrMController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-ttl-str-m/data')
       expect(res.headers.get('cache-control')).toBe('public, max-age=300')
@@ -81,7 +81,7 @@ describe('Cache-Control headers', () => {
       void [TtlCompoundController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-ttl-compound/data')
       expect(res.headers.get('cache-control')).toBe('public, max-age=5400')
@@ -101,7 +101,7 @@ describe('Cache-Control headers', () => {
       void [SharedMaxAgeController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-smaxage/data')
       expect(res.headers.get('cache-control')).toContain('max-age=300')
@@ -122,7 +122,7 @@ describe('Cache-Control headers', () => {
       void [StaleWhileRevalidateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-swr/data')
       expect(res.headers.get('cache-control')).toContain('stale-while-revalidate=30')
@@ -140,7 +140,7 @@ describe('Cache-Control headers', () => {
       void [StaleIfErrorController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-sie/data')
       expect(res.headers.get('cache-control')).toContain('stale-if-error=3600')
@@ -160,7 +160,7 @@ describe('Cache-Control headers', () => {
       void [PrivateCacheController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-private/data')
       expect(res.headers.get('cache-control')).toBe('private, max-age=60')
@@ -178,7 +178,7 @@ describe('Cache-Control headers', () => {
       void [PublicCacheController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-public/data')
       expect(res.headers.get('cache-control')).toContain('public')
@@ -198,7 +198,7 @@ describe('Cache-Control headers', () => {
       void [NoStoreController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-nostore/data')
       expect(res.headers.get('cache-control')).toBe('no-store')
@@ -216,7 +216,7 @@ describe('Cache-Control headers', () => {
       void [NoCacheController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-nocache/data')
       expect(res.headers.get('cache-control')).toContain('no-cache')
@@ -234,7 +234,7 @@ describe('Cache-Control headers', () => {
       void [MustRevalidateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-mustrevalidate/data')
       expect(res.headers.get('cache-control')).toContain('must-revalidate')
@@ -252,7 +252,7 @@ describe('Cache-Control headers', () => {
       void [ImmutableController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-cc-immutable/data')
       expect(res.headers.get('cache-control')).toContain('immutable')
@@ -271,7 +271,7 @@ describe('Cache-Control headers', () => {
     void [EmptyOptionsController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-cc-empty/data')
     expect(res.headers.get('cache-control')).toBeNull()
@@ -291,7 +291,7 @@ describe('Vary header', () => {
     void [VarySingleController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-vary-single/data')
     expect(res.headers.get('vary')).toBe('Accept-Language')
@@ -309,7 +309,7 @@ describe('Vary header', () => {
     void [VaryMultiController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-vary-multi/data')
     expect(res.headers.get('vary')).toBe('Accept, Accept-Encoding')
@@ -327,7 +327,7 @@ describe('Vary header', () => {
     void [VaryNoneController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-vary-none/data')
     expect(res.headers.get('vary')).toBeNull()
@@ -347,7 +347,7 @@ describe('ETag', () => {
     void [ETagPresentController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-etag-present/data')
     expect(res.status).toBe(200)
@@ -367,7 +367,7 @@ describe('ETag', () => {
     void [ETagStableController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-etag-stable/data')
     const res2 = await app.fetch('/cache-etag-stable/data')
@@ -393,7 +393,7 @@ describe('ETag', () => {
     void [ETagDiffController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const resA = await app.fetch('/cache-etag-diff/a')
     const resB = await app.fetch('/cache-etag-diff/b')
@@ -415,7 +415,7 @@ describe('ETag', () => {
     void [ETagDisabledController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-etag-disabled/data')
     expect(res.headers.get('etag')).toBeNull()
@@ -433,7 +433,7 @@ describe('ETag', () => {
     void [ETagNoStoreController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-etag-nostore/data')
     expect(res.headers.get('etag')).toBeNull()
@@ -451,7 +451,7 @@ describe('ETag', () => {
     void [ETagStreamController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-etag-stream/data')
     expect(res.status).toBe(200)
@@ -472,7 +472,7 @@ describe('304 Not Modified', () => {
     void [Match304Controller]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-304-match/data')
     const etag = res1.headers.get('etag') as string
@@ -495,7 +495,7 @@ describe('304 Not Modified', () => {
     void [NoMatch304Controller]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-304-nomatch/data')
 
@@ -519,7 +519,7 @@ describe('304 Not Modified', () => {
 
     const store = new MemoryHTTPCacheStore()
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-304-stale/data')
     const oldEtag = res1.headers.get('etag') as string
@@ -548,7 +548,7 @@ describe('304 Not Modified', () => {
 
     const store = new MemoryHTTPCacheStore()
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
-    await app.ready()
+    await app.bootstrap()
 
     const etag = (await app.fetch('/cache-304-fresh/data')).headers.get('etag') as string
     await store.evictByTag('forgotten')
@@ -577,7 +577,7 @@ describe('304 Not Modified', () => {
     void [ETagOnly304Controller]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const etag = (await app.fetch('/cache-304-etag-only/data')).headers.get('etag') as string
     const res = await app.fetch('/cache-304-etag-only/data', { headers: { 'if-none-match': etag } })
@@ -598,7 +598,7 @@ describe('304 Not Modified', () => {
     void [Head304Controller]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-304-head/data')
     const etag = res1.headers.get('etag') as string
@@ -624,7 +624,7 @@ describe('Cache store', () => {
     void [StoreBupassController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-store-bypass/data')
     expect(callCount).toBe(1)
@@ -650,7 +650,7 @@ describe('Cache store', () => {
     void [StoreNoStoreController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-store-nostore/data')
     await app.fetch('/cache-store-nostore/data')
@@ -672,7 +672,7 @@ describe('Cache store', () => {
     void [StorePostDefaultController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-store-post-default/data', { method: 'POST' })
     await app.fetch('/cache-store-post-default/data', { method: 'POST' })
@@ -694,7 +694,7 @@ describe('Cache store', () => {
     void [StorePostCustomController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
     expect(callCount).toBe(1)
@@ -730,7 +730,7 @@ describe('Cache store', () => {
     void [StoreStatusController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-store-status/created')
     const replayed = await app.fetch('/cache-store-status/created')
@@ -762,7 +762,7 @@ describe('Cache store', () => {
 
     const store = new MemoryHTTPCacheStore()
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-store-clear/data')
     expect(callCount).toBe(1)
@@ -793,7 +793,7 @@ describe('Cache key', () => {
     void [KeyDefaultController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-key-default/data')
     await app.fetch('/cache-key-default/data')
@@ -823,7 +823,7 @@ describe('Cache key', () => {
     void [KeyURLsController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-key-urls/a')
     await app.fetch('/cache-key-urls/a')
@@ -849,7 +849,7 @@ describe('Cache key', () => {
     void [KeyCustomPathController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-key-custom-path/data?v=1')
     await app.fetch('/cache-key-custom-path/data?v=2')
@@ -871,7 +871,7 @@ describe('Cache key', () => {
     void [KeyCustomQueryController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-key-custom-query/data?lang=en')
     await app.fetch('/cache-key-custom-query/data?lang=pt')
@@ -901,7 +901,7 @@ describe('Decorator scope', () => {
     void [ScopeClassController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const resA = await app.fetch('/cache-scope-class/a')
     const resB = await app.fetch('/cache-scope-class/b')
@@ -927,7 +927,7 @@ describe('Decorator scope', () => {
     void [ScopeMethodController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const resCached = await app.fetch('/cache-scope-method/cached')
     const resUncached = await app.fetch('/cache-scope-method/uncached')
@@ -949,7 +949,7 @@ describe('Decorator scope', () => {
     void [ScopeReplaceController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-scope-replace/route')
     expect(res.headers.get('cache-control')).toBe('public, max-age=30')
@@ -972,7 +972,7 @@ describe('Undecorated routes', () => {
     void [UndecoratedController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/cache-undecorated/data')
     await app.fetch('/cache-undecorated/data')
@@ -996,7 +996,7 @@ describe('@CacheControl(false)', () => {
     void [CacheFalseMethodController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-false-method/data')
     expect(res.status).toBe(200)
@@ -1023,7 +1023,7 @@ describe('@CacheControl(false)', () => {
     void [CacheFalseClassController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const resA = await app.fetch('/cache-false-class/a')
     const resB = await app.fetch('/cache-false-class/b')
@@ -1047,7 +1047,7 @@ describe('@CacheControl(false)', () => {
     void [CacheFalseNoCacheController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-false-nocache/data')
     await app.fetch('/cache-false-nocache/data')
@@ -1073,7 +1073,7 @@ describe('Bug fixes', () => {
       void [Bug1EtagFalseController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-bug1-etag-false/data')
       expect(res1.status).toBe(200)
@@ -1098,7 +1098,7 @@ describe('Bug fixes', () => {
       void [Bug1InmIgnoredController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-bug1-inm-ignored/data')
 
@@ -1123,7 +1123,7 @@ describe('Bug fixes', () => {
       void [Bug2PrivateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-bug2-private/data')
       expect(res1.headers.get('cache-control')).toContain('private')
@@ -1151,7 +1151,7 @@ describe('Bug fixes', () => {
       void [Bug3VarySeparateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
       await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'pt-BR' } })
@@ -1173,7 +1173,7 @@ describe('Bug fixes', () => {
       void [Bug3VaryHitController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
       await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
@@ -1195,7 +1195,7 @@ describe('Bug fixes', () => {
       void [Bug3VaryMultiController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       // same Accept-Language, different Accept → separate entry
       await app.fetch('/cache-bug3-vary-multi/data', {
@@ -1228,7 +1228,7 @@ describe('Bug fixes', () => {
       void [Bug4CCNoCacheController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-bug4-cc-nocache/data')
       expect(callCount).toBe(1)
@@ -1258,7 +1258,7 @@ describe('Bug fixes', () => {
       void [Bug4PragmaController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-bug4-pragma/data')
       expect(callCount).toBe(1)
@@ -1282,7 +1282,7 @@ describe('Bug fixes', () => {
       void [Bug5HeadNoBodyController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const getRes = await app.fetch('/cache-bug5-head-nobody/data')
       expect(getRes.status).toBe(200)
@@ -1306,7 +1306,7 @@ describe('Bug fixes', () => {
       void [Bug5Head304Controller]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const getRes = await app.fetch('/cache-bug5-head-304/data')
       const etag = getRes.headers.get('etag') as string
@@ -1337,7 +1337,7 @@ describe('Bug fixes', () => {
       void [VaryStarController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-vary-star/data')
       expect(res1.status).toBe(200)
@@ -1379,7 +1379,7 @@ describe('Bug fixes', () => {
       void [TagsController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-tags/data')
       expect(spyStore.hinted).toEqual([['products', 'all']])
@@ -1403,7 +1403,7 @@ describe('Bug fixes', () => {
       void [AuthPrivateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
       expect(res1.status).toBe(200)
@@ -1431,7 +1431,7 @@ describe('Bug fixes', () => {
       void [AuthPublicOverrideController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
       expect(callCount).toBe(1)
@@ -1473,7 +1473,7 @@ describe('Bug fixes', () => {
       void [KeyEncodeController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-key-encode/data?a=1&b=2')
 
@@ -1501,7 +1501,7 @@ describe('Bug fixes', () => {
       void [ReqNoStoreController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-req-nostore/data')
       expect(callCount).toBe(1)
@@ -1530,7 +1530,7 @@ describe('Bug fixes', () => {
       void [Headers304Controller]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-304-headers/data')
       const etag = res1.headers.get('etag') as string
@@ -1556,7 +1556,7 @@ describe('Bug fixes', () => {
       void [InmWildcardController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-inm-wildcard/data')
 
@@ -1576,7 +1576,7 @@ describe('Bug fixes', () => {
       void [InmListController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-inm-list/data')
       const etag = res1.headers.get('etag') as string
@@ -1599,7 +1599,7 @@ describe('Bug fixes', () => {
       void [InmWeakController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-inm-weak/data')
       const strongEtag = res1.headers.get('etag') as string
@@ -1624,7 +1624,7 @@ describe('Bug fixes', () => {
       void [ProxyRevalidateController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-proxy-revalidate/data')
       expect(res.status).toBe(200)
@@ -1654,7 +1654,7 @@ describe('Bug fixes', () => {
       void [InvalidateSelfController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-invalidate-self/resource')
       await app.fetch('/cache-invalidate-self/resource')
@@ -1687,7 +1687,7 @@ describe('Bug fixes', () => {
       void [InvalidatePathsController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-invalidate-paths/resource')
       expect(getCount).toBe(1)
@@ -1720,7 +1720,7 @@ describe('Bug fixes', () => {
       void [Invalidate4xxController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-invalidate-4xx/resource')
       expect(getCount).toBe(1)
@@ -1746,7 +1746,7 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedMissController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-only-if-cached-miss/data', { headers: { 'cache-control': 'only-if-cached' } })
       expect(res.status).toBe(504)
@@ -1767,7 +1767,7 @@ describe('Bug fixes', () => {
       void [OnlyIfCachedHitController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-only-if-cached-hit/data')
       expect(callCount).toBe(1)
@@ -1791,7 +1791,7 @@ describe('Bug fixes', () => {
       void [NoTransformController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-no-transform/data')
       expect(res.status).toBe(200)
@@ -1812,7 +1812,7 @@ describe('Bug fixes', () => {
       void [LastModifiedController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/cache-last-modified/data')
       expect(res.headers.get('last-modified')).toBeDefined()
@@ -1830,7 +1830,7 @@ describe('Bug fixes', () => {
       void [ImsMatchController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       const res1 = await app.fetch('/cache-ims-match/data')
       const lastModified = res1.headers.get('last-modified') as string
@@ -1853,7 +1853,7 @@ describe('Bug fixes', () => {
       void [ImsStaleController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-ims-stale/data')
 
@@ -1876,7 +1876,7 @@ describe('Bug fixes', () => {
       void [InmPrecedenceController]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-inm-precedence/data')
 
@@ -1908,7 +1908,7 @@ describe('Bug fixes', () => {
       void [ReqMaxAge0Controller]
 
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.ready()
+      await app.bootstrap()
 
       await app.fetch('/cache-req-maxage0/data')
       expect(callCount).toBe(1)
@@ -1959,7 +1959,7 @@ describe('CacheControl builder & container-managed store', () => {
     const container = new CaffeineIoC()
     container.bind(MapStore, t => t.toClass(MapStore))
     const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-di-custom-store/data')
     const res2 = await app.fetch('/cache-di-custom-store/data')
@@ -1991,7 +1991,7 @@ describe('CacheControl builder & container-managed store', () => {
     // binding above is never consulted.
     const app = createWebApplication({ container }).with(HTTPCaching())
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
 
     const bound = app.container.get(MapStore) as MapStore
     expect(bound.ops).toEqual([])
@@ -2013,7 +2013,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const store = new MapStore()
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/cache-builder-store/data')
     const res2 = await app.fetch('/cache-builder-store/data')
@@ -2037,7 +2037,7 @@ describe('CacheControl builder & container-managed store', () => {
 
     const store = new MapStore()
     const app = createWebApplication().with(HTTPCaching(b => b.store(store).etagGenerator(() => '"builder-etag"')))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-builder-both/data')
     expect(res.headers.get('etag')).toBe('"builder-etag"')
@@ -2060,7 +2060,7 @@ describe('CacheControl builder & container-managed store', () => {
     const app = createWebApplication({ container }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-di-etag/data')
     expect(res.headers.get('etag')).toBe('"sentinel-etag"')
@@ -2082,7 +2082,7 @@ describe('CacheControl builder & container-managed store', () => {
     const app = createWebApplication({ container }).with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).etagGenerator(kETagGenerator)),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cache-di-etag-override/data')
     expect(res.headers.get('etag')).toBe('"route-override"')
@@ -2102,7 +2102,7 @@ describe('X-Cache status header', () => {
     void [XCBasicController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/xc-basic/data')
     expect(res1.headers.get('x-cache')).toBe('MISS')
@@ -2123,7 +2123,7 @@ describe('X-Cache status header', () => {
     void [XC304Controller]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res1 = await app.fetch('/xc-304/data')
     const etag = res1.headers.get('etag') as string
@@ -2145,7 +2145,7 @@ describe('X-Cache status header', () => {
     void [XCBypassController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/xc-bypass/data', { headers: { 'cache-control': 'no-store' } })
     expect(res.headers.get('x-cache')).toBe('BYPASS')
@@ -2163,7 +2163,7 @@ describe('X-Cache status header', () => {
     void [XCFalseController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/xc-false/data')
     expect(res.headers.get('x-cache')).toBe('BYPASS')
@@ -2183,7 +2183,7 @@ describe('X-Cache status header', () => {
     const app = createWebApplication().with(
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-My-Cache')),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/xc-custom/data')
     expect(res.headers.get('x-cache')).toBeNull()
@@ -2207,7 +2207,7 @@ describe('Canonical query keys', () => {
     void [QueryKeyOrderController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/qk-order/data?a=1&b=2')
     const res2 = await app.fetch('/qk-order/data?b=2&a=1')
@@ -2231,7 +2231,7 @@ describe('Canonical query keys', () => {
     void [QueryKeyValuesController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/qk-values/data?a=1')
     await app.fetch('/qk-values/data?a=2')
@@ -2252,7 +2252,7 @@ describe('Age header & request max-age', () => {
     void [AgeHitController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/age-hit/data')
     const res2 = await app.fetch('/age-hit/data')
@@ -2274,7 +2274,7 @@ describe('Age header & request max-age', () => {
     void [AgeMaxAgeOkController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/age-maxage-ok/data')
     const res2 = await app.fetch('/age-maxage-ok/data', { headers: { 'cache-control': 'max-age=100' } })
@@ -2306,7 +2306,7 @@ describe('Age header & request max-age', () => {
     void [AgeMaxAgeStaleController]
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new AgedStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/age-maxage-stale/data', { headers: { 'cache-control': 'max-age=10' } })
     expect(res.status).toBe(200)

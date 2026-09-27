@@ -99,7 +99,7 @@ describe('authentication gate — requests', () => {
     void [BodyController]
 
     const { app } = newApp()
-    await app.ready()
+    await app.bootstrap()
 
     // The body is invalid against the schema, so a validation-first pipeline would answer 400 here.
     const res = await app.fetch('/mw-auth-body', {
@@ -125,7 +125,7 @@ describe('authentication gate — requests', () => {
     void [MultiController]
 
     const { app, first, second } = newApp()
-    await app.ready()
+    await app.bootstrap()
 
     // Anonymous: both named schemes advertise how to authenticate.
     expect((await app.fetch('/mw-auth-multi')).status).toBe(401)
@@ -159,7 +159,7 @@ describe('authentication gate — requests', () => {
       seen = ctx.user
       return next()
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw-auth-anon/open', { headers: { 'x-default': 'someone' } })
 
@@ -186,7 +186,7 @@ describe('authentication gate — requests', () => {
       seen = ctx.user
       return next()
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mw-auth-open')
 

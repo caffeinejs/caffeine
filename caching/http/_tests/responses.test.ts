@@ -31,7 +31,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const miss = await app.fetch('/resp-status/missing')
     const hit = await app.fetch('/resp-status/missing')
@@ -71,7 +71,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const failed = await app.fetch('/resp-noncacheable/boom')
     expect(failed.status).toBe(500)
@@ -99,7 +99,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const failed = await app.fetch('/resp-nostore/boom')
 
@@ -130,7 +130,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const ok = await app.fetch('/resp-nostore-handler/ok')
     const missing = await app.fetch('/resp-nostore-handler/missing')
@@ -157,7 +157,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const first = await app.fetch('/resp-handler-cc/secret')
     const second = await app.fetch('/resp-handler-cc/secret')
@@ -182,7 +182,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const miss = await app.fetch('/resp-handler-validators/doc')
     expect(miss.headers.get('etag')).toBe('"v42"')
@@ -212,7 +212,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const miss = await app.fetch('/resp-headers/list')
     const hit = await app.fetch('/resp-headers/list')
@@ -241,7 +241,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/resp-cookie/start')
     const second = await app.fetch('/resp-cookie/start')
@@ -266,7 +266,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const miss = await app.fetch('/resp-cookie-public/list')
     const hit = await app.fetch('/resp-cookie-public/list')
@@ -297,7 +297,7 @@ describe('what the cache says about a response', () => {
       })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const miss = await app.fetch('/resp-vary/page', { headers: { origin: 'https://a.example' } })
     expect(miss.headers.get('vary')).toBe('Origin, Accept-Language')
@@ -322,7 +322,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const get = await app.fetch('/resp-head/data')
     const head = await app.fetch('/resp-head/data', { method: 'HEAD' })
@@ -353,7 +353,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const head = await app.fetch('/resp-head-own/data', { method: 'HEAD' })
     const get = await app.fetch('/resp-head-own/data')
@@ -378,7 +378,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const etag = (await app.fetch('/resp-304/data')).headers.get('etag') as string
     const res = await app.fetch('/resp-304/data', { headers: { 'if-none-match': etag } })
@@ -407,7 +407,7 @@ describe('what the cache says about a response', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const etag = (await app.fetch('/resp-304-fresh/data')).headers.get('etag') as string
     const res = await app.fetch('/resp-304-fresh/data', { headers: { 'if-none-match': etag } })
@@ -466,7 +466,7 @@ describe('a request authenticated without an Authorization header', () => {
 
     const app = signedIn({ onBypass: event => bypasses.push(event) })
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const alice = await app.fetch('/auth-private/me', { headers: { cookie: 'session=alice' } })
     expect(alice.headers.get('cache-control')).toBe('private, max-age=60')
@@ -496,7 +496,7 @@ describe('a request authenticated without an Authorization header', () => {
 
     const app = signedIn()
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/auth-public/catalog', { headers: { cookie: 'session=alice' } })
     const second = await app.fetch('/auth-public/catalog', { headers: { cookie: 'session=bob' } })

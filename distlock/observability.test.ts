@@ -55,7 +55,7 @@ async function newApp(
     }),
   )
 
-  await app.ready()
+  await app.bootstrap()
   opened.push(() => app.close())
 
   return { lock: app.container.get(kDistLock), log }

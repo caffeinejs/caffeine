@@ -32,7 +32,7 @@ describe('registerWattChecks', () => {
   // The same entry module runs under plain Node, where there is no Watt to answer.
   it('does nothing outside Watt', async () => {
     const app = createApplication()
-    await app.ready()
+    await app.bootstrap()
 
     expect(() => registerWattChecks(app)).not.toThrow()
     expect(getGlobal()).toBeUndefined()
@@ -44,7 +44,7 @@ describe('registerWattChecks', () => {
   it('answers readiness from the lifecycle: refused before run(), ready while serving, refused once closing', async () => {
     const watt = underWatt()
     const app = createApplication()
-    await app.ready()
+    await app.bootstrap()
     registerWattChecks(app)
 
     expect(await watt.readiness()).toEqual(refused('readyz'))
@@ -75,7 +75,7 @@ describe('registerWattChecks', () => {
     const watt = underWatt()
     const app = createApplication()
     app.container.bind(Postgres, t => t.toSelf().extends(HealthIndicator))
-    await app.ready()
+    await app.bootstrap()
     registerWattChecks(app)
     await app.run()
 
@@ -96,7 +96,7 @@ describe('registerWattChecks', () => {
     }
     const warn = vi.fn()
     const app = createApplication({ logger: { ...newNoopLogger(), warn } })
-    await app.ready()
+    await app.bootstrap()
 
     registerWattChecks(app)
 

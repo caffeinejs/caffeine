@@ -194,7 +194,7 @@ function controls(client: object, harness: Harness): unknown {
     $app: harness.app,
     $container: harness.app.container,
     $fetch: (input: Request | string | URL, init?: RequestInit) => harness.fetch(input, init),
-    $ready: () => harness.ready(),
+    $ready: () => harness.bootstrap(),
     $close: () => harness.close(),
     [Symbol.asyncDispose]: () => harness.close(),
   }

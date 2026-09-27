@@ -40,7 +40,7 @@ describe('HTTPCaching observer option', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(MissCounter)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/obs-opt-token/data')
 
@@ -59,7 +59,7 @@ describe('HTTPCaching observer option', () => {
     )
     close = () => app.close()
 
-    const failure = app.ready()
+    const failure = app.bootstrap()
 
     await expect(failure).rejects.toThrow(ErrConfiguration)
     await expect(failure).rejects.toThrow(
@@ -81,7 +81,7 @@ describe('HTTPCaching observer option', () => {
     const observer = new MissCounter()
     const app = createWebApplication().with(HTTPCaching({ store: new MemoryHTTPCacheStore(), observer }))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/obs-opt-object/data')
 

@@ -6,14 +6,14 @@ import { DEFAULT_INSTANCE } from './keys.js'
 export type TypeORMConfigurer<C = unknown> = FeatureConfigurer<TypeORMBuilder<C>, C>
 
 /**
- * Installs a TypeORM DataSource, opened before `ready()` returns and closed on `close()`.
+ * Installs a TypeORM DataSource, opened before `bootstrap()` returns and closed on `close()`.
  *
  * The callback is required: a feature with no DataSource has nothing to do.
  *
  * @param instance - Names this DataSource, so an application can install several. The unnamed one is bound
  *   under TypeORM's `DataSource`; a named one under `dataSourceKey(instance)`.
  *
- * @throws {@link ErrMissingDataSourceOptions} at `ready()`, when the callback never calls `dataSource(...)`.
+ * @throws {@link ErrMissingDataSourceOptions} at `bootstrap()`, when the callback never calls `dataSource(...)`.
  */
 export function TypeORM<C = unknown>(configure: TypeORMConfigurer<C>): Feature<C>
 export function TypeORM<C = unknown>(instance: string, configure: TypeORMConfigurer<C>): Feature<C>

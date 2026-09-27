@@ -20,7 +20,7 @@ describe('static feature', () => {
 
   it('serves a file under the configured prefix', async () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/static/hello.txt')
 
@@ -31,7 +31,7 @@ describe('static feature', () => {
 
   it('sets the css content-type from the extension', async () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/assets' })))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/assets/style.css')
 
@@ -41,7 +41,7 @@ describe('static feature', () => {
 
   it('404s for a missing file', async () => {
     app = createWebApplication({}).with(staticFiles(s => s.serve(fixtures, { prefix: '/static' })))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/static/nope.txt')
 
@@ -52,7 +52,7 @@ describe('static feature', () => {
     app = createWebApplication({}).with(
       staticFiles(s => s.serve(fixtures, { prefix: '/one' }).serve(fixtures2, { prefix: '/two' })),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const one = await app.fetch('/one/hello.txt')
     const two = await app.fetch('/two/other.txt')

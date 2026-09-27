@@ -35,7 +35,7 @@ describe('Fastify Adapter', () => {
     const app = createWebApplication().serverCallback((_context, server) => {
       server.get('/', () => ({ ok: true }))
     })
-    await app.ready()
+    await app.bootstrap()
 
     const result = await app.fetch('/')
 
@@ -56,7 +56,7 @@ describe('Fastify Adapter', () => {
       void [TestController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
 
@@ -85,7 +85,7 @@ describe('Fastify Adapter', () => {
       void [PickersController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/test/pickers?foo=bar')
 
@@ -112,7 +112,7 @@ describe('Fastify Adapter', () => {
       void [AsyncPickController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/async-pick/value')
       expect(res.status).toBe(200)
@@ -135,7 +135,7 @@ describe('Fastify Adapter', () => {
       void [MixedPickController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/mixed-pick/42')
       expect(res.status).toBe(200)
@@ -158,7 +158,7 @@ describe('Fastify Adapter', () => {
       void [MethodController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       for (const m of methods) {
         const res = await app.fetch('/method-test/action', { method: m })
@@ -185,7 +185,7 @@ describe('Fastify Adapter', () => {
       void [RequestScopedController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const r1 = await app.fetch('/req-ctrl/id')
       const r2 = await app.fetch('/req-ctrl/id')
@@ -219,7 +219,7 @@ describe('Fastify Adapter', () => {
       void [TransientController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const r1 = await app.fetch('/transient-ctrl/svc-id')
       const r2 = await app.fetch('/transient-ctrl/svc-id')

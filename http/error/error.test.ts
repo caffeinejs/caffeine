@@ -141,7 +141,7 @@ void [PetsController, BoomController]
 describe('error handler dispatch', () => {
   it('renders the matching @Catch handler with injected dependencies', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/pets/42')
 
@@ -151,7 +151,7 @@ describe('error handler dispatch', () => {
 
   it('routes an arbitrary Error to the @Catch(Error) catch-all', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/boom')
 
@@ -265,7 +265,7 @@ void [ShopController, WidgetsController, MixedController, ScopedController, TxCo
 describe('per-controller error handler', () => {
   it('wins over a global handler for the same error type', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/shop/9')
 
@@ -275,7 +275,7 @@ describe('per-controller error handler', () => {
 
   it('catches subclasses via a base-type @Catch method', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/widgets/conflict')
 
@@ -285,7 +285,7 @@ describe('per-controller error handler', () => {
 
   it('falls back to the global handler for an uncovered error type', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/mixed/other')
 
@@ -295,7 +295,7 @@ describe('per-controller error handler', () => {
 
   it('runs on the same request-scoped instance that threw', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/scoped/boom')
 
@@ -305,7 +305,7 @@ describe('per-controller error handler', () => {
 
   it('runs on the same transient instance that threw', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/tx/boom')
 
@@ -315,7 +315,7 @@ describe('per-controller error handler', () => {
 
   it('catches a schema-validation error thrown before the route handler', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/validated', {
       method: 'POST',
@@ -497,7 +497,7 @@ void [CatchByNamedController, CatchByValidatedController, CatchByOrphanControlle
 describe('@Catch with multiple error types', () => {
   it('serves every declared error type from one handler class', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const alpha = await app.fetch('/multi/alpha')
     const gamma = await app.fetch('/multi/gamma')
@@ -510,7 +510,7 @@ describe('@Catch with multiple error types', () => {
 
   it('serves subclasses of a declared error type', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/multi/beta')
 
@@ -522,7 +522,7 @@ describe('@Catch with multiple error types', () => {
 describe('@CatchWith', () => {
   it('overrides the global handler for the controller, with dependencies injected', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-shop/alpha')
 
@@ -532,7 +532,7 @@ describe('@CatchWith', () => {
 
   it('overrides the controller handler on a single route', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-shop/override')
 
@@ -542,7 +542,7 @@ describe('@CatchWith', () => {
 
   it('leaves error types it does not declare to the @Catch method', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-shop/gamma')
 
@@ -552,7 +552,7 @@ describe('@CatchWith', () => {
 
   it('wins over a @Catch method registered for the same error type', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-priority/alpha')
 
@@ -562,7 +562,7 @@ describe('@CatchWith', () => {
 
   it('catches a schema-validation error from a route-level handler', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-validated', {
       method: 'POST',
@@ -576,7 +576,7 @@ describe('@CatchWith', () => {
 
   it('resolves a handler by @Named identifier, honouring @Primary', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/cb-named/delta')
 
@@ -586,7 +586,7 @@ describe('@CatchWith', () => {
 
   it('keeps an unenrolled handler out of the application-wide map', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     // ErrDelta is served only by handlers nobody enrolled. A controller that does not name them cannot
     // reach them: the lookup falls through to the enrolled @Catch(Error) catch-all.

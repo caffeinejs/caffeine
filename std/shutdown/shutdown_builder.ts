@@ -92,7 +92,7 @@ export class ShutdownBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    // Validated here, at `ready()` while the logs are still being watched, rather than during the shutdown a
+    // Validated here, at `bootstrap()` while the logs are still being watched, rather than during the shutdown a
     // bad budget would ruin.
     const policy = finalizeShutdownOptions(mergeShutdownConfig(this.#inputs(), { dispatcher: this.#dispatcher }), {
       drainDelayInCode: this.#values.drainDelay !== undefined,

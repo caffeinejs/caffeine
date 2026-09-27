@@ -62,7 +62,7 @@ void [CustomController]
 describe('custom ResponseResult dispatch', () => {
   async function buildApp() {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(CustomErrorHandler))
-    await app.ready()
+    await app.bootstrap()
     return app
   }
 

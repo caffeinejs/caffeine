@@ -147,7 +147,7 @@ describe('an application on an adapter that is not Fastify', () => {
       .with(unit('third'))
       .use((_ctx, next) => next(), { hook: 'after' })
 
-    await app.ready()
+    await app.bootstrap()
 
     const root = (adapter.input?.extensions.root() ?? []).map(entry =>
       entry.kind === 'feature' ? `feature:${entry.name}` : `extension:${entry.extension.unit}`,
@@ -178,7 +178,7 @@ describe('an application on an adapter that is not Fastify', () => {
       app.basePath(given)
     }
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(adapter.input).toBeDefined()
     expect(adapter.input!.basePath).toBe(expected)

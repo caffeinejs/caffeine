@@ -143,7 +143,7 @@ async function buildApp() {
   const builder = createWebApplication({ container })
   builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())
   const app = builder
-  await app.ready()
+  await app.bootstrap()
   return app
 }
 
@@ -247,7 +247,7 @@ async function buildDurableApp(graceSeconds?: number) {
       .addCredentials(),
   )
   const app = builder
-  await app.ready()
+  await app.bootstrap()
   return { app, store }
 }
 
@@ -482,7 +482,7 @@ describe('cookie sign-in under a base path', () => {
           .authorize({})
           .get('/*', () => ({ shell: true })),
       )
-    await app.ready()
+    await app.bootstrap()
     return app
   }
 

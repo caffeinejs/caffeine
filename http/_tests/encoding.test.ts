@@ -50,7 +50,7 @@ describe('Encoding', () => {
     void [SingleEncodingController]
 
     const app = encodingApp()
-    await app.ready()
+    await app.bootstrap()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
@@ -76,7 +76,7 @@ describe('Encoding', () => {
     void [MultiEncodingController]
 
     const app = encodingApp()
-    await app.ready()
+    await app.bootstrap()
 
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
     const brotliPayload = await brotli(JSON.stringify({ msg: 'hello' }))
@@ -115,7 +115,7 @@ describe('Encoding', () => {
     void [ClassEncodingController]
 
     const app = encodingApp()
-    await app.ready()
+    await app.bootstrap()
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 

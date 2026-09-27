@@ -56,7 +56,7 @@ describe('route extensions', () => {
       void [DecoratedStreamController]
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const payload = Buffer.from('hello stream world')
       const send = (path: string) =>
@@ -80,7 +80,7 @@ describe('route extensions', () => {
         })
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/ext-buffer/upload', {
         method: 'POST',
@@ -149,7 +149,7 @@ describe('fst', () => {
         })
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/fst/hooked')).status).toBe(200)
       expect(order).toEqual(['fst', 'handler'])
@@ -171,7 +171,7 @@ describe('fst', () => {
         })
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       // attachValidation turns a validation failure into a flag on the request instead of a 400.
       const res = await app.fetch('/fst-opts/validated?n=nope')

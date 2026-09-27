@@ -29,7 +29,7 @@ class Users {
 }
 ```
 
-The connection is open before `ready()` returns and closed during `close()`, after everything that used it.
+The connection is open before `bootstrap()` returns and closed during `close()`, after everything that used it.
 
 ## Configuration
 
@@ -133,7 +133,7 @@ project — see [mixing decorators](../../ai/docs/mixing-decorators.md).
 ## Start-up errors
 
 Everything this package can detect is decided while the container compiles, so a misconfigured application
-fails `ready()` instead of one request at a time.
+fails `bootstrap()` instead of one request at a time.
 
 | Error                         | Cause                                                        |
 | ----------------------------- | ------------------------------------------------------------ |

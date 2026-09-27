@@ -20,7 +20,7 @@ void [PetsController]
 describe('unmatched routes', () => {
   it('renders the same envelope as a 404 a handler threw', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const thrown = (await (await app.fetch('/pets/42')).json()) as Record<string, unknown>
     const unmatched = (await (await app.fetch('/no-such-route')).json()) as Record<string, unknown>
@@ -48,7 +48,7 @@ describe('unmatched routes', () => {
     })
 
     const app = createWebApplication().with(() => shell)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/client/route?a=b')
 
@@ -67,7 +67,7 @@ describe('unmatched routes', () => {
     })
 
     const app = createWebApplication().with(() => partial)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/nope')
 
@@ -84,7 +84,7 @@ describe('unmatched routes', () => {
         void reply.code(418).send({ mine: true })
       })
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/nope')
 

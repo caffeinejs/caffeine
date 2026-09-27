@@ -232,7 +232,7 @@ describe('brewer against an application in process', () => {
       'should keep it in every request, from %s',
       async baseURL => {
         const based = createWebApplication().basePath('/api').mount(pets)
-        await based.ready()
+        await based.bootstrap()
 
         try {
           const calls: string[] = []

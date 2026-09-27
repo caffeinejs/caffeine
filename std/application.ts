@@ -76,7 +76,7 @@ export const caffeineConfigSchema = $t.Object({
   profiles: $t.List($t.String(), { default: DEFAULT_CAFFEINE_CONFIG.profiles }),
 })
 
-/** Thrown when an application is configured after {@link Application.ready} has started. */
+/** Thrown when an application is configured after {@link Application.bootstrap} has started. */
 export class ErrApplicationStarted extends ErrCaffeine {
   constructor() {
     super('Cannot configure the application: it has already started', 'ERR_APPLICATION_STARTED')
@@ -109,7 +109,7 @@ export class ErrApplicationNotReady extends ErrCaffeine {
       `Cannot ${action}: the application is not ready`,
       'ERR_APPLICATION_NOT_READY',
       undefined,
-      'Call "ready()" or "run()" first',
+      'Call "bootstrap()" or "run()" first',
     )
   }
 }
@@ -121,14 +121,14 @@ export class ErrConfigNotReady extends ErrCaffeine {
       'Cannot read the application configuration: the config is not ready',
       'ERR_CONFIG_NOT_READY',
       undefined,
-      'Call "ready()" or "run()" first',
+      'Call "bootstrap()" or "run()" first',
     )
   }
 }
 
 /**
  * A headless application: owns the DI container, the installed {@link Feature}s, and the lifecycle
- * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
+ * (bootstrap → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
  * binding that implements `OnBootstrap` / `OnDestroy` runs during `container.init()` / `container.dispose()`.
  * The HTTP `WebApplication` extends this and fills the protected `setup`/`start`/`stop` steps.
  *
@@ -153,8 +153,8 @@ export class Application<TConfig = unknown> {
   readonly #shutdownBuilder = new ShutdownBuilder<TConfig>()
 
   // Registered unconditionally, like #shutdownBuilder: a `.logger(...)` call is deferred to this Feature's own
-  // `configure()`, during `ready()`, so it sees resolved configuration. `#logger` (not just the builder) is
-  // held too, seeded here in the constructor, so `log` answers before `ready()` without touching the
+  // `configure()`, during `bootstrap()`, so it sees resolved configuration. `#logger` (not just the builder) is
+  // held too, seeded here in the constructor, so `log` answers before `bootstrap()` without touching the
   // container — refreshed again once this builder's `configure()` has run.
   readonly #loggerBuilder = new LoggerBuilder<TConfig>()
   #logger: Logger
@@ -187,7 +187,7 @@ export class Application<TConfig = unknown> {
       this.#container.autoWire()
     }
 
-    // Loaded in `ready()`, once the profiles are known. An application that declared nothing still loads: no
+    // Loaded in `bootstrap()`, once the profiles are known. An application that declared nothing still loads: no
     // source, and a schema that keeps every key, so the framework's own block is read the same way.
     this.#definition = (options.config as ConfigDefinition<unknown> | undefined) ?? {
       schema: passthroughConfigSchema,
@@ -203,7 +203,7 @@ export class Application<TConfig = unknown> {
     this.#register(this.#loggerBuilder)
 
     // Seeds the builder from the simple, eager path; `.logger(configure)` layers on top of this during
-    // `ready()`. Bound here so `logToken()` resolves even for an application that never calls `.logger()`.
+    // `bootstrap()`. Bound here so `logToken()` resolves even for an application that never calls `.logger()`.
     if (options.logger === false) {
       this.#loggerBuilder.disable(true)
     } else if (options.logger !== undefined) {
@@ -217,7 +217,7 @@ export class Application<TConfig = unknown> {
     return this.#container
   }
 
-  /** The application name from `caffeine.name`. Empty until {@link ready} has run. */
+  /** The application name from `caffeine.name`. Empty until {@link bootstrap} has run. */
   get name(): string {
     return this.#name
   }
@@ -239,7 +239,7 @@ export class Application<TConfig = unknown> {
    * The application's {@link ApplicationHealth}: the instance its container binds, which injecting it or
    * `container.get(ApplicationHealth)` also returns.
    *
-   * @throws ErrApplicationNotReady until {@link ready} has resolved, and once {@link close} has disposed the
+   * @throws ErrApplicationNotReady until {@link bootstrap} has resolved, and once {@link close} has disposed the
    *   container.
    */
   get health(): ApplicationHealth {
@@ -254,7 +254,7 @@ export class Application<TConfig = unknown> {
   /**
    * The live configuration features are configured and bootstrapped with. One identity for the life of the
    * application, and a node read from it follows every reload. Available once configuration has loaded, which
-   * is before {@link ready} resolves.
+   * is before {@link bootstrap} resolves.
    *
    * @throws ErrConfigNotReady until configuration has loaded.
    */
@@ -292,7 +292,7 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * Installs a feature. Callable at any point before {@link ready}, and once per {@link kFeatureName} — an
+   * Installs a feature. Callable at any point before {@link bootstrap}, and once per {@link kFeatureName} — an
    * instanced feature (`kafka('orders')`) carries a distinct name, so it does not clash with the default
    * instance.
    *
@@ -307,7 +307,7 @@ export class Application<TConfig = unknown> {
    * ```
    *
    * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link kFeatureName} is already installed.
-   * @throws ErrApplicationStarted when {@link ready} has already started.
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
   with(feature: Feature<TConfig>): this {
     this.assertConfigurable()
@@ -328,7 +328,7 @@ export class Application<TConfig = unknown> {
    * A fluent method is the last word; `SHUTDOWN__DRAIN_DELAY` reaches the feature only through
    * `.shutdown((s, { config }) => s.config(config.shutdown))`.
    *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
   shutdown(configure: FeatureConfigurer<ShutdownBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
@@ -345,10 +345,10 @@ export class Application<TConfig = unknown> {
    * Configures the application's logger, with access to the resolved configuration — `.logger((b, { config })
    * => b.disable(config.app.logEnabled))`. The feature is registered either way, so this only overrides the
    * default.
-   * Deferred to `ready()`, like every other feature: {@link log} and `logToken()` reflect it once `ready()`
+   * Deferred to `bootstrap()`, like every other feature: {@link log} and `logToken()` reflect it once `bootstrap()`
    * has run, not as soon as this returns.
    *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
   logger(configure: FeatureConfigurer<LoggerBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
@@ -357,8 +357,8 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * Refuses configuration once {@link ready} has started: the feature list is read once, so a later change
-   * would be dropped rather than applied. The {@link ready} callback is the exception, and it runs before
+   * Refuses configuration once {@link bootstrap} has started: the feature list is read once, so a later change
+   * would be dropped rather than applied. The {@link bootstrap} callback is the exception, and it runs before
    * that list is read.
    */
   protected assertConfigurable(): void {
@@ -395,18 +395,18 @@ export class Application<TConfig = unknown> {
    *   initializes.
    * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
    */
-  ready(): Promise<void>
-  ready(configure: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void>
-  ready(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
+  bootstrap(): Promise<void>
+  bootstrap(configure: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void>
+  bootstrap(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     if (this.#closing !== undefined) {
       return Promise.reject(new ErrApplicationClosed())
     }
 
-    this.#boot ??= this.#readyOnce(configure)
+    this.#boot ??= this.#bootstrapOnce(configure)
     return this.#boot
   }
 
-  async #readyOnce(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
+  async #bootstrapOnce(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     this.#booting = true
 
     // Decided before anything loads, so the load that follows is profile-aware on its first and only pass. The
@@ -539,7 +539,7 @@ export class Application<TConfig = unknown> {
   /**
    * Readies the application if needed, starts it, and resolves to its {@link RunInfo}.
    *
-   * Runs once. A second call is refused, where one to {@link ready} or {@link close} joins the first: a subclass's
+   * Runs once. A second call is refused, where one to {@link bootstrap} or {@link close} joins the first: a subclass's
    * `run()` takes start options — the HTTP application's listen options — and joining would drop a second call's
    * without a word.
    *
@@ -557,7 +557,7 @@ export class Application<TConfig = unknown> {
     this.#running = true
 
     if (!this.#ready) {
-      await this.ready()
+      await this.bootstrap()
     }
 
     // A close that arrived during the boot wins: starting now would open what nothing is left to close.
@@ -592,11 +592,11 @@ export class Application<TConfig = unknown> {
    * its instances in parallel-safe reverse order with no place to hold a fixed delay ahead of them.
    *
    * Safe at any point of the lifecycle, and final: a closed application is not readied or run again. Before
-   * {@link ready} it tears nothing down, since nothing was brought up, and the application is closed all the same;
+   * {@link bootstrap} it tears nothing down, since nothing was brought up, and the application is closed all the same;
    * during it, it waits for the boot to settle first. An application that never served — readied but never run —
    * skips step 2, having no routing table to wait for. One still starting when the close arrives finishes starting,
-   * so that what it opened is then closed. After a failed {@link ready}, it tears down what the boot brought
-   * up and logs, rather than throws, what that teardown hits: `ready()` already reported the failure, and in a
+   * so that what it opened is then closed. After a failed {@link bootstrap}, it tears down what the boot brought
+   * up and logs, rather than throws, what that teardown hits: `bootstrap()` already reported the failure, and in a
    * `finally` a second error would replace it.
    *
    * @throws AggregateError when teardown fails or overruns its budget, `ErrShutdownTimeout` first — to the call
@@ -625,7 +625,7 @@ export class Application<TConfig = unknown> {
     return this.#closing
   }
 
-  /** A close that arrived before {@link ready} finished: waits for the boot, then closes what it left. */
+  /** A close that arrived before {@link bootstrap} finished: waits for the boot, then closes what it left. */
   async #closeAfterBoot(boot: Promise<void>): Promise<void> {
     const booted = await boot.then(
       () => true,
@@ -639,7 +639,7 @@ export class Application<TConfig = unknown> {
     this.#availability.beginDrain()
 
     for (const error of await this.#teardown(this.shutdownOptions().shutdownTimeoutMs)) {
-      this.#logger.error({ err: error }, 'cannot tear down what a failed ready() brought up')
+      this.#logger.error({ err: error }, 'cannot tear down what a failed bootstrap() brought up')
     }
 
     this.#availability.markBroken('closed')
@@ -779,7 +779,7 @@ export class Application<TConfig = unknown> {
     return this.#store
   }
 
-  /** Whether `ready()` has completed. */
+  /** Whether `bootstrap()` has completed. */
   protected get started(): boolean {
     return this.#ready
   }
@@ -819,7 +819,7 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * Ran during {@link ready}, after the callback and before the feature list is read. Subclasses install
+   * Ran during {@link bootstrap}, after the callback and before the feature list is read. Subclasses install
    * features that depend on what that callback configured. Configuration is still open. The container has not
    * initialized.
    */
@@ -827,7 +827,7 @@ export class Application<TConfig = unknown> {
     // Nothing in a headless application.
   }
 
-  /** Ran during `ready()`, after `container.init()`. Subclasses wire their platform here. */
+  /** Ran during `bootstrap()`, after `container.init()`. Subclasses wire their platform here. */
   protected setup(): Promise<void> {
     return Promise.resolve()
   }
@@ -847,7 +847,7 @@ export class Application<TConfig = unknown> {
  * Creates a headless {@link Application}. Mirrors the HTTP `createWebApplication`.
  *
  * Install features with `.with(feature)` or `.with(feature(configure))` — can be called at any point in the
- * chain before `ready()`. Configuration is built separately with `newConfiguration` and passed in as
+ * chain before `bootstrap()`. Configuration is built separately with `newConfiguration` and passed in as
  * `{ config }`.
  */
 export function createApplication<TConfig = unknown>(options?: ApplicationOptions<TConfig>): Application<TConfig> {

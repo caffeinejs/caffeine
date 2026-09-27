@@ -67,7 +67,7 @@ function verdict(probe: string, result: ProbeResult): WattCheckResult {
 }
 ```
 
-- **Register after `ready()` and before `run()`.** `app.health` fails until `ready()` has run, and until `run()`
+- **Register after `bootstrap()` and before `run()`.** `app.health` fails until `bootstrap()` has run, and until `run()`
   readiness refuses, so Watt never sees the application ready before it serves.
 - **Guard with `hasField`.** The setters throw wherever the global lacks their field: outside Watt, and under a
   runtime older than 3.56, which registers its global without the fields they look up. The guard makes the same code
@@ -105,7 +105,7 @@ internal applications, which other applications reach through the runtime withou
 ```ts
 const app = createWebApplication().with(health()).mount(routes)
 
-await app.ready()
+await app.bootstrap()
 registerWattChecks(app)
 await app.run()
 
@@ -125,7 +125,7 @@ const app = createWebApplication()
   .shutdown(s => s.drainDelay(0))
 
 export async function create(): Promise<FastifyInstance> {
-  await app.ready()
+  await app.bootstrap()
   registerWattChecks(app)
   app.availability.markStarted().acceptTraffic()
 
@@ -152,7 +152,7 @@ of it.
 ```ts
 const app = createApplication().shutdown(s => s.drainDelay(0))
 
-await app.ready()
+await app.bootstrap()
 registerWattChecks(app)
 await app.run()
 
@@ -163,7 +163,7 @@ export async function close(): Promise<void> {
 
 A headless application has no `health()` to tune its budgets with and runs on the defaults: 2 s per indicator, 3 s
 per probe, results reused for 1 s. To change them, bind `kHealthRegistryOptions` from `@caffeinejs/std/health`
-before `ready()`.
+before `bootstrap()`.
 
 ## Shutting down
 

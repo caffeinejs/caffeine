@@ -83,7 +83,7 @@ describe('registerRouteGroup', () => {
     const builder = createWebApplication()
     builder.addFeature(new ProgrammaticService())
     app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/programmatic.json')
 
@@ -96,7 +96,7 @@ describe('registerRouteGroup', () => {
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ schemes: ['Bearer'] }))
     app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const anonymous = await app.fetch('/programmatic.json')
     expect(anonymous.status).toBe(401)
@@ -114,7 +114,7 @@ describe('registerRouteGroup', () => {
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     builder.addFeature(new ProgrammaticService({ roles: ['ops'] }))
     app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const withoutRole = await signToken({ sub: 'user-1' })
     const denied = await app.fetch('/programmatic.json', {

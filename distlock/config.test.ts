@@ -78,7 +78,7 @@ async function newLock(
     }),
   )
 
-  await app.ready()
+  await app.bootstrap()
   opened.push(() => app.close())
 
   return app.container.get(kDistLock)
@@ -169,7 +169,7 @@ describe('distlock configuration', () => {
       distlock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(2)),
     )
 
-    await expect(app.ready()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
   // A bare number names no unit. Read as duration text it was a lease of 0, which lapses as it is granted.
@@ -181,7 +181,7 @@ describe('distlock configuration', () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
       distlock<AppConfig>((d, { config }) => d.backend(new MemoryLockBackend()).config(config.app.distlock)),
     )
-    const booting = app.ready()
+    const booting = app.bootstrap()
 
     await expect(booting).rejects.toThrow(ErrConfigValidation)
     await expect(booting).rejects.toThrow('app.distlock.ttl')
@@ -198,7 +198,7 @@ describe('distlock configuration', () => {
   it('refuses to start without a backend', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(distlock())
 
-    await expect(app.ready()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
   it('refuses to start when the backend key resolves to nothing', async () => {
@@ -206,7 +206,7 @@ describe('distlock configuration', () => {
       distlock(d => d.backend(kDistLockBackend)),
     )
 
-    await expect(app.ready()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
   it('resolves a backend bound under a key', async () => {
@@ -215,7 +215,7 @@ describe('distlock configuration', () => {
 
     const app = createApplication({ container }).with(distlock(d => d.backend(kDistLockBackend)))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     expect(await app.container.get(kDistLock).tryAcquire('k')).toBeDefined()

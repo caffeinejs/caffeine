@@ -47,9 +47,9 @@ one is installed. `dataSourceKey(name)` is the only key a named instance answers
 ## The DataSource binding is async, and cannot be lazy
 
 `toAsyncFactory` is what makes `init()` await `initialize()` before any binding that injects a repository
-resolves, so the connection is open by the time `ready()` returns. The container rejects `lazy` on an async
+resolves, so the connection is open by the time `bootstrap()` returns. The container rejects `lazy` on an async
 binding, and a `bootstrap` hook would force-resolve a lazy binding anyway — so "lazy" and "connected before
-`ready()`" cannot both hold. Do not add a `lazy` knob without resolving that first.
+`bootstrap()`" cannot both hold. Do not add a `lazy` knob without resolving that first.
 
 ## Entities are `EntitySchema`
 

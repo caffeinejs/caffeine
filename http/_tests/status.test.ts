@@ -16,7 +16,7 @@ describe('Status', () => {
     void [StatusController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/status/created', { method: 'POST' })
 
@@ -35,7 +35,7 @@ describe('Status', () => {
     void [StatusDefaultController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/status-default/ok')
 
@@ -53,7 +53,7 @@ describe('Status', () => {
     void [StatusEmptyController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/status-empty/ok')
 

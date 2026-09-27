@@ -14,7 +14,7 @@ import { Controller, Get, WebApplication, createWebApplication } from './index.j
 
 /**
  * The server the adapter builds from `.server(...)`: what reaches Fastify's constructor and its `listen()`, how
- * several calls fold together, what `run(...)` adds, and what is reachable before `ready()`.
+ * several calls fold together, what `run(...)` adds, and what is reachable before `bootstrap()`.
  */
 
 const schema = $t.Object({
@@ -56,10 +56,10 @@ describe('the server .server(...) configures', () => {
     expect(await res.json()).toEqual({ ok: true })
   })
 
-  it('binds once when ready() precedes run()', async () => {
+  it('binds once when bootstrap() precedes run()', async () => {
     app = createWebApplication().server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
 
-    await app.ready()
+    await app.bootstrap()
     expect(app.address).toBeUndefined()
 
     await app.run()
@@ -157,7 +157,7 @@ describe('the server .server(...) configures', () => {
         decorated = instance.hasDecorator('$container')
       })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(callbackContext).toBe(factoryContext)
     expect(dbURL).toBe('x')
@@ -167,7 +167,7 @@ describe('the server .server(...) configures', () => {
   it('constructs Fastify with the factory section', async () => {
     app = createWebApplication().server(() => ({ factory: { routerOptions: { ignoreTrailingSlash: true } } }))
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/adapter-server/ping/')
     expect(res.status).toBe(200)
@@ -197,7 +197,7 @@ describe('the server .server(...) configures', () => {
     expect(app.address!.port).toBe(bound)
   })
 
-  it('has no server to reach before ready()', async () => {
+  it('has no server to reach before bootstrap()', async () => {
     app = createWebApplication()
 
     expect(() => app!.instance).toThrow(ErrApplicationNotReady)

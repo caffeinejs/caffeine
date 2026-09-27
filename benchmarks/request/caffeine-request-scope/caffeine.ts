@@ -86,5 +86,5 @@ const app = createWebApplication().serverCallback((_context, server) => {
   })
 })
 
-await app.ready()
+await app.bootstrap()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

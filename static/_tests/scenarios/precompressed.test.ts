@@ -44,7 +44,7 @@ describe('a mount serving pre-compressed siblings', () => {
 
   it('serves brotli to a client that accepts it', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'br' },
@@ -59,7 +59,7 @@ describe('a mount serving pre-compressed siblings', () => {
 
   it('falls back through the encodings the client actually accepts', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const gzip = await app.fetch('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'gzip' },
@@ -77,7 +77,7 @@ describe('a mount serving pre-compressed siblings', () => {
   // so a compiled route serving the shell gets it without asking.
   it('compresses the shell served from a compiled route', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
 
@@ -89,7 +89,7 @@ describe('a mount serving pre-compressed siblings', () => {
   // What `spaMount()`'s globIgnore is for: reachable as its own URL, this would hand out unreadable bytes.
   it('does not register the compressed siblings as routes of their own', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     for (const path of ['/assets/app-Ab12Cd34.js.br', '/assets/app-Ab12Cd34.js.gz']) {
       await expectNotFoundJSON(await app.fetch(path, { headers: NAVIGATION }))
@@ -98,7 +98,7 @@ describe('a mount serving pre-compressed siblings', () => {
 
   it('still caches the hashed assets immutably', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'br' },

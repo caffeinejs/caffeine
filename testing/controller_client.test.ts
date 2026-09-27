@@ -71,7 +71,7 @@ describe('controllerClient()', () => {
 
   beforeAll(async () => {
     app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
     baseURL = await app.instance.listen({ port: 0, host: '127.0.0.1' })
   })
 

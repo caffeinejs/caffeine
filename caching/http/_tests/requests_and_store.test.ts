@@ -46,7 +46,7 @@ describe('what a request may ask of the cache', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/req-no-store/data', { headers: { 'cache-control': 'No-Store' } })
     const next = await app.fetch('/req-no-store/data')
@@ -70,7 +70,7 @@ describe('what a request may ask of the cache', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/req-case/data')
     const fresh = await app.fetch('/req-case/data', { headers: { 'cache-control': 'No-Cache' } })
@@ -93,7 +93,7 @@ describe('what a request may ask of the cache', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/req-pragma/data')
     const res = await app.fetch('/req-pragma/data', { headers: { pragma: 'no-cache', 'cache-control': 'max-age=60' } })
@@ -117,7 +117,7 @@ describe('what a request may ask of the cache', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     // Only the clock the cache reads an entry's age from is moved; the store's own ttl runs on another.
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -174,7 +174,7 @@ describe('what of the query the key carries', () => {
   it('keeps the parameters a route lists and drops the rest, in any order', async () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     expect(await status(app, '/query/listed?page=1&utm_source=mail')).toBe('MISS')
     expect(await status(app, '/query/listed?utm_source=ad&page=1')).toBe('HIT')
@@ -185,7 +185,7 @@ describe('what of the query the key carries', () => {
   it('falls back to the install list, and a route may leave the whole query out', async () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).varyByQuery(['q'])))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     expect(await status(app, '/query/unlisted?q=cat&utm_source=mail')).toBe('MISS')
     expect(await status(app, '/query/unlisted?q=cat')).toBe('HIT')
@@ -199,7 +199,7 @@ describe('what of the query the key carries', () => {
   it('counts the whole query when nobody lists anything', async () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     expect(await status(app, '/query/unlisted?a=1')).toBe('MISS')
     expect(await status(app, '/query/unlisted?a=2')).toBe('MISS')
@@ -260,7 +260,7 @@ describe('a response left out of the store', () => {
       ),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const first = await app.fetch('/skip/large')
     const second = await app.fetch('/skip/large')
@@ -283,7 +283,7 @@ describe('a response left out of the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/skip/cookie')
 
@@ -298,7 +298,7 @@ describe('a response left out of the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const first = await app.fetch('/skip/stream')
     const second = await app.fetch('/skip/stream')
@@ -327,7 +327,7 @@ describe('a response left out of the store', () => {
       ),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const first = await app.fetch('/skip/empty')
     const second = await app.fetch('/skip/empty')
@@ -347,7 +347,7 @@ describe('a response left out of the store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize('lots')))
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(/maxEntrySize must be a byte size/)
+    await expect(app.bootstrap()).rejects.toThrow(/maxEntrySize must be a byte size/)
   })
 })
 
@@ -456,7 +456,7 @@ describe('a store that rejects', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(observer)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     store.failPut = true
     const written = await app.fetch('/store-down/data')
@@ -488,7 +488,7 @@ describe('a store that rejects', () => {
 
     const app = createWebApplication({ logger: log }).with(HTTPCaching(b => b.store(store).observer({ onHit() {} })))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/store-down/data')
     await app.fetch('/store-down/data')
@@ -507,7 +507,7 @@ describe('a store that rejects', () => {
       HTTPCaching(b => b.store(store).observer({ onError: event => errors.push(event) })),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/store-down/data')
 
@@ -569,7 +569,7 @@ describe('a store that never answers', () => {
       ),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const read = await app.fetch('/store-hung/data')
     const evicted = await app.fetch('/store-hung/data', { method: 'POST' })
@@ -593,7 +593,7 @@ describe('a store that never answers', () => {
     )
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(/storeTimeout must be a positive duration/)
+    await expect(app.bootstrap()).rejects.toThrow(/storeTimeout must be a positive duration/)
   })
 })
 
@@ -632,7 +632,7 @@ describe('an entry the application put in the store itself', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
     const res = await app.fetch('/store-warm/data')
 
     expect(res.headers.get('x-cache')).toBe('HIT')
@@ -672,7 +672,7 @@ describe('a store that hands back an entry past the route ttl', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore(lru)).observer({ onMiss: event => misses.push(event) })),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     // `allowStale` hands the entry back whatever its age, so the clock the cache reads is the only one to move.
     vi.useFakeTimers({ toFake: ['Date'] })

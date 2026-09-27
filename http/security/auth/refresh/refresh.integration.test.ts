@@ -120,7 +120,7 @@ async function buildApp() {
       .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
   )
   const app = builder
-  await app.ready()
+  await app.bootstrap()
   return { app, store }
 }
 

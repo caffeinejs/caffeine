@@ -23,7 +23,7 @@ describe('createWebApplication default Fastify form', () => {
     void [DefaultAppController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/default-app/data')
     expect(res.status).toBe(200)
@@ -32,7 +32,7 @@ describe('createWebApplication default Fastify form', () => {
 
   it('exposes a Fastify instance', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     expect(typeof (app.instance as { inject?: unknown }).inject).toBe('function')
   })
@@ -49,7 +49,7 @@ describe('createWebApplication default Fastify form', () => {
 
     const container = new CaffeineIoC()
     const app = createWebApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container).toBe(container)
 
@@ -75,18 +75,18 @@ describe('createWebApplication default Fastify form', () => {
     }
 
     const app = createWebApplication().with(probe)
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ value: 'hello' })
   })
 })
 
 describe('configuring a started web application', () => {
-  // The HTTP-only methods are refused the same way the shared ones are: once `ready()` has read the feature
+  // The HTTP-only methods are refused the same way the shared ones are: once `bootstrap()` has read the feature
   // list, a server port or an authentication scheme written afterwards would never take effect.
-  it('refuses server, authentication, guards and plugin configuration once ready() has run', async () => {
+  it('refuses server, authentication, guards and plugin configuration once bootstrap() has run', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     expect(() => app.server(() => ({}))).toThrow(ErrApplicationStarted)
     expect(() => app.authentication(a => a.default('Bearer'))).toThrow(ErrApplicationStarted)

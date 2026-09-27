@@ -34,7 +34,7 @@ describe('caching under a base path', () => {
     app = createWebApplication()
       .basePath('/api')
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.ready()
+    await app.bootstrap()
 
     const underMiss = await app.fetch('/api/based/page')
     const underHit = await app.fetch('/api/based/page')

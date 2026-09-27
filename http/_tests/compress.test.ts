@@ -37,7 +37,7 @@ describe('Compress', () => {
       void [GlobalCompressController]
 
       const app = compressApp()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/compress-global/data', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
 
@@ -57,7 +57,7 @@ describe('Compress', () => {
       void [NoCompressController]
 
       const app = createWebApplication({})
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/no-compress/data', { headers: { 'accept-encoding': 'br, gzip, deflate' } })
 
@@ -85,7 +85,7 @@ describe('Compress', () => {
       void [MixedCompressController]
 
       const app = compressApp()
-      await app.ready()
+      await app.bootstrap()
 
       const resOff = await app.fetch('/compress-mixed/no-compress', {
         headers: { 'accept-encoding': 'br, gzip, deflate' },
@@ -121,7 +121,7 @@ describe('Compress', () => {
 
       // Default threshold is 1024 bytes — small payload won't be compressed globally
       const app = compressApp({ threshold: 1024 })
-      await app.ready()
+      await app.bootstrap()
 
       const resLow = await app.fetch('/compress-threshold/low-threshold', { headers: { 'accept-encoding': 'gzip' } })
 
@@ -164,7 +164,7 @@ describe('Compress', () => {
       compressed.get('/a').handler(() => ({ message: 'hello world'.repeat(100) }))
 
       const app = compressApp().mount(router, compressed)
-      await app.ready()
+      await app.bootstrap()
 
       const headers = { 'accept-encoding': 'br, gzip, deflate' }
 

@@ -13,7 +13,7 @@ const app = createWebApplication()
 // injecting into it otherwise, with no port at all. `run()` never runs, so nothing else marks the application
 // started, and without this line its readiness would never pass.
 export async function create(): Promise<FastifyInstance> {
-  await app.ready()
+  await app.bootstrap()
   registerWattChecks(app)
   app.availability.markStarted().acceptTraffic()
 

@@ -45,9 +45,9 @@ describe('ctx.req.cookie()', () => {
   })
 
   // Mounting a router re-types the application with its routes, so what is kept is the way to close it.
-  async function ready<A extends { ready(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
+  async function ready<A extends { bootstrap(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     return app
   }
@@ -220,7 +220,7 @@ describe('Cookies', () => {
     void [NamedCookieController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
     expect(res.status).toBe(200)
@@ -239,7 +239,7 @@ describe('Cookies', () => {
     void [AllCookiesController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
     expect(res.status).toBe(200)
@@ -261,7 +261,7 @@ describe('Cookies', () => {
     void [SignedController]
 
     const app = createWebApplication().cookie(k => k.secret(SECRET))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${signed}` } })
     expect(res.status).toBe(200)
@@ -280,7 +280,7 @@ describe('Cookies', () => {
     void [TamperedController]
 
     const app = createWebApplication().cookie(k => k.secret('test-secret'))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
     expect(res.status).toBe(200)
@@ -300,7 +300,7 @@ describe('Cookies', () => {
     void [SetCookieController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/set')
     expect(res.status).toBe(200)
@@ -321,7 +321,7 @@ describe('Cookies', () => {
     void [GetCookieController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/get', { headers: { Cookie: 'token=secret' } })
     expect(res.status).toBe(200)
@@ -343,7 +343,7 @@ describe('Cookies', () => {
     void [ReqSignedCookieController]
 
     const app = createWebApplication().cookie(k => k.secret(SECRET))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${signed}` } })
     expect(res.status).toBe(200)
@@ -363,7 +363,7 @@ describe('Cookies', () => {
     void [DeleteCookieController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/ck/delete')
     expect(res.status).toBe(200)

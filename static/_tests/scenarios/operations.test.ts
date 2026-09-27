@@ -46,7 +46,7 @@ describe('a single-page application next to the plugins an application runs in p
 
   it('leaves the health probes to the health plugin', async () => {
     app = isolated().with(health()).with(files()).mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const live = await app.fetch('/livez', { headers: PROBE })
     expect(live.status).toBe(200)
@@ -63,7 +63,7 @@ describe('a single-page application next to the plugins an application runs in p
       .with(health(h => h.enabled(false)))
       .with(files())
       .mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/livez', { headers: PROBE }))
   })
@@ -77,7 +77,7 @@ describe('a single-page application next to the plugins an application runs in p
       )
       .with(files())
       .mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const preflight = await app.fetch('/api/pets', {
       method: 'OPTIONS',
@@ -100,7 +100,7 @@ describe('a single-page application next to the plugins an application runs in p
       )
       .with(files())
       .mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/dashboard', { headers: { ...NAVIGATION, 'accept-encoding': 'gzip' } })
 
@@ -120,7 +120,7 @@ describe('a single-page application next to the plugins an application runs in p
       })
       .with(files())
       .mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/nope', { method: 'POST' })).status).toBe(418)
 
@@ -142,7 +142,7 @@ describe('a single-page application next to the plugins an application runs in p
       )
       .with(files())
       .mount(api(), pages()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const metrics = await app.fetch('/metrics', { headers: PROBE })
     expect(metrics.status).toBe(200)
@@ -169,7 +169,7 @@ describe('a single-page application next to the plugins an application runs in p
       .with(files())
       .mount(api(), pages()) as WebApplication
 
-    await expect(app.ready()).rejects.toThrow(/already declared/)
+    await expect(app.bootstrap()).rejects.toThrow(/already declared/)
   })
 
   // `@fastify/static` forwards a route config only on the per-file routes it registers: the wildcard it
@@ -181,7 +181,7 @@ describe('a single-page application next to the plugins an application runs in p
       .authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler()))
       .authorization(authz => authz.requireAuthenticatedByDefault())
       .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const asset = await app.fetch('/bundle/hello.txt', { headers: PROBE })
 
@@ -200,6 +200,6 @@ describe('a single-page application next to the plugins an application runs in p
       .with(files())
       .mount(api(), pages()) as WebApplication
 
-    await expect(app.ready()).rejects.toThrow(/has already been added/)
+    await expect(app.bootstrap()).rejects.toThrow(/has already been added/)
   })
 })

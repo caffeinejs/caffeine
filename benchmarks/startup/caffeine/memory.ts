@@ -9,7 +9,7 @@ import './order/order.controller.js'
 import './payment/payment.controller.js'
 
 const app = createWebApplication()
-await app.ready()
+await app.bootstrap()
 
 // Twice: the first pass can leave objects that only become unreachable once finalizers have run.
 global.gc!()

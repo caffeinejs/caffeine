@@ -219,7 +219,7 @@ Exceptions, where `config(...)` overlays what the fluent methods set:
 The application declares the whole schema, importing the feature's exported schema (`loggerConfigSchema`,
 `cookieConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
 into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
-fields and no source to fill them fails validation at `ready()`.
+fields and no source to fill them fails validation at `bootstrap()`.
 
 A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
 environment variable or argument reaches it.

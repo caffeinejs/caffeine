@@ -42,7 +42,7 @@ describe('openapi from a programmatic router', () => {
       .with(openapi(o => o.info({ title: 'Documented', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
-    await app.ready()
+    await app.bootstrap()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
@@ -78,7 +78,7 @@ describe('openapi from a programmatic router', () => {
       .with(openapi(o => o.info({ title: 'Programmatic', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
-    await app.ready()
+    await app.bootstrap()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
 
@@ -106,7 +106,7 @@ describe('openapi from a programmatic router', () => {
       .with(openapi(o => o.info({ title: 'Versioned', version: '1.0.0' }).docs(false).public()))
       .mount(pets) as WebApplication
 
-    await app.ready()
+    await app.bootstrap()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
     const list = operationAt(document, '/versioned-pets')

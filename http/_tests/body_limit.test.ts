@@ -17,7 +17,7 @@ describe('BodyLimit', () => {
     void [LimitedController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const over = await app.fetch('/limited/data', {
       method: 'POST',
@@ -47,7 +47,7 @@ describe('BodyLimit', () => {
     void [MixedLimitController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const body = 'x'.repeat(50)
     const headers = { 'content-type': 'text/plain' }
@@ -73,7 +73,7 @@ describe('BodyLimit', () => {
     void [StringLimitController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const headers = { 'content-type': 'text/plain' }
     const atLimit = await app.fetch('/string-limit/data', { method: 'POST', headers, body: 'x'.repeat(1024) })

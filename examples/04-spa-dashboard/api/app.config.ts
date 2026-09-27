@@ -44,7 +44,7 @@ export const SESSION_COOKIE = 'spa.session'
 export const CSRF_COOKIE = '_csrf'
 
 /**
- * Builds the configuration the application resolves at `ready()`.
+ * Builds the configuration the application resolves at `bootstrap()`.
  *
  * A function rather than a built value, so importing this module reads no environment and each test builds a
  * fresh one.

@@ -114,7 +114,7 @@ describe('health()', () => {
   it('mounts nothing when never installed', async () => {
     app = createWebApplication()
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/readyz')).status).toBe(404)
   })
@@ -126,13 +126,13 @@ describe('health()', () => {
 
     app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/readyz')).status).toBe(404)
   })
 
   // The key has to be the one its variable folds to: spelled `cacheTTL`, no variable could reach it, and the
-  // value was dropped at ready() without a word.
+  // value was dropped at bootstrap() without a word.
   it('takes the cache budget from HEALTH__CACHE_TTL', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new EnvConfigSource({ env: { HEALTH__CACHE_TTL: '5s' } }))
@@ -140,20 +140,20 @@ describe('health()', () => {
 
     app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(kHealthRegistryOptions).cacheTTLMs).toBe(5_000)
   })
 
   // A bare number names no unit. Read as duration text it was 0: every indicator that awaits was cancelled on the
-  // next turn, and readiness failed for the life of the process with nothing said at ready().
+  // next turn, and readiness failed for the life of the process with nothing said at bootstrap().
   it('refuses a budget the environment gives as a bare number', async () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new EnvConfigSource({ env: { HEALTH__INDICATOR_TIMEOUT: '5000' } }))
       .build()
     const booting = createWebApplication({ config: conf })
       .with(health((h, { config }) => h.config(config.health)))
-      .ready()
+      .bootstrap()
 
     await expect(booting).rejects.toThrow(ErrConfigValidation)
     await expect(booting).rejects.toThrow('health.indicatorTimeout')
@@ -166,10 +166,10 @@ describe('health()', () => {
       .build()
     const fromCode = createWebApplication()
       .with(health(h => h.indicatorTimeout(0)))
-      .ready()
+      .bootstrap()
     const fromConfig = createWebApplication({ config: conf })
       .with(health((h, { config }) => h.config(config.health)))
-      .ready()
+      .bootstrap()
 
     await expect(fromCode).rejects.toThrow(ErrHealthConfiguration)
     await expect(fromCode).rejects.toThrow('an indicator timeout of "0ms"')

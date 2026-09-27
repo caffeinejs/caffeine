@@ -119,7 +119,7 @@ describe('pets feature (via @caffeinejs/testing)', () => {
     const container = new TestContainer().modules(petsModule).overrideWithMock(PetsRepository, fake).build()
 
     app = buildApp(container, { logger: false })
-    await app.ready()
+    await app.bootstrap()
 
     stubGithub()
     session = await signInWithGithub(app)

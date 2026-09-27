@@ -95,7 +95,7 @@ async function start(observer: CacheObserver, options: { store?: HTTPCacheStore;
   const store = options.store ?? new MemoryHTTPCacheStore()
   const app = createWebApplication({ logger: options.logger }).with(HTTPCaching(b => b.store(store).observer(observer)))
   close = () => app.close()
-  await app.ready()
+  await app.bootstrap()
   return app
 }
 

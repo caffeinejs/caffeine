@@ -90,15 +90,15 @@ describe('Application integration', () => {
 
     expect(app.log).toBeInstanceOf(ConsoleLogger)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(logToken())).toBe(app.log)
   })
 
-  // LoggerBuilder is a Feature again: `.logger(...)` is deferred to `ready()`, exactly like `.shutdown(...)`,
-  // so `.log` still holds the eager default immediately after the call and only reflects it once `ready()`
+  // LoggerBuilder is a Feature again: `.logger(...)` is deferred to `bootstrap()`, exactly like `.shutdown(...)`,
+  // so `.log` still holds the eager default immediately after the call and only reflects it once `bootstrap()`
   // has run.
-  it('defers .logger() to ready(), not the call itself', async () => {
+  it('defers .logger() to bootstrap(), not the call itself', async () => {
     const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
     const provided = new ConsoleLogger({ level: 'debug' })
 
@@ -106,13 +106,13 @@ describe('Application integration', () => {
 
     expect(app.log).not.toBe(provided)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.log).toBe(provided)
     expect(app.container.get(logToken())).toBe(provided)
   })
 
-  it('takes the logger from ApplicationOptions.logger, eagerly, before ready()', () => {
+  it('takes the logger from ApplicationOptions.logger, eagerly, before bootstrap()', () => {
     const provided = new ConsoleLogger({ level: 'warn' })
     const app = new Application({ container: new CaffeineIoC({ decorators: false }), logger: provided })
 
@@ -125,19 +125,19 @@ describe('Application integration', () => {
 
     expect(app.log).toBe(noopLogger)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(logToken())).toBe(noopLogger)
   })
 
   // The reason `.logger()` had to become a Feature again: `.disable(c.logEnabled)` reads a real, resolved
   // configuration value, not a schema default — impossible before config resolves, which only happens inside
-  // `ready()`.
+  // `bootstrap()`.
   it('reads the resolved configuration, not a pre-resolution default', async () => {
     const app = appWithConfig(false)
     app.logger((b, { config }) => b.disable(config.logEnabled === false))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.log).toBe(noopLogger)
   })
@@ -146,7 +146,7 @@ describe('Application integration', () => {
     const app = appWithConfig(true)
     app.logger((b, { config }) => b.disable(config.logEnabled === false))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.log).not.toBe(noopLogger)
   })
@@ -158,7 +158,7 @@ describe('Application integration', () => {
       const app = appWithSlice({ level: 'debug', enabled: true })
       app.logger((b, { config }) => b.config(config.log))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log).not.toBe(noopLogger)
       expect(app.log.level).toBe('debug')
@@ -169,7 +169,7 @@ describe('Application integration', () => {
       const app = appWithSlice({ enabled: false })
       app.logger((b, { config }) => b.config(config.log))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log).toBe(noopLogger)
     })
@@ -180,7 +180,7 @@ describe('Application integration', () => {
       const app = appWithSlice({ level: 'error', enabled: false })
       app.logger((b, { config }) => b.config(config.log).level('trace').disable(false))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log).not.toBe(noopLogger)
       expect(app.log.level).toBe('trace')
@@ -191,7 +191,7 @@ describe('Application integration', () => {
       const app = appWithSlice({ level: 'warn' })
       app.logger((b, { config }) => b.config(config.log))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log).not.toBe(noopLogger)
       expect(app.log.level).toBe('warn')
@@ -205,7 +205,7 @@ describe('Application integration', () => {
       const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
       app.logger(l => l.level('debug'))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log.level).toBe('debug')
     })
@@ -215,7 +215,7 @@ describe('Application integration', () => {
       const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
       app.logger(l => l.use(provided).level('trace'))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(provided.level).toBe('trace')
     })
@@ -224,7 +224,7 @@ describe('Application integration', () => {
       const app = appWithConfig(true)
       app.logger((l, { config }) => l.level(config.logEnabled ? 'debug' : 'error'))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log.level).toBe('debug')
     })
@@ -235,26 +235,26 @@ describe('Application integration', () => {
       const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
       app.logger(l => l.disable().level('debug'))
 
-      await app.ready()
+      await app.bootstrap()
 
       expect(app.log).toBe(noopLogger)
       expect(noopLogger.level).toBe('silent')
     })
 
-    it('surfaces a level the logger refuses, out of ready()', async () => {
+    it('surfaces a level the logger refuses, out of bootstrap()', async () => {
       const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
       app.logger(l => l.level('verbose'))
 
-      await expect(app.ready()).rejects.toThrow(ErrInvalidLogLevel)
+      await expect(app.bootstrap()).rejects.toThrow(ErrInvalidLogLevel)
     })
   })
 
-  it('refuses a second .use() across two .logger() calls, surfaced when ready() runs them', async () => {
+  it('refuses a second .use() across two .logger() calls, surfaced when bootstrap() runs them', async () => {
     const app = new Application({ container: new CaffeineIoC({ decorators: false }) })
 
     app.logger(l => l.use(new ConsoleLogger()))
     app.logger(l => l.use(new ConsoleLogger()))
 
-    await expect(app.ready()).rejects.toThrow(ErrLoggerAlreadyConfigured)
+    await expect(app.bootstrap()).rejects.toThrow(ErrLoggerAlreadyConfigured)
   })
 })

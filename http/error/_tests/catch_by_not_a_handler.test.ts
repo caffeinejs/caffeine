@@ -25,6 +25,6 @@ describe('@CatchWith with a binding that is not an error handler', () => {
   it('rejects when the referenced binding is not decorated with @Catch', async () => {
     const app = createWebApplication()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 })

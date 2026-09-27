@@ -61,7 +61,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const builder = opaqueBuilder()
     builder.authentication(auth => auth.addOpaqueToken())
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/opaque-ok', { headers: { authorization: 'Bearer good-token' } })
     expect(res.status).toBe(200)
@@ -84,7 +84,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const builder = opaqueBuilder()
     builder.authentication(auth => auth.addOpaqueToken())
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/opaque-none')
     expect(res.status).toBe(401)
@@ -104,7 +104,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const builder = opaqueBuilder()
     builder.authentication(auth => auth.addOpaqueToken())
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/opaque-bad', { headers: { authorization: 'Bearer bad-token' } })
     expect(res.status).toBe(401)
@@ -124,7 +124,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const builder = opaqueBuilder()
     builder.authentication(auth => auth.addOpaqueToken())
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const granted = await app.fetch('/opaque-scope', { headers: { authorization: 'Bearer good-token' } })
     expect(granted.status).toBe(200)

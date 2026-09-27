@@ -97,7 +97,7 @@ describe('ContextState', () => {
 describe('request variables', () => {
   it('carries a value from a middleware to the handler', async () => {
     const application = newApp()
-    await application.ready()
+    await application.bootstrap()
 
     const response = await application.fetch('/state/read', { headers: { 'x-tenant': 'acme' } })
 
@@ -108,7 +108,7 @@ describe('request variables', () => {
 
   it('reads undefined on a request no middleware wrote to', async () => {
     const application = newApp()
-    await application.ready()
+    await application.bootstrap()
 
     const response = await application.fetch('/state/missing')
 
@@ -120,7 +120,7 @@ describe('request variables', () => {
 
   it('reaches an error handler, which serves the same context as the handler', async () => {
     const application = newApp()
-    await application.ready()
+    await application.bootstrap()
 
     const response = await application.fetch('/state/boom', { headers: { 'x-tenant': 'acme' } })
 
@@ -132,7 +132,7 @@ describe('request variables', () => {
 
   it('hands out one state per request, not a fresh one per access', async () => {
     const application = newApp()
-    await application.ready()
+    await application.bootstrap()
 
     const response = await application.fetch('/state/identity')
 
@@ -143,7 +143,7 @@ describe('request variables', () => {
 
   it('keeps concurrent requests from seeing each other values', async () => {
     const application = newApp()
-    await application.ready()
+    await application.bootstrap()
 
     const [first, second] = await Promise.all([
       application.fetch('/state/slow', { headers: { 'x-tenant': 'acme' } }),
@@ -161,7 +161,7 @@ describe('request variables', () => {
     const routes = pets.get('/', ctx => ({ tenant: ctx.state.get('tenant') ?? null }))
 
     const application = newApp().mount(routes)
-    await application.ready()
+    await application.bootstrap()
 
     const response = await application.fetch('/pets', { headers: { 'x-tenant': 'acme' } })
 

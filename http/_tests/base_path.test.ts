@@ -91,7 +91,7 @@ describe('an application under a base path', () => {
   describe('configuration', () => {
     it('drops trailing slashes and exposes the base to plugins', async () => {
       app = createWebApplication().basePath('/api/').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
       expect(app.instance.$basePath).toBe('/api')
@@ -104,7 +104,7 @@ describe('an application under a base path', () => {
       ['a callback returning "/"', () => '/'],
     ])('reads %s as no base path at all', async (_label, value) => {
       app = createWebApplication().basePath(value).mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '' } })
       expect(app.instance.$basePath).toBe('')
@@ -114,7 +114,7 @@ describe('an application under a base path', () => {
       app = createWebApplication()
         .basePath(async () => '/api')
         .mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { basePath: '/api' } })
     })
@@ -135,7 +135,7 @@ describe('an application under a base path', () => {
           return context.config.app.basePath
         })
         .mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(basePathContext).toBe(factoryContext)
       expect(await get(app, '/gateway/pets')).toMatchObject({ status: 200, body: { basePath: '/gateway' } })
@@ -147,7 +147,7 @@ describe('an application under a base path', () => {
       ['/api#x', 'contains "#"'],
     ])('fails start-up on %s, given directly or by a callback', async (value, reason) => {
       for (const basePath of [value, () => value]) {
-        const ready = createWebApplication().basePath(basePath).ready()
+        const ready = createWebApplication().basePath(basePath).bootstrap()
 
         await expect(ready).rejects.toThrow(ErrConfiguration)
         await expect(ready).rejects.toThrow(reason)
@@ -167,7 +167,7 @@ describe('an application under a base path', () => {
           throw boom
         })
 
-      await expect(failing.ready()).rejects.toBe(boom)
+      await expect(failing.bootstrap()).rejects.toBe(boom)
       expect(factoryRan).toBe(false)
     })
 
@@ -187,14 +187,14 @@ describe('an application under a base path', () => {
           order.push('server')
           return {}
         })
-      await app.ready()
+      await app.bootstrap()
 
       expect(order).toEqual(['server', 'basePath', 'factory'])
     })
 
     it('takes the last call', async () => {
       app = createWebApplication().basePath('/a').basePath('/b').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/b/pets')).toMatchObject({ status: 200, body: { basePath: '/b' } })
       expect((await get(app, '/a/pets')).status).toBe(404)
@@ -202,7 +202,7 @@ describe('an application under a base path', () => {
 
     it('refuses a change once the application is ready', async () => {
       app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       expect(() => app!.basePath('/api')).toThrow(ErrApplicationStarted)
     })
@@ -211,7 +211,7 @@ describe('an application under a base path', () => {
   describe('matching a request', () => {
     it('routes a request with or without the base, telling the handler which it was', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
       expect(await get(app, '/pets')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '' } })
@@ -223,35 +223,35 @@ describe('an application under a base path', () => {
       ['/api?x=1', '/?x=1', '1'],
     ])('takes %s to the root route, as %s', async (url, appURL, x) => {
       app = createWebApplication().basePath('/api').mount(echo('/')) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, url)).toMatchObject({ status: 200, body: { url: appURL, basePath: '/api', x } })
     })
 
     it('takes the base off only on a segment boundary', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect((await get(app, '/apix/pets')).status).toBe(404)
     })
 
     it('leaves a route that merely starts like the base to answer as declared', async () => {
       app = createWebApplication().basePath('/api').mount(echo('/apix/pets')) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/apix/pets')).toMatchObject({ status: 200, body: { url: '/apix/pets', basePath: '' } })
     })
 
     it('compares the base case-sensitively, as the router compares paths', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect((await get(app, '/API/pets')).status).toBe(404)
     })
 
     it('takes the base off once, so a route declared under the same segment is reached below it', async () => {
       app = createWebApplication().basePath('/api').mount(echo('/api/pets')) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/api/pets')).toMatchObject({
         status: 200,
@@ -262,14 +262,14 @@ describe('an application under a base path', () => {
 
     it("answers HEAD through Fastify's automatic HEAD route", async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/api/pets', { method: 'HEAD' })).status).toBe(200)
     })
 
     it('keeps the query, and the full URL as the request arrived', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/pets?x=1')).toMatchObject({
         status: 200,
@@ -282,7 +282,7 @@ describe('an application under a base path', () => {
         .basePath('/api')
         .server(() => ({ factory: { routerOptions: { ignoreTrailingSlash: true } } }))
         .mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect((await get(app, '/api/pets/')).status).toBe(200)
     })
@@ -302,7 +302,7 @@ describe('an application under a base path', () => {
           },
         }))
         .mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/old')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '/api' } })
       expect(await get(app, '/old')).toMatchObject({ status: 200, body: { url: '/pets', basePath: '' } })
@@ -311,9 +311,9 @@ describe('an application under a base path', () => {
 
     it('answers a miss under the base exactly as it answers one without a base path', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
       const plain = createWebApplication().mount(echo()) as WebApplication
-      await plain.ready()
+      await plain.bootstrap()
 
       try {
         expect(await get(app, '/api/nope')).toEqual(await get(plain, '/nope'))
@@ -354,7 +354,7 @@ describe('an application under a base path', () => {
 
     it.each(sources)('serves %s under the base, and without it', async (_label, path) => {
       app = everySource()
-      await app.ready()
+      await app.bootstrap()
 
       const under = await get(app, `/api${path}`)
 
@@ -383,7 +383,7 @@ describe('an application under a base path', () => {
 
     it('resolves "~/" against the base the request came in under', async () => {
       app = redirecting()
-      await app.ready()
+      await app.bootstrap()
 
       const under = await app.fetch('/api/go')
       expect(under.status).toBe(303)
@@ -393,14 +393,14 @@ describe('an application under a base path', () => {
 
     it('sends any other URL as it is written', async () => {
       app = redirecting()
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/api/verbatim')).headers.get('location')).toBe('/done')
     })
 
     it('never resolves "~//" into a URL that leaves the origin', async () => {
       app = redirecting()
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/api/escape')).headers.get('location')).toBe('~//evil.example')
     })
@@ -415,7 +415,7 @@ describe('an application under a base path', () => {
         seen.push({ url: req.url, originalUrl: (req as IncomingMessage & { originalUrl?: string }).originalUrl })
         next()
       }) as NodeMiddleware)
-      await app.ready()
+      await app.bootstrap()
 
       // The handler reads the full URL after the middleware ran over the request: it must not have been replaced
       // by the path the base was taken off.
@@ -437,7 +437,7 @@ describe('an application under a base path', () => {
         seen.push({ basePath: ctx.req.basePath, url: ctx.req.url })
         next()
       })
-      await app.ready()
+      await app.bootstrap()
 
       await get(app, '/api/admin/x')
       await get(app, '/api/other')
@@ -449,14 +449,14 @@ describe('an application under a base path', () => {
     it('still refuses a route that takes a probe path, both being relative to the application', async () => {
       const failing = createWebApplication().basePath('/api').with(health()).mount(echo('/livez'))
 
-      await expect(failing.ready()).rejects.toThrow(/already registered at "\/livez"/)
+      await expect(failing.bootstrap()).rejects.toThrow(/already registered at "\/livez"/)
     })
   })
 
   describe('cost', () => {
     it('leaves the server without a URL rewrite when there is no base path', async () => {
       app = createWebApplication().mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       // Fastify saves `originalUrl` on the raw request only when it has a `rewriteUrl` to run.
       expect(await get(app, '/pets')).toMatchObject({ status: 200, body: { rawOriginalUrlSet: false } })
@@ -464,7 +464,7 @@ describe('an application under a base path', () => {
 
     it('rewrites the URL once a base path is set', async () => {
       app = createWebApplication().basePath('/api').mount(echo()) as WebApplication
-      await app.ready()
+      await app.bootstrap()
 
       expect(await get(app, '/api/pets')).toMatchObject({ status: 200, body: { rawOriginalUrlSet: true } })
     })

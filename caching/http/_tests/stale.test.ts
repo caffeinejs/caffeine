@@ -101,7 +101,7 @@ describe('stale-while-revalidate, served by the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/swr-followers/data')
@@ -152,7 +152,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/swr-unlocked/data')
@@ -201,7 +201,7 @@ describe('stale-while-revalidate, served by the store', () => {
     const recording = new Recording()
     const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/swr-limits/over')
@@ -257,7 +257,7 @@ describe('stale-while-revalidate, served by the store', () => {
     const recording = new Recording()
     const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     const proxy = await app.fetch('/swr-revalidate/proxy')
@@ -304,7 +304,7 @@ describe('stale-while-revalidate, served by the store', () => {
     const recording = new Recording()
     const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/swr-sie/data')
@@ -355,7 +355,7 @@ describe('stale-while-revalidate, served by the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/swr-request/data')
@@ -426,7 +426,7 @@ describe('max-stale, asked for by the client', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
     const fetch = (path: string, cacheControl?: string) =>
       app.fetch(`/max-stale/${path}`, cacheControl === undefined ? {} : { headers: { 'cache-control': cacheControl } })
 
@@ -528,7 +528,7 @@ describe('stale-if-error, served by the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
     failing = false
     vi.useFakeTimers({ toFake: ['Date'] })
 
@@ -654,7 +654,7 @@ describe('stale-if-error, served by the store', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await app.fetch('/sie-followers/data')

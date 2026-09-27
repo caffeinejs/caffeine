@@ -30,7 +30,7 @@ beforeAll(async () => {
       registered.set(`${route.method} ${route.url}`, route as RouteOptions)
     })
   })
-  await app.ready()
+  await app.bootstrap()
 })
 
 afterAll(async () => {
@@ -59,7 +59,7 @@ describe('route hook slots under a base path', () => {
           underBase.set(`${route.method} ${route.url}`, route as RouteOptions)
         })
       })
-    await based.ready()
+    await based.bootstrap()
   })
 
   afterAll(async () => {

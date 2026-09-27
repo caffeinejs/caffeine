@@ -89,7 +89,7 @@ describe('authentication configuration', () => {
       a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     const withEnvSecret = await app.fetch('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
@@ -110,7 +110,7 @@ describe('authentication configuration', () => {
       a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(CODE_SECRET)}` },
@@ -131,7 +131,7 @@ describe('authentication configuration', () => {
       a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
     )
 
-    await expect(app.ready()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
+    await expect(app.bootstrap()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
   })
 
   it('configures a basic realm and a cookie name from the tree', async () => {
@@ -159,7 +159,7 @@ describe('authentication configuration', () => {
         .default('Basic'),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/protected')
     expect(res.headers.get('www-authenticate')).toContain('realm="From Config"')
@@ -188,7 +188,7 @@ describe('authentication configuration', () => {
         .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(AuthenticationSchemeProvider).defaultAuthenticateScheme).toBe('Bearer')
 
@@ -213,7 +213,7 @@ describe('authentication configuration', () => {
       ),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/protected', {
       headers: { authorization: `Basic ${Buffer.from('u:p').toString('base64')}` },
@@ -243,7 +243,7 @@ describe('authentication configuration', () => {
       a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
     )
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
@@ -270,7 +270,7 @@ describe('authentication configuration', () => {
     // "false" is a non-empty string, and a non-empty string is true.
     it('turns a boolean option off when the variable says false', async () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'false' })
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
 
@@ -280,7 +280,7 @@ describe('authentication configuration', () => {
 
     it('leaves it on when the variable says true', async () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'true' })
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
 
@@ -291,7 +291,7 @@ describe('authentication configuration', () => {
     it('refuses to start on a key the scheme does not have, and names the ones it has', async () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__AUDIANCE: 'someone-else' })
 
-      await expect(app.ready()).rejects.toMatchObject({
+      await expect(app.bootstrap()).rejects.toMatchObject({
         code: 'ERR_AUTH_CONFIGURATION',
         message: expect.stringMatching(/authentication scheme "jwt".*"audiance" is not an option.*"audience"/),
       })
@@ -300,7 +300,7 @@ describe('authentication configuration', () => {
     it('refuses to start on a value the option does not take', async () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'maybe' })
 
-      await expect(app.ready()).rejects.toMatchObject({
+      await expect(app.bootstrap()).rejects.toMatchObject({
         code: 'ERR_AUTH_CONFIGURATION',
         message: expect.stringContaining('includeErrorDetails'),
       })
@@ -334,7 +334,7 @@ describe('authentication configuration', () => {
           ),
       )
 
-      await app.ready()
+      await app.bootstrap()
 
       // The sign-in route follows the configured callback, and what it sends the provider is the configured client.
       const res = await app.fetch('/signin/callback/login', { redirect: 'manual' })

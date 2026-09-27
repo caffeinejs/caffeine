@@ -204,7 +204,7 @@ describe('testClient()', () => {
       container.bind(Greeter, t => t.toSelf())
 
       const app = createWebApplication({ container }).mount(newGreet())
-      await app.ready()
+      await app.bootstrap()
 
       try {
         // The bags were built during setup, so a shim installed now would be read by nothing.

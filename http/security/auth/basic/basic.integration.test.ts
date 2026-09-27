@@ -41,7 +41,7 @@ describe('BasicAuthenticationHandler (application)', () => {
       ),
     )
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/basic-ok', { headers: { authorization: basicHeader('alice', 'secret') } })
     expect(res.status).toBe(200)
@@ -62,7 +62,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null)))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/basic-challenge')
     expect(res.status).toBe(401)
@@ -83,7 +83,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addBasic(b => b.validate(() => null)))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/basic-bad', { headers: { authorization: basicHeader('alice', 'wrong') } })
     expect(res.status).toBe(401)

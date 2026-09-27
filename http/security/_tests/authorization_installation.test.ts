@@ -29,7 +29,7 @@ describe('authorization installation', () => {
     void [NoneNeededController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-none-needed')
     expect(res.status).toBe(200)
@@ -49,7 +49,7 @@ describe('authorization installation', () => {
     void [AnonOnlyController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-anon-only')
     expect(res.status).toBe(200)
@@ -68,7 +68,7 @@ describe('authorization installation', () => {
     const app = createWebApplication()
     // Never named by a route: the policy is only there so `.authorization(...)` has something to install.
     app.authorization(authz => authz.addPolicy('SignedIn', p => p.requireAuthenticated()))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-standalone')
     expect(res.status).toBe(200)
@@ -78,7 +78,7 @@ describe('authorization installation', () => {
   // is refused with the authentication-specific error — calling `.authentication(...)` would also auto-install
   // authorization, so that is the one actionable fix. This is unaffected by the authorization changes; it is
   // asserted here as a regression guard alongside the narrower authorization-only case below.
-  it('rejects ready() with the authentication error when a route is protected and neither is configured', async () => {
+  it('rejects bootstrap() with the authentication error when a route is protected and neither is configured', async () => {
     @Authorize()
     @Controller('/authz-neither-configured')
     class NeitherConfiguredController {
@@ -91,12 +91,12 @@ describe('authorization installation', () => {
 
     const app = createWebApplication()
 
-    await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
+    await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationRequired)
   })
 
   // The only way to reach `ErrAuthorizationRequired` itself: authentication bound directly on the container,
   // bypassing `.authentication(...)` entirely, so the auto-install in `beforeConfigure()` never runs.
-  it('rejects ready() with ErrAuthorizationRequired when authentication is bound without going through .authentication()', async () => {
+  it('rejects bootstrap() with ErrAuthorizationRequired when authentication is bound without going through .authentication()', async () => {
     @Authorize()
     @Controller('/authz-bypassed')
     class BypassedController {
@@ -110,12 +110,12 @@ describe('authorization installation', () => {
     const app = createWebApplication()
     app.container.bind(AuthenticationService, t => t.toValue({} as AuthenticationService))
 
-    await expect(app.ready()).rejects.toThrow(ErrAuthorizationRequired)
+    await expect(app.bootstrap()).rejects.toThrow(ErrAuthorizationRequired)
   })
 
   // `.authentication()` inside the callback is still before the feature list is read, so the default
-  // authorization policy is installed with it. Without that, `ready()` fails with ErrAuthorizationRequired.
-  it('installs authorization when .authentication() is called from the ready() callback', async () => {
+  // authorization policy is installed with it. Without that, `bootstrap()` fails with ErrAuthorizationRequired.
+  it('installs authorization when .authentication() is called from the bootstrap() callback', async () => {
     @Authorize()
     @Controller('/authz-from-ready-callback')
     class FromCallbackController {
@@ -133,7 +133,7 @@ describe('authorization installation', () => {
     }
 
     const app = createWebApplication()
-    await app.ready((_config, application) => {
+    await app.bootstrap((_config, application) => {
       application.authentication(auth => auth.addStrategy('default', new None({})).default('default'))
     })
 

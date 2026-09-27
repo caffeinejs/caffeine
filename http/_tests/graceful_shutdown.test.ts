@@ -204,7 +204,7 @@ describe('graceful shutdown', () => {
 describe('running once', () => {
   it('opens no server once the application has been closed', async () => {
     const app = createWebApplication().shutdown(s => s.drainDelay(0))
-    await app.ready()
+    await app.bootstrap()
     await app.close()
 
     await expect(app.run({ host: '127.0.0.1', port: 0 })).rejects.toThrow(ErrApplicationClosed)

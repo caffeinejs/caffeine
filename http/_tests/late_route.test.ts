@@ -40,7 +40,7 @@ describe('$route', () => {
         ])
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/late/hello')
     expect(res.status).toBe(200)
@@ -58,7 +58,7 @@ describe('$route', () => {
         ])
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.routeGroups.some(g => g.path === '/late')).toBe(false)
   })
@@ -87,7 +87,7 @@ describe('$route', () => {
           ])
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/late/closed')
     expect(res.status).toBe(403)
@@ -108,7 +108,7 @@ describe('$route', () => {
       }),
     )
 
-    await expect(app.ready()).rejects.toThrow(ErrAuthenticationRequired)
+    await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationRequired)
     app = undefined
   })
 
@@ -150,7 +150,7 @@ describe('$route', () => {
         }),
       )
       .mount(ordinary) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     expect(constructions).toBe(1)
   })

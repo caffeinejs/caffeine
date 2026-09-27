@@ -82,7 +82,7 @@ describe('the authentication gate registers where it was written', () => {
     const app = guardedApp(ran)
 
     try {
-      await app.ready()
+      await app.bootstrap()
       const res = await app.fetch('/gate-order')
 
       expect(res.status).toBe(401)
@@ -99,7 +99,7 @@ describe('the authentication gate registers where it was written', () => {
     const app = guardedApp(ran)
 
     try {
-      await app.ready()
+      await app.bootstrap()
       const res = await app.fetch('/gate-order')
 
       expect(res.status).toBe(401)

@@ -74,7 +74,7 @@ describe('a handler that outlives its timeout', () => {
         .server(() => ({ factory: { handlerTimeout: 30 } }))
         .with(() => fp(slowSend(runs), { name: 'slow-send' }))
       close = () => app.close()
-      await app.ready()
+      await app.bootstrap()
 
       const slow = await app.fetch('/timed/slow')
       expect(slow.status).toBe(503)
@@ -104,7 +104,7 @@ describe('a handler that outlives its timeout', () => {
         .with(() => fp(slowSend(runs), { name: 'slow-send' }))
         .mount(timed)
       close = () => app.close()
-      await app.ready()
+      await app.bootstrap()
 
       const slow = await app.fetch('/timed-route/slow')
       expect(slow.status).toBe(503)
@@ -130,7 +130,7 @@ describe('a handler that outlives its timeout', () => {
         .with(() => fp(slowSend(runs), { name: 'slow-send' }))
         .mount(timed)
       close = () => app.close()
-      await app.ready()
+      await app.bootstrap()
 
       const slow = await app.fetch('/timed-reject/slow')
       expect(slow.status).toBe(503)

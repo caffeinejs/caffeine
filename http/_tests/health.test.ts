@@ -210,7 +210,7 @@ describe('health probes', () => {
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
-      await expect(app.ready()).rejects.toThrow(ErrHealthIndicatorNotSingleton)
+      await expect(app.bootstrap()).rejects.toThrow(ErrHealthIndicatorNotSingleton)
     } finally {
       await app.close().catch(() => undefined)
     }

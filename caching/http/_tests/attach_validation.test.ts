@@ -36,7 +36,7 @@ describe('what a route may ask of the cache, checked while it registers', () => 
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     return app
   }
@@ -130,7 +130,7 @@ describe('constrained routes that share a URL', () => {
           .with(caching)
     const mounted = app.mount(router)
     close = () => mounted.close()
-    await mounted.ready()
+    await mounted.bootstrap()
 
     return mounted
   }
@@ -198,7 +198,7 @@ describe('constrained routes that share a URL', () => {
         .mount(router)
       close = () => app.close()
 
-      return app.ready()
+      return app.bootstrap()
     }
 
     await expect(build({ ttl: 60 })).rejects.toThrow(/constraint "tenant" reads no header the cache key can vary on/)

@@ -24,7 +24,7 @@ describe('Timeout', () => {
     void [TimedClassController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const slowRes = await app.fetch('/timed-class/slow')
     const fastRes = await app.fetch('/timed-class/fast-enough')
@@ -48,7 +48,7 @@ describe('Timeout', () => {
     void [TimedController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/timed/slow')
 

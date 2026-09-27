@@ -99,7 +99,7 @@ void [NeverEnrolledHandler]
 describe('ErrHTTP envelope fallback', () => {
   it('renders the status and a structured envelope for an unhandled ErrHTTP', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/http-err/conflict')
 
@@ -117,7 +117,7 @@ describe('ErrHTTP envelope fallback', () => {
 
   it('sends a falsy-but-defined body verbatim instead of the envelope', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/http-err/zero-body')
 
@@ -131,7 +131,7 @@ describe('ErrHTTP envelope fallback', () => {
   // reaches reply.headers at all.
   it('applies the headers an ErrHTTP carries', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/http-err/with-headers')
 
@@ -145,7 +145,7 @@ describe('ErrHTTP envelope fallback', () => {
   // replace it by being imported; now only the application naming the handler does.
   it('keeps the envelope when a matching handler was declared but never enrolled', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/http-err/conflict')
 
@@ -157,7 +157,7 @@ describe('ErrHTTP envelope fallback', () => {
 
   it('replaces the envelope once the application enrols that same handler', async () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(NeverEnrolledHandler))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/http-err/conflict')
 
@@ -174,7 +174,7 @@ describe('an unexpected failure', () => {
   it('answers a generic 500 and keeps the detail in the log', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/unexpected/boom')
     const text = await res.text()
@@ -199,7 +199,7 @@ describe('an unexpected failure', () => {
   // The status says how to react — retry, or do not. Only the message disclosed anything.
   it('keeps the status the error asked for rather than collapsing it to 500', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/unexpected/unavailable')
     const text = await res.text()
@@ -221,7 +221,7 @@ describe('an unexpected failure', () => {
   it('leaves a 4xx alone, with its field detail, and logs it as information', async () => {
     const logged: LogEntry[] = []
     const app = loggingTo(logged)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/unexpected/validated', {
       method: 'POST',
@@ -244,7 +244,7 @@ describe('an unexpected failure', () => {
 describe('exposeStacktrace', () => {
   it('adds the stack while the message stays generic', async () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
-    await app.ready()
+    await app.bootstrap()
 
     const body = await bodyOf(await app.fetch('/unexpected/boom'))
 
@@ -259,7 +259,7 @@ describe('exposeStacktrace', () => {
   // A rejected fetch says only "fetch failed" until its cause names the address.
   it('includes the chain of causes behind the error', async () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
-    await app.ready()
+    await app.bootstrap()
 
     const body = await bodyOf(await app.fetch('/unexpected/wrapped'))
 
@@ -272,7 +272,7 @@ describe('exposeStacktrace', () => {
 
   it('adds it to a thrown ErrHTTP and to an error naming a public message', async () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
-    await app.ready()
+    await app.bootstrap()
 
     const conflict = await bodyOf(await app.fetch('/http-err/conflict'))
     expect(conflict.message).toBe('nope')
@@ -288,7 +288,7 @@ describe('exposeStacktrace', () => {
   // A body the error carried is the author's own and need not be an object, so there is nothing to add to.
   it('leaves a body the error carried verbatim', async () => {
     const app = createWebApplication().errorHandling(e => e.exposeStacktrace())
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/http-err/zero-body')).text()).toBe('0')
 
@@ -297,7 +297,7 @@ describe('exposeStacktrace', () => {
 
   it('is off unless the application asks for it', async () => {
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await bodyOf(await app.fetch('/unexpected/boom'))).stacktrace).toBeUndefined()
     expect((await bodyOf(await app.fetch('/http-err/conflict'))).stacktrace).toBeUndefined()

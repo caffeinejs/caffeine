@@ -78,7 +78,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
 
     const recorder = new Recorder()
     const app = createWebApplication({ logger: recorder as unknown as Logger })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/logged/ping')
 
@@ -106,7 +106,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
         done()
       })
     })
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/logging/write')
 
@@ -124,7 +124,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
   it('builds its own server with the application’s logger, with no Fastify instance supplied', async () => {
     const recorder = new Recorder()
     const app = createWebApplication({ logger: recorder as unknown as Logger })
-    await app.ready()
+    await app.bootstrap()
 
     app.instance.log.error({ code: 'x' }, 'through the application logger')
 
@@ -153,7 +153,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
       })
     })
 
-    await app.ready()
+    await app.bootstrap()
     await app.fetch('/wired/ping')
 
     const written = recorder.records.find(record => record.args[1] === 'wired per-request record')
@@ -186,7 +186,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
         })
       })
 
-    await app.ready()
+    await app.bootstrap()
     await app.fetch('/levelled/ping')
 
     expect(app.instance.log.level).toBe('debug')
@@ -208,7 +208,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
 
     const recorder = new Recorder()
     const app = createWebApplication({ logger: recorder as unknown as Logger })
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/quiet/ping')
 
@@ -219,7 +219,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
   it('routes the server logger back to the implementation', async () => {
     const recorder = new Recorder()
     const app = createWebApplication({ logger: recorder as unknown as Logger })
-    await app.ready()
+    await app.bootstrap()
 
     app.instance.log.error({ code: 'x' }, 'server record')
 
@@ -236,7 +236,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     const app = createWebApplication({ logger: recorder as unknown as Logger }).server(() => ({
       factory: { logger: false },
     }))
-    await app.ready()
+    await app.bootstrap()
 
     app.instance.log.error({ code: 'x' }, 'not through the application logger')
 

@@ -40,7 +40,7 @@ describe('an application mounted under a prefix', () => {
 
   it('leaves the root to the application’s own route', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/', { headers: NAVIGATION })
 
@@ -50,7 +50,7 @@ describe('an application mounted under a prefix', () => {
 
   it('serves the shell at the prefix, with and without a trailing slash, and for every client route under it', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     for (const path of ['/app', '/app/', '/app/settings', '/app/orders/42']) {
       const res = await app.fetch(path, { headers: NAVIGATION })
@@ -62,7 +62,7 @@ describe('an application mounted under a prefix', () => {
 
   it('serves the shell’s assets under the prefix', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/app/assets/app-eZr2sdaR.js', { headers: SCRIPT })
 
@@ -72,7 +72,7 @@ describe('an application mounted under a prefix', () => {
 
   it('serves the plain mount, and keeps a miss under it a missing file', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/static/hello.txt')).status).toBe(200)
     await expectNotFoundJSON(await app.fetch('/static/missing.txt', { headers: NAVIGATION }))
@@ -80,7 +80,7 @@ describe('an application mounted under a prefix', () => {
 
   it('does not answer outside its prefix', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/settings', { headers: NAVIGATION }))
   })

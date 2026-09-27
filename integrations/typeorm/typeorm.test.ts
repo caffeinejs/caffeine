@@ -56,24 +56,24 @@ describe('TypeORM() feature', function () {
     expect(() => app.with(TypeORM('reports', t => t.dataSource(memory())))).not.toThrow()
   })
 
-  it('should fail ready() when the callback never provides options', async function () {
+  it('should fail bootstrap() when the callback never provides options', async function () {
     const app = newApplication().with(TypeORM(() => undefined))
 
     opened.push(() => app.close())
 
     // Nothing else can report this: an empty builder would otherwise bind a DataSource with no driver and
     // fail somewhere inside TypeORM.
-    await expect(app.ready()).rejects.toThrow(ErrMissingDataSourceOptions)
+    await expect(app.bootstrap()).rejects.toThrow(ErrMissingDataSourceOptions)
   })
 })
 
 describe('TypeORM() over a real database', function () {
-  it('should hand a working repository, connected before ready() returns', async function () {
+  it('should hand a working repository, connected before bootstrap() returns', async function () {
     const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const { users } = app.container.get(Users)
@@ -96,7 +96,7 @@ describe('TypeORM() over a real database', function () {
 
     app.container.bind(Shop, t => t.toClass(Shop, [$repository(UserEntity), $repository(OrderEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const shop = app.container.get(Shop)
@@ -117,7 +117,7 @@ describe('TypeORM() over a real database', function () {
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const { users } = app.container.get(Users)
@@ -147,7 +147,7 @@ describe('TypeORM() over a real database', function () {
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
     app.container.bind(Readers, t => t.toClass(Readers, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     // TypeORM caches a repository per entity per manager, which is what lets the stage call `getRepository`
@@ -169,7 +169,7 @@ describe('TypeORM() over a real database', function () {
       t.toClass(Pair, [$repository(UserEntity, 'reports'), $repository(UserEntity, dataSourceKey('reports'))]),
     )
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const pair = app.container.get(Pair)
@@ -193,7 +193,7 @@ describe('TypeORM() over a real database', function () {
 
     app.container.bind(Service, t => t.toClass(Service, [$repository(UserEntity), $repository(UserEntity, 'reports')]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const service = app.container.get(Service)
@@ -214,7 +214,7 @@ describe('TypeORM() over a real database', function () {
 
     first.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await first.ready()
+    await first.bootstrap()
     await first.container.get(Users).users.save({ email: 'ada@example.com' } as User)
 
     const snapshot = (first.container.get(DataSource).manager as unknown as ExportableManager).exportDatabase()
@@ -225,7 +225,7 @@ describe('TypeORM() over a real database', function () {
 
     second.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await second.ready()
+    await second.bootstrap()
     opened.push(() => second.close())
 
     // The writes were real and outlived the connection that made them, so the feature is not just holding
@@ -251,7 +251,7 @@ describe('TypeORM() lifecycle', function () {
 
     app.container.bind(AuditLog, t => t.toClass(AuditLog, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const audit = app.container.get(AuditLog)
@@ -270,7 +270,7 @@ describe('TypeORM() lifecycle', function () {
   it('should wait for the connection to close before close() resolves', async function () {
     const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const dataSource = app.container.get(DataSource)
@@ -296,7 +296,7 @@ describe('TypeORM() lifecycle', function () {
   it('should leave close() safe to call twice', async function () {
     const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
 
     const dataSource = app.container.get(DataSource)
     const inner = dataSource.destroy.bind(dataSource)
@@ -316,14 +316,14 @@ describe('TypeORM() lifecycle', function () {
     expect(destroyed).toEqual(1)
   })
 
-  it('should reject ready() when the database cannot be opened', async function () {
+  it('should reject bootstrap() when the database cannot be opened', async function () {
     const app = newApplication().with(TypeORM(t => t.dataSource(memory({ database: new Uint8Array([1, 2, 3, 4, 5]) }))))
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
     // The failure belongs to start-up: a driver that cannot open its database must stop the application
     // rather than hand out repositories that throw on first use.
-    await expect(app.ready()).rejects.toThrow()
+    await expect(app.bootstrap()).rejects.toThrow()
 
     // Nothing was left resolvable, and shutting the half-started application down is still safe.
     expect(() => app.container.get(DataSource)).toThrow()
@@ -335,7 +335,7 @@ describe('TypeORM() lifecycle', function () {
       .with(TypeORM(t => t.dataSource(memory())))
       .with(TypeORM('reports', t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
 
     const main = app.container.get(DataSource)
     const reports = app.container.get(dataSourceKey('reports'))

@@ -19,7 +19,7 @@ import { Controller, Get, createWebApplication, newRouter, type WebApplication }
  * Collects every URL the application registers, from a plugin's `onRoute` hook.
  *
  * A plugin rather than `app.instance`: compiled routes register after every plugin, and the instance is not
- * reachable until `ready()` — by which point the routes have already gone past.
+ * reachable until `bootstrap()` — by which point the routes have already gone past.
  */
 function collectURLs(urls: string[]) {
   return () =>
@@ -39,7 +39,7 @@ describe('a group prefix and a route at "/"', () => {
     const app = createWebApplication({})
       .with(collectURLs(urls))
       .mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect(urls).toContain('/app')
@@ -51,7 +51,7 @@ describe('a group prefix and a route at "/"', () => {
 
   it('answers the bare path and not the trailing slash', async () => {
     const app = createWebApplication({}).mount(newRouter('/app').get('/', () => ({ ok: true }))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect((await app.fetch('/app')).status).toBe(200)
@@ -67,7 +67,7 @@ describe('a group prefix and a route at "/"', () => {
     const app = createWebApplication({})
       .with(collectURLs(urls))
       .mount(newRouter('/api').mount(newRouter('/v1').get('/', () => ({ ok: true })))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect(urls).toContain('/api/v1')
@@ -88,7 +88,7 @@ describe('a group prefix and a route at "/"', () => {
     void [RootController]
 
     const app = createWebApplication({}) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect((await app.fetch('/ctrl')).status).toBe(200)
@@ -100,7 +100,7 @@ describe('a group prefix and a route at "/"', () => {
   // The half of the documented papercut that is real: a wildcard covers the empty match but not the bare path.
   it('does not match a bare path against a sibling wildcard', async () => {
     const app = createWebApplication({}).mount(newRouter().get('/dash/*', () => ({ ok: true }))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect((await app.fetch('/dash')).status).toBe(404)

@@ -127,7 +127,7 @@ describe('HTML', () => {
   // the markup as source. Answering HTML under the right content type is the package's reason to exist.
   it('answers with text/html', async () => {
     const app = htmlApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html/document')
 
@@ -139,7 +139,7 @@ describe('HTML', () => {
   // instance and HTML_DEFAULTS applies. An application that only ever renders registers nothing.
   it('renders in an application that never registered the HTML plugin', async () => {
     const app = createWebApplication({})
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html/document')
 
@@ -151,7 +151,7 @@ describe('HTML', () => {
   // separate branch of respond() and a separate adapter dispatch path.
   it('awaits an asynchronous component', async () => {
     const app = htmlApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html/async')
 
@@ -163,7 +163,7 @@ describe('HTML', () => {
     // A browser without a doctype falls into quirks mode, so a full document gets one it did not author.
     it('prefixes a document', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/html/document')).text()).toMatch(/^<!doctype html><html>/)
     })
@@ -171,14 +171,14 @@ describe('HTML', () => {
     // A fragment is spliced into an existing document, where a doctype would be invalid markup.
     it('leaves a fragment alone', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/html/fragment')).text()).toBe('<div>hello</div>')
     })
 
     it('does not double an authored doctype', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/html/pre-doctyped')).text()).toBe(
         '<!doctype html><html><body>hello</body></html>',
@@ -191,7 +191,7 @@ describe('HTML', () => {
   // default, so it stays the hardcoded one here.
   it('applies the application defaults', async () => {
     const app = htmlApp({ autoDoctype: false })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html/document')
 
@@ -207,7 +207,7 @@ describe('HTML', () => {
       .build()
     const app = createWebApplication({ config: conf }).with(({ config }) => html(config.html))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
 
@@ -217,7 +217,7 @@ describe('HTML', () => {
   // One route answering differently must not require reconfiguring the application.
   it('lets a per-call doctype option override the application default', async () => {
     const app = htmlApp({ autoDoctype: true })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html/overridden')
 
@@ -229,7 +229,7 @@ describe('HTML', () => {
     // The default must not clobber a Content-Type the route already declared before the handler ran.
     it('does not override a route-declared Content-Type from @Produces', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/html/produces')
 
@@ -239,7 +239,7 @@ describe('HTML', () => {
     // The handler's own header call is just as much "already set" as a route-level @Produces.
     it('does not override a Content-Type the handler set itself', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/html/header-set')
 
@@ -253,14 +253,14 @@ describe('HTML', () => {
     // Only `<` and `&` are replaced — enough to stop tag injection, so `>` survives verbatim.
     it('escapes children marked safe', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/html/escaped')).text()).toBe('<div>&lt;script>alert(1)&lt;/script></div>')
     })
 
     it('does not escape children that are not marked safe', async () => {
       const app = htmlApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/html/unsafe')).text()).toBe('<div><script>alert(1)</script></div>')
     })
@@ -270,7 +270,7 @@ describe('HTML', () => {
   // an error page is a genuinely separate path from a handler's response.
   it('renders from an error handler', async () => {
     const app = htmlApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/html-error/boom')
 

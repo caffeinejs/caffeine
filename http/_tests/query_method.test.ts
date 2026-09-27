@@ -18,7 +18,7 @@ describe('@Query verb (OpenAPI 3.2 QUERY method)', () => {
     void [QueryController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/query-test', {
       method: 'QUERY',

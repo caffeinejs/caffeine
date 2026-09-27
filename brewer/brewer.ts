@@ -57,7 +57,7 @@ interface RequestArgs {
  * argument nor the URL is written:
  *
  * ```ts
- * await app.ready()
+ * await app.bootstrap()
  * const client = brewer(app)
  * ```
  *

@@ -37,7 +37,7 @@ describe('ctx.config', () => {
       config: conf,
     }).mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
 
@@ -72,7 +72,7 @@ describe('ctx.config', () => {
 
     app.use(churn, { hook: 'onRequest' })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 25 })
     // The handler was served the very object the middleware took, not a second snapshot of the same values.
@@ -90,7 +90,7 @@ describe('ctx.config', () => {
 
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     // No `config` constructor option, so there is no application config key to resolve — and the context still reads.
     // It is empty: no source, and no feature adds a field to the configuration an application reads.
@@ -118,7 +118,7 @@ describe('ctx.config', () => {
       config: conf,
     }).mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/catalog/write')).json()).toEqual({ threw: true })
 
@@ -202,7 +202,7 @@ describe('ctx.config with an application schema', () => {
       .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/catalog')).json()).toEqual({ pageSize: 25, host: '0.0.0.0' })
 
@@ -223,7 +223,7 @@ describe('ctx.config with an application schema', () => {
       .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/catalog')).json()).toEqual({ host: '0.0.0.0' })
 
@@ -243,7 +243,7 @@ describe('ctx.config with an application schema', () => {
       config: conf,
     }).mount(routes)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/plain')).json()).toEqual({ keys: ['catalog'] })
 

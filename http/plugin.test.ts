@@ -43,7 +43,7 @@ describe('WebApplication.with()', () => {
     const container = new CaffeineIoC()
     const app = createWebApplication({ container }).with(probe(t => t.capture('localhost:9092')))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ broker: 'localhost:9092' })
   })
@@ -63,7 +63,7 @@ describe('WebApplication.with()', () => {
 
     const app = createWebApplication({ container, config: conf }).with(probe(t => t.capture('after-config:9092')))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ broker: 'after-config:9092' })
   })
@@ -77,6 +77,6 @@ describe('WebApplication.with()', () => {
       .with(probe())
       .server(({ config }) => ({ listener: config.app.server }))
 
-    expect(typeof app.ready).toBe('function')
+    expect(typeof app.bootstrap).toBe('function')
   })
 })

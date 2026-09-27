@@ -79,7 +79,7 @@ describe('OIDC integration', () => {
     void [OIDCIntChallengeController]
 
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     // A navigation, so the challenge redirects. Without the header this is a 401 carrying the same URL —
     // see "answers 401 rather than redirecting a caller that is not a browser navigation" below.
@@ -148,7 +148,7 @@ describe('OIDC integration', () => {
 
       const stateCookie = await makeStateCookie(nonce)
       const app = makeOIDCApp(jwksResolver)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
@@ -176,7 +176,7 @@ describe('OIDC integration', () => {
         const nonce = 'based-nonce'
         mockTokenEndpoint(nonce)
         const app = basedApp()
-        await app.ready()
+        await app.bootstrap()
 
         const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
@@ -195,7 +195,7 @@ describe('OIDC integration', () => {
         const nonce = 'direct-nonce'
         mockTokenEndpoint(nonce)
         const app = basedApp()
-        await app.ready()
+        await app.bootstrap()
 
         const res = await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '/api/dashboard')),
@@ -209,7 +209,7 @@ describe('OIDC integration', () => {
         const nonce = 'unsafe-nonce'
         mockTokenEndpoint(nonce)
         const app = basedApp()
-        await app.ready()
+        await app.bootstrap()
 
         const res = await app.fetch(`/api${CALLBACK_PATH}?code=code&state=oidc-st`, {
           headers: stateCookieHeader(await makeStateCookie(nonce, 'oidc-st', '//evil.example/phish')),
@@ -225,7 +225,7 @@ describe('OIDC integration', () => {
             .authorize({})
             .get('/', () => ({ ok: true })),
         )
-        await app.ready()
+        await app.bootstrap()
 
         const navigation = await app.fetch('/api/based-private', { headers: { 'sec-fetch-mode': 'navigate' } })
         expect(navigation.status).toBe(302)
@@ -243,7 +243,7 @@ describe('OIDC integration', () => {
 
       it('starts a sign-in at the login route under the base', async () => {
         const app = basedApp()
-        await app.ready()
+        await app.bootstrap()
 
         const res = await app.fetch('/api/oidc/callback/login?returnTo=/api/x')
 
@@ -253,7 +253,7 @@ describe('OIDC integration', () => {
 
       it('takes nothing off a callback path outside the base, the base ending on a segment boundary', async () => {
         const app = basedApp('https://oidc-app.example.com/apix/cb')
-        await app.ready()
+        await app.bootstrap()
 
         // No state cookie: the route answers with its own refusal, which is what shows it is there.
         expect((await app.fetch('/apix/cb?code=code&state=oidc-st')).status).toBe(400)
@@ -263,14 +263,14 @@ describe('OIDC integration', () => {
       it('refuses a route of the application at the callback path, both being relative to it', async () => {
         const app = basedApp().mount(newRouter('/oidc').get('/callback', () => ({ ok: true })))
 
-        await expect(app.ready()).rejects.toThrow(/"\/oidc\/callback" conflicts with a registered controller route/)
+        await expect(app.bootstrap()).rejects.toThrow(/"\/oidc\/callback" conflicts with a registered controller route/)
       })
     })
 
     it('callback with state mismatch → 400', async () => {
       const stateCookie = await makeStateCookie('n', 'correct-state')
       const app = makeOIDCApp(jwksResolver)
-      await app.ready()
+      await app.bootstrap()
 
       // Planted under the name the *query* state derives, so the lookup succeeds and the sealed-vs-parameter
       // comparison is what rejects it rather than the cookie simply being absent.
@@ -285,7 +285,7 @@ describe('OIDC integration', () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
       const app = makeOIDCApp(jwksResolver)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
@@ -298,7 +298,7 @@ describe('OIDC integration', () => {
       mockTokenEndpoint('wrong-nonce')
       const stateCookie = await makeStateCookie('correct-nonce')
       const app = makeOIDCApp(jwksResolver)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch(`${CALLBACK_PATH}?code=c&state=oidc-st`, {
         headers: { cookie: `__Host-oidc_Google_state.oidc-st=${stateCookie}` },
@@ -330,7 +330,7 @@ describe('OIDC integration', () => {
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'oidc-int-user', ISSUER)])
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc-int-session', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
@@ -359,7 +359,7 @@ describe('OIDC integration', () => {
     void [OIDCIntAnonController]
 
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     const [pub, prot] = await Promise.all([app.fetch('/oidc-int-anon/public'), app.fetch('/oidc-int-anon/protected')])
 
@@ -387,7 +387,7 @@ describe('OIDC integration', () => {
     void [OIDCIntXHRController]
 
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc-int-xhr', { headers: { accept: 'application/json' } })
 
@@ -421,7 +421,7 @@ describe('OIDC integration', () => {
 
     const sessionJWT = await makeSessionCookie([new Claim('sub', 'admin', ISSUER), new Claim('roles', 'admin', ISSUER)])
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc-int-role-ok', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
@@ -445,7 +445,7 @@ describe('OIDC integration', () => {
       new Claim('roles', 'viewer', ISSUER),
     ])
     const app = makeOIDCApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc-int-role-403', {
       headers: { cookie: `__Host-oidc_Google_session=${sessionJWT}` },
@@ -457,7 +457,7 @@ describe('OIDC integration', () => {
   // parsed with nothing asked of the application.
   it('starts with @fastify/cookie registered by nobody', async () => {
     const builder = makeOIDCApp()
-    await expect(builder.ready()).resolves.toBeUndefined()
+    await expect(builder.bootstrap()).resolves.toBeUndefined()
     await builder.close()
   })
 
@@ -472,6 +472,6 @@ describe('OIDC integration', () => {
     void [ConflictingController]
 
     const builder = makeOIDCApp()
-    await expect(builder.ready()).rejects.toThrow('conflicts with a registered controller route')
+    await expect(builder.bootstrap()).rejects.toThrow('conflicts with a registered controller route')
   })
 })
