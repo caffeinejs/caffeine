@@ -319,7 +319,7 @@ describe('configuration as the DI config provider', () => {
       })
       wire(container)
 
-      await builder.ready()
+      await builder.bootstrap()
 
       expect(container.getMany(Database).map(d => d.kind())).toEqual(['embedded'])
     })
@@ -330,7 +330,7 @@ describe('configuration as the DI config provider', () => {
       })
       wire(container)
 
-      await builder.ready()
+      await builder.bootstrap()
 
       expect(container.getMany(Database).map(d => d.kind())).toEqual(['network'])
     })

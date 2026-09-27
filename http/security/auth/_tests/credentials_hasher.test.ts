@@ -57,7 +57,7 @@ describe('the PasswordHasher addCredentials() provides', () => {
     container.bind(PasswordHasher, t => t.toValue(own).profiles('hasher-prod'))
 
     const app = credentialsApp(container)
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(PasswordHasher)).toBe(own)
 
@@ -70,7 +70,7 @@ describe('the PasswordHasher addCredentials() provides', () => {
     container.bind(PasswordHasher, t => t.toValue(own).profiles('hasher-prod'))
 
     const app = credentialsApp(container)
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(PasswordHasher)).toBeInstanceOf(ScryptPasswordHasher)
     expect(app.container.get(PasswordHasher)).not.toBe(own)
