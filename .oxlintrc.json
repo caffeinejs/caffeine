@@ -12,6 +12,8 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    ".agents/**",
+    ".claude/skills/**",
     ".vscode/**",
     ".local/**",
     "benchmarks/di/testdata/third_party_legacy/**",

@@ -13,6 +13,8 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    ".agents/**",
+    ".claude/skills/**",
     "**/*.gen.mod.ts",
     "cli/caffeinerc.schema.json",
     "prisma/migrations/**",

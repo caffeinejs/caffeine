@@ -153,8 +153,8 @@ CLAUDE.local.md
 skills-lock.json
 
 .codex/
-.agents/
-.claude/skills/*
+.agents/*
+!.agents/skills/
 .claude/plans/*
 .cursor/
 

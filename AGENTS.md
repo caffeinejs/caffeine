@@ -7,6 +7,18 @@ Before any edit, read [`CONVENTIONS.md`](CONVENTIONS.md). When editing a first-p
 These rules apply to every task unless explicitly overridden.
 Bias: caution over speed on non-trivial work. Use judgment on trivial tasks.
 
+## Third-party skills
+
+[`.agents/skills/`](.agents/skills/README.md) holds vendored third-party skills for contributors (`.claude/skills` links to it). They are generic advice. Where one conflicts with `CONVENTIONS.md` or a package `AGENTS.md`, this repository wins:
+
+- Tests run on Vitest, not `node:test`.
+- Imports use `.js` extensions and packages build with `tsc --build`. No type stripping, no `.ts` import extensions.
+- Type-check with the package's check project (`npx tsc --build <pkg>/tsconfig.json`), not `tsc --noEmit`.
+- Lint and format with oxlint and oxfmt, not ESLint.
+- Checks run in the order of "After every edit" in `CONVENTIONS.md`.
+
+Do not edit a vendored skill. Record an unavoidable patch in [`.agents/skills/README.md`](.agents/skills/README.md). The skills shipped to applications live in [`ai/skills/`](ai/skills/), not here.
+
 ## Output
 
 Chat in short, plain English. Lead with the answer. No filler.
