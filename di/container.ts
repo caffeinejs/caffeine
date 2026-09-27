@@ -71,8 +71,16 @@ interface PendingBinding {
   binding: Binding
   // Made by hand — bind(), aspect(), a module or restore() — rather than read from decorators by autoWire().
   byHand: boolean
-  // The held @Configuration class this @Provides binding comes from. It registers only if the class does.
+  // The held @Configuration class this @Provides binding comes from, which it is decided after.
   providedByConfig?: InjectionToken
+  // What the metadata reader returned for the key when the binding was held, applied when it registers.
+  meta?: Partial<Binding>
+}
+
+// How a held binding was decided: registered, or not — and then the condition that failed, when one did.
+interface Decision {
+  registered: boolean
+  failed?: Condition
 }
 
 // Marks a snapshot's copy of a binding still held back for its conditions, and whether it was made by hand. restore()
@@ -83,6 +91,12 @@ const kHeld = Symbol('@caffeinejs/di:held')
 type HeldOrigin = 'by-hand' | 'decorated'
 
 type ConfigCondition = Extract<Condition, { kind: 'config' }>
+
+// Reads the configuration a `config` condition selects from, once per compile.
+type ConfigReader = (key: InjectionToken, condition: ConfigCondition) => unknown
+
+// A condition that checks a key in the registry, so the order of decisions can depend on it.
+type KeyCondition = Extract<Condition, { kind: 'present' | 'missing' | 'config' }>
 
 // A configuration class, as opposed to one of its @Provides bindings, which carry the class as their source.
 function isConfigurationClass(binding: Binding): boolean {
@@ -102,41 +116,48 @@ function rank(condition: Condition): number {
   }
 }
 
-// The key a condition checks in the registry: its own for `present` / `missing`, the config provider's for `config`.
-function keyChecked(condition: Condition): InjectionToken | undefined {
-  switch (condition.kind) {
-    case 'present':
-    case 'missing':
-      return condition.key
-    case 'config':
-      return Keys.kConfigProvider
-    default:
-      return undefined
-  }
+function checksKey(condition: Condition): condition is KeyCondition {
+  return condition.kind === 'present' || condition.kind === 'missing' || condition.kind === 'config'
 }
 
-// For every key, where the held bindings answering to it are — by that key, a name or a base. A configuration binding
-// has no base, as mapAbstract skips it.
-function answeringIndex(entries: readonly PendingBinding[]): Map<InjectionToken | Identifier, number[]> {
-  const answering = new Map<InjectionToken | Identifier, number[]>()
-  const answer = (key: InjectionToken | Identifier, i: number): void => {
-    const list = answering.get(key)
-    if (list === undefined) {
-      answering.set(key, [i])
-    } else {
-      list.push(i)
-    }
+// The key a condition checks in the registry: its own for `present` / `missing`, the config provider's for `config`.
+function keyChecked(condition: KeyCondition): InjectionToken {
+  return condition.kind === 'config' ? Keys.kConfigProvider : condition.key
+}
+
+// How an error names a condition that checks a key: present("Cache"), missing("Cache"), config("cache.kind").
+function conditionStr(condition: KeyCondition): string {
+  if (condition.kind === 'config') {
+    const access = typeof condition.access === 'string' ? `"${condition.access}"` : 'selector'
+    return `config(${access})`
   }
 
-  for (let i = 0; i < entries.length; i++) {
-    const { key, binding } = entries[i]
+  return `${condition.kind}("${keyStr(condition.key)}")`
+}
 
-    answer(key, i)
-    for (const name of binding.names) {
-      answer(name, i)
-    }
-    if (binding.extend !== undefined && !binding.configuration) {
-      answer(binding.extend, i)
+// The keys a held binding answers to: its own, its names and its base. A configuration binding has no base, as
+// mapAbstract skips it.
+function answersTo({ key, binding }: PendingBinding): Array<InjectionToken | Identifier> {
+  const keys: Array<InjectionToken | Identifier> = [key, ...binding.names]
+  if (binding.extend !== undefined && !binding.configuration) {
+    keys.push(binding.extend)
+  }
+
+  return keys
+}
+
+// For every key, where the held bindings answering to it are.
+function answeringIndex(entries: readonly PendingBinding[]): Map<InjectionToken | Identifier, number[]> {
+  const answering = new Map<InjectionToken | Identifier, number[]>()
+
+  for (let i = 0; i < entries.length; i++) {
+    for (const key of answersTo(entries[i])) {
+      const list = answering.get(key)
+      if (list === undefined) {
+        answering.set(key, [i])
+      } else {
+        list.push(i)
+      }
     }
   }
 
@@ -153,13 +174,8 @@ function waitsOf(
   const entry = entries[i]
   const waits = new Set<number>(entry.providedByConfig === undefined ? [] : answering.get(entry.providedByConfig))
 
-  for (const condition of entry.binding.conditionals) {
-    const key = keyChecked(condition)
-    if (key === undefined) {
-      continue
-    }
-
-    for (const j of answering.get(key) ?? []) {
+  for (const condition of entry.binding.conditionals.filter(checksKey)) {
+    for (const j of answering.get(keyChecked(condition)) ?? []) {
       if (entries[j].providedByConfig !== entry.key) {
         waits.add(j)
       }
@@ -182,28 +198,37 @@ function waitsOf(
  * class whose condition checks for a key it provides is a default. Among the bindings free to go, the first declared
  * goes first; when none is — a cycle, such as two defaults of one key — so does the first declared of the rest, and
  * the others then see it.
+ *
+ * `forced` holds each binding decided out of a cycle, with the bindings it still waited for then: its decision took
+ * them to be absent, which {@link checkForcedDecisions} verifies once they are decided too.
  */
-function decisionOrder(entries: readonly PendingBinding[]): PendingBinding[] {
+function decisionOrder(entries: readonly PendingBinding[]): {
+  order: PendingBinding[]
+  forced: Map<PendingBinding, PendingBinding[]>
+} {
   const answering = answeringIndex(entries)
-  const waiting = new Array<number>(entries.length).fill(0)
+  const waits = entries.map((_, i) => waitsOf(entries, i, answering))
+  const waiting = waits.map(w => w.size)
   const dependents = entries.map((): number[] => [])
 
   for (let i = 0; i < entries.length; i++) {
-    const waits = waitsOf(entries, i, answering)
-
-    waiting[i] = waits.size
-    for (const j of waits) {
+    for (const j of waits[i]) {
       dependents[j].push(i)
     }
   }
 
   const decided = new Array<boolean>(entries.length).fill(false)
   const order: PendingBinding[] = []
+  const forced = new Map<PendingBinding, PendingBinding[]>()
 
   while (order.length < entries.length) {
     let next = waiting.findIndex((count, i) => count === 0 && !decided[i])
     if (next === -1) {
       next = decided.indexOf(false)
+      forced.set(
+        entries[next],
+        [...waits[next]].filter(j => !decided[j]).map(j => entries[j]),
+      )
     }
 
     decided[next] = true
@@ -214,7 +239,57 @@ function decisionOrder(entries: readonly PendingBinding[]): PendingBinding[] {
     }
   }
 
-  return order
+  return { order, forced }
+}
+
+// Whether a decision could have come out otherwise, had the key the condition checks been answered: a binding
+// registered on `missing` or `config`, or rejected by `present` or `config`.
+function overturnable(condition: KeyCondition, decision: Decision): boolean {
+  switch (condition.kind) {
+    case 'missing':
+      return decision.registered
+    case 'present':
+      return decision.failed === condition
+    default:
+      return decision.registered || decision.failed === condition
+  }
+}
+
+/**
+ * Verifies the decisions taken out of a cycle. Each was taken while bindings it waited for were still undecided, so
+ * as if they were absent. When one of them then registered and answers to a key a condition checks, and the decision
+ * turned on that condition, it was taken on a false premise: no order of the cycle is consistent, and the container
+ * fails rather than keep a binding its own condition contradicts.
+ *
+ * Two defaults of one key settle, so they pass: the first registers, and the other sees it and never does.
+ *
+ * @throws {@link ErrInvalidBinding} naming the binding, its condition, and the binding that overturned it
+ */
+function checkForcedDecisions(
+  forced: Map<PendingBinding, PendingBinding[]>,
+  decisions: Map<PendingBinding, Decision>,
+): void {
+  for (const [entry, pending] of forced) {
+    const decision = decisions.get(entry)!
+
+    for (const other of pending.filter(e => decisions.get(e)!.registered)) {
+      const answers = answersTo(other)
+      const condition = entry.binding.conditionals
+        .filter(checksKey)
+        .find(c => answers.includes(keyChecked(c)) && overturnable(c, decision))
+
+      if (condition !== undefined) {
+        throw new ErrInvalidBinding(
+          `Cannot decide "${keyStr(entry.key)}": its condition ${conditionStr(condition)} was decided before ` +
+            `"${keyStr(other.key)}", which it waits for through a cycle of conditions, and which registered afterwards` +
+            solutions(
+              `Break the cycle: a condition must not depend, through the conditions of other bindings, on its own binding`,
+              `Defaults of one key are the cycle that settles: give each of them c => c.missing(key) for the same key`,
+            ),
+        )
+      }
+    }
+  }
 }
 
 // What a snapshot keeps of a binding: its configuration, without what compile() derives from it.
@@ -315,6 +390,9 @@ export class CaffeineIoC implements Container {
   private _compiled = false
   private _pendingConditionals: PendingBinding[] = []
   private _pendingConfigClasses = new Set<InjectionToken>()
+  // Keys a decorated binding decided at compile() took. A binding made by hand passing afterwards clashes with it, on a
+  // retry of a compile that threw as much as in the first.
+  private readonly _released = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScoped = false
@@ -929,6 +1007,7 @@ export class CaffeineIoC implements Container {
 
     this._pendingConditionals = this._pendingConditionals.filter(e => e.key !== key)
     this._pendingConfigClasses.delete(key)
+    this._released.delete(key)
 
     return this.bind(key, configure)
   }
@@ -1041,8 +1120,9 @@ export class CaffeineIoC implements Container {
    * Must be called before {@link compile}.
    *
    * A binding the snapshot's container had registered is registered as it is: its conditions are not decided again.
-   * One it still held back is held here, in place of any binding this container holds for its key, and decided when
-   * this container compiles — with the snapshot's profiles active, which restoring adds to this container's own.
+   * One it still held back is held here, and decided when this container compiles — with the snapshot's profiles
+   * active, which restoring adds to this container's own. Either way, it takes the place of any binding this container
+   * holds back for its key.
    *
    * @throws {@link ErrInvalidContainerState} once the container has been compiled
    */
@@ -1071,8 +1151,9 @@ export class CaffeineIoC implements Container {
       held.push({ key, binding, byHand: origin === 'by-hand' })
     }
 
-    // A container that read the same decorators holds the same bindings already; the snapshot's take their place.
-    const restored = new Set(held.map(e => e.key))
+    // A container that read the same decorators holds the same bindings already. The snapshot's take their place,
+    // whether the snapshot's container had decided them or still held them.
+    const restored = new Set(snap.entries().map(([key]) => key))
     this._pendingConditionals = this._pendingConditionals.filter(e => !restored.has(e.key))
 
     for (const entry of held) {
@@ -1151,16 +1232,18 @@ export class CaffeineIoC implements Container {
 
       this.hooks.emit('onSetup', { key, binding })
 
-      if (this.holdsBack(key, binding)) {
+      const meta = this.readMetadata(key, binding)
+
+      if (binding.conditionals.length > 0) {
         if (isConfigurationClass(binding)) {
           this._pendingConfigClasses.add(key)
         }
 
-        this._pendingConditionals.push({ key, binding, byHand: false })
+        this._pendingConditionals.push({ key, binding, byHand: false, meta })
         continue
       }
 
-      this.configureBinding(key, binding)
+      this.configureBinding(key, binding, meta)
       this.hooks.emit('onBindingRegistered', { key, binding })
     }
 
@@ -1171,10 +1254,10 @@ export class CaffeineIoC implements Container {
 
       // Tied to its own class, the one it was declared in: the key it provides can be provided by another class too.
       const providedByConfig = this.heldConfigurationOf(binding)
-      const held = this.holdsBack(key, binding)
+      const meta = this.readMetadata(key, binding)
 
-      if (held || providedByConfig !== undefined) {
-        this._pendingConditionals.push({ key, binding, byHand: false, providedByConfig })
+      if (binding.conditionals.length > 0 || providedByConfig !== undefined) {
+        this._pendingConditionals.push({ key, binding, byHand: false, providedByConfig, meta })
         continue
       }
 
@@ -1184,7 +1267,7 @@ export class CaffeineIoC implements Container {
         )
       }
 
-      this.configureBinding(key, binding)
+      this.configureBinding(key, binding, meta)
       this.hooks.emit('onBindingRegistered', { key, binding })
     }
 
@@ -1388,8 +1471,14 @@ export class CaffeineIoC implements Container {
    *
    * @param key - The key to configure the binding for.
    * @param config - The binding configuration.
+   * @param meta - What the metadata reader returned for the key, when the caller already read it: the reader is called
+   *   once per binding.
    */
-  private configureBinding<T>(key: InjectionToken<T>, config: Binding<T>): void {
+  private configureBinding<T>(
+    key: InjectionToken<T>,
+    config: Binding<T>,
+    meta: Partial<Binding> = this.metadataReader(key),
+  ): void {
     notNil(key)
     notNil(config)
 
@@ -1401,7 +1490,7 @@ export class CaffeineIoC implements Container {
       checkAsyncBinding(key, config)
     }
 
-    const conf = { ...config, ...this.metadataReader(key) }
+    const conf = { ...config, ...meta }
     const binding = newBinding(conf)
     if (config.async && !binding.scopeID) {
       binding.scopeID = Scopes.SINGLETON
@@ -1849,31 +1938,32 @@ export class CaffeineIoC implements Container {
    *
    * Held back, it is decided with the other held bindings: its conditions never see the binding itself, and a binding
    * already registered under its key stays until they pass. A default bound with `.conditional(c => c.missing(key))`
-   * relies on both. Binding the key again discards it, the way it would replace a registered binding.
+   * relies on both. A binding of the key held back beside it stays too: they are decided in order, and the one decided
+   * last among those that pass is registered. Binding the key again without conditions discards every held binding
+   * made by hand for it, the way it replaces a registered one.
    */
   private registerOrHold(key: InjectionToken, binding: Binding): void {
-    const held = this._pendingConditionals.findIndex(e => e.byHand && e.key === key)
-    if (held !== -1) {
-      this._pendingConditionals.splice(held, 1)
-    }
+    const meta = this.readMetadata(key, binding)
 
-    if (this.holdsBack(key, binding)) {
-      this._pendingConditionals.push({ key, binding, byHand: true })
+    if (binding.conditionals.length > 0) {
+      this._pendingConditionals.push({ key, binding, byHand: true, meta })
       return
     }
 
-    this.configureBinding(key, binding)
+    this._pendingConditionals = this._pendingConditionals.filter(e => !(e.byHand && e.key === key))
+    this.configureBinding(key, binding, meta)
   }
 
   /**
-   * Settles the binding's conditions and reports whether it carries any, so must wait for {@link compile}.
+   * Calls the metadata reader for the binding, once, and settles its conditions: the reader's `conditionals` replace
+   * the binding's own, as its other fields do in `configureBinding`, which is handed what this returns.
    *
-   * The metadata reader's `conditionals` replace the binding's own, as the reader's fields do in `configureBinding`.
    * Reading them here rather than at registration is what holds back a binding the reader makes conditional.
    */
-  private holdsBack(key: InjectionToken, binding: Binding): boolean {
-    binding.conditionals = this.metadataReader(key).conditionals ?? binding.conditionals
-    return binding.conditionals.length > 0
+  private readMetadata(key: InjectionToken, binding: Binding): Partial<Binding> {
+    const meta = this.metadataReader(key)
+    binding.conditionals = meta.conditionals ?? binding.conditionals
+    return meta
   }
 
   // The held @Configuration class a @Provides binding was declared in, when that class is held.
@@ -1887,79 +1977,115 @@ export class CaffeineIoC implements Container {
    *
    * A decorated binding never lands on a registered key. When two bindings of one key are decided and one of them is
    * decorated, whichever comes second throws rather than silently replacing the other.
+   *
+   * A binding leaves the held set once decided, so a compile that throws half-way leaves held only what it had not
+   * decided yet, and a second one decides no binding twice.
+   *
+   * @throws {@link ErrInvalidContainerState} when a binding with conditions was bound while the decisions ran
+   * @throws {@link ErrInvalidBinding} when a decision taken out of a cycle turns out false
    */
   private async evaluatePendingConditionals(): Promise<void> {
-    const released = new Set<InjectionToken>()
+    const { order, forced } = decisionOrder(this._pendingConditionals)
+    const decisions = new Map<PendingBinding, Decision>()
     let config: { values: unknown } | undefined
 
     // Read once, by the first `config` condition decided: the provider is not read again while this compile lasts.
-    const readConfig = (key: InjectionToken, condition: ConfigCondition): unknown => {
+    const readConfig: ConfigReader = (key, condition) => {
       config ??= { values: this.readConfigProvider(key, condition) }
       return config.values
     }
 
-    for (const entry of decisionOrder(this._pendingConditionals)) {
-      const { key, binding } = entry
-
-      // The class came first; a @Provides binding whose class did not register is not decided at all.
-      if (entry.providedByConfig !== undefined && !this.registry.has(entry.providedByConfig)) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
+    try {
+      for (const entry of order) {
+        decisions.set(entry, await this.decide(entry, readConfig))
       }
-
-      if (!(await this.passes(key, binding.conditionals, readConfig))) {
-        this.hooks.emit('onBindingNotRegistered', { key, binding })
-        continue
-      }
-
-      if (entry.byHand ? released.has(key) : this.registry.has(key)) {
-        throw new ErrRepeatedInjectableConfiguration(
-          `Cannot register "${keyStr(key)}"` +
-            (binding.configuredBy === undefined ? '' : ` configured at "${binding.configuredBy}"`) +
-            `: another binding is registered under the key, and a decorated binding decided at compile() does not replace one` +
-            solutions(
-              `Replace the decorated binding with rebind(key, ...), which also drops it before it is decided`,
-              `Make one of them a default that yields to the other with c => c.missing(key)`,
-            ),
-        )
-      }
-
-      this.configureBinding(key, binding)
-
-      if (!entry.byHand) {
-        released.add(key)
-      }
-
-      this.hooks.emit('onBindingRegistered', { key, binding })
+    } finally {
+      this._pendingConditionals = this._pendingConditionals.filter(e => !decisions.has(e))
     }
 
-    this._pendingConditionals = []
+    checkForcedDecisions(forced, decisions)
+
+    // Held while the decisions ran — bound from a condition, a hook or the config provider — it could be ordered
+    // against none of the bindings already decided, so it is not decided at all.
+    if (this._pendingConditionals.length > 0) {
+      const keys = this._pendingConditionals.map(e => `"${keyStr(e.key)}"`).join(', ')
+
+      throw new ErrInvalidContainerState(
+        `Cannot decide the conditions of ${keys}: bound while the container was deciding conditions, it cannot be ` +
+          `ordered against the bindings decided before it` +
+          solutions(
+            `Bind it before init(), outside a condition, a hook or the config provider`,
+            `Or bind it without conditions`,
+          ),
+      )
+    }
+
+    this._released.clear()
     this._pendingConfigClasses.clear()
   }
 
-  // Tests the conditions in rank order, stopping at the first that fails; only a `when` that returns a promise is awaited.
-  private async passes(
+  // Decides one held binding: a @Provides binding goes with its class, and the rest registers when every condition
+  // passes and no decorated binding would land on a registered key.
+  private async decide(entry: PendingBinding, readConfig: ConfigReader): Promise<Decision> {
+    const { key, binding } = entry
+    const configuration = binding.source?.ctor
+
+    // Its class came first, whether it was held or not; a @Provides binding whose class is not registered is not
+    // decided at all.
+    if (configuration !== undefined && !this.registry.has(configuration)) {
+      this.hooks.emit('onBindingNotRegistered', { key, binding })
+      return { registered: false }
+    }
+
+    const failed = await this.failing(key, binding.conditionals, readConfig)
+    if (failed !== undefined) {
+      this.hooks.emit('onBindingNotRegistered', { key, binding })
+      return { registered: false, failed }
+    }
+
+    if (entry.byHand ? this._released.has(key) : this.registry.has(key)) {
+      throw new ErrRepeatedInjectableConfiguration(
+        `Cannot register "${keyStr(key)}"` +
+          (binding.configuredBy === undefined ? '' : ` configured at "${binding.configuredBy}"`) +
+          `: another binding is registered under the key, and a decorated binding decided at compile() does not replace one` +
+          solutions(
+            `Replace the decorated binding with rebind(key, ...), which also drops it before it is decided`,
+            `Make one of them a default that yields to the other with c => c.missing(key)`,
+          ),
+      )
+    }
+
+    this.configureBinding(key, binding, entry.meta)
+
+    if (!entry.byHand) {
+      this._released.add(key)
+    }
+
+    this.hooks.emit('onBindingRegistered', { key, binding })
+
+    return { registered: true }
+  }
+
+  // Tests the conditions in rank order and returns the first that fails; only a `when` that returns a promise is
+  // awaited.
+  private async failing(
     key: InjectionToken,
     conditions: readonly Condition[],
-    readConfig: (key: InjectionToken, condition: ConfigCondition) => unknown,
-  ): Promise<boolean> {
+    readConfig: ConfigReader,
+  ): Promise<Condition | undefined> {
     const ordered = conditions.length > 1 ? [...conditions].sort((a, b) => rank(a) - rank(b)) : conditions
 
     for (const condition of ordered) {
       const result = this.test(key, condition, readConfig)
       if (!(typeof result === 'boolean' ? result : await result)) {
-        return false
+        return condition
       }
     }
 
-    return true
+    return undefined
   }
 
-  private test(
-    key: InjectionToken,
-    condition: Condition,
-    readConfig: (key: InjectionToken, condition: ConfigCondition) => unknown,
-  ): boolean | Promise<boolean> {
+  private test(key: InjectionToken, condition: Condition, readConfig: ConfigReader): boolean | Promise<boolean> {
     switch (condition.kind) {
       case 'present':
         return this.has(condition.key)
@@ -1990,8 +2116,7 @@ export class CaffeineIoC implements Container {
    * @throws {@link ErrInvalidBinding} when the provider needs compiling to be read
    */
   private readConfigProvider(key: InjectionToken, condition: ConfigCondition): unknown {
-    const access = typeof condition.access === 'string' ? `"${condition.access}"` : 'selector'
-    const context = `condition config(${access}) of "${keyStr(key)}"`
+    const context = `condition ${conditionStr(condition)} of "${keyStr(key)}"`
     const provider = this.getBinding(Keys.kConfigProvider)
 
     if (provider === undefined) {

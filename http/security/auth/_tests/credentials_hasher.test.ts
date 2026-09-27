@@ -50,6 +50,34 @@ describe('the PasswordHasher addCredentials() provides', () => {
     await app.close()
   })
 
+  // Held back for its profile, the application's hasher is decided beside the default rather than discarded by it.
+  it('is the one the application bound for the active profile', async () => {
+    const own = new ScryptPasswordHasher({ N: 1024 })
+    const container = new CaffeineIoC({ profiles: ['hasher-prod'] })
+    container.bind(PasswordHasher, t => t.toValue(own).profiles('hasher-prod'))
+
+    const app = credentialsApp(container)
+    await app.ready()
+
+    expect(app.container.get(PasswordHasher)).toBe(own)
+
+    await app.close()
+  })
+
+  it('is ScryptPasswordHasher while the profile of the hasher the application bound is inactive', async () => {
+    const own = new ScryptPasswordHasher({ N: 1024 })
+    const container = new CaffeineIoC()
+    container.bind(PasswordHasher, t => t.toValue(own).profiles('hasher-prod'))
+
+    const app = credentialsApp(container)
+    await app.ready()
+
+    expect(app.container.get(PasswordHasher)).toBeInstanceOf(ScryptPasswordHasher)
+    expect(app.container.get(PasswordHasher)).not.toBe(own)
+
+    await app.close()
+  })
+
   it('is the one a module bound after the feature configured', async () => {
     const own = new ScryptPasswordHasher({ N: 1024 })
     const container = new CaffeineIoC({

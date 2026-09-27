@@ -705,6 +705,345 @@ describe('decision order', function () {
   })
 })
 
+// A cycle is decided by forcing its first declared binding out before the bindings it waits for. That settles when
+// some order of the cycle holds — two defaults of one key — and the container fails when none does, rather than keep a
+// binding its own condition contradicts.
+describe('a cycle of conditions across keys', function () {
+  class Rock {}
+  class Paper {}
+  class Scissors {}
+
+  abstract class PluginBase {
+    abstract id(): string
+  }
+  class Plugin extends PluginBase {
+    id(): string {
+      return 'plugin'
+    }
+  }
+  class SwitchedOffPlugin extends PluginBase {
+    id(): string {
+      return 'switched-off'
+    }
+  }
+  class BuiltInPlugin extends PluginBase {
+    id(): string {
+      return 'built-in'
+    }
+  }
+  class Feature {}
+  const kPlugins = token<PluginBase>(Symbol('cycle-plugins'))
+
+  it('fails the container when no order of the cycle holds', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Rock, t => t.toSelf().conditional(c => c.missing(Paper)))
+    di.bind(Paper, t => t.toSelf().conditional(c => c.missing(Scissors)))
+    di.bind(Scissors, t => t.toSelf().conditional(c => c.missing(Rock)))
+
+    const init = di.init()
+
+    await expect(init).rejects.toThrow(ErrInvalidBinding)
+    await expect(init).rejects.toThrow(
+      /Cannot decide "Rock": its condition missing\("Paper"\) was decided before "Paper"/,
+    )
+    await expect(init).rejects.toThrow(/Break the cycle/)
+  })
+
+  it('fails when a presence check and a default each wait for the other', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Feature, t => t.toSelf().conditional(c => c.present(Plugin)))
+    di.bind(Plugin, t => t.toSelf().conditional(c => c.missing(Feature)))
+
+    await expect(di.init()).rejects.toThrow(/Cannot decide "Feature": its condition present\("Plugin"\)/)
+  })
+
+  it('follows the cycle through a name', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Feature, t => t.toSelf().conditional(c => c.present(kPlugins)))
+    di.bind(Plugin, t =>
+      t
+        .toSelf()
+        .names(kPlugins)
+        .conditional(c => c.missing(Feature)),
+    )
+
+    await expect(di.init()).rejects.toThrow(/its condition present\("Symbol\(cycle-plugins\)"\)/)
+  })
+
+  it('follows the cycle through a base', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Feature, t => t.toSelf().conditional(c => c.present(PluginBase)))
+    di.bind(Plugin, t =>
+      t
+        .toSelf()
+        .extends(PluginBase)
+        .conditional(c => c.missing(Feature)),
+    )
+
+    await expect(di.init()).rejects.toThrow(/its condition present\("PluginBase"\) was decided before "Plugin"/)
+  })
+
+  // Feature read the provider registered first; the held one, which waited for Feature, then replaced it.
+  it('follows the cycle through the config provider', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Feature, t => t.toSelf().conditional(c => c.config('feature.on')))
+    di.bindConfigProvider(t => t.toValue({ feature: { on: true } }))
+    di.bindConfigProvider(t => t.toValue({ feature: { on: false } }).conditional(c => c.present(Feature)))
+
+    await expect(di.init()).rejects.toThrow(/Cannot decide "Feature": its condition config\("feature\.on"\)/)
+  })
+
+  // Rejected on the value of the provider it read, Feature would have passed on the one that replaced it.
+  it('fails when the config provider a rejected binding read is replaced afterwards', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Feature, t => t.toSelf().conditional(c => c.config('feature.on')))
+    di.bindConfigProvider(t => t.toValue({ feature: { on: false } }))
+    di.bindConfigProvider(t => t.toValue({ feature: { on: true } }).conditional(c => c.missing(Feature)))
+
+    await expect(di.init()).rejects.toThrow(/Cannot decide "Feature": its condition config\("feature\.on"\)/)
+  })
+
+  // Feature found the key present before the cycle closed, and it still is: nothing it decided on changed.
+  it('keeps a binding whose presence check was already met when the cycle was broken', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(BuiltInPlugin, t => t.toSelf().names(kPlugins))
+    di.bind(Feature, t => t.toSelf().conditional(c => c.present(kPlugins)))
+    di.bind(Plugin, t =>
+      t
+        .toSelf()
+        .names(kPlugins)
+        .conditional(c => c.present(Feature)),
+    )
+    await di.init()
+
+    expect([di.has(Feature), di.has(Plugin)]).toEqual([true, true])
+  })
+
+  it('settles two bindings that each yield to the other: the first registers, the other sees it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Rock, t => t.toSelf().conditional(c => c.missing(Paper)))
+    di.bind(Paper, t => t.toSelf().conditional(c => c.missing(Rock)))
+    await di.init()
+
+    expect([di.has(Rock), di.has(Paper)]).toEqual([true, false])
+  })
+
+  // The first default is rejected by its own switch, not by the key the second answers to, so the second registering
+  // afterwards leaves its decision standing.
+  it('settles two defaults of one key when the first is switched off', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(SwitchedOffPlugin, t =>
+      t
+        .toSelf()
+        .extends(PluginBase)
+        .conditional(c => c.missing(PluginBase))
+        .conditional(c => c.when(() => false)),
+    )
+    di.bind(Plugin, t =>
+      t
+        .toSelf()
+        .extends(PluginBase)
+        .conditional(c => c.missing(PluginBase)),
+    )
+    await di.init()
+
+    expect(di.getMany(PluginBase)).toEqual([expect.any(Plugin)])
+  })
+
+  it('settles two bindings that each need the other by leaving both out', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Rock, t => t.toSelf().conditional(c => c.present(Paper)))
+    di.bind(Paper, t => t.toSelf().conditional(c => c.present(Rock)))
+    await di.init()
+
+    expect([di.has(Rock), di.has(Paper)]).toEqual([false, false])
+  })
+})
+
+// A conditional binding made by hand replaces a binding of its key only when its conditions pass, whether that binding
+// is registered or still held back beside it. Only a binding without conditions discards the held ones outright.
+describe('conditional bindings of one key made by hand', function () {
+  const kMode = token<string>(Symbol('held-beside-mode'))
+
+  const bindMode = (di: CaffeineIoC, value: string, passes: boolean) =>
+    di.bind(kMode, t => t.toValue(value).conditional(c => c.when(() => passes)))
+
+  it('keep the first when the second fails', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'first', true)
+    bindMode(di, 'second', false)
+    await di.init()
+
+    expect(di.get(kMode)).toBe('first')
+  })
+
+  it('take the second when the first fails', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'first', false)
+    bindMode(di, 'second', true)
+    await di.init()
+
+    expect(di.get(kMode)).toBe('second')
+  })
+
+  it('take the later of two that pass, as a second bind() replaces the first', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'first', true)
+    bindMode(di, 'second', true)
+    await di.init()
+
+    expect(di.get(kMode)).toBe('second')
+  })
+
+  it('let a default bound after a competitor yield to it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'competitor', true)
+    di.bind(kMode, t => t.toValue('default').conditional(c => c.missing(kMode)))
+    await di.init()
+
+    expect(di.get(kMode)).toBe('competitor')
+  })
+
+  it('let a default bound before a competitor yield to it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kMode, t => t.toValue('default').conditional(c => c.missing(kMode)))
+    bindMode(di, 'competitor', true)
+    await di.init()
+
+    expect(di.get(kMode)).toBe('competitor')
+  })
+
+  it('are all discarded by a binding of the key without conditions', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'first', true)
+    bindMode(di, 'second', true)
+    di.bind(kMode, t => t.toValue('plain'))
+    await di.init()
+
+    expect(di.get(kMode)).toBe('plain')
+  })
+
+  it('are all dropped by rebind()', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    bindMode(di, 'first', true)
+    bindMode(di, 'second', true)
+    di.rebind(kMode, t => t.toValue('rebound'))
+    await di.init()
+
+    expect(di.get(kMode)).toBe('rebound')
+  })
+
+  it('are carried through snapshot() and restore(), and decided the same way', async function () {
+    const source = new CaffeineIoC({ decorators: false })
+    bindMode(source, 'first', true)
+    bindMode(source, 'second', false)
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.restore(source.snapshot())
+    await di.init()
+
+    expect(di.get(kMode)).toBe('first')
+  })
+})
+
+// A binding held back while the container decides the held bindings could be ordered against none of those already
+// decided. Rather than decide it out of order, or drop it without a word, the container refuses it.
+describe('a binding with conditions made while the conditions are decided', function () {
+  const kTrigger = token<string>(Symbol('late-trigger'))
+  const kLate = token<string>(Symbol('late-held'))
+
+  const bindLate = (di: CaffeineIoC) => di.bind(kLate, t => t.toValue('late').conditional(c => c.when(() => true)))
+
+  it('is refused when a condition makes it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kTrigger, t =>
+      t.toValue('trigger').conditional(c =>
+        c.when(() => {
+          bindLate(di)
+          return true
+        }),
+      ),
+    )
+
+    const init = di.init()
+
+    await expect(init).rejects.toThrow(ErrInvalidContainerState)
+    await expect(init).rejects.toThrow(/Cannot decide the conditions of "Symbol\(late-held\)": bound while/)
+  })
+
+  it('is refused when a hook makes it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.hooks.on('onBindingRegistered', ({ key }) => {
+      if (key === kTrigger) {
+        bindLate(di)
+      }
+    })
+    di.bind(kTrigger, t => t.toValue('trigger').conditional(c => c.when(() => true)))
+
+    await expect(di.init()).rejects.toThrow(ErrInvalidContainerState)
+  })
+
+  it('is refused when the config provider makes it', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bindConfigProvider(t =>
+      t.toFactory(() => {
+        bindLate(di)
+        return { on: true }
+      }),
+    )
+    di.bind(kTrigger, t => t.toValue('trigger').conditional(c => c.config('on')))
+
+    await expect(di.init()).rejects.toThrow(ErrInvalidContainerState)
+  })
+
+  it('is not what a binding without conditions is: that one registers, as it would from anywhere', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kTrigger, t =>
+      t.toValue('trigger').conditional(c =>
+        c.when(() => {
+          di.bind(kLate, b => b.toValue('late'))
+          return true
+        }),
+      ),
+    )
+    await di.init()
+
+    expect(di.get(kLate)).toBe('late')
+  })
+})
+
+// What init() called again after a failure sees: the bindings decided before the throw stay decided, so none is
+// decided twice.
+describe('a compile that throws half-way', function () {
+  class Decided {}
+  class Flaky {}
+
+  it('decides only what was left when init() runs again', async function () {
+    const decided = vi.fn(() => true)
+    let fail = true
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Decided, t => t.toSelf().conditional(c => c.when(decided)))
+    di.bind(Flaky, t =>
+      t.toSelf().conditional(c =>
+        c.when(() => {
+          if (fail) {
+            throw new Error('flaky condition')
+          }
+          return true
+        }),
+      ),
+    )
+
+    await expect(di.init()).rejects.toThrow('flaky condition')
+
+    fail = false
+    await di.init()
+
+    expect(decided).toHaveBeenCalledTimes(1)
+    expect([di.has(Decided), di.has(Flaky)]).toEqual([true, true])
+  })
+})
+
 describe('config conditions', function () {
   type Cfg = { cache: { enabled: boolean; kind: string } }
   const config: Cfg = { cache: { enabled: true, kind: 'redis' } }
@@ -941,6 +1280,66 @@ describe('conditions from a metadata reader', function () {
 
     expect(di.getMany(ReadHasher).map(h => h.kind())).toEqual(['argon'])
   })
+
+  // The reader is the application's own. Called twice for one binding it would repeat whatever it does, and a reader
+  // answering differently the second time would contradict the decision to hold the binding back.
+  describe('called once for every binding', function () {
+    const kReadProvided = token<string>(Symbol('read-once-provided'))
+
+    @Injectable()
+    class ReadOnceDecorated {}
+
+    @Injectable()
+    @Profile('read-once')
+    class ReadOnceHeldDecorated {}
+
+    @Configuration()
+    class ReadOnceConfig {
+      @Provides(kReadProvided)
+      value(): string {
+        return 'provided'
+      }
+    }
+
+    class Plain {}
+    class HeldPassing {}
+    class HeldFailing {}
+
+    it('whether it is bound by hand, registers at once, waits for its conditions or fails them', async function () {
+      const read = vi.fn((_key: unknown) => ({}))
+      const di = new CaffeineIoC({ metadataReader: read, profiles: ['read-once'] })
+      di.bind(Plain, t => t.toSelf())
+      di.bind(HeldPassing, t => t.toSelf().conditional(c => c.when(() => true)))
+      di.bind(HeldFailing, t => t.toSelf().conditional(c => c.when(() => false)))
+      await di.init()
+
+      const calls = (key: unknown) => read.mock.calls.filter(([k]) => k === key).length
+      const keys = [
+        Plain,
+        HeldPassing,
+        HeldFailing,
+        ReadOnceDecorated,
+        ReadOnceHeldDecorated,
+        ReadOnceConfig,
+        kReadProvided,
+      ]
+
+      expect(keys.map(calls)).toEqual(keys.map(() => 1))
+      expect([di.has(HeldPassing), di.has(HeldFailing), di.has(ReadOnceHeldDecorated)]).toEqual([true, false, true])
+    })
+
+    it('and what it returned still applies to a binding that waited for its conditions', async function () {
+      class Transient {}
+      const di = new CaffeineIoC({
+        decorators: false,
+        metadataReader: key => (key === Transient ? { scopeID: Scopes.TRANSIENT } : {}),
+      })
+      di.bind(Transient, t => t.toSelf().conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(Transient)).not.toBe(di.get(Transient))
+    })
+  })
 })
 
 describe('snapshot() and restore()', function () {
@@ -999,6 +1398,71 @@ describe('snapshot() and restore()', function () {
         .entries()
         .map(([key]) => key),
     ).not.toContain(kInternal)
+  })
+
+  it('takes the place of a binding this container holds for the key, even one the snapshot had decided', async function () {
+    const kDecided = token<string>(Symbol('snapshot-decided-over-held'))
+    const source = new CaffeineIoC({ decorators: false })
+    source.bind(kDecided, t => t.toValue('snapshot'))
+    await source.init()
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kDecided, t => t.toValue('container').conditional(c => c.when(() => true)))
+    di.restore(source.snapshot())
+    await di.init()
+
+    expect(di.get(kDecided)).toBe('snapshot')
+  })
+
+  // A @Provides binding goes with the class it was declared in, whether that class is held back or registered.
+  describe('a @Provides binding', function () {
+    const kOrphan = token<string>(Symbol('snapshot-orphan-provides'))
+    const kOwn = token<string>(Symbol('snapshot-own-provides'))
+
+    @Configuration()
+    @Profile('snapshot-orphan')
+    class OrphanConfig {
+      @Provides(kOrphan)
+      value(): string {
+        return 'provided'
+      }
+    }
+
+    @Configuration()
+    class RegisteredConfig {
+      @Conditional(c => c.profile('snapshot-own'))
+      @Provides(kOwn)
+      value(): string {
+        return 'provided'
+      }
+    }
+    void RegisteredConfig
+
+    // What TestContainer.skip() of the class does: the class goes, and what it provides goes with it.
+    it('is left out with its held class', async function () {
+      const notRegistered = vi.fn()
+      const source = new CaffeineIoC({ profiles: ['snapshot-orphan'] })
+      const di = new CaffeineIoC({ decorators: false })
+      di.hooks.on('onBindingNotRegistered', ({ key }) => notRegistered(key))
+      di.restore(source.snapshot().exclude(OrphanConfig))
+      await di.init()
+
+      expect(di.has(kOrphan)).toBe(false)
+      expect(notRegistered).toHaveBeenCalledWith(kOrphan)
+    })
+
+    it('is decided on its own conditions when its class was registered', async function () {
+      const passing = new CaffeineIoC({ decorators: false })
+      passing.restore(new CaffeineIoC({ profiles: ['snapshot-own'] }).snapshot())
+      await passing.init()
+
+      const failing = new CaffeineIoC({ decorators: false })
+      failing.restore(new CaffeineIoC().snapshot())
+      await failing.init()
+
+      expect(passing.get(kOwn)).toBe('provided')
+      expect(failing.has(kOwn)).toBe(false)
+    })
   })
 
   it('cannot restore once the container has been compiled', async function () {

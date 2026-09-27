@@ -75,8 +75,19 @@ class RedisStore extends Store {}
 Among the bindings free to be decided, the first declared goes first. When none is — two defaults of one key each wait
 for the other — the first declared goes first, and the other then sees it.
 
+A cycle settles only when some outcome of it holds together. When none does — `Rock` checks `c.missing(Paper)`, `Paper`
+checks `c.missing(Scissors)`, and `Scissors` checks `c.missing(Rock)` — `init()` fails with `ErrInvalidBinding`, naming
+the binding whose condition the rest of the cycle proved false, rather than keep it registered.
+
 Within one binding, profiles are checked first and `c.when` predicates last, so a predicate of your own runs only once
 every condition the container can check itself has passed.
+
+A binding with conditions made while the container decides them — from a `c.when` predicate, a hook, or the config
+provider — could be ordered against none of the bindings already decided, so `init()` refuses it with
+`ErrInvalidContainerState`. A binding without conditions made there registers as it would anywhere else.
+
+When a condition throws, `init()` rejects with that error. The bindings decided before it stay decided, and calling
+`init()` again decides only the rest.
 
 :::warning
 A binding that fails its condition is completely absent from the container. Any hard injection of that key will throw
@@ -318,8 +329,16 @@ await di.init()
 Multiple `.conditional()` calls chain as AND, matching the decorator behaviour.
 
 A binding made by hand with `.conditional()` is held back until `init()` the way a decorated one is, and leaves a
-binding already registered under its key alone. It replaces that binding only if its conditions pass. Binding the same
-key again discards it, the same way the second of two `bind()` calls replaces the first.
+binding of its key alone — registered, or held back beside it. It replaces that binding only if its conditions pass, so
+a key can be bound once for each profile:
+
+```ts
+di.bind(Storage, t => t.toClass(LocalDiskStorage).profiles('dev'))
+di.bind(Storage, t => t.toClass(S3Storage).profiles('prod'))
+```
+
+When more than one of them passes, the one decided last is registered, as the second of two `bind()` calls replaces the
+first. Binding the key again without conditions discards every one of them.
 
 ---
 

@@ -92,5 +92,6 @@ type Condition =
 
 A condition is data rather than a predicate. The container reads its `kind` to know which keys it checks, and decides a
 binding after every held binding answering to one of them: `present` and `missing` check their key, and `config` the
-config provider's. Build one with a helper; `@Conditional` and `.conditional()` reject anything that is not a
+config provider's. Bindings that wait for one another in a cycle are decided first declared first; when no outcome of
+the cycle holds together, `init()` fails with `ErrInvalidBinding`. Build one with a helper; `@Conditional` and `.conditional()` reject anything that is not a
 condition of one of these kinds with `ErrInvalidDecorator` / `ErrInvalidBinding`.

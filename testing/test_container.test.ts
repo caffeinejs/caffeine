@@ -256,6 +256,41 @@ describe('TestContainer', function () {
       expect(di.has(kConn)).toBe(true)
     })
 
+    // A test that keeps the real payment infrastructure out skips its configuration class. What the class provides
+    // goes with it, even while the class is still held back for its profile in the source.
+    describe('skip() of a @Configuration held back for its profile', function () {
+      const kGateway = token<string>(Symbol('tc-live-gateway'))
+
+      @Configuration()
+      @Profile('tc-payments-live')
+      class LivePaymentsConfig {
+        @Provides(kGateway)
+        gateway(): string {
+          return 'live-gateway'
+        }
+      }
+
+      it('leaves out what it provides', async function () {
+        const source = new CaffeineIoC({ profiles: ['tc-payments-live'] })
+        const di = new TestContainer(source).skip(LivePaymentsConfig).build()
+        await di.init()
+
+        expect(di.has(LivePaymentsConfig)).toBe(false)
+        expect(di.has(kGateway)).toBe(false)
+      })
+
+      it('lets an override stand in for what it provided', async function () {
+        const source = new CaffeineIoC({ profiles: ['tc-payments-live'] })
+        const di = new TestContainer(source)
+          .skip(LivePaymentsConfig)
+          .override(kGateway, b => b.toValue('fake-gateway'))
+          .build()
+        await di.init()
+
+        expect(di.get(kGateway)).toBe('fake-gateway')
+      })
+    })
+
     it('override key is exempt from skipAsyncBindings filter and resolves', async function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source)

@@ -8,8 +8,9 @@ too: `@Profile` and `.profiles()` add a `profile` one, and there is no separate 
 
 Every binding whose conditions are non-empty waits in `_pendingConditionals` until `compile()`, however it was made:
 read by `autoWire`, bound by hand (`registerOrHold` for `bind`, `aspect` and modules), or restored undecided.
-`holdsBack` applies the `MetadataReader`'s `conditionals` first, so a binding the reader makes conditional is held
-like any other; there is no eager path and no prune.
+`readMetadata` calls the `MetadataReader` once per binding and applies its `conditionals` first, so a binding the
+reader makes conditional is held like any other; there is no eager path and no prune. The partial it read travels with
+a held binding (`PendingBinding.meta`) into `configureBinding`, so the reader is never called twice for one binding.
 
 Two reasons, both about what a condition sees:
 
@@ -23,22 +24,36 @@ Two reasons, both about what a condition sees:
 - A binding waits for its held `@Configuration` class, and for every held binding answering — by key, name or base — to
   a key one of its conditions checks. A configuration class does not wait for its own `@Provides` bindings.
 - Among the free bindings, push order decides; on a cycle, the first pushed of the rest goes, and the others then
-  see it.
-- A `@Provides` binding is tied to its own class through `source` (`_pendingConfigClasses`), never through the key
-  it provides: another class may provide the same key.
+  see it. That forced decision took the bindings it still waited for to be absent. `checkForcedDecisions` verifies it
+  once they are decided: if one registered and overturns the condition the decision turned on (`missing` on a
+  registered binding, `present` on a rejected one, `config` either way), no order of the cycle holds, and it throws
+  `ErrInvalidBinding`. Two defaults of one key never trip it: the second yields, so it never registers.
+- A `@Provides` binding is decided after its own held class (`providedByConfig`), never through the key it provides:
+  another class may provide the same key. It registers only if `source.ctor` is registered, whether that class was
+  held or not, so a snapshot that left the class out leaves its `@Provides` out too.
 - Within a binding, `profile` conditions go first and `when` last. `config` reads the provider once per compile,
   through its own factory, which is why the provider must be bound with `toValue()` or `toFactory()`.
 
 A decorated binding decided at `compile()` never lands on a registered key: it throws
-`ErrRepeatedInjectableConfiguration`. So does a binding made by hand that passes after a decorated one took its key,
-so the outcome does not depend on which is decided first. `rebind` drops every held binding of its key, which is how a
-decorated binding is overridden; a binding made by hand replaces another as `bind()` does.
+`ErrRepeatedInjectableConfiguration`. So does a binding made by hand that passes after a decorated one took its key
+(`_released`), so the outcome does not depend on which is decided first. `rebind` drops every held binding of its key
+and forgets that a decorated binding took it, which is how a decorated binding is overridden; a binding made by hand
+replaces another as `bind()` does.
+
+A binding leaves `_pendingConditionals` once decided, in a `finally`, so a compile that throws half-way keeps held only
+what it had not decided, and `init()` called again decides no binding twice. `_released` outlives that throw for the
+same reason. Whatever is still held once the loop ends was held while it ran — from a `when`, a hook, or the config
+provider's factory — and could be ordered against none of the decided bindings, so the container throws
+`ErrInvalidContainerState` rather than decide it or drop it.
 
 - `has()`, `entries()`, `size` and `getBindingsByLabel()` do not see a held-back binding until `compile()`.
-- Binding the key again discards a held-back binding made by hand, as it replaces a registered one.
+- A conditional binding made by hand is held beside the held bindings of its key, not in place of them: one that
+  passes replaces one decided before it, as it replaces a registered one. Binding the key again without conditions
+  discards every held binding of it made by hand. `ConfigModule` relies on this: its provider is a
+  `c.missing(Keys.kConfigProvider)` default, which yields to the application's even while that one is held.
 - `snapshot()` records the registered bindings, every held one marked with `kHeld` and its origin, and the active
-  profiles. `restore()` registers a registered binding as it is, without deciding it again; holds a marked one back
-  in place of what this container holds for its key; and activates the snapshot's profiles.
+  profiles. `restore()` registers a registered binding as it is, without deciding it again; holds a marked one back;
+  either way takes the place of what this container holds for its key; and activates the snapshot's profiles.
 
 ## `token()` is for injection keys only
 

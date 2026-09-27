@@ -20,7 +20,8 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
  * - The live config object under the definition's key, and the store under its store key, when it names them.
  * - The store under the {@link ConfigStore} class, which is how the framework finds it.
  * - The current snapshot as the config provider, so `$i.config(c => c.database.host)` reads configuration. The value
- *   is read when the consumer is built.
+ *   is read when the consumer is built. It is a default: a config provider the application bound wins, with or
+ *   without conditions of its own.
  * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
  *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *
@@ -41,13 +42,14 @@ export function ConfigModule<T>(store: ConfigStore<T>): Module {
       t.toValue(store as ConfigStore<unknown>).internal(),
     )
 
-    // An application that bound its own config provider meant it. A module is handed the binding operations only,
-    // so the check walks the entries.
-    const boundAlready = [...container.entries()].some(([bound]) => bound === Keys.kConfigProvider)
-    if (!boundAlready) {
-      // Transient, so every injection reads the snapshot that is current then.
-      container.bindConfigProvider(t => t.toFactory(() => store.current).lifetime(Scopes.TRANSIENT))
-    }
+    // A default: an application that bound its own config provider meant it, and it wins whether it is registered or
+    // still held back for its own conditions. Transient, so every injection reads the snapshot that is current then.
+    container.bindConfigProvider(t =>
+      t
+        .toFactory(() => store.current)
+        .lifetime(Scopes.TRANSIENT)
+        .conditional(c => c.missing(Keys.kConfigProvider)),
+    )
 
     const refresher: SelfRefreshable = {
       async [kSelfRefresh]() {

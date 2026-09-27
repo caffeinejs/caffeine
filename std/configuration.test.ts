@@ -279,6 +279,63 @@ describe('configuration as the DI config provider', () => {
     expect(container.get(Holder).host).toBe('second')
   })
 
+  // The provider the application's configuration binds is a default, decided while the container compiles like any
+  // conditional binding. A config condition waits for it, so it reads the loaded configuration.
+  describe('choosing an implementation by configuration', () => {
+    abstract class Database {
+      abstract kind(): string
+    }
+
+    class EmbeddedDatabase extends Database {
+      kind(): string {
+        return 'embedded'
+      }
+    }
+
+    class NetworkDatabase extends Database {
+      kind(): string {
+        return 'network'
+      }
+    }
+
+    const wire = (container: CaffeineIoC) =>
+      container
+        .bind(EmbeddedDatabase, t =>
+          t
+            .toSelf()
+            .extends(Database)
+            .conditional(c => c.config<DatabaseConfig, string>(cfg => cfg.database.host, 'embedded')),
+        )
+        .bind(NetworkDatabase, t =>
+          t
+            .toSelf()
+            .extends(Database)
+            .conditional(c => c.missing(Database)),
+        )
+
+    it('registers the one the configuration selects', async () => {
+      const { builder, container } = appWith({
+        provider: new InlineConfigSource({ database: { host: 'embedded', port: 0 } }),
+      })
+      wire(container)
+
+      await builder.ready()
+
+      expect(container.getMany(Database).map(d => d.kind())).toEqual(['embedded'])
+    })
+
+    it('falls back to the default when the configuration selects none', async () => {
+      const { builder, container } = appWith({
+        provider: new InlineConfigSource({ database: { host: 'db.local', port: 5432 } }),
+      })
+      wire(container)
+
+      await builder.ready()
+
+      expect(container.getMany(Database).map(d => d.kind())).toEqual(['network'])
+    })
+  })
+
   it('leaves an application-supplied config provider alone', async () => {
     @Injectable([$i.config<{ own: string }, string>(c => c.own)])
     class Holder {

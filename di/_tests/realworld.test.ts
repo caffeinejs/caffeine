@@ -250,3 +250,64 @@ describe('Real World', function () {
     expect(userSpy).toHaveBeenCalledTimes(1)
   })
 })
+
+// A library ships a default that yields to whatever the application binds. The application overrides it only in
+// production, so which one resolves turns on the active profile, never on which of the two was declared first.
+describe('a library default and an application override for one profile', function () {
+  abstract class SessionStore {
+    abstract kind(): string
+  }
+
+  // Declared by the library, and so read before the application binds anything.
+  @Conditional(c => c.missing(SessionStore))
+  @Injectable()
+  @Extends()
+  class MemorySessionStore extends SessionStore {
+    kind(): string {
+      return 'memory'
+    }
+  }
+  void MemorySessionStore
+
+  class RedisSessionStore extends SessionStore {
+    kind(): string {
+      return 'redis'
+    }
+  }
+
+  @Injectable([SessionStore])
+  class SessionService {
+    constructor(readonly store: SessionStore) {}
+  }
+
+  const application = (di: CaffeineIoC) =>
+    di.bind(RedisSessionStore, t => t.toSelf().extends(SessionStore).profiles('rw-sessions-prod'))
+
+  it('uses the library default outside the profile', async function () {
+    const di = new CaffeineIoC()
+    application(di)
+    await di.init()
+
+    expect(di.get(SessionService).store.kind()).toBe('memory')
+  })
+
+  it('uses the application override in the profile, and only it', async function () {
+    const di = new CaffeineIoC({ profiles: ['rw-sessions-prod'] })
+    application(di)
+    await di.init()
+
+    expect(di.get(SessionService).store.kind()).toBe('redis')
+    expect(di.getMany(SessionStore).map(s => s.kind())).toEqual(['redis'])
+  })
+
+  // What an application built with @caffeinejs/std does: it activates the profiles it read from its configuration only
+  // after the container read the decorators and the application bound its own.
+  it('uses the override when the profile is activated after both were declared', async function () {
+    const di = new CaffeineIoC()
+    application(di)
+    di.addProfiles('rw-sessions-prod')
+    await di.init()
+
+    expect(di.get(SessionService).store.kind()).toBe('redis')
+  })
+})

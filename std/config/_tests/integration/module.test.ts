@@ -59,6 +59,40 @@ describe('ConfigModule', () => {
     expect(container.has(Keys.kConfigProvider)).toBe(true)
   })
 
+  // The module's provider is a default. An application's own wins even while it waits for conditions of its own — the
+  // module runs before any held binding is decided, so it cannot tell by looking.
+  describe('beside a config provider the application holds back for its conditions', () => {
+    @Injectable([$i.config<{ from: string }, string>(c => c.from)])
+    class Reader {
+      constructor(readonly from: string) {}
+    }
+
+    async function withHeldProvider(passes: boolean) {
+      const store = await loadConfig<AppConfig>(
+        { schema, key: kConfig, storeKey: undefined, sources: [remote(data).source], loadTimeoutMs: 30_000 },
+        { start: false },
+      )
+      const container = new CaffeineIoC({ decorators: false })
+      container.bindConfigProvider(t => t.toValue({ from: 'application' }).conditional(c => c.when(() => passes)))
+      container.addModules(ConfigModule(store))
+      container.bind(Reader, t => t.toSelf())
+      await container.init()
+      return { container, store }
+    }
+
+    it('lets the application provider win when its conditions pass', async () => {
+      const { container } = await withHeldProvider(true)
+
+      expect(container.get(Reader).from).toBe('application')
+    })
+
+    it('binds its own when they fail', async () => {
+      const { container, store } = await withHeldProvider(false)
+
+      expect(container.get(Keys.kConfigProvider)).toBe(store.current)
+    })
+  })
+
   // The config provider is read when a consumer is built, so a transient built after a reload sees the new value.
   it('lets $i.config read the snapshot current when the consumer is built', async () => {
     @Injectable([$i.config<AppConfig, string>(c => c.http.host)])

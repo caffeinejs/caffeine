@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
+import { Extends } from '../decorators/extends.js'
+import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrRepeatedInjectableConfiguration } from '../errors.js'
@@ -137,5 +139,113 @@ describe('a decorated binding decided at compile() over a registered key', funct
     di.addProfiles('clash-48-profiled')
 
     await expect(di.init()).rejects.toThrow(ErrRepeatedInjectableConfiguration)
+  })
+})
+
+// A compile that throws half-way keeps held only what it had not decided yet. init() called again then decides no
+// binding twice, and reports what failed rather than a clash with a binding it had registered itself.
+describe('init() called again after a condition threw', function () {
+  const state = { fail: true }
+
+  @Injectable()
+  @Profile('clash-retry')
+  class RetryDecided {}
+
+  @Injectable()
+  @Profile('clash-retry')
+  @Conditional(c =>
+    c.when(() => {
+      if (state.fail) {
+        throw new Error('flaky condition')
+      }
+      return true
+    }),
+  )
+  class RetryFlaky {}
+
+  beforeEach(function () {
+    state.fail = true
+  })
+
+  it('decides what was left, and registers nothing twice', async function () {
+    const registered = vi.fn()
+    const di = new CaffeineIoC({ profiles: ['clash-retry'] })
+    di.hooks.on('onBindingRegistered', ({ key }) => registered(key))
+
+    await expect(di.init()).rejects.toThrow('flaky condition')
+
+    state.fail = false
+    await di.init()
+
+    expect(di.has(RetryFlaky)).toBe(true)
+    expect(registered.mock.calls.filter(([key]) => key === RetryDecided)).toHaveLength(1)
+  })
+
+  it('reports what failed again while it still fails', async function () {
+    const di = new CaffeineIoC({ profiles: ['clash-retry'] })
+
+    await expect(di.init()).rejects.toThrow('flaky condition')
+    await expect(di.init()).rejects.toThrow('flaky condition')
+  })
+
+  it('still refuses a binding made by hand over a key a decorated binding took before the throw', async function () {
+    const di = new CaffeineIoC({ profiles: ['clash-retry'] })
+    di.bind(RetryDecided, t => t.toSelf().conditional(c => c.when(() => true)))
+
+    await expect(di.init()).rejects.toThrow('flaky condition')
+
+    state.fail = false
+    await expect(di.init()).rejects.toThrow(ErrRepeatedInjectableConfiguration)
+  })
+
+  it('lets a binding rebind() put in place of the decorated one stand', async function () {
+    const di = new CaffeineIoC({ profiles: ['clash-retry'] })
+
+    await expect(di.init()).rejects.toThrow('flaky condition')
+
+    di.rebind(RetryDecided, t => t.toSelf().conditional(c => c.when(() => true)))
+    state.fail = false
+    await di.init()
+
+    expect(di.has(RetryDecided)).toBe(true)
+  })
+})
+
+// A container that reads decorators holds its own copy of every conditional class. Restoring a snapshot that had
+// decided one puts the snapshot's in its place, rather than deciding the class a second time over it.
+describe('a compiled snapshot restored into a container that reads decorators', function () {
+  abstract class RestoredStore {
+    abstract kind(): string
+  }
+
+  @Injectable()
+  @Extends()
+  @Profile('clash-restore')
+  class RestoredRedisStore extends RestoredStore {
+    kind(): string {
+      return 'redis'
+    }
+  }
+  void RestoredRedisStore
+
+  @Injectable()
+  @Extends()
+  @Conditional(c => c.missing(RestoredStore))
+  class RestoredMemoryStore extends RestoredStore {
+    kind(): string {
+      return 'memory'
+    }
+  }
+  void RestoredMemoryStore
+
+  it('registers what the snapshot decided, once, and keeps out the default it beat', async function () {
+    const source = new CaffeineIoC({ profiles: ['clash-restore'] })
+    await source.init()
+
+    const di = new CaffeineIoC()
+    di.restore(source.snapshot())
+    await di.init()
+
+    expect(di.getMany(RestoredStore).map(s => s.kind())).toEqual(['redis'])
   })
 })

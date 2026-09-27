@@ -222,6 +222,37 @@ describe('BindingSpec.profiles()', function () {
 
     expect(di.has(FluentProfCond)).toBe(false)
   })
+
+  // One key, one implementation per profile: each is held back beside the others and decided on its own profile, so
+  // binding the next one does not discard the first.
+  describe('one key bound by hand for each profile', function () {
+    const kStorage = token<string>(Symbol('storage-per-profile'))
+
+    const bindAll = (di: CaffeineIoC) =>
+      di
+        .bind(kStorage, t => t.toValue('local-disk').profiles('storage-dev'))
+        .bind(kStorage, t => t.toValue('s3').profiles('storage-prod'))
+
+    it('resolves the one of the active profile, whichever was bound last', async function () {
+      const dev = new CaffeineIoC({ decorators: false, profiles: ['storage-dev'] })
+      bindAll(dev)
+      await dev.init()
+
+      const prod = new CaffeineIoC({ decorators: false, profiles: ['storage-prod'] })
+      bindAll(prod)
+      await prod.init()
+
+      expect([dev.get(kStorage), prod.get(kStorage)]).toEqual(['local-disk', 's3'])
+    })
+
+    it('resolves none with no matching profile active', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      bindAll(di)
+      await di.init()
+
+      expect(di.has(kStorage)).toBe(false)
+    })
+  })
 })
 
 describe('CaffeineIoC.addProfiles()', function () {

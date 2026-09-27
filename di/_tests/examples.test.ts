@@ -1326,6 +1326,81 @@ describe('conditional-bindings: complementary condition for the default', functi
   })
 })
 
+// ─── conditional-bindings: region-based implementations with a missing() default ─
+
+describe('conditional-bindings: region-based implementations with a missing() default', function () {
+  abstract class CbRegionGateway {
+    abstract charge(amount: number): string
+  }
+
+  // Declared first, and still decided after the gateways it checks for.
+  @Conditional(c => c.missing(CbRegionGateway))
+  @Injectable()
+  @Extends()
+  class CbMockRegionGateway extends CbRegionGateway {
+    charge(amount: number) {
+      return `mock:${amount}`
+    }
+  }
+
+  @Conditional(c => c.env('CB_REGION', 'eu'))
+  @Injectable()
+  @Extends()
+  class CbStripeEUGateway extends CbRegionGateway {
+    charge(amount: number) {
+      return `eu:${amount}`
+    }
+  }
+
+  @Conditional(c => c.env('CB_REGION', 'us'))
+  @Injectable()
+  @Extends()
+  class CbBraintreeUSGateway extends CbRegionGateway {
+    charge(amount: number) {
+      return `us:${amount}`
+    }
+  }
+
+  @Injectable([CbRegionGateway])
+  class CbCheckoutService {
+    constructor(private readonly gateway: CbRegionGateway) {}
+
+    checkout(amount: number) {
+      return this.gateway.charge(amount)
+    }
+  }
+
+  let origRegion: string | undefined
+  beforeAll(function () {
+    origRegion = process.env.CB_REGION
+  })
+  afterAll(function () {
+    if (origRegion === undefined) {
+      delete process.env.CB_REGION
+    } else {
+      process.env.CB_REGION = origRegion
+    }
+  })
+
+  it.each([
+    ['eu', CbStripeEUGateway, 'eu:10'],
+    ['us', CbBraintreeUSGateway, 'us:10'],
+    [undefined, CbMockRegionGateway, 'mock:10'],
+  ])('registers exactly one gateway for region %s', async function (region, gateway, charged) {
+    if (region === undefined) {
+      delete process.env.CB_REGION
+    } else {
+      process.env.CB_REGION = region
+    }
+
+    const di = new CaffeineIoC()
+    await di.init()
+
+    expect(di.getMany(CbRegionGateway)).toEqual([expect.any(gateway)])
+    expect(di.get(CbCheckoutService).checkout(10)).toBe(charged)
+  })
+})
+
 // ─── conditional-bindings: stacked @Conditional (AND) — all pass ───────────
 
 describe('conditional-bindings: stacked @Conditional (AND) — all pass', function () {
