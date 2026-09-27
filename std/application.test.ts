@@ -20,6 +20,7 @@ import {
   ErrApplicationNotReady,
   ErrApplicationRunning,
   ErrApplicationStarted,
+  ErrConfigNotReady,
   ErrFeatureAlreadyInstalled,
   FeatureBuilder,
   type BootstrapKit,
@@ -255,9 +256,9 @@ describe('feature lifecycle', () => {
     expect(app.container.get(token<number | undefined>('widget.size'))).toBe(42)
   })
 
-  // Application code reads the same object a feature was handed. It is not available until `ready()` has
-  // resolved: a feature mid-bootstrap still reads the kit.
-  it('returns the live config features were handed, once ready()', async () => {
+  // Application code reads the same object a feature was handed. The store is kept before features configure,
+  // so a feature mid-bootstrap reads `app.config` rather than only the kit.
+  it('returns the live config features were handed, once it has loaded', async () => {
     let handed: FeatureConfigureKit['config'] | undefined
 
     const app = widgetApp(
@@ -267,16 +268,17 @@ describe('feature lifecycle', () => {
         },
         [kFeatureConfigure](kit: FeatureConfigureKit): void {
           handed = kit.config
+          expect(app.config).toBe(kit.config)
         },
         [kFeatureBootstrap](kit: BootstrapKit): void {
           expect(kit.config).toBe(handed)
-          expect(() => app.config).toThrow(ErrApplicationNotReady)
+          expect(app.config).toBe(handed)
         },
       },
       42,
     )
 
-    expect(() => app.config).toThrow(ErrApplicationNotReady)
+    expect(() => app.config).toThrow(ErrConfigNotReady)
 
     await app.ready()
 
@@ -397,6 +399,115 @@ describe('feature bootstrap', () => {
     await app.ready()
 
     expect(seen).toBe(custom)
+  })
+})
+
+describe('ready() callback', () => {
+  // The callback is the place that can still install a feature after the config exists and before the list
+  // of features is read. A feature added there has to configure and bootstrap, or the call only looks like it worked.
+  it('configures and bootstraps a feature installed from the callback, against the loaded config', async () => {
+    const conf = newConfiguration(widgetSchema, kWidgetConfig)
+      .source(new InlineConfigSource({ widget: { size: 7 }, caffeine: { name: 'petstore' } }))
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+
+    let seenSize: number | undefined
+    let bootstrapped = false
+
+    await app.ready((config, application) => {
+      expect(config).toBe(application.config)
+      expect(config.widget.size).toBe(7)
+      expect(application.name).toBe('petstore')
+
+      application.with({
+        [kFeatureName]: 'from-callback',
+        [kFeatureConfigure](kit: FeatureConfigureKit<WidgetConfig>): void {
+          seenSize = kit.config.widget.size
+          expect(kit.config).toBe(config)
+        },
+        [kFeatureBootstrap](): void {
+          bootstrapped = true
+        },
+      })
+    })
+
+    expect(seenSize).toBe(7)
+    expect(bootstrapped).toBe(true)
+  })
+
+  // Omitting `config` still loads: a passthrough definition with no sources. The getter must not treat that
+  // as missing.
+  it('exposes an empty config when none was declared, and refuses the read before it has loaded', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+
+    expect(() => app.config).toThrow(ErrConfigNotReady)
+
+    await app.ready((_config, application) => {
+      expect(application.config).toEqual({})
+    })
+
+    expect(app.config).toEqual({})
+  })
+
+  // `container.init()` runs OnBootstrap. The callback has to have returned before that, including when it awaits.
+  it('awaits the callback before the container initializes and before features bootstrap', async () => {
+    const order: string[] = []
+
+    class Beacon implements OnBootstrap {
+      onBootstrap() {
+        order.push('init')
+      }
+    }
+
+    const app = appWith(c => c.bind(Beacon, t => t.toClass(Beacon)))
+
+    await app.ready(async (_config, application) => {
+      order.push('callback')
+      application.with({
+        [kFeatureName]: 'ordered',
+        [kFeatureConfigure](): void {
+          order.push('configure')
+        },
+        [kFeatureBootstrap](): void {
+          order.push('bootstrap')
+        },
+      })
+      await Promise.resolve()
+      order.push('callback-done')
+    })
+
+    expect(order).toEqual(['callback', 'callback-done', 'configure', 'init', 'bootstrap'])
+  })
+
+  // A callback that throws is a boot that never initialized the container, so the store has to be closed here.
+  it('closes the configuration when the callback throws, before the container initializes', async () => {
+    const close = vi.fn()
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+
+    await expect(
+      app.ready(() => {
+        throw new Error('callback')
+      }),
+    ).rejects.toThrow('callback')
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  // The first call owns the boot. A callback on a later call would never run, and must not look like it did.
+  it('does not run a callback passed to a later ready()', async () => {
+    let runs = 0
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const first = app.ready(() => {
+      runs++
+    })
+    const second = app.ready(() => {
+      runs++
+    })
+
+    await Promise.all([first, second])
+    expect(runs).toBe(1)
   })
 })
 

@@ -332,18 +332,14 @@ export class WebApplication<
 
   /**
    * Auto-installs authorization when authentication was configured and `.authorization(...)` never was —
-   * so a protected route still gets a default policy — before the base class captures the feature list and
-   * starts booting. Neither call made means authorization stays off, by design.
-   *
-   * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
+   * so a protected route still gets a default policy — after the {@link ready} callback and before the base
+   * class captures the feature list. Neither call made means authorization stays off, by design.
    */
-  override async ready(): Promise<void> {
+  protected override beforeConfigure(): void {
     if (this.#authBuilder != null && this.#authzBuilder == null) {
       this.#authzBuilder = new AuthorizationBuilder()
       this.addFeature(this.#authzBuilder)
     }
-
-    return super.ready()
   }
 
   /**

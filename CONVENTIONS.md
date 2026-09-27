@@ -367,7 +367,7 @@ either — `ErrorHandlingBuilder` leads `WebApplication.configurers()` and is st
 
 ## Documentation
 
-TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export.
+TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export. Do not add internal implementation details in the TSDocs.
 
 Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter’s meaning is not its name, or a generic/overload is non-obvious.
 

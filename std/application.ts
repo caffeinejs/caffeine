@@ -114,6 +114,18 @@ export class ErrApplicationNotReady extends ErrCaffeine {
   }
 }
 
+/** Thrown when {@link Application.config} is read before configuration has loaded. */
+export class ErrConfigNotReady extends ErrCaffeine {
+  constructor() {
+    super(
+      'Cannot read the application configuration: the config is not ready',
+      'ERR_CONFIG_NOT_READY',
+      undefined,
+      'Call "ready()" or "run()" first',
+    )
+  }
+}
+
 /**
  * A headless application: owns the DI container, the installed {@link Feature}s, and the lifecycle
  * (ready → run → close), with no serving platform. Bootstrap and destroy hooks live on the container: a class
@@ -152,6 +164,7 @@ export class Application<TConfig = unknown> {
   #profiles: string[] = []
   #shutdownPolicy?: ShutdownOptions
   #booting = false
+  #configuring = false
   #boot?: Promise<void>
   #ready = false
   #running = false
@@ -240,13 +253,14 @@ export class Application<TConfig = unknown> {
 
   /**
    * The live configuration features are configured and bootstrapped with. One identity for the life of the
-   * application, and a node read from it follows every reload.
+   * application, and a node read from it follows every reload. Available once configuration has loaded, which
+   * is before {@link ready} resolves.
    *
-   * @throws ErrApplicationNotReady until {@link ready} has resolved.
+   * @throws ErrConfigNotReady until configuration has loaded.
    */
   get config(): LiveConfig<TConfig> {
-    if (!this.#ready) {
-      throw new ErrApplicationNotReady("read the application's configuration")
+    if (this.#store === undefined) {
+      throw new ErrConfigNotReady()
     }
 
     // The store erases `TConfig`; this is the application's own configuration.
@@ -344,10 +358,11 @@ export class Application<TConfig = unknown> {
 
   /**
    * Refuses configuration once {@link ready} has started: the feature list is read once, so a later change
-   * would be dropped rather than applied.
+   * would be dropped rather than applied. The {@link ready} callback is the exception, and it runs before
+   * that list is read.
    */
   protected assertConfigurable(): void {
-    if (this.#booting) {
+    if (this.#booting && !this.#configuring) {
       throw new ErrApplicationStarted()
     }
   }
@@ -358,33 +373,40 @@ export class Application<TConfig = unknown> {
    * 1. the active profiles are decided;
    * 2. configuration **loads**, once, already profile-aware;
    * 3. `caffeine.name` and the active profiles are applied;
-   * 4. the application's {@link ApplicationAvailability} is bound;
-   * 5. every feature **configures** — running the application's configure callback against its builder, then
+   * 4. `configure`, when passed, runs — configuration is still open, and {@link config} already answers;
+   * 5. the application's {@link ApplicationAvailability} is bound;
+   * 6. every feature **configures** — running the application's configure callback against its builder, then
    *    binding into the container;
-   * 6. the load is reported, through the logger the features settled on;
-   * 7. the container initializes;
-   * 8. every feature **bootstraps** — looking up bindings;
-   * 9. the platform is set up, and the configuration's live sources start being watched.
+   * 7. the load is reported, through the logger the features settled on;
+   * 8. the container initializes;
+   * 9. every feature **bootstraps** — looking up bindings;
+   * 10. the platform is set up, and the configuration's live sources start being watched.
+   *
+   * `configure` is awaited before `container.init()`. It is not an `OnBootstrap` hook.
    *
    * Configuration loads before any feature configures and while binding is still open, which is what lets a
    * feature be configured from a setting it then consumes at binding time. Loading inside `container.init()`
    * would be too late for both.
    *
-   * Runs once: a later call — while booting or after — answers with the same promise, so a failed boot is not
-   * retried.
+   * Runs once: a later call — while booting or after — answers with the same promise and does not run its own
+   * callback, so a failed boot is not retried.
    *
+   * @param configure - Called after configuration has loaded, before features configure and before the container
+   *   initializes.
    * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
    */
-  ready(): Promise<void> {
+  ready(): Promise<void>
+  ready(configure: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void>
+  ready(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     if (this.#closing !== undefined) {
       return Promise.reject(new ErrApplicationClosed())
     }
 
-    this.#boot ??= this.#readyOnce()
+    this.#boot ??= this.#readyOnce(configure)
     return this.#boot
   }
 
-  async #readyOnce(): Promise<void> {
+  async #readyOnce(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     this.#booting = true
 
     // Decided before anything loads, so the load that follows is profile-aware on its first and only pass. The
@@ -394,9 +416,6 @@ export class Application<TConfig = unknown> {
     // Empty, and only then, `FileConfigSource` falls back to the `caffeine.profiles` its base file declares.
     const named = activeProfiles([...this.#container.profiles, ...hostProfiles()])
 
-    // Captured once: a subclass assembles this list per call, and it must be the same list throughout.
-    const features = this.configurers()
-
     // Not started yet: every feature configures against one revision, and the triggers arm once this is done.
     const store = await loadConfig(this.#definition, { profiles: named, logger: () => this.#logger, start: false })
     this.#store = store
@@ -404,6 +423,10 @@ export class Application<TConfig = unknown> {
 
     // The store closes with the container, through a hook the module installs when the container initializes. A
     // failure before then would leave the sources it loaded open, with nothing left to close them.
+    //
+    // Assigned once the callback has returned: a feature it installs has to be on the list that configures and
+    // bootstraps. The same list throughout, after that.
+    let features: Feature[]
     try {
       // The framework's own block, read from the merged tree: it is there whether or not the application's schema
       // declares it.
@@ -420,6 +443,19 @@ export class Application<TConfig = unknown> {
 
       this.#name = caffeine.name
       this.#profiles = profiles
+
+      // Before the feature list is read, and before `container.init()`. Configuration methods still pass.
+      this.#configuring = true
+      try {
+        if (configure !== undefined) {
+          await configure(this.liveConfig as LiveConfig<TConfig>, this)
+        }
+        this.beforeConfigure()
+      } finally {
+        this.#configuring = false
+      }
+
+      features = this.configurers()
 
       // The application's own instance, bound before any feature configures so health (and anything else) can
       // inject it rather than closing over a kit field. The lifecycle writes to this object.
@@ -780,6 +816,15 @@ export class Application<TConfig = unknown> {
   /** The features configured then bootstrapped. Subclasses may prepend framework ones. */
   protected configurers(): Feature[] {
     return [...this.#features]
+  }
+
+  /**
+   * Ran during {@link ready}, after the callback and before the feature list is read. Subclasses install
+   * features that depend on what that callback configured. Configuration is still open. The container has not
+   * initialized.
+   */
+  protected beforeConfigure(): void {
+    // Nothing in a headless application.
   }
 
   /** Ran during `ready()`, after `container.init()`. Subclasses wire their platform here. */

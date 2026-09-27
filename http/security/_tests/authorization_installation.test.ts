@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 
 import {
   AllowAnonymous,
+  AuthenticateResult,
   AuthenticationService,
   Authorize,
+  BaseAuthenticationHandler,
   Controller,
   ErrAuthenticationRequired,
   ErrAuthorizationRequired,
@@ -93,7 +95,7 @@ describe('authorization installation', () => {
   })
 
   // The only way to reach `ErrAuthorizationRequired` itself: authentication bound directly on the container,
-  // bypassing `.authentication(...)` entirely, so the auto-install in `WebApplication.ready()` never runs.
+  // bypassing `.authentication(...)` entirely, so the auto-install in `beforeConfigure()` never runs.
   it('rejects ready() with ErrAuthorizationRequired when authentication is bound without going through .authentication()', async () => {
     @Authorize()
     @Controller('/authz-bypassed')
@@ -109,5 +111,34 @@ describe('authorization installation', () => {
     app.container.bind(AuthenticationService, t => t.toValue({} as AuthenticationService))
 
     await expect(app.ready()).rejects.toThrow(ErrAuthorizationRequired)
+  })
+
+  // `.authentication()` inside the callback is still before the feature list is read, so the default
+  // authorization policy is installed with it. Without that, `ready()` fails with ErrAuthorizationRequired.
+  it('installs authorization when .authentication() is called from the ready() callback', async () => {
+    @Authorize()
+    @Controller('/authz-from-ready-callback')
+    class FromCallbackController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [FromCallbackController]
+
+    class None extends BaseAuthenticationHandler<object> {
+      authenticate(): Promise<AuthenticateResult> {
+        return Promise.resolve(AuthenticateResult.none())
+      }
+    }
+
+    const app = createWebApplication()
+    await app.ready((_config, application) => {
+      application.authentication(auth => auth.addStrategy('default', new None({})).default('default'))
+    })
+
+    const res = await app.fetch('/authz-from-ready-callback')
+    expect(res.status).toBe(401)
+    await app.close()
   })
 })
