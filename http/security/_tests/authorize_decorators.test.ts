@@ -66,7 +66,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-class-401')
     expect(res.status).toBe(401)
@@ -89,7 +89,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-class-200')
     expect(res.status).toBe(200)
@@ -112,7 +112,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-class-fail')
     expect(res.status).toBe(401)
@@ -141,7 +141,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const [protectedRes, publicRes] = await Promise.all([
       app.fetch('/auth-anon-method/protected'),
@@ -169,7 +169,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-anon-class')
     expect(res.status).toBe(200)
@@ -197,7 +197,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const [openRes, securedRes] = await Promise.all([
       app.fetch('/auth-method-only/open'),
@@ -225,7 +225,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-role-ok')
     expect(res.status).toBe(200)
@@ -248,7 +248,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-role-403')
     expect(res.status).toBe(403)
@@ -271,7 +271,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/roles-ok')
     expect(res.status).toBe(200)
@@ -294,7 +294,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/roles-403')
     expect(res.status).toBe(403)
@@ -328,7 +328,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', new CustomChallengeHandler()).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-custom-challenge')
     expect(res.status).toBe(401)
@@ -363,7 +363,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', new CustomForbidHandler()).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-custom-forbid')
     expect(res.status).toBe(403)
@@ -388,7 +388,7 @@ describe('auth configurer (fake handler)', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/auth-ctx-user')
     expect(res.status).toBe(200)
@@ -422,7 +422,7 @@ describe('authorization policies', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-schemes-only')
     expect(res.status).toBe(401)
@@ -445,7 +445,7 @@ describe('authorization policies', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-schemes-only-ok')
     expect(res.status).toBe(200)
@@ -469,7 +469,7 @@ describe('authorization policies', () => {
     builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
     builder.authorization(authz => authz.addPolicy('AdminOnly', b => b.role('admin')))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-named-policy')
     expect(res.status).toBe(200)
@@ -496,7 +496,7 @@ describe('authorization policies', () => {
       authz.addPolicy('AdminOnly2', b => b.role('admin'))
     })
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-named-policy-deny')
     expect(res.status).toBe(403)
@@ -524,7 +524,7 @@ describe('authorization policies', () => {
       authz.authorizeDecoratorDefaultPolicy(b => b.requireAuthenticated())
     })
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-require-auth')
     expect(res.status).toBe(401)
@@ -552,7 +552,7 @@ describe('authorization policies', () => {
       authz.addPolicy('CanReadOrders', b => b.claim('permission', 'orders:read'))
     })
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/authz-claim-ok')
     expect(res.status).toBe(200)

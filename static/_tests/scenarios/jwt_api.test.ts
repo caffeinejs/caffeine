@@ -64,7 +64,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('serves the shell to a navigation', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/settings', { headers: NAVIGATION })
 
@@ -74,7 +74,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('challenges an API call without a token with 401 and WWW-Authenticate', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/api/me', { headers: XHR })
 
@@ -84,7 +84,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('authenticates an API call carrying a token', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/api/me', { headers: { ...XHR, authorization: user } })
 
@@ -94,7 +94,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('forbids a token without the role, as an error and not as the page', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const forbidden = await app.fetch('/api/admin', { headers: { ...XHR, authorization: user } })
     expect(forbidden.status).toBe(403)
@@ -106,7 +106,7 @@ describe('public single-page application with a bearer-token API', () => {
   // A bearer scheme has nowhere to redirect to, and the page must not step in for a URL the API owns.
   it('answers a navigation to a protected API route with 401, not the shell', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/api/admin', { headers: NAVIGATION })).status).toBe(401)
   })
@@ -116,7 +116,7 @@ describe('public single-page application with a bearer-token API', () => {
   // the API's own posture and not the shell stepping in.
   it('keeps an API miss away from the page, for a navigation as much as for a fetch', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...XHR, authorization: user } }))
     await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...NAVIGATION, authorization: user } }))
@@ -128,14 +128,14 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('answers a mistyped fetch of a client route with 404 rather than a page JavaScript cannot parse', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/settings', { headers: XHR }))
   })
 
   it('does not take a bare wildcard Accept for a document request', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/settings', { headers: CURL }))
   })
@@ -143,7 +143,7 @@ describe('public single-page application with a bearer-token API', () => {
   // A declared path is a request for the document itself, so it answers a client that is not a browser.
   it('answers the declared paths to any client', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/', { headers: CURL })).status).toBe(200)
     expect((await app.fetch('/index.html', { headers: CURL })).status).toBe(200)
@@ -151,7 +151,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('serves the shell into an iframe', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/settings', { headers: IFRAME })
 
@@ -161,7 +161,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('answers HEAD with the headers and no body', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/settings', { method: 'HEAD', headers: NAVIGATION })
 
@@ -172,7 +172,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('revalidates the shell: a matching ETag gets 304', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const first = await app.fetch('/settings', { headers: NAVIGATION })
     const etag = first.headers.get('etag')
@@ -186,7 +186,7 @@ describe('public single-page application with a bearer-token API', () => {
 
   it('caches a hashed asset indefinitely and keeps a missing one a 404', async () => {
     app = publicSPA()
-    await app.ready()
+    await app.bootstrap()
 
     const asset = await app.fetch('/assets/app-eZr2sdaR.js')
     expect(asset.status).toBe(200)

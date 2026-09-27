@@ -29,7 +29,7 @@ function policyOf(app: { container: { get(t: typeof kShutdownPolicy): ShutdownOp
 describe('ShutdownBuilder', () => {
   it('is registered unconditionally and resolves detached off the defaults', async () => {
     const app = headless()
-    await app.ready()
+    await app.bootstrap()
 
     const policy = policyOf(app)
     expect(policy.drainDelayMs).toBe(0)
@@ -44,7 +44,7 @@ describe('ShutdownBuilder', () => {
       .source(new EnvConfigSource({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }))
       .build()
     const app = headless(conf)
-    await app.ready()
+    await app.bootstrap()
 
     expect(policyOf(app).drainDelayMs).toBe(0)
     await app.close()
@@ -57,7 +57,7 @@ describe('ShutdownBuilder', () => {
       .source(new InlineConfigSource({ shutdown: { drainDelay: '90ms' } }))
       .build()
     const app = headless(conf).shutdown((s, { config }) => s.drainDelay('10s').config(config.shutdown))
-    await app.ready()
+    await app.bootstrap()
 
     expect(policyOf(app).drainDelayMs).toBe(10_000)
   })
@@ -71,7 +71,7 @@ describe('ShutdownBuilder', () => {
       )
       .build()
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
-    await app.ready()
+    await app.bootstrap()
 
     const policy = policyOf(app)
     expect(policy.drainDelayMs).toBe(40)
@@ -86,7 +86,7 @@ describe('ShutdownBuilder', () => {
       .source(new EnvConfigSource({ env: { SHUTDOWN__SHUTDOWN_TIMEOUT: '10000' } }))
       .build()
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
-    const booting = app.ready()
+    const booting = app.bootstrap()
 
     await expect(booting).rejects.toThrow(ErrConfigValidation)
     await expect(booting).rejects.toThrow('shutdown.shutdownTimeout')
@@ -97,7 +97,7 @@ describe('ShutdownBuilder', () => {
       .source(new InlineConfigSource({ shutdown: { drainDelay: '30ms' } }))
       .build()
     const app = headless(conf).shutdown((s, { config }) => s.dispatcher(noopSignalDispatcher).config(config.shutdown))
-    await app.ready()
+    await app.bootstrap()
 
     const policy = policyOf(app)
     expect(policy.dispatcher).toBe(noopSignalDispatcher)
@@ -114,7 +114,7 @@ describe('ShutdownBuilder', () => {
 
     const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
-    await app.ready()
+    await app.bootstrap()
 
     const policy = policyOf(app)
     expect(policy.shutdownTimeoutMs).toBe(9_000)
@@ -129,15 +129,15 @@ describe('ShutdownBuilder', () => {
 
   it('clamps a shutdown timeout that would outlive the grace period', async () => {
     const app = headless().shutdown(s => s.drainDelay('5s').shutdownTimeout('60s').terminationGracePeriod('30s'))
-    await app.ready()
+    await app.bootstrap()
 
     expect(policyOf(app).shutdownTimeoutMs).toBe(23_000)
   })
 
-  it('rejects at ready() when the drain delay cannot fit the grace period at all', async () => {
+  it('rejects at bootstrap() when the drain delay cannot fit the grace period at all', async () => {
     const app = headless().shutdown(s => s.drainDelay('30s').terminationGracePeriod('20s'))
 
-    await expect(app.ready()).rejects.toThrow('does not fit in a termination grace period')
+    await expect(app.bootstrap()).rejects.toThrow('does not fit in a termination grace period')
   })
 
   it('installs a real signal handler when signals are set explicitly, even under the test runner', async () => {
@@ -180,7 +180,7 @@ describe('the zero-drain warning under Kubernetes', () => {
   it('says nothing about a 0 set in code', async () => {
     const { dispatcher, warnings } = recording()
     const app = headless().shutdown(s => s.dispatcher(dispatcher).drainDelay(0))
-    await app.ready()
+    await app.bootstrap()
 
     expect(warnings).toEqual([])
     await app.close()
@@ -189,7 +189,7 @@ describe('the zero-drain warning under Kubernetes', () => {
   it('warns about a 0 from the configuration', async () => {
     const { dispatcher, warnings } = recording()
     const app = headless(configured('0s')).shutdown((s, { config }) => s.dispatcher(dispatcher).config(config.shutdown))
-    await app.ready()
+    await app.bootstrap()
 
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('from the configuration')
@@ -201,7 +201,7 @@ describe('the zero-drain warning under Kubernetes', () => {
     const app = headless(configured('5s')).shutdown((s, { config }) =>
       s.dispatcher(dispatcher).config(config.shutdown).drainDelay(0),
     )
-    await app.ready()
+    await app.bootstrap()
 
     expect(policyOf(app).drainDelayMs).toBe(0)
     expect(warnings).toEqual([])
@@ -213,7 +213,7 @@ describe('the zero-drain warning under Kubernetes', () => {
     const app = headless(configured('0s')).shutdown((s, { config }) =>
       s.dispatcher(dispatcher).config(config.shutdown).drainDelay('5s'),
     )
-    await app.ready()
+    await app.bootstrap()
 
     expect(policyOf(app).drainDelayMs).toBe(5_000)
     expect(warnings).toEqual([])

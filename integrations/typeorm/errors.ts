@@ -17,9 +17,9 @@ export class ErrNoDataSource extends ErrTypeORM {
   constructor(key: InjectionToken | undefined, target: EntityTarget<ObjectLiteral>) {
     super(
       `Cannot inject a repository for "${entityName(target)}": no DataSource is bound to the key "${keyName(key)}"` +
-        '\n  - Install the feature with .with(typeorm(t => t.dataSource(options)))' +
+        '\n  - Install the feature with .with(TypeORM(t => t.dataSource(options)))' +
         '\n  - Or provide one from a @Configuration class with @ProvidesAsync(DataSource)' +
-        '\n  - If the repository is optional, wrap it with $i.optional($typeorm.repository(Entity))',
+        '\n  - If the repository is optional, wrap it with $i.optional($repository(Entity))',
       'ERR_NO_DATA_SOURCE',
     )
     this.name = 'ErrNoDataSource'
@@ -33,7 +33,7 @@ export class ErrNoUniqueDataSource extends ErrTypeORM {
       `Cannot inject a repository for "${entityName(target)}": more than one DataSource is bound to the key ` +
         `"${keyName(key)}" and none is primary` +
         '\n  - Mark the one to prefer with @Primary' +
-        '\n  - Or name each instance and select it, as $typeorm.repository(Entity, dataSourceKey("orders"))',
+        '\n  - Or name each instance and select it, as $repository(Entity, dataSourceKey("orders"))',
       'ERR_NO_UNIQUE_DATA_SOURCE',
     )
     this.name = 'ErrNoUniqueDataSource'
@@ -45,7 +45,7 @@ export class ErrMissingDataSourceOptions extends ErrTypeORM {
   constructor(feature: string) {
     super(
       `Cannot configure feature "${feature}": no data source options were provided` +
-        '\n  - Call .dataSource(options) in the configure callback, as typeorm(t => t.dataSource({ ... }))',
+        '\n  - Call .dataSource(options) in the configure callback, as TypeORM(t => t.dataSource({ ... }))',
       'ERR_MISSING_DATA_SOURCE_OPTIONS',
     )
     this.name = 'ErrMissingDataSourceOptions'

@@ -1,4 +1,4 @@
-FROM node:24-alpine
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80
 
 WORKDIR /workspace
 
@@ -10,9 +10,7 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Install example deps (tsx + app deps)
-WORKDIR /workspace/examples/05-fastify-cats-complete
-RUN npm install
+WORKDIR /workspace/di/examples/04-fastify-cats-complete
 
 EXPOSE 3000
 

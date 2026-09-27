@@ -233,7 +233,7 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
         .with(HTTPCaching(b => b.store(store)))
         .mount(pets)
-      await app.ready()
+      await app.bootstrap()
 
       try {
         const miss = await app.fetch('/pets')

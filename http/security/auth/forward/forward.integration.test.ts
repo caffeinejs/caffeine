@@ -49,7 +49,7 @@ describe('scheme negotiation (Forward, application)', () => {
     void [FwdBasicController]
 
     const app = forwardBuilder()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fwd-basic', { headers: { authorization: basicHeader('alice', 'secret') } })
     expect(res.status).toBe(200)
@@ -67,7 +67,7 @@ describe('scheme negotiation (Forward, application)', () => {
     void [FwdJwtController]
 
     const app = forwardBuilder()
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' })
     const res = await app.fetch('/fwd-jwt', { headers: { authorization: `Bearer ${token}` } })
@@ -86,7 +86,7 @@ describe('scheme negotiation (Forward, application)', () => {
     void [FwdNoneController]
 
     const app = forwardBuilder()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fwd-none', { headers: { authorization: 'Bearer not-a-jwt' } })
     expect(res.status).toBe(401)

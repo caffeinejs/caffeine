@@ -28,7 +28,7 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
   async function start() {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
     return app
   }
 
@@ -176,7 +176,7 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
     container.bind(kHTTPCacheStore, t => t.toValue(new MemoryHTTPCacheStore()))
     const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(kHTTPCacheStore)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/inv-service/report')
     expect((await app.fetch('/inv-service/report')).headers.get('x-cache')).toBe('HIT')
@@ -230,7 +230,7 @@ describe('@CacheInvalidate and the status of the mutation', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/inv-status/items')
     expect((await app.fetch('/inv-status/conflict', { method: 'POST' })).status).toBe(409)
@@ -278,7 +278,7 @@ describe('the request a key function is handed', () => {
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/key-request/1')
     expect(seen.map(item => item.by)).toEqual(['cache key', 'get handler'])
@@ -299,7 +299,7 @@ describe('cacheInvalidate refuses an eviction that names nothing at start-up', (
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       .mount(router)
     close = () => app.close()
-    return app.ready()
+    return app.bootstrap()
   }
 
   it('refuses an empty list of tags', async () => {

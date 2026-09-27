@@ -21,7 +21,7 @@ const app = createApplication()
   .shutdown(s => s.drainDelay(0))
 app.container.bind(QueueHealth, t => t.toSelf().extends(HealthIndicator))
 
-await app.ready()
+await app.bootstrap()
 registerWattChecks(app)
 await app.run()
 

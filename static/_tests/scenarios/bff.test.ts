@@ -88,7 +88,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
   describe('public pages', () => {
     it('serves the page to an anonymous navigation, though the application authenticates by default', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
 
       for (const path of ['/', '/dashboard', '/orders/42']) {
         const res = await app.fetch(path, { headers: NAVIGATION })
@@ -103,7 +103,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
     // public page would load with every script failing.
     it('serves the bundle anonymously', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })
 
@@ -113,7 +113,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('answers an anonymous fetch of the API with 401, not the page', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/api/me', { headers: XHR })
 
@@ -123,7 +123,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('redirects an anonymous navigation to the API into the sign-in page', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/api/me', { headers: NAVIGATION })
 
@@ -133,7 +133,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('authenticates the API through the session cookie', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
       const cookie = await signIn(app)
 
       const res = await app.fetch('/api/me', { headers: { ...XHR, cookie } })
@@ -144,7 +144,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('keeps an API miss a JSON 404, for a fetch and for a navigation alike', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
       const cookie = await signIn(app)
 
       await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...XHR, cookie } }))
@@ -153,7 +153,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('renders a forbidden API call as an error, never as the page', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
       const cookie = await signIn(app)
 
       const res = await app.fetch('/api/orders', { headers: { ...XHR, cookie } })
@@ -164,7 +164,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('serves the client-side sign-in page anonymously', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/login', { headers: NAVIGATION })
 
@@ -174,7 +174,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('never answers a non-GET with a document', async () => {
       app = bff(false)
-      await app.ready()
+      await app.bootstrap()
       const cookie = await signIn(app)
 
       await expectNotFoundJSON(await app.fetch('/dashboard', { method: 'POST', headers: { ...NAVIGATION, cookie } }))
@@ -184,7 +184,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
   describe('gated pages', () => {
     it('redirects an anonymous navigation to a client route into the sign-in page', async () => {
       app = bff(true)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/dashboard', { headers: NAVIGATION })
 
@@ -196,14 +196,14 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('keeps the sign-in page reachable so the redirect does not loop', async () => {
       app = bff(true)
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/login', { headers: NAVIGATION })).status).toBe(200)
     })
 
     it('serves the page and its bundle to a signed-in browser', async () => {
       app = bff(true)
-      await app.ready()
+      await app.bootstrap()
       const cookie = await signIn(app)
 
       const page = await app.fetch('/dashboard', { headers: { ...NAVIGATION, cookie } })
@@ -215,7 +215,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
 
     it('challenges an anonymous fetch of a client route before asking whether it is a navigation', async () => {
       app = bff(true)
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/dashboard', { headers: XHR })).status).toBe(401)
     })

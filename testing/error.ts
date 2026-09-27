@@ -33,7 +33,7 @@ export class ErrTestClientAlreadyReady extends Error {
     super(
       `Cannot apply "${option}": the application is already ready` +
         '\n\nPossible Solutions:\n - Hand "testClient" the routers instead of an application, so it owns the setup' +
-        '\n - Pass the application before calling "ready()" on it',
+        '\n - Pass the application before calling "bootstrap()" on it',
     )
   }
 }

@@ -83,7 +83,7 @@ describe('plugin registration', () => {
       .with(stamping('first', 'x-first', log))
       .with(stamping('second', 'x-second', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['third', 'first', 'second'])
   })
@@ -99,7 +99,7 @@ describe('plugin registration', () => {
       .with(stamping('plugin-c', 'x-c', log))
       .with(logging('feature-d', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['plugin-a', 'feature-b', 'plugin-c', 'feature-d'])
   })
@@ -114,7 +114,7 @@ describe('plugin registration', () => {
       .addFeature(logging('added', log))
       .with(stamping('after', 'x-after', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['before', 'added', 'after'])
   })
@@ -146,7 +146,7 @@ describe('plugin registration', () => {
       .with(slow)
       .with(stamping('after', 'x-after', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['slow', 'after'])
   })
@@ -177,7 +177,7 @@ describe('plugin registration', () => {
       .with(forgetful)
       .with(stamping('after', 'x-after', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['nested', 'after'])
   })
@@ -202,7 +202,7 @@ describe('plugin registration', () => {
 
     app = createWebApplication().with(probe)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(seen).toBe(app.instance)
     expect(decorated).toBe(true)
@@ -235,7 +235,7 @@ describe('plugin registration', () => {
       })
       .with(probe)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(seen.hook).toBe(seen.factory)
     expect(seen.factory?.logger).toBe(custom)
@@ -267,7 +267,7 @@ describe('plugin registration', () => {
 
     app = createWebApplication({ container }).with(factory)
 
-    await expect(app.ready()).resolves.not.toThrow()
+    await expect(app.bootstrap()).resolves.not.toThrow()
 
     expect((await app.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
   })
@@ -297,7 +297,7 @@ describe('plugin registration', () => {
       .with(awaiting)
       .with(stamping('after', 'x-after', log))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['before', 'awaiting', 'after'])
   })
@@ -316,7 +316,7 @@ describe('plugin registration', () => {
 
     app = createWebApplication().with(stamping('stamp', 'x-stamp'))
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/head-slot/boom')
 
@@ -330,7 +330,7 @@ describe('plugin registration', () => {
   it('answers an unmatched URL from the not-found handler registered after every plugin', async () => {
     app = createWebApplication().with(stamping('stamp', 'x-stamp'))
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/nothing-here')
 
@@ -360,7 +360,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().mount(pets, orders)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/scoped-pets')).headers.get('x-pets')).toBe('yes')
     expect((await app.fetch('/scoped-orders')).headers.get('x-pets')).toBeNull()
@@ -377,7 +377,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().mount(shop)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/scoped-shop')).headers.get('x-shop')).toBe('yes')
     expect((await app.fetch('/scoped-shop/items')).headers.get('x-shop')).toBe('yes')
@@ -404,7 +404,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication()
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/scoped-admin')).headers.get('x-admin')).toBe('yes')
     expect((await app.fetch('/scoped-public')).headers.get('x-admin')).toBeNull()
@@ -424,7 +424,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().with(twice).with(twice)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(log).toEqual(['twice', 'twice'])
   })
@@ -437,7 +437,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().with(twice).with(twice)
 
-    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice": it is already registered/)
   })
 
   // What a factory produced is only checked by the adapter, at start-up: a factory handing back the options
@@ -446,7 +446,7 @@ describe('scoped plugin registration', () => {
     // Cast: the factory's result is deliberately not a Fastify extension.
     app = createWebApplication().with((() => ({ origin: '*' })) as never)
 
-    await expect(app.ready()).rejects.toMatchObject({
+    await expect(app.bootstrap()).rejects.toMatchObject({
       code: 'ERR_HTTP_INVALID_PLUGIN',
       message: expect.stringMatching(/expected a Fastify plugin, got object/),
     })
@@ -462,7 +462,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().mount(bad)
 
-    await expect(app.ready()).rejects.toMatchObject({
+    await expect(app.bootstrap()).rejects.toMatchObject({
       code: 'ERR_HTTP_INVALID_PLUGIN',
       message: expect.stringMatching(/expected a Fastify plugin, got object/),
     })
@@ -476,7 +476,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().mount(twice)
 
-    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "twice-group": it is already registered/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "twice-group": it is already registered/)
   })
 
   it('keeps the plugins of two routers apart, one per group', async () => {
@@ -489,7 +489,7 @@ describe('scoped plugin registration', () => {
 
     app = createWebApplication().mount(pets, orders)
 
-    await app.ready()
+    await app.bootstrap()
 
     const petsRes = await app.fetch('/inst-pets')
     const ordersRes = await app.fetch('/inst-orders')
@@ -538,7 +538,7 @@ describe('a plugin registered with its options', () => {
 
     app = createWebApplication().with(() => [fp(recording, { name: 'recording' }), { header: 'x-from-options' }])
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(seen).toEqual(['x-from-options'])
   })
@@ -554,7 +554,7 @@ describe('a plugin registered with its options', () => {
       .with(() => [fp(configurable('pair'), { name: 'pair' }), { header: 'x-pair' }])
       .mount(pets)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/pair-pets')).headers.get('x-pair')).toBe('yes')
   })
@@ -568,7 +568,7 @@ describe('a plugin registered with its options', () => {
       .with(() => [configurable('loose'), { header: 'x-loose' }])
       .mount(pets)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/pair-unwrapped')).headers.get('x-loose')).toBeNull()
   })
@@ -581,7 +581,7 @@ describe('a plugin registered with its options', () => {
 
     app = createWebApplication().mount(pets, orders)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/pair-scoped-pets')).headers.get('x-scoped')).toBe('yes')
     expect((await app.fetch('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
@@ -607,7 +607,7 @@ describe('a plugin registered with its options', () => {
       .with(({ config }) => [fp(configurable('typed'), { name: 'typed' }), { header: config.security.header }])
       .mount(pets)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/pair-typed')).headers.get('x-from-config')).toBe('yes')
     // Mounted rather than absent, so the feature really installed. What it then reports is health's own test.

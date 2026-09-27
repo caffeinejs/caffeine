@@ -19,7 +19,7 @@ describe('authentication wiring', () => {
     app = buildApp(newTestContainer(createContainer(rootModule)).build(), {
       logger: false,
     })
-    await app.ready()
+    await app.bootstrap()
   })
 
   afterAll(async () => {
@@ -184,7 +184,7 @@ describe('documentation is protected by Basic, independently of the default sche
     app = buildApp(newTestContainer(createContainer(rootModule)).build(), {
       logger: false,
     })
-    await app.ready()
+    await app.bootstrap()
   })
 
   afterAll(async () => {

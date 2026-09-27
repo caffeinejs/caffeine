@@ -101,7 +101,7 @@ non-optional on the strength of the word invariant: every 404 would be a `TypeEr
 Telling a compiled route from a raw one is `$caffeine.compiled`, never `$caffeine` itself — here, in
 `health/probes_route.ts`, in `oidc_routes.ts` and in `routing/fastify/route_config.ts`. Both collision guards depend on it:
 each adds its `onRoute` hook before registering its own routes, so without the `compiled` check they would trip
-their own guard and fail `ready()`. `compiled` holds `route` and `group` as required members, so one nullable
+their own guard and fail `bootstrap()`. `compiled` holds `route` and `group` as required members, so one nullable
 object narrows all of it at once and a partial stamp cannot reach a reader.
 
 That leaves `auth` as the slot for something the gate cannot do yet: give a **raw** route a policy rather than
@@ -135,7 +135,7 @@ Fastify's own error.
 
 Health (`/livez`, `/readyz`, `/startupz`) is an opt-in `HTTPFeatureBuilder`, `.with(health(...))`, and is **not**
 registered by `WebApplication`, which holds no reference to `http/health` at all. What the probes answer from is
-not theirs: `ApplicationHealth` from `@caffeinejs/std/health`, which every `Application` binds in `ready()`,
+not theirs: `ApplicationHealth` from `@caffeinejs/std/health`, which every `Application` binds in `bootstrap()`,
 headless included, so a Watt check or any other caller shares one evaluation with the routes. Installing
 `health()` does two things. It mounts the routes (default `enabled: true`; `.k8s()` switches that default to the
 Kubernetes auto-detection, `KUBERNETES_SERVICE_HOST` present). And it binds `kHealthRegistryOptions`, the budgets
@@ -172,7 +172,7 @@ handler goes. One hook precedes it, the adapter's `$caffeine` stamp, because Fas
 declared rather than when it loads — so a raw route written here is stamped, and an `onRoute` hook added here
 runs behind the stamp and reads it.
 `factory` takes `https` and `http2` too, and the instance is `FastifyInstance` whichever server they build. That
-is deliberate: TLS is switched by configuration at `ready()`, long after the application's type was fixed, so no
+is deliberate: TLS is switched by configuration at `bootstrap()`, long after the application's type was fixed, so no
 type parameter could follow it. `https.Server` is an `http.Server` to `@types/node`, so HTTPS is typed exactly
 enough. Under HTTP/2 the server and the raw request and reply are Node's HTTP/2 objects behind HTTP/1 types, and
 a reader narrows with `instanceof`. Do not add a second adapter type for a TLS or HTTP/2 server. `address.origin`
@@ -220,7 +220,7 @@ merged over `listener` key by key, `run()` winning. With neither, `listen()` is 
 default stands (`localhost`, an OS-assigned port); a `listener` naming a `host` but no `port` is refused by Node
 at `run()`, so `port: 0` is spelled out for an OS-assigned port. `run()` still resolves to `WebRunInfo`.
 `app.instance` and `app.fetch()` throw `ErrApplicationNotReady` (from `@caffeinejs/std`, which `app.health` throws
-too) before `ready()`; `app.address` is `undefined` until `run()` bound the socket.
+too) before `bootstrap()`; `app.address` is `undefined` until `run()` bound the socket.
 
 ## Handler timeouts
 
@@ -301,7 +301,7 @@ compiled in), next to the fields the handler reads. There is no server decoratio
 Compiled routes register after every plugin, so a plugin that needs them adds an `onRoute` hook, as any
 Fastify plugin would; `compiled` is absent on a route registered straight on Fastify, which is how the hook
 tells the two apart. `$caffeine` itself is on both — the adapter stamps it — so testing that instead sees
-every route there is. A per-route check throws from the hook (`app.ready()` rejects with it); a decision that
+every route there is. A per-route check throws from the hook (`app.bootstrap()` rejects with it); a decision that
 needs every route waits for `onReady`. `collectRouteGroups(instance)` is that pattern packaged — it regroups
 what registered and counts a GET route's automatic HEAD twin once — and the SPA shell and `@caffeinejs/openapi`
 use it.
@@ -327,7 +327,7 @@ route resolves through the one cache, not a second one — and appended to the s
 `assertAuthenticationConfigured`'s startup scan and the Fastify registration loop both read. Compiling is what
 happens immediately; registering is not. A `$route` group registers with everything else, after every plugin,
 so it reaches every plugin's `onRoute` hook whichever order the plugins were installed in. A compile failure —
-an unresolvable guard, an ambiguous `@CatchWith` — therefore rejects `ready()` from inside the registration of
+an unresolvable guard, an ambiguous `@CatchWith` — therefore rejects `bootstrap()` from inside the registration of
 the plugin that called `$route`, which is where the cause is. The group is declared by no class, so it carries
 no `target`: a guard on one reads no `Symbol.metadata`, and diagnostics name it by the `name` given here.
 `@caffeinejs/openapi` is the one consumer: its doc-serving routes must be real, protectable
@@ -406,7 +406,7 @@ Do not add a version argument to the inline verb form, an app-level `enableVersi
 
 ## Route-type accumulation
 
-`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `WebApplication`. `@caffeinejs/brewer` is the client built on it: it reads `__routes` structurally, without importing this package, so the flat union is its contract now. The paths are the ones the application declares. A `.basePath(...)` is where the application is deployed, not what it declares — a callback can decide it at `ready()` — so it is not in the type; it belongs in the client's base URL, as it belongs in an OpenAPI document's `servers`.
+`Router<GD, GP, R>`'s third parameter accumulates a `RouteDef` union, read back with `RoutesOf<T>` through a `__routes` phantom on both `Router` and `WebApplication`. `@caffeinejs/brewer` is the client built on it: it reads `__routes` structurally, without importing this package, so the flat union is its contract now. The paths are the ones the application declares. A `.basePath(...)` is where the application is deployed, not what it declares — a callback can decide it at `bootstrap()` — so it is not in the type; it belongs in the client's base URL, as it belongs in an OpenAPI document's `servers`.
 
 The carrier is the **return value**, not the variable: `.handler()` gives back the router re-typed with the route just closed, so a chain accumulates. Statement style leaves one handle per statement, each naming the same router with one route in its type; `blend(...)` (or `mount(...)`, or `app.mount(...)`) unions them. The variable the routes were opened from stays `never`, and the verb methods cannot mutate a shared type — do not try to "fix" either.
 

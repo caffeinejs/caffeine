@@ -37,7 +37,7 @@ describe('newConfiguration', () => {
       .build()
     const app = createApplication({ container, config: conf })
 
-    await app.ready()
+    await app.bootstrap()
 
     // No type argument: the key carries the type, which is the point of declaring it beside the schema.
     const config = app.container.get(kConfig)
@@ -76,7 +76,7 @@ describe('newConfiguration', () => {
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
-    await app.ready()
+    await app.bootstrap()
 
     const store = app.container.get(kStore)
     expectTypeOf(store).toEqualTypeOf<ConfigStore<AppConfig>>()
@@ -116,7 +116,7 @@ describe('newConfiguration', () => {
     const conf = newConfiguration(schema, kConfig).source(source).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
-    await app.ready()
+    await app.bootstrap()
 
     const config = app.container.get(kConfig)
     expect(config.server.host).toBe('before')
@@ -133,7 +133,7 @@ describe('newConfiguration', () => {
     const conf = newConfiguration(schema, kConfig).source(source).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
-    await app.ready()
+    await app.bootstrap()
 
     const store = app.container.get(ConfigStore)
     expect(store.revision).toBe(0)
@@ -151,7 +151,7 @@ describe('newConfiguration', () => {
     const container = new CaffeineIoC({ decorators: false })
     const app = createApplication({ container })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(ConfigStore).current).toEqual({})
     expect(app.container.has(kConfig)).toBe(false)
@@ -225,7 +225,7 @@ describe('configuration as the DI config provider', () => {
     })
     container.bind(Repository, t => t.toSelf())
 
-    await builder.ready()
+    await builder.bootstrap()
 
     expect(container.get(Repository).host).toBe('db.local')
   })
@@ -247,7 +247,7 @@ describe('configuration as the DI config provider', () => {
     })
     container.bind(Repository, t => t.toSelf())
 
-    await builder.ready()
+    await builder.bootstrap()
 
     const repository = container.get(Repository)
     expect(repository.port).toBe(5432)
@@ -268,7 +268,7 @@ describe('configuration as the DI config provider', () => {
     const { builder, container } = appWith({ provider: changing })
     container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
-    await builder.ready()
+    await builder.bootstrap()
 
     expect(container.get(Holder).host).toBe('first')
 
@@ -348,7 +348,7 @@ describe('configuration as the DI config provider', () => {
     container.bindConfigProvider<{ own: string }>(t => t.toValue({ own: 'mine' }))
     container.bind(Holder, t => t.toSelf())
 
-    await builder.ready()
+    await builder.bootstrap()
 
     expect(container.get(Holder).own).toBe('mine')
   })
@@ -388,7 +388,7 @@ describe('live configuration', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Pricing, t => t.toSelf())
     const app = createApplication({ container, config: conf })
-    await app.ready()
+    await app.bootstrap()
 
     const pricing = app.container.get(Pricing)
     expect(pricing.quote()).toBe(0.2)

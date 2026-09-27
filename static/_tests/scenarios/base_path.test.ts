@@ -38,7 +38,7 @@ describe('a file mount under a base path', () => {
 
   it('serves a file under the base with its bytes, and the same file without the base', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const expected = readFileSync(join(fixtures, 'hello.txt'), 'utf8')
 
@@ -52,14 +52,14 @@ describe('a file mount under a base path', () => {
 
   it('keeps a miss under the mount a missing file', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/api/static/missing.txt', { headers: NAVIGATION }))
   })
 
   it('takes nothing off a path that only starts like the base', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/apistatic/hello.txt')).status).toBe(404)
   })
@@ -95,7 +95,7 @@ describe('a redirecting mount under a base path', () => {
     ['/api/flat', '/api/flat/'],
   ])('redirects %s to %s, the base put back', async (url, location) => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch(url)
 
@@ -105,7 +105,7 @@ describe('a redirecting mount under a base path', () => {
 
   it('redirects a request that came without the base without it', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/files')).headers.get('location')).toBe('/files/')
   })
@@ -113,7 +113,7 @@ describe('a redirecting mount under a base path', () => {
   // The hook runs for every reply the mount's routes send, and nearly all of them are files, not redirects.
   it('sends a file from the mount as it always has, with no Location', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/api/files/index.html')
 
@@ -126,7 +126,7 @@ describe('a redirecting mount under a base path', () => {
   // already — is never given a second one.
   it("leaves the application's own redirects alone", async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/api/app-go')).headers.get('location')).toBe('/api/elsewhere')
   })
@@ -139,7 +139,7 @@ describe('a redirecting mount under a base path', () => {
       .authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login')))
       .authorization(z => z.requireAuthenticatedByDefault())
       .with(staticFiles(s => s.serve(dist, { prefix: '/files', redirect: true }))) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/api/files/index.html', { headers: NAVIGATION })
 
@@ -181,7 +181,7 @@ describe('a directory sendFile or download sends under a base path', () => {
     ['/dir', '/dir/'],
   ])('redirects %s to %s', async (url, location) => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch(url)
 
@@ -191,7 +191,7 @@ describe('a directory sendFile or download sends under a base path', () => {
 
   it('sends a file under the base as it always has', async () => {
     app = site()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/api/page')
 
@@ -205,7 +205,7 @@ describe('a directory sendFile or download sends under a base path', () => {
     ['a request that came without the base', '/api', '/page'],
   ])('leaves the reply as it is with %s', async (_, basePath, url) => {
     app = site(basePath)
-    await app.ready()
+    await app.bootstrap()
     shadowed = undefined
 
     expect((await app.fetch(url)).status).toBe(200)
@@ -235,7 +235,7 @@ describe('what a mount pays under a base path', () => {
   it('adds no hook to a mount that does not redirect', async () => {
     const registered = new Map<string, RouteOptions>()
     app = collecting(registered, '/api', false)
-    await app.ready()
+    await app.bootstrap()
 
     expect(registered.has('/static/*')).toBe(true)
     expect(registered.get('/static/*')!.onSend).toBeUndefined()
@@ -244,7 +244,7 @@ describe('what a mount pays under a base path', () => {
   it('adds no hook to a redirecting mount when there is no base path', async () => {
     const registered = new Map<string, RouteOptions>()
     app = collecting(registered, '', true)
-    await app.ready()
+    await app.bootstrap()
 
     expect(registered.has('/static/*')).toBe(true)
     expect(registered.get('/static/*')!.onSend).toBeUndefined()
@@ -253,7 +253,7 @@ describe('what a mount pays under a base path', () => {
   it('adds one to a redirecting mount under a base path', async () => {
     const registered = new Map<string, RouteOptions>()
     app = collecting(registered, '/api', true)
-    await app.ready()
+    await app.bootstrap()
 
     expect(registered.get('/static/*')!.onSend).toBeDefined()
   })
@@ -276,7 +276,7 @@ describe('a listing mount under a base path', () => {
 
   it('renders its links under the base', async () => {
     app = listing('/api')
-    await app.ready()
+    await app.bootstrap()
 
     const links = JSON.parse(await (await app.fetch('/api/listing/')).text()) as string[]
 
@@ -287,7 +287,7 @@ describe('a listing mount under a base path', () => {
   // `render` gets no request, so the links carry the configured base; one still routes without it.
   it('renders the same links for a request that came without the base', async () => {
     app = listing('/api')
-    await app.ready()
+    await app.bootstrap()
 
     const links = JSON.parse(await (await app.fetch('/listing/')).text()) as string[]
 
@@ -296,7 +296,7 @@ describe('a listing mount under a base path', () => {
 
   it('renders them as it always has without a base path', async () => {
     app = listing('')
-    await app.ready()
+    await app.bootstrap()
 
     const links = JSON.parse(await (await app.fetch('/listing/')).text()) as string[]
 

@@ -91,7 +91,7 @@ describe('concurrent misses for one key', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-once/data')
     await g.seen
@@ -164,7 +164,7 @@ describe('concurrent misses for one key', () => {
       HTTPCaching(b => b.store(new FailingWrites()).observer(recording.observer).storeTimeout('1s')),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     for (const [path, g] of Object.entries(gates)) {
       const leader = app.fetch(`/sf-nothing/${path}`)
@@ -216,7 +216,7 @@ describe('concurrent misses for one key', () => {
       HTTPCaching(b => b.store(new HungWrites()).observer(recording.observer).storeTimeout('30ms')),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-hung/data')
     await g.seen
@@ -245,7 +245,7 @@ describe('concurrent misses for one key', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-oic/data')
     await g.seen
@@ -286,7 +286,7 @@ describe('concurrent misses for one key', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     for (const [path, g] of Object.entries(gates)) {
       const leader = app.fetch(`/sf-off/${path}`)
@@ -327,7 +327,7 @@ describe('concurrent misses for one key', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new Down())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-down/data')
     await g.seen
@@ -366,7 +366,7 @@ describe('concurrent misses for one key', () => {
     const recording = new Recording()
     const app = createWebApplication().with(HTTPCaching(b => b.store(new Forgetful()).observer(recording.observer)))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-gone/data')
     await g.seen
@@ -422,7 +422,7 @@ describe('concurrent misses for one key', () => {
       ),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-reread/data')
     await g.seen
@@ -471,7 +471,7 @@ describe('a HEAD and the flight', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const head = app.fetch('/sf-head-leads/data', { method: 'HEAD' })
     await g.seen
@@ -503,7 +503,7 @@ describe('a HEAD and the flight', () => {
       HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const leader = app.fetch('/sf-head-follows/data')
     await g.seen
@@ -539,7 +539,7 @@ describe('a HEAD and the flight', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/sf-own-head/data', { method: 'HEAD' })
     await app.fetch('/sf-own-head/data', { method: 'HEAD' })
@@ -823,6 +823,6 @@ describe('lockTimeout', () => {
     )
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(/lockTimeout must be a positive duration/)
+    await expect(app.bootstrap()).rejects.toThrow(/lockTimeout must be a positive duration/)
   })
 })

@@ -50,7 +50,7 @@ async function newLock(backend: Backend = new MemoryLockBackend()): Promise<Dist
     distlock(d => d.backend(backend)),
   )
 
-  await app.ready()
+  await app.bootstrap()
   opened.push(() => app.close())
 
   return app.container.get(kDistLock)

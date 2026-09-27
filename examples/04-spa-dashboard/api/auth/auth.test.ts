@@ -15,7 +15,7 @@ describe('cookie authentication', () => {
 
   beforeAll(async () => {
     app = newApp()
-    await app.ready()
+    await app.bootstrap()
   })
 
   afterAll(async () => await app.close())

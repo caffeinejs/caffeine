@@ -99,7 +99,7 @@ describe('per-route authentication schemes', () => {
     void [DocsSchemeController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/docs-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
 
@@ -119,7 +119,7 @@ describe('per-route authentication schemes', () => {
     void [DocsChallengeController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/docs-challenge')
 
@@ -143,7 +143,7 @@ describe('per-route authentication schemes', () => {
     void [DocsDowngradeController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/docs-downgrade', { headers: { 'x-default-user': 'mallory' } })
 
@@ -163,7 +163,7 @@ describe('per-route authentication schemes', () => {
     void [MultiController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const viaBasic = await app.fetch('/multi', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(viaBasic.status).toBe(200)
@@ -188,7 +188,7 @@ describe('per-route authentication schemes', () => {
     void [PlainController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const authenticated = await app.fetch('/plain', { headers: { 'x-default-user': 'dana' } })
     expect(authenticated.status).toBe(200)
@@ -211,7 +211,7 @@ describe('per-route authentication schemes', () => {
     void [AnonController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     // The handler still sees whoever the default scheme authenticated, because the route is not gated and
     // taking that away would break an optional-identity handler.
@@ -237,7 +237,7 @@ describe('per-route authentication schemes', () => {
     void [ClassSchemeController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const viaBasic = await app.fetch('/class-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(viaBasic.status).toBe(200)
@@ -261,7 +261,7 @@ describe('per-route authentication schemes', () => {
     void [BothSchemesController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/both-schemes', {
       headers: {
@@ -288,7 +288,7 @@ describe('per-route authentication schemes', () => {
     void [EitherSchemeController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/either-scheme', { headers: { authorization: basicHeader('admin', 'admin123') } })
     expect(res.status).toBe(200)
@@ -316,7 +316,7 @@ describe('per-route authentication schemes', () => {
     void [NarrowedController]
 
     app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const withDefault = { headers: { 'x-default-user': 'mallory' } }
 
@@ -344,6 +344,6 @@ describe('per-route authentication schemes', () => {
     void [TypoSchemeController]
 
     app = buildApp()
-    await expect(app.ready()).rejects.toThrow('Cannot resolve authentication scheme "Beaerer"')
+    await expect(app.bootstrap()).rejects.toThrow('Cannot resolve authentication scheme "Beaerer"')
   })
 })

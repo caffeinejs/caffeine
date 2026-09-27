@@ -24,7 +24,7 @@ describe('API versioning', () => {
 
   it('routes Accept-Version 1.x to v1 and 2.x to v2, not by registration order', async () => {
     const app = petsV1AndV2()
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
     expect(await (await app.fetch('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
@@ -34,7 +34,7 @@ describe('API versioning', () => {
 
   it('404s a request that sends no Accept-Version — no default version is invented', async () => {
     const app = petsV1AndV2()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/pets')).status).toBe(404)
 
@@ -43,7 +43,7 @@ describe('API versioning', () => {
 
   it('sets Vary: Accept-Version on a versioned response, and nothing when no route is constrained', async () => {
     const app = petsV1AndV2()
-    await app.ready()
+    await app.bootstrap()
     const versioned = await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })
     expect(versioned.headers.get('vary')?.toLowerCase()).toContain('accept-version')
     await app.close()
@@ -51,7 +51,7 @@ describe('API versioning', () => {
     const plain = new Router('/plain').name('Plain')
     plain.get('/').handler(() => ({ ok: true }))
     const plainApp = createWebApplication({ container: new CaffeineIoC() }).mount(plain)
-    await plainApp.ready()
+    await plainApp.bootstrap()
     const res = await plainApp.fetch('/plain')
     expect(res.headers.get('vary')?.toLowerCase() ?? '').not.toContain('accept-version')
     await plainApp.close()
@@ -66,7 +66,7 @@ describe('API versioning', () => {
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
       .mount(plain, versioned)
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/shop', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
       kind: 'versioned',
@@ -76,7 +76,7 @@ describe('API versioning', () => {
     await app.close()
   })
 
-  it('fails at ready() when two routes share method, path and version', async () => {
+  it('fails at bootstrap() when two routes share method, path and version', async () => {
     const a = new Router('/dup').name('DupA').with(version('1.0.0'))
     a.get('/').handler(() => ({}))
     const b = new Router('/dup').name('DupB').with(version('1.0.0'))
@@ -85,7 +85,7 @@ describe('API versioning', () => {
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
       .mount(a, b)
-    await expect(app.ready()).rejects.toThrow()
+    await expect(app.bootstrap()).rejects.toThrow()
 
     await app.close()
   })
@@ -98,7 +98,7 @@ describe('API versioning', () => {
       .with(() => constraints())
       .with(health())
       .mount(v1)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/livez')).status).toBe(200)
 

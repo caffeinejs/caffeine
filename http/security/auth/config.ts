@@ -61,7 +61,7 @@ export const refreshConfigSchema = $t.Object({
  *
  * Open because the keys one scheme accepts depend on its kind, which only the `addX(...)` call knows. Each
  * scheme's block is still validated, against its kind's schema, when the scheme is built: a key the kind does not
- * have, or a value its option does not take, fails `ready()`.
+ * have, or a value its option does not take, fails `bootstrap()`.
  *
  * Declaring a scheme precisely moves that check to where the configuration loads, which is also what a reload
  * goes through:

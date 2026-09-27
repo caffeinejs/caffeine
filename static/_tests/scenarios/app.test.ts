@@ -124,7 +124,7 @@ describe('a realistic application: controllers, a router, health and a single-pa
 
   beforeAll(async () => {
     app = application()
-    await app.ready()
+    await app.bootstrap()
 
     const asMember = await app.fetch('/auth/login', { method: 'POST' })
     expect(asMember.status).toBe(200)

@@ -93,7 +93,7 @@ class Database extends HealthIndicator {
 describe('kafka(k => k.health())', () => {
   it('registers no indicator unless an instance asks for one', async () => {
     const app = createApplication({}).with(kafka(k => k.brokers('localhost:9092'), { clients: noopClients() }))
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.has(KafkaHealthIndicator)).toBe(false)
 
@@ -103,7 +103,7 @@ describe('kafka(k => k.health())', () => {
   it('registers the indicator next to one the application bound', async () => {
     const app = createApplication({}).with(kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }))
     app.container.bind(Database, t => t.toSelf().extends(HealthIndicator))
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.getMany(HealthIndicator).map(indicator => indicator.name)).toEqual(
       expect.arrayContaining(['database', 'kafka']),
@@ -116,7 +116,7 @@ describe('kafka(k => k.health())', () => {
     const app = createApplication({})
       .with(kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }))
       .with(kafka('audit', k => k.brokers('localhost:9092'), { clients: noopClients() }))
-    await app.ready()
+    await app.bootstrap()
 
     expect(Object.keys(app.container.get(KafkaHealthIndicator).check().data ?? {})).toEqual(['default'])
 

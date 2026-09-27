@@ -66,7 +66,7 @@ describe('role-gated administration site', () => {
     ['a user without the role', bob, 403],
   ] as const)('refuses the page to %s with %i, not with a page', async (_who, caller, status) => {
     app = adminSite(false)
-    await app.ready()
+    await app.bootstrap()
 
     const page = await app.fetch('/', { headers: { ...NAVIGATION, ...caller } })
     expect(page.status).toBe(status)
@@ -78,7 +78,7 @@ describe('role-gated administration site', () => {
 
   it('serves the page and the API to an administrator', async () => {
     app = adminSite(false)
-    await app.ready()
+    await app.bootstrap()
 
     const page = await app.fetch('/', { headers: { ...NAVIGATION, ...ann } })
     expect(page.status).toBe(200)
@@ -94,7 +94,7 @@ describe('role-gated administration site', () => {
     ['a user without the role', bob, 403],
   ] as const)('refuses the bundle to %s with %i', async (_who, caller, status) => {
     app = adminSite(false)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...caller } })
     expect(res.status).toBe(status)
@@ -102,7 +102,7 @@ describe('role-gated administration site', () => {
 
   it('serves the bundle to an administrator', async () => {
     app = adminSite(false)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...ann } })
     expect(res.status).toBe(200)
@@ -111,14 +111,14 @@ describe('role-gated administration site', () => {
 
   it('keeps a missing asset a JSON 404 for an administrator', async () => {
     app = adminSite(false)
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/assets/missing.js', { headers: { ...SCRIPT, ...ann } }))
   })
 
   it('stays gated under authenticate-by-default', async () => {
     app = adminSite(true)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(401)
     expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, ...bob } })).status).toBe(403)

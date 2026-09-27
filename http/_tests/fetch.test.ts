@@ -21,7 +21,7 @@ describe('Fetch API Response Support', () => {
     void [FetchController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fetch/json')
 
@@ -42,7 +42,7 @@ describe('Fetch API Response Support', () => {
     void [NoBodyController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fetch/empty')
 
@@ -67,7 +67,7 @@ describe('Fetch API Response Support', () => {
     void [BufferController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fetch/buf')
 
@@ -93,7 +93,7 @@ describe('Fetch API Response Support', () => {
     void [BinaryController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/fetch/binary')
 
@@ -117,7 +117,7 @@ describe('Fetch API Response Support', () => {
       void [MixClassController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/mix-class/route')
 
@@ -138,7 +138,7 @@ describe('Fetch API Response Support', () => {
       void [MixMethodController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/mix-method/route')
 
@@ -159,7 +159,7 @@ describe('Fetch API Response Support', () => {
       void [OverrideClassController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/override-class/route')
 
@@ -179,7 +179,7 @@ describe('Fetch API Response Support', () => {
       void [OverrideMethodController]
 
       const app = createWebApplication()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/override-method/route')
 

@@ -79,7 +79,7 @@ async function buildApp() {
   const app = createWebApplication({})
     .errorHandling(e => e.globalHandlers(HTTPErrorHandler, FallbackErrorHandler))
     .with(() => html())
-  await app.ready()
+  await app.bootstrap()
 
   return app
 }

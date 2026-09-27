@@ -30,20 +30,20 @@ function credentialsApp(container: CaffeineIoC) {
 describe('the PasswordHasher addCredentials() provides', () => {
   it('is ScryptPasswordHasher when the application binds none', async () => {
     const app = credentialsApp(new CaffeineIoC())
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(PasswordHasher)).toBeInstanceOf(ScryptPasswordHasher)
 
     await app.close()
   })
 
-  it('is the one the application bound before ready()', async () => {
+  it('is the one the application bound before bootstrap()', async () => {
     const own = new ScryptPasswordHasher({ N: 1024 })
     const container = new CaffeineIoC()
     container.bind(PasswordHasher, t => t.toValue(own))
 
     const app = credentialsApp(container)
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(PasswordHasher)).toBe(own)
 
@@ -85,7 +85,7 @@ describe('the PasswordHasher addCredentials() provides', () => {
     })
 
     const app = credentialsApp(container)
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.get(PasswordHasher)).toBe(own)
 

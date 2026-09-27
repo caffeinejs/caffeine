@@ -16,7 +16,7 @@ describe('Prefix', () => {
     void [UsersController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const hit = await app.fetch('/v1/users/list')
     const miss = await app.fetch('/users/list')
@@ -47,7 +47,7 @@ describe('Prefix', () => {
     void [ItemsController, ItemsV2Controller]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const v1 = await app.fetch('/v1/items/all')
     const v2 = await app.fetch('/v2/items/all')

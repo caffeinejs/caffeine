@@ -219,7 +219,7 @@ Exceptions, where `config(...)` overlays what the fluent methods set:
 The application declares the whole schema, importing the feature's exported schema (`loggerConfigSchema`,
 `cookieConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
 into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
-fields and no source to fill them fails validation at `ready()`.
+fields and no source to fill them fails validation at `bootstrap()`.
 
 A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
 environment variable or argument reaches it.
@@ -367,7 +367,7 @@ either — `ErrorHandlingBuilder` leads `WebApplication.configurers()` and is st
 
 ## Documentation
 
-TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export.
+TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export. Do not add internal implementation details in the TSDocs.
 
 Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter’s meaning is not its name, or a generic/overload is non-obvious.
 

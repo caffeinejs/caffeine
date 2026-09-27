@@ -21,7 +21,7 @@ describe('Header', () => {
     void [VersionedController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const resA = await app.fetch('/versioned/a')
     const resB = await app.fetch('/versioned/b')
@@ -48,7 +48,7 @@ describe('Header', () => {
     void [TargetedController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const hit = await app.fetch('/targeted/with-header')
     const miss = await app.fetch('/targeted/without-header')
@@ -70,7 +70,7 @@ describe('Header', () => {
     void [MultiClassController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/multi-class/route')
 
@@ -91,7 +91,7 @@ describe('Header', () => {
     void [MultiMethodController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/multi-method/route')
 
@@ -112,7 +112,7 @@ describe('Header', () => {
     void [OverrideController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/override/route')
 
@@ -133,7 +133,7 @@ describe('Header', () => {
     void [CharsetController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/charset/route')
 
@@ -153,7 +153,7 @@ describe('Header', () => {
     void [NoCharsetController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/no-charset/route')
 
@@ -173,7 +173,7 @@ describe('Header', () => {
     void [CharsetArrayController]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/charset-array/route')
 

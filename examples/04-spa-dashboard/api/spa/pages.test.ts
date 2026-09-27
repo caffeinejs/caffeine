@@ -29,7 +29,7 @@ describe('the single-page application', () => {
 
   beforeAll(async () => {
     app = newApp()
-    await app.ready()
+    await app.bootstrap()
     member = await signIn(app, 'user', 'user123')
     admin = await signIn(app, 'admin', 'admin123')
 

@@ -87,6 +87,6 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
           .get('/', () => ({ ok: true })),
       )
 
-    await expect(app.ready()).rejects.toMatchObject({ code: 'ERR_AUTHZ_REQUIREMENT_HANDLER_DUPLICATE' })
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHZ_REQUIREMENT_HANDLER_DUPLICATE' })
   })
 })

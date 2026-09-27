@@ -20,6 +20,7 @@ import {
   ErrApplicationNotReady,
   ErrApplicationRunning,
   ErrApplicationStarted,
+  ErrConfigNotReady,
   ErrFeatureAlreadyInstalled,
   FeatureBuilder,
   type BootstrapKit,
@@ -51,7 +52,7 @@ function appWith(configure: (container: CaffeineIoC) => void) {
 }
 
 describe('Application lifecycle', () => {
-  it('runs a container OnBootstrap hook during ready() and an OnDestroy hook during close()', async () => {
+  it('runs a container OnBootstrap hook during bootstrap() and an OnDestroy hook during close()', async () => {
     const order: string[] = []
 
     class Beacon implements OnBootstrap, OnDestroy {
@@ -66,14 +67,14 @@ describe('Application lifecycle', () => {
 
     const app = appWith(c => c.bind(Beacon, t => t.toClass(Beacon)))
 
-    await app.ready()
+    await app.bootstrap()
     expect(order).toEqual(['bootstrap'])
     await app.run()
     await app.close()
     expect(order).toEqual(['bootstrap', 'destroy'])
   })
 
-  it('fail-fast: a throwing onBootstrap hook aborts ready()', async () => {
+  it('fail-fast: a throwing onBootstrap hook aborts bootstrap()', async () => {
     class Boom implements OnBootstrap {
       onBootstrap() {
         throw new Error('boom')
@@ -82,7 +83,7 @@ describe('Application lifecycle', () => {
 
     const app = appWith(c => c.bind(Boom, t => t.toClass(Boom)))
 
-    await expect(app.ready()).rejects.toThrow('boom')
+    await expect(app.bootstrap()).rejects.toThrow('boom')
   })
 
   it('shutdown: a throwing onDestroy hook aggregates, and the container is still disposed', async () => {
@@ -106,16 +107,16 @@ describe('Application lifecycle', () => {
     const dispose = vi.spyOn(container, 'dispose')
 
     const app = createApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     await expect(app.close()).rejects.toThrow(AggregateError)
     expect(ran.sort()).toEqual(['a', 'b'])
     expect(dispose).toHaveBeenCalledOnce()
   })
 
-  // The store closes with the container, and only an initialized container has the hook that does it. A ready() that
+  // The store closes with the container, and only an initialized container has the hook that does it. A bootstrap() that
   // fails before then must close it, or the sources it loaded stay open with nobody left to close them.
-  it('closes the configuration when ready() fails before the container initializes', async () => {
+  it('closes the configuration when bootstrap() fails before the container initializes', async () => {
     const close = vi.fn()
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
@@ -130,7 +131,7 @@ describe('Application lifecycle', () => {
       misconfigured,
     )
 
-    await expect(app.ready()).rejects.toThrow('misconfigured')
+    await expect(app.bootstrap()).rejects.toThrow('misconfigured')
     expect(close).toHaveBeenCalledOnce()
   })
 })
@@ -176,7 +177,7 @@ describe('Application.with', () => {
   it('installs the feature and bootstraps it', async () => {
     const app = createApplication().with(tracker(t => t.capture('recorded')))
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.getOptional(kSentinel)).toEqual({ value: 'recorded' })
     await app.close()
@@ -249,10 +250,40 @@ describe('feature lifecycle', () => {
     const feature = new WidgetFeature()
     const app = widgetApp(feature as Feature<never>, 42)
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(feature.bound).toBe(42)
     expect(app.container.get(token<number | undefined>('widget.size'))).toBe(42)
+  })
+
+  // Application code reads the same object a feature was handed. The store is kept before features configure,
+  // so a feature mid-bootstrap reads `app.config` rather than only the kit.
+  it('returns the live config features were handed, once it has loaded', async () => {
+    let handed: FeatureConfigureKit['config'] | undefined
+
+    const app = widgetApp(
+      {
+        get [kFeatureName](): string {
+          return 'reader'
+        },
+        [kFeatureConfigure](kit: FeatureConfigureKit): void {
+          handed = kit.config
+          expect(app.config).toBe(kit.config)
+        },
+        [kFeatureBootstrap](kit: BootstrapKit): void {
+          expect(kit.config).toBe(handed)
+          expect(app.config).toBe(handed)
+        },
+      },
+      42,
+    )
+
+    expect(() => app.config).toThrow(ErrConfigNotReady)
+
+    await app.bootstrap()
+
+    expect(app.config).toBe(handed)
+    expect(app.config.widget.size).toBe(42)
   })
 
   it('runs a feature that reads no configuration at all', async () => {
@@ -271,12 +302,12 @@ describe('feature lifecycle', () => {
       },
     })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(configured).toBe(true)
   })
 
-  // A tree that cannot validate is a broken application, and saying so at `ready()` is earlier and more
+  // A tree that cannot validate is a broken application, and saying so at `bootstrap()` is earlier and more
   // legible than failing at whatever moment a feature first read it.
   it('fails start-up when the configuration cannot be validated, before anything binds', async () => {
     let configured = false
@@ -299,7 +330,7 @@ describe('feature lifecycle', () => {
       },
     })
 
-    await expect(app.ready()).rejects.toThrow()
+    await expect(app.bootstrap()).rejects.toThrow()
     expect(configured).toBe(false)
   })
 
@@ -322,7 +353,7 @@ describe('feature lifecycle', () => {
       await init()
     }
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(order).toEqual(['configure', 'init', 'bootstrap'])
   })
@@ -341,7 +372,7 @@ describe('feature bootstrap', () => {
       },
     })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(configured).toBe(true)
   })
@@ -365,14 +396,123 @@ describe('feature bootstrap', () => {
         },
       })
 
-    await app.ready()
+    await app.bootstrap()
 
     expect(seen).toBe(custom)
   })
 })
 
+describe('bootstrap() callback', () => {
+  // The callback is the place that can still install a feature after the config exists and before the list
+  // of features is read. A feature added there has to configure and bootstrap, or the call only looks like it worked.
+  it('configures and bootstraps a feature installed from the callback, against the loaded config', async () => {
+    const conf = newConfiguration(widgetSchema, kWidgetConfig)
+      .source(new InlineConfigSource({ widget: { size: 7 }, caffeine: { name: 'petstore' } }))
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+
+    let seenSize: number | undefined
+    let bootstrapped = false
+
+    await app.bootstrap((config, application) => {
+      expect(config).toBe(application.config)
+      expect(config.widget.size).toBe(7)
+      expect(application.name).toBe('petstore')
+
+      application.with({
+        [kFeatureName]: 'from-callback',
+        [kFeatureConfigure](kit: FeatureConfigureKit<WidgetConfig>): void {
+          seenSize = kit.config.widget.size
+          expect(kit.config).toBe(config)
+        },
+        [kFeatureBootstrap](): void {
+          bootstrapped = true
+        },
+      })
+    })
+
+    expect(seenSize).toBe(7)
+    expect(bootstrapped).toBe(true)
+  })
+
+  // Omitting `config` still loads: a passthrough definition with no sources. The getter must not treat that
+  // as missing.
+  it('exposes an empty config when none was declared, and refuses the read before it has loaded', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+
+    expect(() => app.config).toThrow(ErrConfigNotReady)
+
+    await app.bootstrap((_config, application) => {
+      expect(application.config).toEqual({})
+    })
+
+    expect(app.config).toEqual({})
+  })
+
+  // `container.init()` runs OnBootstrap. The callback has to have returned before that, including when it awaits.
+  it('awaits the callback before the container initializes and before features bootstrap', async () => {
+    const order: string[] = []
+
+    class Beacon implements OnBootstrap {
+      onBootstrap() {
+        order.push('init')
+      }
+    }
+
+    const app = appWith(c => c.bind(Beacon, t => t.toClass(Beacon)))
+
+    await app.bootstrap(async (_config, application) => {
+      order.push('callback')
+      application.with({
+        [kFeatureName]: 'ordered',
+        [kFeatureConfigure](): void {
+          order.push('configure')
+        },
+        [kFeatureBootstrap](): void {
+          order.push('bootstrap')
+        },
+      })
+      await Promise.resolve()
+      order.push('callback-done')
+    })
+
+    expect(order).toEqual(['callback', 'callback-done', 'configure', 'init', 'bootstrap'])
+  })
+
+  // A callback that throws is a boot that never initialized the container, so the store has to be closed here.
+  it('closes the configuration when the callback throws, before the container initializes', async () => {
+    const close = vi.fn()
+    const conf = newConfiguration(caffeineSchema, kConfig)
+      .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
+      .build()
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+
+    await expect(
+      app.bootstrap(() => {
+        throw new Error('callback')
+      }),
+    ).rejects.toThrow('callback')
+    expect(close).toHaveBeenCalledOnce()
+  })
+
+  // The first call owns the boot. A callback on a later call would never run, and must not look like it did.
+  it('does not run a callback passed to a later bootstrap()', async () => {
+    let runs = 0
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+    const first = app.bootstrap(() => {
+      runs++
+    })
+    const second = app.bootstrap(() => {
+      runs++
+    })
+
+    await Promise.all([first, second])
+    expect(runs).toBe(1)
+  })
+})
+
 describe('configuring a started application', () => {
-  // `ready()` reads the feature list once. A change made after that point would be dropped without a word, so
+  // `bootstrap()` reads the feature list once. A change made after that point would be dropped without a word, so
   // it is refused instead: a misplaced call must not look like it worked.
   const late: Feature = {
     [kFeatureName]: 'late',
@@ -384,18 +524,18 @@ describe('configuring a started application', () => {
     },
   }
 
-  it('refuses configuration once ready() has completed', async () => {
+  it('refuses configuration once bootstrap() has completed', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    await app.ready()
+    await app.bootstrap()
 
     expect(() => app.with(late)).toThrow(ErrApplicationStarted)
     expect(() => app.addFeature(late)).toThrow(ErrApplicationStarted)
     expect(() => app.shutdown(s => s.signals(false))).toThrow(ErrApplicationStarted)
   })
 
-  it('refuses configuration while ready() is still in flight', async () => {
+  it('refuses configuration while bootstrap() is still in flight', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    const ready = app.ready()
+    const ready = app.bootstrap()
 
     expect(() => app.with(late)).toThrow(ErrApplicationStarted)
 
@@ -413,9 +553,9 @@ describe('application name and profiles', () => {
   @Profile('eu')
   class EuOnly {}
 
-  it('defaults name to empty after ready()', async () => {
+  it('defaults name to empty after bootstrap()', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.name).toBe('')
   })
@@ -425,7 +565,7 @@ describe('application name and profiles', () => {
       .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.name).toBe('petstore')
   })
@@ -434,7 +574,7 @@ describe('application name and profiles', () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.container.profiles.has('eu')).toBe(true)
   })
@@ -446,7 +586,7 @@ describe('application name and profiles', () => {
 
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
     const app = createApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     expect(container.profiles.has('test')).toBe(true)
     expect(container.profiles.has('eu')).toBe(true)
@@ -457,7 +597,7 @@ describe('application name and profiles', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
     const app = createApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(false)
   })
@@ -468,7 +608,7 @@ describe('application name and profiles', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf())
     const app = createApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(true)
   })
@@ -493,7 +633,7 @@ describe('application name and profiles', () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu,eu,dev')
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.profiles).toEqual(['eu', 'dev'])
   })
@@ -507,7 +647,7 @@ describe('application name and profiles', () => {
       .source(new InlineConfigSource({ caffeine: { profiles: ['eu'] } }))
       .build()
     const app = createApplication({ container, config: conf })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.profiles).toEqual(['test'])
     expect(container.profiles.has('eu')).toBe(false)
@@ -538,7 +678,7 @@ describe('profile-segregated config files', () => {
 
     const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.name).toBe('eu-app')
     expect(app.profiles).toEqual(['eu'])
@@ -553,7 +693,7 @@ describe('profile-segregated config files', () => {
       container: new CaffeineIoC({ decorators: false, profiles: ['test'] }),
       config: conf,
     })
-    await app.ready()
+    await app.bootstrap()
 
     expect(app.name).toBe('test-app')
     expect(app.profiles).toEqual(['test'])
@@ -772,15 +912,15 @@ describe('closing at any point of the lifecycle', () => {
 
     expect(dispose).not.toHaveBeenCalled()
     expect(app.availability.live).toBe('broken')
-    await expect(app.ready()).rejects.toThrow(ErrApplicationClosed)
+    await expect(app.bootstrap()).rejects.toThrow(ErrApplicationClosed)
   })
 
-  it('waits for a ready() in flight, then tears down what it brought up', async () => {
+  it('waits for a bootstrap() in flight, then tears down what it brought up', async () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Recorder, t => t.toSelf())
     const app = createApplication({ container })
 
-    const booting = app.ready()
+    const booting = app.bootstrap()
     const closing = app.close()
 
     await booting
@@ -822,7 +962,7 @@ describe('closing at any point of the lifecycle', () => {
     expect(dispatcher.installed).toBe(0)
   })
 
-  it('tears down after a failed ready() without replacing its error, logging what the teardown hit', async () => {
+  it('tears down after a failed bootstrap() without replacing its error, logging what the teardown hit', async () => {
     class Failing implements OnDestroy {
       onDestroy() {
         throw new Error('teardown failed')
@@ -844,7 +984,7 @@ describe('closing at any point of the lifecycle', () => {
 
     const boot = async (): Promise<void> => {
       try {
-        await app.ready()
+        await app.bootstrap()
       } finally {
         await app.close()
       }
@@ -857,7 +997,7 @@ describe('closing at any point of the lifecycle', () => {
 
   it('skips the drain delay for an application that never served', async () => {
     const app = createApplication().shutdown(s => s.drainDelay('5s'))
-    await app.ready()
+    await app.bootstrap()
 
     const startedAt = Date.now()
     await app.close()
@@ -886,7 +1026,7 @@ describe('closing at any point of the lifecycle', () => {
     await expect(app.close()).resolves.toBeUndefined()
   })
 
-  it('boots once when ready() is called again while booting', async () => {
+  it('boots once when bootstrap() is called again while booting', async () => {
     let configured = 0
     const counting: Feature = {
       [kFeatureName]: 'counting',
@@ -896,7 +1036,7 @@ describe('closing at any point of the lifecycle', () => {
     }
     const app = createApplication().with(counting)
 
-    await Promise.all([app.ready(), app.ready()])
+    await Promise.all([app.bootstrap(), app.bootstrap()])
 
     expect(configured).toBe(1)
     await app.close()
@@ -935,15 +1075,15 @@ describe('running once', () => {
     expect(app.calls).toEqual(['start', 'listening', 'stop'])
   })
 
-  it('refuses to ready a closed application, while a ready() already under way keeps its outcome', async () => {
+  it('refuses to ready a closed application, while a bootstrap() already under way keeps its outcome', async () => {
     const app = createApplication()
 
-    const booting = app.ready()
+    const booting = app.bootstrap()
     const closing = app.close()
 
     await expect(booting).resolves.toBeUndefined()
     await closing
-    await expect(app.ready()).rejects.toThrow(ErrApplicationClosed)
+    await expect(app.bootstrap()).rejects.toThrow(ErrApplicationClosed)
   })
 })
 
@@ -962,7 +1102,7 @@ describe('application health', () => {
 
   it('follows the lifecycle, evaluating the indicators bound in the container', async () => {
     const app = appWith(container => container.bind(Database, t => t.toSelf().extends(HealthIndicator)))
-    await app.ready()
+    await app.bootstrap()
 
     const health = app.container.get(ApplicationHealth)
 
@@ -985,7 +1125,7 @@ describe('application health', () => {
     const app = appWith(container =>
       container.bind(Database, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator)),
     )
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect(() => app.container.get(ApplicationHealth)).toThrow(ErrHealthIndicatorNotSingleton)
@@ -997,7 +1137,7 @@ describe('application health', () => {
   // One instance however it is reached: a second would split the cache and the coalescing every caller shares.
   it('reads the instance the container binds', async () => {
     const app = appWith(container => container.bind(Database, t => t.toSelf().extends(HealthIndicator)))
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect(app.health).toBe(app.container.get(ApplicationHealth))
@@ -1006,7 +1146,7 @@ describe('application health', () => {
     }
   })
 
-  it('fails until ready() has resolved', async () => {
+  it('fails until bootstrap() has resolved', async () => {
     let bootstrapped = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
@@ -1015,7 +1155,7 @@ describe('application health', () => {
       [kFeatureConfigure](): void {
         // Binds nothing: the bootstrap hook is what reads.
       },
-      // Runs once the container has initialized, before ready() resolves.
+      // Runs once the container has initialized, before bootstrap() resolves.
       [kFeatureBootstrap](): void {
         expect(() => app.health).toThrow(ErrApplicationNotReady)
         bootstrapped = true
@@ -1024,7 +1164,7 @@ describe('application health', () => {
 
     expect(() => app.health).toThrow(ErrApplicationNotReady)
 
-    await app.ready()
+    await app.bootstrap()
 
     try {
       expect(bootstrapped).toBe(true)

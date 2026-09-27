@@ -18,7 +18,7 @@ npm install @caffeinejs/caching
 ## Quick start
 
 Two halves: install the plugin once, then say which routes cache. Decorating routes without installing the
-plugin fails at `app.ready()`. There is no default store: you pass one.
+plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 
 ```ts
 import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
@@ -190,7 +190,7 @@ combination.
 
 Routes selected by a constraint, a version or a host, share their URL with the routes selected otherwise, and so
 would share a key. Such a route with a `ttl` must list the constraint's header in `vary`, or have its own `key`.
-Otherwise `app.ready()` fails.
+Otherwise `app.bootstrap()` fails.
 
 ```ts
 @CacheControl({ ttl: 60, vary: ['Accept-Version'] })
@@ -299,11 +299,11 @@ context, with the `container` and the application `logger`.
 | `lockTimeout`   | How long a request waits for another's handler run. Default `10s`.                                                                        |
 
 `store`, `etagGenerator` and `observer` each take the value or a container token. A token bound to nothing fails
-at `app.ready()`, and so does a missing `store`. Nothing is bound into the container for you.
+at `app.bootstrap()`, and so does a missing `store`. Nothing is bound into the container for you.
 
 It installs on the whole application, or on one route group with `router.plugin(HTTPCaching(...))` or
 `@Use(HTTPCaching(...))`, each install with its own store and settings. A group that declares caching and
-installs nothing, under an application that installs nothing, fails at `app.ready()`.
+installs nothing, under an application that installs nothing, fails at `app.bootstrap()`.
 
 Order matters in two places:
 
@@ -489,7 +489,7 @@ Observers cost nothing when absent: no event is built for a route nobody observe
 
 ## Start-up errors
 
-All of these fail `app.ready()` with `ErrConfiguration`:
+All of these fail `app.bootstrap()` with `ErrConfiguration`:
 
 - a route declares `@CacheControl` or `@CacheInvalidate` and the plugin is not installed for it
 - `HTTPCaching` has no `store`, or a `store`, `etagGenerator` or `observer` token is bound to nothing

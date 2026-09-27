@@ -86,7 +86,7 @@ export interface ShutdownConfig {
  * (`isKubernetes`, the test-runner check) and are applied by {@link mergeShutdownConfig} afterwards. So the tree
  * carries only what somebody actually set, and absence keeps its meaning.
  *
- * The durations are `$t.Duration()`: `SHUTDOWN__SHUTDOWN_TIMEOUT=10000` fails validation at `ready()` rather than
+ * The durations are `$t.Duration()`: `SHUTDOWN__SHUTDOWN_TIMEOUT=10000` fails validation at `bootstrap()` rather than
  * becoming a timeout of 0, which waits indefinitely.
  */
 export const shutdownConfigSchema = $t.Object({
@@ -166,7 +166,7 @@ export interface ShutdownValidation {
 }
 
 /**
- * Checks the shutdown budget against the pod's termination grace period, at `ready()` — while the logs are still
+ * Checks the shutdown budget against the pod's termination grace period, at `bootstrap()` — while the logs are still
  * being watched, rather than during the shutdown the mistake would ruin.
  *
  * `drainDelayMs + shutdownTimeoutMs` must fit inside `terminationGracePeriodMs`, otherwise `SIGKILL` arrives

@@ -64,7 +64,7 @@ describe('two applications on one origin', () => {
 
   it('serves the public application to anyone at the root', async () => {
     app = origin(false)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/settings', { headers: NAVIGATION })
 
@@ -74,7 +74,7 @@ describe('two applications on one origin', () => {
 
   it('refuses the administration application to a stranger and to a user without the role', async () => {
     app = origin(false)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/admin/users', { headers: NAVIGATION })).status).toBe(401)
 
@@ -85,7 +85,7 @@ describe('two applications on one origin', () => {
 
   it('serves the administration application, and only that one, under its prefix', async () => {
     app = origin(false)
-    await app.ready()
+    await app.bootstrap()
 
     for (const path of ['/admin', '/admin/', '/admin/users']) {
       const res = await app.fetch(path, { headers: { ...NAVIGATION, ...ann } })
@@ -97,7 +97,7 @@ describe('two applications on one origin', () => {
 
   it('answers a missing file under the administration prefix as a 404', async () => {
     app = origin(false)
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/admin/missing.js', { headers: { ...NAVIGATION, ...ann } }))
   })
@@ -105,7 +105,7 @@ describe('two applications on one origin', () => {
   // One bundle is public because its sign-in page needs it; the other is as gated as the page it belongs to.
   it('serves the public bundle to anyone and the administration bundle only to an administrator', async () => {
     app = origin(true)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(200)
     expect((await app.fetch('/admin/assets/admin-Zz9.js', { headers: SCRIPT })).status).toBe(401)
@@ -118,7 +118,7 @@ describe('two applications on one origin', () => {
 
   it('keeps an API miss a JSON 404 whichever application it is nearest to', async () => {
     app = origin(false)
-    await app.ready()
+    await app.bootstrap()
 
     await expectNotFoundJSON(await app.fetch('/api/typo', { headers: XHR }))
   })

@@ -13,7 +13,7 @@ interface WattCheckResult {
  * Answers Watt's readiness and liveness checks from the application's `ApplicationHealth`, so Watt's probe server
  * (`/ready`, `/status`) reports what `/readyz` and `/livez` would. Does nothing outside Watt.
  *
- * Call it once `ready()` has run — `app.health` fails until then — and before `run()`, so Watt sees the
+ * Call it once `bootstrap()` has run — `app.health` fails until then — and before `run()`, so Watt sees the
  * application refusing until it actually serves. Every Watt poll lands on the same cached, coalesced evaluation
  * the HTTP probes use, so polling both never doubles the load on a dependency.
  *

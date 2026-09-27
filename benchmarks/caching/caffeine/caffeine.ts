@@ -22,5 +22,5 @@ const app = cached
       .mount(api)
   : createWebApplication().mount(api)
 
-await app.ready()
+await app.bootstrap()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

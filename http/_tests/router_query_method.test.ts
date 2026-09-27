@@ -12,7 +12,7 @@ describe('Router.query()', () => {
     }))
 
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(routes)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/query-test', {
       method: 'QUERY',

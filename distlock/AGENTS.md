@@ -7,7 +7,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to thi
 `distlock()` installs nothing usable on its own: `.backend(...)` takes an instance or a key to resolve one
 from the container, and omitting it throws `ErrDistLockConfiguration` while the feature configures. A key that
 resolves to nothing throws too, from the factory the container runs during `init()` — so both failures land at
-`app.ready()` rather than at the first lock a request tries to take.
+`app.bootstrap()` rather than at the first lock a request tries to take.
 
 There is deliberately no fallback to `MemoryLockBackend`. A lock service that quietly degraded to a
 single-process backend would hand a fleet the one answer it must never give, and it would do it silently.
@@ -77,7 +77,7 @@ Three consumers, one set of emission points in the core:
 
 - **Logs** are direct calls on the service's `Logger`. The constructor requires one; `.logger(...)` on the
   builder picks it — unset, it is the application logger's child named `distlock`, resolved inside the factory
-  so it sees the logger the application settled on during `ready()`; `false` gives `newNoopLogger()`. Logs are
+  so it sees the logger the application settled on during `bootstrap()`; `false` gives `newNoopLogger()`. Logs are
   not a channel subscriber: channels are process-wide, and one would mix every service's records into one
   logger.
 - **`node:diagnostics_channel`** is what the core publishes and the only thing it publishes to. `acquire`,
@@ -161,9 +161,9 @@ disposal waits for it. Once `app.close()` resolves this package has no write out
 the case at all.
 
 There is no `onBootstrap`, and adding an empty one to force construction would be cargo cult. A bad backend key
-already fails at `app.ready()` rather than at the first lock, because singleton bindings are eager in this
+already fails at `app.bootstrap()` rather than at the first lock, because singleton bindings are eager in this
 container: `DEFAULT_OPTIONS.lazy` is `false` and `SingletonScope.lazy` is `false`, so `init()` resolves the
-binding and a throwing factory rejects `ready()`. `config.test.ts`'s "refuses to start when the backend key
+binding and a throwing factory rejects `bootstrap()`. `config.test.ts`'s "refuses to start when the backend key
 resolves to nothing" is what holds that; if it ever starts failing, the container's defaults changed
 underneath this package.
 

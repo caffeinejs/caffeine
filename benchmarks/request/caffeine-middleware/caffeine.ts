@@ -71,5 +71,5 @@ app.use((ctx, next) => {
   return next()
 })
 
-await app.ready()
+await app.bootstrap()
 await app.instance.listen({ port: PORT, host: '0.0.0.0' })

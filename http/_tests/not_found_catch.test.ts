@@ -12,7 +12,7 @@ class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
 describe('@Catch and unmatched routes', () => {
   it('an enrolled @Catch(ErrHTTPNotFound) sees a URL that matched no route', async () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(GlobalNotFound))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/definitely-not-a-route')
 

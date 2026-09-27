@@ -10,7 +10,7 @@ import './payment/payment.controller.js'
 
 const started = performance.now()
 const app = createWebApplication()
-await app.ready()
+await app.bootstrap()
 await app.instance.listen({ port: 3013, host: '127.0.0.1' })
 // performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.
 const listening = performance.now()

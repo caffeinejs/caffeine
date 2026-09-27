@@ -37,7 +37,7 @@ Side-effect-import the controller file from `main.ts` so `@Controller` registers
 
 ## HTTPS and HTTP/2
 
-TLS and HTTP/2 are `factory` options, so configuration can switch them at `ready()`:
+TLS and HTTP/2 are `factory` options, so configuration can switch them at `bootstrap()`:
 
 ```ts
 createWebApplication({ config }).server(({ config }) => ({
@@ -66,7 +66,7 @@ Two things differ under HTTP/2:
 ## Serving under a base path
 
 Behind a gateway or proxy that forwards `/api/...` with the prefix intact, `.basePath('/api')` serves the whole
-application under it — or `.basePath(({ config }) => config.app.basePath)`, resolved at `ready()`. Under Watt:
+application under it — or `.basePath(({ config }) => config.app.basePath)`, resolved at `bootstrap()`. Under Watt:
 `.basePath(() => getBasePath({ throwOnMissing: false }) ?? undefined)` — the rest of running under Watt is
 [docs/watt.md](../../docs/watt.md).
 
@@ -122,7 +122,7 @@ pets.group('/:petID/orders', r =>
     .handler((ctx, deps) => deps.svc.order(ctx.req.body())),
 )
 
-app.mount(pets) // before app.ready()
+app.mount(pets) // before app.bootstrap()
 ```
 
 - A verb takes `(path)`, `(path, handler)` or `(path, schema, handler)`. With a handler the route is closed there
@@ -265,10 +265,10 @@ await client.pets.post({ body: { name: 'Rex' } })
   against.
 - Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
-  URL is written. The application must be `ready()` first, or every call answers 404:
+  URL is written. The application must be `bootstrap()` first, or every call answers 404:
 
   ```ts
-  await app.ready()
+  await app.bootstrap()
   const client = brewer(app)
   await client.pets({ id: 1 }).get()
 

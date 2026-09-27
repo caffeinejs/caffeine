@@ -45,7 +45,7 @@ describe('cache plugin wiring', () => {
       })
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     // The plugin registered: the request decoration is in place.
     expect(app.instance.hasRequestDecorator('responseCached')).toBe(true)
@@ -63,7 +63,7 @@ describe('cache plugin wiring', () => {
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-Second')))
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
   })
 
   // A route group inherits the plugins its parent registered, so a group install under a root install is the
@@ -78,7 +78,7 @@ describe('cache plugin wiring', () => {
       .mount(router)
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot register plugin "@caffeinejs\/caching"/)
   })
 
   // The start-up refusal exists for a decorated route nothing serves. A group that installed the plugin for
@@ -94,7 +94,7 @@ describe('cache plugin wiring', () => {
 
     const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(router)
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('MISS')
     expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('HIT')
@@ -118,7 +118,7 @@ describe('cache plugin wiring', () => {
       group('owners'),
     )
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/group-own-pets/data')
     await app.fetch('/group-own-owners/data')
@@ -147,6 +147,6 @@ describe('cache plugin wiring', () => {
       .mount(unserved)
     close = () => app.close()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 })

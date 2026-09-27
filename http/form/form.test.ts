@@ -8,7 +8,7 @@ const FORM = 'application/x-www-form-urlencoded'
 async function appWith(controller: unknown) {
   void [controller]
   const app = createWebApplication()
-  await app.ready()
+  await app.bootstrap()
   return app
 }
 

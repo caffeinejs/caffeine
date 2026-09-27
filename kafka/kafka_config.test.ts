@@ -50,7 +50,7 @@ describe('kafka configuration', () => {
     const app = createApplication({ config: conf }).with(kfk((k, { config }) => k.config(config.kafka.default)))
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['from-config:9092'])
     expect(configOf(built.container, 'default').groupId).toBe('from-config')
@@ -71,7 +71,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['prod-1:9092', 'prod-2:9092'])
     // Untouched by the environment, so the code value still stands.
@@ -93,7 +93,7 @@ describe('kafka configuration', () => {
       .with(kfk((k, { config }) => k.config(config.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['b1:9092'])
     expect(configOf(built.container, 'default').groupId).toBe('svc')
@@ -124,7 +124,7 @@ describe('kafka configuration', () => {
       .with(kfk((k, { config }) => k.config(config.app.events).brokers('moved:9092')))
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').brokers).toEqual(['moved:9092'])
     expect(configOf(built.container, 'default').groupId).toBe('from-moved-path')
@@ -148,7 +148,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     const config = configOf(built.container, 'default')
     expect(config.brokers).toEqual(['from-env:9092'])
@@ -172,7 +172,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').deadLetter).toEqual({ topic })
 
@@ -190,7 +190,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
 
@@ -209,7 +209,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
 
@@ -228,7 +228,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(configOf(built.container, 'default').deadLetter).toBe(false)
 
@@ -247,7 +247,7 @@ describe('kafka configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(built.container.getOptional(runtimeKey('ghost'))).toBeUndefined()
 

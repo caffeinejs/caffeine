@@ -36,7 +36,7 @@ async function newApp(
     }),
   )
 
-  await app.ready()
+  await app.bootstrap()
   opened.push(() => app.close())
 
   return { lock: app.container.get(kDistLock), log, close: () => app.close() }
@@ -190,7 +190,7 @@ describe('DistLock.events containment', () => {
 
 describe('DistLockBuilder.on', () => {
   // The listener is attached as the service is built, so it hears about a lock another binding takes while the
-  // application bootstraps — which a listener added after ready() never could.
+  // application bootstraps — which a listener added after bootstrap() never could.
   it('hears locks taken while another binding bootstraps', async () => {
     const seen: string[] = []
 

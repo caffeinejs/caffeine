@@ -39,7 +39,7 @@ describe('view feature', () => {
     void [ModelController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-model/show')
 
@@ -60,7 +60,7 @@ describe('view feature', () => {
     void [PlainController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-plain/show')
 
@@ -84,7 +84,7 @@ describe('view feature', () => {
         v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').defaultContext({ site: 'Caffeine' })),
       ),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-context/show')
 
@@ -105,7 +105,7 @@ describe('view feature', () => {
     app = createWebApplication({}).with(
       view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-namespaced/show')
 
@@ -125,7 +125,7 @@ describe('view feature', () => {
     void [AsyncController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-async/show')
 
@@ -145,7 +145,7 @@ describe('view feature', () => {
     void [LayoutController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-layout/show')
     const body = await res.text()
@@ -168,7 +168,7 @@ describe('view feature', () => {
     void [JsonController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-json/show')
 
@@ -188,7 +188,7 @@ describe('view feature', () => {
     void [UnconfiguredController]
 
     app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-unconfigured/show')
 
@@ -207,7 +207,7 @@ describe('view feature', () => {
     void [UnconfiguredAsyncController]
 
     app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/view-unconfigured-async/show')
 
@@ -238,7 +238,7 @@ describe('view feature', () => {
         v.add('ejs', e => e.engine({ ejs }).root(ejsRoot).extension('ejs'))
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const hbs = await app.fetch('/multi/hbs')
     const ejsRes = await app.fetch('/multi/ejs')
@@ -274,7 +274,7 @@ describe('view feature', () => {
         v.add('alt', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs').layout('layout-alt'))
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const plain = await app.fetch('/same-engine/plain')
     const alt = await app.fetch('/same-engine/alt')
@@ -302,7 +302,7 @@ describe('view feature', () => {
     void [MissingEngineController]
 
     app = viewApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/multi-missing/show')
 
@@ -310,19 +310,19 @@ describe('view feature', () => {
   })
 
   // The configure callback runs when the application bootstraps, so an authoring mistake inside it surfaces
-  // from `ready()` rather than from the `.with(...)` call that wrote it.
+  // from `bootstrap()` rather than from the `.with(...)` call that wrote it.
   it('rejects registering an engine named "view" (reserved for the default engine)', async () => {
     const rejected = createWebApplication({}).with(
       view(v => v.add('view', e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))),
     )
 
-    await expect(rejected.ready()).rejects.toThrow(/reserved for the default engine/)
+    await expect(rejected.bootstrap()).rejects.toThrow(/reserved for the default engine/)
   })
 
   it('refuses a view plugin with no engine configured', async () => {
     app = createWebApplication({}).with(view())
 
-    await expect(app.ready()).rejects.toThrow(/Cannot install the view plugin: no engine was configured/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot install the view plugin: no engine was configured/)
   })
 })
 

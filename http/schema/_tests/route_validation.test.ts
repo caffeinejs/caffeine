@@ -83,7 +83,7 @@ void PetsController
 
 async function boot() {
   const app = createWebApplication()
-  await app.ready()
+  await app.bootstrap()
   return app
 }
 

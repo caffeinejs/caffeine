@@ -20,7 +20,7 @@ const app = createWebApplication()
   // as `undefined`; outside Watt there is none either, and the application serves from `/`.
   .basePath(() => getBasePath({ throwOnMissing: false }) ?? undefined)
 
-await app.ready()
+await app.bootstrap()
 registerWattChecks(app)
 await app.run()
 

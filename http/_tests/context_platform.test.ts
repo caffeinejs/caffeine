@@ -48,7 +48,7 @@ describe('ctx.platform', () => {
       })
       .mount(router)
 
-    await app.ready()
+    await app.bootstrap()
 
     const expected = { name: 'fastify', ownRequest: true, ownReply: true }
 

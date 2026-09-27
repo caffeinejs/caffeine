@@ -10,7 +10,7 @@ import {
   createWebApplication,
 } from '../../index.js'
 
-// Isolated: two controller methods handling the same error type. buildRouting rejects at ready(),
+// Isolated: two controller methods handling the same error type. buildRouting rejects at bootstrap(),
 // which poisons every app build in the module — so it lives alone.
 @Controller('/dup')
 class DupController {
@@ -31,6 +31,6 @@ describe('duplicate controller error handler', () => {
   it('rejects when two methods handle the same error type', async () => {
     const app = createWebApplication()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 })

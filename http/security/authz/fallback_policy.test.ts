@@ -82,7 +82,7 @@ describe('fallbackPolicy', () => {
 
   it('leaves undecorated routes open when it is not configured', async () => {
     app = buildApp(false)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/undecorated')).status).toBe(200)
   })
@@ -91,7 +91,7 @@ describe('fallbackPolicy', () => {
     // The whole point: forgetting `@Authorize` stops being the difference between a protected endpoint and
     // a public one.
     app = buildApp(true)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/undecorated')).status).toBe(401)
     expect((await app.fetch('/undecorated', { headers: { 'x-user': 'alice' } })).status).toBe(200)
@@ -99,7 +99,7 @@ describe('fallbackPolicy', () => {
 
   it('honours @AllowAnonymous as the opt-out', async () => {
     app = buildApp(true)
-    await app.ready()
+    await app.bootstrap()
 
     expect((await app.fetch('/opted-out')).status).toBe(200)
   })

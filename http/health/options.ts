@@ -85,7 +85,7 @@ export interface HealthConfig {
  * somebody actually set — in code, in a file, in the environment or on the command line — and absence keeps its
  * meaning instead of being overwritten by a default written into a low band.
  *
- * The budgets are `$t.Duration()`: `HEALTH__INDICATOR_TIMEOUT=5000` or `'5 hours'` fails validation at `ready()`
+ * The budgets are `$t.Duration()`: `HEALTH__INDICATOR_TIMEOUT=5000` or `'5 hours'` fails validation at `bootstrap()`
  * rather than reaching a timer as 0.
  */
 export const healthConfigSchema = $t.Object({

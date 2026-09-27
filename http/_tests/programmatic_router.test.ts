@@ -30,7 +30,7 @@ describe('programmatic router', () => {
       router.post('/').handler(ctx => ctx.status(201).body({ created: true }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
       expect(await (await app.fetch('/pets/7')).json()).toEqual({ id: '7' })
@@ -50,7 +50,7 @@ describe('programmatic router', () => {
         .post('/', ctx => ctx.status(201).body({ created: true }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
       expect(await (await app.fetch('/pets/7')).json()).toEqual({ id: '7' })
@@ -70,7 +70,7 @@ describe('programmatic router', () => {
       )
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const ok = await app.fetch('/orders/10', {
         method: 'POST',
@@ -99,7 +99,7 @@ describe('programmatic router', () => {
         .delete('/:id', ctx => ctx.status(204).body(null))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
       expect(await (await app.fetch('/pets/3', { method: 'PUT' })).json()).toEqual({ replaced: '3' })
@@ -118,7 +118,7 @@ describe('programmatic router', () => {
       const router = new Router('/pets').route(['GET', 'POST'], '/ping', ctx => ctx.body({ pong: true }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets/ping')).json()).toEqual({ pong: true })
       expect(await (await app.fetch('/pets/ping', { method: 'POST' })).json()).toEqual({ pong: true })
@@ -132,7 +132,7 @@ describe('programmatic router', () => {
         .get('/:name', (ctx, deps) => ctx.body({ message: deps.greeter.greet(ctx.req.param().name) }))
 
       const app = newApp(c => c.bind(Greeter, t => t.toSelf())).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/greet/ada')).json()).toEqual({ message: 'hello ada' })
 
@@ -152,7 +152,7 @@ describe('programmatic router', () => {
         .handler(ctx => ctx.body({ id: ctx.req.param().id, quantity: ctx.req.body().quantity }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const ok = await app.fetch('/orders/10', {
         method: 'POST',
@@ -186,7 +186,7 @@ describe('programmatic router', () => {
         )
 
       const app = newApp(c => c.bind(Greeter, t => t.toSelf())).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/greet/ada')).json()).toEqual({ message: 'hello ada', missing: true })
 
@@ -207,7 +207,7 @@ describe('programmatic router', () => {
         )
 
       const app = newApp(c => c.bind(Greeter, t => t.toSelf())).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/greet/ada')).json()).toEqual({
         message: 'hello ada',
@@ -231,7 +231,7 @@ describe('programmatic router', () => {
         }))
 
       const app = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const one = (await (await app.fetch('/provided')).json()) as { first: number; second: number }
       const two = (await (await app.fetch('/provided')).json()) as { first: number; second: number }
@@ -247,7 +247,7 @@ describe('programmatic router', () => {
       router.get('/').handler((_ctx, deps) => ({ deps: deps === undefined }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/plain')).json()).toEqual({ deps: true })
 
@@ -264,7 +264,7 @@ describe('programmatic router', () => {
         .handler((_ctx, deps) => ({ id: deps.counter.id }))
 
       const scoped = newApp(c => c.bind(Counter, t => t.toSelf().lifetime(Scopes.REQUEST))).mount(scopedRouter)
-      await scoped.ready()
+      await scoped.bootstrap()
 
       const first = (await (await scoped.fetch('/scoped')).json()) as { id: number }
       const second = (await (await scoped.fetch('/scoped')).json()) as { id: number }
@@ -278,7 +278,7 @@ describe('programmatic router', () => {
         .handler((_ctx, deps) => ({ id: deps.counter.id }))
 
       const singleton = newApp(c => c.bind(Counter, t => t.toSelf())).mount(singletonRouter)
-      await singleton.ready()
+      await singleton.bootstrap()
 
       const third = (await (await singleton.fetch('/singleton')).json()) as { id: number }
       const fourth = (await (await singleton.fetch('/singleton')).json()) as { id: number }
@@ -306,7 +306,7 @@ describe('programmatic router', () => {
       })
 
       const app = newApp(c => c.bind(Greeter, t => t.toSelf())).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const root = await app.fetch('/api/root')
       expect(root.headers.get('x-group')).toBe('api')
@@ -334,7 +334,7 @@ describe('programmatic router', () => {
       outer.mount('/prefixed', inner)
 
       const app = newApp().mount(outer)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/outer/inner/ping')).json()).toEqual({ pong: true })
       expect(await (await app.fetch('/outer/prefixed/inner/ping')).json()).toEqual({ pong: true })
@@ -350,7 +350,7 @@ describe('programmatic router', () => {
       const add = pets.post('/').handler(ctx => ctx.status(201).body({ created: true }))
 
       const app = newApp().mount(blend(list, add))
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
       expect((await app.fetch('/pets', { method: 'POST' })).status).toBe(201)
@@ -364,7 +364,7 @@ describe('programmatic router', () => {
       const add = pets.post('/').handler(() => ({ created: true }))
 
       const app = newApp().mount(pets, list, add)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
 
@@ -379,7 +379,7 @@ describe('programmatic router', () => {
       const app = newApp()
       app.mount(list)
       app.mount(add)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets')).json()).toEqual({ list: true })
 
@@ -396,7 +396,7 @@ describe('programmatic router', () => {
       const b = new Router('/b').mount(shared)
 
       const app = newApp().mount(a, b)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/a/shared/ping')).json()).toEqual({ pong: true })
       expect(await (await app.fetch('/b/shared/ping')).json()).toEqual({ pong: true })
@@ -414,7 +414,7 @@ describe('programmatic router', () => {
       orders.get('/').handler(() => ({ orders: true }))
 
       const app = newApp().mount(new Router('/api').mount('/v1', pets, orders))
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/api/v1/pets')).json()).toEqual({ pets: true })
       expect(await (await app.fetch('/api/v1/orders')).json()).toEqual({ orders: true })
@@ -438,7 +438,7 @@ describe('programmatic router', () => {
       router.get('/ping').handler(() => ({ source: 'router' }))
 
       const app = newApp().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/decorated/ping')).json()).toEqual({ source: 'decorator' })
       expect(await (await app.fetch('/programmatic/ping')).json()).toEqual({ source: 'router' })
@@ -453,12 +453,12 @@ describe('programmatic router', () => {
       router.get('/ping').handler(() => ({ ok: true }))
 
       const first = newApp().mount(router)
-      await first.ready()
+      await first.bootstrap()
       expect((await first.fetch('/shared/ping')).status).toBe(200)
       await first.close()
 
       const second = newApp().mount(router)
-      await second.ready()
+      await second.bootstrap()
       expect((await second.fetch('/shared/ping')).status).toBe(200)
       await second.close()
     })
@@ -471,14 +471,14 @@ describe('programmatic router', () => {
 
       const app = newApp().mount(router)
 
-      await expect(app.ready()).rejects.toThrow(/declares no handler/)
+      await expect(app.bootstrap()).rejects.toThrow(/declares no handler/)
     })
   })
 
   describe('given a router mounted after start-up', () => {
     it('should refuse rather than silently do nothing', async () => {
       const app = newApp()
-      await app.ready()
+      await app.bootstrap()
 
       expect(() => app.mount(new Router('/late'))).toThrow(/already been built/)
 

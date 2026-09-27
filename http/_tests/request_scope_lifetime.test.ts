@@ -63,7 +63,7 @@ describe('request scope lifetime', () => {
       })
 
     const app = newApp().mount(router)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/scope-await')
 
@@ -104,7 +104,7 @@ describe('request scope lifetime', () => {
       })
 
     const app = newApp().mount(router)
-    await app.ready()
+    await app.bootstrap()
 
     const teardown = nextTeardown()
     const res = await app.fetch('/scope-stream')
@@ -131,7 +131,7 @@ describe('request scope lifetime', () => {
       .handler((_ctx, deps) => ({ id: deps.session.get().id }))
 
     const app = newApp().mount(router)
-    await app.ready()
+    await app.bootstrap()
 
     let teardown = nextTeardown()
     expect(await (await app.fetch('/scope-once')).json()).toEqual({ id: 1 })
@@ -159,7 +159,7 @@ describe('request scope lifetime', () => {
       })
 
     const app = newApp().mount(router)
-    await app.ready()
+    await app.bootstrap()
 
     const teardown = nextTeardown()
     const res = await app.fetch('/scope-throws')

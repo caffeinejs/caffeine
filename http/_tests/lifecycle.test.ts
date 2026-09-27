@@ -27,7 +27,7 @@ describe('Adapter Lifecycle', () => {
 
     const app = createWebApplication()
 
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/lc/ping')
 
@@ -57,7 +57,7 @@ describe('Adapter Lifecycle', () => {
 
     const app = createWebApplication()
 
-    await app.ready()
+    await app.bootstrap()
     await app.close()
 
     expect(closeFired).toHaveBeenCalledOnce()
@@ -75,7 +75,7 @@ describe('Adapter Lifecycle', () => {
     void [Lc4Controller]
 
     const app = createWebApplication()
-    await app.ready()
+    await app.bootstrap()
 
     const beforeClose = await app.fetch('/lc4/ping')
     expect(beforeClose.status).toBe(200)

@@ -25,7 +25,7 @@ describe('Redirect', () => {
     const app = createWebApplication()
 
     beforeAll(async () => {
-      await app.ready()
+      await app.bootstrap()
     })
 
     afterAll(async () => {

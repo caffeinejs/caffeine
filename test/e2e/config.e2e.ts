@@ -174,7 +174,7 @@ describe.skipIf(!up)('a web application configured from a config server and five
     await writeFile(join(dir, 'config-dev.json'), JSON.stringify({ region: 'eu-central' }))
 
     app = buildApp(dir, overrides)
-    await app.ready()
+    await app.bootstrap()
     store = app.container.get(ConfigStore) as ConfigStore<AppConfig>
   })
 

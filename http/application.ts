@@ -332,18 +332,14 @@ export class WebApplication<
 
   /**
    * Auto-installs authorization when authentication was configured and `.authorization(...)` never was —
-   * so a protected route still gets a default policy — before the base class captures the feature list and
-   * starts booting. Neither call made means authorization stays off, by design.
-   *
-   * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
+   * so a protected route still gets a default policy — after the {@link ready} callback and before the base
+   * class captures the feature list. Neither call made means authorization stays off, by design.
    */
-  override async ready(): Promise<void> {
+  protected override beforeConfigure(): void {
     if (this.#authBuilder != null && this.#authzBuilder == null) {
       this.#authzBuilder = new AuthorizationBuilder()
       this.addFeature(this.#authzBuilder)
     }
-
-    return super.ready()
   }
 
   /**
@@ -532,7 +528,7 @@ export class WebApplication<
    *
    * ```ts
    * app.mount(pets, orders)
-   * await app.ready()
+   * await app.bootstrap()
    * ```
    *
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
@@ -680,7 +676,7 @@ export class WebApplication<
  * Creates a web application.
  *
  * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
- * called at any point in the chain before `ready()`. Configuration is built separately with
+ * called at any point in the chain before `bootstrap()`. Configuration is built separately with
  * `newConfiguration` and passed in as `{ config }`. A plugin factory is
  * `.with(({ config }) => [fastifyCors, config.app.cors.options])`.
  *

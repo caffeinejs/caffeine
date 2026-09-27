@@ -271,7 +271,7 @@ tracing channels; `change` is a plain one. The names are in `CONFIG_CHANNELS`.
 
 ```mermaid
 sequenceDiagram
-  participant App as Application.ready()
+  participant App as Application.bootstrap()
   participant Store as ConfigStore
   participant Feat as each Feature
   App->>App: decide the active profiles
@@ -283,7 +283,7 @@ sequenceDiagram
   App->>Store: start(): poll timers and watchers armed
 ```
 
-A tree that cannot validate fails `ready()`, which is more legible than failing wherever it was first read.
+A tree that cannot validate fails `bootstrap()`, which is more legible than failing wherever it was first read.
 
 ---
 

@@ -18,7 +18,7 @@ describe('sendFile and download', () => {
       .get('/elsewhere', ctx => sendFile(ctx, 'other.txt'))
 
     app = createWebApplication({}).with(staticFiles(configure)).mount(routes) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     return app
   }
@@ -49,7 +49,7 @@ describe('sendFile and download', () => {
           sendFile(ctx, 'hello.txt')
         }),
       ) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/dropped')
 

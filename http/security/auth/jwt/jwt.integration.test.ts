@@ -56,7 +56,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' })
     const res = await app.fetch('/jwt-valid', {
@@ -79,7 +79,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/jwt-no-header')
     expect(res.status).toBe(401)
@@ -100,7 +100,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/jwt-bad-token', {
       headers: { authorization: 'Bearer not.a.valid.jwt' },
@@ -122,7 +122,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signExpiredToken({ sub: 'user-expired' })
     const res = await app.fetch('/jwt-expired', {
@@ -152,7 +152,7 @@ describe('JWTBearerHandler', () => {
       ),
     )
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' }, { issuer: 'https://other.example.com' })
     const res = await app.fetch('/jwt-wrong-iss', {
@@ -182,7 +182,7 @@ describe('JWTBearerHandler', () => {
       ),
     )
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' }, { audience: 'other-api' })
     const res = await app.fetch('/jwt-wrong-aud', {
@@ -206,7 +206,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'alice-123' })
     const res = await app.fetch('/jwt-sub-claim', {
@@ -231,7 +231,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: 'admin' })
     const res = await app.fetch('/jwt-role', {
@@ -254,7 +254,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: ['admin', 'editor'] })
     const res = await app.fetch('/jwt-array-roles', {
@@ -289,7 +289,7 @@ describe('JWTBearerHandler', () => {
       ),
     )
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-hook' })
     await app.fetch('/jwt-on-validated', {
@@ -327,7 +327,7 @@ describe('JWTBearerHandler', () => {
       ),
     )
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/jwt-on-fail', {
       headers: { authorization: 'Bearer not.a.jwt' },
@@ -353,7 +353,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: 'viewer' })
     const res = await app.fetch('/jwt-role-403', {
@@ -383,7 +383,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/jwt-status-guard', { method: 'POST' })
     expect(res.status).toBe(401)
@@ -410,7 +410,7 @@ describe('JWTBearerHandler', () => {
     const builder = createWebApplication()
     builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
     const app = builder
-    await app.ready()
+    await app.bootstrap()
 
     const [protectedRes, publicRes] = await Promise.all([
       app.fetch('/jwt-allow-anon/protected'),

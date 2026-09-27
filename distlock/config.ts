@@ -29,7 +29,7 @@ export interface DistLockConfigSlice {
  * $t.Object({ distlock: $t.Object(distLockConfigSchema.properties, { default: {} }) })
  * ```
  *
- * The durations are `$t.Duration()`: `DISTLOCK__TTL=30000` fails validation at `ready()` rather than becoming a
+ * The durations are `$t.Duration()`: `DISTLOCK__TTL=30000` fails validation at `bootstrap()` rather than becoming a
  * lease of 0.
  */
 export const distLockConfigSchema = $t.Object({

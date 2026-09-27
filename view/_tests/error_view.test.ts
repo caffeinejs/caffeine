@@ -44,7 +44,7 @@ describe('error handler returning a View()', () => {
     const app = createWebApplication({})
       .errorHandling(e => e.globalHandlers(ReturnViewHandler))
       .with(view(v => v.add(e => e.engine({ handlebars }).root(templatesRoot).extension('hbs'))))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/err-return-view/view')
 

@@ -30,6 +30,6 @@ describe('@CatchWith with an unregistered handler', () => {
   it('rejects when the referenced handler has no binding', async () => {
     const app = createWebApplication()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 })

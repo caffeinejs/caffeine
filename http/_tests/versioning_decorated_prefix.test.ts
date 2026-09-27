@@ -23,7 +23,7 @@ describe('API versioning — decorated controllers', () => {
     const container = new CaffeineIoC()
     container.bind(V1Pets, t => t.toSelf())
     const app = createWebApplication({ container })
-    await app.ready()
+    await app.bootstrap()
 
     expect(await (await app.fetch('/v1/pets')).json()).toEqual({ prefixed: true })
 

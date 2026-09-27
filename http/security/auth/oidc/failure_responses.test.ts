@@ -67,7 +67,7 @@ describe('a sign-in that cannot go ahead', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error(UNREACHABLE)))
 
     const app = application()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/account', { headers: { 'sec-fetch-mode': 'navigate' } })
     const text = await res.text()
@@ -87,7 +87,7 @@ describe('a sign-in that cannot go ahead', () => {
 
   it('answers the same way when a route handler is where it surfaced', async () => {
     const app = application()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/sign-out')
     const text = await res.text()
@@ -112,7 +112,7 @@ describe('a sign-in that cannot go ahead', () => {
           throw new ErrOAuthCallback('state mismatch for subject jane@example.com')
         }),
       )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/finish')
     const text = await res.text()
@@ -135,7 +135,7 @@ describe('a sign-in that cannot go ahead', () => {
         throw Object.assign(new Error('teapot'), { statusCode: 418 })
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/broken')
 
@@ -156,7 +156,7 @@ describe('a callback that fails', () => {
       seen.push(error)
       ctx.redirect('/sign-in?failed=1', 303)
     }, logged)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
 
@@ -187,7 +187,7 @@ describe('a callback that fails', () => {
     const app = application(ctx => {
       ctx.redirect('/sign-in?failed=1', 303)
     }).with(() => fp(slowSend, { name: 'slow-send' }))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
 
@@ -202,7 +202,7 @@ describe('a callback that fails', () => {
 
   it('sends the redirect onFail set up and left unsent', async () => {
     const app = application(ctx => void ctx.status(302).header('location', '/sign-in?failed=1'))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
 
@@ -219,7 +219,7 @@ describe('a callback that fails', () => {
     const app = application(() => {
       throw new Error('audit log at 10.0.0.9:5432 refused the write')
     })
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc/callback?error=access_denied&state=abc')
     const text = await res.text()
@@ -234,7 +234,7 @@ describe('a callback that fails', () => {
   it('answers a generic 400 when onFail only took note', async () => {
     const onFail = vi.fn()
     const app = application(onFail)
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/oidc/callback?error=access_denied&error_description=jane%40example.com&state=abc')
     const text = await res.text()

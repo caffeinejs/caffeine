@@ -63,7 +63,7 @@ describe('a handler that answered the request itself', () => {
     const app = createWebApplication()
       .server(() => ({ factory: { logger: pinoTo(logged) } }))
       .mount(newRouter('/sync').get('/', ctx => void ctx.redirect('/foo')))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/sync')
 
@@ -84,7 +84,7 @@ describe('a handler that answered the request itself', () => {
           ctx.redirect('/', 303)
         }),
       )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/async', { method: 'GET' })
 
@@ -106,7 +106,7 @@ describe('a handler that answered the request itself', () => {
           ctx.notFound()
         }),
       )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/gone')
 
@@ -121,7 +121,7 @@ describe('a handler that answered the request itself', () => {
     const app = createWebApplication().mount(
       newRouter('/prepared').get('/', ctx => void ctx.status(302).header('location', '/x')),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/prepared')
 
@@ -140,7 +140,7 @@ describe('a handler that answered the request itself', () => {
         })
         .get('/value', () => ({ ok: true })),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const sync = await app.fetch('/quiet/sync')
     expect(sync.status).toBe(200)
@@ -175,7 +175,7 @@ describe('under an onSend hook that awaits', () => {
             ctx.body({ ok: true })
           }),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held')
 
@@ -195,7 +195,7 @@ describe('under an onSend hook that awaits', () => {
       const app = createWebApplication()
         .with(() => fp(slowSend(runs), { name: 'slow-send' }))
         .mount(newRouter('/held-sync').get('/', ctx => void ctx.body({ ok: true })))
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held-sync')
 
@@ -220,7 +220,7 @@ describe('under an onSend hook that awaits', () => {
             await sleep(1)
           }),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held-empty')
 
@@ -248,7 +248,7 @@ describe('under an onSend hook that awaits', () => {
             return { late: true }
           }),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held-value')
 
@@ -274,7 +274,7 @@ describe('under an onSend hook that awaits', () => {
             return 'second'
           }),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held-sync-value')
 
@@ -307,7 +307,7 @@ describe('under an onSend hook that awaits', () => {
             return new Late()
           }),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/held-responder')
 
@@ -333,7 +333,7 @@ describe('under an onSend hook that awaits', () => {
           seen = [ctx.sent, ctx.platform.reply.sent]
         }),
       )
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/record')
 

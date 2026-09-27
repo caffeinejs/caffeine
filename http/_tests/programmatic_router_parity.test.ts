@@ -74,7 +74,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       container.bind(DenyGuard, t => t.toSelf())
 
       const app = createWebApplication({ container }).mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/guarded/open')).status).toBe(200)
       expect((await app.fetch('/guarded/closed')).status).toBe(403)
@@ -99,7 +99,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const builder = createWebApplication()
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
       const app = builder.mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect((await app.fetch('/secure/private')).status).toBe(401)
       expect((await app.fetch('/secure/public')).status).toBe(200)
@@ -121,7 +121,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const builder = createWebApplication()
       builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
       const app = builder.mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       handler.result = successTicket([{ type: 'roles', value: 'staff' }])
       expect((await app.fetch('/roles/admin')).status).toBe(403)
@@ -151,7 +151,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       })
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/catching/missing')
       expect(res.status).toBe(404)
@@ -174,7 +174,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .handler(() => 'created')
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const plain = await app.fetch('/shaped/plain')
       expect(plain.headers.get('x-group')).toBe('yes')
@@ -200,7 +200,7 @@ describe('programmatic router parity with the decorator feature set', () => {
         .handler(ctx => ctx.body(ctx.req.body()))
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/limited/small', {
         method: 'POST',
@@ -219,7 +219,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       router.route(['GET', 'POST'], '/both').handler(ctx => ({ method: ctx.req.method }))
 
       const app = createWebApplication().mount(router)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/multi/both')).json()).toEqual({ method: 'GET' })
       expect(await (await app.fetch('/multi/both', { method: 'POST' })).json()).toEqual({ method: 'POST' })
@@ -239,7 +239,7 @@ describe('programmatic router parity with the decorator feature set', () => {
       const app = createWebApplication()
         .with(() => constraints())
         .mount(v1, v2)
-      await app.ready()
+      await app.bootstrap()
 
       expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
       expect(await (await app.fetch('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })

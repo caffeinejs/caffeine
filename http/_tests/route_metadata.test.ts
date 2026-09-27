@@ -95,7 +95,7 @@ describe('route metadata on config.$caffeine', () => {
   it('reaches onRoute for decorated, programmatic and $route routes, and not for a raw Fastify route', async () => {
     const seen: Seen[] = []
     app = createWebApplication().with(observer(seen)).with(lateAndRaw).mount(routerWithOneRoute()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const get = (url: string) => seen.find(s => s.url === url && s.method === 'GET')
 
@@ -128,7 +128,7 @@ describe('route metadata on config.$caffeine', () => {
       instance.addHook('onRoute', record(seen))
       instance.get('/meta-customized', async () => ({ ok: true }))
     }) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const customized = seen.find(s => s.url === '/meta-customized' && s.method === 'GET')
 
@@ -138,7 +138,7 @@ describe('route metadata on config.$caffeine', () => {
   it('hands the automatic HEAD twin of a GET route the same compiled route', async () => {
     const seen: Seen[] = []
     app = createWebApplication().with(observer(seen)).mount(routerWithOneRoute()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const twins = seen.filter(s => s.url === '/meta-router/hello')
 
@@ -163,7 +163,7 @@ describe('route metadata on config.$caffeine', () => {
       )
       .with(lateAndRaw)
       .mount(routerWithOneRoute()) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const late = groups.filter(group => group.name === 'late')
 

@@ -53,7 +53,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
 
       const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
       close = () => app.close()
-      await app.ready()
+      await app.bootstrap()
 
       const first = app.fetch('/err-async-send/boom')
       const second = app.fetch('/err-async-send/boom')
@@ -112,7 +112,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
       }
       const app = createWebApplication().with(() => fp(slowSend, { name: 'slow-send' }))
       close = () => app.close()
-      await app.ready()
+      await app.bootstrap()
 
       const res = await app.fetch('/err-async-redirect/boom')
 

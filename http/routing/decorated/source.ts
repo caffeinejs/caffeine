@@ -151,7 +151,7 @@ function sharedTargetErrorHandler<R>(errorHandlers: Map<Ctor<Error>, string | sy
 }
 
 // Converts the raw per-controller error-handler list into a lookup map, rejecting two handlers for
-// the same error type. Runs at build (app.ready()), so the throw is observable, not an import crash.
+// the same error type. Runs at build (app.bootstrap()), so the throw is observable, not an import crash.
 function buildErrorHandlerMap(
   handlers: Array<[Ctor<Error>, string | symbol]> | undefined,
   controllerKey: unknown,

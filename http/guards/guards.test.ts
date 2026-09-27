@@ -149,7 +149,7 @@ describe('guard', () => {
 
   it('allows a boolean true', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-allow')
     expect(res.status).toBe(200)
@@ -160,7 +160,7 @@ describe('guard', () => {
 
   it('allows GuardResult.ok true and ignores reason', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-allow/result')
     expect(res.status).toBe(200)
@@ -170,7 +170,7 @@ describe('guard', () => {
 
   it('allows a Promise of true', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-allow/async')
     expect(res.status).toBe(200)
@@ -180,7 +180,7 @@ describe('guard', () => {
 
   it('denies a boolean false', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-deny')
     expect(res.status).toBe(403)
@@ -190,7 +190,7 @@ describe('guard', () => {
 
   it('denies GuardResult.ok false', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-deny/result')
     expect(res.status).toBe(403)
@@ -200,7 +200,7 @@ describe('guard', () => {
 
   it('denies a Promise of false', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-deny/async')
     expect(res.status).toBe(403)
@@ -210,7 +210,7 @@ describe('guard', () => {
 
   it('denies a Promise of GuardResult.ok false', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/guard-deny/async-result')
     expect(res.status).toBe(403)
@@ -339,7 +339,7 @@ describe('use_guards', () => {
   it('runs global, then controller, then method', async () => {
     order.length = 0
     const app = createWebApplication().guards(g => g.global(GlobalGuard))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/use-guards/both')
     expect(res.status).toBe(200)
@@ -351,7 +351,7 @@ describe('use_guards', () => {
   it('runs multiple method guards in declaration order and stops at the first denial', async () => {
     order.length = 0
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/use-guards-multi/multi')
     expect(res.status).toBe(403)
@@ -363,7 +363,7 @@ describe('use_guards', () => {
   it('runs a guard listed at several levels once, at its first position', async () => {
     order.length = 0
     const app = createWebApplication().guards(g => g.global(RepeatedGuard))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/use-guards-repeated')
     expect(res.status).toBe(200)
@@ -375,7 +375,7 @@ describe('use_guards', () => {
   it('carries on to the next guard after an async one, and still stops at the first denial', async () => {
     order.length = 0
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/use-guards-multi/after-async')
     expect(res.status).toBe(403)
@@ -425,7 +425,7 @@ describe('builder', () => {
 
   it('runs a global guard listed by InjectionToken on every route', async () => {
     const app = createWebApplication().guards(g => g.global(ListedGuard))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/builder-ok')
     expect(res.status).toBe(200)
@@ -435,7 +435,7 @@ describe('builder', () => {
 
   it('does not require .guards() for @UseGuards on a controller', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/builder-use')
     expect(res.status).toBe(200)
@@ -447,13 +447,13 @@ describe('builder', () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
     const app = createWebApplication().guards(g => g.global(kMissing))
 
-    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('rejects an InjectionToken that is not a Guard at start-up', async () => {
     const app = createWebApplication().guards(g => g.global(NotAGuard as never))
 
-    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('accepts an abstract key bound to a factory, whose prototype carries no "guard" method', async () => {
@@ -476,7 +476,7 @@ describe('builder', () => {
     router.get('/').handler(() => ({ ok: true }))
 
     const app = createWebApplication({ container }).mount(router) as WebApplication
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/abstract-guard')
     expect(res.status).toBe(403)
@@ -587,7 +587,7 @@ describe('denial', () => {
 
   it('renders the default 403 envelope for boolean false', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/false')
     expect(res.status).toBe(403)
@@ -603,7 +603,7 @@ describe('denial', () => {
 
   it('uses the GuardResult reason as the 403 message', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/reason')
     expect(res.status).toBe(403)
@@ -620,7 +620,7 @@ describe('denial', () => {
   it('answers GuardResult.unauthenticated with 401 rather than 403, and its reason', async () => {
     // A caller who is not signed in must be told to authenticate, not that they are not allowed.
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/unauthenticated')
     expect(res.status).toBe(401)
@@ -636,7 +636,7 @@ describe('denial', () => {
 
   it('falls back to the default 401 message when GuardResult.unauthenticated names no reason', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/unauthenticated-no-reason')
     expect(res.status).toBe(401)
@@ -647,7 +647,7 @@ describe('denial', () => {
 
   it('lets GuardResult.unauthenticated reach @Catch as an ErrHTTPUnauthorized', async () => {
     const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/unauthenticated')
     expect(res.status).toBe(401)
@@ -658,7 +658,7 @@ describe('denial', () => {
 
   it('lets a thrown ErrHTTPUnauthorized reach @Catch', async () => {
     const built = buildApp().errorHandling(e => e.globalHandlers(UnauthorizedCatch))
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/401')
     expect(res.status).toBe(401)
@@ -669,7 +669,7 @@ describe('denial', () => {
 
   it('does not serve the route when a guard fails without a reason', async () => {
     const built = buildApp()
-    await built.ready()
+    await built.bootstrap()
 
     const res = await built.fetch('/denial/faulty')
     expect(res.status).toBe(500)
@@ -710,7 +710,7 @@ describe('on_request', () => {
 
   it('runs before the body is parsed and can read headers', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const denied = await app.fetch('/on-request/echo', {
       method: 'POST',
@@ -754,7 +754,7 @@ describe('target', () => {
 
   it('names the class and the handler the guard is running for', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/target/one')
     expect(res.status).toBe(200)
@@ -840,7 +840,7 @@ describe('authorization', () => {
 
   async function ready() {
     const app = createWebApplication().guards(g => g.global(AuthGuard, RolesGuard))
-    await app.ready()
+    await app.bootstrap()
     return app
   }
 
@@ -941,7 +941,7 @@ describe('scope', () => {
   it('resolves a request-scoped guard per request', async () => {
     requestScoped = 0
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     await app.fetch('/scope-req')
     await app.fetch('/scope-req')
@@ -953,7 +953,7 @@ describe('scope', () => {
   it('does not reconstruct a singleton guard per request', async () => {
     singleton = 0
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const constructedAtReady = singleton
     expect(constructedAtReady).toBeGreaterThanOrEqual(1)
@@ -999,7 +999,7 @@ describe('zero_cost', () => {
         registered.set(`${route.method} ${route.url}`, route as RouteOptions)
       })
     })
-    await app.ready()
+    await app.bootstrap()
   })
 
   afterAll(async () => {
@@ -1043,7 +1043,7 @@ describe('structural_guard', () => {
 
   it('runs a guard class that does not declare "implements Guard"', async () => {
     const app = buildApp()
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/bare-guard')
     expect(res.status).toBe(403)
@@ -1072,6 +1072,6 @@ describe('use_guards_unbound', () => {
 
     const app = buildApp()
 
-    await expect(app.ready()).rejects.toThrow(ErrGuardConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
 })

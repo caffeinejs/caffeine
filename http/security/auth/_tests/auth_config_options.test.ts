@@ -116,7 +116,7 @@ describe('authentication options set from the tree', () => {
             return { ok: true }
           }),
       )
-    await app.ready()
+    await app.bootstrap()
 
     const signedIn = await app.fetch('/session', { method: 'POST' })
     expect(signedIn.status).toBe(200)
@@ -159,7 +159,7 @@ describe('authentication options set from the tree', () => {
             ),
         )
         .mount(protectedRoute)
-      await app.ready()
+      await app.bootstrap()
 
       const challenged = await app.fetch('/reports', asScript)
       expect(challenged.status).toBe(401)
@@ -195,7 +195,7 @@ describe('authentication options set from the tree', () => {
             ),
         )
         .mount(protectedRoute)
-      await app.ready()
+      await app.bootstrap()
 
       // A challenge that cannot redirect asks the provider nothing, so this is answered with no provider at all.
       const challenged = await app.fetch('/reports', asScript)
@@ -261,7 +261,7 @@ describe('authentication options set from the tree', () => {
         callbackUrl: 'https://app.test/signin/back',
         allowPlainPkce: true,
       })
-      await app.ready()
+      await app.bootstrap()
 
       const challenged = await app.fetch('/reports', asNavigation)
       expect(challenged.status).toBe(302)
@@ -287,7 +287,7 @@ describe('authentication options set from the tree', () => {
         callbackUrl: 'https://app.test/signin/back',
         allowPlainPkce: true,
       })
-      await app.ready()
+      await app.bootstrap()
 
       const challenged = await app.fetch('/reports', asNavigation)
       expect(new URL(challenged.headers.get('location')!).searchParams.get('code_challenge_method')).toBe('plain')
@@ -300,7 +300,7 @@ describe('authentication options set from the tree', () => {
         discoveryUrl: DISCOVERY_URL,
         callbackUrl: 'https://app.test/signin/back',
       })
-      await strict.ready()
+      await strict.bootstrap()
 
       const refused = await strict.fetch('/reports', asNavigation)
       expect(refused.status).toBe(500)
@@ -330,10 +330,10 @@ describe('authentication options set from the tree', () => {
           )
           .mount(protectedRoute)
 
-      await expect(manual({}).ready()).rejects.toThrow(/provide discoveryURL or all of/)
+      await expect(manual({}).bootstrap()).rejects.toThrow(/provide discoveryURL or all of/)
 
       const app = manual({ jwksUri: `${ISSUER}/jwks` })
-      await app.ready()
+      await app.bootstrap()
 
       // And it is the JWKS URI it completed, not some other endpoint: the authorization request still goes to
       // the endpoint the code named.
@@ -372,7 +372,7 @@ describe('authentication options set from the tree', () => {
             .inject({ auth: AuthenticationService })
             .post('/out', (ctx, { auth }) => auth.signOut(ctx, 'oidc')),
         )
-      await app.ready()
+      await app.bootstrap()
 
       const out = await app.fetch('/session/out', { method: 'POST', redirect: 'manual' })
       expect(out.status).toBe(302)
@@ -403,7 +403,7 @@ describe('authentication options set from the tree', () => {
           .authorize({})
           .get('/', () => ({ ok: true })),
       )
-    await app.ready()
+    await app.bootstrap()
 
     const challenged = await app.fetch('/reports', {
       headers: { 'sec-fetch-mode': 'navigate' },
@@ -449,7 +449,7 @@ describe('authentication options set from the tree', () => {
             .callbackURL(provider.callbackURL),
         ),
     )
-    await app.ready()
+    await app.bootstrap()
 
     // A whole round trip: the sign-in route hands out the state and its cookie, the callback spends them.
     const started = await app.fetch('/auth/callback/login', { redirect: 'manual' })
@@ -487,7 +487,7 @@ describe('authentication options set from the tree', () => {
         .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
         .addRefreshTokens(o => o.resolve(() => ada())),
     )
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
@@ -527,7 +527,7 @@ describe('authentication options set from the tree', () => {
           .authorize({})
           .get('/', () => ({ ok: true })),
       )
-    await app.ready()
+    await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
@@ -576,7 +576,7 @@ describe('authentication options set from the tree', () => {
     // password sign-in reads a claim the users do not carry.
     it('names the identity and its role claim the way the tree says, over what the code said', async () => {
       const app = credentialsApp({ scheme: 'FromTree', roleClaimType: 'groups' }, await hasher.hash('s3cret'))
-      await app.ready()
+      await app.bootstrap()
 
       const principal = await app.container.get(CredentialsService).attempt('ada', 's3cret')
 

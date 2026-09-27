@@ -222,7 +222,7 @@ describe('storeTimeout on HTTPCaching', () => {
     }
     const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer({ onError: e => errors.push(e) })))
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     const started = Date.now()
     const res = await app.fetch('/default-timeout/data')

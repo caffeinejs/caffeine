@@ -19,6 +19,6 @@ describe('health probe path collisions', () => {
 
     const app = createWebApplication().with(health())
 
-    await expect(app.ready()).rejects.toThrow(/already registered at "\/readyz"/)
+    await expect(app.bootstrap()).rejects.toThrow(/already registered at "\/readyz"/)
   })
 })

@@ -12,7 +12,7 @@ import { messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
-// Every inbound binding needs a consumer: the engine now starts during `ready()` (via the `MessagingLifecycle`
+// Every inbound binding needs a consumer: the engine now starts during `bootstrap()` (via the `MessagingLifecycle`
 // OnBootstrap hook), so a routeless inbound binding fails there rather than at `run()`.
 @MessageHandler()
 class OrdersConsumer {
@@ -56,7 +56,7 @@ describe('messaging configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.destination).toBe('orders.v2')
     // Untouched by the environment, so the code values still stand.
@@ -80,7 +80,7 @@ describe('messaging configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.group).toBe('from-config')
 
@@ -110,7 +110,7 @@ describe('messaging configuration', () => {
       )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(runtimeOf(built.container).outbound.get('log')?.destination).toBe('log')
     expect(runtimeOf(built.container, 'audit').outbound.get('log')?.destination).toBe('audit.v2')
@@ -136,7 +136,7 @@ describe('messaging configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     const binding = runtimeOf(built.container).inbound.get('orders')
     expect(binding?.destination).toBe('orders.v2')
@@ -170,7 +170,7 @@ describe('messaging configuration', () => {
       )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(runtimeOf(built.container).inbound.get('orders')?.destination).toBe('moved.orders')
 
@@ -196,7 +196,7 @@ describe('messaging configuration', () => {
     )
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(runtimeOf(built.container).inbound.has('ghost')).toBe(false)
     expect(runtimeOf(built.container).inbound.has('orders')).toBe(true)

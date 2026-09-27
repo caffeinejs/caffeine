@@ -78,7 +78,7 @@ export class LoggerBuilder<C = unknown> extends FeatureBuilder<C> {
    * The level is handed to the logger's own setter, so it decides what it accepts: `ConsoleLogger` and
    * `PinoLogger` take the seven `LOG_LEVELS`, and `ConsoleLogger` refuses anything else.
    *
-   * @throws ErrInvalidLogLevel From `ready()`, when the logger refuses the level.
+   * @throws ErrInvalidLogLevel From `bootstrap()`, when the logger refuses the level.
    */
   level(level: string): this {
     this.#level = level

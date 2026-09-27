@@ -301,7 +301,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       done()
     })
 
-    if (container.hasRequestScoped) {
+    if (container.hasRequestScope) {
       const man = container.requestScopeManager
       fastify.addHook('onRequest', (req, reply, done) => {
         this.#fastifyCtxAls.run(req.httpContext, () => {
@@ -380,7 +380,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     await fastify.ready()
   }
 
-  // Both tolerate a server that was never built: `close()` runs `stop()` whether or not `ready()` got that far.
+  // Both tolerate a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
   async teardown(): Promise<void> {
     await this.#fastify?.close()
   }
@@ -505,7 +505,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 }
 
 /**
- * The Fastify adapter, which builds its own instance at `ready()` from what `.server(...)` returned. It is what
+ * The Fastify adapter, which builds its own instance at `bootstrap()` from what `.server(...)` returned. It is what
  * `createWebApplication()` runs on when no adapter is named.
  */
 export function fastifyAdapterFactory(): AdapterFactory<FastifyTypes> {

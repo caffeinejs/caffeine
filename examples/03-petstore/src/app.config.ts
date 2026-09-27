@@ -64,7 +64,7 @@ export const GITHUB_SESSION_COOKIE = 'petstore_gh_session'
 export const GITHUB_STATE_COOKIE = 'petstore_gh_state'
 
 /**
- * Builds the configuration the application resolves at `ready()`.
+ * Builds the configuration the application resolves at `bootstrap()`.
  *
  * A function rather than a built value, so importing this module reads no environment and a test can build a
  * fresh one.

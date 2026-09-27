@@ -58,7 +58,7 @@ beforeAll(async () => {
         b.store(new MemoryHTTPCacheStore()).observer({ onHit() {}, onMiss() {}, onStore() {}, onInvalidate() {} }),
       ),
     )
-  await app.ready()
+  await app.bootstrap()
 })
 
 afterAll(async () => {

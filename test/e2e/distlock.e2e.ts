@@ -140,7 +140,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         container.bind(kDistLockBackend, t => t.toValue(new RedisLockBackend(clients[0])))
 
         const app = createApplication({ container }).with(distlock(d => d.backend(kDistLockBackend)))
-        await app.ready()
+        await app.bootstrap()
 
         try {
           const k = key('feature')

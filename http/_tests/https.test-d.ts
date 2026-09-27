@@ -8,7 +8,7 @@ import { createWebApplication, type Context } from '../index.js'
 
 /**
  * What `.server(...)` accepts for TLS and HTTP/2, and what the instance is typed as once it is built. The server
- * kind is picked by configuration at `ready()`, so the instance is one type whichever it is, and the TLS-only
+ * kind is picked by configuration at `bootstrap()`, so the instance is one type whichever it is, and the TLS-only
  * surface is reached by narrowing. `npm run test:typecheck` is the test.
  */
 

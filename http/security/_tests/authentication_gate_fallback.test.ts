@@ -75,9 +75,9 @@ describe('the authentication gate and routes registered straight on the server',
   })
 
   // Mounting a router re-types the application with its routes, so what is kept is the way to close it.
-  async function ready<A extends { ready(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
+  async function ready<A extends { bootstrap(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     return app
   }
@@ -236,9 +236,9 @@ describe('the challenge of a route that names several schemes', () => {
   })
 
   // Mounting a router re-types the application with its routes, so what is kept is the way to close it.
-  async function ready<A extends { ready(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
+  async function ready<A extends { bootstrap(): Promise<unknown>; close(): Promise<unknown> }>(app: A): Promise<A> {
     close = () => app.close()
-    await app.ready()
+    await app.bootstrap()
 
     return app
   }
@@ -317,7 +317,7 @@ describe('an application whose scheme reads cookies', () => {
   it('starts with nothing registered by the application', async () => {
     const app = createWebApplication().authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
 
-    await expect(app.ready()).resolves.toBeUndefined()
+    await expect(app.bootstrap()).resolves.toBeUndefined()
     await app.close()
   })
 
@@ -333,7 +333,7 @@ describe('an application whose scheme reads cookies', () => {
       )
       .authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
 
-    await app.ready()
+    await app.bootstrap()
 
     const response = await app.fetch('/seen', { headers: { cookie: 'probe=yes' } })
 
@@ -344,7 +344,7 @@ describe('an application whose scheme reads cookies', () => {
   it('asks nothing of an application whose schemes read no cookie', async () => {
     const app = createWebApplication().authentication(auth => auth.addBasic(b => b.validate(() => null)))
 
-    await expect(app.ready()).resolves.toBeUndefined()
+    await expect(app.bootstrap()).resolves.toBeUndefined()
     await app.close()
   })
 })

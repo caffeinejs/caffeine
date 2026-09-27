@@ -88,13 +88,13 @@ export class Harness {
   }
 
   /** Readies the application, once, however many requests race for it. */
-  ready(): Promise<void> {
-    this.#ready ??= this.app.ready()
+  bootstrap(): Promise<void> {
+    this.#ready ??= this.app.bootstrap()
     return this.#ready
   }
 
   async fetch(input: Request | string | URL, init?: RequestInit): Promise<Response> {
-    await this.ready()
+    await this.bootstrap()
     return this.app.fetch(input, init)
   }
 
@@ -169,7 +169,7 @@ export class Harness {
 /**
  * Whether the application has already been set up.
  *
- * `routeGroups` is the only public thing that answers it: it throws until `ready()` has run. There is no
+ * `routeGroups` is the only public thing that answers it: it throws until `bootstrap()` has run. There is no
  * `started` on the public type, and adding one to `@caffeinejs/http` for this would be a wider change than the
  * question deserves.
  */

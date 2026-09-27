@@ -162,7 +162,7 @@ function msOf(value: Duration | undefined): number | undefined {
 }
 
 // Resolved inside the factory, at `init()`, so it reads the logger `.logger(...)` on the application settled on
-// during `ready()` rather than the one it started with.
+// during `bootstrap()` rather than the one it started with.
 function resolveLogger(logger: Logger | false | undefined, container: ContainerOps): Logger {
   if (logger === false) {
     return newNoopLogger()

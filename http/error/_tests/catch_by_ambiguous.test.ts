@@ -39,6 +39,6 @@ describe('ambiguous @CatchWith', () => {
   it('rejects when two referenced handlers cover the same error type', async () => {
     const app = createWebApplication()
 
-    await expect(app.ready()).rejects.toThrow(ErrConfiguration)
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
   })
 })

@@ -5,9 +5,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { type Order, OrderEntity, type User, UserEntity } from './_testdata/entities.testkit.js'
 import { ErrMissingDataSourceOptions } from './errors.js'
-import { $typeorm } from './injection.js'
+import { $repository } from './injection.js'
 import { dataSourceKey } from './keys.js'
-import { typeorm } from './plugin.js'
+import { TypeORM } from './plugin.js'
 
 /** What the sql.js driver adds to the entity manager. Not on TypeORM's barrel, so it is named structurally. */
 type ExportableManager = { exportDatabase(): Uint8Array }
@@ -42,38 +42,38 @@ class Users {
   constructor(readonly users: Repository<User>) {}
 }
 
-describe('typeorm() feature', function () {
+describe('TypeORM() feature', function () {
   it('should refuse a second unnamed instance', function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
     // Both would bind under TypeORM's `DataSource`, and the second would silently shadow or fight the first.
-    expect(() => app.with(typeorm(t => t.dataSource(memory())))).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => app.with(TypeORM(t => t.dataSource(memory())))).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('should allow a named instance alongside the unnamed one', function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    expect(() => app.with(typeorm('reports', t => t.dataSource(memory())))).not.toThrow()
+    expect(() => app.with(TypeORM('reports', t => t.dataSource(memory())))).not.toThrow()
   })
 
-  it('should fail ready() when the callback never provides options', async function () {
-    const app = newApplication().with(typeorm(() => undefined))
+  it('should fail bootstrap() when the callback never provides options', async function () {
+    const app = newApplication().with(TypeORM(() => undefined))
 
     opened.push(() => app.close())
 
     // Nothing else can report this: an empty builder would otherwise bind a DataSource with no driver and
     // fail somewhere inside TypeORM.
-    await expect(app.ready()).rejects.toThrow(ErrMissingDataSourceOptions)
+    await expect(app.bootstrap()).rejects.toThrow(ErrMissingDataSourceOptions)
   })
 })
 
-describe('typeorm() over a real database', function () {
-  it('should hand a working repository, connected before ready() returns', async function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+describe('TypeORM() over a real database', function () {
+  it('should hand a working repository, connected before bootstrap() returns', async function () {
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    app.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const { users } = app.container.get(Users)
@@ -92,11 +92,11 @@ describe('typeorm() over a real database', function () {
       ) {}
     }
 
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    app.container.bind(Shop, t => t.toClass(Shop, [$typeorm.repository(UserEntity), $typeorm.repository(OrderEntity)]))
+    app.container.bind(Shop, t => t.toClass(Shop, [$repository(UserEntity), $repository(OrderEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const shop = app.container.get(Shop)
@@ -113,11 +113,11 @@ describe('typeorm() over a real database', function () {
   })
 
   it('should roll back a transaction started from the injected repository', async function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    app.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const { users } = app.container.get(Users)
@@ -142,12 +142,12 @@ describe('typeorm() over a real database', function () {
       constructor(readonly users: Repository<User>) {}
     }
 
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    app.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
-    app.container.bind(Readers, t => t.toClass(Readers, [$typeorm.repository(UserEntity)]))
+    app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
+    app.container.bind(Readers, t => t.toClass(Readers, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     // TypeORM caches a repository per entity per manager, which is what lets the stage call `getRepository`
@@ -163,16 +163,13 @@ describe('typeorm() over a real database', function () {
       ) {}
     }
 
-    const app = newApplication().with(typeorm('reports', t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM('reports', t => t.dataSource(memory())))
 
     app.container.bind(Pair, t =>
-      t.toClass(Pair, [
-        $typeorm.repository(UserEntity, 'reports'),
-        $typeorm.repository(UserEntity, dataSourceKey('reports')),
-      ]),
+      t.toClass(Pair, [$repository(UserEntity, 'reports'), $repository(UserEntity, dataSourceKey('reports'))]),
     )
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const pair = app.container.get(Pair)
@@ -191,14 +188,12 @@ describe('typeorm() over a real database', function () {
     }
 
     const app = newApplication()
-      .with(typeorm(t => t.dataSource(memory())))
-      .with(typeorm('reports', t => t.dataSource(memory())))
+      .with(TypeORM(t => t.dataSource(memory())))
+      .with(TypeORM('reports', t => t.dataSource(memory())))
 
-    app.container.bind(Service, t =>
-      t.toClass(Service, [$typeorm.repository(UserEntity), $typeorm.repository(UserEntity, 'reports')]),
-    )
+    app.container.bind(Service, t => t.toClass(Service, [$repository(UserEntity), $repository(UserEntity, 'reports')]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const service = app.container.get(Service)
@@ -215,22 +210,22 @@ describe('typeorm() over a real database', function () {
   })
 
   it('should reopen a database exported before the application closed', async function () {
-    const first = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const first = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    first.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    first.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await first.ready()
+    await first.bootstrap()
     await first.container.get(Users).users.save({ email: 'ada@example.com' } as User)
 
     const snapshot = (first.container.get(DataSource).manager as unknown as ExportableManager).exportDatabase()
 
     await first.close()
 
-    const second = newApplication().with(typeorm(t => t.dataSource(memory({ synchronize: false, database: snapshot }))))
+    const second = newApplication().with(TypeORM(t => t.dataSource(memory({ synchronize: false, database: snapshot }))))
 
-    second.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    second.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
-    await second.ready()
+    await second.bootstrap()
     opened.push(() => second.close())
 
     // The writes were real and outlived the connection that made them, so the feature is not just holding
@@ -239,7 +234,7 @@ describe('typeorm() over a real database', function () {
   })
 })
 
-describe('typeorm() lifecycle', function () {
+describe('TypeORM() lifecycle', function () {
   it('should let a shutdown hook still use the repository', async function () {
     class AuditLog implements OnDestroy {
       rowsAtShutdown = -1
@@ -252,11 +247,11 @@ describe('typeorm() lifecycle', function () {
       }
     }
 
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    app.container.bind(AuditLog, t => t.toClass(AuditLog, [$typeorm.repository(UserEntity)]))
+    app.container.bind(AuditLog, t => t.toClass(AuditLog, [$repository(UserEntity)]))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const audit = app.container.get(AuditLog)
@@ -273,9 +268,9 @@ describe('typeorm() lifecycle', function () {
   })
 
   it('should wait for the connection to close before close() resolves', async function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
     opened.push(() => app.close())
 
     const dataSource = app.container.get(DataSource)
@@ -299,9 +294,9 @@ describe('typeorm() lifecycle', function () {
   })
 
   it('should leave close() safe to call twice', async function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory())))
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
 
     const dataSource = app.container.get(DataSource)
     const inner = dataSource.destroy.bind(dataSource)
@@ -321,14 +316,14 @@ describe('typeorm() lifecycle', function () {
     expect(destroyed).toEqual(1)
   })
 
-  it('should reject ready() when the database cannot be opened', async function () {
-    const app = newApplication().with(typeorm(t => t.dataSource(memory({ database: new Uint8Array([1, 2, 3, 4, 5]) }))))
+  it('should reject bootstrap() when the database cannot be opened', async function () {
+    const app = newApplication().with(TypeORM(t => t.dataSource(memory({ database: new Uint8Array([1, 2, 3, 4, 5]) }))))
 
-    app.container.bind(Users, t => t.toClass(Users, [$typeorm.repository(UserEntity)]))
+    app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
     // The failure belongs to start-up: a driver that cannot open its database must stop the application
     // rather than hand out repositories that throw on first use.
-    await expect(app.ready()).rejects.toThrow()
+    await expect(app.bootstrap()).rejects.toThrow()
 
     // Nothing was left resolvable, and shutting the half-started application down is still safe.
     expect(() => app.container.get(DataSource)).toThrow()
@@ -337,10 +332,10 @@ describe('typeorm() lifecycle', function () {
 
   it('should close every instance when several are installed', async function () {
     const app = newApplication()
-      .with(typeorm(t => t.dataSource(memory())))
-      .with(typeorm('reports', t => t.dataSource(memory())))
+      .with(TypeORM(t => t.dataSource(memory())))
+      .with(TypeORM('reports', t => t.dataSource(memory())))
 
-    await app.ready()
+    await app.bootstrap()
 
     const main = app.container.get(DataSource)
     const reports = app.container.get(dataSourceKey('reports'))

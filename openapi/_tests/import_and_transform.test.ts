@@ -67,7 +67,7 @@ describe('imported specifications', () => {
 
   it('serves a document object verbatim, describing none of the application routes', async () => {
     app = build(o => o.document(HAND_WRITTEN))
-    await app.ready()
+    await app.bootstrap()
 
     const document = await documentOf(app)
 
@@ -81,7 +81,7 @@ describe('imported specifications', () => {
     writeFileSync(path, 'openapi: 3.1.1\ninfo:\n  title: From YAML\n  version: 1.2.3\npaths: {}\n')
 
     app = build(o => o.specification({ path }))
-    await app.ready()
+    await app.bootstrap()
 
     const document = await documentOf(app)
 
@@ -94,7 +94,7 @@ describe('imported specifications', () => {
     writeFileSync(path, JSON.stringify(HAND_WRITTEN))
 
     app = build(o => o.specification({ path }))
-    await app.ready()
+    await app.bootstrap()
 
     expect((await documentOf(app)).info.title).toBe('Hand written')
   })
@@ -102,7 +102,7 @@ describe('imported specifications', () => {
   it('fails at boot when the file does not exist', async () => {
     app = build(o => o.specification({ path: join(tmpdir(), 'definitely-not-here.yaml') }))
 
-    await expect(app.ready()).rejects.toThrow(/Cannot read the OpenAPI specification/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot read the OpenAPI specification/)
     app = undefined
   })
 
@@ -113,13 +113,13 @@ describe('imported specifications', () => {
 
     app = build(o => o.specification({ path }))
 
-    await expect(app.ready()).rejects.toThrow(/Cannot parse the OpenAPI specification/)
+    await expect(app.bootstrap()).rejects.toThrow(/Cannot parse the OpenAPI specification/)
     app = undefined
   })
 
   it('serves an imported document as YAML too', async () => {
     app = build(o => o.document(HAND_WRITTEN))
-    await app.ready()
+    await app.bootstrap()
 
     const res = await app.fetch('/openapi.yaml')
 
@@ -144,7 +144,7 @@ describe('transformDocument', () => {
         doc.info.title = 'Renamed'
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     expect((await documentOf(app)).info.title).toBe('Renamed')
   })
@@ -153,7 +153,7 @@ describe('transformDocument', () => {
     app = build(o =>
       o.document(HAND_WRITTEN).transformDocument(doc => ({ ...doc, info: { ...doc.info, title: 'Patched' } })),
     )
-    await app.ready()
+    await app.bootstrap()
 
     expect((await documentOf(app)).info.title).toBe('Patched')
   })
@@ -169,7 +169,7 @@ describe('transformDocument', () => {
         }
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const document = await documentOf(app)
 
@@ -190,7 +190,7 @@ describe('derived response detail', () => {
 
   it('documents response headers the route already declares', async () => {
     app = build(() => {})
-    await app.ready()
+    await app.bootstrap()
 
     const document = await documentOf(app)
     const operation = (document.paths!['/widgets'] as Record<string, OperationObject>).get
@@ -207,7 +207,7 @@ describe('derived response detail', () => {
         return match === null ? undefined : `${match[2]}${match[1].toUpperCase()}`
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const names = Object.keys((await documentOf(app)).components?.schemas ?? {})
 
@@ -221,7 +221,7 @@ describe('derived response detail', () => {
         parameters: { page: { name: 'page', in: 'query', schema: { type: 'integer' } } },
       }),
     )
-    await app.ready()
+    await app.bootstrap()
 
     const components = (await documentOf(app)).components
 

@@ -34,7 +34,7 @@ describe('kafka feature', () => {
     const app = createApplication({ container }).with(kfk(k => k.brokers('localhost:9092').groupId('g')))
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     expect(built.container.getOptional(KafkaTemplate)).toBeInstanceOf(KafkaTemplate)
     // default template is also reachable by its instance key (name alias)
@@ -52,7 +52,7 @@ describe('kafka feature', () => {
       .with(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
 
     const built = app
-    await built.ready()
+    await built.bootstrap()
 
     const def = built.container.getOptional(KafkaTemplate)
     const orders = built.container.getOptional(kafkaTemplate('orders'))
@@ -67,12 +67,12 @@ describe('kafka feature', () => {
   // Brokers may arrive from the builder or from the configuration, so the first moment the answer is known is
   // when the feature bootstraps. It fails there, naming the real problem rather than arriving wrapped as a
   // configuration failure.
-  it('rejects at ready() when an instance has no brokers', async () => {
+  it('rejects at bootstrap() when an instance has no brokers', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
     const app = createApplication({}).with(kfk(k => k.groupId('g'))) // no brokers
 
-    await expect(app.ready()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
   it('throws when the same instance is installed twice', () => {

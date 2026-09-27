@@ -18,7 +18,7 @@ export type ViewConfigurer<C = unknown> = HTTPPluginConfigurer<ViewBuilder, C>
  * `.add(...)` configures the default engine (`reply.view`); `.add(name, ...)` adds a named one
  * (`reply.<name>`).
  *
- * At least one engine is required — installing with none fails at `app.ready()`.
+ * At least one engine is required — installing with none fails at `app.bootstrap()`.
  */
 export function view<C = unknown>(configure?: ViewConfigurer<C>): HTTPPluginFactory<C> {
   return context => {
