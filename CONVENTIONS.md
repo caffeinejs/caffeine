@@ -59,23 +59,25 @@ Run checks in this order and fix failures before considering the task complete. 
   1. `npm run build -w <pkg>`
   2. `npx tsc --build <pkg>/tsconfig.json` — the package's check project, and the only step here that type-checks `*.test.ts`
   3. `npm test -w <pkg>`
-  4. `npm run lint:fix -- <pkg-path>` — zero errors (warnings are pre-existing and acceptable)
+  4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
   1. `npm run build`
   2. `npm run test:typecheck`
   3. `npm test`
   4. `npm run lint:fix`
+  5. `make check` before asking for review — it also lints markdown, builds the CLI binary and the examples, and runs `test:memory`, which is what CI runs.
 
 Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
 
 When in doubt on **code** scope, run the full suite. A README next to a TypeScript change does not make the task docs-only.
 
-Every package has two `tsc` projects. `X/tsconfig.build.json` emits `dist/` from the package sources and
-references the sibling build projects it depends on. `X/tsconfig.json` type-checks the package _including_
-its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsconfig.json` holds the shared
-`compilerOptions` and nothing else.
+- `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`, or `node_modules/.bin/caffeine` is missing.
+- A new production dependency must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.
 
-Every `X/tsconfig.build.json` carries the same `exclude`, and a new package copies it verbatim:
+### Build and check projects
+
+- Every package has two `tsc` projects. `X/tsconfig.build.json` emits `dist/` from the package sources and references the sibling build projects it depends on. `X/tsconfig.json` type-checks the package including its tests, emits nothing, and references only `./tsconfig.build.json`. Root `tsconfig.json` holds the shared `compilerOptions` and nothing else.
+- Every `X/tsconfig.build.json` carries the same `exclude`, and a new package copies it verbatim. Package-specific entries go after those, never instead of them:
 
 ```json
 [
@@ -92,34 +94,13 @@ Every `X/tsconfig.build.json` carries the same `exclude`, and a new package copi
 ]
 ```
 
-Package-specific entries go after those, never instead of them. Excluding a test **helper** matters as much as
-excluding a test: a helper under `_tests/` is not `*.test.ts`, so without `**/_tests/**` it is compiled into
-the published `dist/`. The check project still sees all of it — `X/tsconfig.json` keeps `include: ["**/*.ts"]`,
-so tests and helpers are type-checked and only emission stops. The same three patterns are excluded from
-coverage in root [`vitest.config.ts`](vitest.config.ts) and [`codecov.yml`](codecov.yml), and from analysis in
-[`sonar-project.properties`](sonar-project.properties); change them together.
-
-Two solution files drive them: `npm run build` is `tsc --build tsconfig.build.json`, and
-`npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental; do not edit `dist/`
-by hand.
-
-A check project is the only thing that reads a test file. `tsconfig.build.json` excludes `**/*.test.ts`, so a
-green `npm run build` says nothing about them, and Vitest type-checks only where a config turns it on —
-`brewer/` and `testing/`, through their own `tsconfig.vitest.json`. `npm test` elsewhere runs tests it never
-type-checked.
-
-Every package in the table above is referenced by `tsconfig.check.json`, so the check project is its step 2.
-`cli/` and `benchmarks/` are outside that solution and own a `test:typecheck` script the root chain calls
-separately — they are the only two workspaces where `npm run test:typecheck -w <pkg>` means anything, so
-`--if-present` against any other package silently does nothing. `devtools/ui` and `examples/**` are in neither:
-nothing type-checks them.
-
-Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts` — the same resolution Vitest uses at
-run time. There is no `source` export condition and no `paths` map, so a type-check needs the dependency
-`dist/` to exist; `tsc --build` produces it. A check project is never referenced by another project, so it
-cannot create a reference cycle.
-
-The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
+- A test helper under `_tests/` is not `*.test.ts`; without `**/_tests/**` it is compiled into the published `dist/`. The check project still sees it, because `X/tsconfig.json` keeps `include: ["**/*.ts"]`.
+- The same patterns are excluded from coverage in root [`vitest.config.ts`](vitest.config.ts) and [`codecov.yml`](codecov.yml), and from analysis in [`sonar-project.properties`](sonar-project.properties). Change them together.
+- `npm run build` is `tsc --build tsconfig.build.json`; `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental. Never edit `dist/` by hand.
+- A green `npm run build` says nothing about tests: only a check project reads a test file. Vitest type-checks only where a config turns it on (`brewer/` and `testing/`, through their own `tsconfig.vitest.json`); `npm test` elsewhere runs tests it never type-checked.
+- `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `devtools/ui` and `examples/**` are type-checked by nothing.
+- Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts`. There is no `source` condition and no `paths` map, so a type-check needs the dependency `dist/` to exist: build first.
+- The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
 
 ## Import style
 
@@ -195,67 +176,21 @@ Where a value goes depends on who reads it, not on what is convenient:
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
 | start-up wiring the server runs                       | the feature's `server` hook            | the adapter, in the feature's slot      |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
+| a plugin's setting read per request                   | a Fastify decoration the plugin sets   | `request.server[kThing]`                |
 
-Those are the only answers, and there is no eighth. A value the application needs once everything is up is
-either configuration — so the callback reads it out of the tree and hands it over — or an artifact, so it is a
-binding. There is no side channel between a feature and the application's configuration: a feature registers
-no slice, publishes no key, and adds no field to the resolved configuration object.
+Those are the only answers.
 
-**A fluent method is the last word.** `s.drainDelay('5s')` is what the feature runs on; it is not a default that a
-higher band quietly outranks. Configuration reaches a feature because the application's configure callback
-wired it — `.shutdown((s, { config }) => s.config(config.app.shutdown))` — and by no other path. Where the more
-specific of the two is named, the more specific wins: a setter beats the block `config(...)` handed over.
-
-The server's own construction and listen settings are not a feature. `.server(configure)` hands them to the
-adapter, resolved against the setup context, and the adapter builds the server from them in `setup()`, once the
-container has initialized. `.serverCallback(callback)` is handed that setup context and then the bare instance.
-
-Exceptions, where `config(...)` overlays what the fluent methods set:
-
-- authentication scheme options, so a secret in the tree redirects one written in code
-- kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice)
-- messaging binding destinations (and the other keys a binding's config slice declares)
-
-The application declares the whole schema, importing the feature's exported schema (`loggerConfigSchema`,
-`cookieConfigSchema`, `healthConfigSchema`, …) rather than restating it. Importing it is what carries the feature's own defaults
-into the tree, since the feature no longer seeds anything there — a block declared with required, undefaulted
-fields and no source to fill them fails validation at `bootstrap()`.
-
-A feature nothing wired runs on its own defaults and its builder values alone: it works, and no file,
-environment variable or argument reaches it.
-
-Liveness is the author's choice rather than something the framework manufactures. A configuration node is live:
-its fields follow every reload, so `b.config(config.app.thing)` follows a reload while
-`b.port(config.app.thing.port)` reads a number once. A feature's own resolved options are a plain object read once, when the feature configures:
-config loads before any feature configures, so there is nothing left to fold lazily — `configure` reads its
-inputs, folds in whatever the builder itself holds (a dispatcher, a merged default), and binds the result. A
-reload afterward does not reach an already-bound value. A feature that has to act on a change takes a view in its
-`config(...)` instead: `(b, { store }) => b.config(store.view(t => t.app.thing))`.
-
-Do not route a plugin's own configuration through a container key it reads back at server setup: the builder
-is holding the value when it builds the plugin, so the plugin closes over it.
-`instance.register(thingPlugin(options))` in the `server` hook is the whole act — there is no token to bind and
-no registry entry to look up.
-
-An HTTP feature's start-up wiring is its `server` hook, handed the server the application's adapter drives.
-Under the Fastify adapter the hook body **is** a plugin body: the adapter registers it as one
-`fastify-plugin`-wrapped plugin, so `instance` is the root server. Wrap a plugin the hook registers in
-`fastify-plugin` and its hooks and decorations apply to the context it was registered in; leave it unwrapped and
-they stay inside the plugin. The plugin does not choose that context: a feature or an application factory
-registers it on the root server, a `router.plugin(...)` or a `@Use(...)` registers it inside that route group —
-so one wrapped plugin covers every route or one group's routes, according to who asked for it.
-
-Plugins register in the order they were written, which is the order of the application's `.with(...)` calls.
-There are no stages and nothing is sorted by what a plugin is: a feature that must precede another is installed
-first. The adapter installs one slot at a time, and a slot is finished — whatever its hook awaited, and whatever
-it registered without awaiting — before the next one starts, so a feature that awaits before registering does
-not move.
-
-One framework slot leads that list, in `WebApplication.configurers()` and nowhere else: error handling, so
-every route and hook the rest register is already covered by it. Everything else, this package's own features
-included, follows in `.with(...)` order — the authentication gate included, which is why `.authentication(...)`
-is written after the CORS plugin and before a hook that reads `req.user`. The default not-found handler is not a
-feature: the adapter installs it after every plugin, and a plugin that set its own keeps it.
+- No side channel between a feature and the configuration: a feature registers no slice, publishes no key, and adds no field to the resolved configuration object. A value the application needs once everything is up is either configuration, read out of the tree by the callback, or a binding.
+- A fluent method is the last word: `s.drainDelay('5s')` is what the feature runs on. Configuration reaches a feature only because the application's configure callback handed it over (`.shutdown((s, { config }) => s.config(config.app.shutdown))`). The more specific wins: a setter beats the block `config(...)` handed over.
+- Exceptions, where `config(...)` overlays what the fluent methods set: authentication scheme options (a secret in the tree redirects one written in code); kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice); messaging binding destinations (and the other keys a binding's config slice declares).
+- The application declares the whole schema by importing the feature's exported schema (`loggerConfigSchema`, `cookieConfigSchema`, `healthConfigSchema`, …), never by restating it. Importing it carries the feature's defaults into the tree; a block with required, undefaulted fields and no source fails validation at `bootstrap()`.
+- A feature nothing wired runs on its own defaults and its builder values alone.
+- A configuration node is live and a resolved options object is read once: `b.config(config.app.thing)` follows a reload, `b.port(config.app.thing.port)` reads a number once, and a bound value is not reached by a later reload. A feature that must act on a change takes a view instead: `(b, { store }) => b.config(store.view(t => t.app.thing))`.
+- A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` in the `server` hook is the whole act.
+- The server's construction and listen settings are not a feature: `.server(configure)` hands them to the adapter, which builds the server in `setup()` once the container has initialized.
+- Under the Fastify adapter a feature's `server` hook body is a plugin body; the adapter registers it as one `fastify-plugin`-wrapped plugin, so `instance` is the root server. A plugin the hook registers reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it.
+- Plugins install in the order of the application's `.with(...)` calls. There are no stages and nothing is sorted by kind; a feature that must precede another is installed first. One slot finishes, including what its hook awaited and what it registered without awaiting, before the next starts.
+- One framework slot leads, in `WebApplication.configurers()` and nowhere else: error handling. The default not-found handler is not a feature; the adapter installs it after every plugin, and a plugin that set its own keeps it.
 
 ## Writing a feature
 
@@ -269,36 +204,13 @@ export interface Feature<C = unknown> {
 }
 ```
 
-`[kFeatureName]` is the identity `.with` deduplicates on, so a feature accepting an instance name folds it
-in (`kafka` vs `kafka:orders`) and one image cannot install the same instance twice. `[kFeatureConfigure]`
-runs after configuration has resolved and before the container initializes, so the kit's `config` is readable
-and binding is still open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings
-there. Its kit carries the logger the application configured.
-
-An HTTP feature that wires the server implements `HTTPFeature` from `@caffeinejs/http`, which adds a fourth
-member: `[kFeatureServer]`, handed the server at the feature's install position, after the container has
-initialized, together with the same `HTTPSetupContext` a plugin factory receives. It is a property rather than a
-method, so a feature written for one server does not compile on an application running another.
-
-That property is why the interface states the kit as `HTTPSetupContext`, with no `C`: a property's parameter is
-checked strictly, so naming `C` there would make `HTTPFeature` invariant in it, and an application held without
-its configuration type — `function portOf(app: WebApplication)` — could no longer take a configured one.
-`HTTPFeatureBuilder` restores it, so a subclass's `server(instance, kit)` reads `HTTPSetupContext<C>`. That is
-the same trade `configure` already makes, whose hook is a bivariant method while `FeatureBuilder.configure` is
-handed `FeatureConfigureKit<C>`.
-
-Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which adds exactly one thing: it runs the
-application's configure callbacks against the builder, with the resolved configuration, immediately before
-`configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in
-`configure`.
-
-The callback the application writes is `(builder, kit)` — one context argument, the same shape a plugin
-factory takes. The kit is the `FeatureConfigureKit` the feature's own `configure` receives, so a callback
-reads `config` and `store` and may `container.bind(...)`; it runs before `container.init()`, so there is no
-`container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` instead and is handed the
-`HTTPSetupContext` its factory got, where the container resolves and binding is closed.
-
-An HTTP feature extends `HTTPFeatureBuilder<C>` instead, and wires the server in `server`:
+- `[kFeatureName]` is the identity `.with` deduplicates on. A feature accepting an instance name folds it in (`kafka` vs `kafka:orders`).
+- `[kFeatureConfigure]` runs after configuration has resolved and before the container initializes: `config` is readable and binding is open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings there. Its kit carries the application's logger.
+- An HTTP feature implements `HTTPFeature` from `@caffeinejs/http`, which adds `[kFeatureServer]`: handed the server at the feature's install position, after the container has initialized, with the same `HTTPSetupContext` a plugin factory receives. It is a property, not a method, so a feature written for one server does not compile on an application running another.
+- `HTTPFeature` states that kit as `HTTPSetupContext` with no `C`: a typed parameter on a property would make the interface invariant in `C`, and `function portOf(app: WebApplication)` could no longer take a configured application. `HTTPFeatureBuilder` restores it, so a subclass's `server(instance, kit)` reads `HTTPSetupContext<C>`.
+- Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
+- The application's callback is `(builder, kit)`. The kit is the `FeatureConfigureKit` the feature's own `configure` receives: `config`, `store`, and `container.bind(...)`, but no `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` and is handed the `HTTPSetupContext`, where the container resolves and binding is closed.
+- An HTTP feature extends `HTTPFeatureBuilder<C>` and wires the server in `server`:
 
 ```ts
 export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
@@ -327,9 +239,7 @@ export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 }
 ```
 
-The package exports a **factory function**, generic over the application configuration type so the `config`
-and `store` on the callback's kit are typed against the schema the application declared. An HTTP feature's
-factory returns `HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
+- The package exports a factory function, generic over the application configuration type. An HTTP feature's factory returns `HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
 
 ```ts
 export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C> {
@@ -337,23 +247,15 @@ export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>
 }
 ```
 
-A feature taking an instance name overloads on it, and folds it into `[kFeatureName]`:
+- A feature taking an instance name overloads on it and folds it into `[kFeatureName]`:
 
 ```ts
 export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
 export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
 ```
 
-The framework's own pre-registered builders — the shutdown policy, the logger, cookies, error handling — are
-constructed before an application can name a callback, so `.shutdown(...)` and its siblings hand theirs over with
-`builder[kAddConfigurer](configure)`. Nothing else uses that symbol.
-
-A feature the application cannot configure implements `Feature` / `HTTPFeature` directly instead —
-`FeatureBuilder` exists to run a configure callback, and one with no callback to run is not a feature builder.
-There are two: `AuthorizationBuilder` and `GuardsBuilder`, which configure nothing tunable. Having real work in
-both phases does not change this; having nothing to configure does. Being registered unconditionally does not
-either — `ErrorHandlingBuilder` leads `WebApplication.configurers()` and is still a `FeatureBuilder`, because
-`.errorHandling(...)` hands it a callback.
+- Only the framework's pre-registered builders (shutdown policy, logger, cookies, error handling) hand a callback over with `builder[kAddConfigurer](configure)`, because they are constructed before an application can name one. Nothing else uses that symbol.
+- A feature the application cannot configure implements `Feature` / `HTTPFeature` directly, not `FeatureBuilder`: `AuthorizationBuilder` and `GuardsBuilder`. Having nothing to configure is what decides it, not how much work the phases do.
 
 ## Error messages
 
@@ -403,6 +305,12 @@ Before relying on the API of a third-party library, call the Context7 MCP server
 3. Answer from those docs. Prefer Context7 over web search for a library API.
 
 Skip Context7 for `@caffeinejs/*`, language builtins, and code already in the conversation. First-party behavior is in this file, [`AGENTS.md`](AGENTS.md), and the package `AGENTS.md`.
+
+## Analysis servers
+
+- SonarQube: query the files in the change, or set `pullRequest` to the pull request number. Never load the full issue list. Never change an issue's status. The quality-gate status returns `NONE` for this project; it is neither a pass nor a fail, use issue search.
+- The GitHub MCP server is read-only. Open and merge pull requests with `gh`.
+- Scorecard scores and Dependabot alerts are signals, not a verdict.
 
 ## Acronym casing
 

@@ -1,83 +1,17 @@
 # `@caffeinejs/html`
 
-Follow the root [`AGENTS.md`](../AGENTS.md). The rules below are specific to this package.
+Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
-## What the package is
-
-JSX server-side rendering on `@kitajs/html`. A handler returns `HTML(<Page />)`; the adapter answers with
-the markup under `text/html; charset=utf-8`.
-
-`@kitajs/html` has no render step: its `JSX.Element` is `string | Promise<string>`, so a JSX expression
-_is_ the markup. That is why `HTMLNode` is `string | Promise<string>` and why this package's own sources
-need no JSX compiler options — only its tests do.
-
-`@kitajs/fastify-html-plugin` is a behavioural reference, not a dependency. Do not add it.
-
-## Consumer tsconfig
-
-An application authoring `.tsx` needs all three:
-
-```jsonc
-{
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "jsxImportSource": "@kitajs/html",
-    "plugins": [{ "name": "@kitajs/ts-html-plugin" }],
-  },
-}
-```
-
-`@kitajs/ts-html-plugin` is the XSS scanner: `@kitajs/html` escapes nothing on its own, so without it an
-unescaped `{userInput}` is reported nowhere. Its `xss-scan` bin is the CI equivalent.
-
-It is an **optional** peer dependency, and that is load-bearing. Its own `typescript` peer is `^5.9.3`
-against this repo's TypeScript 7; npm resolves a workspace package's peers, so a plain `peerDependencies`
-entry fails `npm install` at the root with `ERESOLVE`. Marking it optional in `peerDependenciesMeta`
-records the requirement for consumers while letting npm skip it here. Do not drop the `optional` flag, and
-do not add it to `devDependencies`. It is a language-service plugin — it changes no emit and runs only in
-an editor using the workspace TypeScript — so nothing in this package needs it present.
-
-TypeScript 7's editor is LSP-based and does not load `tsconfig` `plugins`. Under the TypeScript 7 language
-service, `@kitajs/ts-html-plugin` does not run; unescaped `{userInput}` is not reported in the editor.
-Use the plugin's `xss-scan` CLI for that check, or keep the TypeScript 6 language service in the editor
-until a TypeScript 7.1 API exists that the plugin can use.
-
-## `autoDoctype` reaches a response through a Fastify decoration; Content-Type does not
-
-`Context` carries no container, so `HTMLResult.respond` cannot resolve anything. `HTMLPlugin(defaults)`
-decorates the Fastify instance it registers into under `kHTMLOptions`, and `respond` reads it back off
-`ctx.platform.request.server`. Reading it off the request's own server rather than the root instance is what makes
-a plugin registered inside one route group parameterize that group's responses and no others.
-
-The plugin is optional: with none registered nothing decorated the instance, `HTML_DEFAULTS` applies, and
-`HTML(...)` works with no setup at all.
-
-The settings the plugin is handed are usually a node of the configuration tree —
-`.with(({ config }) => HTMLPlugin(config.app.html))` — so the decoration reads through rather than copying, and a reload
-reaches a response rendered after it. There is no config slice, no feature and no builder: the package
-registers one plugin and nothing else.
-
-Content-Type has no app-level default and no per-call override — `HTMLOptions` carries no `contentType`
-field. `respond` sets the hardcoded `text/html; charset=utf-8` only when the reply carries no Content-Type
-yet; a route's `@Produces`, or a handler's own `ctx.header('content-type', ...)` call before returning
-`HTML(...)`, both survive untouched. Those two are the only ways to get a different Content-Type — do not
-add a `contentType` option back onto `HTML(...)`, and do not reintroduce an app-wide setting.
-
-## `respond` returns, it does not send
-
-`respond` returns the markup rather than calling `ctx.body(...)`, so the same result is correct on the
-adapter and `http/error/error_handling.ts`. The adapter unwraps a `Responder` exactly once — never return
-another `Responder` from `respond`.
-
-## No route-level decorator
-
-There is no `@HTML` decorator or `html()` route extension. `@Produces` already sets a route's
-Content-Type. If one is ever added, `http/AGENTS.md` requires writing the `AnyRouteExtension` first and
-having the decorator call it.
-
-## Tests are `.tsx`
-
-`_tests/*.test.tsx` so the real JSX authoring path is covered. That is why this package's `tsconfig.json`
-sets `jsx`/`jsxImportSource` and includes `**/*.tsx`, and why `vitest.config.ts` sets `jsc.parser.tsx` and
-the `react` transform. Only tests are
-`.tsx`; `dist/` contains no JSX.
+- `@kitajs/fastify-html-plugin` is a behavioural reference, not a dependency. Do not add it.
+- `@kitajs/ts-html-plugin` stays an optional peer dependency (`peerDependenciesMeta`): its own `typescript` peer
+  conflicts with this repository's TypeScript, so a plain `peerDependencies` entry fails root `npm install` with
+  `ERESOLVE`. Do not drop the `optional` flag, and do not add it to `devDependencies`.
+- `respond` reads `kHTMLOptions` off `ctx.platform.request.server`, never off the root instance, so a plugin
+  registered inside one route group parameterizes that group's responses and no others.
+- `HTMLOptions` carries no `contentType` field and there is no app-wide Content-Type setting. `respond` sets
+  `text/html; charset=utf-8` only when the reply carries no Content-Type; a route's `@Produces` or a handler's
+  `ctx.header('content-type', ...)` are the only overrides. Do not add either back.
+- `respond` returns the markup; it does not call `ctx.body(...)`, so the same result is correct on the adapter and
+  in `http/error/plugin.ts`. Never return another `Responder` from `respond`: the adapter unwraps exactly once.
+- There is no `@HTML` decorator and no `html()` route extension; `@Produces` already sets a route's Content-Type.
+  If one is ever added, write the `RouteExtension` first — see [`http/AGENTS.md`](../http/AGENTS.md).

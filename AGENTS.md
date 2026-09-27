@@ -24,6 +24,14 @@ Do not edit a vendored skill. Record an unavoidable patch in [`.agents/skills/RE
 Chat in short, plain English. Lead with the answer. No filler.
 Keep code names, paths, and error text exact. Do not simplify those.
 
+## Commits and pull requests
+
+- Conventional Commits: `<type>(<optional scope>): <description>`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`.
+- Description under 72 characters, imperative mood, no trailing period.
+- One concern per pull request. Changed behaviour ships with its tests.
+- `make check` green before review; `make lint-markdown` when every changed file is `*.md`.
+- Never commit or push unless asked.
+
 ## Rule 1 — Think Before Coding
 
 State assumptions explicitly. If uncertain, ask rather than guess.
