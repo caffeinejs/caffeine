@@ -13,6 +13,15 @@
     "scorecard": {
       "type": "stdio",
       "command": "scorecard-mcp"
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${CAFFEINE_GITHUB_MCP_TOKEN}",
+        "X-MCP-Readonly": "true",
+        "X-MCP-Toolsets": "context,issues,pull_requests,actions,code_security,dependabot,secret_protection"
+      }
     }
   }
 }
