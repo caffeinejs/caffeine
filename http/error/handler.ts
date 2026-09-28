@@ -59,7 +59,7 @@ export interface ErrorHandler<E extends Error> {
 /**
  * A reference to an error handler class, as accepted by `@CatchWith` and
  * `.errorHandling(e => e.globalHandlers(...))`: either the class itself or a name assigned to it with `@Named`.
- * Both are resolved through the container, so `@Primary`, `@ConditionalOn` and `@Profile` apply as they do
+ * Both are resolved through the container, so `@Primary`, `@Conditional` and `@Profile` apply as they do
  * anywhere else.
  */
 export type ErrorHandlerRef = InjectionToken<ErrorHandler<Error>>
@@ -90,7 +90,7 @@ export interface CatchByOwner {
  * Resolves error handler references into a map of error type to handler provider.
  *
  * Resolution goes through the container, so a reference by class or by `@Named` identifier honours `@Primary`,
- * `@ConditionalOn` and `@Profile` like any other injection point. A handler whose binding is absent is refused
+ * `@Conditional` and `@Profile` like any other injection point. A handler whose binding is absent is refused
  * rather than skipped: a reference that resolves to nothing is a handler the application asked for and did not
  * get.
  *

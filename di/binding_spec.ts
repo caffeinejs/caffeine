@@ -1,5 +1,5 @@
 import { Binding } from './binding.js'
-import { Conditional } from './conditional.js'
+import { conditionOf, type Condition, type ConditionHelpers } from './conditional.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from './errors.js'
 import { AsyncFactory, Factory } from './factory.js'
@@ -530,21 +530,31 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Attaches one or more predicates that must all return `true` for this binding to be active.
+   * Registers this binding only when the condition passes, or every one of them when given several.
    *
    * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
-   * decorated bindings. A predicate therefore never sees the binding itself, and a binding already registered under
-   * the key stays unless the predicates pass — which is what lets `!ctx.container.has(key)` make it a default.
+   * decorated bindings. Its conditions therefore never see the binding itself, and a binding already registered under
+   * the key stays unless they pass — which is what lets `c.missing(key)` make it a default.
+   *
+   * @param condition - A condition built with {@link $cond}, several, or a callback handed the same builders. The
+   *   callback runs once, when this method is called.
+   *
+   * @throws {@link ErrInvalidBinding} when handed anything else, a predicate included
    *
    * @example
    * ```ts
-   * container.bind(key, t => t.toClass(ProdService).conditional(ctx => process.env.NODE_ENV === 'production'))
-   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+   * container.bind(Cache, t => t.toClass(RedisCache).conditional(c => c.config('cache.kind', 'redis')))
+   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
    * ```
    */
-  conditional(fn: Conditional | Conditional[]): this {
-    const fns = Array.isArray(fn) ? fn : [fn]
-    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...fns]
+  conditional(condition: Condition | readonly Condition[] | ((c: ConditionHelpers) => Condition)): this {
+    const invalid = (reason: string) =>
+      new ErrInvalidBinding(`Cannot configure .conditional() for "${keyStr(this.key)}": ${reason}`)
+    const conditions = Array.isArray(condition)
+      ? condition.map(c => conditionOf(c, invalid))
+      : [conditionOf(condition, invalid)]
+
+    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...conditions]
 
     return this
   }

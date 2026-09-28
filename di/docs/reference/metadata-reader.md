@@ -73,14 +73,14 @@ const di = new CaffeineIoC({ metadataReader: reader })
 
 ### Useful Binding fields to override
 
-| Field          | Type            | Set by decorator |
-| -------------- | --------------- | ---------------- |
-| `scopeId`      | `Identifier`    | `@Lifetime`      |
-| `profiles`     | `Set<string>`   | `@Profile`       |
-| `names`        | `Identifier[]`  | `@Named`         |
-| `lazy`         | `boolean`       | `@Lazy`          |
-| `primary`      | `boolean`       | `@Primary`       |
-| `conditionals` | `Conditional[]` | `@ConditionalOn` |
+| Field          | Type           | Set by decorator |
+| -------------- | -------------- | ---------------- |
+| `scopeId`      | `Identifier`   | `@Lifetime`      |
+| `profiles`     | `Set<string>`  | `@Profile`       |
+| `names`        | `Identifier[]` | `@Named`         |
+| `lazy`         | `boolean`      | `@Lazy`          |
+| `primary`      | `boolean`      | `@Primary`       |
+| `conditionals` | `Condition[]`  | `@Conditional`   |
 
 Returning factory-level fields (`factory`, `injections`, `injectionResolvers`)
 from a reader is possible but unusual — prefer the fluent binder API for those.

@@ -1,1 +1,1 @@
-export { mergeObject } from './objects.js'
+export { mergeObject, selector } from './objects.js'

@@ -29,7 +29,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
 
 - [Abstract Classes](./abstract-classes.md) — register multiple implementations
   of an abstract class, inject all of them with `allOf`, and select between them
-  using `@Named`, `@Primary`, and `@ConditionalOn`.
+  using `@Named`, `@Primary`, and `@Conditional`.
 
 - [Interfaces](./interfaces.md) — use symbol tokens as runtime keys for TypeScript
   interfaces, with the same injection patterns as abstract classes.
@@ -53,8 +53,9 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
   container directly at resolution time; useful for dynamic or conditional dependencies.
 
 - [Conditional Bindings](./conditional-bindings.md) — register implementations only
-  when a predicate passes at init time: region flags, env vars, feature toggles,
-  presence of another binding, or a default that yields to any other implementation.
+  when a condition passes at init time: region flags, env vars, configuration values,
+  feature toggles, presence of another binding, or a default that yields to any other
+  implementation.
 
 - [Lazy Bindings](./lazy-bindings.md) — defer construction of a binding until its first
   resolution; reduce startup time for expensive services and break circular dependency

@@ -2,7 +2,7 @@ import '../index.nodejs.js'
 import { describe, it, beforeEach, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -26,13 +26,13 @@ import { Scopes } from '../scope.js'
 // Group A: Decorator Combination Edge Cases
 // ─────────────────────────────────────────────────────────────────────────────
 
-// A1: @ConditionalOn on @Primary — when the primary's condition is false,
+// A1: @Conditional on @Primary — when the primary's condition is false,
 //     the plain non-primary sibling wins sole ownership of the key.
-describe('A1: @ConditionalOn on @Primary — non-primary wins when condition fails', function () {
+describe('A1: @Conditional on @Primary — non-primary wins when condition fails', function () {
   const NS_A1 = 'ec-a1'
   const kA1 = token<{ readonly kind: string }>(Symbol('ec-a1'))
 
-  @ConditionalOn(() => false)
+  @Conditional(c => c.when(() => false))
   @Primary()
   @Injectable(kA1)
   @Profile(NS_A1)
@@ -313,13 +313,13 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
 // Group E: @Provides / @Configuration Edge Cases
 // ─────────────────────────────────────────────────────────────────────────────
 
-// E1: @ConditionalOn at class AND method level are evaluated independently.
+// E1: @Conditional at class AND method level are evaluated independently.
 //     Class condition false → all beans skipped.
 //     Class condition true, method condition false → only that bean skipped.
 //
 //     Guards are pre-bound symbol keys so that autoWire() order does not
 //     affect which guard is visible when the condition function runs.
-describe('E1: @ConditionalOn at class + method level — independent evaluation', function () {
+describe('E1: @Conditional at class + method level — independent evaluation', function () {
   const NS_E1 = 'ec-e1'
   const kE1ClassFlag = token<boolean>(Symbol('ec-e1-class-flag'))
   const kE1MethodFlag = token<boolean>(Symbol('ec-e1-method-flag'))
@@ -327,10 +327,10 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
 
   @Configuration()
   @Profile(NS_E1)
-  @ConditionalOn(ctx => ctx.container.has(kE1ClassFlag))
+  @Conditional(c => c.present(kE1ClassFlag))
   class EC_E1Config {
     @Provides(kE1Bean)
-    @ConditionalOn(ctx => ctx.container.has(kE1MethodFlag))
+    @Conditional(c => c.present(kE1MethodFlag))
     bean(): string {
       return 'bean'
     }

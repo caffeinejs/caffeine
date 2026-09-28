@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
@@ -87,7 +87,7 @@ describe('Label', function () {
     const sym = Symbol('cond')
 
     @Label(sym)
-    @ConditionalOn(() => false)
+    @Conditional(c => c.when(() => false))
     @Injectable()
     class Excluded {}
 

@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -216,7 +216,7 @@ describe('BindingSpec.profiles()', function () {
       t
         .toSelf()
         .profiles('fluent-both')
-        .conditional(() => false),
+        .conditional(c => c.when(() => false)),
     )
     await di.init()
 
@@ -277,13 +277,13 @@ describe('constructor profile evaluation', function () {
   })
 })
 
-describe('Profile + ConditionalOn dual queue', function () {
+describe('Profile + Conditional dual queue', function () {
   it('should not run the predicate when the profile misses', async function () {
     const predicate = vi.fn(() => true)
 
     @Injectable()
     @Profile('dual-miss')
-    @ConditionalOn(predicate)
+    @Conditional(c => c.when(predicate))
     class DualMissBean {}
 
     const di = new CaffeineIoC()
@@ -296,7 +296,7 @@ describe('Profile + ConditionalOn dual queue', function () {
   it('should register when both profile and conditional pass', async function () {
     @Injectable()
     @Profile('dual-hit')
-    @ConditionalOn(() => true)
+    @Conditional(c => c.when(() => true))
     class DualHitBean {}
 
     const di = new CaffeineIoC({ profiles: ['dual-hit'] })

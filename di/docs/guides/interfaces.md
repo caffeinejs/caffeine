@@ -103,7 +103,7 @@ class Pipeline {
 :::warning
 Injecting the token directly — without `allOf` — when multiple implementations are
 registered throws `ErrNoUniqueInjectionForKey`. Mark one implementation `@Primary`,
-use `@ConditionalOn` so only one survives at runtime, or inject by a more specific
+use `@Conditional` so only one survives at runtime, or inject by a more specific
 name or token.
 :::
 
@@ -208,10 +208,10 @@ class NotificationRouter {
 
 ---
 
-## Conditional implementations with `@ConditionalOn`
+## Conditional implementations with `@Conditional`
 
 ```ts
-import { Injectable, Named, Primary, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Named, Primary, Conditional } from '@caffeinejs/di'
 
 interface CacheStore {
   get(key: string): Promise<string | undefined>
@@ -235,7 +235,7 @@ class InMemoryCache implements CacheStore {
 
 // Only registered when a RedisClient binding is present in the container
 @Primary()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 @Named(kCacheStore)
 @Injectable()
 class RedisCache implements CacheStore {
@@ -249,8 +249,10 @@ class RedisCache implements CacheStore {
 }
 ```
 
-All bindings are registered before any `@ConditionalOn` predicate runs, so
-`ctx.container.has()` is safe to call for any key.
+Every binding without conditions is registered before any condition is decided, so
+`c.present(RedisClient)` sees `RedisClient` whether it was bound by hand, by a module or by
+decorators. A conditional binding is visible only once it has been decided — see
+[Conditionals](./conditional-bindings.md#how-conditional-works).
 
 ---
 

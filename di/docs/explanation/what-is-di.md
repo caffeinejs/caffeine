@@ -89,7 +89,8 @@ Beyond basic injection, CaffeineIoC provides:
 - **Lifecycle hooks** — run code after construction (`@PostConstruct`), after
   every binding is resolved (`OnBootstrap`), and before shutdown (`OnDestroy`).
 - **Profiles** — activate bindings only in specific environments.
-- **Conditionals** — activate bindings based on arbitrary predicates.
+- **Conditionals** — activate bindings based on configuration, the environment, or the
+  presence of other bindings.
 - **Testing utilities** — snapshot and restore the binding registry for
   isolated tests.
 

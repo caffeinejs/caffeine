@@ -1454,7 +1454,7 @@ describe('AOP', function () {
         t
           .toSelf()
           .pointcuts($aop.forClass(CondTarget, 'run'))
-          .conditional(() => false),
+          .conditional(c => c.when(() => false)),
       )
       await di.init()
 

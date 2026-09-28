@@ -5,8 +5,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 ## Bindings and keys
 
 - A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
-  must never see its own binding, or a default written as `.conditional(ctx => !ctx.container.has(key))` removes
-  itself.
+  must never see its own binding (`present` / `missing` skip it by id), or a default written as
+  `.conditional(c => c.missing(key))` removes itself.
+- Conditions are data built with `$cond`, each with a `kind`. `when` is handed nothing: a registry check is
+  `present` / `missing`, whose key the container can read. Never hand a condition the container.
+- Profiles are not a condition kind. The active profile set only grows before compile, which is what lets a profiled
+  binding register in the constructor; deciding profiles with the conditions would move that visibility and its
+  errors to `init()`.
 - `token<T>(...)` brands an injection key only. Never use it for a label, tag, metadata key, resolver name or plain
   `Map` lookup.
 - `T` must name what the key resolves to: `token()`, `token<any>`, `token<unknown>`, `token<object>` and a class

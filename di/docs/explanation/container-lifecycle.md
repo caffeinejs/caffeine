@@ -39,8 +39,8 @@ During init, the container does all its heavy lifting:
    `addModules()`, then run each module `fn` once.
 2. **Profile filtering** — bindings whose `@Profile` is not in the active set
    are dropped.
-3. **Conditional evaluation** — `@ConditionalOn` predicates are evaluated;
-   bindings that return `false` are dropped.
+3. **Conditional evaluation** — `@Conditional` and `.conditional()` conditions are
+   decided; bindings that fail them are dropped.
 4. **Scope validation** — the container checks that no binding violates the
    configured scope rules (e.g. singleton depending on transient).
 5. **Circular dependency detection** — the graph is checked for cycles.

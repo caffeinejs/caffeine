@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Lazy } from '../decorators/index.js'
 import { Inject } from '../decorators/inject.js'
@@ -276,7 +276,7 @@ describe('Hooks', function () {
 
     // 2
     @Injectable()
-    @ConditionalOn(() => false)
+    @Conditional(c => c.when(() => false))
     class NotValid {}
 
     // 3 - belongs to profile 'test'; invisible to the no-profile container below
@@ -289,7 +289,7 @@ describe('Hooks', function () {
     class Conf {
       // 5
       @Provides(token<string>(Symbol('test1')))
-      @ConditionalOn(() => false)
+      @Conditional(c => c.when(() => false))
       test1() {
         return 'test1'
       }

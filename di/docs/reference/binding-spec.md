@@ -323,14 +323,15 @@ di.bind(PaymentService, t => t.toSelf().intercept((ctx, instance) => withMetrics
 ### conditional
 
 ```ts
-conditional(fn)
+conditional(condition: Condition | readonly Condition[] | ((c: ConditionHelpers) => Condition))
 ```
 
-Activates the binding only when all predicates in `fn` return `true`.
-Predicates receive a `ConditionContext` with `container.has()`.
+Activates the binding only when every condition passes. It takes a condition built with
+[`$cond`](./conditionals.md#cond), several of them, or a callback handed the same builders, which runs
+once, when `.conditional()` is called. Anything else, a predicate included, throws `ErrInvalidBinding`.
 
 ```ts
-di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
+di.bind(RedisCacheService, t => t.toSelf().conditional(c => c.present(RedisClient)))
 ```
 
 A binding with conditions is not registered when `bind()` returns. It waits for
@@ -339,7 +340,7 @@ visible to `has()`, `entries()` or `size`, and it leaves a binding already
 registered under its key in place. That is what lets a default check for its own key:
 
 ```ts
-di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
 
 See [Defaults](../guides/conditional-bindings.md#defaults).

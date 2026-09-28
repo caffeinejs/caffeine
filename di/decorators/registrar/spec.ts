@@ -1,5 +1,5 @@
 import { Binding, newBinding } from '../../binding.js'
-import { Conditional } from '../../conditional.js'
+import type { Condition } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
@@ -14,7 +14,7 @@ export class DecoratedBindingConfig {
   #scopeID?: NamedToken<Scope>
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
-  #conditionals?: Conditional[]
+  #conditionals?: Condition[]
   #key?: InjectionToken
   #dependencies?: InjectionDescriptor[]
   #type?: Function
@@ -70,7 +70,7 @@ export class DecoratedBindingConfig {
     return this.#tags
   }
 
-  get getConditionals(): Conditional[] | undefined {
+  get getConditionals(): Condition[] | undefined {
     return this.#conditionals
   }
 
@@ -133,9 +133,9 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  conditional(conditional: Conditional): this {
-    this.#conditionals ??= new Array<Conditional>()
-    this.#conditionals.unshift(conditional)
+  conditional(condition: Condition): this {
+    this.#conditionals ??= new Array<Condition>()
+    this.#conditionals.unshift(condition)
     return this
   }
 

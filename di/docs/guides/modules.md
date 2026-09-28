@@ -70,26 +70,32 @@ await di.init()
 ## Conditional registration
 
 The preferred way to conditionally register a binding is `.conditional()` on
-the binder. The predicate receives a `ConditionContext` with access to the
-container's `has()` method, the binding key, and the binding config. It is
-evaluated once during `init()`, so the container is partially available:
+the binder. It takes a condition built with `$cond`, or a callback handed the
+same builders, and the condition is decided once during `init()`:
 
 ```ts
 import { type ContainerBindingOps } from '@caffeinejs/di'
 
 function storageModule(di: ContainerBindingOps) {
-  di.bind(BlobStorage, t => t.toClass(S3BlobStorage).conditional(ctx => ctx.container.has(AppConfig)))
+  di.bind(BlobStorage, t => t.toClass(S3BlobStorage).conditional(c => c.present(AppConfig)))
 }
 ```
 
-Conditionals can be async:
+Several conditions given at once must all pass:
+
+```ts
+import { $cond } from '@caffeinejs/di'
+
+di.bind(FeatureFlags, t =>
+  t.toClass(RemoteFeatureFlags).conditional([$cond.present(AppConfig), $cond.env('NODE_ENV', 'production')]),
+)
+```
+
+A `when` test can be async:
 
 ```ts
 di.bind(FeatureFlags, t =>
-  t.toClass(RemoteFeatureFlags).conditional(async ctx => {
-    const cfg = ctx.container.has(AppConfig)
-    return cfg && process.env.NODE_ENV === 'production'
-  }),
+  t.toClass(RemoteFeatureFlags).conditional(c => c.when(async () => (await remoteFlags()).isEnabled('remote'))),
 )
 ```
 
@@ -108,4 +114,4 @@ function storageModule(di: ContainerBindingOps) {
 
 For profile-based or decorator-driven activation, see
 [`@Profile`](../reference/decorators.md#profile) and
-[`@ConditionalOn`](../reference/decorators.md#conditionalon).
+[`@Conditional`](../reference/decorators.md#conditional).

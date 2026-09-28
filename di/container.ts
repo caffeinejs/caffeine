@@ -5,7 +5,7 @@ import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
 import { newBinding, Binding } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
-import { Conditional, ConditionContext } from './conditional.js'
+import type { Condition } from './conditional.js'
 import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import {
   getBindingConfigurations,
@@ -25,6 +25,7 @@ import {
   ErrMultiplePrimary,
   ErrInvalidContainerState,
   ErrInjectableBase,
+  ErrNoValuesProvider,
 } from './errors.js'
 import { HookListener } from './hooks.js'
 import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
@@ -34,6 +35,8 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
+import { solutions } from './internal/util/errutil/index.js'
+import { selector } from './internal/util/objects/index.js'
 import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue } from './key.js'
 import type { OnBootstrap, OnDestroy } from './lifecycle.js'
 import { MetadataReader } from './metadata_reader.js'
@@ -72,6 +75,11 @@ interface PendingBinding {
   // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
   // against the profiles of the container it came from, so only a bound one is matched here.
   byHand?: 'bind' | 'restore'
+}
+
+// Read through globalThis, so di carries no host binding: where the runtime has no process.env, every variable is unset.
+function hostEnv(): Record<string, string | undefined> | undefined {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
 }
 
 /**
@@ -681,10 +689,11 @@ export class CaffeineIoC implements Container {
 
   /**
    * Registers a values provider under the well-known internal key, making it available for
-   * `$i.config` injections throughout the container.
+   * `$i.value` injections throughout the container.
    *
-   * Syntax sugar for `bind(kValuesProvider)` — returns a {@link Binder} so the caller can
-   * choose any factory strategy and lifetime.
+   * Syntax sugar for `bind(kValuesProvider)`, so the caller can choose any factory strategy and lifetime. A
+   * `$cond.config` condition reads the provider before the container compiles, so it needs one bound with `toValue()`,
+   * or with `toFactory()` and no injections.
    *
    * @example
    * ```ts
@@ -1877,9 +1886,8 @@ export class CaffeineIoC implements Container {
    * Registers a binding made by hand, or holds it back until {@link compile} when it carries conditions.
    *
    * Held back, it is decided with the decorated bindings: its conditions never see the binding itself, and a binding
-   * already registered under its key stays until they pass. A default bound with
-   * `.conditional(ctx => !ctx.container.has(key))` relies on both. Binding the key again discards it, the way it would
-   * replace a registered binding.
+   * already registered under its key stays until they pass. A default bound with `.conditional(c => c.missing(key))`
+   * relies on both. Binding the key again discards it, the way it would replace a registered binding.
    */
   private registerOrHold(key: InjectionToken, binding: Binding, by: 'bind' | 'restore' = 'bind'): void {
     const held = this._pendingConditionals.findIndex(e => e.byHand !== undefined && e.key === key)
@@ -1895,9 +1903,10 @@ export class CaffeineIoC implements Container {
     this.configureBinding(key, binding, by === 'bind')
   }
 
-  private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
-    for (const c of conditionals) {
-      if (!(await c(ctx))) {
+  // Decides the conditions of a binding in order, stopping at the first that fails.
+  private async passes(key: InjectionToken, binding: Binding): Promise<boolean> {
+    for (const condition of binding.conditionals) {
+      if (!(await this.decide(key, binding, condition))) {
         return false
       }
     }
@@ -1905,11 +1914,60 @@ export class CaffeineIoC implements Container {
     return true
   }
 
+  private async decide(key: InjectionToken, binding: Binding, condition: Condition): Promise<boolean> {
+    switch (condition.kind) {
+      case 'present':
+        return this.answered(condition.key, binding)
+      case 'missing':
+        return !this.answered(condition.key, binding)
+      case 'config':
+        return selector(condition.access)(this.readValuesProvider(key)) === condition.expected
+      case 'env': {
+        const value = hostEnv()?.[condition.name]
+
+        return condition.expected === undefined ? value !== undefined && value !== '' : value === condition.expected
+      }
+      case 'when':
+        return Boolean(await condition.test())
+      default:
+        throw new ErrInvalidBinding(
+          `Cannot decide the conditions of "${keyStr(key)}": one of them is not a condition` +
+            solutions(`Build conditions with $cond, e.g. $cond.when(() => ...)`),
+        )
+    }
+  }
+
+  // Whether a binding other than the one being decided answers to the key, so a condition never sees its own binding.
+  private answered(key: InjectionToken, self: Binding): boolean {
+    return this.getBindings(key).some(b => b.id !== self.id)
+  }
+
+  // A config condition reads the values provider before the container has compiled, so only through a factory that
+  // needs nothing compile() builds.
+  private readValuesProvider(key: InjectionToken): unknown {
+    const provider = this.getBinding(Keys.kValuesProvider)
+    if (provider === undefined) {
+      throw new ErrNoValuesProvider(`Read by the config condition of "${keyStr(key)}"`)
+    }
+
+    if (
+      typeof provider.factory !== 'function' ||
+      provider.type !== undefined ||
+      provider.factoryCreator !== undefined ||
+      provider.async === true ||
+      provider.injections.length > 0
+    ) {
+      throw new ErrInvalidBinding(
+        `Cannot decide the config condition of "${keyStr(key)}": the values provider cannot be read before init()` +
+          solutions(`Bind the values provider with toValue(), or with toFactory() and no injections`),
+      )
+    }
+
+    return provider.factory({ container: this, key: Keys.kValuesProvider, binding: provider })
+  }
+
   private async evaluatePendingConditionals(): Promise<void> {
     const justRegistered = new Set<number>()
-
-    const evalAll = (conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> =>
-      this.evalConditionals(conditionals, ctx)
 
     const registerEntry = (key: InjectionToken, binding: Binding): void => {
       this.configureBinding(key, binding)
@@ -1926,8 +1984,7 @@ export class CaffeineIoC implements Container {
       }
 
       const binding = entry.binding
-      const ctx: ConditionContext = { container: this, key: entry.key, binding }
-      const pass = await evalAll(binding.conditionals, ctx)
+      const pass = await this.passes(entry.key, binding)
 
       if (pass) {
         registerEntry(entry.key, binding)
@@ -1943,8 +2000,7 @@ export class CaffeineIoC implements Container {
           }
 
           const providedBinding = provided.binding
-          const pCtx: ConditionContext = { container: this, key: provided.key, binding: providedBinding }
-          const pPass = await evalAll(providedBinding.conditionals, pCtx)
+          const pPass = await this.passes(provided.key, providedBinding)
 
           if (pPass) {
             registerEntry(provided.key, providedBinding)
@@ -1978,10 +2034,8 @@ export class CaffeineIoC implements Container {
       }
 
       const binding = entry.binding
-      const ctx: ConditionContext = { container: this, key: entry.key, binding }
       // One bound by hand never entered the profile queue, so its profiles are matched here.
-      const pass =
-        (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await evalAll(binding.conditionals, ctx))
+      const pass = (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await this.passes(entry.key, binding))
 
       if (pass) {
         registerEntry(entry.key, binding)
@@ -1998,12 +2052,7 @@ export class CaffeineIoC implements Container {
         continue
       }
 
-      const ctx: ConditionContext = {
-        container: this,
-        key,
-        binding: binding as unknown as Binding,
-      }
-      const pass = await evalAll(binding.conditionals, ctx)
+      const pass = await this.passes(key, binding as unknown as Binding)
       if (!pass) {
         toUnref.push(key)
       }

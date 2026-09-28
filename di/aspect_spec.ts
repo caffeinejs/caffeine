@@ -10,7 +10,7 @@ import { BindingSpec } from './binding_spec.js'
  * container.aspect(LoggingAspect, t => t
  *   .toSelf()
  *   .pointcuts($aop.forClass(UserService, 'findUser'))
- *   .conditional(ctx => process.env.NODE_ENV === 'production')
+ *   .conditional(c => c.env('NODE_ENV', 'production'))
  *   .order(1))
  * ```
  */

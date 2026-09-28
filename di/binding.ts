@@ -1,4 +1,4 @@
-import { Conditional } from './conditional.js'
+import type { Condition } from './conditional.js'
 import { ContainerOps } from './container_interface.js'
 import { Factory, AsyncFactory, FactoryCreator } from './factory.js'
 import { InjectionDescriptor } from './injection.js'
@@ -95,7 +95,7 @@ export interface Binding<T = any> {
   /**
    * The conditionals for this binding to be evaluated against.
    */
-  conditionals: Conditional[]
+  conditionals: Condition[]
 
   /**
    * The configuration class that generated this binding.

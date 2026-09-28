@@ -6,6 +6,7 @@ import { Identifier, keyStr, TypedKey } from '../../../key.js'
 import type { Provider } from '../../../provider.js'
 import { Keys } from '../../../symbols.js'
 import { solutions } from '../../util/errutil/index.js'
+import { selector } from '../../util/objects/index.js'
 import { excludeSelf, uniqueBindingOrThrow } from './_binding_util.js'
 import { describeContext } from './_fmt.js'
 
@@ -125,15 +126,7 @@ export const configStage: InjectionMiddleware = (ctx, _next, args) => {
     return () => undefined
   }
 
-  const select: (provider: unknown) => unknown =
-    typeof access === 'string'
-      ? (() => {
-          const keys = access.split('.')
-
-          return (provider: unknown) =>
-            keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), provider)
-        })()
-      : (access as (provider: unknown) => unknown)
+  const select = selector(access)
 
   return () => {
     const v = select(providerBinding.factory(providerBinding.ctx!))

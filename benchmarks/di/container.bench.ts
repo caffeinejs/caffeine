@@ -3,7 +3,7 @@
 import {
   $i,
   CaffeineIoC,
-  ConditionalOn,
+  Conditional,
   Configuration,
   Extends,
   Inject,
@@ -75,7 +75,7 @@ class Act1 extends Act {
 }
 
 @Injectable()
-@ConditionalOn(() => false)
+@Conditional(c => c.when(() => false))
 class Maybe {}
 
 const kLog = token<Logger>(Symbol('log'))

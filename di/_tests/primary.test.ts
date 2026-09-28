@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -74,7 +74,7 @@ describe('@Primary', function () {
     @Injectable()
     @Named(kActive)
     @Primary()
-    @ConditionalOn(() => false)
+    @Conditional(c => c.when(() => false))
     @Profile('conditional-primary')
     class Excluded {
       name() {
