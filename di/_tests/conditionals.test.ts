@@ -503,6 +503,120 @@ describe('Conditionals', function () {
     it('should refuse two unconditional @Provides of one key beside a conditional class providing it', function () {
       expect(() => new CaffeineIoC({ profiles: ['provides-twice'] })).toThrow(ErrRepeatedInjectableConfiguration)
     })
+
+    // A @Provides keyed by a configuration class provides a binding of that key; it is not the class. Its passing must
+    // not let the @Provides of the class through: GatedConf waits for the gate, and fails.
+    it('should skip the @Provides of a failing class when a @Provides of the class key passed', async function () {
+      const kGate = token<string>(Symbol('class-key-gate'))
+      const kValue = token<string>(Symbol('class-key-value'))
+
+      @Configuration()
+      @Conditional(c => c.present(kGate))
+      @Profile('provides-class-key')
+      class GatedConf {
+        @Provides(kValue)
+        value(): string {
+          return 'gated'
+        }
+      }
+
+      @Configuration()
+      @Conditional(c => c.when(() => true))
+      @Profile('provides-class-key')
+      class ClassKeyConf {
+        @Provides(GatedConf)
+        gated(): GatedConf {
+          return new GatedConf()
+        }
+      }
+      void ClassKeyConf
+
+      const di = new CaffeineIoC({ profiles: ['provides-class-key'] })
+      di.bind(kGate, t => t.toValue('gate').conditional(c => c.when(() => false)))
+      await di.init()
+
+      expect(di.has(kValue)).toBe(false)
+    })
+
+    // A conditional @Provides of an unconditional class is decided with the configuration classes, but it is not one.
+    // Keyed by a held class, it must not take that class's @Provides as its own.
+    it('should decide the @Provides of a class once, by that class, when a conditional @Provides of another class provides the class key', async function () {
+      const kGate = token<string>(Symbol('class-key-late-gate'))
+      const kValue = token<string>(Symbol('class-key-late-value'))
+
+      @Configuration()
+      @Conditional(c => c.present(kGate))
+      @Profile('provides-class-key-late')
+      class LateGatedConf {
+        @Provides(kValue)
+        value(): string {
+          return 'gated'
+        }
+      }
+
+      @Configuration()
+      @Profile('provides-class-key-late')
+      class ClassKeyProvider {
+        @Provides(LateGatedConf)
+        @Conditional(c => c.when(() => false))
+        gated(): LateGatedConf {
+          return new LateGatedConf()
+        }
+      }
+      void ClassKeyProvider
+
+      const decisions: string[] = []
+      const di = new CaffeineIoC({ profiles: ['provides-class-key-late'] })
+      di.hooks.on('onBindingRegistered', ({ key }) => {
+        if (key === kValue) {
+          decisions.push('registered')
+        }
+      })
+      di.hooks.on('onBindingNotRegistered', ({ key }) => {
+        if (key === kValue) {
+          decisions.push('not registered')
+        }
+      })
+      di.bind(kGate, t => t.toValue('gate').conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kValue)).toBe('gated')
+      expect(decisions).toEqual(['registered'])
+    })
+
+    // Only the class itself goes without waiting for its own @Provides. A @Provides keyed by the class still waits for
+    // the ones it checks: decided first, this fallback would register beside WaitedConf and clash with it.
+    it('should let a @Provides keyed by a held class wait for the @Provides of that class it checks', async function () {
+      const kGate = token<string>(Symbol('class-key-wait-gate'))
+      const kValue = token<string>(Symbol('class-key-wait-value'))
+
+      @Configuration()
+      @Conditional(c => c.present(kGate))
+      @Profile('provides-class-key-wait')
+      class WaitedConf {
+        @Provides(kValue)
+        value(): string {
+          return 'waited'
+        }
+      }
+
+      @Configuration()
+      @Profile('provides-class-key-wait')
+      class FallbackProvider {
+        @Provides(WaitedConf)
+        @Conditional(c => c.missing(kValue))
+        fallback(): WaitedConf {
+          return new WaitedConf()
+        }
+      }
+      void FallbackProvider
+
+      const di = new CaffeineIoC({ profiles: ['provides-class-key-wait'] })
+      di.bind(kGate, t => t.toValue('gate').conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kValue)).toBe('waited')
+    })
   })
 
   // A present or missing condition is decided after every held binding answering to the key it checks, so a default

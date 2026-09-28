@@ -15,6 +15,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A `present` / `missing` condition waits for every held binding answering to its key, and a `config` one for a held
   values provider (`decisionOrder`, `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at
   its earliest binding and no decision is revisited: `init()` never fails because of a cycle.
+- Tell a `@Configuration` class from its `@Provides` with `isConfigurationClass` (`binding.ts`): a `@Provides` binding
+  carries `configuration` too, and only the class has no `source`.
 - Profiles are not a condition kind. The active profile set only grows before compile, which is what lets a profiled
   binding register in the constructor; deciding profiles with the conditions would move that visibility and its
   errors to `init()`.

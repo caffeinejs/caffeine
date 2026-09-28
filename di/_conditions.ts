@@ -1,4 +1,4 @@
-import type { Binding } from './binding.js'
+import { isConfigurationClass, type Binding } from './binding.js'
 import type { Condition } from './conditional.js'
 import type { ContainerOps } from './container_interface.js'
 import { ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
@@ -19,6 +19,11 @@ export interface Held {
 // A decorated configuration held for its conditions, or a conditional @Provides of one that is not: decided first.
 function isHeldConfiguration(entry: Held): boolean {
   return entry.byHand === undefined && entry.providedByConfig === undefined && entry.binding!.configuration === true
+}
+
+// A decorated configuration class held for its conditions: its own @Provides go after it, and only once it passed.
+export function isHeldClass(entry: Held): boolean {
+  return isHeldConfiguration(entry) && isConfigurationClass(entry.binding!)
 }
 
 // Adds `value` to the list `map` holds under `key`.
@@ -58,8 +63,9 @@ function keysChecked(binding: Binding): InjectionToken[] {
   return keys
 }
 
-// The order conditions were always decided in: each conditional configuration class followed by its own @Provides,
-// then every other held binding in the order it was held. A @Provides whose class is not held is left out.
+// The order conditions were always decided in: the conditional configuration classes, each followed by its own
+// @Provides, and the conditional @Provides of unconditional classes, then every other held binding in the order it was
+// held. A @Provides whose class is not held is left out.
 function baseOrder<E extends Held>(pending: readonly E[]): E[] {
   const held = pending.filter(e => !e.profileRejected && e.binding !== undefined)
   const provided = new Map<InjectionToken, E[]>()
@@ -73,8 +79,10 @@ function baseOrder<E extends Held>(pending: readonly E[]): E[] {
   const order: E[] = []
 
   for (const entry of held) {
-    if (isHeldConfiguration(entry)) {
+    if (isHeldClass(entry)) {
       order.push(entry, ...(provided.get(entry.key) ?? []))
+    } else if (isHeldConfiguration(entry)) {
+      order.push(entry)
     }
   }
 
@@ -99,16 +107,17 @@ function waitsOf(order: readonly Held[]): number[][] {
       append(answering, key, i)
     }
 
-    if (isHeldConfiguration(order[i])) {
+    if (isHeldClass(order[i])) {
       classAt.set(order[i].key, i)
     }
   }
 
   return order.map((entry, i) => {
     const own = entry.providedByConfig === undefined ? undefined : classAt.get(entry.providedByConfig)
+    const isClass = isHeldClass(entry)
     const checked = keysChecked(entry.binding!)
       .flatMap(key => answering.get(key) ?? [])
-      .filter(j => j !== i && order[j].providedByConfig !== entry.key)
+      .filter(j => j !== i && !(isClass && order[j].providedByConfig === entry.key))
       .sort((a, b) => a - b)
 
     return [...new Set(own === undefined ? checked : [own, ...checked])]

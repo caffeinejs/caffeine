@@ -234,6 +234,15 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
 }
 
 /**
+ * Whether the binding is a `@Configuration` class.
+ *
+ * A `@Provides` binding carries `configuration` too; only the class has no `source`.
+ */
+export function isConfigurationClass(binding: Binding): boolean {
+  return binding.configuration === true && binding.source === undefined
+}
+
+/**
  * The bindings an injection receives out of the candidates answering to its key.
  *
  * A collecting injection receives every candidate but `own`, the consumer's own bindings, which it would otherwise

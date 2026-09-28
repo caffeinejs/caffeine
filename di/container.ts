@@ -1,10 +1,10 @@
 import './_polyfill.js'
 import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
-import { decisionOrder, passes } from './_conditions.js'
+import { decisionOrder, isHeldClass, passes } from './_conditions.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
-import { newBinding, Binding } from './binding.js'
+import { isConfigurationClass, newBinding, Binding } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import {
@@ -1451,7 +1451,7 @@ export class CaffeineIoC implements Container {
       return entry.config.isConfiguration === true && entry.config.getSource === undefined
     }
 
-    return entry.binding?.configuration === true && entry.binding.source === undefined
+    return entry.binding !== undefined && isConfigurationClass(entry.binding)
   }
 
   private entryMatchesProfiles(entry: PendingBinding): boolean {
@@ -1975,7 +1975,7 @@ export class CaffeineIoC implements Container {
 
         if (pass) {
           justRegistered.add(this.registerDecided(entry, binding, decoratedIDs))
-          if (entry.byHand === undefined) {
+          if (isHeldClass(entry)) {
             passed.add(entry.key)
           }
 
