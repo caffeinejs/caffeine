@@ -1,6 +1,7 @@
 import './_polyfill.js'
 import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
+import { decisionOrder } from './_conditions.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
 import { newBinding, Binding } from './binding.js'
@@ -75,6 +76,8 @@ interface PendingBinding {
   // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
   // against the profiles of the container it came from, so only a bound one is matched here.
   byHand?: 'bind' | 'restore'
+  // Taken out of the queue, possibly while conditions are decided, which then skip it.
+  discarded?: boolean
 }
 
 // Read through globalThis, so di carries no host binding: where the runtime has no process.env, every variable is unset.
@@ -733,7 +736,7 @@ export class CaffeineIoC implements Container {
     this.bindings.delete(key)
     this.bindingMembers.delete(key)
 
-    this._pendingConditionals = this._pendingConditionals.filter(e => e.key !== key)
+    this.discardHeld(e => e.key === key)
     this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
     this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
     this._pendingManualProfileKeys.delete(key)
@@ -869,7 +872,7 @@ export class CaffeineIoC implements Container {
 
     for (const [key, binding] of snap.entries()) {
       if (binding.conditionals.length > 0) {
-        this._pendingConditionals = this._pendingConditionals.filter(e => e.byHand !== undefined || e.key !== key)
+        this.discardHeld(e => e.byHand === undefined && e.key === key)
         this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
         this._pendingConfigKeys.delete(key)
       }
@@ -1883,6 +1886,18 @@ export class CaffeineIoC implements Container {
     return result.length === entries.length ? result : entries
   }
 
+  // Takes the held bindings that match out of the queue. One taken out while conditions are decided is skipped.
+  private discardHeld(match: (entry: PendingBinding) => boolean): void {
+    this._pendingConditionals = this._pendingConditionals.filter(entry => {
+      if (!match(entry)) {
+        return true
+      }
+
+      entry.discarded = true
+      return false
+    })
+  }
+
   /**
    * Registers a binding made by hand, or holds it back until {@link compile} when it carries conditions.
    *
@@ -1891,10 +1906,7 @@ export class CaffeineIoC implements Container {
    * relies on both. Binding the key again discards it, the way it would replace a registered binding.
    */
   private registerOrHold(key: InjectionToken, binding: Binding, by: 'bind' | 'restore' = 'bind'): void {
-    const held = this._pendingConditionals.findIndex(e => e.byHand !== undefined && e.key === key)
-    if (held !== -1) {
-      this._pendingConditionals.splice(held, 1)
-    }
+    this.discardHeld(e => e.byHand !== undefined && e.key === key)
 
     if (binding.conditionals.length > 0) {
       this._pendingConditionals.push({ key, binding, byHand: by })
@@ -1998,6 +2010,9 @@ export class CaffeineIoC implements Container {
   private async evaluatePendingConditionals(): Promise<void> {
     const justRegistered = new Set<number>()
     const decoratedIDs = new Set<number>()
+    // The configuration classes that passed: only their own @Provides are decided.
+    const passed = new Set<InjectionToken>()
+    const decided = new Set<PendingBinding>()
 
     for (const entry of this._pendingConditionals) {
       if (entry.byHand === undefined && entry.binding !== undefined) {
@@ -2005,78 +2020,39 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const registerEntry = (entry: PendingBinding, binding: Binding): void => {
-      justRegistered.add(this.registerDecided(entry, binding, decoratedIDs))
-    }
+    // A condition may bind while it is decided. What that holds is decided in a round of its own, after this one.
+    for (
+      let order = decisionOrder(this._pendingConditionals);
+      order.length > 0;
+      order = decisionOrder(this._pendingConditionals.filter(e => !decided.has(e)))
+    ) {
+      for (const entry of order) {
+        decided.add(entry)
 
-    for (const entry of this._pendingConditionals) {
-      if (entry.profileRejected || entry.binding === undefined) {
-        continue
-      }
-
-      if (!entry.binding.configuration || entry.byHand !== undefined || entry.providedByConfig !== undefined) {
-        continue
-      }
-
-      const binding = entry.binding
-      const pass = await this.passes(entry.key, binding)
-
-      if (pass) {
-        registerEntry(entry, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-
-        for (const provided of this._pendingConditionals) {
-          if (provided.profileRejected || provided.binding === undefined) {
-            continue
-          }
-
-          if (provided.providedByConfig !== entry.key) {
-            continue
-          }
-
-          const providedBinding = provided.binding
-          const pPass = await this.passes(provided.key, providedBinding)
-
-          if (pPass) {
-            registerEntry(provided, providedBinding)
-            this.hooks.emit('onBindingRegistered', { key: provided.key, binding: providedBinding })
-          } else {
-            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: providedBinding })
-          }
+        if (entry.discarded) {
+          continue
         }
-      } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
 
-        for (const provided of this._pendingConditionals) {
-          if (provided.profileRejected || provided.binding === undefined) {
-            continue
-          }
+        const binding = entry.binding!
 
-          if (provided.providedByConfig === entry.key) {
-            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: provided.binding })
-          }
+        if (entry.providedByConfig !== undefined && !passed.has(entry.providedByConfig)) {
+          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+          continue
         }
-      }
-    }
 
-    for (const entry of this._pendingConditionals) {
-      if (entry.profileRejected || entry.binding === undefined) {
-        continue
-      }
+        // One bound by hand never entered the profile queue, so its profiles are matched here.
+        const pass = (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await this.passes(entry.key, binding))
 
-      if ((entry.binding.configuration && entry.byHand === undefined) || entry.providedByConfig !== undefined) {
-        continue
-      }
+        if (pass) {
+          justRegistered.add(this.registerDecided(entry, binding, decoratedIDs))
+          if (entry.byHand === undefined) {
+            passed.add(entry.key)
+          }
 
-      const binding = entry.binding
-      // One bound by hand never entered the profile queue, so its profiles are matched here.
-      const pass = (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await this.passes(entry.key, binding))
-
-      if (pass) {
-        registerEntry(entry, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-      } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+          this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
+        } else {
+          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+        }
       }
     }
 

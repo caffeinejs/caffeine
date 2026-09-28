@@ -45,10 +45,17 @@ The callback runs once, when the class is decorated, and must return a condition
 condition.
 
 Decision order: every binding without conditions is registered first — by hand, by a module or by decorators.
-Bindings with conditions are then decided one at a time during `init()`: decorated `@Configuration` classes first,
-then the other decorated bindings in the order they were declared, then the ones bound by hand in the order they
-were bound. So `present` and `missing` see every unconditional binding, but a conditional one only once it has been
-decided.
+Bindings with conditions are then decided one at a time during `init()`. A `present` or `missing` condition waits for
+every other binding held for its conditions that answers to its key — registered under it, named after it, or
+extending it — and a `config` condition waits for a held values provider. Otherwise the order is the order of
+declaration: decorated `@Configuration` classes first, each followed by its own `@Provides`, then the other decorated
+bindings in the order they were declared, then the ones bound by hand in the order they were bound. So `present` and
+`missing` see every binding that could answer to their key, conditional ones included.
+
+Two bindings can wait for each other, as two defaults of one key do. Such a cycle is decided in declaration order: the
+first binding on it is decided as if the others were absent, and no decision is revisited. Two defaults of one key
+settle that way. A cycle of `missing` conditions across different keys can leave a binding registered whose condition
+no longer holds, so keep such conditions from depending on each other.
 
 :::warning
 A binding that fails its condition is completely absent from the container. Any
@@ -387,13 +394,12 @@ from its configuration step:
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
 
-It yields to every binding of `Cache` without conditions, whether bound by hand before or
-after it, by a module or by decorators. It also yields to every conditional one decided
-before it. It cannot see a conditional one decided after it, such as a decorated class
-declared later: that one registers too, and resolving `Cache` fails with
-`ErrNoUniqueInjectionForKey`. When the replacement is conditional, give the default the
-complementary condition, as `MockPaymentGateway` does above. Or keep the default
-unconditional and mark the replacement `@Primary`:
+It yields to every other binding of `Cache`, with conditions or without, whether bound by hand
+before or after it, by a module or by decorators: its condition is decided after every binding
+that answers to `Cache`. When the replacement's own condition fails, the default registers. Of
+two defaults of one key, the first declared registers and the other yields to it.
+
+A default can also stay unconditional, with the replacement marked `@Primary`:
 
 ```ts
 @Primary()

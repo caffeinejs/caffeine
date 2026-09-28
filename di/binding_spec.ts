@@ -533,7 +533,8 @@ export class BindingSpec<TValue, K = unknown> {
    * Registers this binding only when the condition passes, or every one of them when given several.
    *
    * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
-   * decorated bindings. Its conditions therefore never see the binding itself, and a binding already registered under
+   * decorated bindings, and a `present` or `missing` condition after every binding answering to its key. Its
+   * conditions therefore never see the binding itself, and a binding already registered under
    * the key stays unless they pass — which is what lets `c.missing(key)` make it a default. It never replaces a
    * decorated binding that passed its own conditions: `init()` throws `ErrRepeatedInjectableConfiguration` instead.
    *

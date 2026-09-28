@@ -63,4 +63,30 @@ describe('the PasswordHasher addCredentials() provides', () => {
 
     await app.close()
   })
+
+  // The module's hasher is conditional and is decided after the default the feature bound, so the default must wait for
+  // it rather than register beside it and leave PasswordHasher with two candidates.
+  it('is the one a module binds conditionally under its own key', async () => {
+    class OwnHasher extends ScryptPasswordHasher {}
+
+    const container = new CaffeineIoC({
+      modules: [
+        mod('hasher', c =>
+          c.bind(OwnHasher, t =>
+            t
+              .toSelf()
+              .extends(PasswordHasher)
+              .conditional(cond => cond.when(() => true)),
+          ),
+        ),
+      ],
+    })
+
+    const app = credentialsApp(container)
+    await app.bootstrap()
+
+    expect(app.container.get(PasswordHasher)).toBeInstanceOf(OwnHasher)
+
+    await app.close()
+  })
 })

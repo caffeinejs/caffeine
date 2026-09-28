@@ -12,6 +12,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A binding decided at `compile()` never silently replaces another of its key: a decorated one meeting any
   registration, or one made by hand meeting a decorated one decided there, throws
   `ErrRepeatedInjectableConfiguration`. Compare binding ids, not objects: `configureBinding` registers a copy.
+- A `present` / `missing` condition waits for every held binding answering to its key, and a `config` one for a held
+  values provider (`decisionOrder`, `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at
+  its earliest binding and no decision is revisited: `init()` never fails because of a cycle.
 - Profiles are not a condition kind. The active profile set only grows before compile, which is what lets a profiled
   binding register in the constructor; deciding profiles with the conditions would move that visibility and its
   errors to `init()`.

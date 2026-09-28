@@ -505,6 +505,264 @@ describe('Conditionals', function () {
     })
   })
 
+  // A present or missing condition is decided after every held binding answering to the key it checks, so a default
+  // yields to a conditional competitor however the two were declared. Decided in declaration order, a default saw
+  // only the competitors decided before it, registered next to a later one, and resolving the key failed.
+  describe('decision order', function () {
+    abstract class Store {
+      abstract kind(): string
+    }
+
+    @Conditional(c => c.missing(Store))
+    @Injectable()
+    @Extends()
+    @Profile('order-decorated')
+    class DecoratedDefault extends Store {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    @Conditional(c => c.when(() => true))
+    @Injectable()
+    @Extends()
+    @Profile('order-decorated')
+    class DecoratedCompetitor extends Store {
+      kind(): string {
+        return 'redis'
+      }
+    }
+
+    @Conditional(c => c.missing(Store))
+    @Injectable()
+    @Extends()
+    @Profile('order-hand-competitor')
+    class DecoratedDefaultBeforeHand extends Store {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    class HandDefault extends Store {
+      kind(): string {
+        return 'memory'
+      }
+    }
+
+    class HandCompetitor extends Store {
+      kind(): string {
+        return 'redis'
+      }
+    }
+
+    class OtherDefault extends Store {
+      kind(): string {
+        return 'other'
+      }
+    }
+
+    void [DecoratedDefault, DecoratedCompetitor, DecoratedDefaultBeforeHand]
+
+    const bindDefault = (di: CaffeineIoC, cls: new () => Store = HandDefault) =>
+      di.bind(cls, t =>
+        t
+          .toSelf()
+          .extends(Store)
+          .conditional(c => c.missing(Store)),
+      )
+    const bindCompetitor = (di: CaffeineIoC, passes = true) =>
+      di.bind(HandCompetitor, t =>
+        t
+          .toSelf()
+          .extends(Store)
+          .conditional(c => c.when(() => passes)),
+      )
+
+    it('should let a decorated default yield to a conditional decorated class declared after it', async function () {
+      const di = new CaffeineIoC({ profiles: ['order-decorated'] })
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['redis'])
+    })
+
+    it('should let a decorated default yield to a conditional binding made by hand', async function () {
+      const di = new CaffeineIoC({ profiles: ['order-hand-competitor'] })
+      bindCompetitor(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['redis'])
+    })
+
+    it('should let a default bound by hand yield to a conditional binding bound after it', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      bindDefault(di)
+      bindCompetitor(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['redis'])
+    })
+
+    it('should register a default when its conditional competitor fails', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      bindDefault(di)
+      bindCompetitor(di, false)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['memory'])
+    })
+
+    // Two defaults of one key wait for each other. The cycle is decided in declaration order: the first registers,
+    // and the second sees it and yields.
+    it('should register only the first declared of two defaults of one key', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      bindDefault(di, OtherDefault)
+      bindDefault(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['other'])
+    })
+
+    // Stats waits on the two defaults, which wait on each other. Forcing the earliest undecided binding would decide
+    // Stats first, before any Store exists; the cycle is what gets broken, and Stats is decided after it.
+    it('should decide a binding waiting on a cycle after the cycle', async function () {
+      class Stats {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Stats, t => t.toSelf().conditional(c => c.present(Store)))
+      bindDefault(di, OtherDefault)
+      bindDefault(di)
+      await di.init()
+
+      expect(di.has(Stats)).toBe(true)
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['other'])
+    })
+
+    it('should decide a @Provides after the held binding its condition checks', async function () {
+      const kReport = token<string>(Symbol('order-report'))
+
+      class Metrics {}
+
+      @Configuration()
+      @Profile('order-provides')
+      class ReportConf {
+        @Provides(kReport)
+        @Conditional(c => c.present(Metrics))
+        report(): string {
+          return 'report'
+        }
+      }
+      void ReportConf
+
+      const di = new CaffeineIoC({ profiles: ['order-provides'] })
+      di.bind(Metrics, t => t.toSelf().conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kReport)).toBe('report')
+    })
+
+    // A class whose condition checks a key it provides is a default for that key: it waits for every other binding
+    // answering to the key, but never for its own @Provides.
+    it('should let a configuration class providing a key it checks yield to a competitor of that key', async function () {
+      const kSource = token<string>(Symbol('order-source'))
+
+      @Configuration()
+      @Conditional(c => c.missing(kSource))
+      @Profile('order-autoconfig')
+      class DefaultSourceConf {
+        @Provides(kSource)
+        source(): string {
+          return 'default'
+        }
+      }
+
+      const di = new CaffeineIoC({ profiles: ['order-autoconfig'] })
+      di.bind(kSource, t => t.toValue('application').conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kSource)).toBe('application')
+      expect(di.has(DefaultSourceConf)).toBe(false)
+    })
+
+    // Waiting on its own @Provides, the class would form a cycle with it and be decided there, before a competitor that
+    // still waits on a cycle of its own.
+    it('should let a configuration class yield to a competitor waiting on another cycle', async function () {
+      const kSource = token<string>(Symbol('order-cycle-source'))
+      const kA = token<string>(Symbol('order-cycle-a'))
+      const kB = token<string>(Symbol('order-cycle-b'))
+
+      @Configuration()
+      @Conditional(c => c.missing(kSource))
+      @Profile('order-autoconfig-cycle')
+      class CycleDefaultSourceConf {
+        @Provides(kSource)
+        source(): string {
+          return 'default'
+        }
+      }
+
+      const di = new CaffeineIoC({ profiles: ['order-autoconfig-cycle'] })
+      di.bind(kSource, t => t.toValue('application').conditional(c => c.present(kB)))
+      di.bind(kB, t => t.toValue('b').conditional(c => c.missing(kA)))
+      di.bind(kA, t => t.toValue('a').conditional(c => c.missing(kB)))
+      await di.init()
+
+      expect(di.get(kSource)).toBe('application')
+      expect(di.has(CycleDefaultSourceConf)).toBe(false)
+    })
+
+    // A config condition reads the values provider, so it waits for a provider still held for its own conditions.
+    it('should decide a config condition after a values provider held for its conditions', async function () {
+      class Cached {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Cached, t => t.toSelf().conditional(c => c.config('cache.enabled')))
+      di.bindValuesProvider(t => t.toValue({ cache: { enabled: true } }).conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.has(Cached)).toBe(true)
+    })
+
+    it('should decide a conditional binding made while conditions are decided', async function () {
+      class Trigger {}
+      class Late {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Trigger, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            di.bind(Late, l => l.toSelf().conditional(lc => lc.when(() => true)))
+            return true
+          }),
+        ),
+      )
+      await di.init()
+
+      expect(di.has(Late)).toBe(true)
+    })
+
+    // Binding a key again discards a held binding of it, even while conditions are decided: the discarded one must not
+    // come back and replace the binding that discarded it.
+    it('should not decide a held binding discarded while conditions are decided', async function () {
+      const kHeld = token<string>(Symbol('order-discarded'))
+
+      class Trigger {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Trigger, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            di.bind(kHeld, h => h.toValue('replacement'))
+            return true
+          }),
+        ),
+      )
+      di.bind(kHeld, t => t.toValue('discarded').conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kHeld)).toBe('replacement')
+    })
+  })
+
   describe('using on configuration class', function () {
     describe('and using the decorator on class level', function () {
       const spy1 = vi.fn()

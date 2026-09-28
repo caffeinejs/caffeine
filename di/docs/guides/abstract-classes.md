@@ -248,10 +248,9 @@ class RedisCache extends CacheStore {
 When `RedisClient` is bound, `RedisCache` is registered and wins as `@Primary`.
 When absent, the container falls back to `InMemoryCache`.
 
-Every binding without conditions is registered before any condition is decided, so
-`c.present(RedisClient)` sees `RedisClient` whether it was bound by hand, by a module or by
-decorators. A conditional binding is visible only once it has been decided — see
-[Conditionals](./conditional-bindings.md#how-conditional-works).
+`c.present(RedisClient)` is decided after every binding that answers to `RedisClient`,
+whether it was bound by hand, by a module or by decorators, with conditions of its own or
+without — see [Conditionals](./conditional-bindings.md#how-conditional-works).
 
 ---
 

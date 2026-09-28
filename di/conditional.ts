@@ -19,7 +19,8 @@ export type Condition =
 /**
  * Passes when a binding answers to `key`: one registered under it, one named after it, or one extending it.
  *
- * The binding being decided never counts, so a binding cannot satisfy its own condition.
+ * It is decided after every other binding held for its conditions that answers to `key`, and the binding being
+ * decided never counts, so a binding cannot satisfy its own condition.
  */
 function present(key: InjectionToken): Condition {
   if (key == null) {
@@ -32,8 +33,9 @@ function present(key: InjectionToken): Condition {
 /**
  * Passes when no binding answers to `key`.
  *
- * The binding being decided never counts, so a binding with this condition on its own key is a default: it
- * registers only when nothing else answers to the key.
+ * It is decided after every other binding held for its conditions that answers to `key`, and the binding being
+ * decided never counts, so a binding with this condition on its own key is a default: it registers only when nothing
+ * else answers to the key, whichever order the two were declared in.
  */
 function missing(key: InjectionToken): Condition {
   if (key == null) {
@@ -84,7 +86,8 @@ function env(name: string, expected?: string): Condition {
 /**
  * Passes when `test` returns `true`. It may be async.
  *
- * `test` is handed nothing: whether a key is bound is asked with `present` or `missing`.
+ * `test` is handed nothing: whether a key is bound is asked with `present` or `missing`, which the container decides
+ * after the bindings answering to that key.
  */
 function when(test: () => boolean | Promise<boolean>): Condition {
   if (typeof test !== 'function') {
