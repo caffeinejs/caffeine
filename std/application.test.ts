@@ -549,9 +549,11 @@ describe('application name and profiles', () => {
     vi.unstubAllEnvs()
   })
 
-  @Injectable()
-  @Profile('eu')
   class EuOnly {}
+
+  @Injectable()
+  @Profile('opt')
+  class OptOnly {}
 
   it('defaults name to empty after bootstrap()', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
@@ -593,24 +595,33 @@ describe('application name and profiles', () => {
     expect(app.profiles).toEqual(['test', 'eu'])
   })
 
-  it('does not register a @Profile bean without matching config profiles', async () => {
+  it('does not register a profiled bean without matching config profiles', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly, t => t.toSelf())
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const app = createApplication({ container })
     await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(false)
   })
 
-  it('registers a @Profile bean when the active profiles include it', async () => {
+  it('registers a profiled bean when the active profiles include it', async () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly, t => t.toSelf())
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const app = createApplication({ container })
     await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(true)
+  })
+
+  // Options rather than a container: the application builds the container from them, decorators: false included.
+  it('builds its container from the options it is given', async () => {
+    const app = createApplication({ container: { decorators: false, profiles: ['opt'] } })
+    await app.bootstrap()
+
+    expect(app.container.profiles.has('opt')).toBe(true)
+    expect(app.container.has(OptOnly)).toBe(false)
   })
 
   it('run() resolves to the application name and active profiles', async () => {

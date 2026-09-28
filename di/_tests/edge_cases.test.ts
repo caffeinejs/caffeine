@@ -7,16 +7,12 @@ import { Configuration } from '../decorators/configuration.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Interceptor } from '../decorators/interceptor.js'
+import { Lifetime } from '../decorators/lifetime.js'
 import { PostConstruct } from '../decorators/post_construct.js'
 import { Primary } from '../decorators/primary.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import {
-  ErrInvalidBinding,
-  ErrOutOfScope,
-  ErrNoResolutionForKey,
-  ErrRepeatedInjectableConfiguration,
-} from '../errors.js'
+import { ErrDuplicateBinding, ErrInvalidBinding, ErrOutOfScope, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { Provider } from '../provider.js'
@@ -71,19 +67,29 @@ describe('B4: toFactory() returning null — null is a valid resolved value', fu
   })
 })
 
-describe('B5: Binding the same key twice — last write wins', function () {
-  it('should replace the first binding with the second; no ambiguity error', async function () {
+describe('B5: Binding the same key twice — refused; rebind() replaces', function () {
+  class EC_B5Key {}
+  class EC_B5First {
+    readonly value = 'first'
+  }
+  class EC_B5Second {
+    readonly value = 'second'
+  }
+
+  it('should refuse the second binding', async function () {
     const di = new CaffeineIoC({ decorators: false })
-    class EC_B5Key {}
-    class EC_B5First {
-      readonly value = 'first'
-    }
-    class EC_B5Second {
-      readonly value = 'second'
-    }
 
     di.bind(EC_B5Key, t => t.toClass(EC_B5First))
     di.bind(EC_B5Key, t => t.toClass(EC_B5Second))
+
+    await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+  })
+
+  it('should replace the first binding with the rebound one; no ambiguity error', async function () {
+    const di = new CaffeineIoC({ decorators: false })
+
+    di.bind(EC_B5Key, t => t.toClass(EC_B5First))
+    di.rebind(EC_B5Key, t => t.toClass(EC_B5Second))
     await di.init()
     const result = di.get(EC_B5Key) as EC_B5Second
     expect(result.value).toBe('second')
@@ -98,6 +104,8 @@ describe('C1: @PostConstruct on TRANSIENT — called for every new instance', fu
   const postConstructSpy = vi.fn()
 
   @Injectable()
+  @Lifetime(Scopes.TRANSIENT)
+  @Profile('ec-c1')
   class EC_C1Transient {
     @PostConstruct()
     init() {
@@ -108,8 +116,7 @@ describe('C1: @PostConstruct on TRANSIENT — called for every new instance', fu
   beforeEach(() => postConstructSpy.mockReset())
 
   it('should invoke the @PostConstruct method once per transient resolution', async function () {
-    const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_C1Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+    const di = new CaffeineIoC({ profiles: ['ec-c1'] })
     await di.init()
     di.get(EC_C1Transient)
     di.get(EC_C1Transient)
@@ -263,17 +270,18 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
   describe('when container is strict and it is mixing singleton and transient dependencies - without using $i.provide()', function () {
     it('should throw ErrScopeMismatch', async function () {
       @Injectable()
+      @Profile('ec-d3-direct')
       class EC_D3SingletonDep {}
 
       @Injectable()
+      @Lifetime(Scopes.TRANSIENT)
+      @Profile('ec-d3-direct')
       class EC_D3TransientConsumer {
         @Inject(EC_D3SingletonDep)
         dep!: EC_D3SingletonDep
       }
 
-      const di = new CaffeineIoC({ checks: { scopes: 'off' }, decorators: false })
-      di.bind(EC_D3SingletonDep, t => t.toSelf().lifetime(Scopes.SINGLETON))
-      di.bind(EC_D3TransientConsumer, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+      const di = new CaffeineIoC({ checks: { scopes: 'off' }, profiles: ['ec-d3-direct'] })
       await di.init()
       const t1 = di.get(EC_D3TransientConsumer)
       const t2 = di.get(EC_D3TransientConsumer)
@@ -287,17 +295,18 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
   describe('when container is strict and it is mixing singleton and transient dependencies - using $i.provide()', function () {
     it('should inject the singleton dep into every new transient instance', async function () {
       @Injectable()
+      @Profile('ec-d3-provide')
       class EC_D3SingletonDep {}
 
       @Injectable()
+      @Lifetime(Scopes.TRANSIENT)
+      @Profile('ec-d3-provide')
       class EC_D3TransientConsumer {
         @Inject($i.provide(EC_D3SingletonDep))
         dep!: Provider<EC_D3SingletonDep>
       }
 
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(EC_D3SingletonDep, t => t.toSelf().lifetime(Scopes.SINGLETON))
-      di.bind(EC_D3TransientConsumer, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+      const di = new CaffeineIoC({ profiles: ['ec-d3-provide'] })
       await di.init()
       const t1 = di.get(EC_D3TransientConsumer)
       const t2 = di.get(EC_D3TransientConsumer)
@@ -317,8 +326,7 @@ describe('D3: Property injection on TRANSIENT — each instance receives fresh i
 //     Class condition false → all beans skipped.
 //     Class condition true, method condition false → only that bean skipped.
 //
-//     Guards are pre-bound symbol keys so that autoWire() order does not
-//     affect which guard is visible when the condition function runs.
+//     Guards are symbol keys bound by hand, so they are registered before any condition runs.
 describe('E1: @ConditionalOn at class + method level — independent evaluation', function () {
   const NS_E1 = 'ec-e1'
   const kE1ClassFlag = token<boolean>(Symbol('ec-e1-class-flag'))
@@ -336,28 +344,29 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
     }
   }
 
-  it('should skip all beans when the class-level condition fails', function () {
-    const di = new CaffeineIoC({ profiles: [NS_E1], decorators: false })
+  it('should skip all beans when the class-level condition fails', async function () {
+    const di = new CaffeineIoC({ profiles: [NS_E1] })
     // kE1ClassFlag is not bound → class condition fails → EC_E1Config skipped
-    di.autoWire()
+    await di.compile()
 
+    expect(di.has(EC_E1Config)).toBe(false)
     expect(di.has(kE1Bean)).toBe(false)
   })
 
-  it('should skip the bean when class condition passes but method condition fails', function () {
-    const di = new CaffeineIoC({ profiles: [NS_E1], decorators: false })
+  it('should skip the bean when class condition passes but method condition fails', async function () {
+    const di = new CaffeineIoC({ profiles: [NS_E1] })
     di.bind(kE1ClassFlag, t => t.toValue(true))
     // kE1MethodFlag is absent → method condition fails → bean skipped
-    di.autoWire()
+    await di.compile()
 
+    expect(di.has(EC_E1Config)).toBe(true)
     expect(di.has(kE1Bean)).toBe(false)
   })
 
   it('should register the bean when both conditions pass', async function () {
-    const di = new CaffeineIoC({ profiles: [NS_E1], decorators: false })
+    const di = new CaffeineIoC({ profiles: [NS_E1] })
     di.bind(kE1ClassFlag, t => t.toValue(true))
     di.bind(kE1MethodFlag, t => t.toValue(true))
-    di.autoWire()
     await di.init()
     expect(di.has(kE1Bean)).toBe(true)
     expect(di.get(kE1Bean)).toBe('bean')
@@ -365,7 +374,7 @@ describe('E1: @ConditionalOn at class + method level — independent evaluation'
 })
 
 // E2: Two @Configuration classes providing the SAME bean key without @Primary
-//     results in ErrRepeatedInjectableConfiguration during autoWire.
+//     results in ErrDuplicateBinding when the container compiles: a key takes one binding.
 describe('E2: Two @Configuration classes providing the same key — ambiguity error', function () {
   const NS_E2 = 'ec-e2'
   const kE2Bean = token<string>(Symbol('ec-e2-bean'))
@@ -388,8 +397,8 @@ describe('E2: Two @Configuration classes providing the same key — ambiguity er
     }
   }
 
-  it('should throw ErrRepeatedInjectableConfiguration during autoWire', function () {
-    expect(() => new CaffeineIoC({ profiles: [NS_E2] })).toThrow(ErrRepeatedInjectableConfiguration)
+  it('should throw ErrDuplicateBinding when the container compiles', async function () {
+    await expect(new CaffeineIoC({ profiles: [NS_E2] }).compile()).rejects.toThrow(ErrDuplicateBinding)
   })
 })
 
@@ -433,8 +442,7 @@ describe('F1: @PostConstruct throws — error propagates from init()', function 
       }
     }
 
-    const di = new CaffeineIoC({ decorators: false, profiles: ['ec-f1'] })
-    di.bind(EC_F1BadInit, t => t.toSelf())
+    const di = new CaffeineIoC({ profiles: ['ec-f1'] })
 
     await expect(di.init()).rejects.toThrow('post-construct-boom')
   })
@@ -489,6 +497,8 @@ describe('F3: @Interceptor on TRANSIENT — invoked for every new resolution', f
   const interceptSpy = vi.fn()
 
   @Injectable()
+  @Lifetime(Scopes.TRANSIENT)
+  @Profile('ec-f3')
   @Interceptor((_ctx, instance) => {
     interceptSpy()
     return instance
@@ -498,8 +508,7 @@ describe('F3: @Interceptor on TRANSIENT — invoked for every new resolution', f
   beforeEach(() => interceptSpy.mockReset())
 
   it('should call the interceptor once per transient resolution', async function () {
-    const di = new CaffeineIoC({ decorators: false })
-    di.bind(EC_F3Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+    const di = new CaffeineIoC({ profiles: ['ec-f3'] })
     await di.init()
     di.get(EC_F3Transient)
     di.get(EC_F3Transient)

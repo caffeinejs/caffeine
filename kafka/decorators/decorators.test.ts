@@ -37,7 +37,7 @@ describe('@KafkaHandler / @KafkaListener', () => {
     expect(bc?.autocommit).toBe(false)
   })
 
-  it('labels the class for discovery and tags it with the default instance', () => {
+  it('labels the class for discovery and tags it with the default instance', async () => {
     @KafkaHandler()
     class LabelledConsumer {
       @KafkaListener({ topic: 't' })
@@ -45,13 +45,14 @@ describe('@KafkaHandler / @KafkaListener', () => {
     }
 
     const container = new CaffeineIoC()
+    await container.compile()
     const discovered = container.getBindingsByLabel(Keys.KAFKA_HANDLER)
     const found = discovered.find(d => d.binding.type === LabelledConsumer)
     expect(found).toBeDefined()
     expect(found!.binding.tags.get(Keys.KAFKA_INSTANCE)).toBe('default')
   })
 
-  it('tags the class with an explicit instance name', () => {
+  it('tags the class with an explicit instance name', async () => {
     @KafkaHandler({ instance: 'orders' })
     class OrdersScoped {
       @KafkaListener({ topic: 't' })
@@ -59,6 +60,7 @@ describe('@KafkaHandler / @KafkaListener', () => {
     }
 
     const container = new CaffeineIoC()
+    await container.compile()
     const found = container.getBindingsByLabel(Keys.KAFKA_HANDLER).find(d => d.binding.type === OrdersScoped)
     expect(found!.binding.tags.get(Keys.KAFKA_INSTANCE)).toBe('orders')
   })

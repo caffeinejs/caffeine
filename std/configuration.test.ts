@@ -1,4 +1,4 @@
-import { $i, CaffeineIoC, Injectable, Scopes, token, type NamedToken } from '@caffeinejs/di'
+import { $i, CaffeineIoC, Scopes, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -215,7 +215,6 @@ function appWith(...sources: Array<{ provider: ConfigSource }>) {
 
 describe('configuration as the DI values provider', () => {
   it('injects a value selected by function', async () => {
-    @Injectable([$i.config<DatabaseConfig, string>(c => c.database.host)])
     class Repository {
       constructor(readonly host: string) {}
     }
@@ -223,7 +222,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigSource({ database: { host: 'db.local', port: 5432 } }),
     })
-    container.bind(Repository, t => t.toSelf())
+    container.bind(Repository, t => t.toSelf([$i.config<DatabaseConfig, string>(c => c.database.host)]))
 
     await builder.bootstrap()
 
@@ -231,10 +230,6 @@ describe('configuration as the DI values provider', () => {
   })
 
   it('injects a value selected by dot-path, and honours a default', async () => {
-    @Injectable([
-      $i.config<DatabaseConfig, number>('database.port'),
-      $i.config<DatabaseConfig, string>('database.missing', 'fallback'),
-    ])
     class Repository {
       constructor(
         readonly port: number,
@@ -245,7 +240,12 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigSource({ database: { host: 'h', port: 5432 } }),
     })
-    container.bind(Repository, t => t.toSelf())
+    container.bind(Repository, t =>
+      t.toSelf([
+        $i.config<DatabaseConfig, number>('database.port'),
+        $i.config<DatabaseConfig, string>('database.missing', 'fallback'),
+      ]),
+    )
 
     await builder.bootstrap()
 
@@ -257,7 +257,6 @@ describe('configuration as the DI values provider', () => {
   // The values are the live configuration object, so a transient resolved after a refresh sees the new value
   // without anything having been rebound.
   it('follows a refresh', async () => {
-    @Injectable([$i.config<DatabaseConfig, string>(c => c.database.host)])
     class Holder {
       constructor(readonly host: string) {}
     }
@@ -266,7 +265,9 @@ describe('configuration as the DI values provider', () => {
     const changing: ConfigSource = { name: 'test', live: true, load: () => [{ name: 'test', data: { database } }] }
 
     const { builder, container } = appWith({ provider: changing })
-    container.bind(Holder, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+    container.bind(Holder, t =>
+      t.toSelf([$i.config<DatabaseConfig, string>(c => c.database.host)]).lifetime(Scopes.TRANSIENT),
+    )
 
     await builder.bootstrap()
 
@@ -280,7 +281,6 @@ describe('configuration as the DI values provider', () => {
   })
 
   it('leaves an application-supplied values provider alone', async () => {
-    @Injectable([$i.config<{ own: string }, string>(c => c.own)])
     class Holder {
       constructor(readonly own: string) {}
     }
@@ -289,7 +289,7 @@ describe('configuration as the DI values provider', () => {
       provider: new InlineConfigSource({ database: { host: 'h', port: 1 } }),
     })
     container.bindConfig<{ own: string }>({ own: 'mine' })
-    container.bind(Holder, t => t.toSelf())
+    container.bind(Holder, t => t.toSelf([$i.config<{ own: string }, string>(c => c.own)]))
 
     await builder.bootstrap()
 
@@ -305,7 +305,6 @@ const kPricingConfig = token<PricingConfig>(Symbol('app.config'))
 // that was handed the configuration once reads the new value, with nobody calling a refresh.
 describe('live configuration', () => {
   it('reaches a singleton through the config object it was injected with', async () => {
-    @Injectable([kPricingConfig])
     class Pricing {
       constructor(private readonly config: PricingConfig) {}
 
@@ -329,7 +328,7 @@ describe('live configuration', () => {
     }
     const conf = newConfiguration(pricingSchema, kPricingConfig).source(overrides).build()
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(Pricing, t => t.toSelf())
+    container.bind(Pricing, t => t.toSelf([kPricingConfig]))
     const app = createApplication({ container, config: conf })
     await app.bootstrap()
 

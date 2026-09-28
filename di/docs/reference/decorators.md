@@ -85,7 +85,7 @@ class UserService {
 ### @Lifetime
 
 ```ts
-@Lifetime(scopeId: Identifier)
+@Lifetime(scopeID: NamedToken<Scope>)
 ```
 
 Sets the lifecycle scope for the binding. `Scopes.SINGLETON` is the default
@@ -172,7 +172,7 @@ receives a `ConditionContext`.
 interface ConditionContext {
   container: { has(key: InjectionToken): boolean }
   key: InjectionToken
-  binding: BindingDecoratorConfig
+  binding: Binding
 }
 ```
 

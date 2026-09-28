@@ -25,7 +25,7 @@ type Conditional = (ctx: ConditionContext) => boolean | Promise<boolean>
 interface ConditionContext {
   container: { has(key: InjectionToken): boolean }
   key: InjectionToken
-  binding: BindingDecoratorConfig
+  binding: Binding
 }
 ```
 
@@ -33,12 +33,13 @@ interface ConditionContext {
 | -------------------- | ----------------------------------------------------------------------------------------------------------- |
 | `container.has(key)` | Whether a binding answers to the key: any binding without conditions, or a conditional one decided already. |
 | `key`                | The key of the binding being tested.                                                                        |
-| `binding`            | Decorator config (scope, name, labels) of the binding being tested.                                         |
+| `binding`            | The binding being tested.                                                                                   |
 
-Predicate evaluation order: every binding without conditions is registered first — by hand,
-by a module or by decorators. Bindings with conditions are then decided one at a time during
-`init()`: decorated `@Configuration` classes first, then the other decorated bindings in the
-order they were declared, then the ones bound by hand in the order they were bound. So
+Predicate evaluation order: every binding without conditions is registered first — by
+decorators, by hand or by a module. Bindings with conditions are then decided one at a time
+during `init()`: `@Configuration` classes first, each followed by its `@Provides` methods,
+then the rest in the order they were registered — decorated bindings in the order they were
+declared, then the ones bound by hand in the order they were bound, then the modules'. So
 `ctx.container.has()` sees every unconditional binding, but a conditional one only once it
 has been decided.
 
@@ -295,10 +296,9 @@ await di.init()
 
 Multiple `.conditional()` calls chain as AND, matching the decorator behaviour.
 
-A binding made by hand with `.conditional()` waits for `init()` the way a decorated one does.
-Until then `has()` does not see it, and it leaves a binding already registered under its key
-alone. It replaces that binding only if its predicate passes. Binding the same key again
-discards it, the same way the second of two `bind()` calls replaces the first.
+A binding made by hand with `.conditional()` is decided during `init()` the way a decorated one
+is. A key takes one binding: if its predicate passes while another binding holds its key,
+`init()` fails with `ErrDuplicateBinding`. `rebind()` of the same key discards it.
 
 ---
 
@@ -328,7 +328,8 @@ It yields to every binding of `Cache` without conditions, whether bound by hand 
 after it, by a module or by decorators. It also yields to every conditional one decided
 before it. It cannot see a conditional one decided after it, such as a decorated class
 declared later: that one registers too, and resolving `Cache` fails with
-`ErrNoUniqueInjectionForKey`. When the replacement is conditional, give the default the
+`ErrNoUniqueInjectionForKey` (or `init()` fails with `ErrDuplicateBinding` when both are bound
+under `Cache` itself). When the replacement is conditional, give the default the
 complementary condition, as `MockPaymentGateway` does above. Or keep the default
 unconditional and mark the replacement `@Primary`:
 

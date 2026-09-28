@@ -17,7 +17,7 @@ function maxAcyclicEdges(nodeCount: number): number {
 describe('ensureResolvable (property)', function () {
   it.prop([fc.integer({ min: 1, max: 5 }), fc.array(fc.boolean(), { minLength: 0, maxLength: 15 })], { numRuns: 100 })(
     'closed manual-bind graph does not throw',
-    (nodeCount, mask) => {
+    async (nodeCount, mask) => {
       const edgeCount = maxAcyclicEdges(nodeCount)
       const edgeMask = mask.slice(0, edgeCount)
       while (edgeMask.length < edgeCount) {
@@ -25,13 +25,13 @@ describe('ensureResolvable (property)', function () {
       }
 
       const di = buildDiFromEdges(edgesWithAllMaskTrue(nodeCount, edgeMask), false)
-      expect(() => di.assertResolvable()).not.toThrow()
+      await expect(di.assertResolvable()).resolves.toBeUndefined()
     },
   )
 
   it.prop([fc.string({ minLength: 1, maxLength: 12 })], { numRuns: 50 })(
     'missing required dependency produces an issue mentioning the key',
-    missingKey => {
+    async missingKey => {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(token<Record<string, unknown>>('svc'), t =>
         t.toFunction((_: unknown) => ({}), [token<Record<string, unknown>>(missingKey)]),
@@ -39,7 +39,7 @@ describe('ensureResolvable (property)', function () {
 
       let caught: ErrUnresolvableDependencies | undefined
       try {
-        di.assertResolvable()
+        await di.assertResolvable()
       } catch (e) {
         caught = e as ErrUnresolvableDependencies
       }
@@ -50,13 +50,13 @@ describe('ensureResolvable (property)', function () {
     },
   )
 
-  it('optional missing dependency does not throw', function () {
+  it('optional missing dependency does not throw', async function () {
     const di = new CaffeineIoC({ decorators: false })
     di.bind(token<Record<string, unknown>>('svc'), t =>
       t.toFunction((_: unknown) => ({}), [{ key: token<Record<string, unknown>>('missing'), optional: true }]),
     )
 
-    expect(() => di.assertResolvable()).not.toThrow()
+    await expect(di.assertResolvable()).resolves.toBeUndefined()
   })
 })
 

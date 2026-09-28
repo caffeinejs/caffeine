@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 
 import { AuthenticationBuilder } from './builder.js'
 import { BaseAuthenticationHandler, type AuthenticationHandler } from './handler.js'
+import { AuthenticationSchemeProvider } from './scheme_provider.js'
 import { AuthenticateResult } from './ticket.js'
 
 // Long enough for HS256: a JWT scheme refuses a secret shorter than the hash it feeds.
@@ -93,16 +94,26 @@ describe('AuthenticationBuilder[kFeatureConfigure]()', () => {
   })
 
   // A named token used to be stored as if it were the handler, and every request failed on
-  // "handler.authenticate is not a function".
+  // "handler.authenticate is not a function". The container is asked only when the handler is: nothing is
+  // registered while features configure.
   it.each([
     ['a symbol token', token<AuthenticationHandler>(Symbol('handler'))],
     ['a string token', token<AuthenticationHandler>('handler')],
     ['a class', StubHandler],
   ])('resolves a strategy registered by %s from the container', (_label, key) => {
+    const bound = new Map<unknown, unknown>()
     const kit = makeKit()
+    vi.mocked(kit.container.bind).mockImplementation(((k: unknown, configure: (spec: unknown) => void) => {
+      configure({ toValue: (value: unknown) => (bound.set(k, value), { internal: vi.fn() }) })
+    }) as never)
     const builder = new AuthenticationBuilder().addStrategy('api', key as never)
 
     expect(builder[kFeatureConfigure](kit)).toBeUndefined()
+    expect(kit.container.wrap).not.toHaveBeenCalled()
+
+    const schemes = bound.get(AuthenticationSchemeProvider) as AuthenticationSchemeProvider
+    schemes.schemeFor('api')!.get()
+
     expect(kit.container.wrap).toHaveBeenCalledWith(key)
   })
 

@@ -57,11 +57,4 @@ describe('Binding registration after init()', function () {
 
     expect(() => di.rebind(Svc, t => t.toSelf())).toThrow(ErrInvalidContainerState)
   })
-
-  it('should throw when calling autoWire() after init()', async function () {
-    const di = new CaffeineIoC({ decorators: false })
-    await di.init()
-
-    expect(() => di.autoWire()).toThrow(ErrInvalidContainerState)
-  })
 })

@@ -65,7 +65,7 @@ describe('Class', function () {
       const root = di.get(Root)
 
       expect(root).toBeDefined()
-      expect(new CaffeineIoC().has(Root)).toBeTruthy()
+      expect(di.has(Root)).toBeTruthy()
       expect(root.seeYaService.bye()).toEqual('bye-bye')
       expect(root.okService.ok()).toEqual('ok-bye-bye')
       expect(constructed).toBe(3) // there are 3 dependencies: SeeYaService, OkService, Root

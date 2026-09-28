@@ -1,12 +1,15 @@
 import { DeferredCtor } from '@caffeinejs/di'
-import type { InjectionToken, Snapshot } from '@caffeinejs/di'
+import type { Binding, InjectionToken } from '@caffeinejs/di'
 
 export function resolveKey(key: InjectionToken): InjectionToken {
   return key instanceof DeferredCtor ? key.unwrap() : key
 }
 
-export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<InjectionToken>): Set<InjectionToken> {
-  const forward = buildForwardMap(snap)
+export function exclusiveDeps(
+  entries: Iterable<[InjectionToken, Binding]>,
+  isolatedKeys: Set<InjectionToken>,
+): Set<InjectionToken> {
+  const forward = buildForwardMap(entries)
   const reverse = new Map<InjectionToken, Set<InjectionToken>>()
 
   for (const [k, deps] of forward) {
@@ -46,8 +49,11 @@ export function exclusiveDeps(snap: Snapshot, isolatedKeys: Set<InjectionToken>)
   return candidates
 }
 
-export function allTransitiveDeps(snap: Snapshot, roots: Set<InjectionToken>): Set<InjectionToken> {
-  const forward = buildForwardMap(snap)
+export function allTransitiveDeps(
+  entries: Iterable<[InjectionToken, Binding]>,
+  roots: Set<InjectionToken>,
+): Set<InjectionToken> {
+  const forward = buildForwardMap(entries)
   const result = new Set<InjectionToken>()
   const queue: InjectionToken[] = [...roots].flatMap(k => [...(forward.get(k) ?? [])])
   for (let i = 0; i < queue.length; i++) {
@@ -62,10 +68,10 @@ export function allTransitiveDeps(snap: Snapshot, roots: Set<InjectionToken>): S
   return result
 }
 
-function buildForwardMap(snap: Snapshot): Map<InjectionToken, Set<InjectionToken>> {
+function buildForwardMap(entries: Iterable<[InjectionToken, Binding]>): Map<InjectionToken, Set<InjectionToken>> {
   const forward = new Map<InjectionToken, Set<InjectionToken>>()
 
-  for (const [k, b] of snap.entries()) {
+  for (const [k, b] of entries) {
     const deps = new Set<InjectionToken>()
     for (const d of b.injections) {
       if (d.key) {

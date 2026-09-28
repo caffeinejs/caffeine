@@ -223,8 +223,6 @@ describe('AOP integration', function () {
     it('only weaves classes carrying the annotation', async function () {
       classAnnSpy.length = 0
       const di = new CaffeineIoC({ profiles: ['aop-ann-class-pred'] })
-      di.bind(ApiController, t => t.toSelf())
-      di.bind(PlainService, t => t.toSelf())
       await di.init()
 
       di.get(ApiController).handle()
@@ -267,7 +265,6 @@ describe('AOP integration', function () {
     it('only weaves methods carrying the annotation', async function () {
       methodAnnSpy.length = 0
       const di = new CaffeineIoC({ profiles: ['aop-ann-method-pred'] })
-      di.bind(HttpController, t => t.toSelf())
       await di.init()
 
       const ctrl = di.get(HttpController)
@@ -283,7 +280,6 @@ describe('AOP integration', function () {
     it('reflect.get(jp.cls, HandlerAnn, methodName) returns the annotation value', async function () {
       methodAnnSpy.length = 0
       const di = new CaffeineIoC({ profiles: ['aop-ann-method-pred'] })
-      di.bind(HttpController, t => t.toSelf())
       await di.init()
 
       di.get(HttpController).getUsers()
@@ -324,7 +320,6 @@ describe('AOP integration', function () {
 
     beforeAll(async function () {
       di = new CaffeineIoC({ profiles: ['aop-ann-jp'] })
-      di.bind(PaySvc, t => t.toSelf())
       await di.init()
     })
 
@@ -358,7 +353,6 @@ describe('AOP integration', function () {
       void ClsRefAspect
 
       const localDi = new CaffeineIoC({ profiles: ['aop-ann-cls-ref'] })
-      localDi.bind(ClsRefSvc, t => t.toSelf())
       return localDi.init().then(() => {
         const svc = localDi.get(ClsRefSvc)
         svc.run()

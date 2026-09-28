@@ -168,7 +168,7 @@ after a factory method, and all return the same `BindingSpec`.
 ### lifetime
 
 ```ts
-lifetime(scopeId)
+lifetime(scopeID)
 ```
 
 Sets the lifecycle scope for the binding. See [Scopes](./scopes.md) for
@@ -318,10 +318,10 @@ Predicates receive a `ConditionContext` with `container.has()`.
 di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
 ```
 
-A binding with conditions is not registered when `bind()` returns. It waits for
-`compile()`, where it is decided with the decorated ones. Until then it is not
-visible to `has()`, `entries()` or `size`, and it leaves a binding already
-registered under its key in place. That is what lets a default check for its own key:
+A binding with conditions is decided during `compile()`, once every binding
+without conditions is registered, whether it was decorated, bound by hand or bound
+by a module. Its predicates never see the binding itself. That is what lets a
+default check for its own key:
 
 ```ts
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
@@ -363,6 +363,6 @@ di.get(Logger) // ConsoleLogger
 internal()
 ```
 
-Marks the binding as internal. Internal bindings are excluded from
-`getBindings()`, `getBindingsBy()`, and `getBindingsByLabel()` results when
-called from outside the container's own resolution logic.
+Marks the binding as internal, for tools to read. Nothing else reads it: an
+internal binding is registered, resolved, snapshotted and overridden like any
+other.

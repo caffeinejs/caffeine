@@ -70,13 +70,30 @@ Thrown by `bindScope()` when the scope identifier is already bound.
 
 ---
 
+### ErrDuplicateBinding
+
+**Code:** `ERR_DUPLICATE_BINDING`
+
+Thrown during `compile()` / `init()` when a key ends up with a second binding,
+whatever made either of them: a decorated class also bound with `bind()`, two
+`@Provides` methods for one key, a module binding a key already bound, or a
+conditional binding whose predicate passes while another binding holds its key.
+Profiles and conditions are decided first, so bindings of one key that they
+leave to a single survivor do not throw.
+
+**Fix:** Use `rebind()` to replace a binding deliberately. Remove the `bind()` of
+a class that is already decorated, or turn the `decorators` option off. Give one
+of the bindings a profile or a condition so that only one of them is registered.
+
+---
+
 ### ErrRepeatedInjectableConfiguration
 
-**Code:** `ERR_REPEATED_INJECTABLE_CONFIGURATION`
+**Code:** `ERR_REPEATED_INJECTABLE`
 
-Thrown when `@Injectable` is applied to the same class more than once.
+Thrown when decorators give one binding the same name twice.
 
-**Fix:** Remove duplicate `@Injectable` annotations.
+**Fix:** Remove the repeated name.
 
 ---
 
@@ -96,11 +113,13 @@ a component listed among its own dependencies.
 
 **Code:** `ERR_INVALID_CONTAINER_STATE`
 
-Thrown when a lifecycle operation is called in the wrong order — for example,
-calling `di.get()` before `await di.init()`, or `init()` after `dispose()`.
+Thrown when an operation is called in the wrong phase — for example, calling
+`di.get()` before `await di.init()`, `bind()` after the container has registered
+its bindings (`compile()`, `init()` or `assertResolvable()` has run), or `addProfiles()`, `addModules()`, `restore()` or `overrides()` once it has
+started compiling.
 
-**Fix:** Ensure `await di.init()` is called before any resolution, and do not
-call `init()` more than once on the same container.
+**Fix:** Declare everything before `init()`, and resolve only after it.
+`init()` itself can be called more than once: later calls do nothing.
 
 ---
 

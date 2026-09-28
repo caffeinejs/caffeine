@@ -6,17 +6,17 @@ import { AspectSpec } from './aspect_spec.js'
 import { newBinding, Binding } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { Conditional, ConditionContext } from './conditional.js'
-import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import {
-  getBindingConfigurations,
-  getBindingConfiguration,
-  providedBindingConfigurations,
-  hasInjectable,
-  decoratorConfigToBinding,
-} from './decorators/registrar/index.js'
-import type { DecoratedBindingConfig } from './decorators/registrar/spec.js'
+  BindingDescriptor,
+  Container,
+  ContainerOverride,
+  Options,
+  OverrideOps,
+  ScopeCheckMode,
+} from './container_interface.js'
+import { getBindingConfigurations, providedBindingConfigurations, hasInjectable } from './decorators/registrar/index.js'
 import {
-  ErrRepeatedInjectableConfiguration,
+  ErrDuplicateBinding,
   ErrNoUniqueInjectionForKey,
   ErrNoResolutionForKey,
   ErrInvalidBinding,
@@ -43,7 +43,7 @@ import { Provider } from './provider.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
 import { Scopes, scopeEntries, Scope, ScopedInstance } from './scope.js'
-import { Snapshot } from './snapshot.js'
+import { Declaration, Snapshot } from './snapshot.js'
 import { Keys } from './symbols.js'
 import { Ctor } from './types.js'
 
@@ -56,22 +56,15 @@ for (const [name, middleware, options] of builtInStages) {
 const DEFAULT_OPTIONS: Partial<Options> = {
   defaultScopeID: Scopes.SINGLETON,
   lazy: false,
-  decorators: true,
   checks: {
     circularReferences: true,
     scopes: 'compatible-scopes-only',
   },
 }
 
-interface PendingBinding {
+interface HeldBinding {
   key: InjectionToken
-  config?: DecoratedBindingConfig
-  binding?: Binding
-  providedByConfig?: InjectionToken
-  profileRejected?: boolean
-  // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
-  // against the profiles of the container it came from, so only a bound one is matched here.
-  byHand?: 'bind' | 'restore'
+  binding: Binding
 }
 
 /**
@@ -83,6 +76,11 @@ interface PendingBinding {
  */
 export class CaffeineIoC implements Container {
   private readonly modules: Array<Module | ModuleFn>
+  private readonly declared: Declaration[] = []
+  // The declarations the constructor made, first in `declared`: the container's own bindings. A snapshot leaves them
+  // out, since the container it is restored into makes its own.
+  private readonly ownDeclarations: number
+  private readonly overriders: ContainerOverride[] = []
   private readonly registry = new Map<InjectionToken, Binding>()
   private readonly bindings = new Map<InjectionToken | Identifier, Binding[]>()
   private readonly bindingsByLabel = new Map<symbol, [InjectionToken, Binding][]>()
@@ -102,16 +100,18 @@ export class CaffeineIoC implements Container {
   readonly requestScopeManager!: RequestScopeManager
 
   private readonly _profiles: Set<string>
+  private _decorators: boolean
   private _ready = false
   private _initializing = false
+  private _compiling = false
+  private _registered = false
   private _compiled = false
-  private _pendingConditionals: PendingBinding[] = []
-  private _pendingProfiles: PendingBinding[] = []
-  private _pendingManualProfiles: PendingBinding[] = []
-  private _pendingManualProfileKeys = new Set<InjectionToken>()
-  private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
-  private _evaluatingProfiles = false
-  private _pendingConditionalKeys = new Set<InjectionToken>()
+  private _registration: Promise<void> | undefined
+  private _compilation: Promise<void> | undefined
+  // Bindings carrying conditions, waiting for them to be decided. A condition never sees its own binding.
+  private _held: HeldBinding[] = []
+  // Bindings a profile, a condition, a rebind() or an override left out, reported once compile() is done.
+  private _dropped: [InjectionToken, Binding][] = []
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScoped = false
@@ -137,13 +137,10 @@ export class CaffeineIoC implements Container {
     this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
     this.scopes = new Map<NamedToken<Scope>, Scope>()
     this.modules = [...(opts.modules ?? [])]
+    this._decorators = opts.decorators ?? true
 
     for (const [id, factory] of scopeEntries()) {
       this.scopes.set(id, factory(this))
-    }
-
-    if (opts.decorators) {
-      this.autoWire()
     }
 
     // Binding internal components to the container to facilitate their usage across components.
@@ -166,6 +163,8 @@ export class CaffeineIoC implements Container {
       this.requestScopeManager = requestScopeManager
       this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager).byPassPostProcessors().internal())
     }
+
+    this.ownDeclarations = this.declared.length
   }
 
   get [Symbol.toStringTag]() {
@@ -670,8 +669,18 @@ export class CaffeineIoC implements Container {
   /**
    * Binds a new type to given key, making it managed by the container.
    *
+   * The binding is registered when the container compiles, not when `bind()` returns: until then {@link has},
+   * {@link getBindings} and {@link entries} do not see it, and an invalid binding is reported by {@link compile}. A key
+   * takes one binding, so binding a key that ends up with another binding, decorated or bound, fails the compilation.
+   * Use {@link rebind} to replace one.
+   *
+   * Decorators are not read: a decorated class bound here gets only what its binding declares.
+   *
    * @param key - The key to bind the type to.
    * @param configure - Describes the binding on the {@link BindingSpec} it receives.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    *
    * @example
    * ```ts
@@ -683,17 +692,13 @@ export class CaffeineIoC implements Container {
   bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot bind: container is already initialized — call init() first')
-    }
+    this.assertNotRegistered('Cannot bind')
 
-    const type = getBindingConfiguration(key)
-    const binding = newBinding<TokenValue<K>>(type ? decoratorConfigToBinding(type) : {})
-    const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, binding)
+    const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, newBinding<TokenValue<K>>())
 
     configure(spec)
 
-    this.registerOrHold(key as InjectionToken, spec[kBuildBinding]())
+    this.declare(key as InjectionToken, spec[kBuildBinding](), false)
 
     return this
   }
@@ -726,37 +731,31 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Rebinds the given key with a new binding.
-   * The existing binding for the given key will be unregistered.
-   * For testing purposes.
+   * Replaces whatever answers to the given key with a new binding: the binding registered under it, however it was
+   * made, and the bindings answering to it through a name or a base, which stay registered under their own keys.
+   *
+   * It is the one way to replace a binding. Called before the container compiles, the replacement is applied once
+   * the decorated bindings, the ones bound by hand and the modules' are registered, so it replaces any of them. A key
+   * with no binding is simply bound.
    *
    * @param key - The key to rebind.
    * @param configure - Describes the replacement binding on the {@link BindingSpec} it receives.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    */
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot rebind: container is already initialized — call init() first')
-    }
+    this.assertNotRegistered('Cannot rebind')
 
-    if (this.registry.has(key)) {
-      this.unref(key)
-    }
+    const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, newBinding<TokenValue<K>>())
 
-    // Rebinding replaces everything that answers to the key, not only the binding registered under it: a binding
-    // named after the key or extending it would otherwise stay a candidate beside the replacement. Those bindings
-    // stay registered under their own keys.
-    this.bindings.delete(key)
-    this.bindingMembers.delete(key)
+    configure(spec)
 
-    this._pendingConditionals = this._pendingConditionals.filter(e => e.key !== key)
-    this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
-    this._pendingManualProfiles = this._pendingManualProfiles.filter(e => e.key !== key)
-    this._pendingManualProfileKeys.delete(key)
-    this._pendingConfigKeys.delete(key)
+    this.declare(key as InjectionToken, spec[kBuildBinding](), true)
 
-    return this.bind(key, configure)
+    return this
   }
 
   /**
@@ -764,7 +763,8 @@ export class CaffeineIoC implements Container {
    *
    * @param cls - The aspect class to register. Must implement {@link MethodAspect}.
    *
-   * @throws {@link ErrInvalidContainerState} if the container is already initialized
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    *
    * @example
    * ```ts
@@ -780,16 +780,14 @@ export class CaffeineIoC implements Container {
   aspect<C extends Ctor<MethodAspect<any>>>(cls: C, configure: (spec: AspectSpec<InstanceType<C>, C>) => void): this {
     notNil(cls)
 
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot bind: container is already initialized — call init() first')
-    }
+    this.assertNotRegistered('Cannot bind aspect')
 
     const binding = newBinding<InstanceType<C>>({ type: cls, labels: [kAspectLabel] })
     const spec = new AspectSpec<InstanceType<C>, C>(cls as unknown as InjectionToken<InstanceType<C>>, binding)
 
     configure(spec)
 
-    this.registerOrHold(cls as InjectionToken, spec[kBuildBinding]())
+    this.declare(cls as InjectionToken, spec[kBuildBinding](), false)
 
     return this
   }
@@ -801,29 +799,25 @@ export class CaffeineIoC implements Container {
    * @param module - The module to add.
    * @param rest - Additional modules to add.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been initialized
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling
    */
   addModules(module: Module | ModuleFn, ...rest: Array<Module | ModuleFn>): void {
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot add modules once the container has been initialized')
-    }
+    this.assertOpen('Cannot add modules')
 
     this.modules.push(module, ...rest)
   }
 
   /**
    * Adds profiles to the container's active set.
-   * Profile matching runs during {@link compile} / {@link init}.
+   * Every binding is matched against them when the container compiles, however it was made.
    *
    * @param profile - The first profile to activate.
    * @param profiles - Additional profiles to activate.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling
    */
   addProfiles(profile: string, ...profiles: string[]): void {
-    if (this._ready || this._compiled) {
-      throw new ErrInvalidContainerState('Cannot add profiles once the container has been compiled')
-    }
+    this.assertOpen('Cannot add profiles')
 
     notNil(profile, `Parameter profile must not be null or undefined`)
 
@@ -834,56 +828,76 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Captures a snapshot of all non-internal bindings in their current state, and of the values bound with
-   * {@link bindConfig}.
-   * Works at any point — pre-init or post-init.
-   * For testing purposes.
+   * Adds a step that changes the bindings once every one is registered and its profiles and conditions are decided,
+   * and before any is resolved. Overrides run in the order they were added, when the container compiles.
+   *
+   * A binding an override adds is decided right after it: its profiles and conditions apply as to any other.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling
+   *
+   * @example
+   * ```ts
+   * container.overrides(ops => {
+   *   ops.unbind(MailSender)
+   *   ops.rebind(Clock, t => t.toValue(fixedClock))
+   * })
+   * ```
    */
-  snapshot(): Snapshot {
-    const entries: [InjectionToken, Binding][] = []
-    // A binding made by hand that is still waiting on its conditions belongs to the state as much as a registered one.
-    // restore() holds it back again.
-    const held = this._pendingConditionals.filter(e => e.byHand !== undefined).map(e => [e.key, e.binding!] as const)
+  overrides(override: ContainerOverride): this {
+    notNil(override)
 
-    for (const [key, binding] of [...this.registry, ...held]) {
-      if (binding.internal) {
-        continue
-      }
+    this.assertOpen('Cannot add overrides')
 
-      const isDerived =
-        typeof key === 'function' ||
-        binding.type !== undefined ||
-        binding.factoryCreator !== undefined ||
-        binding.source !== undefined
+    this.overriders.push(override)
 
-      entries.push([
-        key,
-        {
-          ...binding,
-          factory: isDerived ? undefined! : (binding.unscopedFactory ?? binding.factory),
-          unscopedFactory: undefined!,
-          ctx: undefined,
-          injectionResolvers: [],
-          propertyResolvers: new Map(),
-        },
-      ])
-    }
-
-    return new Snapshot(entries, this._values)
+    return this
   }
 
   /**
-   * Restores bindings from the given snapshot into the container, and the values when the snapshot carries any.
-   * Must be called before {@link init}.
+   * Captures what the container was told to hold: the bindings declared with {@link bind}, {@link rebind} and
+   * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, and the values bound with
+   * {@link bindConfig}. The container's own bindings (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out:
+   * every container binds its own.
+   *
+   * Restored with {@link restore}, it gives the same bindings whether it was taken before or after {@link init}.
+   * For testing purposes.
    */
-  restore(snap: Snapshot): void {
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot restore: container is already initialized')
+  snapshot(): Snapshot {
+    const declarations: Declaration[] = []
+    for (const { key, binding, rebind } of this.declared.slice(this.ownDeclarations)) {
+      declarations.push({ key, binding: copyBinding(binding), rebind })
     }
 
-    for (const [key, binding] of snap.entries()) {
-      this.registerOrHold(key, binding, 'restore')
+    return new Snapshot({
+      declarations,
+      modules: [...this.modules],
+      profiles: [...this._profiles],
+      decorators: this._decorators,
+      values: this._values,
+    })
+  }
+
+  /**
+   * Adds what the snapshot holds to the container: its declarations, after the ones already made, its modules, its
+   * profiles, and its values when it carries any. The container registers decorated bindings when the snapshot's
+   * container did.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has started compiling
+   */
+  restore(snap: Snapshot): void {
+    this.assertOpen('Cannot restore')
+
+    for (const { key, binding, rebind } of snap.declarations()) {
+      this.declared.push({ key, binding: copyBinding(binding), rebind })
     }
+
+    this.modules.push(...snap.modules)
+
+    for (const profile of snap.profiles) {
+      this._profiles.add(profile)
+    }
+
+    this._decorators = snap.decorators
 
     if (snap.values !== undefined) {
       this._values = snap.values
@@ -940,72 +954,6 @@ export class CaffeineIoC implements Container {
     }
 
     return this.preDestroyBinding(binding).finally(() => this.scopes.get(binding.scopeID)?.reset(binding))
-  }
-
-  /**
-   * Registers decorated bindings into the container.
-   * autoWire() is called automatically when the container is created if `decorators` option is true (default).
-   */
-  autoWire(): void {
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot register binding: container is already initialized')
-    }
-
-    for (const [key, config] of getBindingConfigurations()) {
-      if (!hasInjectable(key)) {
-        throw new ErrOrphanedBindingConfig(key)
-      }
-
-      if (this.queueProfiledConfig(key, config)) {
-        continue
-      }
-
-      const binding = config.binding()
-
-      this.hooks.emit('onSetup', { key, binding })
-
-      if (binding.conditionals.length > 0) {
-        if (binding.configuration) {
-          this._pendingConfigKeys.set(key, binding.keysProvided)
-        }
-        this._pendingConditionals.push({ key, binding })
-      } else {
-        this.configureBinding(key, binding)
-        this.hooks.emit('onBindingRegistered', { key, binding })
-      }
-    }
-
-    for (const [key, config] of providedBindingConfigurations()) {
-      const configKey = this.findPendingConfigForKey(key)
-
-      if (this.queueProfiledConfig(key, config, configKey)) {
-        continue
-      }
-
-      const binding = config.binding()
-
-      this.hooks.emit('onSetup', { key, binding })
-
-      if (configKey !== undefined) {
-        this._pendingConditionals.push({ key, binding, providedByConfig: configKey })
-        continue
-      }
-
-      if (binding.conditionals.length > 0) {
-        this._pendingConditionals.push({ key, binding })
-      } else {
-        if (this.registry.has(key)) {
-          throw new ErrRepeatedInjectableConfiguration(
-            `Found multiple bindings with the same injection key "${keyStr(key)}" configured at "${binding.configuredBy}"`,
-          )
-        }
-
-        this.configureBinding(key, binding)
-        this.hooks.emit('onBindingRegistered', { key, binding })
-      }
-    }
-
-    this.hooks.emit('onSetupComplete')
   }
 
   /**
@@ -1138,12 +1086,16 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Asserts that all bindings are resolvable.
-   * Usually called after all bindings have been registered and before the container is initialized.
+   * Asserts that all bindings are resolvable, reporting every missing dependency at once.
+   *
+   * Registers the bindings first, as {@link compile} does, without compiling them: call it before {@link init}.
+   * Once it has run, the container takes no more bindings.
    *
    * @throws {@link ErrUnresolvableDependencies} if any binding is not resolvable
    */
-  assertResolvable(): void {
+  async assertResolvable(): Promise<void> {
+    await this.registerAll()
+
     checkIfContainerIsResolvable(this.registry, this.getBindings.bind(this))
   }
 
@@ -1201,59 +1153,32 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Configures a binding for the given key.
+   * Configures a binding for the given key and registers it.
    *
    * @param key - The key to configure the binding for.
    * @param config - The binding configuration.
    */
-  private configureBinding<T>(key: InjectionToken<T>, config: Binding<T>, queueProfileEval = true): void {
+  private configureBinding<T>(key: InjectionToken<T>, config: Binding<T>): void {
     notNil(key)
     notNil(config)
 
-    if (this._ready) {
-      throw new ErrInvalidContainerState('Cannot register binding: container is already initialized')
+    if (this.registry.has(key)) {
+      throw new ErrDuplicateBinding(key)
     }
 
     if (config.async) {
-      if (config.lazy) {
-        throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
-      }
-
-      const allowed =
-        config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
-      if (!allowed) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
-        )
-      }
-
-      if ((config.injectableProperties?.size ?? 0) > 0) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding for key "${keyStr(key)}":` +
-            `async bindings cannot have injectable properties.`,
-        )
-      }
+      assertAsyncBinding(key, config)
     }
 
-    const binding = newBinding<T>(config)
+    // A copy, so that nothing done to the registered binding reaches the declared one a snapshot is taken from.
+    const binding = copyBinding(config)
     if (config.async && !binding.scopeID) {
       binding.scopeID = Scopes.SINGLETON
     }
 
     const scopeID = binding.scopeID ? binding.scopeID : this.scopeID
-    const ctor: Ctor | undefined =
-      (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
-    if (ctor !== undefined) {
-      // A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit
-      // hook set on the spec (or an @OnLifecycle callback) still wins.
-      if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
-        binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
-      }
-      if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
-        binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
-      }
-    }
+    adoptLifecycleHooks(key, binding)
 
     const scope = this.scopes.get(scopeID)
     if (scope === undefined && scopeID !== Scopes.TRANSIENT) {
@@ -1261,51 +1186,33 @@ export class CaffeineIoC implements Container {
     }
 
     binding.scopeID = scopeID
+    binding.lazy = binding.lazy ?? this.lazy ?? scope?.lazy ?? true
 
-    binding.lazy =
-      binding.lazy === undefined && this.lazy === undefined
-        ? (scope?.lazy ?? true)
-        : binding.lazy === undefined
-          ? this.lazy
-          : binding.lazy
+    this.registry.set(key, binding)
+    // Joins the bindings already answering to the key through a name or a base rather than replacing them, so the
+    // order they were registered in does not decide what the key resolves to.
+    this.mapUnder(key, binding)
 
-    const canonical = this.registerBinding(key, binding)
+    this.mapNamed(binding)
+    this.mapLabeled(key, binding)
+    this.mapAbstract(binding)
 
-    this.mapNamed(canonical)
-    this.mapLabeled(key, canonical)
-    this.mapAbstract(canonical)
-
-    if (!this._compiled && canonical.conditionals.length > 0) {
-      this._pendingConditionalKeys.add(key)
-    }
-
-    if (
-      queueProfileEval &&
-      !this._compiled &&
-      !this._evaluatingProfiles &&
-      canonical.profiles.size > 0 &&
-      !this._pendingManualProfileKeys.has(key)
-    ) {
-      this._pendingManualProfileKeys.add(key)
-      this._pendingManualProfiles.push({ key, binding: canonical })
-    }
-
-    if (canonical.scopeID === Scopes.REQUEST) {
+    if (binding.scopeID === Scopes.REQUEST) {
       this._hasRequestScoped = true
     }
 
-    if (canonical.async) {
+    if (binding.async) {
       this._hasAsync = true
     }
 
-    if (canonical.bootstrap !== undefined) {
-      if (canonical.scopeID !== Scopes.SINGLETON) {
+    if (binding.bootstrap !== undefined) {
+      if (binding.scopeID !== Scopes.SINGLETON) {
         throw new ErrInvalidBinding(
           `Cannot configure binding "${keyStr(key)}": bootstrap hooks are only allowed on singleton-scoped bindings`,
         )
       }
 
-      this._bootstrapBindings.set(key, canonical)
+      this._bootstrapBindings.set(key, binding)
     }
   }
 
@@ -1325,7 +1232,6 @@ export class CaffeineIoC implements Container {
     this.unmapFrom(key, binding)
 
     this.registry.delete(key)
-    this._pendingConditionalKeys.delete(key)
     this._bootstrapBindings.delete(key)
   }
 
@@ -1393,10 +1299,6 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private isRegistrable(binding: Binding): boolean {
-    return this.matchesProfiles(binding.profiles)
-  }
-
   private matchesProfiles(profiles: Set<string> | undefined): boolean {
     if (!profiles || profiles.size === 0) {
       return true
@@ -1414,189 +1316,6 @@ export class CaffeineIoC implements Container {
     }
 
     return false
-  }
-
-  private queueProfiledConfig(
-    key: InjectionToken,
-    config: DecoratedBindingConfig,
-    providedByConfig?: InjectionToken,
-  ): boolean {
-    const profiles = config.getProfiles
-    if (!profiles || profiles.size === 0) {
-      return false
-    }
-
-    if (this.matchesProfiles(profiles)) {
-      return false
-    }
-
-    const conditionals = config.getConditionals
-    const hasConditionals = conditionals !== undefined && conditionals.length > 0
-    const entry: PendingBinding = { key, config, providedByConfig }
-
-    this._pendingProfiles.push(entry)
-
-    if (hasConditionals && config.isConfiguration === true && config.getSource === undefined) {
-      this._pendingConfigKeys.set(key, config.getKeysProvided ?? [])
-    }
-
-    if (hasConditionals || providedByConfig !== undefined) {
-      this._pendingConditionals.push(entry)
-    }
-
-    return true
-  }
-
-  private isConfigClass(entry: PendingBinding): boolean {
-    if (entry.providedByConfig !== undefined) {
-      return false
-    }
-
-    if (entry.config !== undefined) {
-      return entry.config.isConfiguration === true && entry.config.getSource === undefined
-    }
-
-    return entry.binding?.configuration === true && entry.binding.source === undefined
-  }
-
-  private entryMatchesProfiles(entry: PendingBinding): boolean {
-    return this.matchesProfiles(entry.config?.getProfiles ?? entry.binding?.profiles)
-  }
-
-  private shouldDeferToConditionals(entry: PendingBinding): boolean {
-    const conditionals = entry.config?.getConditionals ?? entry.binding?.conditionals
-    return (conditionals !== undefined && conditionals.length > 0) || entry.providedByConfig !== undefined
-  }
-
-  private materializePending(entry: PendingBinding): Binding {
-    if (entry.binding !== undefined) {
-      return entry.binding
-    }
-
-    const binding = entry.config!.binding()
-    entry.binding = binding
-    return binding
-  }
-
-  private rejectProfile(entry: PendingBinding): void {
-    entry.profileRejected = true
-    if (entry.binding !== undefined) {
-      this.unref(entry.key)
-      this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding: entry.binding })
-    }
-  }
-
-  private registerProfileHit(entry: PendingBinding): void {
-    const binding = this.materializePending(entry)
-    this.hooks.emit('onSetup', { key: entry.key, binding })
-
-    if (binding.configuredBy !== undefined && this.registry.has(entry.key)) {
-      throw new ErrRepeatedInjectableConfiguration(
-        `Found multiple bindings with the same injection key "${keyStr(entry.key)}" configured at "${binding.configuredBy}"`,
-      )
-    }
-
-    this.configureBinding(entry.key, binding)
-    this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-  }
-
-  private leaveForConditionals(entry: PendingBinding): void {
-    const binding = this.materializePending(entry)
-    this.hooks.emit('onSetup', { key: entry.key, binding })
-  }
-
-  private evaluatePendingProfiles(): void {
-    this._evaluatingProfiles = true
-
-    try {
-      for (const entry of this._pendingProfiles) {
-        if (!this.isConfigClass(entry)) {
-          continue
-        }
-
-        if (!this.entryMatchesProfiles(entry)) {
-          this.rejectProfile(entry)
-          continue
-        }
-
-        if (this.shouldDeferToConditionals(entry)) {
-          this.leaveForConditionals(entry)
-          continue
-        }
-
-        this.registerProfileHit(entry)
-      }
-
-      for (const entry of this._pendingProfiles) {
-        if (this.isConfigClass(entry) || entry.providedByConfig !== undefined) {
-          continue
-        }
-
-        if (!this.entryMatchesProfiles(entry)) {
-          this.rejectProfile(entry)
-          continue
-        }
-
-        if (this.shouldDeferToConditionals(entry)) {
-          this.leaveForConditionals(entry)
-          continue
-        }
-
-        this.registerProfileHit(entry)
-      }
-
-      for (const entry of this._pendingProfiles) {
-        if (entry.providedByConfig === undefined) {
-          continue
-        }
-
-        if (!this.entryMatchesProfiles(entry)) {
-          this.rejectProfile(entry)
-          continue
-        }
-
-        if (this.shouldDeferToConditionals(entry)) {
-          this.leaveForConditionals(entry)
-          continue
-        }
-
-        this.registerProfileHit(entry)
-      }
-
-      for (const entry of this._pendingManualProfiles) {
-        if (!this.matchesProfiles(entry.binding!.profiles)) {
-          this.rejectProfile(entry)
-        }
-      }
-    } finally {
-      this._evaluatingProfiles = false
-      this._pendingProfiles = []
-      this._pendingManualProfiles = []
-      this._pendingManualProfileKeys.clear()
-    }
-  }
-
-  private registerBinding<T>(key: InjectionToken<T>, binding: Binding<T>): Binding<T> {
-    const existing = this.registry.get(key)
-    if (existing) {
-      // Registering a key again replaces its configuration, so the names, labels, base and bootstrap hook of the
-      // old one must stop pointing at it. configureBinding maps the new ones afterwards.
-      this.unmapMemberships(existing)
-      this._bootstrapBindings.delete(key)
-      this._pendingConditionalKeys.delete(key)
-
-      Object.assign(existing, binding, { id: existing.id })
-      this.mapUnder(key, existing)
-
-      return existing as Binding<T>
-    }
-
-    this.registry.set(key, binding)
-    // Joins the bindings already answering to the key through a name or a base rather than replacing them, so the
-    // order they were registered in does not decide what the key resolves to.
-    this.mapUnder(key, binding)
-
-    return binding
   }
 
   /**
@@ -1719,21 +1438,27 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Compiles all registered bindings — runs module evaluation, conditional resolution,
-   * circular-reference checks, scope validation, and factory compilation.
+   * Registers every binding and prepares it for resolution.
+   *
+   * In order: registers the decorated bindings when the `decorators` option is on, then the bindings declared with
+   * {@link bind} and {@link aspect}, runs the modules, applies the {@link rebind} calls, decides the conditions, runs
+   * the {@link overrides}, and then checks the graph and compiles the factories. Profiles are matched as each binding
+   * is registered. A key takes one binding.
    *
    * May be called before {@link init} to pre-warm the container (e.g. for benchmarking).
    * Calling {@link init} after `compile()` will skip recompilation automatically.
-   * Subsequent calls are no-ops.
+   * Subsequent calls return the same compilation, including its failure.
+   *
+   * @throws {@link ErrDuplicateBinding} if a key ends up with more than one binding
    */
-  async compile(): Promise<void> {
-    if (this._compiled) {
-      return
-    }
+  compile(): Promise<void> {
+    this._compilation ??= this.compileOnce()
 
-    await runModules(this.modules, this)
-    this.evaluatePendingProfiles()
-    await this.evaluatePendingConditionals()
+    return this._compilation
+  }
+
+  private async compileOnce(): Promise<void> {
+    await this.registerAll()
 
     if (this.circularReferences) {
       checkCircularReferences(this.registry, this.bindings)
@@ -1768,7 +1493,248 @@ export class CaffeineIoC implements Container {
       compileFactory(this, this.scopes, key, binding)
     }
 
+    this._compiling = false
     this._compiled = true
+  }
+
+  /**
+   * Registers every binding and decides its profiles, conditions and overrides, once.
+   */
+  private registerAll(): Promise<void> {
+    this._registration ??= this.registerOnce()
+
+    return this._registration
+  }
+
+  private async registerOnce(): Promise<void> {
+    this._compiling = true
+
+    if (this._decorators) {
+      this.autoWire()
+    }
+
+    const rebinds: Declaration[] = []
+    for (const declaration of this.declared) {
+      if (declaration.rebind) {
+        rebinds.push(declaration)
+      } else {
+        this.register(declaration.key, declaration.binding)
+      }
+    }
+
+    await runModules(this.modules, this)
+
+    for (const { key, binding } of rebinds) {
+      this.replace(key, binding)
+    }
+
+    await this.decideConditions()
+
+    if (this.overriders.length > 0) {
+      const ops = this.overrideOps()
+      for (const override of this.overriders) {
+        await override(ops)
+        await this.decideConditions()
+      }
+    }
+
+    for (const [key, binding] of this.registry) {
+      this.hooks.emit('onBindingRegistered', { key, binding })
+    }
+    for (const [key, binding] of this._dropped) {
+      this.hooks.emit('onBindingNotRegistered', { key, binding })
+    }
+    this._dropped = []
+
+    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
+    // the overrides and the hooks, so there is none.
+    this._registered = true
+  }
+
+  /**
+   * Registers the decorated bindings, with the same {@link register} every other binding goes through.
+   */
+  private autoWire(): void {
+    for (const [key, config] of getBindingConfigurations()) {
+      if (!hasInjectable(key)) {
+        throw new ErrOrphanedBindingConfig(key)
+      }
+
+      const binding = config.binding()
+
+      this.hooks.emit('onDecoratedBinding', { key, binding })
+      this.register(key, binding)
+    }
+
+    for (const [key, config] of providedBindingConfigurations()) {
+      const binding = config.binding()
+
+      this.hooks.emit('onDecoratedBinding', { key, binding })
+      this.register(key, binding)
+    }
+  }
+
+  /**
+   * Keeps a binding declared before the container compiles, or registers it right away while it compiles: in a
+   * module or an override.
+   */
+  private declare(key: InjectionToken, binding: Binding, rebind: boolean): void {
+    if (!this._compiling) {
+      this.declared.push({ key, binding, rebind })
+      return
+    }
+
+    if (rebind) {
+      this.replace(key, binding)
+    } else {
+      this.register(key, binding)
+    }
+  }
+
+  /**
+   * Registers a binding, however it was made. Profiles are final once the container compiles, so a binding whose
+   * profiles do not match is dropped here. One carrying conditions, or provided by a configuration class that
+   * carries them, is held until {@link decideConditions}.
+   *
+   * @throws {@link ErrDuplicateBinding} if a binding is already registered under the key
+   */
+  private register(key: InjectionToken, binding: Binding): void {
+    const parent = configurationOf(binding)
+
+    if (!this.matchesProfiles(binding.profiles) || (parent !== undefined && this.isDropped(parent))) {
+      this._dropped.push([key, binding])
+      return
+    }
+
+    if (binding.conditionals.length > 0 || (parent !== undefined && this.isHeld(parent))) {
+      this._held.push({ key, binding })
+      return
+    }
+
+    this.configureBinding(key, binding)
+  }
+
+  /**
+   * Replaces whatever answers to the key, registered or held, with the given binding.
+   */
+  private replace(key: InjectionToken, binding: Binding): void {
+    this.unbind(key)
+
+    const held = this._held
+    this._held = []
+    for (const entry of held) {
+      if (entry.key === key) {
+        this._dropped.push([entry.key, entry.binding])
+      } else {
+        this._held.push(entry)
+      }
+    }
+
+    // Rebinding replaces everything that answers to the key, not only the binding registered under it: a binding
+    // named after the key or extending it would otherwise stay a candidate beside the replacement. Those bindings
+    // stay registered under their own keys.
+    this.bindings.delete(key)
+    this.bindingMembers.delete(key)
+
+    this.register(key, binding)
+  }
+
+  private unbind(key: InjectionToken): void {
+    const binding = this.registry.get(key)
+    if (binding === undefined) {
+      return
+    }
+
+    this.unref(key)
+    this._dropped.push([key, binding])
+  }
+
+  private isHeld(key: InjectionToken): boolean {
+    return this._held.some(entry => entry.key === key)
+  }
+
+  private isDropped(key: InjectionToken): boolean {
+    return !this.registry.has(key) && !this.isHeld(key)
+  }
+
+  /**
+   * Decides the held bindings. A configuration class goes first and its `@Provides` bindings right after it, dropped
+   * with it when its conditions fail; everything else follows in the order it was held.
+   */
+  private async decideConditions(): Promise<void> {
+    const held = this._held
+    if (held.length === 0) {
+      return
+    }
+
+    this._held = []
+
+    const decided = new Set<HeldBinding>()
+    const decide = async (entry: HeldBinding): Promise<void> => {
+      decided.add(entry)
+
+      const parent = configurationOf(entry.binding)
+      const pass =
+        (parent === undefined || this.registry.has(parent)) &&
+        (await this.evalConditionals(entry.binding.conditionals, {
+          container: this,
+          key: entry.key,
+          binding: entry.binding,
+        }))
+
+      if (pass) {
+        this.configureBinding(entry.key, entry.binding)
+      } else {
+        this._dropped.push([entry.key, entry.binding])
+      }
+    }
+
+    for (const entry of held) {
+      if (!isConfigurationClass(entry.binding)) {
+        continue
+      }
+
+      await decide(entry)
+
+      for (const provided of held) {
+        if (configurationOf(provided.binding) === entry.key) {
+          await decide(provided)
+        }
+      }
+    }
+
+    for (const entry of held) {
+      if (!decided.has(entry)) {
+        await decide(entry)
+      }
+    }
+  }
+
+  private overrideOps(): OverrideOps {
+    return {
+      entries: () => this.entries(),
+      getBindings: key => this.getBindings(key),
+      has: key => this.has(key),
+      bind: (key, configure) => {
+        this.bind(key, configure)
+      },
+      rebind: (key, configure) => {
+        this.rebind(key, configure)
+      },
+      unbind: key => this.unbind(key),
+    }
+  }
+
+  private assertOpen(action: string): void {
+    if (this._compiling || this._compiled || this._ready) {
+      throw new ErrInvalidContainerState(`${action}: container has already started compiling`)
+    }
+  }
+
+  private assertNotRegistered(action: string): void {
+    if (this._registered || this._compiled || this._ready) {
+      throw new ErrInvalidContainerState(`${action}: container has already registered its bindings`)
+    }
   }
 
   private async resolveAsyncBinding(key: InjectionToken, binding: Binding): Promise<void> {
@@ -1883,38 +1849,6 @@ export class CaffeineIoC implements Container {
     return result.length === entries.length ? result : entries
   }
 
-  private findPendingConfigForKey(key: InjectionToken): InjectionToken | undefined {
-    for (const [configKey, providedKeys] of this._pendingConfigKeys) {
-      if (providedKeys.includes(key)) {
-        return configKey
-      }
-    }
-
-    return undefined
-  }
-
-  /**
-   * Registers a binding made by hand, or holds it back until {@link compile} when it carries conditions.
-   *
-   * Held back, it is decided with the decorated bindings: its conditions never see the binding itself, and a binding
-   * already registered under its key stays until they pass. A default bound with
-   * `.conditional(ctx => !ctx.container.has(key))` relies on both. Binding the key again discards it, the way it would
-   * replace a registered binding.
-   */
-  private registerOrHold(key: InjectionToken, binding: Binding, by: 'bind' | 'restore' = 'bind'): void {
-    const held = this._pendingConditionals.findIndex(e => e.byHand !== undefined && e.key === key)
-    if (held !== -1) {
-      this._pendingConditionals.splice(held, 1)
-    }
-
-    if (binding.conditionals.length > 0) {
-      this._pendingConditionals.push({ key, binding, byHand: by })
-      return
-    }
-
-    this.configureBinding(key, binding, by === 'bind')
-  }
-
   private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
     for (const c of conditionals) {
       if (!(await c(ctx))) {
@@ -1923,121 +1857,6 @@ export class CaffeineIoC implements Container {
     }
 
     return true
-  }
-
-  private async evaluatePendingConditionals(): Promise<void> {
-    const justRegistered = new Set<number>()
-
-    const evalAll = (conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> =>
-      this.evalConditionals(conditionals, ctx)
-
-    const registerEntry = (key: InjectionToken, binding: Binding): void => {
-      this.configureBinding(key, binding)
-      justRegistered.add(this.registry.get(key)!.id)
-    }
-
-    for (const entry of this._pendingConditionals) {
-      if (entry.profileRejected || entry.binding === undefined) {
-        continue
-      }
-
-      if (!entry.binding.configuration || entry.byHand !== undefined || entry.providedByConfig !== undefined) {
-        continue
-      }
-
-      const binding = entry.binding
-      const ctx: ConditionContext = { container: this, key: entry.key, binding }
-      const pass = await evalAll(binding.conditionals, ctx)
-
-      if (pass) {
-        registerEntry(entry.key, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-
-        for (const provided of this._pendingConditionals) {
-          if (provided.profileRejected || provided.binding === undefined) {
-            continue
-          }
-
-          if (provided.providedByConfig !== entry.key) {
-            continue
-          }
-
-          const providedBinding = provided.binding
-          const pCtx: ConditionContext = { container: this, key: provided.key, binding: providedBinding }
-          const pPass = await evalAll(providedBinding.conditionals, pCtx)
-
-          if (pPass) {
-            registerEntry(provided.key, providedBinding)
-            this.hooks.emit('onBindingRegistered', { key: provided.key, binding: providedBinding })
-          } else {
-            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: providedBinding })
-          }
-        }
-      } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-
-        for (const provided of this._pendingConditionals) {
-          if (provided.profileRejected || provided.binding === undefined) {
-            continue
-          }
-
-          if (provided.providedByConfig === entry.key) {
-            this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: provided.binding })
-          }
-        }
-      }
-    }
-
-    for (const entry of this._pendingConditionals) {
-      if (entry.profileRejected || entry.binding === undefined) {
-        continue
-      }
-
-      if ((entry.binding.configuration && entry.byHand === undefined) || entry.providedByConfig !== undefined) {
-        continue
-      }
-
-      const binding = entry.binding
-      const ctx: ConditionContext = { container: this, key: entry.key, binding }
-      // One bound by hand never entered the profile queue, so its profiles are matched here.
-      const pass =
-        (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await evalAll(binding.conditionals, ctx))
-
-      if (pass) {
-        registerEntry(entry.key, binding)
-        this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-      } else {
-        this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-      }
-    }
-
-    const toUnref: InjectionToken[] = []
-    for (const key of this._pendingConditionalKeys) {
-      const binding = this.registry.get(key)
-      if (binding === undefined || justRegistered.has(binding.id)) {
-        continue
-      }
-
-      const ctx: ConditionContext = {
-        container: this,
-        key,
-        binding: binding as unknown as Binding,
-      }
-      const pass = await evalAll(binding.conditionals, ctx)
-      if (!pass) {
-        toUnref.push(key)
-      }
-    }
-
-    for (const key of toUnref) {
-      const binding = this.registry.get(key)!
-      this.unref(key)
-      this.hooks.emit('onBindingNotRegistered', { key, binding: binding as unknown as Binding })
-    }
-
-    this._pendingConditionals = []
-    this._pendingConfigKeys.clear()
-    this._pendingConditionalKeys.clear()
   }
 
   // The queue is consumed with a cursor rather than `shift()`, which is O(n) per dequeue, and dependencies are
@@ -2112,4 +1931,77 @@ export class CaffeineIoC implements Container {
 
 export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
   return new CaffeineIoC(options)
+}
+
+/**
+ * The configuration class a `@Provides` binding belongs to.
+ */
+function configurationOf(binding: Binding): InjectionToken | undefined {
+  return binding.configuration === true ? binding.source?.ctor : undefined
+}
+
+function isConfigurationClass(binding: Binding): boolean {
+  return binding.configuration === true && binding.source === undefined
+}
+
+/**
+ * Refuses what an async binding cannot be: lazy, scoped other than singleton or refresh, or property injected.
+ */
+function assertAsyncBinding(key: InjectionToken, config: Binding): void {
+  if (config.lazy) {
+    throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
+  }
+
+  const allowed =
+    config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
+  if (!allowed) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
+    )
+  }
+
+  if ((config.injectableProperties?.size ?? 0) > 0) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding for key "${keyStr(key)}":` + `async bindings cannot have injectable properties.`,
+    )
+  }
+}
+
+/**
+ * A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit hook set on the
+ * spec (or an @OnLifecycle callback) still wins.
+ */
+function adoptLifecycleHooks<T>(key: InjectionToken<T>, binding: Binding<T>): void {
+  const ctor: Ctor | undefined =
+    (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
+  if (ctor === undefined) {
+    return
+  }
+
+  if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
+    binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
+  }
+  if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
+    binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
+  }
+}
+
+/**
+ * Copies the binding along with its collections, which the container changes in place once it registers one.
+ */
+function copyBinding<T>(binding: Binding<T>): Binding<T> {
+  return newBinding<T>({
+    ...binding,
+    injections: [...binding.injections],
+    injectableProperties: new Map(binding.injectableProperties),
+    interceptors: [...binding.interceptors],
+    profiles: new Set(binding.profiles),
+    names: [...binding.names],
+    conditionals: [...binding.conditionals],
+    keysProvided: [...binding.keysProvided],
+    labels: [...binding.labels],
+    tags: new Map(binding.tags),
+    injectionResolvers: [],
+    propertyResolvers: new Map(),
+  })
 }

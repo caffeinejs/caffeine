@@ -14,6 +14,7 @@ import { Provides } from '../decorators/provides.js'
 import { ProvidesAsync } from '../decorators/provides_async.js'
 import { HookListener } from '../hooks.js'
 import { token } from '../key.js'
+import { mod } from '../module.js'
 
 describe('Hooks', function () {
   describe('On Destroy', function () {
@@ -132,9 +133,8 @@ describe('Hooks', function () {
 
       it('fires with async: false when sync factory throws', async function () {
         const failListener = vi.fn()
-        const di = new CaffeineIoC({ profiles: ['hook-init-fail-sync'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-fail-sync'] })
         di.hooks.on('onBindingInitializationFailed', failListener)
-        di.autoWire()
 
         await expect(di.init()).rejects.toThrow('sync fail')
 
@@ -160,9 +160,8 @@ describe('Hooks', function () {
 
       it('fires with async: true when async factory rejects', async function () {
         const failListener = vi.fn()
-        const di = new CaffeineIoC({ profiles: ['hook-init-fail-async'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-fail-async'] })
         di.hooks.on('onBindingInitializationFailed', failListener)
-        di.autoWire()
 
         await expect(di.init()).rejects.toThrow('async fail')
 
@@ -183,9 +182,8 @@ describe('Hooks', function () {
 
       it('fires with async: false and matching instance', async function () {
         const listener = vi.fn()
-        const di = new CaffeineIoC({ profiles: ['hook-init-sync'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-sync'] })
         di.hooks.on('onBindingInitialized', listener)
-        di.autoWire()
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === SyncSvc)?.[0]
@@ -211,9 +209,8 @@ describe('Hooks', function () {
 
       it('fires with async: true and matching instance', async function () {
         const listener = vi.fn()
-        const di = new CaffeineIoC({ profiles: ['hook-init-async'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-async'] })
         di.hooks.on('onBindingInitialized', listener)
-        di.autoWire()
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === AsyncSvc)?.[0]
@@ -231,9 +228,8 @@ describe('Hooks', function () {
 
       it('does not fire for lazy binding during init()', async function () {
         const listener = vi.fn()
-        const di = new CaffeineIoC({ profiles: ['hook-init-lazy'], decorators: false })
+        const di = new CaffeineIoC({ profiles: ['hook-init-lazy'] })
         di.hooks.on('onBindingInitialized', listener)
-        di.autoWire()
         await di.init()
 
         const event = listener.mock.calls.find(([e]) => e.key === LazySvc)
@@ -243,65 +239,67 @@ describe('Hooks', function () {
   })
 
   describe('Container Lifetime Listener', function () {
-    const spy = vi.fn()
+    const kTest1 = token<string>(Symbol('test1'))
+    const kTest2 = token<string>(Symbol('test2'))
+    const kHand = token<string>(Symbol('hand'))
+    const kModule = token<string>(Symbol('module'))
 
-    // 1
     @Injectable()
     class Dep {}
 
-    // 1
-    class Incomplete {
-      onDestroy() {}
-    }
-
-    // 1
-    class IncompleteWithProp {
-      @Inject(token<string>(''))
-      message!: string
-    }
-
-    // 2
     @Injectable()
     @ConditionalOn(() => false)
     class NotValid {}
 
-    // 3 - belongs to profile 'test'; invisible to the no-profile container below
+    // Belongs to profile 'test'; invisible to the no-profile container below.
     @Injectable()
     @Profile('test')
     class OtherProfile {}
 
-    // 4
     @Configuration()
     class Conf {
-      // 5
-      @Provides(token<string>(Symbol('test1')))
+      @Provides(kTest1)
       @ConditionalOn(() => false)
       test1() {
         return 'test1'
       }
 
-      // 6
-      @Provides(token<string>(Symbol('test2')))
+      @Provides(kTest2)
       test2() {
         return 'test2'
       }
     }
 
-    it('should call inspector methods on container specific registration steps', async function () {
-      const di = new CaffeineIoC({ decorators: false })
+    // Listeners attached after construction see every decorated binding, because nothing registers before the
+    // container compiles.
+    it('should report each decorated binding, then what was registered and what was left out', async function () {
+      const decorated: unknown[] = []
+      const registered: unknown[] = []
+      const dropped: unknown[] = []
+      const disposed = vi.fn()
 
-      di.hooks.on('onSetup', a => spy())
-      di.hooks.on('onBindingRegistered', a => spy())
-      di.hooks.on('onBindingNotRegistered', a => spy())
-      di.hooks.on('onSetupComplete', a => spy())
-      di.hooks.on('onDisposed', a => spy())
+      const di = new CaffeineIoC()
+      di.bind(kHand, t => t.toValue('hand'))
+      di.addModules(mod('hooks-module', c => c.bind(kModule, t => t.toValue('module'))))
 
-      di.autoWire()
+      di.hooks.on('onDecoratedBinding', ({ key }) => decorated.push(key))
+      di.hooks.on('onBindingRegistered', ({ key }) => registered.push(key))
+      di.hooks.on('onBindingNotRegistered', ({ key }) => dropped.push(key))
+      di.hooks.on('onDisposed', disposed)
+
       await di.init()
-
       await di.dispose()
 
-      expect(spy).toHaveBeenCalledTimes(12)
+      expect(decorated).toEqual(expect.arrayContaining([Dep, NotValid, OtherProfile, Conf, kTest1, kTest2]))
+      expect(decorated).not.toContain(kHand)
+
+      expect(registered).toEqual(expect.arrayContaining([Dep, Conf, kTest2, kHand, kModule]))
+      expect(registered).not.toEqual(expect.arrayContaining([NotValid]))
+      expect(registered).not.toEqual(expect.arrayContaining([OtherProfile]))
+      expect(registered).not.toEqual(expect.arrayContaining([kTest1]))
+
+      expect(dropped).toEqual(expect.arrayContaining([NotValid, OtherProfile, kTest1]))
+      expect(disposed).toHaveBeenCalledOnce()
     })
   })
 
@@ -314,13 +312,13 @@ describe('Hooks', function () {
 
       const hooks = new HookListener()
 
-      hooks.on('onSetupComplete', spy1)
-      hooks.on('onSetupComplete', spy2)
-      hooks.once('onSetupComplete', spy3)
-      hooks.on('onDisposed', spy4)
+      hooks.on('onDisposed', spy1)
+      hooks.on('onDisposed', spy2)
+      hooks.once('onDisposed', spy3)
+      hooks.on('onModuleRegistered', spy4)
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
+      hooks.emit('onDisposed')
+      hooks.emit('onDisposed')
 
       expect(spy1).toHaveBeenCalledTimes(2)
       expect(spy2).toHaveBeenCalledTimes(2)
@@ -332,12 +330,12 @@ describe('Hooks', function () {
       spy3.mockReset()
       spy4.mockReset()
 
-      hooks.off('onSetupComplete', spy1)
-      hooks.off('onDisposed', spy2)
+      hooks.off('onDisposed', spy1)
+      hooks.off('onModuleRegistered', spy2)
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
       hooks.emit('onDisposed')
+      hooks.emit('onDisposed')
+      hooks.emit('onModuleRegistered')
 
       expect(spy1).not.toHaveBeenCalled()
       expect(spy2).toHaveBeenCalledTimes(2)
@@ -349,12 +347,12 @@ describe('Hooks', function () {
       spy3.mockReset()
       spy4.mockReset()
 
-      hooks.removeAllListeners('onSetupComplete')
+      hooks.removeAllListeners('onDisposed')
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
       hooks.emit('onDisposed')
       hooks.emit('onDisposed')
+      hooks.emit('onModuleRegistered')
+      hooks.emit('onModuleRegistered')
 
       expect(spy1).not.toHaveBeenCalled()
       expect(spy2).not.toHaveBeenCalled()
@@ -366,10 +364,10 @@ describe('Hooks', function () {
       const spy = vi.fn()
       const hooks = new HookListener()
 
-      hooks.on('onSetupComplete', spy)
+      hooks.on('onDisposed', spy)
 
-      expect(() => hooks.on('onSetupComplete', spy)).toThrow()
-      expect(() => hooks.once('onSetupComplete', spy)).toThrow()
+      expect(() => hooks.on('onDisposed', spy)).toThrow()
+      expect(() => hooks.once('onDisposed', spy)).toThrow()
     })
 
     describe('once() duplicate check', function () {
@@ -377,39 +375,39 @@ describe('Hooks', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
+        listener.once('onDecoratedBinding', handler)
 
-        expect(() => listener.once('onSetup', handler)).toThrow()
+        expect(() => listener.once('onDecoratedBinding', handler)).toThrow()
       })
 
       it('should throw when on() is followed by once() with the same listener', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.on('onSetup', handler)
+        listener.on('onDecoratedBinding', handler)
 
-        expect(() => listener.once('onSetup', handler)).toThrow()
+        expect(() => listener.once('onDecoratedBinding', handler)).toThrow()
       })
 
       it('should throw when once() is followed by on() with the same listener', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
+        listener.once('onDecoratedBinding', handler)
 
-        expect(() => listener.on('onSetup', handler)).toThrow()
+        expect(() => listener.on('onDecoratedBinding', handler)).toThrow()
       })
 
       it('should allow re-registering the same listener after it has fired', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
-        listener.emit('onSetup', {} as any)
+        listener.once('onDecoratedBinding', handler)
+        listener.emit('onDecoratedBinding', {} as any)
 
-        expect(() => listener.once('onSetup', handler)).not.toThrow()
+        expect(() => listener.once('onDecoratedBinding', handler)).not.toThrow()
 
-        listener.emit('onSetup', {} as any)
+        listener.emit('onDecoratedBinding', {} as any)
 
         expect(handler).toHaveBeenCalledTimes(2)
       })

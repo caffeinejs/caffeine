@@ -68,11 +68,11 @@ const json = graphToJSON(container)
 ## Validating the graph
 
 Call `assertResolvable()` before rendering to ensure every dependency can be
-resolved. It throws if a required key is missing or resolves to more than one
-binding with none of them primary.
+resolved. It registers the bindings, then throws listing every required key that
+is missing or resolves to more than one binding with none of them primary.
 
 ```ts
-container.assertResolvable()
+await container.assertResolvable()
 console.log(graphToText(container))
 ```
 
@@ -87,8 +87,8 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { graphToMermaid } from '@caffeinejs/di/graph'
 
 const container = new CaffeineIoC()
+await container.assertResolvable()
 await container.init()
-container.assertResolvable()
 
 if (process.env.GENERATE_GRAPH) {
   writeFileSync('dependency-graph.md', graphToMermaid(container))

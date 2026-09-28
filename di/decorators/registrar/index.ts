@@ -2,7 +2,6 @@ export type { Binding as BindingDecoratorConfig } from '../../binding.js'
 export type { DecoratorRegistrySnapshot } from './registrar.js'
 export {
   addProvidedBindings,
-  decoratorConfigToBinding,
   defineInjectable,
   defineMemberInjection,
   extendInjectableAttributes,

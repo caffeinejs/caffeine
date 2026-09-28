@@ -32,7 +32,7 @@ createWebApplication({ container })
   .with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
 ```
 
-`createApplication()` is headless. HTTP is `createWebApplication`. Side-effect-import controller / `@KafkaHandler` modules so they register.
+`createApplication()` is headless. HTTP is `createWebApplication`. Side-effect-import controller / `@KafkaHandler` modules before `bootstrap()` so they register: the container reads the decorators when it compiles.
 
 ## Config
 

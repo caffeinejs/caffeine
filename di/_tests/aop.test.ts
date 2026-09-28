@@ -613,7 +613,6 @@ describe('AOP', function () {
       txPredSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-pred'] })
-      di.bind(TxTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(TxTarget)
@@ -628,7 +627,6 @@ describe('AOP', function () {
       multiTagSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-multi-tag'] })
-      di.bind(MultiTagTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(MultiTagTarget)
@@ -644,7 +642,6 @@ describe('AOP', function () {
       cacheSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-method-cache'] })
-      di.bind(CacheTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(CacheTarget)
@@ -659,7 +656,6 @@ describe('AOP', function () {
       classAnnSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-class-ann'] })
-      di.bind(ReportSvc, t => t.toSelf())
       await di.init()
 
       di.get(ReportSvc).generate()
@@ -1039,7 +1035,6 @@ describe('AOP', function () {
       logReturnSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-entry-exit'] })
-      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       const result = di.get(LogTarget).process('hello')
@@ -1053,7 +1048,6 @@ describe('AOP', function () {
       logErrorSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-error'] })
-      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       expect(() => di.get(LogTarget).fail()).toThrow('log-error')
@@ -1064,7 +1058,6 @@ describe('AOP', function () {
       logTimingSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-timing'] })
-      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       di.get(LogTarget).process('x')
@@ -1077,7 +1070,6 @@ describe('AOP', function () {
       logLevelSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-level'] })
-      di.bind(LogTarget, t => t.toSelf())
       await di.init()
 
       const svc = di.get(LogTarget)
@@ -1092,7 +1084,6 @@ describe('AOP', function () {
       classLogSpy.mockClear()
 
       const di = new CaffeineIoC({ profiles: ['aop-log-class'] })
-      di.bind(ClassLogTarget, t => t.toSelf())
       await di.init()
 
       di.get(ClassLogTarget).process()

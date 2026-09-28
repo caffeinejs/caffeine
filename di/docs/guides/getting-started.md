@@ -94,7 +94,7 @@ export function createContainer() {
 //
 ```
 
-In this example, neither `ProductController`, nor `ProductRepository` were loaded by the time the container was created, so it does not know about them, and thus, they are not registered.  
+In this example, neither `ProductController`, nor `ProductRepository` is ever imported, so their decorators never run and the container does not know about them when it initializes: they are not registered.  
 We could solve this with:
 
 ```ts
@@ -112,7 +112,7 @@ To avoid having to import all files with decorated classes, CaffeineIoC provides
 ```ts
 import { CaffeineIoC, scan } from '@caffeinejs/di'
 
-// must be called before creating the container
+// must be awaited before the container initializes
 await scan({
   dir: rootDir,
   exclude: [import.meta.url, new URL('./index.ts', import.meta.url)],

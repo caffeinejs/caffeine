@@ -6,7 +6,8 @@ import { Extends } from './extends.js'
 import { defineInjectable } from './registrar/index.js'
 
 /**
- * Marks a class as an injectable component, registering it in the container.
+ * Marks a class as an injectable component. A container registers it when it compiles, unless its `decorators`
+ * option is off.
  *
  * Pass a named token (`token<T>(...)`) to bind by name instead of type.
  * For abstract-type binding use `@Extends` instead.

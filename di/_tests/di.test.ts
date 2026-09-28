@@ -26,11 +26,12 @@ describe('CaffeineIoC', function () {
     ) {}
   }
 
-  it('should print the type name when calling toString()', function () {
+  it('should print the type name when calling toString()', async function () {
     const di = new CaffeineIoC()
     di.bind(token<string>('tk100'), t => t.toValue('test'))
     di.bind(token<string>('tk200'), t => t.toValue('test'))
 
+    await di.compile()
     const str = di.toString()
     const protoStr = Object.prototype.toString.call(di)
 
@@ -42,9 +43,10 @@ describe('CaffeineIoC', function () {
     expect(protoStr).toEqual('[object CaffeineIoC]')
   })
 
-  it('should support iteration via entries() and direct Symbol.iterator', function () {
+  it('should support iteration via entries() and direct Symbol.iterator', async function () {
     const di = new CaffeineIoC()
 
+    await di.compile()
     for (const [key, binding] of di.entries()) {
       expect(key).toBeDefined()
       expect(binding).toBeDefined()
@@ -67,14 +69,13 @@ describe('CaffeineIoC', function () {
 
   // This test considers ALL injectable defined in this test file
   // --
-  it('should return the number of registered components when calling size()', function () {
+  it('should return the number of registered components when calling size()', async function () {
     const di = new CaffeineIoC()
     const userDefined = 3 // all injectables in this file
     const internal = 1 // the internal components (request scope manager is not enabled in this test)
     const expected = userDefined + internal
 
-    di.autoWire()
-    di.autoWire()
+    await di.compile()
 
     expect(di.size).toEqual(expected)
   })

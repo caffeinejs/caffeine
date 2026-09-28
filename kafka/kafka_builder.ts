@@ -239,14 +239,14 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     )
 
     // Registered once, covering every configured instance: starts every engine on `container.init()` and
-    // stops it on `container.dispose()`. A second named instance binds the same thing again, which replaces the first.
-    kit.container.bind(KafkaLifecycle, t => t.toFactory(ctx => new KafkaLifecycle(ctx.container)))
+    // stops it on `container.dispose()`. A second named instance rebinds the same thing, which replaces the first.
+    kit.container.rebind(KafkaLifecycle, t => t.toFactory(ctx => new KafkaLifecycle(ctx.container)))
 
     // Registered once, the same way, when any instance enabled it, and it reports those instances. Checked whenever
     // something asks the application's `ApplicationHealth` — the HTTP probes, a Watt check — and then it is what
     // makes readiness mean "consuming".
     if (this.#health) {
-      kit.container.bind(KafkaHealthIndicator, t =>
+      kit.container.rebind(KafkaHealthIndicator, t =>
         t.toFactory(ctx => new KafkaHealthIndicator(ctx.container as Container)).extends(HealthIndicator),
       )
     }

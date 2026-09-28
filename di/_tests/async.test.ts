@@ -134,8 +134,7 @@ describe('Async bindings via manual binding', function () {
       constructor(readonly host: string) {}
     }
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(Connection, t =>
       t.toAsyncFactory(async () => {
         return new Promise<Connection>(resolve => setTimeout(() => resolve(new Connection('localhost')), 10))
@@ -175,30 +174,27 @@ describe('Async bindings via manual binding', function () {
     expect((svc as AsyncSvc).dep.value).toBe('sync-dep')
   })
 
-  it('should throw when an explicit non-singleton scope is applied to an async binding', function () {
+  it('should throw when an explicit non-singleton scope is applied to an async binding', async function () {
     class MyService {}
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
+    di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lifetime(Scopes.TRANSIENT))
 
-    expect(() => {
-      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lifetime(Scopes.TRANSIENT))
-    }).toThrow(ErrInvalidBinding)
+    await expect(di.compile()).rejects.toThrow(ErrInvalidBinding)
   })
 
-  it('should throw when lazy() is called on an async binding', function () {
+  it('should throw when lazy() is called on an async binding', async function () {
     class MyService {}
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const lazy = new CaffeineIoC()
+    lazy.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy())
 
-    expect(() => {
-      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy())
-    }).toThrow(ErrInvalidBinding)
+    await expect(lazy.compile()).rejects.toThrow(ErrInvalidBinding)
 
-    expect(() => {
-      di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy(false))
-    }).not.toThrow()
+    const eager = new CaffeineIoC()
+    eager.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lazy(false))
+
+    await expect(eager.compile()).resolves.toBeUndefined()
   })
 })
 
@@ -206,8 +202,7 @@ describe('Async bindings with RefreshScope', function () {
   it('should not throw when refresh scope is applied to an async binding', function () {
     class MyService {}
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
 
     expect(() => {
       di.bind(MyService, t => t.toAsyncFactory(async () => new MyService()).lifetime(Scopes.REFRESH))
@@ -219,8 +214,7 @@ describe('Async bindings with RefreshScope', function () {
       constructor(readonly value: string) {}
     }
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(APIToken, t => t.toAsyncFactory(async () => new APIToken('token-v1')).lifetime(Scopes.REFRESH))
 
     await di.init()
@@ -237,8 +231,7 @@ describe('Async bindings with RefreshScope', function () {
     }
 
     let counter = 0
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(APIToken, t => t.toAsyncFactory(async () => new APIToken(`token-v${++counter}`)).lifetime(Scopes.REFRESH))
 
     await di.init()
@@ -266,8 +259,7 @@ describe('Async bindings with RefreshScope', function () {
     let singletonCount = 0
     let refreshCount = 0
 
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(DbConn, t => t.toAsyncFactory(async () => new DbConn(++singletonCount)))
     di.bind(RefreshedToken, t =>
       t.toAsyncFactory(async () => new RefreshedToken(++refreshCount)).lifetime(Scopes.REFRESH),
@@ -292,8 +284,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(Token, t => t.toAsyncFactory(async () => new Token(++counter)))
 
     await di.init()
@@ -316,8 +307,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(RefreshToken, t => t.toAsyncFactory(async () => new RefreshToken(++counter)).lifetime(Scopes.REFRESH))
 
     await di.init()
@@ -343,8 +333,7 @@ describe('resetInstance() with async bindings', function () {
     }
 
     let counter = 0
-    const di = new CaffeineIoC({ decorators: false })
-    di.autoWire()
+    const di = new CaffeineIoC()
     di.bind(Conn, t =>
       t
         .toAsyncFactory(async () => {

@@ -36,20 +36,20 @@ See the [Profiles guide](../guides/profiles.md).
 
 ---
 
-### `defaultScopeId`
+### `defaultScopeID`
 
 ```ts
-defaultScopeId?: Identifier
+defaultScopeID?: NamedToken<Scope>
 ```
 
 **Default:** `Scopes.SINGLETON`
 
-Scope applied to bindings that do not explicitly declare one via `@Lifetime()` or `.scope()`.
+Scope applied to bindings that do not explicitly declare one via `@Lifetime()` or `.lifetime()`.
 
 ```ts
 import { Scopes } from '@caffeinejs/di'
 
-const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
+const di = new CaffeineIoC({ defaultScopeID: Scopes.TRANSIENT })
 ```
 
 Built-in identifiers: `Scopes.SINGLETON`, `Scopes.TRANSIENT`, `Scopes.REFRESH`, `Scopes.REQUEST`. See the [Scopes reference](./scopes.md).
@@ -64,7 +64,7 @@ lazy?: boolean
 
 **Default:** `false`
 
-When `true`, construction of eager-by-default bindings (singleton, container,
+When `true`, construction of eager-by-default bindings (singleton,
 refresh) is deferred to the first `get()` call instead of running during `init()`.
 
 Individual bindings override this with `@Lazy()` / `@Lazy(false)` or `.lazy()` / `.lazy(false)`.
@@ -155,11 +155,13 @@ decorators?: boolean
 
 **Default:** `true`
 
-When `true`, the container calls `autoWire()` in its constructor, registering
-all `@Injectable`-decorated classes found in the global decorator registry at
-construction time.
+When `true`, the container registers the `@Injectable` and `@Configuration`
+classes found in the global decorator registry when it compiles, during
+`compile()` / `init()`. A decorated class only has to be imported before then.
 
-Set to `false` for fully manual containers with no decorators:
+Set to `false` for fully manual containers. Decorators are then ignored
+entirely: a decorated class bound with `bind()` gets only what its binding
+declares, so declare its injections on the binding:
 
 ```ts
 const di = new CaffeineIoC({ decorators: false })
@@ -199,7 +201,7 @@ See the [Modules guide](../guides/modules.md).
 | Field                       | Type                        | Default                    |
 | --------------------------- | --------------------------- | -------------------------- |
 | `profiles`                  | `string[]`                  | `[]`                       |
-| `defaultScopeId`            | `Identifier`                | `Scopes.SINGLETON`         |
+| `defaultScopeID`            | `NamedToken<Scope>`         | `Scopes.SINGLETON`         |
 | `lazy`                      | `boolean`                   | `false`                    |
 | `checks.scopes`             | `ScopeCheckMode`            | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean`                   | `true`                     |

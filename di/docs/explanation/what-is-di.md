@@ -90,8 +90,8 @@ Beyond basic injection, CaffeineIoC provides:
   every binding is resolved (`OnBootstrap`), and before shutdown (`OnDestroy`).
 - **Profiles** — activate bindings only in specific environments.
 - **Conditionals** — activate bindings based on arbitrary predicates.
-- **Testing utilities** — snapshot and restore the binding registry for
-  isolated tests.
+- **Testing utilities** — capture what a container was told and rebuild it as a
+  test container, with bindings replaced, skipped or pruned.
 
 See [Container lifecycle](./container-lifecycle.md) for how CaffeineIoC's startup and
 shutdown sequence works, or start with the

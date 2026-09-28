@@ -14,10 +14,9 @@ container.hooks.on('onBindingInitialized', ({ key, instance }) => {
   - [off](#off)
   - [emit](#emit)
 - [Events](#events)
-  - [onSetup](#onsetup)
+  - [onDecoratedBinding](#ondecoratedbinding)
   - [onBindingRegistered](#onbindingregistered)
   - [onBindingNotRegistered](#onbindingnotregistered)
-  - [onSetupComplete](#onsetupcomplete)
   - [onModuleRegistered](#onmoduleregistered)
   - [onModuleRegistrationFailed](#onmoduleregistrationfailed)
   - [onBindingInitialized](#onbindinginitialized)
@@ -39,8 +38,8 @@ chaining. Throws if the same listener function is registered twice for the
 same event.
 
 ```ts
-container.hooks.on('onSetupComplete', () => {
-  console.log('Container ready')
+container.hooks.on('onBindingRegistered', ({ key }) => {
+  console.log(`Registered ${String(key)}`)
 })
 ```
 
@@ -73,50 +72,46 @@ and module implementations.
 
 ## Events
 
-### onSetup
+Nothing is registered before the container compiles, so a listener attached
+any time before `compile()` / `init()` sees every registration event.
 
-Fired for each binding as the container processes it during startup. Fires
-before the binding is accepted or rejected.
+### onDecoratedBinding
+
+Fired once for each decorated binding (`@Injectable`, `@Configuration`,
+`@Provides`, …) when the container compiles, just before it is registered and
+before its profiles and conditions are decided. Not fired when the
+`decorators` option is off.
 
 ```ts
-container.hooks.on('onSetup', ({ key, binding }) => {
+container.hooks.on('onDecoratedBinding', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
+  // binding: Binding
 })
 ```
 
 ### onBindingRegistered
 
-Fired when a binding passes all conditions (profiles, conditionals) and is
-accepted into the container.
+Fired once for every binding the container holds after compiling, however it
+was made: decorated, bound by hand, bound by a module or added by an override.
+Fires after profiles, conditions and overrides are decided.
 
 ```ts
 container.hooks.on('onBindingRegistered', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
+  // binding: Binding
 })
 ```
 
 ### onBindingNotRegistered
 
-Fired when a binding is evaluated but skipped — for example, because its
-`@Profile` is not active or its `@ConditionalOn` predicate returned `false`.
+Fired once for every binding the container left out when compiling: its
+profile is not active, a condition returned `false`, or a `rebind()` or an
+override replaced or removed it.
 
 ```ts
 container.hooks.on('onBindingNotRegistered', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
-})
-```
-
-### onSetupComplete
-
-Fired once after all bindings have been processed and the container has
-finished its setup phase.
-
-```ts
-container.hooks.on('onSetupComplete', () => {
-  // no args
+  // binding: Binding
 })
 ```
 
@@ -145,8 +140,9 @@ container.hooks.on('onModuleRegistrationFailed', ({ name, index, error }) => {
 
 ### onBindingInitialized
 
-Fired after an instance is created and fully initialized (including
-`@PostConstruct` hooks).
+Fired during `init()` after an eager or async binding's instance is created and
+fully initialized (including `@PostConstruct` hooks). A lazy binding resolved
+later does not fire it.
 
 ```ts
 container.hooks.on('onBindingInitialized', ({ key, binding, instance, async }) => {

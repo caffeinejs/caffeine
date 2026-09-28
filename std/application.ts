@@ -173,8 +173,7 @@ export class Application<TConfig = unknown> {
   #closing?: Promise<void>
 
   /**
-   * Constructs the container with `decorators:false` and calls `autoWire()`; a caller-supplied, already-wired
-   * container is used as-is.
+   * Constructs the container from the given options, or uses a caller-supplied container as-is.
    */
   constructor(options: ApplicationOptions<TConfig> = {}) {
     const c = options.container
@@ -182,9 +181,7 @@ export class Application<TConfig = unknown> {
     if (c != null && typeof (c as Container).get === 'function') {
       this.#container = c as Container
     } else {
-      const opts = c != null ? (c as Partial<Options>) : {}
-      this.#container = new CaffeineIoC({ ...opts, decorators: false })
-      this.#container.autoWire()
+      this.#container = new CaffeineIoC(c != null ? (c as Partial<Options>) : {})
     }
 
     // Loaded in `bootstrap()`, once the profiles are known. An application that declared nothing still loads: no

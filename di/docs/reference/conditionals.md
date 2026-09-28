@@ -33,9 +33,9 @@ Used by:
 // synchronous
 const hasRedis: Conditional = ctx => ctx.container.has(RedisClient)
 
-// async
-const featureEnabled: Conditional = async ctx => {
-  const flags = ctx.container.get(FeatureFlags)
+// async — a predicate can only ask the container what is bound, so it reads anything else itself
+const featureEnabled: Conditional = async () => {
+  const flags = await loadFeatureFlags()
   return flags.isEnabled('new-cache')
 }
 ```
@@ -53,7 +53,7 @@ interface ConditionContext {
     has(key: InjectionToken): boolean
   }
   readonly key: InjectionToken
-  readonly binding: BindingDecoratorConfig
+  readonly binding: Binding
 }
 ```
 

@@ -523,11 +523,12 @@ describe('has() and a polymorphic binding', function () {
     expect(di.get(HasBase)).toBeInstanceOf(HasChild)
   })
 
-  it('agrees with get() before the container is initialized', function () {
+  it('agrees with get() once compiled, before the container is initialized', async function () {
     const di = new CaffeineIoC({ decorators: false })
     di.bind(HasChild, t => t.toSelf().extends(HasBase))
+    await di.compile()
 
-    // `.extends()` maps the base while the chain is built, so the answer does not wait for init().
+    // `.extends()` maps the base when the binding is registered, so the answer does not wait for init().
     expect(di.has(HasBase)).toBe(true)
   })
 

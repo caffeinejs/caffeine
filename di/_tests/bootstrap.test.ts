@@ -1,3 +1,4 @@
+import '../index.nodejs.js'
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
@@ -131,46 +132,43 @@ describe('OnBootstrap', function () {
     expect(order).toEqual(['first:start', 'first:end', 'second:start', 'second:end'])
   })
 
-  it('should throw ErrInvalidBinding when an OnBootstrap class is not singleton scoped', function () {
+  it('should throw ErrInvalidBinding when an OnBootstrap class is not singleton scoped', async function () {
     class Svc implements OnBootstrap {
       onBootstrap() {}
     }
 
     const di = new CaffeineIoC({ decorators: false })
+    di.bind(Svc, t => t.toSelf().lifetime(Scopes.TRANSIENT))
 
-    expect(() => {
-      di.bind(Svc, t => t.toSelf().lifetime(Scopes.TRANSIENT))
-    }).toThrow(ErrInvalidBinding)
+    await expect(di.compile()).rejects.toThrow(ErrInvalidBinding)
   })
 
-  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REQUEST scope', function () {
+  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REQUEST scope', async function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
+    di.bind(Svc, t =>
+      t
+        .toSelf()
+        .lifetime(Scopes.REQUEST)
+        .bootstrap(() => {}),
+    )
 
-    expect(() => {
-      di.bind(Svc, t =>
-        t
-          .toSelf()
-          .lifetime(Scopes.REQUEST)
-          .bootstrap(() => {}),
-      )
-    }).toThrow(ErrInvalidBinding)
+    await expect(di.compile()).rejects.toThrow(ErrInvalidBinding)
   })
 
-  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REFRESH scope', function () {
+  it('should throw ErrInvalidBinding when .bootstrap(fn) is combined with REFRESH scope', async function () {
     class Svc {}
 
     const di = new CaffeineIoC({ decorators: false })
+    di.bind(Svc, t =>
+      t
+        .toSelf()
+        .lifetime(Scopes.REFRESH)
+        .bootstrap(() => {}),
+    )
 
-    expect(() => {
-      di.bind(Svc, t =>
-        t
-          .toSelf()
-          .lifetime(Scopes.REFRESH)
-          .bootstrap(() => {}),
-      )
-    }).toThrow(ErrInvalidBinding)
+    await expect(di.compile()).rejects.toThrow(ErrInvalidBinding)
   })
 
   it('should reject init() when a hook throws, leaving the container not ready, and stop remaining hooks', async function () {

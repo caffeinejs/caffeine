@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Profile } from '../decorators/profile.js'
 import { ErrInvalidContainerState } from '../errors.js'
 import { token } from '../key.js'
 import { kModule, mod, type Module, type ModuleFn } from '../module.js'
@@ -103,14 +105,21 @@ describe('Module', function () {
       await expect(di.init()).resolves.toBeUndefined()
     })
 
-    it('should execute modules after autoWire', async function () {
+    it('should execute modules after the decorated bindings are registered', async function () {
+      @Injectable()
+      @Profile('module-after-decorated')
+      class Decorated {}
+
+      let seen: number | undefined
       const module: ModuleFn = (container: ContainerBindingOps) => {
+        seen = container.getBindings(Decorated).length
         container.bind(token<string>('manual-key'), t => t.toValue('manual-value'))
       }
 
-      const di = new CaffeineIoC({ modules: [module] })
+      const di = new CaffeineIoC({ profiles: ['module-after-decorated'], modules: [module] })
       await di.init()
 
+      expect(seen).toBe(1)
       expect(di.get(token<Record<string, unknown>>('manual-key'))).toBe('manual-value')
     })
 

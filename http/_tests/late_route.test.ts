@@ -72,7 +72,6 @@ describe('$route', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(DenyGuard, t => t.toSelf())
 
     app = createWebApplication({ container }).with(
       lateRoute(router => {
@@ -130,7 +129,6 @@ describe('$route', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(CountingGuard, t => t.toSelf())
 
     const ordinary = new Router('/ordinary').guards([CountingGuard])
     ordinary.get('/hello').handler(() => ({ ok: true }))

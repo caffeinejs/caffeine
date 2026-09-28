@@ -8,7 +8,7 @@ import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrMultiplePrimary } from '../errors.js'
+import { ErrDuplicateBinding, ErrMultiplePrimary } from '../errors.js'
 import { token } from '../key.js'
 
 describe('@Primary', function () {
@@ -35,8 +35,8 @@ describe('@Primary', function () {
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] })).toThrow(ErrMultiplePrimary)
+    it('should throw ErrMultiplePrimary at setup time', async function () {
+      await expect(new CaffeineIoC({ profiles: ['double-primary'] }).compile()).rejects.toThrow(ErrMultiplePrimary)
     })
   })
 
@@ -48,7 +48,7 @@ describe('@Primary', function () {
     }
 
     @Configuration()
-    @Profile('double-primary')
+    @Profile('double-primary-provides')
     class Cfg {
       @Provides(Msg, kMsg)
       @Primary()
@@ -63,8 +63,11 @@ describe('@Primary', function () {
       }
     }
 
-    it('should throw ErrMultiplePrimary at setup time', function () {
-      expect(() => new CaffeineIoC({ profiles: ['double-primary'] })).toThrow(ErrMultiplePrimary)
+    // A key takes one binding, so a second one is refused before primaries are ever compared.
+    it('should throw ErrDuplicateBinding at setup time', async function () {
+      await expect(new CaffeineIoC({ profiles: ['double-primary-provides'] }).compile()).rejects.toThrow(
+        ErrDuplicateBinding,
+      )
     })
   })
 
