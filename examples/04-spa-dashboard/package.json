@@ -1,5 +1,6 @@
 {
   "name": "@caffeinejs/example-spa-dashboard",
+  "description": "Single-page dashboard with authentication, CSRF protection, and static assets",
   "private": true,
   "type": "module",
   "scripts": {

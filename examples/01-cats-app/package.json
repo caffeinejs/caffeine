@@ -1,5 +1,6 @@
 {
   "name": "@caffeinejs/example-cats-app",
+  "description": "Basic Caffeine HTTP application with dependency injection and controllers",
   "private": true,
   "type": "module",
   "scripts": {
