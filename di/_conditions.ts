@@ -1,5 +1,10 @@
 import type { Binding } from './binding.js'
-import type { Identifier, InjectionToken } from './key.js'
+import type { Condition } from './conditional.js'
+import type { ContainerOps } from './container_interface.js'
+import { ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
+import { solutions } from './internal/util/errutil/index.js'
+import { selector } from './internal/util/objects/index.js'
+import { keyStr, type Identifier, type InjectionToken } from './key.js'
 import { Keys } from './symbols.js'
 
 // What the order reads of a binding held for its conditions.
@@ -228,4 +233,77 @@ export function decisionOrder<E extends Held>(pending: readonly E[]): E[] {
   const order = baseOrder(pending)
 
   return schedule(waitsOf(order)).map(i => order[i])
+}
+
+// Read through globalThis, so di carries no host binding: where the runtime has no process.env, every variable is unset.
+function hostEnv(): Record<string, string | undefined> | undefined {
+  return (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env
+}
+
+// Whether a binding other than the one being decided answers to the key, so a condition never sees its own binding.
+function answered(container: ContainerOps, key: InjectionToken, self: Binding): boolean {
+  return container.getBindings(key).some(b => b.id !== self.id)
+}
+
+// A config condition reads the values provider before the container has compiled, so only through a factory that
+// needs nothing compile() builds.
+function readValuesProvider(container: ContainerOps, key: InjectionToken): unknown {
+  const provider = container.getBinding(Keys.kValuesProvider)
+  if (provider === undefined) {
+    throw new ErrNoValuesProvider(`Read by the config condition of "${keyStr(key)}"`)
+  }
+
+  if (
+    typeof provider.factory !== 'function' ||
+    provider.type !== undefined ||
+    provider.factoryCreator !== undefined ||
+    provider.async === true ||
+    provider.injections.length > 0
+  ) {
+    throw new ErrInvalidBinding(
+      `Cannot decide the config condition of "${keyStr(key)}": the values provider cannot be read before init()` +
+        solutions(`Bind the values provider with toValue(), or with toFactory() and no injections`),
+    )
+  }
+
+  return provider.factory({ container, key: Keys.kValuesProvider, binding: provider })
+}
+
+async function decide(
+  container: ContainerOps,
+  key: InjectionToken,
+  binding: Binding,
+  condition: Condition,
+): Promise<boolean> {
+  switch (condition.kind) {
+    case 'present':
+      return answered(container, condition.key, binding)
+    case 'missing':
+      return !answered(container, condition.key, binding)
+    case 'config':
+      return selector(condition.access)(readValuesProvider(container, key)) === condition.expected
+    case 'env': {
+      const value = hostEnv()?.[condition.name]
+
+      return condition.expected === undefined ? value !== undefined && value !== '' : value === condition.expected
+    }
+    case 'when':
+      return Boolean(await condition.test())
+    default:
+      throw new ErrInvalidBinding(
+        `Cannot decide the conditions of "${keyStr(key)}": one of them is not a condition` +
+          solutions(`Build conditions with $cond, e.g. $cond.when(() => ...)`),
+      )
+  }
+}
+
+// Decides the conditions of a binding in order, stopping at the first that fails.
+export async function passes(container: ContainerOps, key: InjectionToken, binding: Binding): Promise<boolean> {
+  for (const condition of binding.conditionals) {
+    if (!(await decide(container, key, binding, condition))) {
+      return false
+    }
+  }
+
+  return true
 }

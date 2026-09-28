@@ -73,7 +73,8 @@ function config(access: ((config: never) => unknown) | string, ...rest: [expecte
 /**
  * Passes when the environment variable is set to a non-empty value, or equals `expected` when one is given.
  *
- * The variable is read when the container compiles. Where the runtime has no `process.env`, it is unset.
+ * The variable is read from `process.env` when the container compiles, and is unset where the runtime has none. Where a
+ * runtime exposes its variables another way, check them with `when` or `config` instead.
  */
 function env(name: string, expected?: string): Condition {
   if (typeof name !== 'string' || name.length === 0) {
