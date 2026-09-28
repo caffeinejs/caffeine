@@ -86,7 +86,7 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given authorization declared on the group', () => {
     it('should protect every route under it, and let a route opt out', async () => {
-      const router = new Router('/secure').authorize({})
+      const router = new Router('/secure').authorize()
       router.get('/private').handler(() => ({ ok: true }))
       router
         .get('/public')
@@ -105,6 +105,29 @@ describe('programmatic router parity with the decorator feature set', () => {
       expect((await app.fetch('/secure/public')).status).toBe(200)
 
       handler.result = successTicket([{ type: 'sub', value: 'u1' }])
+      expect((await app.fetch('/secure/private')).status).toBe(200)
+
+      await app.close()
+    })
+
+    it('should apply the default policy to a route with bare authorize()', async () => {
+      const router = new Router('/secure')
+      router.get('/public').handler(() => ({ ok: true }))
+      router
+        .get('/private')
+        .authorize()
+        .handler(() => ({ ok: true }))
+
+      const handler = new FakeAuthHandler()
+      const builder = createWebApplication()
+      builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+      const app = builder.mount(router)
+      await app.bootstrap()
+
+      expect((await app.fetch('/secure/public')).status).toBe(200)
+      expect((await app.fetch('/secure/private')).status).toBe(401)
+
+      handler.result = successTicket()
       expect((await app.fetch('/secure/private')).status).toBe(200)
 
       await app.close()

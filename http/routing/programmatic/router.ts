@@ -373,13 +373,15 @@ export class Router<
    * Adds an authorization declaration to the group. Calling it again adds another, and a router mounted inside
    * this one adds to it: every `roles` list declared along the way has to be satisfied, and every policy named.
    *
+   * With no options, asks for the application's default policy.
+   *
    * `{ allowAnonymous: true }` opens the routes that declare nothing themselves; one that calls `.authorize(...)`
    * on its own chain stays protected.
    *
    * `schemes` do not add up across levels: a route, or a router mounted inside this one, that names schemes of its
    * own replaces these, and one that names none uses them.
    */
-  authorize(options: RouteAuthzOptions): this {
+  authorize(options: RouteAuthzOptions = {}): this {
     this.#state.builder.authorize(options)
     return this
   }

@@ -92,9 +92,9 @@ export class RouteChain<
 
   /**
    * Adds an authorization declaration to the route, on top of what its router declared. Calling it again adds
-   * another rather than replacing the first.
+   * another rather than replacing the first. With no options, asks for the application's default policy.
    */
-  authorize(options: RouteAuthzOptions): this {
+  authorize(options: RouteAuthzOptions = {}): this {
     this.#state.builder.authorize(options)
     return this
   }
