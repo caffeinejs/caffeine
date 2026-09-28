@@ -15,6 +15,10 @@
       "types": "./dist/experimental/index.d.ts",
       "default": "./dist/experimental/index.js"
     },
+    "./tls": {
+      "types": "./dist/tls/index.d.ts",
+      "default": "./dist/tls/index.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
