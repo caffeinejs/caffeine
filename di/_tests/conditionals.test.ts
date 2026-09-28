@@ -8,6 +8,7 @@ import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
+import { ErrDuplicateBinding } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
@@ -293,10 +294,18 @@ describe('Conditionals', function () {
         expect(di.has(ScryptHasher)).toBe(true)
       })
 
-      it('should be discarded by a later binding of the same key, as a registered one is replaced', async function () {
+      it('should conflict with another binding of its key when its condition passes', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
         di.bind(Hasher, t => t.toClass(ArgonHasher))
+
+        await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+      })
+
+      it('should be discarded by a rebind() of its key', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
+        di.rebind(Hasher, t => t.toClass(ArgonHasher))
         await di.init()
 
         expect(di.get(Hasher).kind()).toBe('argon')

@@ -98,9 +98,8 @@ export interface CatchByOwner {
  * type another reference in the same list already handles.
  */
 export function buildCatchByMap(
-  // Only what resolving a reference needs, so both callers fit: a feature's `configure`, handed
-  // `ContainerBindingOps` before the container initializes, and route compilation, handed the whole container
-  // after it has.
+  // Only what resolving a reference needs, so both callers fit: the factory of the application-wide provider, handed
+  // the lookups of a resolution context, and route compilation, handed the whole container.
   container: Pick<Container, 'getBinding' | 'wrapBinding'>,
   refs: readonly ErrorHandlerRef[] | undefined,
   { owner, declaredBy }: CatchByOwner,

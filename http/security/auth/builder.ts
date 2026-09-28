@@ -542,7 +542,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       // A key of any spelling — a class, a named token — resolves from the container. Only what is left is the
       // handler itself.
       const handler: Provider<AuthenticationHandler> = isKey(keyOrHandler)
-        ? kit.container.wrap(keyOrHandler)
+        ? wrapLazily(kit.container, keyOrHandler)
         : { get: () => keyOrHandler }
       schemes.set(name, handler)
     }
@@ -551,7 +551,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       this.#mapper === undefined
         ? undefined
         : typeof this.#mapper === 'string' || typeof this.#mapper === 'symbol'
-          ? kit.container.wrap(this.#mapper as InjectionToken<PrincipalMapper>)
+          ? wrapLazily(kit.container, this.#mapper as InjectionToken<PrincipalMapper>)
           : { get: () => this.#mapper as PrincipalMapper }
     const schemeProvider = new AuthenticationSchemeProvider(schemes, options)
     const service = new AuthenticationService(schemeProvider, mapper)
@@ -573,7 +573,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       if (keyOrHandler instanceof OpaqueTokenAuthenticationHandler) {
         const store = keyOrHandler.options.store ?? OpaqueTokenStore
         const provider: Provider<OpaqueTokenStore> = isKey(store)
-          ? kit.container.wrap<OpaqueTokenStore>(store)
+          ? wrapLazily<OpaqueTokenStore>(kit.container, store)
           : { get: () => store }
         keyOrHandler.setStore(provider)
       }
@@ -584,8 +584,8 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
       // surfaces as a resolution error the first time remember-me is used.
       if (keyOrHandler instanceof CookieAuthenticationHandler && keyOrHandler.options.rememberMe) {
         keyOrHandler.setRememberDeps(
-          kit.container.wrap<RememberMeTokenStore>(RememberMeTokenStore),
-          kit.container.wrap<UserProvider>(UserProvider),
+          wrapLazily<RememberMeTokenStore>(kit.container, RememberMeTokenStore),
+          wrapLazily<UserProvider>(kit.container, UserProvider),
         )
       }
     }
@@ -726,6 +726,16 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 
     return this.#oidcHandlers.map(handler => handler.schemeName).filter(name => name !== defaultScheme)
   }
+}
+
+/**
+ * Wraps a key in a provider that looks its binding up on the first `get()`. Nothing is registered while features
+ * configure, so the lookup waits until a request asks for the instance.
+ */
+function wrapLazily<T>(container: FeatureConfigureKit['container'], key: InjectionToken<T>): Provider<T> {
+  let provider: Provider<T> | undefined
+
+  return { get: () => (provider ??= container.wrap(key)).get() }
 }
 
 /** Stands in for an omitted options callback: the scheme runs on its own defaults plus whatever is configured. */

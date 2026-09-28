@@ -14,16 +14,18 @@ class ProfiledConsumer {
   on(): void {}
 }
 
-function isWired(container: CaffeineIoC): boolean {
+async function isWired(container: CaffeineIoC): Promise<boolean> {
+  await container.compile()
+
   return container.getBindingsByLabel(Keys.KAFKA_HANDLER).some(d => d.binding.type === ProfiledConsumer)
 }
 
 describe('@KafkaHandler + @Profile', () => {
-  it('does not wire a profiled handler when the profile is inactive', () => {
-    expect(isWired(new CaffeineIoC())).toBe(false)
+  it('does not wire a profiled handler when the profile is inactive', async () => {
+    expect(await isWired(new CaffeineIoC())).toBe(false)
   })
 
-  it('wires a profiled handler when the profile is active', () => {
-    expect(isWired(new CaffeineIoC({ profiles: ['kafka'] }))).toBe(true)
+  it('wires a profiled handler when the profile is active', async () => {
+    expect(await isWired(new CaffeineIoC({ profiles: ['kafka'] }))).toBe(true)
   })
 })

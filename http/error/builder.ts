@@ -70,14 +70,18 @@ export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    const handlers = buildCatchByMap(kit.container, this.#handlers, {
-      owner: 'the application',
-      declaredBy: '"globalHandlers"',
-    })
-
+    // Built when the provider resolves: the handlers are bindings, and nothing is registered while features configure.
     kit.container.bind(ErrorHandlerProvider, t =>
       t
-        .toValue(new ErrorHandlerProvider(handlers ?? new Map()))
+        .toFactory(
+          ctx =>
+            new ErrorHandlerProvider(
+              buildCatchByMap(ctx.container, this.#handlers, {
+                owner: 'the application',
+                declaredBy: '"globalHandlers"',
+              }) ?? new Map(),
+            ),
+        )
         .lifetime(Scopes.SINGLETON)
         .internal(),
     )

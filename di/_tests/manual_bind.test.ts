@@ -8,7 +8,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
 import { UseAsyncFactory } from '../decorators/use_async_factory.js'
-import { ErrInvalidBinding, ErrMultiplePrimary, ErrNoResolutionForKey } from '../errors.js'
+import { ErrDuplicateBinding, ErrInvalidBinding, ErrMultiplePrimary, ErrNoResolutionForKey } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { Provider } from '../provider.js'
@@ -283,41 +283,53 @@ describe('Manual Binding', function () {
         expect(di.get(SqlStore).kind()).toBe('sql')
       })
 
-      describe('binding again a binding the key was taken from', function () {
-        // The rebind took the key from SqlStore, so SqlStore is no longer in the key's list. Binding SqlStore again
-        // unmaps it from the key it used to extend, and that must leave the replacement where it is.
+      describe('a key other bindings extend', function () {
+        // The rebind takes the key from SqlStore, which stays registered under its own key.
         abstract class Store {}
 
         class SqlStore extends Store {}
 
         class MemoryStore extends Store {}
 
-        it('should keep the replacement', async function () {
+        it('should leave the replacement as the only binding answering to it', async function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlStore, t => t.toSelf().extends(Store))
           di.rebind(Store, t => t.toClass(MemoryStore))
-          di.bind(SqlStore, t => t.toSelf())
+          await di.init()
+
+          expect(di.get(Store)).toBeInstanceOf(MemoryStore)
+          expect(di.getBindings(Store)).toHaveLength(1)
+          expect(di.get(SqlStore)).toBeInstanceOf(SqlStore)
+        })
+
+        it('should do the same with a replacement that carries a condition', async function () {
+          const di = new CaffeineIoC({ decorators: false })
+          di.bind(SqlStore, t => t.toSelf().extends(Store))
+          di.rebind(Store, t => t.toClass(MemoryStore).conditional(() => true))
           await di.init()
 
           expect(di.get(Store)).toBeInstanceOf(MemoryStore)
           expect(di.getBindings(Store)).toHaveLength(1)
         })
-
-        it('should keep a replacement that is not registered yet', async function () {
-          const di = new CaffeineIoC({ decorators: false })
-          di.bind(SqlStore, t => t.toSelf().extends(Store))
-          di.rebind(Store, t => t.toClass(MemoryStore).conditional(() => true))
-          di.bind(SqlStore, t => t.toSelf())
-          await di.init()
-
-          expect(di.get(Store)).toBeInstanceOf(MemoryStore)
-        })
       })
     })
 
     describe('binding a key twice', function () {
-      // The second binding replaces the first, so whatever only the first one declared must stop resolving to it.
-      // A leftover bootstrap hook used to be called on a binding that no longer had one, and init() threw.
+      // A key takes one binding: a second bind() is a mistake, not a replacement.
+      it('should refuse the second binding', async function () {
+        class Once {}
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(Once, t => t.toSelf())
+        di.bind(Once, t => t.toSelf())
+
+        await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+      })
+    })
+
+    describe('rebinding a key', function () {
+      // The replacement is the key's only binding, so whatever only the replaced one declared must stop resolving to
+      // it. A leftover bootstrap hook used to be called on a binding that no longer had one, and init() threw.
       it('should drop the names, labels, base and bootstrap hook of the replaced binding', async function () {
         abstract class Base {
           abstract kind(): string
@@ -336,7 +348,7 @@ describe('Manual Binding', function () {
 
         const di = new CaffeineIoC({ decorators: false })
         di.bind(Twice, t => t.toSelf().names(kOld).labels(label).extends(Base).bootstrap(bootstrap))
-        di.bind(Twice, t => t.toSelf().names(kNew))
+        di.rebind(Twice, t => t.toSelf().names(kNew))
         await di.init()
 
         expect(di.has(kOld)).toBe(false)
@@ -347,8 +359,8 @@ describe('Manual Binding', function () {
       })
 
       describe('as primary', function () {
-        // A key's list keeps its primary first, and resolution reads only the first binding. So a key bound again as
-        // primary has to move ahead of the bindings extending it, or get() stays ambiguous.
+        // A key's list keeps its primary first, and resolution reads only the first binding. So a key bound as primary
+        // after the bindings extending it has to move ahead of them, or get() stays ambiguous.
         abstract class Repo {}
 
         class SqlRepo extends Repo {}
@@ -358,7 +370,6 @@ describe('Manual Binding', function () {
         it('should put the key ahead of the bindings extending it', async function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlRepo, t => t.toSelf().extends(Repo))
-          di.bind(Repo, t => t.toClass(MemoryRepo))
           di.bind(Repo, t => t.toClass(MemoryRepo).primary())
           await di.init()
 
@@ -370,18 +381,18 @@ describe('Manual Binding', function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlRepo, t => t.toSelf().extends(Repo))
           di.bind(Repo, t => t.toClass(MemoryRepo).primary())
-          di.bind(Repo, t => t.toClass(MemoryRepo).primary())
+          di.rebind(Repo, t => t.toClass(MemoryRepo).primary())
           await di.init()
 
           expect(di.get(Repo)).toBeInstanceOf(MemoryRepo)
         })
 
-        it('should refuse it when a binding extending the key is primary already', function () {
+        it('should refuse it when a binding extending the key is primary already', async function () {
           const di = new CaffeineIoC({ decorators: false })
           di.bind(SqlRepo, t => t.toSelf().extends(Repo).primary())
-          di.bind(Repo, t => t.toClass(MemoryRepo))
+          di.bind(Repo, t => t.toClass(MemoryRepo).primary())
 
-          expect(() => di.bind(Repo, t => t.toClass(MemoryRepo).primary())).toThrow(ErrMultiplePrimary)
+          await expect(di.init()).rejects.toThrow(ErrMultiplePrimary)
         })
       })
     })
@@ -477,11 +488,12 @@ describe('Manual Binding', function () {
         expect(di.getBindings(ReqDep)[0].scopeID).toEqual(Scopes.REQUEST)
       })
 
-      it('should bind component as refresh scoped', function () {
+      it('should bind component as refresh scoped', async function () {
         const di = new CaffeineIoC()
 
         di.bind(RefreshDep, t => t.toSelf().lifetime(Scopes.REFRESH))
 
+        await di.compile()
         expect(di.getBindings(RefreshDep)[0].scopeID).toEqual(Scopes.REFRESH)
       })
     })
@@ -563,65 +575,71 @@ describe('Manual Binding', function () {
   })
 
   describe('labels()', function () {
-    it('should add a single label to the binding', function () {
+    it('should add a single label to the binding', async function () {
       const kSvc = Symbol('svc')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kSvc))
 
+      await di.compile()
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kSvc))).toHaveLength(1)
     })
 
-    it('should accumulate labels across multiple labels() calls', function () {
+    it('should accumulate labels across multiple labels() calls', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kA).labels(kB))
 
+      await di.compile()
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
-    it('should not add duplicate entries when called twice with the same symbol', function () {
+    it('should not add duplicate entries when called twice with the same symbol', async function () {
       const kSvc = Symbol('svc')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kSvc).labels(kSvc))
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.labels.filter(l => l === kSvc)).toHaveLength(1)
     })
 
-    it('should add multiple labels from an array', function () {
+    it('should add multiple labels from an array', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kA, kB))
 
+      await di.compile()
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
-    it('should merge labels from single and array calls', function () {
+    it('should merge labels from single and array calls', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kA).labels(kB))
 
+      await di.compile()
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kA))).toHaveLength(1)
       expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(kB))).toHaveLength(1)
     })
 
-    it('should deduplicate symbols present in both existing labels and the new array', function () {
+    it('should deduplicate symbols present in both existing labels and the new array', async function () {
       const kSvc = Symbol('svc')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).labels(kSvc).labels(kSvc))
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.labels.filter(l => l === kSvc)).toHaveLength(1)
@@ -629,17 +647,18 @@ describe('Manual Binding', function () {
   })
 
   describe('names()', function () {
-    it('should deduplicate names when the same name is added twice', function () {
+    it('should deduplicate names when the same name is added twice', async function () {
       const di = new CaffeineIoC({ decorators: false })
 
       di.bind(token<string>('svc'), t => t.toValue('ok').names('alpha', 'alpha'))
 
+      await di.compile()
       expect(di.getBinding(token<Record<string, unknown>>('svc')).names).toEqual(['alpha'])
     })
   })
 
   describe('primary()', function () {
-    it('should set the primary flag on the binding', function () {
+    it('should set the primary flag on the binding', async function () {
       const di = new CaffeineIoC({ decorators: false })
 
       class Svc {
@@ -648,47 +667,51 @@ describe('Manual Binding', function () {
 
       di.bind(Svc, t => t.toSelf().primary())
 
+      await di.compile()
       expect(di.getBinding(Svc).primary).toBe(true)
     })
   })
 
   describe('tags()', function () {
-    it('should set a single tag on the binding', function () {
+    it('should set a single tag on the binding', async function () {
       const kRoute = Symbol('route')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).tags(kRoute, '/users'))
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kRoute)).toBe('/users')
     })
 
-    it('should accumulate tags across multiple tags() calls', function () {
+    it('should accumulate tags across multiple tags() calls', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).tags(kA, 1).tags(kB, 2))
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kA)).toBe(1)
       expect(binding.tags.get(kB)).toBe(2)
     })
 
-    it('should overwrite an existing tag when called with the same key', function () {
+    it('should overwrite an existing tag when called with the same key', async function () {
       const kSlot = Symbol('slot')
       const di = new CaffeineIoC()
 
       di.bind(token<Record<string, unknown>>('svc'), t => t.toValue({}).tags(kSlot, 'first').tags(kSlot, 'second'))
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kSlot)).toBe('second')
     })
 
-    it('should set multiple tags from a map', function () {
+    it('should set multiple tags from a map', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
@@ -702,13 +725,14 @@ describe('Manual Binding', function () {
         ),
       )
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kA)).toBe('alpha')
       expect(binding.tags.get(kB)).toBe('beta')
     })
 
-    it('should merge single tag with map tags', function () {
+    it('should merge single tag with map tags', async function () {
       const kA = Symbol('a')
       const kB = Symbol('b')
       const di = new CaffeineIoC()
@@ -720,13 +744,14 @@ describe('Manual Binding', function () {
           .tags(new Map([[kB, 'from-map']])),
       )
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kA)).toBe('from-single')
       expect(binding.tags.get(kB)).toBe('from-map')
     })
 
-    it('should overwrite keys already present when maps overlap', function () {
+    it('should overwrite keys already present when maps overlap', async function () {
       const kSlot = Symbol('slot')
       const di = new CaffeineIoC()
 
@@ -737,6 +762,7 @@ describe('Manual Binding', function () {
           .tags(new Map([[kSlot, 'second']])),
       )
 
+      await di.compile()
       const binding = di.getBindings(token<Record<string, unknown>>('svc'))[0]
 
       expect(binding.tags.get(kSlot)).toBe('second')
@@ -809,7 +835,7 @@ describe('Manual Binding', function () {
   })
 
   describe('async binding constraints', function () {
-    it('should throw ErrInvalidBinding when async binding has an injectable property', function () {
+    it('should throw ErrInvalidBinding when async binding has an injectable property', async function () {
       const kDep = token<string>(Symbol('dep'))
 
       @UseAsyncFactory(async () => new AsyncWithInjectableProp())
@@ -821,7 +847,7 @@ describe('Manual Binding', function () {
 
       void AsyncWithInjectableProp
 
-      expect(() => new CaffeineIoC()).toThrow(ErrInvalidBinding)
+      await expect(new CaffeineIoC().compile()).rejects.toThrow(ErrInvalidBinding)
     })
   })
 

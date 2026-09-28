@@ -1,6 +1,6 @@
 # Lazy
 
-By default, CaffeineIoC constructs singleton, container-scoped, and refresh-scoped bindings
+By default, CaffeineIoC constructs singleton and refresh-scoped bindings
 eagerly — during `init()`. A lazy binding defers that construction until the binding
 is first resolved via `get()`.
 
@@ -151,7 +151,7 @@ await di.init()
 ## Async bindings
 
 Async bindings cannot be lazy. Combining `@Lazy()` with `@UseAsyncFactory` or
-`@ProvidesAsync` throws `ErrInvalidBinding` at container construction time.
+`@ProvidesAsync` throws `ErrInvalidBinding` when the container compiles.
 
 ```ts
 // throws ErrInvalidBinding — async bindings cannot be deferred

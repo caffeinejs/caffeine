@@ -21,7 +21,7 @@ describe('@Injectable — extending an @Injectable base', function () {
 
   void Child
 
-  it('throws ErrInjectableBase at container construction — @Injectable classes cannot serve as extension bases', function () {
-    expect(() => new CaffeineIoC()).toThrow(ErrInjectableBase)
+  it('throws ErrInjectableBase when the container compiles — @Injectable classes cannot serve as extension bases', async function () {
+    await expect(new CaffeineIoC().compile()).rejects.toThrow(ErrInjectableBase)
   })
 })

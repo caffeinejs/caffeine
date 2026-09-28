@@ -45,6 +45,20 @@ const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepos
 The container that comes out of `.build()` is a real CaffeineIoC container with all
 production wiring intact, minus the pieces you replaced.
 
+## What the rules reach
+
+The test container holds what the source was told — its bindings made by hand, its
+modules, its profiles and its decorated classes — and registers all of it itself when
+it initializes. `.override()`, `.focus()`, `.isolate()`, `.skip()` and
+`.skipAsyncBindings()` run after that, once every binding is registered and its
+profiles and conditions are decided. So they reach a binding however it was made:
+decorated, bound by hand, bound by one of the source's modules, or bound by a module
+passed to `.modules()`.
+
+The rules are applied when the test container initializes, not when `.build()`
+returns. Whatever they leave has to resolve: a binding that depends on a skipped or
+pruned one fails `init()` unless it is skipped or replaced too.
+
 ## Source: container, snapshot, or empty
 
 `TestContainer` accepts an uninitialized container, a `Snapshot`, or no argument:
@@ -53,7 +67,7 @@ production wiring intact, minus the pieces you replaced.
 // from the uninitialized production container
 const di = new TestContainer(appContainer).build()
 
-// from a snapshot — avoids re-reading decorator registrations on every test
+// from a snapshot — what the container was told, frozen when it was taken
 const snap = appContainer.snapshot()
 const di = new TestContainer(snap).build()
 
@@ -61,19 +75,23 @@ const di = new TestContainer(snap).build()
 const di = new TestContainer().modules(ordersModule).overrideWithMock(OrderRepository, fakeRepo).build()
 ```
 
-When the production container is cheap to construct, passing it directly is fine.
-When decorator scanning or module setup is expensive, snapshot it once and reuse
-across test suites.
+Passing the container takes its snapshot. A snapshot records what the container was
+told: its bindings made by hand, its modules, its profiles and whether it registers
+decorated classes. It does not record what the container registered — the test
+container runs the modules and registers the decorated classes itself — so it saves
+no setup work. Take one explicitly when the source will change after you build from
+it.
 
 Either way, the test container keeps the values the source bound with
 `bindConfig()`, so `$i.config` injections resolve as they do in production.
 
-When constructed empty, `.build()` enables decorator auto-wiring so types imported
-via the feature module register on the test container.
+When constructed empty, the test container registers decorated classes, so types
+imported via the feature module register on it.
 
 ## Replacing a binding
 
-`.override()` substitutes any binding while leaving the rest of the tree intact:
+`.override()` substitutes any binding — decorated, bound by hand or bound by a module —
+while leaving the rest of the tree intact:
 
 ```ts
 const di = new TestContainer(appContainer).override(EmailClient, b => b.toClass(InMemoryEmailClient)).build()
@@ -153,6 +171,9 @@ meaningful role in a particular test (analytics, telemetry, background jobs):
 const di = new TestContainer(appContainer).skip(Analytics, MetricsReporter).build()
 ```
 
+A binding that depends on a skipped one must be skipped or replaced too, or
+`init()` fails.
+
 ## Dropping async bindings
 
 Async bindings (created with `@UseAsyncFactory` or `@ProvidesAsync`) hold network or I/O
@@ -173,6 +194,10 @@ regardless of this filter.
 
 ## Activating profiles
 
+The test container activates the source's profiles. `.profiles()` replaces them: only
+the profiles it names are active, so a `@Profile('test')` class the source left out
+is registered, and one only the source's profiles matched is not.
+
 ```ts
 const di = new TestContainer(appContainer).profiles('test', 'no-cache').build()
 
@@ -182,7 +207,9 @@ await di.init()
 ## Adding test modules
 
 Pass extra modules to inject test-specific bindings that do not exist in the
-production container:
+production container. They run after the source's modules, and the rules reach what
+they bind: a `.focus()`ed container drops a test binding nothing in the focused
+graph depends on.
 
 ```ts
 const di = new TestContainer(appContainer).modules(testHelpersModule).build()

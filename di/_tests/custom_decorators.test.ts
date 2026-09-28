@@ -26,8 +26,9 @@ describe('Custom decorator primitives', function () {
     @Injectable()
     class StaticLazy {}
 
-    it('should apply a static partial to the class binding', function () {
+    it('should apply a static partial to the class binding', async function () {
       const di = new CaffeineIoC()
+      await di.compile()
       const binding = di.getBindings(StaticLazy)[0]
       expect(binding.lazy).toBe(true)
     })
@@ -58,10 +59,17 @@ describe('Custom decorator primitives', function () {
       @MyFieldInject(kDep) dep!: FieldDep
     }
 
+    @Configuration()
+    class FieldDepConf {
+      @Provides(kDep)
+      dep(): FieldDep {
+        return new FieldDep()
+      }
+    }
+    void FieldDepConf
+
     it('should expose injectableProperties from metadata in the factory', async function () {
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDep, t => t.toClass(FieldDep))
-      di.bind(FieldConsumer, t => t.toSelf())
+      const di = new CaffeineIoC()
 
       await di.init()
 
@@ -86,8 +94,9 @@ describe('Custom decorator primitives', function () {
     }
     void ConfLazyBean
 
-    it('should apply a partial to a @Provides method making it lazy', function () {
+    it('should apply a partial to a @Provides method making it lazy', async function () {
       const di = new CaffeineIoC()
+      await di.compile()
       const binding = di.getBindings(kService)[0]
       expect(binding.lazy).toBe(true)
     })
@@ -99,8 +108,7 @@ describe('Custom decorator primitives', function () {
     class TransientSvc {}
 
     it('should apply Injectable and Lifetime on the same class', async function () {
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(TransientSvc, t => t.toSelf())
+      const di = new CaffeineIoC()
       await di.init()
       const a = di.get(TransientSvc)
       const b = di.get(TransientSvc)
@@ -114,8 +122,9 @@ describe('Custom decorator primitives', function () {
     @Label(sym)
     class ComposedCtrl {}
 
-    it('should apply Injectable and Label and accumulate all contributions', function () {
+    it('should apply Injectable and Label and accumulate all contributions', async function () {
       const di = new CaffeineIoC()
+      await di.compile()
       expect(di.has(ComposedCtrl)).toBe(true)
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
       expect(result).toHaveLength(1)
@@ -144,10 +153,17 @@ describe('Custom decorator primitives', function () {
       @MyInject(kCustomDep) dep!: TargetService
     }
 
+    @Configuration()
+    class TargetServiceConf {
+      @Provides(kCustomDep)
+      target(): TargetService {
+        return new TargetService()
+      }
+    }
+    void TargetServiceConf
+
     it('should build a custom field injection decorator that resolves correctly', async function () {
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(kCustomDep, t => t.toClass(TargetService))
-      di.bind(TargetConsumer, t => t.toSelf())
+      const di = new CaffeineIoC()
       await di.init()
       const consumer = di.get(TargetConsumer) as TargetConsumer
       expect(consumer.dep).toBeInstanceOf(TargetService)

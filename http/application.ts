@@ -529,8 +529,8 @@ export class WebApplication<
       await register(state, state.plugins)
     }
 
-    // Snapshotted by the container when it was constructed, so every controller the application can resolve
-    // is already known here — long before routing is built.
+    // Registered when the container compiled, so every controller the application can resolve is already known
+    // here — long before routing is built.
     for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
       if (typeof key !== 'function') {
         continue

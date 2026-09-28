@@ -10,7 +10,7 @@ import { Provides } from '../decorators/provides.js'
 import { token } from '../key.js'
 
 describe('Label', function () {
-  it('should tag a class and return its binding via getBy', function () {
+  it('should tag a class and return its binding via getBy', async function () {
     const sym = Symbol('svc')
 
     @Label(sym)
@@ -19,12 +19,13 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
+    await di.compile()
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
     expect(result).toHaveLength(1)
     expect(result[0].key).toBe(Svc)
   })
 
-  it('should support multiple labels on a single class', function () {
+  it('should support multiple labels on a single class', async function () {
     const sym1 = Symbol('a')
     const sym2 = Symbol('b')
 
@@ -34,11 +35,12 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
+    await di.compile()
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))).toHaveLength(1)
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2))).toHaveLength(1)
   })
 
-  it('should accumulate labels when @Label is stacked', function () {
+  it('should accumulate labels when @Label is stacked', async function () {
     const sym1 = Symbol('x')
     const sym2 = Symbol('y')
 
@@ -49,12 +51,13 @@ describe('Label', function () {
 
     const di = new CaffeineIoC()
 
+    await di.compile()
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))).toHaveLength(1)
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym2))).toHaveLength(1)
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym1))[0].key).toBe(Stacked)
   })
 
-  it('should return a BindingDescriptor with the correct key and labels', function () {
+  it('should return a BindingDescriptor with the correct key and labels', async function () {
     const sym = Symbol('resolve')
 
     @Label(sym)
@@ -62,6 +65,7 @@ describe('Label', function () {
     class Resolved {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const descriptors = di.getBindingsByLabel(sym)
 
     expect(descriptors).toHaveLength(1)
@@ -69,7 +73,7 @@ describe('Label', function () {
     expect(descriptors[0].binding.labels).toContain(sym)
   })
 
-  it('should return BindingDescriptor[] from getBindingsBy, not resolved instances', function () {
+  it('should return BindingDescriptor[] from getBindingsBy, not resolved instances', async function () {
     const sym = Symbol('bindings-only')
 
     @Label(sym)
@@ -77,13 +81,14 @@ describe('Label', function () {
     class Target {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
 
     expect(result[0]).not.toBeInstanceOf(Target)
     expect(typeof result[0].key).toBe('function')
   })
 
-  it('should not return the binding of a class that fails its conditional', function () {
+  it('should not return the binding of a class that fails its conditional', async function () {
     const sym = Symbol('cond')
 
     @Label(sym)
@@ -92,6 +97,7 @@ describe('Label', function () {
     class Excluded {}
 
     const di = new CaffeineIoC()
+    await di.compile()
 
     expect(di.has(Excluded)).toBe(false)
     expect(di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))).toHaveLength(0)
@@ -115,7 +121,7 @@ describe('Label', function () {
   })
 
   describe('on @Provides methods inside @Configuration', function () {
-    it('should tag a bean method and return its binding via getBindingsByLabel', function () {
+    it('should tag a bean method and return its binding via getBindingsByLabel', async function () {
       const sym = Symbol('bean-label')
       const kSvc = token<string>(Symbol('svc-key'))
 
@@ -130,12 +136,13 @@ describe('Label', function () {
 
       const di = new CaffeineIoC()
 
+      await di.compile()
       const result = di.getBindingsBy(descriptor => descriptor.binding.labels.includes(sym))
       expect(result).toHaveLength(1)
       expect(result[0].binding.labels).toContain(sym)
     })
 
-    it('should return a BindingDescriptor with the correct key and labels when label is on @Provides method', function () {
+    it('should return a BindingDescriptor with the correct key and labels when label is on @Provides method', async function () {
       const sym = Symbol('bean-label-resolve')
       const kItem = token<Record<string, unknown>>(Symbol('item-key'))
 
@@ -149,6 +156,7 @@ describe('Label', function () {
       }
 
       const di = new CaffeineIoC()
+      await di.compile()
       const descriptors = di.getBindingsByLabel(sym)
 
       expect(descriptors).toHaveLength(1)

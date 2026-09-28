@@ -4,6 +4,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Bindings and keys
 
+- Every binding registers through one path in `compile()`, however it was made: decorated (`autoWire()`, private),
+  bound by hand, bound by a module, or added by an override. Nothing is registered before `compile()`. Do not add a
+  branch on where a binding came from.
+- A key takes one binding once profiles and conditions are decided: a second one is `ErrDuplicateBinding`.
+  `rebind(key)` and `overrides()` are the only replacements. `bind()` does not read decorators.
 - A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
   must never see its own binding, or a default written as `.conditional(ctx => !ctx.container.has(key))` removes
   itself.
@@ -23,8 +28,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - Do not mutate the module-level state in `decorators/registrar/registrar.ts` (`Bindings`, `ProvidedBindings`,
   `MetadataWeakMap`, `Injectables`) from tests. Use the public API and a fresh container for isolation.
-- `await container.init()` before `container.get()` or `container.getMany()`, or instances resolve as `undefined`
-  or with missing dependencies.
+- `await container.init()` before `container.get()` or `container.getMany()`: before it they throw
+  `ErrInvalidContainerState`. `await container.compile()` before `has()`, `getBindings()` or `entries()`: before it
+  nothing is registered, and a negative assertion passes vacuously.
+- Every decorated class a test file declares registers into every container with decorators on. Give a fixture a
+  `@Profile` and activate it where it is used, or a stray fixture breaks unrelated tests.
 
 ## Resolution stages
 

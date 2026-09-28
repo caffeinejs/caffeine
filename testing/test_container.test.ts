@@ -5,6 +5,8 @@ import {
   ErrUnresolvableDependencies,
   Inject,
   Injectable,
+  Keys,
+  mod,
   Profile,
   Provides,
   ProvidesAsync,
@@ -123,7 +125,7 @@ describe('TestContainer', function () {
   })
 
   describe('empty constructor', function () {
-    it('autoWires decorated types without a source container', async function () {
+    it('registers decorated types without a source container', async function () {
       const di = new TestContainer().build()
       await di.init()
 
@@ -195,6 +197,7 @@ describe('TestContainer', function () {
       const mockRepo = {} as RepositoryWithShared
       const source = new CaffeineIoC()
       const di = new TestContainer(source).isolate(RepositoryWithShared, false, b => b.toValue(mockRepo)).build()
+      await di.compile()
 
       expect(di.has(ControllerWithShared)).toBe(true)
       expect(di.has(SharedDep)).toBe(true)
@@ -225,32 +228,37 @@ describe('TestContainer', function () {
       constructor(readonly conn: string) {}
     }
 
-    it('skipAsyncBindings() with no args strips all async bindings', function () {
+    // Focused on the fixtures under test, so the container compiles without every other decorated fixture here.
+    it('skipAsyncBindings() with no args strips all async bindings', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skipAsyncBindings().build()
+      const di = new TestContainer(source).focus(InfraConfig, kConn).skipAsyncBindings().build()
+      await di.compile()
 
       expect(di.has(InfraConfig)).toBe(true)
       expect(di.has(kConn)).toBe(false)
     })
 
-    it('skipAsyncBindings(key) preserves the listed async binding', function () {
+    it('skipAsyncBindings(key) preserves the listed async binding', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skipAsyncBindings(kConn).build()
+      const di = new TestContainer(source).focus(kConn).skipAsyncBindings(kConn).build()
+      await di.compile()
 
       expect(di.has(kConn)).toBe(true)
     })
 
-    it('skip(key) strips an async binding', function () {
+    it('skip(key) strips an async binding', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skip(kConn).build()
+      const di = new TestContainer(source).focus(Repository, kConn).skip(kConn).build()
+      await di.compile()
 
       expect(di.has(kConn)).toBe(false)
       expect(di.has(Repository)).toBe(true)
     })
 
-    it('skip(key) strips a non-async binding', function () {
+    it('skip(key) strips a non-async binding', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skip(Repository).build()
+      const di = new TestContainer(source).focus(Repository, kConn).skip(Repository).build()
+      await di.compile()
 
       expect(di.has(Repository)).toBe(false)
       expect(di.has(kConn)).toBe(true)
@@ -269,28 +277,32 @@ describe('TestContainer', function () {
       expect(di.get(ServiceWithAsyncDep).conn).toBe('mock-connection')
     })
 
-    it('isolate key is exempt from skipAsyncBindings filter', function () {
+    it('isolate key is exempt from skipAsyncBindings filter', async function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source)
+        .focus(kConn)
         .skipAsyncBindings()
         .isolate(kConn, false, b => b.toValue('mock-connection'))
         .build()
+      await di.compile()
 
       expect(di.has(kConn)).toBe(true)
     })
 
-    it('chained calls accumulate exceptions', function () {
+    it('chained calls accumulate exceptions', async function () {
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).skipAsyncBindings().skipAsyncBindings(kConn).build()
+      const di = new TestContainer(source).focus(kConn).skipAsyncBindings().skipAsyncBindings(kConn).build()
+      await di.compile()
 
       expect(di.has(kConn)).toBe(true)
     })
   })
 
   describe('focus()', function () {
-    it('keeps root and its transitive deps', function () {
+    it('keeps root and its transitive deps', async function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller).build()
+      await di.compile()
 
       expect(di.has(Controller)).toBe(true)
       expect(di.has(Repository)).toBe(true)
@@ -303,9 +315,10 @@ describe('TestContainer', function () {
       expect(di.has(UnrelatedService)).toBe(false)
     })
 
-    it('multi-root keeps union of both trees', function () {
+    it('multi-root keeps union of both trees', async function () {
       const source = new CaffeineIoC()
       const di = new TestContainer(source).focus(Controller, UnrelatedService).build()
+      await di.compile()
 
       expect(di.has(Controller)).toBe(true)
       expect(di.has(UnrelatedService)).toBe(true)
@@ -374,11 +387,12 @@ describe('TestContainer', function () {
     })
   })
 
+  // A test container is lazy by default; these build eagerly so that init() instantiates what they track.
   describe('TestPostProcessor', function () {
     it('records instances created during init()', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).build()
+      const di = new TestContainer(source).lazy(false).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -389,7 +403,7 @@ describe('TestContainer', function () {
     it('instancesOf() returns the singleton instance', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).build()
+      const di = new TestContainer(source).lazy(false).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -413,7 +427,7 @@ describe('TestContainer', function () {
     it('confirms focus() trimmed bindings were not instantiated', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Repository).build()
+      const di = new TestContainer(source).focus(Repository).lazy(false).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -425,7 +439,7 @@ describe('TestContainer', function () {
     it('reset() clears all recorded events', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).build()
+      const di = new TestContainer(source).lazy(false).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -438,7 +452,7 @@ describe('TestContainer', function () {
     it('events() preserves dep-before-dependent order', async function () {
       const tracker = new InstanceTracker()
       const source = new CaffeineIoC()
-      const di = new TestContainer(source).focus(Controller).build()
+      const di = new TestContainer(source).focus(Controller).lazy(false).build()
       di.postProcessors.add(tracker)
       await di.init()
 
@@ -592,27 +606,32 @@ describe('TestContainer', function () {
       expect(di1.get(CgOrderService).conn).not.toBe(di2.get(CgOrderService).conn)
     })
 
-    it('isolate(kCgDbConn, true) prunes the db chain, leaving the cache chain intact', function () {
+    // Pruning shared dependencies takes CgInfraConfig too, so what else it provides has to be replaced or skipped.
+    it('isolate(kCgDbConn, true) prunes the whole db chain, the shared CgInfraConfig included', async function () {
       const fakeConn = new CgDbConn(new CgDbPool('fake'))
       const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .isolate(kCgDbConn, true, b => b.toValue(fakeConn))
+        .overrideWithMock(kCgCache, new CgCacheClient('fake'))
+        .skip(kCgRedisURL)
         .build()
+      await di.init()
 
       expect(di.has(kCgDbPool)).toBe(false)
       expect(di.has(kCgConnStr)).toBe(false)
-      expect(di.has(kCgCache)).toBe(true)
-      expect(di.has(kCgRedisURL)).toBe(true)
+      expect(di.has(CgInfraConfig)).toBe(false)
+      expect(di.get(CgOrderService).conn).toBe(fakeConn)
     })
 
-    it('isolate(kCgDbConn, false) prunes exclusive db deps, preserves CgInfraConfig shared by cache', function () {
+    it('isolate(kCgDbConn, false) prunes exclusive db deps, preserves CgInfraConfig shared by cache', async function () {
       const fakeConn = new CgDbConn(new CgDbPool('fake'))
       const source = new CaffeineIoC()
       const di = new TestContainer(source)
         .focus(CgOrderService)
         .isolate(kCgDbConn, false, b => b.toValue(fakeConn))
         .build()
+      await di.compile()
 
       expect(di.has(kCgDbPool)).toBe(false)
       expect(di.has(kCgConnStr)).toBe(false)
@@ -626,10 +645,6 @@ describe('TestContainer', function () {
 
       const source = new CaffeineIoC()
       const di = new TestContainer(source)
-        .focus(CgOrderService)
-        .skipAsyncBindings()
-        .override(kCgDbConn, b => b.toValue(new CgDbConn(new CgDbPool('f'))))
-        .override(kCgCache, b => b.toValue(new CgCacheClient('f')))
         .modules(c => {
           c.bind(kTestClock, t => t.toValue(fakeClock))
         })
@@ -637,6 +652,22 @@ describe('TestContainer', function () {
       await di.init()
 
       expect(di.get(kTestClock)).toBe(fakeClock)
+    })
+
+    // The filters reach every binding, including the ones a test-local module adds.
+    it('focus() drops a test-local module binding nothing in the focused graph depends on', async function () {
+      const kTestClock = token<{ now: () => number }>(Symbol('kTestClock-unreached'))
+
+      const source = new CaffeineIoC()
+      const di = new TestContainer(source)
+        .focus(CgOrderService)
+        .modules(c => {
+          c.bind(kTestClock, t => t.toValue({ now: () => 0 }))
+        })
+        .build()
+      await di.compile()
+
+      expect(di.has(kTestClock)).toBe(false)
     })
 
     it('profiles() makes active profiles accessible during init', async function () {
@@ -662,27 +693,27 @@ describe('TestContainer', function () {
     })
 
     describe('assertResolvable()', function () {
-      it('does not throw when all deps are wired', function () {
+      it('does not throw when all deps are wired', async function () {
         const source = new CaffeineIoC()
         const di = new TestContainer(source).focus(CgOrderService).build()
 
-        expect(() => di.assertResolvable()).not.toThrow()
+        await expect(di.assertResolvable()).resolves.toBeUndefined()
       })
 
-      it('throws ErrUnresolvableDependencies when a binding is missing after skip', function () {
+      it('throws ErrUnresolvableDependencies when a binding is missing after skip', async function () {
         const source = new CaffeineIoC()
         const di = new TestContainer(source).focus(CgOrderService).skip(kCgDbConn).build()
 
-        expect(() => di.assertResolvable()).toThrow(ErrUnresolvableDependencies)
+        await expect(di.assertResolvable()).rejects.toThrow(ErrUnresolvableDependencies)
       })
 
-      it('collects all broken edges before throwing — not just the first', function () {
+      it('collects all broken edges before throwing — not just the first', async function () {
         const source = new CaffeineIoC()
         const di = new TestContainer(source).focus(CgOrderService).skip(kCgDbConn).skip(kCgCache).build()
 
         let error: ErrUnresolvableDependencies | undefined
         try {
-          di.assertResolvable()
+          await di.assertResolvable()
         } catch (e) {
           error = e as ErrUnresolvableDependencies
         }
@@ -729,6 +760,138 @@ describe('TestContainer', function () {
         expect(di.get(CgOrderService).conn).toBe(fakeConn)
         expect(di.has(kCgDbPool)).toBe(false)
       })
+    })
+  })
+
+  // The filters and replacements run once every binding is registered, so they reach a binding however it was made:
+  // decorated, bound by hand or bound by one of the source's modules.
+  describe('every kind of binding', function () {
+    const kModuleDep = token<string>(Symbol('kModuleDep'))
+    const kHandDep = token<string>(Symbol('kHandDep'))
+
+    @Injectable()
+    @Profile('tc-reach')
+    class DecoratedDep {
+      readonly kind: string = 'real'
+    }
+
+    @Injectable([kModuleDep, kHandDep, DecoratedDep])
+    @Profile('tc-reach')
+    class ReachRoot {
+      constructor(
+        readonly moduleDep: string,
+        readonly handDep: string,
+        readonly decorated: DecoratedDep,
+      ) {}
+    }
+
+    function source(): CaffeineIoC {
+      const di = new CaffeineIoC({
+        profiles: ['tc-reach'],
+        modules: [mod('tc-reach-infra', c => c.bind(kModuleDep, t => t.toValue('from-module')))],
+      })
+      di.bind(kHandDep, t => t.toValue('by-hand'))
+      return di
+    }
+
+    it("carries the source's modules into the test container", async function () {
+      const di = new TestContainer(source()).focus(ReachRoot).build()
+      await di.init()
+
+      expect(di.get(ReachRoot).moduleDep).toBe('from-module')
+    })
+
+    it('overrides a module binding, a binding made by hand and a decorated binding', async function () {
+      const di = new TestContainer(source())
+        .focus(ReachRoot)
+        .overrideWithMock(kModuleDep, 'mock-module')
+        .overrideWithMock(kHandDep, 'mock-hand')
+        .overrideWithMock(DecoratedDep, { kind: 'mock' })
+        .build()
+      await di.init()
+
+      const root = di.get(ReachRoot)
+      expect(root.moduleDep).toBe('mock-module')
+      expect(root.handDep).toBe('mock-hand')
+      expect(root.decorated.kind).toBe('mock')
+    })
+
+    it('skips a module binding and a decorated binding', async function () {
+      const di = new TestContainer(source()).focus(ReachRoot).skip(kModuleDep, DecoratedDep).build()
+
+      await expect(di.assertResolvable()).rejects.toThrow(ErrUnresolvableDependencies)
+      expect(di.has(kModuleDep)).toBe(false)
+      expect(di.has(DecoratedDep)).toBe(false)
+      expect(di.has(kHandDep)).toBe(true)
+    })
+
+    it('focuses away a module binding and a decorated binding nothing depends on', async function () {
+      const di = new TestContainer(source()).focus(DecoratedDep).build()
+      await di.compile()
+
+      expect(di.has(DecoratedDep)).toBe(true)
+      expect(di.has(kModuleDep)).toBe(false)
+      expect(di.has(ReachRoot)).toBe(false)
+    })
+
+    it('isolates a decorated binding, pruning what only it needed', async function () {
+      const di = new TestContainer(source())
+        .focus(ReachRoot)
+        .isolateWithMock(ReachRoot, false, { moduleDep: '', handDep: '', decorated: { kind: '' } })
+        .build()
+      await di.compile()
+
+      expect(di.has(kModuleDep)).toBe(false)
+      expect(di.has(kHandDep)).toBe(false)
+      expect(di.has(DecoratedDep)).toBe(false)
+    })
+
+    it('keeps the container its internal bindings when it focuses', async function () {
+      const di = new TestContainer(source()).focus(DecoratedDep).build()
+      await di.compile()
+
+      expect(di.has(Keys.kRefresher)).toBe(true)
+    })
+  })
+
+  describe('source profiles', function () {
+    @Injectable()
+    @Profile('tc-test-only')
+    class TestOnlyService {}
+
+    @Injectable()
+    @Profile('tc-prod-only')
+    class ProdOnlyService {}
+
+    it("activates the source's profiles by default", async function () {
+      const di = new TestContainer(new CaffeineIoC({ profiles: ['tc-prod-only'] }))
+        .focus(ProdOnlyService, TestOnlyService)
+        .build()
+      await di.compile()
+
+      expect(di.has(ProdOnlyService)).toBe(true)
+      expect(di.has(TestOnlyService)).toBe(false)
+    })
+
+    it('replaces them with the profiles it is given, registering a class the source left out', async function () {
+      const di = new TestContainer(new CaffeineIoC({ profiles: ['tc-prod-only'] }))
+        .profiles('tc-test-only')
+        .focus(ProdOnlyService, TestOnlyService)
+        .build()
+      await di.compile()
+
+      expect(di.has(TestOnlyService)).toBe(true)
+      expect(di.has(ProdOnlyService)).toBe(false)
+    })
+  })
+
+  describe('built from scratch', function () {
+    // The empty container registers the decorated bindings once: a second registration would be a duplicate.
+    it('registers the decorated bindings once', async function () {
+      const di = new TestContainer().focus(Repository).build()
+
+      await expect(di.init()).resolves.toBeUndefined()
+      expect(di.getBindings(Repository)).toHaveLength(1)
     })
   })
 })

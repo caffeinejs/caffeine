@@ -5,7 +5,8 @@ sidebar_label: Auto Load Decorated Classes
 # Auto Load Decorated Classes
 
 When using decorators, every file containing an `@Injectable` or
-`@Configuration` class must be imported before the container is created.
+`@Configuration` class must be imported before the container initializes: it
+reads the decorated classes when it compiles, during `init()`.
 CaffeineIoC's `scan()` function automates this: it recursively imports all source
 files in a directory so their decorators register themselves, without you
 having to maintain a manual import list.
@@ -31,7 +32,7 @@ await di.init()
 ```
 
 `scan()` returns a `Promise<string[]>` with the list of files it imported.
-It must be awaited before `new CaffeineIoC()`.
+It must be awaited before `init()`.
 
 Always exclude the file that calls `scan()`. If `scan()` lives in a dedicated
 module (e.g. `app.container.ts`) rather than the process entry point, exclude

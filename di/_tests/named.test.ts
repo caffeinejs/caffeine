@@ -7,8 +7,10 @@ import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
 import { Primary } from '../decorators/primary.js'
+import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import {
+  ErrDuplicateBinding,
   ErrInvalidContainerState,
   ErrNoResolutionForKey,
   ErrNoUniqueInjectionForKey,
@@ -75,46 +77,44 @@ describe('Named Dependencies', function () {
   })
 
   describe('failure scenarios resolving many', function () {
-    it('should fail when trying to set multiple raw beans with same name', function () {
+    it('should fail when trying to set multiple raw beans with same name', async function () {
       const kTest = token<string>(Symbol('test'))
 
-      expect(() => {
-        @Configuration()
-        class ManyRawConf {
-          @Provides(kTest)
-          test1() {
-            return 'one'
-          }
-
-          @Provides(kTest)
-          test2() {
-            return 'two'
-          }
+      @Configuration()
+      @Profile('named-many-raw')
+      class ManyRawConf {
+        @Provides(kTest)
+        test1() {
+          return 'one'
         }
 
-        new CaffeineIoC()
-      }).toThrow()
+        @Provides(kTest)
+        test2() {
+          return 'two'
+        }
+      }
+      void ManyRawConf
+
+      await expect(new CaffeineIoC({ profiles: ['named-many-raw'] }).compile()).rejects.toThrow(ErrDuplicateBinding)
     })
 
-    it('should fail when repeating the same bean key', function () {
-      const kOne = token<Record<string, unknown>>(Symbol('one'))
-
-      expect(() => {
-        @Configuration()
-        class Rep {
-          @Provides(Msg)
-          msg1() {
-            return new Msg('one_1')
-          }
-
-          @Provides(Msg)
-          msg1_1() {
-            return new Msg('one_1_1')
-          }
+    it('should fail when repeating the same bean key', async function () {
+      @Configuration()
+      @Profile('named-repeated-key')
+      class Rep {
+        @Provides(Msg)
+        msg1() {
+          return new Msg('one_1')
         }
 
-        new CaffeineIoC()
-      }).toThrow()
+        @Provides(Msg)
+        msg1_1() {
+          return new Msg('one_1_1')
+        }
+      }
+      void Rep
+
+      await expect(new CaffeineIoC({ profiles: ['named-repeated-key'] }).compile()).rejects.toThrow(ErrDuplicateBinding)
     })
   })
 

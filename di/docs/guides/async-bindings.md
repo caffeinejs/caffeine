@@ -11,9 +11,10 @@ CaffeineIoC awaits all async bindings during `init()`, so by the time your code 
 
 Async bindings have three hard constraints enforced at `init()`:
 
-- **Scope**: must be singleton or refresh scoped. Transient and request scopes.
-- **Always eager**: async bindings are always instantiated during `init()`
-  regardless of the binding's lazy setting.
+- **Scope**: must be singleton or refresh scoped. Transient and request scopes
+  are rejected.
+- **Always eager**: async bindings are always instantiated during `init()`.
+  Marking one lazy is rejected.
 - **No property injection**: `@Inject` on fields is not supported on async
   bindings. Pass all dependencies through the factory function instead.
 

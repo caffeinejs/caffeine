@@ -75,6 +75,25 @@ export class ErrRepeatedInjectableConfiguration extends CaffeineIoCError {
 }
 
 /**
+ * ErrDuplicateBinding is thrown when a second binding is registered under a key that already has one, whatever made
+ * either of them: a decorator, `bind()` or a module.
+ */
+export class ErrDuplicateBinding extends CaffeineIoCError {
+  constructor(key: InjectionToken) {
+    super(
+      `Cannot register "${keyStr(key)}": a binding is already registered under this key` +
+        solutions(
+          `Use rebind() to replace the binding of "${keyStr(key)}" deliberately`,
+          `Remove the bind() of a class that is already decorated, or set the "decorators" option to false`,
+          `Give one of the bindings a profile or a condition, so that only one of them is registered`,
+        ),
+      'ERR_DUPLICATE_BINDING',
+    )
+    this.name = 'ErrDuplicateBinding'
+  }
+}
+
+/**
  * ErrInvalidBinding is an error that is thrown when a binding configuration is invalid.
  */
 export class ErrInvalidBinding extends CaffeineIoCError {

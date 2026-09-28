@@ -71,13 +71,13 @@ describe('Scoping', function () {
     unbindScope(kNoneScopeID)
   })
 
-  it('should fail when using an non-registered scope', function () {
+  it('should fail when using an non-registered scope', async function () {
     @Injectable()
     @Lifetime(kNoneScopeID)
     class NonexistentScope {}
 
     try {
-      new CaffeineIoC()
+      await new CaffeineIoC().compile()
     } catch (e) {
       expect(e).toBeInstanceOf(ErrScopeNotRegistered)
       expect(hasScope(kNoneScopeID)).toBeFalsy()

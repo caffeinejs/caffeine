@@ -229,9 +229,8 @@ describe('CaffeineIoC.addProfiles()', function () {
   @Profile('add-prof-late')
   class LateProfileBean {}
 
-  it('should pick up decorated types queued during autoWire', async function () {
+  it('should match decorated types against profiles added after construction', async function () {
     const di = new CaffeineIoC()
-    expect(di.has(LateProfileBean)).toBe(false)
 
     di.addProfiles('add-prof-late')
     expect(di.profiles.has('add-prof-late')).toBe(true)
@@ -271,8 +270,9 @@ describe('constructor profile evaluation', function () {
   @Profile('ctor-prof')
   class CtorProfBean {}
 
-  it('registers a decorated @Profile type during autoWire when the profile is active', function () {
+  it('registers a decorated @Profile type when the container compiles and the profile is active', async function () {
     const di = new CaffeineIoC({ profiles: ['ctor-prof'] })
+    await di.compile()
     expect(di.has(CtorProfBean)).toBe(true)
   })
 })

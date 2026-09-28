@@ -127,7 +127,7 @@ describe('Post Processors', function () {
   beforeAll(() => {
     bindScope(kScope, () => new CustomTransient())
 
-    di = new CaffeineIoC({ decorators: false })
+    di = new CaffeineIoC()
     di.postProcessors.add(new PpOne())
     di.postProcessors.add(new PpTwo())
   })
@@ -139,7 +139,6 @@ describe('Post Processors', function () {
   })
 
   it('should execute post processors calling the factory just one time per execution', async function () {
-    di.autoWire()
     await di.init()
 
     const dep = di.get(Dep)

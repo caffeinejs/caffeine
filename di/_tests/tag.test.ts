@@ -8,7 +8,7 @@ import { Tag } from '../decorators/tag.js'
 import { token } from '../key.js'
 
 describe('Tag', function () {
-  it('should attach and retrieve a tag from a class binding', function () {
+  it('should attach and retrieve a tag from a class binding', async function () {
     const kRoute = Symbol('route')
 
     @Tag(kRoute, '/users')
@@ -16,24 +16,26 @@ describe('Tag', function () {
     class UserCtrl {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const binding = di.getBindings(UserCtrl)[0]
 
     expect(binding.tags.get(kRoute)).toBe('/users')
   })
 
-  it('should return undefined for a tag key never set on a binding', function () {
+  it('should return undefined for a tag key never set on a binding', async function () {
     const kRoute = token<Record<string, unknown>>(Symbol('route'))
 
     @Injectable()
     class Plain {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const binding = di.getBindings(Plain)[0]
 
     expect(binding.tags.get(kRoute)).toBeUndefined()
   })
 
-  it('should keep two distinct tag keys independent of each other', function () {
+  it('should keep two distinct tag keys independent of each other', async function () {
     const kA = Symbol('a')
     const kB = Symbol('b')
 
@@ -43,13 +45,14 @@ describe('Tag', function () {
     class Both {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const binding = di.getBindings(Both)[0]
 
     expect(binding.tags.get(kA)).toBe('hello')
     expect(binding.tags.get(kB)).toBe(42)
   })
 
-  it('last write wins when Tag is stacked twice with the same key', function () {
+  it('last write wins when Tag is stacked twice with the same key', async function () {
     const kSlot = Symbol('slot')
 
     @Tag(kSlot, 'second')
@@ -58,13 +61,14 @@ describe('Tag', function () {
     class Overwritten {}
 
     const di = new CaffeineIoC()
+    await di.compile()
     const binding = di.getBindings(Overwritten)[0]
 
     expect(binding.tags.get(kSlot)).toBe('second')
   })
 
   describe('array accumulation', function () {
-    it('should concatenate arrays when Tag is stacked with the same key on a class', function () {
+    it('should concatenate arrays when Tag is stacked with the same key on a class', async function () {
       const k = Symbol('arr')
 
       @Tag(k, [1, 2])
@@ -73,12 +77,13 @@ describe('Tag', function () {
       class Accumulated {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const binding = di.getBindings(Accumulated)[0]
 
       expect(binding.tags.get(k)).toEqual([1, 2, 3])
     })
 
-    it('should concatenate arrays when Tag is stacked on a @Provides method', function () {
+    it('should concatenate arrays when Tag is stacked on a @Provides method', async function () {
       const k = Symbol('arr')
       const kBean = token<Record<string, unknown>>(Symbol('arrBean'))
 
@@ -94,12 +99,13 @@ describe('Tag', function () {
       void Conf
 
       const di = new CaffeineIoC()
+      await di.compile()
       const binding = di.getBindings(kBean)[0]
 
       expect(binding.tags.get(k)).toEqual([1, 2, 3])
     })
 
-    it('primitive last-write-wins is unchanged when type does not match existing array', function () {
+    it('primitive last-write-wins is unchanged when type does not match existing array', async function () {
       const k = Symbol('mismatch')
 
       @Tag(k, 'scalar')
@@ -108,6 +114,7 @@ describe('Tag', function () {
       class Mismatch {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const binding = di.getBindings(Mismatch)[0]
 
       expect(binding.tags.get(k)).toBe('scalar')
@@ -115,7 +122,7 @@ describe('Tag', function () {
   })
 
   describe('set accumulation', function () {
-    it('should union Sets when Tag is stacked with the same key', function () {
+    it('should union Sets when Tag is stacked with the same key', async function () {
       const k = Symbol('set')
 
       @Tag(k, new Set([1, 2]))
@@ -124,6 +131,7 @@ describe('Tag', function () {
       class MergedSet {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const result = di.getBindings(MergedSet)[0].tags.get(k) as Set<number>
 
       expect(result).toEqual(new Set([1, 2, 3]))
@@ -131,7 +139,7 @@ describe('Tag', function () {
   })
 
   describe('map accumulation', function () {
-    it('should merge Map entries when Tag is stacked with the same key', function () {
+    it('should merge Map entries when Tag is stacked with the same key', async function () {
       const k = Symbol('map')
 
       @Tag(k, new Map([['a', 1]]))
@@ -140,13 +148,14 @@ describe('Tag', function () {
       class MergedMap {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const result = di.getBindings(MergedMap)[0].tags.get(k) as Map<string, number>
 
       expect(result.get('a')).toBe(1)
       expect(result.get('b')).toBe(2)
     })
 
-    it('outer decorator wins for conflicting Map keys', function () {
+    it('outer decorator wins for conflicting Map keys', async function () {
       const k = Symbol('mapConflict')
 
       @Tag(k, new Map([['x', 'outer']]))
@@ -155,6 +164,7 @@ describe('Tag', function () {
       class MapConflict {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const result = di.getBindings(MapConflict)[0].tags.get(k) as Map<string, string>
 
       expect(result.get('x')).toBe('outer')
@@ -162,7 +172,7 @@ describe('Tag', function () {
   })
 
   describe('plain object accumulation', function () {
-    it('should shallow-merge plain objects when Tag is stacked with the same key', function () {
+    it('should shallow-merge plain objects when Tag is stacked with the same key', async function () {
       const k = Symbol('obj')
 
       @Tag(k, { a: 1 })
@@ -171,13 +181,14 @@ describe('Tag', function () {
       class MergedObj {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const result = di.getBindings(MergedObj)[0].tags.get(k) as Record<string, number>
 
       expect(result.a).toBe(1)
       expect(result.b).toBe(2)
     })
 
-    it('outer decorator wins for conflicting object keys', function () {
+    it('outer decorator wins for conflicting object keys', async function () {
       const k = Symbol('objConflict')
 
       @Tag(k, { x: 'outer' })
@@ -186,6 +197,7 @@ describe('Tag', function () {
       class ObjConflict {}
 
       const di = new CaffeineIoC()
+      await di.compile()
       const result = di.getBindings(ObjConflict)[0].tags.get(k) as Record<string, string>
 
       expect(result.x).toBe('outer')
@@ -193,7 +205,7 @@ describe('Tag', function () {
   })
 
   describe('on @Provides methods inside @Configuration', function () {
-    it('should attach and retrieve a tag from a bean binding', function () {
+    it('should attach and retrieve a tag from a bean binding', async function () {
       const kPath = Symbol('path')
       const kEndpoint = token<Record<string, unknown>>(Symbol('endpoint'))
 
@@ -208,13 +220,14 @@ describe('Tag', function () {
       void APIConf
 
       const di = new CaffeineIoC()
+      await di.compile()
       const descriptors = di.getBindings(kEndpoint)
 
       expect(descriptors).toHaveLength(1)
       expect(descriptors[0].tags.get(kPath)).toBe('/api/v1')
     })
 
-    it('last write wins when Tag is stacked on a @Provides method', function () {
+    it('last write wins when Tag is stacked on a @Provides method', async function () {
       const kSlot = Symbol('slot')
       const kBean = token<Record<string, unknown>>(Symbol('bean'))
 
@@ -230,6 +243,7 @@ describe('Tag', function () {
       void Conf
 
       const di = new CaffeineIoC()
+      await di.compile()
       const descriptors = di.getBindings(kBean)
 
       expect(descriptors[0].tags.get(kSlot)).toBe('second')

@@ -13,7 +13,7 @@ const di = new CaffeineIoC({
 
 ---
 
-## `defaultScopeId`
+## `defaultScopeID`
 
 **Default:** `Scopes.SINGLETON`
 
@@ -22,11 +22,11 @@ The scope applied to any binding that does not declare one explicitly.
 ```ts
 import { Scopes } from '@caffeinejs/di'
 
-const di = new CaffeineIoC({ defaultScopeId: Scopes.TRANSIENT })
+const di = new CaffeineIoC({ defaultScopeID: Scopes.TRANSIENT })
 ```
 
 Every binding in this container is transient unless it explicitly sets
-`@Lifetime(Scopes.SINGLETON)` or calls `.scope(Scopes.SINGLETON)` on the binder.
+`@Lifetime(Scopes.SINGLETON)` or calls `.lifetime(Scopes.SINGLETON)` on the binding.
 
 Built-in scopes: `Scopes.SINGLETON`, `Scopes.TRANSIENT`, `Scopes.REFRESH`, `Scopes.REQUEST`. See the [Scopes reference](../reference/scopes.md).
 
@@ -93,11 +93,11 @@ See the [Profiles guide](./profiles.md).
 
 Controls scope validation at init time. Three modes:
 
-| Mode                       | Behaviour                                                                                                             |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `'compatible-scopes-only'` | Durable scopes (singleton, container) cannot depend on shorter-lived scopes (transient, request). Reverse is allowed. |
-| `'no-mix'`                 | Every dependency must share the exact scope as its consumer.                                                          |
-| `'off'`                    | Validation disabled.                                                                                                  |
+| Mode                       | Behaviour                                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `'compatible-scopes-only'` | Durable scopes (singleton, refresh) cannot depend on shorter-lived scopes (transient, request). Reverse is allowed. |
+| `'no-mix'`                 | Every dependency must share the exact scope as its consumer.                                                        |
+| `'off'`                    | Validation disabled.                                                                                                |
 
 ```ts
 const di = new CaffeineIoC({
@@ -129,10 +129,13 @@ it enabled surfaces new cycles introduced by future edits.
 
 **Default:** `true`
 
-When `true`, the container calls `autoWire()` in its constructor, registering
-all `@Injectable`-decorated classes it finds in the global decorator registry.
+When `true`, the container registers the `@Injectable` and `@Configuration`
+classes found in the global decorator registry when it compiles, during
+`compile()` / `init()`. A decorated class only has to be imported before then.
 
-Set to `false` for fully manual containers where no decorators are used:
+Set to `false` for fully manual containers. Decorators are then ignored
+entirely: a decorated class bound with `bind()` gets only what its binding
+declares, so declare its injections on the binding:
 
 ```ts
 const di = new CaffeineIoC({ decorators: false })
@@ -149,7 +152,7 @@ await di.init()
 
 | Option                      | Type                                            | Default                    |
 | --------------------------- | ----------------------------------------------- | -------------------------- |
-| `defaultScopeId`            | `Identifier`                                    | `Scopes.SINGLETON`         |
+| `defaultScopeID`            | `NamedToken<Scope>`                             | `Scopes.SINGLETON`         |
 | `lazy`                      | `boolean`                                       | `false`                    |
 | `profiles`                  | `string[]`                                      | `[]`                       |
 | `checks.scopes`             | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |

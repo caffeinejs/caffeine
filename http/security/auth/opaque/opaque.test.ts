@@ -269,11 +269,13 @@ describe('OpaqueTokenAuthenticationHandler', () => {
       builder.addStrategy('OpaqueToken', handler)
       await builder[kFeatureConfigure](makeKit(wrap))
 
-      expect(wrap).toHaveBeenCalledWith(OpaqueTokenStore)
+      // The store is looked up when a request needs it, not while features configure.
+      expect(wrap).not.toHaveBeenCalled()
 
       const { ctx } = makeCtx('Bearer tok')
       const result = await handler.authenticate(ctx)
       expect(result.succeeded).toBe(true)
+      expect(wrap).toHaveBeenCalledWith(OpaqueTokenStore)
     })
 
     it('injects an inline store instance without touching the container', async () => {

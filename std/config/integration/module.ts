@@ -36,7 +36,8 @@ export function ConfigModule<T>(store: ConfigStore<T>): Module {
     if (storeKey !== undefined) {
       container.bind(storeKey, t => t.toValue(store))
     }
-    container.bind(ConfigStore as InjectionToken<ConfigStore<unknown>>, t =>
+    // The application's module is added last, at bootstrap, so the store it rebinds is the one this key resolves to.
+    container.rebind(ConfigStore as InjectionToken<ConfigStore<unknown>>, t =>
       t.toValue(store as ConfigStore<unknown>).internal(),
     )
 

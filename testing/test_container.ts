@@ -1,5 +1,14 @@
-import { CaffeineIoC } from '@caffeinejs/di'
-import type { BindingSpec, Container, InjectionToken, Module, ModuleFn, Snapshot, TokenValue } from '@caffeinejs/di'
+import { CaffeineIoC, Snapshot } from '@caffeinejs/di'
+import type {
+  Binding,
+  BindingSpec,
+  Container,
+  InjectionToken,
+  Module,
+  ModuleFn,
+  OverrideOps,
+  TokenValue,
+} from '@caffeinejs/di'
 
 import { allTransitiveDeps, exclusiveDeps } from './_graph.js'
 
@@ -10,18 +19,21 @@ interface IsolationEntry {
 
 /**
  * TestContainer is a fluent builder that takes a {@link Container} or {@link Snapshot},
- * or constructs an empty container when called with no arguments. It applies filters
- * and transformations and produces an uninitialized {@link Container}, suitable for use
- * in tests.
+ * or starts from an empty container when called with no arguments, and produces an
+ * uninitialized {@link Container} suitable for use in tests.
  *
- * The empty constructor creates a container internally so a test can import a single
- * feature module instead of the whole application graph.
+ * The new container holds what the source was told: its bindings made by hand, its modules,
+ * its profiles and its decorated bindings. The filters and replacements run when it
+ * initializes, once all of those are registered, so they reach every binding however it was
+ * made.
+ *
+ * The empty constructor lets a test import a single feature module instead of the whole
+ * application graph.
  *
  * By default, the resulting container will be lazy.
  */
 export class TestContainer {
   readonly #snap: Snapshot
-  readonly #fromScratch: boolean
   readonly #overrides = new Map<InjectionToken, (spec: BindingSpec<any, any>) => void>()
   readonly #isolations = new Map<InjectionToken, IsolationEntry>()
   readonly #skips = new Set<InjectionToken>()
@@ -37,7 +49,6 @@ export class TestContainer {
   constructor(snap: Snapshot)
   constructor(source?: Container | Snapshot) {
     if (source === undefined) {
-      this.#fromScratch = true
       this.#snap = new CaffeineIoC().snapshot()
       return
     }
@@ -46,7 +57,6 @@ export class TestContainer {
       throw new Error('TestContainer requires either a Container instance or a container Snapshot')
     }
 
-    this.#fromScratch = false
     this.#snap = source instanceof CaffeineIoC ? source.snapshot() : (source as Snapshot)
   }
 
@@ -59,7 +69,9 @@ export class TestContainer {
   }
 
   /**
-   * Activates the given profiles in the test container.
+   * Activates the given profiles in the test container, in place of the source's.
+   *
+   * May be called multiple times — profiles accumulate across calls.
    */
   profiles(profile: string, ...rest: string[]): this {
     if (this.#profiles == null) {
@@ -72,7 +84,8 @@ export class TestContainer {
   /**
    * Adds modules to the test container.
    *
-   * Modules run during {@link Container.init} and can register bindings imperatively.
+   * They run after the source's modules, during {@link Container.init}, and can register
+   * bindings imperatively. The filters and replacements reach what they register.
    * May be called multiple times — modules accumulate across calls and run in insertion order.
    *
    * @example
@@ -90,7 +103,8 @@ export class TestContainer {
   /**
    * Replaces the binding for `key` in the test container.
    *
-   * The `configure` callback receives a {@link BindingSpec} pre-linked to `key`, so the full
+   * The binding it replaces may be decorated, bound by hand or bound by a module. The
+   * `configure` callback receives a {@link BindingSpec} pre-linked to `key`, so the full
    * binding DSL is available: `.toValue()`, `.toClass()`, `.toFactory()`, `.toFunction()`,
    * and all its modifiers (`.lifetime()`, `.lazy()`, `.names()`, etc.).
    *
@@ -103,7 +117,7 @@ export class TestContainer {
    * ```ts
    * new TestContainer(source)
    *   .override(Repository, b => b.toValue(mockRepo))
-   *   .override(Cache, b => b.toClass(InMemoryCache).lifetime(Scope.Singleton))
+   *   .override(Cache, b => b.toClass(InMemoryCache).lifetime(Scopes.SINGLETON))
    *   .build()
    * ```
    */
@@ -149,7 +163,7 @@ export class TestContainer {
    * ```ts
    * new TestContainer(source)
    *   .isolate(Repository, false, b => b.toValue(mockRepo))
-   *   .isolate(Cache, true, b => b.toClass(InMemoryCache).lifetime(Scope.Singleton))
+   *   .isolate(Cache, true, b => b.toClass(InMemoryCache).lifetime(Scopes.SINGLETON))
    *   .build()
    * ```
    */
@@ -266,22 +280,54 @@ export class TestContainer {
   }
 
   /**
-   * Builds a new {@link Container} based on the test container configuration.
+   * Builds a new, uninitialized {@link Container} based on the test container configuration.
    */
   build(): Container {
-    let snap = this.#snap
+    const snap =
+      this.#profiles == null
+        ? this.#snap
+        : new Snapshot({
+            declarations: this.#snap.declarations(),
+            modules: this.#snap.modules,
+            profiles: this.#profiles,
+            decorators: this.#snap.decorators,
+            values: this.#snap.values,
+          })
+
+    const di = new CaffeineIoC({ lazy: this.#lazy })
+    di.restore(snap)
+
+    if (this.#modules.length > 0) {
+      di.addModules(this.#modules[0]!, ...this.#modules.slice(1))
+    }
+
+    di.overrides(ops => this.#apply(ops))
+
+    return di
+  }
+
+  /**
+   * Filters and replaces the bindings of the container once every one is registered. The container's own internal
+   * bindings are left alone.
+   */
+  #apply(ops: OverrideOps): void {
+    const all = [...ops.entries()]
+    let entries: [InjectionToken, Binding][] = all.filter(([, b]) => !b.internal)
+    const keep = (predicate: (key: InjectionToken, binding: Binding) => boolean): void => {
+      entries = entries.filter(([k, b]) => predicate(k, b))
+    }
 
     if (this.#asyncPolicy != null) {
       const exempt = new Set<InjectionToken>([...this.#overrides.keys(), ...this.#isolations.keys()])
-      snap = snap.filter((k, b) => !b.async || this.#asyncPolicy!.has(k) || exempt.has(k))
+      keep((k, b) => !b.async || this.#asyncPolicy!.has(k) || exempt.has(k))
     }
 
     if (this.#focusRoots != null) {
       const kept = new Set<InjectionToken>(this.#focusRoots)
-      for (const k of allTransitiveDeps(snap, this.#focusRoots)) {
+      for (const k of allTransitiveDeps(entries, this.#focusRoots)) {
         kept.add(k)
       }
-      snap = snap.filter(k => kept.has(k))
+      keep(k => kept.has(k))
     }
 
     if (this.#isolations.size > 0) {
@@ -300,41 +346,38 @@ export class TestContainer {
       const pruned = new Set<InjectionToken>()
 
       if (exclusiveKeys.size > 0) {
-        for (const k of exclusiveDeps(snap, exclusiveKeys)) {
+        for (const k of exclusiveDeps(entries, exclusiveKeys)) {
           pruned.add(k)
         }
       }
 
       if (allDepKeys.size > 0) {
-        for (const k of allTransitiveDeps(snap, allDepKeys)) {
+        for (const k of allTransitiveDeps(entries, allDepKeys)) {
           pruned.add(k)
         }
       }
 
-      snap = snap.filter(k => !pruned.has(k) && !isolatedKeys.has(k))
+      keep(k => !pruned.has(k) && !isolatedKeys.has(k))
     }
 
     if (this.#skips.size > 0) {
-      snap = snap.filter(k => !this.#skips.has(k))
+      keep(k => !this.#skips.has(k))
     }
 
-    const di = new CaffeineIoC({
-      decorators: this.#fromScratch,
-      lazy: this.#lazy,
-      ...(this.#profiles != null && { profiles: this.#profiles }),
-      modules: this.#modules,
-    })
-    di.restore(snap)
+    const kept = new Set(entries.map(([k]) => k))
+    for (const [key, binding] of all) {
+      if (!binding.internal && !kept.has(key)) {
+        ops.unbind(key)
+      }
+    }
 
     for (const [key, { configure }] of this.#isolations) {
-      di.rebind(key, configure)
+      ops.rebind(key, configure)
     }
 
     for (const [key, configure] of this.#overrides) {
-      di.rebind(key, configure)
+      ops.rebind(key, configure)
     }
-
-    return di
   }
 }
 
@@ -346,8 +389,8 @@ export class TestContainer {
 export function newTestContainer(): TestContainer
 /**
  * Creates a new test container using the given {@link Container} as the base.
- * All the bindings from the base container, and the values bound with `bindConfig()`, will be available in the new
- * container.
+ * The new container holds what the base was told: its bindings made by hand, its modules, its profiles, its decorated
+ * bindings, and the values bound with `bindConfig()`.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param container - The base container to use as the foundation for the test container.
@@ -355,7 +398,8 @@ export function newTestContainer(): TestContainer
 export function newTestContainer(container: Container): TestContainer
 /**
  * Creates a new test container using the given {@link Snapshot} as the base.
- * All the bindings from the snapshot, and the values it carries, will be available in the new container.
+ * The new container holds what the snapshot carries: bindings made by hand, modules, profiles, decorated bindings and
+ * values.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param snap - The snapshot to use as the foundation for the test container.

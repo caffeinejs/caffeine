@@ -21,7 +21,7 @@ export type ModuleFn = ((container: ContainerBindingOps) => void) | ((container:
  *   needs: () => [userModule],
  *   provides: () => [OrderController],
  *   fn: container => {
- *     container.bind(OrderProcessor).toSelf()
+ *     container.bind(OrderProcessor, t => t.toSelf())
  *   },
  * })
  *
@@ -45,7 +45,7 @@ export interface Module {
  * @example
  * ```ts
  * const orderModule = mod('order', (container: ContainerBindingOps) => {
- *   container.bind(OrderProcessor).toSelf()
+ *   container.bind(OrderProcessor, t => t.toSelf())
  * })
  * ```
  */

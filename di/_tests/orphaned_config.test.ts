@@ -9,20 +9,20 @@ import { token } from '../key.js'
 import { Scopes } from '../scope.js'
 
 describe('Orphaned binding config validation', function () {
-  it('should throw when @Lifetime is used without @Injectable', function () {
+  it('should throw when @Lifetime is used without @Injectable', async function () {
     @Lifetime(Scopes.SINGLETON)
     class Svc {}
     void Svc
 
-    expect(() => new CaffeineIoC()).toThrow(ErrOrphanedBindingConfig)
+    await expect(new CaffeineIoC().compile()).rejects.toThrow(ErrOrphanedBindingConfig)
   })
 
-  it('should throw when @Named is used without @Injectable', function () {
+  it('should throw when @Named is used without @Injectable', async function () {
     @Named('svc')
     class Svc {}
     void Svc
 
-    expect(() => new CaffeineIoC()).toThrow(ErrOrphanedBindingConfig)
+    await expect(new CaffeineIoC().compile()).rejects.toThrow(ErrOrphanedBindingConfig)
   })
 
   it('should throw when @Provides is used at class level', function () {

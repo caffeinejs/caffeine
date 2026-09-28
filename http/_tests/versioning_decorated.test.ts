@@ -30,8 +30,6 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(PetsV1, t => t.toSelf())
-    container.bind(PetsV2, t => t.toSelf())
     const app = createWebApplication({ container }).with(() => constraints())
     await app.bootstrap()
 
@@ -59,7 +57,6 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(Catalog, t => t.toSelf())
     const app = createWebApplication({ container }).with(() => constraints())
     await app.bootstrap()
 

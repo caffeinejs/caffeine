@@ -506,9 +506,10 @@ export class BindingSpec<TValue, K = unknown> {
   /**
    * Attaches one or more predicates that must all return `true` for this binding to be active.
    *
-   * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
-   * decorated bindings. A predicate therefore never sees the binding itself, and a binding already registered under
-   * the key stays unless the predicates pass — which is what lets `!ctx.container.has(key)` make it a default.
+   * The predicates run when the container compiles, once every binding without predicates is registered. A predicate
+   * never sees the binding itself, which is what lets `!ctx.container.has(key)` make it a default. A key takes one
+   * binding, so predicates that pass while another binding holds the key fail the compilation with
+   * `ErrDuplicateBinding`.
    *
    * @example
    * ```ts

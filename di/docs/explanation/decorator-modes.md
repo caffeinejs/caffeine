@@ -65,8 +65,11 @@ await di.init()
 
 **Trade-off:** All wiring is centralized. No co-location of dependency
 declarations with the class. More verbose for large graphs. No global registry
-— you must pass `decorators: false` to prevent the container from scanning for
-decorated classes.
+— pass `decorators: false` so the container does not register decorated
+classes. Decorators are then ignored entirely: a class bound with `bind()` gets
+only what its binding declares. With decorators on, a class that is decorated
+and also bound by hand is two bindings of one key, which fails with
+`ErrDuplicateBinding`.
 
 **Choose this when:** decorators are not available in your environment, you
 prefer centralized explicit configuration, or you are integrating CaffeineIoC into

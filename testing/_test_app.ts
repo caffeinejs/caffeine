@@ -44,10 +44,10 @@ export class Harness {
 
   /** Builds an application around routers the caller has not mounted anywhere. */
   static own(routers: readonly AnyRouter[], init: HarnessInit): Harness {
-    // A container of our own, and a live one: handed a live container the application skips `autoWire()`, which is
-    // what reads the process-wide registry every `@Controller` and `@Injectable` writes itself into at class
-    // definition. Left to build its own, the application would route every controller the test file happened to
-    // import. Passing `container` opts back in — `new CaffeineIoC()` wires the registry as an application does.
+    // A container of our own, with decorators off: it never reads the process-wide registry every `@Controller` and
+    // `@Injectable` writes itself into at class definition. Left to build its own, the application would route every
+    // controller the test file happened to import. Passing `container` opts back in — `new CaffeineIoC()` registers
+    // the decorated bindings as an application does.
     const container = init.container ?? new CaffeineIoC({ decorators: false })
     const app: TestApplication = createWebApplication({ container })
 

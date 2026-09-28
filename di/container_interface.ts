@@ -71,7 +71,9 @@ export interface Options {
   }
 
   /**
-   * Whether to automatically scan and register decorated bindings on construction.
+   * Whether the container registers the decorated bindings (`@Injectable`, `@Configuration`, …) when it compiles.
+   *
+   * Off, decorators are ignored entirely: a class bound with `bind()` gets only what its binding declares.
    *
    * @defaultValue `true`
    */
@@ -113,8 +115,6 @@ export interface Container extends AsyncDisposable {
   readonly [Symbol.toStringTag]: string
 
   [Symbol.asyncDispose](): Promise<void>
-
-  autoWire(): void
 
   get<T>(key: InjectionToken<T>): T
 
@@ -160,6 +160,8 @@ export interface Container extends AsyncDisposable {
 
   addProfiles(profile: string, ...profiles: string[]): void
 
+  overrides(override: ContainerOverride): this
+
   resetInstances(): Promise<void>
 
   resetInstance(key: InjectionToken): Promise<void>
@@ -178,7 +180,7 @@ export interface Container extends AsyncDisposable {
 
   restore(snap: Snapshot): void
 
-  assertResolvable(): void
+  assertResolvable(): Promise<void>
 
   toString(): string
 }
@@ -206,8 +208,11 @@ export type ContainerOps = Pick<
 
 /**
  * {@link Container} binding operations available to components that run before
- * the container is initialized. Includes bind-time metadata (`wrap`, `getBinding*`)
- * so a feature can scan and wrap bindings without resolving instances.
+ * the container is initialized.
+ *
+ * Nothing is registered until the container compiles, so the lookups (`entries`, `getBinding*`, `wrap*`) find
+ * nothing before then. A module runs while the container compiles and finds the decorated bindings and those bound
+ * by hand; a feature's configure step runs before it and finds none.
  */
 export type ContainerBindingOps = Pick<
   Container,
@@ -228,3 +233,23 @@ export type ContainerBindingOps = Pick<
   | 'getBindingsBy'
   | 'getBindingsByLabel'
 >
+
+/**
+ * What an override is handed: the container once every binding is registered and every profile and condition is
+ * decided, before anything is resolved.
+ */
+export interface OverrideOps extends Pick<Container, 'entries' | 'getBindings' | 'has'> {
+  bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): void
+
+  rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): void
+
+  /**
+   * Removes the binding registered under `key`. Bindings answering to `key` through a name or a base stay.
+   */
+  unbind(key: InjectionToken): void
+}
+
+/**
+ * Changes the bindings of a container after they are all registered and decided, and before any is resolved.
+ */
+export type ContainerOverride = (ops: OverrideOps) => void | Promise<void>

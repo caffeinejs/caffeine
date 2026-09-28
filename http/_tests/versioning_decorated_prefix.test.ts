@@ -21,7 +21,6 @@ describe('API versioning — decorated controllers', () => {
     }
 
     const container = new CaffeineIoC()
-    container.bind(V1Pets, t => t.toSelf())
     const app = createWebApplication({ container })
     await app.bootstrap()
 

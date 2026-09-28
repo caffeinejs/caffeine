@@ -2,7 +2,7 @@ import { unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
@@ -549,8 +549,6 @@ describe('application name and profiles', () => {
     vi.unstubAllEnvs()
   })
 
-  @Injectable()
-  @Profile('eu')
   class EuOnly {}
 
   it('defaults name to empty after bootstrap()', async () => {
@@ -593,20 +591,20 @@ describe('application name and profiles', () => {
     expect(app.profiles).toEqual(['test', 'eu'])
   })
 
-  it('does not register a @Profile bean without matching config profiles', async () => {
+  it('does not register a profiled bean without matching config profiles', async () => {
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly, t => t.toSelf())
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const app = createApplication({ container })
     await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(false)
   })
 
-  it('registers a @Profile bean when the active profiles include it', async () => {
+  it('registers a profiled bean when the active profiles include it', async () => {
     vi.stubEnv('CAFFEINE__PROFILES', 'eu')
 
     const container = new CaffeineIoC({ decorators: false })
-    container.bind(EuOnly, t => t.toSelf())
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const app = createApplication({ container })
     await app.bootstrap()
 

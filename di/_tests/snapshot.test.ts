@@ -2,19 +2,22 @@ import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { type Options } from '../container_interface.js'
+import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Injectable } from '../decorators/injectable.js'
+import { Profile } from '../decorators/profile.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
+import { mod } from '../module.js'
 import { type Snapshot } from '../snapshot.js'
 
 function newContainerFromSnapshot(snap: Snapshot, options?: Partial<Options>): CaffeineIoC {
-  const di = new CaffeineIoC({ decorators: false, ...options })
+  const di = new CaffeineIoC(options)
   di.restore(snap)
   return di
 }
 
 const kDb = token<string>(Symbol('db'))
 const kAPI = token<string>(Symbol('api'))
-const kLabel = token<Record<string, unknown>>(Symbol('label'))
 
 describe('ContainerSnapshot', function () {
   describe('snapshot()', function () {
@@ -145,7 +148,7 @@ describe('ContainerSnapshot', function () {
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
-      testDi.bind(kDb, t => t.toValue('mock-db'))
+      testDi.rebind(kDb, t => t.toValue('mock-db'))
       await testDi.init()
 
       expect(testDi.get(kDb)).toBe('mock-db')
@@ -157,7 +160,7 @@ describe('ContainerSnapshot', function () {
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
-      testDi.bind(kDb, t => t.toValue('mock-db'))
+      testDi.rebind(kDb, t => t.toValue('mock-db'))
       await testDi.init()
 
       expect(di.get(kDb)).toBe('real-db')
@@ -165,61 +168,100 @@ describe('ContainerSnapshot', function () {
     })
   })
 
-  describe('filter() and exclude()', function () {
-    it('exclude() removes specified keys', async function () {
-      const di = new CaffeineIoC({ decorators: false })
+  // A snapshot holds what the container was told, not what it registered: the restored container registers the
+  // decorated bindings, runs the modules and decides profiles and conditions itself.
+  describe('declarations', function () {
+    const kFlag = token<boolean>(Symbol('snap-flag'))
+    const kModule = token<string>(Symbol('snap-module'))
+
+    @Injectable()
+    @Profile('snap-decl')
+    class SnapDecorated {}
+
+    @Injectable()
+    @Profile('snap-decl')
+    @ConditionalOn(ctx => ctx.container.has(kFlag))
+    class SnapConditional {}
+
+    const snapModule = mod('snap-module', c => c.bind(kModule, t => t.toValue('from-module')))
+
+    function source(): CaffeineIoC {
+      const di = new CaffeineIoC({ profiles: ['snap-decl'], modules: [snapModule] })
       di.bind(kDb, t => t.toValue('db-url'))
-      di.bind(kAPI, t => t.toValue('api-url'))
+      return di
+    }
+
+    async function keysOf(snap: Snapshot): Promise<unknown[]> {
+      const di = newContainerFromSnapshot(snap)
       await di.init()
+      return [...di.entries()].map(([key]) => key)
+    }
 
-      const snap = di.snapshot().exclude(kDb)
+    it('carries the modules, the profiles and whether decorated bindings are registered', function () {
+      const snap = source().snapshot()
 
+      expect(snap.modules).toEqual([snapModule])
+      expect(snap.profiles).toEqual(['snap-decl'])
+      expect(snap.decorators).toBe(true)
       expect(snap.size).toBe(1)
+    })
 
-      const testDi = newContainerFromSnapshot(snap)
+    it('restores to the same bindings whether taken before or after init()', async function () {
+      const before = source().snapshot()
+
+      const initialized = source()
+      await initialized.init()
+      const after = initialized.snapshot()
+
+      const keys = await keysOf(before)
+
+      expect(keys).toEqual(expect.arrayContaining([kDb, kModule, SnapDecorated]))
+      expect(new Set(await keysOf(after))).toEqual(new Set(keys))
+    })
+
+    it('does not carry a module binding twice, since the module runs again', async function () {
+      const initialized = source()
+      await initialized.init()
+
+      const testDi = newContainerFromSnapshot(initialized.snapshot())
       await testDi.init()
 
-      expect(testDi.has(kAPI)).toBe(true)
-      expect(testDi.has(kDb)).toBe(false)
+      expect(testDi.get(kModule)).toBe('from-module')
     })
 
-    it('filter() keeps only matching bindings', async function () {
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb, t => t.toValue('db-url').labels(kLabel))
-      di.bind(kAPI, t => t.toValue('api-url'))
-      await di.init()
+    it('leaves conditions to the restored container', async function () {
+      const initialized = source()
+      await initialized.init()
+      expect(initialized.has(SnapConditional)).toBe(false)
 
-      const snap = di.snapshot().filter((_, binding) => binding.labels.includes(kLabel))
-
-      expect(snap.size).toBe(1)
-
-      const testDi = newContainerFromSnapshot(snap)
+      const testDi = newContainerFromSnapshot(initialized.snapshot())
+      testDi.bind(kFlag, t => t.toValue(true))
       await testDi.init()
 
-      expect(testDi.has(kDb)).toBe(true)
-      expect(testDi.has(kAPI)).toBe(false)
+      expect(testDi.has(SnapConditional)).toBe(true)
     })
 
-    it('filter() returning false for all produces empty snapshot', async function () {
+    it('keeps a rebind() a replacement', async function () {
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kDb, t => t.toValue('db-url'))
-      await di.init()
+      di.bind(kDb, t => t.toValue('first'))
+      di.rebind(kDb, t => t.toValue('second'))
 
-      const snap = di.snapshot().filter(() => false)
+      const testDi = newContainerFromSnapshot(di.snapshot())
+      await testDi.init()
 
-      expect(snap.size).toBe(0)
+      expect(testDi.get(kDb)).toBe('second')
     })
 
-    it('keep the values, which are not a binding either one could drop', function () {
-      const values = { host: 'db.local' }
-      const di = new CaffeineIoC({ decorators: false })
-      di.bindConfig(values)
-      di.bind(kDb, t => t.toValue('db-url'))
+    it('is not changed by what the restored container does with it', async function () {
+      const snap = source().snapshot()
 
-      const snap = di.snapshot()
+      const first = newContainerFromSnapshot(snap)
+      await first.init()
+      const second = newContainerFromSnapshot(snap)
+      await second.init()
 
-      expect(snap.filter(() => false).values).toBe(values)
-      expect(snap.exclude(kDb).values).toBe(values)
+      expect(second.get(kDb)).toBe('db-url')
+      expect(snap.size).toBe(1)
     })
   })
 
@@ -233,6 +275,7 @@ describe('ContainerSnapshot', function () {
       await testDi.init()
 
       expect(testDi.profiles.has('test')).toBe(true)
+      expect(testDi.profiles.has('prod')).toBe(true)
       expect(testDi.get(kDb)).toBe('prod-db')
     })
   })

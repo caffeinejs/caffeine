@@ -1,4 +1,4 @@
-import { $i, CaffeineIoC, Injectable, Scopes, token, type NamedToken } from '@caffeinejs/di'
+import { $i, CaffeineIoC, Scopes, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -62,7 +62,6 @@ describe('ConfigModule', () => {
 
   // The values provider is read when a consumer is built, so a transient built after a reload sees the new value.
   it('lets $i.config read the snapshot current when the consumer is built', async () => {
-    @Injectable([$i.config<AppConfig, string>(c => c.http.host)])
     class Client {
       constructor(readonly host: string) {}
     }
@@ -74,7 +73,7 @@ describe('ConfigModule', () => {
     )
     const container = new CaffeineIoC({ decorators: false })
     container.addModules(ConfigModule(store))
-    container.bind(Client, t => t.toSelf().lifetime(Scopes.TRANSIENT))
+    container.bind(Client, t => t.toSelf([$i.config<AppConfig, string>(c => c.http.host)]).lifetime(Scopes.TRANSIENT))
     await container.init()
 
     expect(container.get(Client).host).toBe('localhost')
@@ -87,7 +86,6 @@ describe('ConfigModule', () => {
 
   // A selected leaf is fixed when the consumer is built; a selected node is the live node itself.
   it('hands $i.config a live node, which follows a reload without the consumer being rebuilt', async () => {
-    @Injectable([$i.config<AppConfig, AppConfig['http']>(c => c.http)])
     class Client {
       constructor(readonly http: AppConfig['http']) {}
     }
@@ -99,7 +97,7 @@ describe('ConfigModule', () => {
     )
     const container = new CaffeineIoC({ decorators: false })
     container.addModules(ConfigModule(store))
-    container.bind(Client, t => t.toSelf())
+    container.bind(Client, t => t.toSelf([$i.config<AppConfig, AppConfig['http']>(c => c.http)]))
     await container.init()
 
     const client = container.get(Client)

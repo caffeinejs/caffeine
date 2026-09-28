@@ -72,8 +72,8 @@ export const CURL: Record<string, string> = {
 /**
  * An application that routes only what is mounted on it.
  *
- * Handed a live container the application skips `autoWire()`, so a `@Controller` declared anywhere in the
- * module graph is not routed and each scenario's routers are its whole surface.
+ * The container has decorators off, so a `@Controller` declared anywhere in the module graph is not routed and each
+ * scenario's routers are its whole surface.
  */
 export function isolated() {
   return createWebApplication({ container: new CaffeineIoC({ decorators: false }) })

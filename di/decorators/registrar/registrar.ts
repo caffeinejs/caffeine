@@ -1,4 +1,3 @@
-import { Binding } from '../../binding.js'
 import { ErrInvalidDecorator } from '../../errors.js'
 import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
@@ -160,13 +159,6 @@ export function addProvidedBindings<T>(key: InjectionToken<T>, config: Decorated
   notNil(config)
 
   ProvidedBindings.push([key, config])
-}
-
-/**
- * Converts a binding decorator configuration to a binding configuration.
- */
-export function decoratorConfigToBinding<T>(config: DecoratedBindingConfig): Binding<T> {
-  return config.binding()
 }
 
 // Testing Utilities

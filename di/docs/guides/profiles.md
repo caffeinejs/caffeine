@@ -135,10 +135,12 @@ await di.init()
 
 ## Fluent `.profiles()`
 
-Manual bindings use the same OR semantics as `@Profile`:
+Manual bindings use the same OR semantics as `@Profile`. Bind an undecorated class this way:
+a class already decorated with `@Injectable` is registered by its decorators, and binding it
+again fails with `ErrDuplicateBinding`.
 
 ```ts
-di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
+di.bind(InMemoryPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 ```
 
 ---
