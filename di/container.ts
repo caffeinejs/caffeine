@@ -73,6 +73,8 @@ interface PendingBinding {
   // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
   // against the profiles of the container it came from, so only a bound one is matched here.
   byHand?: 'bind' | 'restore'
+  // Registered with conditions a metadata reader gave it, and decided in place: it stays unless they fail.
+  registered?: true
 }
 
 /**
@@ -1928,7 +1930,8 @@ export class CaffeineIoC implements Container {
   }
 
   private async evaluatePendingConditionals(): Promise<void> {
-    const justRegistered = new Set<number>()
+    // The bindings registered or kept here, by id: a registered copy of one is not decided again.
+    const decidedIDs = new Set<number>()
     const decoratedIDs = new Set<number>()
     // The configuration classes that passed: only their own @Provides are decided.
     const passed = new Set<InjectionToken>()
@@ -1941,53 +1944,77 @@ export class CaffeineIoC implements Container {
 
     await decideInOrder(
       () => this._pendingConditionals,
-      async entry => {
-        const binding = entry.binding!
-
-        if (entry.providedByConfig !== undefined && !passed.has(entry.providedByConfig)) {
-          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-          return
-        }
-
-        // One bound by hand never entered the profile queue, so its profiles are matched here.
-        const pass =
-          (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await passes(this, entry.key, binding))
-
-        if (pass) {
-          justRegistered.add(this.registerDecided(entry, binding, decoratedIDs))
-          if (isHeldClass(entry)) {
-            passed.add(entry.key)
-          }
-
-          this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
-        } else {
-          this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-        }
-      },
+      () => this.registeredWithConditions(decidedIDs),
+      entry =>
+        entry.registered
+          ? this.decideRegistered(entry, decidedIDs)
+          : this.decideHeld(entry, passed, decidedIDs, decoratedIDs),
     )
-
-    const toUnref: InjectionToken[] = []
-    for (const key of this._pendingConditionalKeys) {
-      const binding = this.registry.get(key)
-      if (binding === undefined || justRegistered.has(binding.id)) {
-        continue
-      }
-
-      const pass = await passes(this, key, binding as unknown as Binding)
-      if (!pass) {
-        toUnref.push(key)
-      }
-    }
-
-    for (const key of toUnref) {
-      const binding = this.registry.get(key)!
-      this.unref(key)
-      this.hooks.emit('onBindingNotRegistered', { key, binding: binding as unknown as Binding })
-    }
 
     this._pendingConditionals = []
     this._pendingConfigKeys.clear()
     this._pendingConditionalKeys.clear()
+  }
+
+  // Decides a binding held for its conditions: registered once they pass, never over another binding of its key.
+  private async decideHeld(
+    entry: PendingBinding,
+    passed: Set<InjectionToken>,
+    decidedIDs: Set<number>,
+    decoratedIDs: ReadonlySet<number>,
+  ): Promise<void> {
+    const binding = entry.binding!
+
+    if (entry.providedByConfig !== undefined && !passed.has(entry.providedByConfig)) {
+      this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+      return
+    }
+
+    // One bound by hand never entered the profile queue, so its profiles are matched here.
+    const pass = (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await passes(this, entry.key, binding))
+
+    if (pass) {
+      decidedIDs.add(this.registerDecided(entry, binding, decoratedIDs))
+      if (isHeldClass(entry)) {
+        passed.add(entry.key)
+      }
+
+      this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
+    } else {
+      this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+    }
+  }
+
+  // Decides a binding registered with conditions a metadata reader gave it: it stays unless they fail. A held binding of
+  // its key that passed first took its place, keeping its id, and is not decided again.
+  private async decideRegistered(entry: PendingBinding, decidedIDs: Set<number>): Promise<void> {
+    const binding = entry.binding!
+
+    if (decidedIDs.has(binding.id)) {
+      return
+    }
+
+    if (await passes(this, entry.key, binding)) {
+      decidedIDs.add(binding.id)
+      return
+    }
+
+    this.unref(entry.key)
+    this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
+  }
+
+  // The bindings registered with conditions a metadata reader gave them and not decided yet.
+  private registeredWithConditions(decidedIDs: ReadonlySet<number>): PendingBinding[] {
+    const entries: PendingBinding[] = []
+
+    for (const key of this._pendingConditionalKeys) {
+      const binding = this.registry.get(key)
+      if (binding !== undefined && !decidedIDs.has(binding.id)) {
+        entries.push({ key, binding, registered: true })
+      }
+    }
+
+    return entries
   }
 
   // The queue is consumed with a cursor rather than `shift()`, which is O(n) per dequeue, and dependencies are

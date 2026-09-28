@@ -14,11 +14,18 @@ export interface Held {
   readonly providedByConfig?: InjectionToken
   readonly byHand?: 'bind' | 'restore'
   readonly profileRejected?: boolean
+  // Registered with conditions a metadata reader gave it, rather than held: it answers to its keys until decided.
+  readonly registered?: boolean
 }
 
 // A decorated configuration held for its conditions, or a conditional @Provides of one that is not: decided first.
 function isHeldConfiguration(entry: Held): boolean {
-  return entry.byHand === undefined && entry.providedByConfig === undefined && entry.binding!.configuration === true
+  return (
+    entry.byHand === undefined &&
+    !entry.registered &&
+    entry.providedByConfig === undefined &&
+    entry.binding!.configuration === true
+  )
 }
 
 // A decorated configuration class held for its conditions: its own @Provides go after it, and only once it passed.
@@ -159,12 +166,13 @@ function next(waits: readonly number[][], done: readonly boolean[]): number | un
   return cycleStart(waits, done)
 }
 
-// Decides the held bindings one at a time, each after the held bindings it waits for. A condition may bind while it is
-// decided: the queue is then a new array, or a longer one, and the order is worked out again with what it holds.
-// Decided bindings stay in the order, done, so nothing decided is decided again and a decided class still leads to its
-// @Provides.
+// Decides the held bindings one at a time, each after the held bindings it waits for, and after them the bindings
+// `registered` returns, which a metadata reader gave conditions to. A condition may bind while it is decided: the queue
+// is then a new array, or a longer one, and the order is worked out again with what it holds. Decided bindings stay in
+// the order, done, so nothing decided is decided again and a decided class still leads to its @Provides.
 export async function decideInOrder<E extends Held>(
   held: () => readonly E[],
+  registered: () => readonly E[],
   decide: (entry: E) => Promise<void>,
 ): Promise<void> {
   const decided = new Set<E>()
@@ -172,7 +180,7 @@ export async function decideInOrder<E extends Held>(
   for (;;) {
     const queue = held()
     const size = queue.length
-    const order = baseOrder(queue)
+    const order = baseOrder([...queue, ...registered()])
     const waits = waitsOf(order)
     const done = order.map(entry => decided.has(entry))
     const unchanged = () => held() === queue && queue.length === size

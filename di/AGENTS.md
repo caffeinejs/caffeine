@@ -4,17 +4,19 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Bindings and keys
 
-- A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
-  must never see its own binding (`present` / `missing` skip it by id), or a default written as
+- A binding carrying conditions registers only once they pass at `compile()`, however it was made. The exception is
+  one a metadata reader gave conditions to: registered when bound, it is decided in place and removed if they fail. A
+  condition must never see its own binding (`present` / `missing` skip it by id), or a default written as
   `.conditional(c => c.missing(key))` removes itself.
 - Conditions are data built with `$cond`, each with a `kind`. `when` is handed nothing: a registry check is
   `present` / `missing`, whose key the container can read. Never hand a condition the container.
 - A binding decided at `compile()` never silently replaces another of its key: a decorated one meeting any
   registration, or one made by hand meeting a decorated one decided there, throws
   `ErrRepeatedInjectableConfiguration`. Compare binding ids, not objects: `configureBinding` registers a copy.
-- A `present` / `missing` condition waits for every held binding answering to its key, and a `config` one for a held
-  values provider (`decideInOrder`, `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at
-  its earliest binding and no decision is revisited: `init()` never fails because of a cycle.
+- A `present` / `missing` condition waits for every binding answering to its key whose conditions are still to be
+  decided, held or given by a metadata reader, and a `config` one for such a values provider (`decideInOrder`,
+  `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at its earliest binding and no
+  decision is revisited: `init()` never fails because of a cycle.
 - Holding or discarding while conditions are decided makes `decideInOrder` work the order out again, skipping decided
   bindings. It notices because the queue grows or `discardHeld` replaces the array: never splice it in place.
 - Tell a `@Configuration` class from its `@Provides` with `isConfigurationClass` (`binding.ts`): a `@Provides` binding

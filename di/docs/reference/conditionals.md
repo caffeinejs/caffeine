@@ -42,8 +42,8 @@ present(key: InjectionToken): Condition
 ```
 
 Passes when a binding answers to `key`: one registered under it, one named after it (`.names()`), or one extending
-it (`.extends()`). It is decided after every other binding held for its conditions that answers to `key`, whatever
-order they were declared in. The binding being decided never counts.
+it (`.extends()`). It is decided after every other binding that answers to `key` and whose conditions are still to be
+decided, a metadata reader's included, whatever order they were declared in. The binding being decided never counts.
 
 Throws `ErrMissingInjectionKey` when `key` is `null` or `undefined`.
 
@@ -57,9 +57,9 @@ di.bind(RedisCacheService, t => t.toSelf().conditional(c => c.present(RedisClien
 missing(key: InjectionToken): Condition
 ```
 
-Passes when no binding answers to `key`. It is decided after every other binding held for its conditions that
-answers to `key`, and the binding being decided never counts, so this condition on the binding's own key makes it a
-default that yields to any other binding of the key.
+Passes when no binding answers to `key`. It is decided after every other binding that answers to `key` and whose
+conditions are still to be decided, a metadata reader's included, and the binding being decided never counts, so this
+condition on the binding's own key makes it a default that yields to any other binding of the key.
 
 Throws `ErrMissingInjectionKey` when `key` is `null` or `undefined`.
 

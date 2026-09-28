@@ -82,5 +82,10 @@ const di = new CaffeineIoC({ metadataReader: reader })
 | `primary`      | `boolean`      | `@Primary`       |
 | `conditionals` | `Condition[]`  | `@Conditional`   |
 
+A binding with no conditions of its own is registered when it is bound, even
+when the reader returns `conditionals` for it. They are decided during `init()`
+with the other conditions, and the binding is removed if they fail. A `present`
+or `missing` condition on its key waits for that decision.
+
 Returning factory-level fields (`factory`, `injections`, `injectionResolvers`)
 from a reader is possible but unusual — prefer the fluent binder API for those.

@@ -46,18 +46,20 @@ condition.
 
 Decision order: every binding without conditions is registered first — by hand, by a module or by decorators.
 Bindings with conditions are then decided one at a time during `init()`. A `present` or `missing` condition waits for
-every other binding held for its conditions that answers to its key — registered under it, named after it, or
-extending it — and a `config` condition waits for a held values provider. Otherwise the order is the order of
-declaration: decorated `@Configuration` classes first, each followed by its own `@Provides`, together with the
-conditional `@Provides` of unconditional classes, then the other decorated bindings in the order they were declared,
-then the ones bound by hand in the order they were bound. A binding held while conditions are decided, bound from a
-`when` test for example, joins the order before the next condition is decided. So `present` and `missing` see every
-binding that could answer to their key, conditional ones included.
+every other binding whose conditions are still to be decided that answers to its key — registered under it, named
+after it, or extending it — and a `config` condition waits for a values provider whose conditions are. Otherwise the
+order is the order of declaration: decorated `@Configuration` classes first, each followed by its own `@Provides`,
+together with the conditional `@Provides` of unconditional classes, then the other decorated bindings in the order
+they were declared, then the ones bound by hand in the order they were bound, then the bindings a metadata reader gave
+conditions to, which are registered when bound and removed if their conditions fail. A binding held while conditions
+are decided, bound from a `when` test for example, joins the order before the next condition is decided. So `present`
+and `missing` see every binding that could answer to their key, conditional ones included.
 
 Two bindings can wait for each other, as two defaults of one key do. Such a cycle is decided in declaration order: the
 first binding on it is decided as if the others were absent, and no decision is revisited. Two defaults of one key
-settle that way. A cycle of `missing` conditions across different keys can leave a binding registered whose condition
-no longer holds, so keep such conditions from depending on each other.
+settle that way. A binding a metadata reader gave conditions to stays registered until it is decided, so on a cycle it
+counts as present. A cycle of `missing` conditions across different keys can leave a binding registered whose
+condition no longer holds, so keep such conditions from depending on each other.
 
 :::warning
 A binding that fails its condition is completely absent from the container. Any

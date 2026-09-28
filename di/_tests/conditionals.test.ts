@@ -1062,6 +1062,110 @@ describe('Conditionals', function () {
 
       expect(di.get(kHeld)).toBe('replacement')
     })
+
+    // A binding a metadata reader gave conditions to is registered when bound, and stays until they fail. The default
+    // waits for that decision rather than yielding to a binding about to be removed.
+    it('should let a default register when a binding a metadata reader gave conditions to fails them', async function () {
+      const di = new CaffeineIoC({
+        decorators: false,
+        metadataReader: key => (key === HandCompetitor ? { conditionals: [$cond.when(() => false)] } : {}),
+      })
+      di.bind(HandCompetitor, t => t.toSelf().extends(Store))
+      bindDefault(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['memory'])
+    })
+
+    // Its own conditions wait like any other: Stats checks Store, which a held competitor answers.
+    it('should decide a binding a metadata reader gave conditions to after the held bindings it checks', async function () {
+      class Stats {}
+
+      const di = new CaffeineIoC({
+        decorators: false,
+        metadataReader: key => (key === Stats ? { conditionals: [$cond.present(Store)] } : {}),
+      })
+      di.bind(Stats, t => t.toSelf())
+      bindCompetitor(di)
+      await di.init()
+
+      expect(di.has(Stats)).toBe(true)
+    })
+
+    it('should decide a binding a metadata reader gave conditions to made while conditions are decided', async function () {
+      class Trigger {}
+
+      const di = new CaffeineIoC({
+        decorators: false,
+        metadataReader: key => (key === HandCompetitor ? { conditionals: [$cond.when(() => false)] } : {}),
+      })
+      di.bind(Trigger, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            di.bind(HandCompetitor, h => h.toSelf().extends(Store))
+            return true
+          }),
+        ),
+      )
+      bindDefault(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['memory'])
+    })
+
+    // With no wait between them, the held bindings go first, as they did when these were decided last of all.
+    it('should decide a binding a metadata reader gave conditions to after the held bindings it does not wait for', async function () {
+      class Stats {}
+      class Audit {}
+
+      const decided: string[] = []
+      const record = (name: string) => () => {
+        decided.push(name)
+        return true
+      }
+
+      const di = new CaffeineIoC({
+        decorators: false,
+        metadataReader: key => (key === Stats ? { conditionals: [$cond.when(record('reader'))] } : {}),
+      })
+      di.bind(Stats, t => t.toSelf())
+      di.bind(Audit, t => t.toSelf().conditional(c => c.when(record('held'))))
+      await di.init()
+
+      expect(decided).toEqual(['held', 'reader'])
+    })
+
+    // The first init() registered Svc, with its conditions, before Boom threw. The retry decides the held Svc again and
+    // must not decide that registered copy a second time.
+    it('should decide each condition once when init() is retried after a condition threw', async function () {
+      class Svc {}
+      class Boom {}
+
+      let threw = false
+      const decide = vi.fn(() => true)
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Svc, t => t.toSelf().conditional(c => c.when(decide)))
+      di.bind(Boom, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            if (!threw) {
+              threw = true
+              throw new Error('boom')
+            }
+
+            return true
+          }),
+        ),
+      )
+
+      await expect(di.init()).rejects.toThrow('boom')
+      decide.mockClear()
+      await di.init()
+
+      expect(decide).toHaveBeenCalledTimes(1)
+      expect(di.has(Svc)).toBe(true)
+    })
   })
 
   describe('using on configuration class', function () {
