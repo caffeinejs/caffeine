@@ -13,8 +13,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   registration, or one made by hand meeting a decorated one decided there, throws
   `ErrRepeatedInjectableConfiguration`. Compare binding ids, not objects: `configureBinding` registers a copy.
 - A `present` / `missing` condition waits for every held binding answering to its key, and a `config` one for a held
-  values provider (`decisionOrder`, `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at
+  values provider (`decideInOrder`, `_conditions.ts`). Otherwise the order is declaration order. A cycle is broken at
   its earliest binding and no decision is revisited: `init()` never fails because of a cycle.
+- Holding or discarding while conditions are decided makes `decideInOrder` work the order out again, skipping decided
+  bindings. It notices because the queue grows or `discardHeld` replaces the array: never splice it in place.
 - Tell a `@Configuration` class from its `@Provides` with `isConfigurationClass` (`binding.ts`): a `@Provides` binding
   carries `configuration` too, and only the class has no `source`.
 - Profiles are not a condition kind. The active profile set only grows before compile, which is what lets a profiled

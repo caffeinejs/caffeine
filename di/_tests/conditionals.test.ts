@@ -969,6 +969,78 @@ describe('Conditionals', function () {
       expect(di.has(Late)).toBe(true)
     })
 
+    // What a condition binds while it is decided joins the order before the next condition is decided, so the default
+    // waits for the competitor Trigger binds.
+    it('should let a default yield to a conditional binding made while conditions are decided', async function () {
+      class Trigger {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Trigger, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            bindCompetitor(di)
+            return true
+          }),
+        ),
+      )
+      bindDefault(di)
+      await di.init()
+
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['redis'])
+    })
+
+    // autoWire() pushes onto the held queue rather than replacing it, and a longer queue is noticed too.
+    it('should decide a conditional decorated binding wired while conditions are decided', async function () {
+      class Trigger {}
+
+      @Conditional(c => c.when(() => true))
+      @Injectable()
+      @Profile('order-wired-late')
+      class WiredLate {}
+
+      const di = new CaffeineIoC({ decorators: false, profiles: ['order-wired-late'] })
+      di.bind(Trigger, t =>
+        t.toSelf().conditional(c =>
+          c.when(() => {
+            di.autoWire()
+            return true
+          }),
+        ),
+      )
+      await di.init()
+
+      expect(di.has(WiredLate)).toBe(true)
+    })
+
+    // The order is worked out again once BindingConf binds. Decided already, the class must still lead to its @Provides.
+    it('should decide the @Provides of a class whose condition binds', async function () {
+      const kReport = token<string>(Symbol('order-binding-class-report'))
+
+      class Audit {}
+
+      @Configuration()
+      @Conditional(c =>
+        c.when(() => {
+          di.bind(Audit, t => t.toSelf())
+          return true
+        }),
+      )
+      @Profile('order-binding-class')
+      class BindingConf {
+        @Provides(kReport)
+        report(): string {
+          return 'report'
+        }
+      }
+      void BindingConf
+
+      const di = new CaffeineIoC({ profiles: ['order-binding-class'] })
+      await di.init()
+
+      expect(di.get(kReport)).toBe('report')
+      expect(di.has(Audit)).toBe(true)
+    })
+
     // Binding a key again discards a held binding of it, even while conditions are decided: the discarded one must not
     // come back and replace the binding that discarded it.
     it('should not decide a held binding discarded while conditions are decided', async function () {

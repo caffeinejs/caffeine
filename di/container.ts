@@ -1,7 +1,7 @@
 import './_polyfill.js'
 import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } from './_checks.js'
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
-import { decisionOrder, isHeldClass, passes } from './_conditions.js'
+import { decideInOrder, isHeldClass, passes } from './_conditions.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
 import { isConfigurationClass, newBinding, Binding } from './binding.js'
@@ -73,8 +73,6 @@ interface PendingBinding {
   // Held back by bind() or aspect(), or by restore(), rather than found by autoWire(). A restored binding was matched
   // against the profiles of the container it came from, so only a bound one is matched here.
   byHand?: 'bind' | 'restore'
-  // Taken out of the queue, possibly while conditions are decided, which then skip it.
-  discarded?: boolean
 }
 
 /**
@@ -1878,16 +1876,9 @@ export class CaffeineIoC implements Container {
     return result.length === entries.length ? result : entries
   }
 
-  // Takes the held bindings that match out of the queue. One taken out while conditions are decided is skipped.
+  // Takes the held bindings that match out of the queue, into a new array: deciding conditions notices the change.
   private discardHeld(match: (entry: PendingBinding) => boolean): void {
-    this._pendingConditionals = this._pendingConditionals.filter(entry => {
-      if (!match(entry)) {
-        return true
-      }
-
-      entry.discarded = true
-      return false
-    })
+    this._pendingConditionals = this._pendingConditionals.filter(entry => !match(entry))
   }
 
   /**
@@ -1941,7 +1932,6 @@ export class CaffeineIoC implements Container {
     const decoratedIDs = new Set<number>()
     // The configuration classes that passed: only their own @Provides are decided.
     const passed = new Set<InjectionToken>()
-    const decided = new Set<PendingBinding>()
 
     for (const entry of this._pendingConditionals) {
       if (entry.byHand === undefined && entry.binding !== undefined) {
@@ -1949,24 +1939,14 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    // A condition may bind while it is decided. What that holds is decided in a round of its own, after this one.
-    for (
-      let order = decisionOrder(this._pendingConditionals);
-      order.length > 0;
-      order = decisionOrder(this._pendingConditionals.filter(e => !decided.has(e)))
-    ) {
-      for (const entry of order) {
-        decided.add(entry)
-
-        if (entry.discarded) {
-          continue
-        }
-
+    await decideInOrder(
+      () => this._pendingConditionals,
+      async entry => {
         const binding = entry.binding!
 
         if (entry.providedByConfig !== undefined && !passed.has(entry.providedByConfig)) {
           this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
-          continue
+          return
         }
 
         // One bound by hand never entered the profile queue, so its profiles are matched here.
@@ -1983,8 +1963,8 @@ export class CaffeineIoC implements Container {
         } else {
           this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })
         }
-      }
-    }
+      },
+    )
 
     const toUnref: InjectionToken[] = []
     for (const key of this._pendingConditionalKeys) {

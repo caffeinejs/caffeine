@@ -124,63 +124,6 @@ function waitsOf(order: readonly Held[]): number[][] {
   })
 }
 
-// A min-heap of positions in the base order: the earliest binding free to be decided comes out first.
-class Ready {
-  readonly #heap: number[] = []
-
-  get size(): number {
-    return this.#heap.length
-  }
-
-  push(i: number): void {
-    const heap = this.#heap
-    heap.push(i)
-
-    for (let c = heap.length - 1; c > 0;) {
-      const p = (c - 1) >> 1
-      if (heap[p] <= heap[c]) {
-        break
-      }
-
-      ;[heap[p], heap[c]] = [heap[c], heap[p]]
-      c = p
-    }
-  }
-
-  pop(): number {
-    const heap = this.#heap
-    const top = heap[0]
-    const last = heap.pop()!
-
-    if (heap.length > 0) {
-      heap[0] = last
-
-      for (let p = 0; ;) {
-        const l = 2 * p + 1
-        const r = l + 1
-        let m = p
-
-        if (l < heap.length && heap[l] < heap[m]) {
-          m = l
-        }
-
-        if (r < heap.length && heap[r] < heap[m]) {
-          m = r
-        }
-
-        if (m === p) {
-          break
-        }
-
-        ;[heap[p], heap[m]] = [heap[m], heap[p]]
-        p = m
-      }
-    }
-
-    return top
-  }
-}
-
 // Walks from the earliest undecided binding to the first binding it still waits for, and on, until a binding repeats,
 // and returns the earliest binding on that cycle. A binding that only waits on a cycle is never the one forced. A
 // @Provides leads to its class while the class is undecided, so the walk follows what gates it before anything else.
@@ -198,50 +141,52 @@ function cycleStart(waits: readonly number[][], decided: readonly boolean[]): nu
   return Math.min(...path.slice(seen.get(i)))
 }
 
-// The positions in the order they are decided. Among the bindings free to go, the earliest in the base order goes
-// first, so without waits the order is the base order. When none is free, the binding cycleStart picks is decided as
-// if the bindings it still waits for were absent, and no decision is revisited.
-function schedule(waits: readonly number[][]): number[] {
-  const remaining = waits.map(w => w.length)
-  const dependents = waits.map((): number[] => [])
-  const decided = waits.map(() => false)
-  const ready = new Ready()
+// The next binding to decide, as a position in the base order: the earliest undecided one whose waits are all decided,
+// so without waits the order is the base order. When none is free, the one cycleStart picks, decided as if the
+// bindings it still waits for were absent. Undefined once every binding is decided.
+function next(waits: readonly number[][], done: readonly boolean[]): number | undefined {
+  const first = done.indexOf(false)
+  if (first === -1) {
+    return undefined
+  }
 
-  for (let i = 0; i < waits.length; i++) {
-    for (const j of waits[i]) {
-      dependents[j].push(i)
-    }
-
-    if (remaining[i] === 0) {
-      ready.push(i)
+  for (let i = first; i < done.length; i++) {
+    if (!done[i] && waits[i].every(j => done[j])) {
+      return i
     }
   }
 
-  const order: number[] = []
-
-  while (order.length < waits.length) {
-    const next = ready.size > 0 ? ready.pop() : cycleStart(waits, decided)
-
-    decided[next] = true
-    order.push(next)
-
-    for (const d of dependents[next]) {
-      remaining[d]--
-      if (remaining[d] === 0 && !decided[d]) {
-        ready.push(d)
-      }
-    }
-  }
-
-  return order
+  return cycleStart(waits, done)
 }
 
-// Orders the held bindings so each is decided after the held bindings it waits for, a cycle broken at its earliest
-// binding.
-export function decisionOrder<E extends Held>(pending: readonly E[]): E[] {
-  const order = baseOrder(pending)
+// Decides the held bindings one at a time, each after the held bindings it waits for. A condition may bind while it is
+// decided: the queue is then a new array, or a longer one, and the order is worked out again with what it holds.
+// Decided bindings stay in the order, done, so nothing decided is decided again and a decided class still leads to its
+// @Provides.
+export async function decideInOrder<E extends Held>(
+  held: () => readonly E[],
+  decide: (entry: E) => Promise<void>,
+): Promise<void> {
+  const decided = new Set<E>()
 
-  return schedule(waitsOf(order)).map(i => order[i])
+  for (;;) {
+    const queue = held()
+    const size = queue.length
+    const order = baseOrder(queue)
+    const waits = waitsOf(order)
+    const done = order.map(entry => decided.has(entry))
+    const unchanged = () => held() === queue && queue.length === size
+
+    for (let i = next(waits, done); i !== undefined && unchanged(); i = next(waits, done)) {
+      done[i] = true
+      decided.add(order[i])
+      await decide(order[i])
+    }
+
+    if (unchanged()) {
+      return
+    }
+  }
 }
 
 // Read through globalThis, so di carries no host binding: where the runtime has no process.env, every variable is unset.
