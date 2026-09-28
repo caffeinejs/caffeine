@@ -63,7 +63,13 @@ export class SpringCloudConfigSource implements ConfigSource {
     this.pollInterval = options.pollInterval
     this.#options = {
       ...options,
-      baseURLs: options.baseURLs.map(url => url.replace(/\/+$/, '')),
+      baseURLs: options.baseURLs.map(url => {
+        let end = url.length
+        while (url[end - 1] === '/') {
+          end--
+        }
+        return url.slice(0, end)
+      }),
       retries: options.retries ?? 3,
       timeoutMs: options.timeoutMs ?? 10_000,
       includeMetadata: options.includeMetadata ?? true,

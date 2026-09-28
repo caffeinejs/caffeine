@@ -57,6 +57,14 @@ describe('buildAliasResolver()', () => {
     expect(resolver?.resolve('@config/x')).toBeUndefined()
   })
 
+  it('substitutes every target wildcard without interpreting replacement tokens', async () => {
+    const dir = await project({
+      'tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@app/*': ['src/*/copy/*'] } } }),
+    })
+    const resolver = await buildAliasResolver(join(dir, 'tsconfig.json'))
+    expect(resolver?.resolve('@app/$&')).toBe(join(dir, 'src/$&/copy/$&.ts'))
+  })
+
   it('prefers the longest matching wildcard prefix', async () => {
     const dir = await project({
       'tsconfig.json': JSON.stringify({

@@ -175,6 +175,10 @@ function defaultGroupName(path: string): string {
 function pathSegments(path: string): string[] {
   return path
     .split('/')
-    .map(segment => segment.replace(/^:/, '').replace(/\(.*$/, '').replace(/\?$/, '').replace(/\*/g, 'all'))
+    .map(segment => {
+      const constraint = segment.indexOf('(')
+      const name = constraint === -1 ? segment : segment.slice(0, constraint)
+      return name.replace(/^:/, '').replace(/\?$/, '').replace(/\*/g, 'all')
+    })
     .filter(segment => segment.length > 0)
 }

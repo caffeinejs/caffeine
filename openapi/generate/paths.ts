@@ -36,10 +36,6 @@ export function routeURL(prefix: string | undefined, routerPath: string, routePa
   return `${prefix ?? ''}${joinPaths(routerPath, routePath)}`
 }
 
-// A Fastify path segment: `:name`, optionally `(regex)`, optionally `?`. Kept greedy-free so `:file.:ext`
-// splits into two parameters rather than one named `file.:ext`.
-const PARAM = /:([A-Za-z0-9_]+)(\(((?:[^()\\]|\\.|\([^)]*\))*)\))?(\?)?/g
-
 /**
  * Translates a Fastify path into OpenAPI path templates.
  *
@@ -58,13 +54,30 @@ export function translatePath(path: string): TranslatedPath {
   const parameters: PathParameter[] = []
   let optionalFrom: number | undefined
 
-  let template = path.replace(PARAM, (_match, name: string, _group, pattern: string | undefined, optional) => {
-    parameters.push({ name, pattern: pattern === undefined ? undefined : stripAnchors(pattern) })
-    if (optional !== undefined) {
-      optionalFrom ??= parameters.length - 1
+  const constraintEnds = findConstraintEnds(path)
+  const parts: string[] = []
+  let from = 0
+  const param = /:([A-Za-z0-9_]+)/g
+  let match: RegExpExecArray | null
+  while ((match = param.exec(path)) !== null) {
+    const name = match[1]
+    let end = param.lastIndex
+    const constraintEnd = constraintEnds.get(end)
+    const pattern = constraintEnd === undefined ? undefined : path.slice(end + 1, constraintEnd)
+    if (constraintEnd !== undefined) {
+      end = constraintEnd + 1
     }
-    return `{${name}}`
-  })
+    parameters.push({ name, pattern: pattern === undefined ? undefined : stripAnchors(pattern) })
+    if (path[end] === '?') {
+      optionalFrom ??= parameters.length - 1
+      end++
+    }
+    parts.push(path.slice(from, match.index), `{${name}}`)
+    from = end
+    param.lastIndex = end
+  }
+  parts.push(path.slice(from))
+  let template = parts.join('')
 
   if (template.includes('*')) {
     template = template.replace(/\*/g, '{wildcard}')
@@ -85,7 +98,42 @@ export function translatePath(path: string): TranslatedPath {
 
 /** The parameter names a template references, in order. */
 export function templateParameters(template: string): string[] {
-  return [...template.matchAll(/\{([^}]+)\}/g)].map(match => match[1])
+  const names: string[] = []
+  let from = 0
+  while (from < template.length) {
+    const start = template.indexOf('{', from)
+    if (start === -1) {
+      break
+    }
+    const end = template.indexOf('}', start + 1)
+    if (end === -1) {
+      break
+    }
+    if (end > start + 1) {
+      names.push(template.slice(start + 1, end))
+    }
+    from = end + 1
+  }
+  return names
+}
+
+// Pair constraints once so an unclosed constraint cannot rescan the suffix for every parameter.
+function findConstraintEnds(path: string): Map<number, number> {
+  const ends = new Map<number, number>()
+  const openings: number[] = []
+  for (let index = 0; index < path.length; index++) {
+    if (path[index] === '\\') {
+      index++
+    } else if (path[index] === '(') {
+      openings.push(index)
+    } else if (path[index] === ')') {
+      const start = openings.pop()
+      if (start !== undefined) {
+        ends.set(start, index)
+      }
+    }
+  }
+  return ends
 }
 
 function stripAnchors(pattern: string): string {
