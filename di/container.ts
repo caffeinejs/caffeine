@@ -4,7 +4,7 @@ import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } 
 import { decideInOrder, isHeldClass, passes } from './_conditions.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
-import { isConfigurationClass, newBinding, Binding } from './binding.js'
+import { newBinding, Binding } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
 import { BindingDescriptor, Container, Options, ScopeCheckMode } from './container_interface.js'
 import {
@@ -1447,11 +1447,7 @@ export class CaffeineIoC implements Container {
       return false
     }
 
-    if (entry.config !== undefined) {
-      return entry.config.isConfiguration === true && entry.config.getSource === undefined
-    }
-
-    return entry.binding !== undefined && isConfigurationClass(entry.binding)
+    return entry.config!.isConfiguration === true && entry.config!.getSource === undefined
   }
 
   private entryMatchesProfiles(entry: PendingBinding): boolean {
