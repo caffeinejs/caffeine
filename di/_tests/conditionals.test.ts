@@ -399,6 +399,25 @@ describe('Conditionals', function () {
       expect(di.has(kPassingProvide)).toBeTruthy()
       expect(di.get(kPassingProvide)).toEqual('value')
     })
+
+    // A configuration class may provide nothing, only marking that a feature is on: it is decided like one that does.
+    it('should decide a conditional configuration class that provides nothing', async function () {
+      @Configuration()
+      @Conditional(c => c.when(() => true))
+      @Profile('conf-provides-nothing')
+      class OnConf {}
+
+      @Configuration()
+      @Conditional(c => c.when(() => false))
+      @Profile('conf-provides-nothing')
+      class OffConf {}
+
+      const di = new CaffeineIoC({ profiles: ['conf-provides-nothing'] })
+      await di.init()
+
+      expect(di.has(OnConf)).toBe(true)
+      expect(di.has(OffConf)).toBe(false)
+    })
   })
 
   // A @Provides waits for the class that declares it, never for another class that provides the same key: tied by key,
