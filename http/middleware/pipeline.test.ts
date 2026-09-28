@@ -216,7 +216,7 @@ describe('MiddlewarePipeline', () => {
     const config = { origin: 'from-config' }
     let factoryRuns = 0
     const pipeline = new MiddlewarePipeline()
-    pipeline.add(
+    pipeline.addFactory(
       undefined,
       ({ config: c }: HTTPSetupContext<{ origin: string }>) => {
         factoryRuns += 1
@@ -248,7 +248,7 @@ describe('MiddlewarePipeline', () => {
     const logger = { ...newNoopLogger() }
     let seen: unknown
 
-    const pipeline = new MiddlewarePipeline().add(undefined, ({ container: c, logger: l }: HTTPSetupContext) => {
+    const pipeline = new MiddlewarePipeline().addFactory(undefined, ({ container: c, logger: l }: HTTPSetupContext) => {
       seen = l
       const greeting = c.get(kGreeting)
 
@@ -732,7 +732,7 @@ describe('MiddlewarePipeline connect-style middleware', () => {
   })
 
   it('runs when a middleware factory returns it', async () => {
-    const pipeline = new MiddlewarePipeline().add(
+    const pipeline = new MiddlewarePipeline().addFactory(
       undefined,
       ({ config }: HTTPSetupContext<{ tag: string }>) =>
         ((_req, res, next) => {

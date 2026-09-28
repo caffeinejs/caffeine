@@ -2,6 +2,9 @@ import type { IncomingMessage } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { newConfiguration } from '@caffeinejs/std'
+import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { $t } from '@caffeinejs/std/schema'
 import cors from 'cors'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -83,6 +86,51 @@ describe('middleware pipeline', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
     expect(seen).toEqual(['mw'])
+    await app.close()
+  })
+
+  it('runs a one-argument Caffeine middleware instead of treating it as a factory', async () => {
+    const app = newApp()
+    app.use(ctx => {
+      ctx.header('x-tag', 'one-argument')
+      ctx.status(401).body({ error: 'anonymous' })
+    })
+    await app.bootstrap()
+
+    const res = await app.fetch('/mw/echo')
+
+    expect(res.status).toBe(401)
+    expect(res.headers.get('x-tag')).toBe('one-argument')
+    expect(await res.json()).toEqual({ error: 'anonymous' })
+    await app.close()
+  })
+
+  it('infers a configured factory alongside Caffeine middleware', async () => {
+    const schema = $t.Object({ middleware: $t.Object({ tag: $t.String() }) })
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('middleware.app.config'))
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigSource({ middleware: { tag: 'from-config' } }))
+      .build()
+    const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
+    const seen: string[] = []
+
+    app.useFn('*', ({ config }) => ({
+      handle(ctx, next) {
+        ctx.header('x-tag', config.middleware.tag)
+        next()
+      },
+    }))
+    app.use('*', (ctx, next) => {
+      seen.push(`caffeine:${ctx.req.url}`)
+      next()
+    })
+    await app.bootstrap()
+
+    const res = await app.fetch('/mw/echo')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-tag')).toBe('from-config')
+    expect(seen).toEqual(['caffeine:/mw/echo'])
     await app.close()
   })
 
@@ -332,7 +380,7 @@ describe('middleware pipeline', () => {
   })
 })
 
-describe('application.use with a path', () => {
+describe('application middleware registration with a path', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -398,7 +446,7 @@ describe('application.use with a path', () => {
             server.use('/api', stringKey, { hook })
             break
           case 'factory':
-            server.use('/api', factory, { hook })
+            server.useFn('/api', factory, { hook })
             break
         }
         server.use((_ctx, next) => {

@@ -168,9 +168,8 @@ export class WebApplication<
    * in — within a hook.
    *
    * The first argument may be a path (`string` or `string[]`); `'*'` means every request. The middleware may
-   * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, a
-   * container key, or `(context) => middleware` called once at start-up with the configuration, the container
-   * and the logger.
+   * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
+   * container key.
    *
    * Which hooks exist is the adapter's: under Fastify, a `FastifyMiddlewareHook`, defaulting to `onRequest`. A
    * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
@@ -179,7 +178,6 @@ export class WebApplication<
    * ```ts
    * app.use(RequestLogger)
    * app.use('/admin', kRateLimiter, { hook: 'preHandler' })
-   * app.use(({ config }) => rateLimit(config.limits))
    * ```
    *
    * A middleware naming the variables it writes is taken at its word: the routers it ends up in front of are
@@ -191,7 +189,6 @@ export class WebApplication<
   ): this
   use(target: NodeMiddleware, options?: MiddlewareOptions<T['hook']>): this
   use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions<T['hook']>): this
-  use(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
   use(target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
   use<V = Record<never, never>, Conf = Record<never, never>>(
     path: MiddlewarePath,
@@ -204,7 +201,6 @@ export class WebApplication<
     target: (req: never, res: never, next: Next) => void,
     options?: MiddlewareOptions<T['hook']>,
   ): this
-  use(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
   use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
   use(
     pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
@@ -216,6 +212,29 @@ export class WebApplication<
   ): this {
     const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
     this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
+    return this
+  }
+
+  /**
+   * Adds a factory that builds middleware once at start-up from the configuration, container and logger.
+   *
+   * This is separate from {@link use} because both a factory and a Caffeine middleware are functions. The distinct
+   * method keeps the factory's setup context inferred without weakening inference for `use`'s Caffeine and Node
+   * middleware signatures.
+   *
+   * ```ts
+   * app.useFn('*', ({ config }) => rateLimit(config.limits))
+   * ```
+   */
+  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+  useFn(
+    pathOrTarget: MiddlewarePath | MiddlewareFactory<C>,
+    targetOrOptions?: MiddlewareFactory<C> | MiddlewareOptions<T['hook']>,
+    options?: MiddlewareOptions<T['hook']>,
+  ): this {
+    const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
+    this.#middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
