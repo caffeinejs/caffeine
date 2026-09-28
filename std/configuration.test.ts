@@ -215,7 +215,7 @@ function appWith(...sources: Array<{ provider: ConfigSource }>) {
 
 describe('configuration as the DI values provider', () => {
   it('injects a value selected by function', async () => {
-    @Injectable([$i.value<DatabaseConfig, string>(c => c.database.host)])
+    @Injectable([$i.config<DatabaseConfig, string>(c => c.database.host)])
     class Repository {
       constructor(readonly host: string) {}
     }
@@ -232,8 +232,8 @@ describe('configuration as the DI values provider', () => {
 
   it('injects a value selected by dot-path, and honours a default', async () => {
     @Injectable([
-      $i.value<DatabaseConfig, number>('database.port'),
-      $i.value<DatabaseConfig, string>('database.missing', 'fallback'),
+      $i.config<DatabaseConfig, number>('database.port'),
+      $i.config<DatabaseConfig, string>('database.missing', 'fallback'),
     ])
     class Repository {
       constructor(
@@ -257,7 +257,7 @@ describe('configuration as the DI values provider', () => {
   // The values are the live configuration object, so a transient resolved after a refresh sees the new value
   // without anything having been rebound.
   it('follows a refresh', async () => {
-    @Injectable([$i.value<DatabaseConfig, string>(c => c.database.host)])
+    @Injectable([$i.config<DatabaseConfig, string>(c => c.database.host)])
     class Holder {
       constructor(readonly host: string) {}
     }
@@ -280,7 +280,7 @@ describe('configuration as the DI values provider', () => {
   })
 
   it('leaves an application-supplied values provider alone', async () => {
-    @Injectable([$i.value<{ own: string }, string>(c => c.own)])
+    @Injectable([$i.config<{ own: string }, string>(c => c.own)])
     class Holder {
       constructor(readonly own: string) {}
     }
@@ -288,7 +288,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigSource({ database: { host: 'h', port: 1 } }),
     })
-    container.bindValuesProvider<{ own: string }>({ own: 'mine' })
+    container.bindConfig<{ own: string }>({ own: 'mine' })
     container.bind(Holder, t => t.toSelf())
 
     await builder.bootstrap()

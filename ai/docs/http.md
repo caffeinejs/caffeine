@@ -138,7 +138,7 @@ app.mount(pets) // before app.bootstrap()
   it and its dependencies are the group's. A route needing any of those opens the chain and closes it with
   `.handler(fn)`.
 - `.inject()` takes a spec or a function handed `$i`, on both `Router` and the route chain — so `optional`, `allOf`,
-  `provide` and `value` are reachable without importing it. Both forms type `deps` identically.
+  `provide` and `config` are reachable without importing it. Both forms type `deps` identically.
 - The handler takes the context first and the injected dependencies second — `undefined` when nothing was injected.
 - `ctx.req.body()` is the parsed body. `ctx.req.param()` / `.query()` / `.header()` are typed from the schema, and
   path parameters are typed from the path when no schema declares them.

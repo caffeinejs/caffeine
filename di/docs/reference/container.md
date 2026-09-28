@@ -11,7 +11,7 @@
 - [Binding](#binding)
   - [bind](#bind)
   - [rebind](#rebind)
-  - [bindValuesProvider](#bindvaluesprovider)
+  - [bindConfig](#bindconfig)
   - [autoWire](#autowire)
   - [addProfiles](#addprofiles)
 - [Inspection](#inspection)
@@ -180,24 +180,24 @@ binding named after it or extending it. Those keep resolving under their own key
 di.rebind(Logger, t => t.toClass(StructuredLogger))
 ```
 
-### bindValuesProvider
+### bindConfig
 
 ```ts
-bindValuesProvider<T = unknown>(values: T): this
+bindConfig<T = unknown>(values: T): this
 ```
 
-Sets the values that [`$i.value`](./injection.md#value) injections read, usually the
+Sets the values that [`$i.config`](./injection.md#config) injections read, usually the
 application's configuration. The container holds the object itself, not a copy and not a
 binding: it does not count in `size` or show in `entries()`. An injection reads it when its
 consumer is built, so a change made to the object in place reaches every consumer built
 afterwards.
 
 ```ts
-di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+di.bindConfig<AppConfig>({ database: { host: 'localhost', port: 5432 } })
 ```
 
 Calling it again replaces the values, and a module may call it too. Once the container has
-compiled, it throws `ErrInvalidContainerState`: the `$i.value` injections compiled by then
+compiled, it throws `ErrInvalidContainerState`: the `$i.config` injections compiled by then
 already hold the values. Read them back with `values`, which throws `ErrNoValuesProvider` when
 none were bound, and ask `hasValues` first when that is a possibility.
 
@@ -424,7 +424,7 @@ di.assertResolvable()
 snapshot(): Snapshot
 ```
 
-Captures the current set of bindings, and the values bound with `bindValuesProvider()`, as a
+Captures the current set of bindings, and the values bound with `bindConfig()`, as a
 `Snapshot`. Does not include instance state.
 
 ### restore
@@ -450,5 +450,5 @@ instances are discarded. When `snap` carries values, they replace the container'
 | `postProcessors`      | `Set<PostProcessor>`     | Post-init hooks run on every instance.                      |
 | `refresher`           | `Refresher`              | Controls `REFRESH` scope resets.                            |
 | `requestScopeManager` | `RequestScopeManager`    | Controls `REQUEST` scope contexts.                          |
-| `values`              | `unknown`                | The values from `bindValuesProvider()`. Throws if unset.    |
-| `hasValues`           | `boolean`                | Whether `bindValuesProvider()` was called.                  |
+| `values`              | `unknown`                | The values from `bindConfig()`. Throws if unset.            |
+| `hasValues`           | `boolean`                | Whether `bindConfig()` was called.                          |

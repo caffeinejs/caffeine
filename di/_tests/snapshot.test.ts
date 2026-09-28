@@ -108,7 +108,7 @@ describe('ContainerSnapshot', function () {
       expect(testDi.get(kAPI)).toBe('api-url')
     })
 
-    // The values are not a binding, so a container rebuilt from a snapshot would otherwise lose every $i.value.
+    // The values are not a binding, so a container rebuilt from a snapshot would otherwise lose every $i.config.
     it('carries the values, which restore() binds into the new container', async function () {
       class Svc {
         constructor(readonly host: string) {}
@@ -116,8 +116,8 @@ describe('ContainerSnapshot', function () {
 
       const values = { host: 'db.local' }
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider(values)
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<typeof values>(c => c.host)]))
+      di.bindConfig(values)
+      di.bind(Svc, t => t.toClass(Svc, [$i.config<typeof values>(c => c.host)]))
       await di.init()
 
       const testDi = newContainerFromSnapshot(di.snapshot())
@@ -130,7 +130,7 @@ describe('ContainerSnapshot', function () {
     it('restoring a snapshot taken without values keeps the values the container has', function () {
       const values = { host: 'own' }
       const testDi = new CaffeineIoC({ decorators: false })
-      testDi.bindValuesProvider(values)
+      testDi.bindConfig(values)
 
       testDi.restore(new CaffeineIoC({ decorators: false }).snapshot())
 
@@ -213,7 +213,7 @@ describe('ContainerSnapshot', function () {
     it('keep the values, which are not a binding either one could drop', function () {
       const values = { host: 'db.local' }
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider(values)
+      di.bindConfig(values)
       di.bind(kDb, t => t.toValue('db-url'))
 
       const snap = di.snapshot()

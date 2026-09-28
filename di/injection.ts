@@ -455,7 +455,7 @@ function optional<K extends InjectionToken<any> | InjectionResult<any>>(
  *   movieService: MovieService,
  *   userService: $i.optional(UserService),
  *   validators: $i.ordered(Validator),
- *   region: $i.value<AppConfig>('aws.region'),
+ *   region: $i.config<AppConfig>('aws.region'),
  * })])
  * class MovieController {
  *   constructor({ movieService, userService, validators, region }) {}
@@ -529,8 +529,8 @@ function just<T>(value: T): InjectionResult<T> {
 }
 
 /**
- * value creates an injection descriptor that injects a typed value from the values bound with
- * `bindValuesProvider()`, using either a selector function or a dot-separated string path.
+ * config creates an injection descriptor that injects a typed value from the values bound with
+ * `bindConfig()`, using either a selector function or a dot-separated string path.
  *
  * An optional second argument sets a default value returned when the resolved value is
  * `undefined` or when no values are bound. Supplying a default prevents
@@ -545,19 +545,19 @@ function just<T>(value: T): InjectionResult<T> {
  * ```ts
  * type AppConfig = { database: { host: string; port: number } }
  *
- * di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+ * di.bindConfig<AppConfig>({ database: { host: 'localhost', port: 5432 } })
  *
  * @Injectable([
- *   $i.value<AppConfig>(cfg => cfg.database.host),
- *   $i.value<AppConfig>('database.port'),
- *   $i.value<AppConfig>('database.host', 'fallback-host'),
+ *   $i.config<AppConfig>(cfg => cfg.database.host),
+ *   $i.config<AppConfig>('database.port'),
+ *   $i.config<AppConfig>('database.host', 'fallback-host'),
  * ])
  * class Repository {
  *   constructor(readonly host: string, readonly port: number, readonly fallback: string) {}
  * }
  * ```
  */
-function value<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R> {
+function config<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R> {
   return encode({
     stages: [{ name: BuiltInStages.CONFIG, args: { access, defaultValue } }],
   })
@@ -616,10 +616,10 @@ function parseObjectSpec(spec: ObjectInjectionSpec): ObjectInjections {
 }
 
 /**
- * The injection helpers `$i` exposes, parameterised by what `value` selects from.
+ * The injection helpers `$i` exposes, parameterised by what `config` selects from.
  *
  * `C` names the values a selector reads, so an API that hands `$i` to a callback can bind it — a parameter typed
- * `InjectionHelpers<AppConfig>` types `i.value(c => c.database.host)` without the call naming the type again. An
+ * `InjectionHelpers<AppConfig>` types `i.config(c => c.database.host)` without the call naming the type again. An
  * explicit type argument still wins, and `$i` itself leaves `C` at `unknown`.
  */
 export interface InjectionHelpers<C = unknown> {
@@ -634,16 +634,16 @@ export interface InjectionHelpers<C = unknown> {
   compose: typeof compose
 
   /**
-   * Injects a typed value from the values bound with `bindValuesProvider()`, by selector or dot-path.
+   * Injects a typed value from the values bound with `bindConfig()`, by selector or dot-path.
    *
    * `T` falls back to `C`, which is what types a selector whose call names no type argument.
    */
-  value<T = C, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R>
+  config<T = C, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R>
 }
 
 export const $i: InjectionHelpers = {
   allOf,
-  value,
+  config,
   ordered,
   mapped,
   defer,

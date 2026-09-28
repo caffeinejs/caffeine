@@ -195,9 +195,9 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * The values bound with {@link bindValuesProvider}, which `$i.value` injections read.
+   * The values bound with {@link bindConfig}, which `$i.config` injections read.
    *
-   * @throws {@link ErrNoValuesProvider} if {@link bindValuesProvider} was never called
+   * @throws {@link ErrNoValuesProvider} if {@link bindConfig} was never called
    */
   get values(): unknown {
     if (this._values === undefined) {
@@ -208,7 +208,7 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Whether {@link bindValuesProvider} was called, so that reading {@link values} does not throw.
+   * Whether {@link bindConfig} was called, so that reading {@link values} does not throw.
    */
   get hasValues(): boolean {
     return this._values !== undefined
@@ -699,21 +699,21 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Sets the values that `$i.value` injections read, usually the application's configuration.
+   * Sets the values that `$i.config` injections read, usually the application's configuration.
    *
    * The container holds the object itself, not a copy and not a binding: an injection reads it when its consumer is
    * built, so a change made to it in place reaches every consumer built afterwards. Calling it again before the
    * container compiles replaces the values.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled, because its `$i.value`
+   * @throws {@link ErrInvalidContainerState} if the container has already been compiled, because its `$i.config`
    * injections already hold the values
    *
    * @example
    * ```ts
-   * di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+   * di.bindConfig<AppConfig>({ database: { host: 'localhost', port: 5432 } })
    * ```
    */
-  bindValuesProvider<T = unknown>(values: T): this {
+  bindConfig<T = unknown>(values: T): this {
     notNil(values, 'Parameter values must not be null or undefined')
 
     if (this._ready || this._compiled) {
@@ -835,7 +835,7 @@ export class CaffeineIoC implements Container {
 
   /**
    * Captures a snapshot of all non-internal bindings in their current state, and of the values bound with
-   * {@link bindValuesProvider}.
+   * {@link bindConfig}.
    * Works at any point — pre-init or post-init.
    * For testing purposes.
    */

@@ -11,7 +11,7 @@
   - [object](#object)
   - [defer](#defer)
   - [just](#just)
-  - [value](#value)
+  - [config](#config)
   - [compose](#compose)
 
 Prefer the `$i` helpers over building an `InjectionDescriptor` manually — they are
@@ -270,23 +270,23 @@ class DatabaseClient {
 }
 ```
 
-### value
+### config
 
 ```ts
-$i.value<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionDescriptor<R>
+$i.config<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionDescriptor<R>
 ```
 
 Injects a value selected out of the values bound with
-[`di.bindValuesProvider()`](./container.md#bindvaluesprovider), either by a selector function or
+[`di.bindConfig()`](./container.md#bindconfig), either by a selector function or
 by a dot-separated path. The values are read when the consumer is built, so a change made to
 them in place reaches every consumer built afterwards.
 
 ```ts
 type AppConfig = { database: { host: string; port: number } }
 
-di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+di.bindConfig<AppConfig>({ database: { host: 'localhost', port: 5432 } })
 
-@Injectable([$i.value<AppConfig>(cfg => cfg.database.host), $i.value<AppConfig>('database.port', 5432)])
+@Injectable([$i.config<AppConfig>(cfg => cfg.database.host), $i.config<AppConfig>('database.port', 5432)])
 class DatabaseClient {
   constructor(
     readonly host: string,

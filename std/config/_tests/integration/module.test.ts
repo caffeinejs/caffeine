@@ -56,13 +56,13 @@ describe('ConfigModule', () => {
 
     expect(container.has(kConfig)).toBe(false)
     expect(container.get(ConfigStore)).toBe(store)
-    // The live object, not a snapshot: it is what lets $i.value follow a reload.
+    // The live object, not a snapshot: it is what lets $i.config follow a reload.
     expect(container.values).toBe(store.live)
   })
 
   // The values provider is read when a consumer is built, so a transient built after a reload sees the new value.
-  it('lets $i.value read the snapshot current when the consumer is built', async () => {
-    @Injectable([$i.value<AppConfig, string>(c => c.http.host)])
+  it('lets $i.config read the snapshot current when the consumer is built', async () => {
+    @Injectable([$i.config<AppConfig, string>(c => c.http.host)])
     class Client {
       constructor(readonly host: string) {}
     }
@@ -86,8 +86,8 @@ describe('ConfigModule', () => {
   })
 
   // A selected leaf is fixed when the consumer is built; a selected node is the live node itself.
-  it('hands $i.value a live node, which follows a reload without the consumer being rebuilt', async () => {
-    @Injectable([$i.value<AppConfig, AppConfig['http']>(c => c.http)])
+  it('hands $i.config a live node, which follows a reload without the consumer being rebuilt', async () => {
+    @Injectable([$i.config<AppConfig, AppConfig['http']>(c => c.http)])
     class Client {
       constructor(readonly http: AppConfig['http']) {}
     }

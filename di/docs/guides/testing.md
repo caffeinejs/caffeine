@@ -66,7 +66,7 @@ When decorator scanning or module setup is expensive, snapshot it once and reuse
 across test suites.
 
 Either way, the test container keeps the values the source bound with
-`bindValuesProvider()`, so `$i.value` injections resolve as they do in production.
+`bindConfig()`, so `$i.config` injections resolve as they do in production.
 
 When constructed empty, `.build()` enables decorator auto-wiring so types imported
 via the feature module register on the test container.
@@ -92,13 +92,13 @@ key is never removed by that filter even if the original binding was async.
 
 ## Replacing the values
 
-The values `$i.value` reads are not a binding, so `.override()` does not reach them.
+The values `$i.config` reads are not a binding, so `.override()` does not reach them.
 Bind the test's own values on the container `.build()` returns. It is not initialized
-yet, and a second `bindValuesProvider()` call replaces the values the source carried:
+yet, and a second `bindConfig()` call replaces the values the source carried:
 
 ```ts
 const di = new TestContainer(appContainer).build()
-di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+di.bindConfig<AppConfig>({ database: { host: 'localhost', port: 5432 } })
 await di.init()
 ```
 

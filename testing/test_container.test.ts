@@ -350,12 +350,12 @@ describe('TestContainer', function () {
 
     function sourceWith(values: { host: string }): CaffeineIoC {
       const source = new CaffeineIoC({ decorators: false })
-      source.bindValuesProvider(values)
-      source.bind(Settings, t => t.toClass(Settings, [$i.value<{ host: string }>(c => c.host)]))
+      source.bindConfig(values)
+      source.bind(Settings, t => t.toClass(Settings, [$i.config<{ host: string }>(c => c.host)]))
       return source
     }
 
-    it('keeps the values of the source container, so $i.value resolves', async function () {
+    it('keeps the values of the source container, so $i.config resolves', async function () {
       const source = sourceWith({ host: 'db.local' })
       await source.init()
 
@@ -367,7 +367,7 @@ describe('TestContainer', function () {
 
     it('lets a test replace the values on the container it builds', async function () {
       const di = newTestContainer(sourceWith({ host: 'db.local' })).build()
-      di.bindValuesProvider({ host: 'test.local' })
+      di.bindConfig({ host: 'test.local' })
       await di.init()
 
       expect(di.get(Settings).host).toBe('test.local')

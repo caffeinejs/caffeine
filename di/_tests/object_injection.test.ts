@@ -44,7 +44,7 @@ describe('$i.object', function () {
     di.bind(Beta, t => t.toSelf().extends(Plugin).order(2))
     di.bind(Singleton, t => t.toSelf())
     di.bind(Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
-    di.bindValuesProvider<{ database: { host: string; port: number } }>({ database: { host: 'localhost', port: 5432 } })
+    di.bindConfig<{ database: { host: string; port: number } }>({ database: { host: 'localhost', port: 5432 } })
 
     await di.init()
 
@@ -66,9 +66,9 @@ describe('$i.object', function () {
       const di = await container()
       const bag = di.resolver(
         $i.object({
-          host: $i.value<{ database: { host: string } }>(cfg => cfg.database.host),
-          port: $i.value<{ database: { port: number } }>('database.port'),
-          missing: $i.value<{ database: { host: string } }>('database.missing', 'fallback'),
+          host: $i.config<{ database: { host: string } }>(cfg => cfg.database.host),
+          port: $i.config<{ database: { port: number } }>('database.port'),
+          missing: $i.config<{ database: { host: string } }>('database.missing', 'fallback'),
         }),
       )()
 

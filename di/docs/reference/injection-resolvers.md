@@ -50,11 +50,11 @@ walked again.
 The bindings selected for the injection travel down the chain, so a stage can rearrange them before
 anything is built. Each stage acts in one of three ways:
 
-| Acts by       | Doing                                               | Used by                                      |
-| ------------- | --------------------------------------------------- | -------------------------------------------- |
-| transforming  | changing `ctx.bindings`, then returning `next(...)` | `ordered`                                    |
-| wrapping      | wrapping the resolver `next` returns                | `provide`                                    |
-| materializing | ignoring `next` and producing the resolver          | `allOf`, `mapped`, `just`, `value`, `object` |
+| Acts by       | Doing                                               | Used by                                       |
+| ------------- | --------------------------------------------------- | --------------------------------------------- |
+| transforming  | changing `ctx.bindings`, then returning `next(...)` | `ordered`                                     |
+| wrapping      | wrapping the resolver `next` returns                | `provide`                                     |
+| materializing | ignoring `next` and producing the resolver          | `allOf`, `mapped`, `just`, `config`, `object` |
 
 The third kind is **terminal**: it decides what the injection resolves to. A chain accepts exactly one,
 and a second throws `ErrConflictingInjectionStages` naming both — `allOf(mapped(key))` asks for an array
@@ -159,7 +159,7 @@ The stages every container starts with, named by the injection helpers in the
 | `MAP`      | yes      | `mapped()`                 |
 | `OBJECT`   | yes      | `object()`                 |
 | `VALUE`    | yes      | `just()`                   |
-| `CONFIG`   | yes      | `value()`                  |
+| `CONFIG`   | yes      | `config()`                 |
 
 A chain that names no terminal resolves the single binding for its key. `defer()` names no stage at all:
 it makes the key a `DeferredCtor`, which the chain unwraps when it selects bindings.

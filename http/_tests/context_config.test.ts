@@ -141,11 +141,11 @@ describe('ctx.config typing', () => {
     })
   })
 
-  it('types an $i.value selector from the router config, without the call naming it again', () => {
+  it('types an $i.config selector from the router config, without the call naming it again', () => {
     new Router('/catalog')
       .configType<AppConfig>()
       .inject($i => ({
-        pageSize: $i.value(c => {
+        pageSize: $i.config(c => {
           expectTypeOf(c).toEqualTypeOf<AppConfig>()
           return c.catalog.pageSize
         }),
@@ -160,7 +160,7 @@ describe('ctx.config typing', () => {
     new Router('/catalog')
       .configType<AppConfig>()
       .inject($i => ({
-        other: $i.value<{ a: { b: string } }, string>(c => {
+        other: $i.config<{ a: { b: string } }, string>(c => {
           expectTypeOf(c).toEqualTypeOf<{ a: { b: string } }>()
           return c.a.b
         }),
@@ -210,10 +210,10 @@ describe('ctx.config with an application schema', () => {
   })
 
   // The values provider is bound to the same handle, so it sees the same tree `ctx.config` does.
-  it('resolves an $i.value selector into a declared feature block', async () => {
+  it('resolves an $i.config selector into a declared feature block', async () => {
     const routes = new Router('/catalog')
       .configType<FullConfig>()
-      .inject($i => ({ host: $i.value(c => c.server.host) }))
+      .inject($i => ({ host: $i.config(c => c.server.host) }))
       .get('/', (_ctx, deps) => ({ host: deps.host }))
 
     const conf = newConfiguration(ownSchema, kFull)

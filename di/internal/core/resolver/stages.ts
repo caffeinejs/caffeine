@@ -103,7 +103,7 @@ type ConfigArgs = {
 }
 
 /**
- * Resolves a value out of the values bound with `bindValuesProvider()`.
+ * Resolves a value out of the values bound with `bindConfig()`.
  *
  * @throws {@link ErrNoValuesProvider} when no values are bound, and the injection is neither optional nor has a
  * default.

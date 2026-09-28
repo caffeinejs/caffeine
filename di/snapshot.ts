@@ -3,7 +3,7 @@ import { InjectionToken } from './key.js'
 
 /**
  * Represents the {@link Container} state at a specific point in time: its bindings, and the values bound with
- * `bindValuesProvider()`.
+ * `bindConfig()`.
  * Designed for testing purposes.
  */
 export class Snapshot {
@@ -20,7 +20,7 @@ export class Snapshot {
   }
 
   /**
-   * The values bound with `bindValuesProvider()` when the snapshot was taken, or `undefined` when none were.
+   * The values bound with `bindConfig()` when the snapshot was taken, or `undefined` when none were.
    *
    * They are not a binding, so {@link filter} and {@link exclude} keep them.
    */

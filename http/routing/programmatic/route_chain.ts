@@ -60,9 +60,9 @@ export class RouteChain<
    * Merged over whatever the enclosing groups injected, so a route may take a group's name for a different
    * binding.
    *
-   * A function is handed `$i`, so a route reaching for `optional`, `allOf`, `provide` or `value` does not have to
+   * A function is handed `$i`, so a route reaching for `optional`, `allOf`, `provide` or `config` does not have to
    * import it. Both forms produce the same dependencies and type the handler the same way, but only the function
-   * form types `$i.value`: the `$i` imported for the object form cannot know which application it is in, so a
+   * form types `$i.config`: the `$i` imported for the object form cannot know which application it is in, so a
    * selector there reads `unknown` unless the call names the type itself.
    *
    * ```ts

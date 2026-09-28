@@ -225,7 +225,7 @@ export function graphToText(input: Iterable<[InjectionToken, Binding]> | Binding
  *
  * What the pairs cannot show is left out: bindings the caller did not pass, bindings not yet settled before
  * `init()`, the replacement a `rebind` made for a key other bindings still name or extend, and dependencies wired
- * outside injections — `aliasOf`, `$i.value`, the configuration class behind a `@Provides` method, and aspects.
+ * outside injections — `aliasOf`, `$i.config`, the configuration class behind a `@Provides` method, and aspects.
  */
 export function buildBindingGraph(bindings: Iterable<[InjectionToken, Binding]>): BindingGraph {
   const entries = Array.from(bindings)
