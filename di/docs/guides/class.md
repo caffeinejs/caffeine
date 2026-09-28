@@ -1,8 +1,7 @@
 # Class
 
-CaffeineIoC supports three injection points on classes: **constructor**, **properties**, and **methods**.
-They are applied in that order — property injections happen after construction,
-method injections after properties.
+CaffeineIoC supports two injection points on classes: **constructor** and **properties**.
+They are applied in that order — property injections happen after construction.
 
 ## Constructor injection
 
@@ -72,36 +71,11 @@ class ReportService {
 }
 ```
 
-## Method injection
-
-`@Inject([...deps])` on a method injects dependencies as arguments and calls the
-method after all property injections have been applied.
-
-```ts
-import { Injectable, Inject } from '@caffeinejs/di'
-
-@Injectable()
-class ConnectionPool {
-  private db!: Database
-  private logger!: Logger
-
-  @Inject([Database, Logger])
-  setup(db: Database, logger: Logger) {
-    this.db = db
-    this.logger = logger
-    this.logger.log('Pool initialised')
-  }
-}
-```
-
-The dep array must match the method's parameter positions exactly, the same as
-with constructor injection.
-
 ## Post-construct hook
 
 `@PostConstruct()` on a method marks it as a lifecycle hook that runs after all
 injections are complete. Use it for logic that requires all injected values —
-constructor, property, and method injections — to already be present.
+constructor and property injections — to already be present.
 
 :::warning
 Post-construct hook are sync.  
@@ -166,5 +140,4 @@ For reference, the full sequence for a managed class:
 
 1. Constructor called with constructor deps
 2. Property injections applied (`@Inject` on fields)
-3. Method injections called (`@Inject` on methods)
-4. `@PostConstruct` hook runs
+3. `@PostConstruct` hook runs

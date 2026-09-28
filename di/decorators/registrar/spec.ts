@@ -31,7 +31,6 @@ export class DecoratedBindingConfig {
   #preDestroy?: Identifier | ((value: any) => void | Promise<void>)
   #bootstrap?: Identifier | ((value: any) => void | Promise<void>)
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
-  #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #configuredBy?: string
   #source?: { ctor: Ctor; method: string | symbol }
   #order?: number
@@ -241,19 +240,6 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  injectableMethod(name: Identifier, descriptors: Injection<unknown>[]): this {
-    this.#injectableMethods ??= new Map()
-    this.#injectableMethods.set(name, normalizeInjections(descriptors))
-    return this
-  }
-
-  injectableMethods(methods: Map<Identifier, Injection<unknown>[]>): this {
-    this.#injectableMethods = new Map(
-      methods.entries().map(([name, descriptors]) => [name, normalizeInjections(descriptors)]),
-    )
-    return this
-  }
-
   configuredBy(configuredBy: string): this {
     this.#configuredBy = configuredBy
     return this
@@ -294,7 +280,6 @@ export class DecoratedBindingConfig {
     return newBinding({
       injections: this.#dependencies,
       injectableProperties: this.#injectableProperties,
-      injectableMethods: this.#injectableMethods,
       interceptors: this.#interceptors,
       profiles: this.#profiles,
       scopeID: this.#scopeID,
@@ -341,7 +326,6 @@ export class DecoratedBindingConfig {
 export class MemberMetadata {
   #members?: Map<Identifier, DecoratedBindingConfig>
   #injectableProperties?: Map<Identifier, InjectionDescriptor<unknown>>
-  #injectableMethods?: Map<Identifier, InjectionDescriptor<unknown>[]>
   #postConstruct?: string | symbol
 
   get members(): Map<Identifier, DecoratedBindingConfig> | undefined {
@@ -370,12 +354,6 @@ export class MemberMetadata {
     return this
   }
 
-  injectableMethod(name: Identifier, descriptors: Injection<unknown>[]): this {
-    this.#injectableMethods ??= new Map()
-    this.#injectableMethods.set(name, normalizeInjections(descriptors))
-    return this
-  }
-
   postConstruct(name: string | symbol): this {
     if (this.#postConstruct) {
       throw new ErrInvalidDecorator(
@@ -390,10 +368,6 @@ export class MemberMetadata {
   applyTo(config: DecoratedBindingConfig): void {
     if (this.#injectableProperties) {
       config.injectableProperties(this.#injectableProperties)
-    }
-
-    if (this.#injectableMethods) {
-      config.injectableMethods(this.#injectableMethods)
     }
 
     if (this.#postConstruct) {

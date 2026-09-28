@@ -181,7 +181,7 @@ function decoratorDependencyTypeChecks(): void {
     @Inject(kMsg)
     msg!: string
 
-    // @ts-expect-error one injection for a two-parameter method
+    // @ts-expect-error @Inject does not apply to methods
     @Inject([Repo])
     setBoth(repo: Repo, logger: Logger): void {
       void repo

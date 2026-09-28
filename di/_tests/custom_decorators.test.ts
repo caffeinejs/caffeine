@@ -37,7 +37,7 @@ describe('Custom decorator primitives', function () {
     const kDep = token<FieldDep>(Symbol('dep-field'))
 
     function MyFieldInject(key: symbol) {
-      return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
+      return (_target: Function | object | undefined, context: ClassFieldDecoratorContext) => {
         defineMemberInjection(context.metadata, context.name, context.kind, {
           key: token<Record<string, unknown>>(key),
         })
@@ -127,7 +127,7 @@ describe('Custom decorator primitives', function () {
     const kCustomDep = token<TargetService>(Symbol('custom-dep'))
 
     function MyInject(key: symbol) {
-      return (_target: Function | object | undefined, context: ClassMemberDecoratorContext) => {
+      return (_target: Function | object | undefined, context: ClassFieldDecoratorContext) => {
         defineMemberInjection(context.metadata, context.name, context.kind, {
           key: token<Record<string, unknown>>(key),
         })

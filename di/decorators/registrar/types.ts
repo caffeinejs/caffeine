@@ -1,6 +1,6 @@
 export type TypeID = Function | object
 
-export type MemberKind = 'method' | 'field' | 'accessor' | 'getter' | 'setter'
+export type MemberKind = 'field' | 'accessor' | 'getter' | 'setter'
 
 export function idfy(id: TypeID | DecoratorContext): TypeID {
   if (typeof id === 'function') {

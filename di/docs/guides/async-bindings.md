@@ -14,8 +14,8 @@ Async bindings have three hard constraints enforced at `init()`:
 - **Scope**: must be singleton or refresh scoped. Transient and request scopes.
 - **Always eager**: async bindings are always instantiated during `init()`
   regardless of the binding's lazy setting.
-- **No property or method injection**: `@InjectMember` and `@InjectMethod` are
-  not supported on async bindings. Pass all dependencies through the factory
+- **No property injection**: `@InjectMember` is not supported on async
+  bindings. Pass all dependencies through the factory
   function instead.
 
 ## Three ways to declare an async binding

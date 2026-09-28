@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { CaffeineIoC } from '../container.js'
 import { Inject } from '../decorators/inject.js'
 import { Injectable } from '../decorators/injectable.js'
-import { ErrInvalidBinding } from '../errors.js'
+import { ErrInvalidBinding, ErrInvalidDecorator } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 
@@ -227,6 +227,20 @@ describe('class field injection', function () {
       expect(() => {
         di.bind(token<string>('stringKey'), t => t.toValue('x').injectProperty('prop', DepA))
       }).toThrow(ErrInvalidBinding)
+    })
+  })
+
+  describe('@Inject on a method', function () {
+    it('should throw ErrInvalidDecorator instead of ignoring the method', function () {
+      expect(() => {
+        class WithInjectedMethod {
+          // @ts-expect-error @Inject does not apply to methods; this asserts the run-time throw a caller
+          // without types still gets
+          @Inject(DepA)
+          setDep(_dep: DepA): void {}
+        }
+        void WithInjectedMethod
+      }).toThrow(ErrInvalidDecorator)
     })
   })
 })

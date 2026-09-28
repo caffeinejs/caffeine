@@ -395,32 +395,6 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Configures method injection for the bound class, calling the method after construction with the given deps.
-   *
-   * @example
-   * ```ts
-   * container.bind(Controller, t => t.toSelf().injectMethod('init', Repository, Cache))
-   * ```
-   */
-  injectMethod(method: Identifier, ...deps: Injection[]): this {
-    if (typeof this.key !== 'function') {
-      throw new ErrInvalidBinding(
-        `Cannot call injectMethod() on key "${String(this.key)}": method injection requires a class binding`,
-      )
-    }
-
-    const descriptors: InjectionDescriptor[] = deps.map(dep =>
-      typeof dep === 'object' && !(dep instanceof DeferredCtor)
-        ? (dep as InjectionDescriptor)
-        : { key: dep as InjectionToken },
-    )
-
-    this.binding.injectableMethods.set(method, descriptors)
-
-    return this
-  }
-
-  /**
    * Attaches one or more symbol labels to the binding, read back with {@link Container.getBindingsByLabel}.
    *
    * A label is a plain symbol, not an injection token: it groups bindings, it does not resolve one.

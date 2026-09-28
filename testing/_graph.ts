@@ -77,13 +77,6 @@ function buildForwardMap(snap: Snapshot): Map<InjectionToken, Set<InjectionToken
         deps.add(resolveKey(d.key))
       }
     }
-    for (const ds of b.injectableMethods.values()) {
-      for (const d of ds) {
-        if (d.key) {
-          deps.add(resolveKey(d.key))
-        }
-      }
-    }
     if (b.source?.ctor) {
       deps.add(b.source.ctor)
     }

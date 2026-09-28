@@ -823,25 +823,6 @@ describe('Manual Binding', function () {
 
       expect(() => new CaffeineIoC()).toThrow(ErrInvalidBinding)
     })
-
-    it('should throw ErrInvalidBinding when async binding has an injectable method', function () {
-      const kDep = token<string>(Symbol('dep'))
-
-      @UseAsyncFactory(async () => new AsyncWithInjectableMethod())
-      @Injectable()
-      class AsyncWithInjectableMethod {
-        dep!: unknown
-
-        @Inject([kDep])
-        setDep(dep: unknown) {
-          this.dep = dep
-        }
-      }
-
-      void AsyncWithInjectableMethod
-
-      expect(() => new CaffeineIoC()).toThrow(ErrInvalidBinding)
-    })
   })
 
   describe('$i.just()', function () {
@@ -1006,28 +987,6 @@ describe('Manual Binding', function () {
       di.bind(alias, t => t.aliasOf(Unregistered))
 
       await expect(di.init()).rejects.toThrow(ErrNoResolutionForKey)
-    })
-  })
-
-  describe('method injection count', function () {
-    const kDep = token<Record<string, unknown>>(Symbol('dep'))
-
-    it('should throw when fewer injection keys are specified than required method parameters', async function () {
-      @Injectable()
-      class OneInjectionTwoMethodParams {
-        val!: unknown
-
-        // @ts-expect-error one injection for a two-parameter method; this asserts the run-time throw a
-        // caller without types still gets
-        @Inject([kDep])
-        setVal(_a: unknown, _b: unknown) {
-          this.val = _a
-        }
-      }
-
-      void OneInjectionTwoMethodParams
-
-      expect(() => new CaffeineIoC()).toThrow()
     })
   })
 })

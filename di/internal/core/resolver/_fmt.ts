@@ -14,9 +14,6 @@ export function describeContext(ctx: InjectionResolverFactoryContext): string {
     case 'property':
       message += `Property "${String(ctx.member)}"`
       break
-    case 'method':
-      message += `Method "${String(ctx.member)}"`
-      break
   }
 
   if (ctx.index !== -1) {

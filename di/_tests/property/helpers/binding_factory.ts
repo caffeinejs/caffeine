@@ -17,7 +17,6 @@ export function binding(
     lazy?: boolean
     injections?: { key?: unknown }[]
     injectableProperties?: Map<string | symbol, { key?: unknown }>
-    injectableMethods?: Map<string | symbol, { key?: unknown }[]>
   } = {},
 ): Binding {
   return newBinding({
@@ -30,6 +29,5 @@ export function binding(
     lazy: opts.lazy,
     injections: (opts.injections ?? []) as any,
     injectableProperties: (opts.injectableProperties ?? new Map()) as any,
-    injectableMethods: (opts.injectableMethods ?? new Map()) as any,
   })
 }

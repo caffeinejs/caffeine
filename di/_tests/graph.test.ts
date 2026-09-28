@@ -101,22 +101,6 @@ describe('buildBindingGraph', function () {
     expect(edge!.meta).toBe('myProp')
   })
 
-  it('creates method-injection edge', function () {
-    const methods = new Map<string, { key: unknown }[]>([['init', [{ key: ServiceB }]]])
-    const bA = binding(1, { injectableMethods: methods as any })
-    const bB = binding(2)
-    const graph = buildBindingGraph([
-      [ServiceA, bA],
-      [ServiceB, bB],
-    ])
-
-    const edge = graph.edges.find(e => e.kind === 'method-injection')
-    expect(edge).toBeDefined()
-    expect(edge!.fromID).toBe(1)
-    expect(edge!.toID).toBe(2)
-    expect(edge!.meta).toBe('init[0]')
-  })
-
   it('resolves named injection via qualifier lookup', function () {
     const bA = binding(1, { injections: [{ key: 'svc' }] })
     const bB = binding(2, { names: ['svc'] })

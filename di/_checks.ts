@@ -11,8 +11,8 @@ import { Scopes } from './scope.js'
  * Check if the container's dependency graph contains any wrongly
  * configured circular references.
  *
- * Constructor, property and method injections all count as edges: a scope caches an instance only after its
- * factory and the property/method injectors have run, so none of the three breaks a cycle. Only `$i.defer`
+ * Constructor and property injections both count as edges: a scope caches an instance only after its
+ * factory and the property injector have run, so neither breaks a cycle. Only `$i.defer`
  * and `$i.provide` do, and an optional key nothing is bound to.
  */
 export function checkCircularReferences(
@@ -62,12 +62,6 @@ export function checkCircularReferences(
 
     for (const desc of binding.injectableProperties.values()) {
       addEdges(key, desc, deps)
-    }
-
-    for (const descs of binding.injectableMethods.values()) {
-      for (const desc of descs) {
-        addEdges(key, desc, deps)
-      }
     }
 
     adj.set(key, deps)
@@ -126,12 +120,6 @@ export function checkIfContainerIsResolvable(
 
     for (const [propName, inj] of binding.injectableProperties) {
       checkInjection(inj, `"${owner}".${String(propName)}`, issues, getBindings)
-    }
-
-    for (const [methodName, injList] of binding.injectableMethods) {
-      for (let i = 0; i < injList.length; i++) {
-        checkInjection(injList[i], `"${owner}".${String(methodName)}[${i}]`, issues, getBindings)
-      }
     }
   }
 

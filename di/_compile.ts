@@ -12,7 +12,6 @@ import {
 } from './internal/core/factory/index.js'
 import {
   propertyInjectorInterceptor,
-  methodInjectorInterceptor,
   postConstructInterceptor,
   beforeInitInterceptor,
   afterInitInterceptor,
@@ -27,7 +26,7 @@ export function compileDescriptorResolver(
   container: Container,
   key: InjectionToken,
   injection: InjectionDescriptor<unknown>,
-  kind: 'constructor' | 'property' | 'method',
+  kind: 'constructor' | 'property',
   member: Identifier,
   index: number,
 ): InjectionResolver {
@@ -54,15 +53,6 @@ export function compileInjectionResolvers(container: Container, key: InjectionTo
       prop,
       compileDescriptorResolver(container, key, desc, 'property', prop as Identifier, -1),
     )
-  }
-
-  for (const [method, specs] of binding.injectableMethods) {
-    const resolvers = new Array<InjectionResolver>(specs.length)
-    for (let i = 0; i < specs.length; i++) {
-      resolvers[i] = compileDescriptorResolver(container, key, specs[i], 'method', method as Identifier, i)
-    }
-
-    binding.methodResolvers.set(method, resolvers)
   }
 }
 
@@ -107,9 +97,6 @@ export function compileFactory<T>(
   if (!binding.async) {
     if (binding.injectableProperties.size > 0) {
       chain.push(propertyInjectorInterceptor<T>())
-    }
-    if (binding.injectableMethods.size > 0) {
-      chain.push(methodInjectorInterceptor<T>())
     }
   }
 

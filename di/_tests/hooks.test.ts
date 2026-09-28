@@ -85,10 +85,6 @@ describe('Hooks', function () {
     @Profile('hooks-post-construct')
     class Prop {}
 
-    @Injectable()
-    @Profile('hooks-post-construct')
-    class Svc {}
-
     @Injectable([Dep])
     @Profile('hooks-post-construct')
     class Component {
@@ -97,13 +93,10 @@ describe('Hooks', function () {
       @Inject(Prop)
       prop!: Prop
 
-      svc!: Svc
-
       constructor(readonly dep: Dep) {
         stack.push('ctor')
         expect(this.dep).toBeDefined()
         expect(this.prop).toBeUndefined()
-        expect(this.svc).toBeUndefined()
       }
 
       @PostConstruct()
@@ -111,18 +104,11 @@ describe('Hooks', function () {
         spy()
         stack.push('init')
         expect(this.dep).toBeDefined()
-        expect(this.svc).toBeDefined()
         expect(this.prop).toBeDefined()
-      }
-
-      @Inject([Svc])
-      setSvc(svc: Svc) {
-        this.svc = svc
-        stack.push('method')
       }
     }
 
-    it('should execute after property, method and any other post providers', async function () {
+    it('should execute after property injection and any other post providers', async function () {
       const di = new CaffeineIoC({ profiles: ['hooks-post-construct'] })
       await di.init()
 
@@ -130,7 +116,7 @@ describe('Hooks', function () {
       di.get(Component)
 
       expect(spy).toHaveBeenCalledTimes(1)
-      expect(stack).toEqual(['ctor', 'method', 'init'])
+      expect(stack).toEqual(['ctor', 'init'])
     })
   })
 

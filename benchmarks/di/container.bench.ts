@@ -117,27 +117,7 @@ class Root {
 }
 
 @Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
-class RootWithMethodInjection {
-  repo!: Repo
-  notification!: Notification
-
-  constructor(
-    readonly act: Act,
-    readonly loggers: Logger[],
-    readonly maybe?: Maybe,
-  ) {}
-
-  @Inject([RepoDb, kNotification])
-  setDeps(repo: Repo, notification: Notification) {
-    this.repo = repo
-    this.notification = notification
-  }
-}
-
-@Injectable([Act, $i.allOf(kLog), $i.optional(Maybe)])
 class RootWithAll {
-  repo!: Repo
-
   @Inject(kNotification)
   notification!: Notification
 
@@ -146,11 +126,6 @@ class RootWithAll {
     readonly loggers: Logger[],
     readonly maybe?: Maybe,
   ) {}
-
-  @Inject([RepoDb])
-  setDeps(repo: Repo) {
-    this.repo = repo
-  }
 }
 
 // Transient graph — isolated from the singleton graph above

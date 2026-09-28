@@ -81,20 +81,6 @@ function runCheck(
         isViolation,
       )
     }
-
-    for (const [method, descs] of binding.injectableMethods) {
-      for (let i = 0; i < descs.length; i++) {
-        checkInjection(
-          ownerKey,
-          binding.scopeID,
-          descs[i],
-          `"${keyStr(ownerKey)}".${String(method)}[${i}]`,
-          violations,
-          ctx,
-          isViolation,
-        )
-      }
-    }
   }
 
   if (violations.length > 0) {

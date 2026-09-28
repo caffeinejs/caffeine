@@ -3,7 +3,6 @@ import { ErrInvalidDecorator } from '../../errors.js'
 import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
 import { InjectionToken } from '../../key.js'
-import { normalizeInjections } from '../util/util.js'
 import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 import { idfy, MemberKind, TypeID } from './types.js'
 
@@ -64,24 +63,16 @@ export function defineMemberInjection<T = unknown>(
   id: TypeID,
   name: string | symbol,
   kind: MemberKind,
-  singleOrMultipleInjections: Injection<T> | Injection[],
+  injection: Injection<T>,
 ): void {
   const metadata = getInjectionMetadata(idfy(id))
-  const injections = normalizeInjections(
-    Array.isArray(singleOrMultipleInjections) ? singleOrMultipleInjections : [singleOrMultipleInjections],
-  )
 
   switch (kind) {
-    case 'method': {
-      metadata.injectableMethod(name, injections)
-      break
-    }
-
     case 'field':
     case 'accessor':
     case 'getter':
     case 'setter':
-      metadata.injectableProperty(name, injections[0])
+      metadata.injectableProperty(name, injection)
       break
   }
 }

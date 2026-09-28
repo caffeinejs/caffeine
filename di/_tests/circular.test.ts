@@ -95,34 +95,6 @@ describe('Circular References', function () {
     })
   })
 
-  @Injectable()
-  class MethodService {
-    tag() {
-      return 'method-service'
-    }
-  }
-
-  @Injectable()
-  class MethodConsumer {
-    svc!: MethodService
-
-    @Inject([$i.defer(() => MethodService)])
-    init(svc: MethodService) {
-      this.svc = svc
-    }
-  }
-
-  describe('deferred key in method injection', function () {
-    it('should inject via the method using the deferred binding', async function () {
-      const di = new CaffeineIoC()
-      await di.init()
-      const consumer = di.get(MethodConsumer)
-
-      expect(consumer.svc).toBeInstanceOf(MethodService)
-      expect(consumer.svc.tag()).toEqual('method-service')
-    })
-  })
-
   describe('cycle detection at init()', function () {
     it('should throw ErrCircularDependency when two classes have mutual non-optional constructor deps', async function () {
       class CycleA {

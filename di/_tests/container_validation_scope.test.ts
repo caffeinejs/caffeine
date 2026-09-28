@@ -126,22 +126,6 @@ describe('checks:scopes', function () {
     })
   })
 
-  describe('method injection', function () {
-    it('throws when method param is injected from different scope', async function () {
-      class SmMethodDep {}
-      class SmMethodOwner {
-        init(_dep: SmMethodDep) {}
-      }
-
-      const di = new CaffeineIoC({ checks: { scopes: 'no-mix' }, decorators: false })
-
-      di.bind(SmMethodDep, t => t.toClass(SmMethodDep).lifetime(Scopes.TRANSIENT))
-      di.bind(SmMethodOwner, t => t.toClass(SmMethodOwner).lifetime(Scopes.SINGLETON).injectMethod('init', SmMethodDep))
-
-      await expect(di.init()).rejects.toThrow(ErrScopeMismatch)
-    })
-  })
-
   describe('multiple violations', function () {
     it('collects all violations before throwing', async function () {
       const kDepA = token<string>(Symbol('sm-mv-dep-a'))

@@ -46,16 +46,6 @@ export interface Binding<T = any> {
   propertyResolvers: Map<Identifier, InjectionResolver<unknown>>
 
   /**
-   * Injectable methods for the component.
-   */
-  injectableMethods: Map<Identifier, InjectionDescriptor<unknown>[]>
-
-  /**
-   * Compiled injectable method resolvers.
-   */
-  methodResolvers: Map<Identifier, InjectionResolver<unknown>[]>
-
-  /**
    * Interceptors to apply to the component after resolution.
    */
   interceptors: PostResolutionInterceptor[]
@@ -202,8 +192,6 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     injectionResolvers: initial.injectionResolvers || [],
     injectableProperties: initial.injectableProperties || new Map(),
     propertyResolvers: initial.propertyResolvers ?? new Map(),
-    injectableMethods: initial.injectableMethods || new Map(),
-    methodResolvers: initial.methodResolvers ?? new Map(),
     interceptors: initial.interceptors || [],
     profiles: initial.profiles || new Set(),
     names: initial.names || [],

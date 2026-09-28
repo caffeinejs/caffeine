@@ -133,9 +133,9 @@ circularReferences?: boolean
 **Default:** `true`
 
 When `true`, the container performs a graph traversal during `init()` and throws
-`ErrCircularDependency` if a cycle is detected. Constructor, property and method
-injections all count as edges — a scope caches an instance only after the
-property and method injectors have run, so none of the three breaks a cycle.
+`ErrCircularDependency` if a cycle is detected. Constructor and property
+injections both count as edges — a scope caches an instance only after the
+property injector has run, so neither breaks a cycle.
 Only `$i.defer()`, `$i.provide()` and an optional key nothing is bound to do.
 
 The whole `checks` object is merged field by field, so passing one of the two

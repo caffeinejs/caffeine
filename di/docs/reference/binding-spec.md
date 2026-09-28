@@ -15,7 +15,6 @@
   - [primary](#primary)
   - [byPassPostProcessors](#bypasspostprocessors)
   - [injectProperty](#injectproperty)
-  - [injectMethod](#injectmethod)
   - [labels](#labels)
   - [tags](#tags)
   - [postConstruct](#postconstruct)
@@ -239,19 +238,6 @@ construction.
 
 ```ts
 di.bind(Service, t => t.toSelf().injectProperty('logger', Logger))
-```
-
-### injectMethod
-
-```ts
-injectMethod(method, ...deps)
-```
-
-Calls `method` on the resolved instance after construction, passing resolved
-dependencies as arguments.
-
-```ts
-di.bind(Service, t => t.toSelf().injectMethod('setLogger', Logger))
 ```
 
 ### labels

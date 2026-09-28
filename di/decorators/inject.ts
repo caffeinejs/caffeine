@@ -1,15 +1,16 @@
 import { DeferredCtor } from '../deferred_ctor.js'
 import { ErrInvalidDecorator } from '../errors.js'
-import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from '../injection.js'
+import { InjectionDescriptor, ResolveInjection } from '../injection.js'
 import { notNil } from '../internal/util/assert/index.js'
 import { InjectionToken } from '../key.js'
 import { defineMemberInjection } from './registrar/index.js'
 
 /**
- * Injects a dependency into a field, getter, setter, accessor, or method.
+ * Injects a dependency into a field, getter, setter, or accessor.
  *
- * On methods, pass an `Injection[]` matching parameter order.
- * On fields/getters/setters, pass a key or `InjectionDescriptor`.
+ * Methods are not injection points.
+ *
+ * @throws {@link ErrInvalidDecorator} when applied to a method.
  *
  * @param key - Injection token: class reference, named token, or `InjectionDescriptor`.
  *
@@ -35,38 +36,26 @@ export function Inject<T>(
 export function Inject<D extends InjectionDescriptor<any>>(
   descriptor: D,
 ): (target: Function | object | undefined, context: InjectedMemberContext<ResolveInjection<D>>) => void
-export function Inject<A extends unknown[]>(
-  dependencies: [...InjectionsFor<A>],
-): (target: (...args: A) => unknown, context: ClassMethodDecoratorContext) => void
 export function Inject(
-  keyOrDependencies: InjectionToken | InjectionDescriptor | Injection[],
+  key: InjectionToken | InjectionDescriptor,
 ): (target: Function | object | undefined, context: ClassMemberDecoratorContext) => void {
-  notNil(keyOrDependencies, `@${Inject.name} parameter key or dependencies is required.`)
+  notNil(key, `@${Inject.name} parameter key is required.`)
 
   return function (_target: Function | object | undefined, context: ClassMemberDecoratorContext) {
     switch (context.kind) {
-      case 'method': {
-        if (!Array.isArray(keyOrDependencies)) {
-          throw new ErrInvalidDecorator(
-            `When using the @${Inject.name} decorator on a method, parameter dependencies must be an array.\n` +
-              `Received: ${typeof keyOrDependencies}\n` +
-              `Check method ${String(context.name)}.`,
-          )
-        }
-
-        defineMemberInjection(context, context.name, 'method', keyOrDependencies)
-
-        break
-      }
+      case 'method':
+        throw new ErrInvalidDecorator(
+          `Cannot use @${Inject.name} on method "${String(context.name)}": method injection is not supported`,
+        )
 
       case 'accessor':
       case 'field':
       case 'getter':
       case 'setter':
-        if (typeof keyOrDependencies === 'object' && !(keyOrDependencies instanceof DeferredCtor)) {
-          defineMemberInjection(context, context.name, context.kind, keyOrDependencies)
+        if (typeof key === 'object' && !(key instanceof DeferredCtor)) {
+          defineMemberInjection(context, context.name, context.kind, key)
         } else {
-          defineMemberInjection(context, context.name, context.kind, { key: keyOrDependencies as InjectionToken })
+          defineMemberInjection(context, context.name, context.kind, { key: key as InjectionToken })
         }
 
         break

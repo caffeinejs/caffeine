@@ -14,7 +14,7 @@ export interface GraphNode {
   lazy: boolean
 }
 
-export type EdgeKind = 'injection' | 'property-injection' | 'method-injection' | 'named-group' | 'label-group'
+export type EdgeKind = 'injection' | 'property-injection' | 'named-group' | 'label-group'
 
 export interface GraphEdge {
   fromID: number
@@ -22,7 +22,7 @@ export interface GraphEdge {
   kind: EdgeKind
 
   /**
-   * Where an injection edge comes from — `param[0]`, a property name, or `method[0]`, followed by the field path of a
+   * Where an injection edge comes from — `param[0]` or a property name, followed by the field path of a
    * `$i.object` field (`param[0].repo`) — or, on a group edge, the name or label the group shares.
    */
   meta?: string
@@ -305,10 +305,6 @@ export function buildBindingGraph(bindings: Iterable<[InjectionToken, Binding]>)
 
     for (const [prop, inj] of binding.injectableProperties) {
       visit(binding, key, inj, 'property-injection', String(prop))
-    }
-
-    for (const [method, injections] of binding.injectableMethods) {
-      injections.forEach((inj, i) => visit(binding, key, inj, 'method-injection', `${String(method)}[${i}]`))
     }
   }
 

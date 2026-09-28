@@ -486,7 +486,6 @@ describe('async singleton resolution timing (L-3)', function () {
 
   describe('ensure container can resolve all registered bindings', function () {
     const kArfrPropDep = token<string>(Symbol('arfr-prop-dep'))
-    const kArfrMethodDep = token<Record<string, unknown>>(Symbol('arfr-method-dep'))
     const kArfrPrimaryKey = token<Record<string, unknown>>(Symbol('arfr-primary-key'))
     const kArfrPrimaryNs = 'arfr-primary-ns'
 
@@ -495,13 +494,6 @@ describe('async singleton resolution timing (L-3)', function () {
     class ArfrSvcWithPropInjection {
       @Inject(kArfrPropDep)
       accessor dep!: string
-    }
-
-    @Injectable()
-    @Profile('arfr-checks')
-    class ArfrSvcWithMethodInjection {
-      @Inject([kArfrMethodDep])
-      init(_dep: unknown) {}
     }
 
     @Injectable()
@@ -630,22 +622,6 @@ describe('async singleton resolution timing (L-3)', function () {
         expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
         expect(caught!.issues).toHaveLength(1)
         expect(caught!.issues[0]).toContain(kArfrPropDep.toString())
-      })
-
-      it('should throw when a method injection dependency is missing', function () {
-        const di = new CaffeineIoC({ decorators: false })
-        di.bind(ArfrSvcWithMethodInjection, t => t.toSelf())
-
-        let caught: ErrUnresolvableDependencies | undefined
-        try {
-          di.assertResolvable()
-        } catch (e) {
-          caught = e as ErrUnresolvableDependencies
-        }
-
-        expect(caught).toBeInstanceOf(ErrUnresolvableDependencies)
-        expect(caught!.issues).toHaveLength(1)
-        expect(caught!.issues[0]).toContain(kArfrMethodDep.toString())
       })
 
       it('should collect all issues rather than stopping at the first', function () {

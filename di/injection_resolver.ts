@@ -48,7 +48,7 @@ export type InjectionResolverFactoryContext<T = unknown> = {
    *
    * @readonly
    */
-  readonly kind: 'constructor' | 'property' | 'method'
+  readonly kind: 'constructor' | 'property'
 
   /**
    * The member of the component asking for the injection being described.

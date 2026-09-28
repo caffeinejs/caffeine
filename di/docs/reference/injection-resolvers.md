@@ -254,9 +254,9 @@ Passed to every `InjectionResolverFactory` when the container wires an injection
 | `container`  | The container instance. Use it to call `get()`, `getMany()`, or `has()`, or to read `values`, during resolver setup.           |
 | `descriptor` | The full `InjectionDescriptor` for this injection, including `key`, `optional`, `stages`, and `resolver`.                      |
 | `key`        | The key of the **component** that declares this injection (i.e. the class that has the dependency, not the dependency itself). |
-| `kind`       | Where the injection appears: constructor parameter, class property, or method parameter.                                       |
-| `member`     | The member name for property and method injections. Empty string for constructor injections.                                   |
-| `index`      | Parameter position for constructor and method injections. `-1` when position is not tracked.                                   |
+| `kind`       | Where the injection appears: constructor parameter or class property.                                                          |
+| `member`     | The member name for property injections. Empty string for constructor injections.                                              |
+| `index`      | Parameter position for constructor injections. `-1` when position is not tracked.                                              |
 
 ---
 

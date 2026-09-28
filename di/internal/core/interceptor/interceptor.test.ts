@@ -5,7 +5,6 @@ import { ResolutionContext } from '../../../resolution_context.js'
 import {
   afterInitInterceptor,
   beforeInitInterceptor,
-  methodInjectorInterceptor,
   postConstructInterceptor,
   propertyInjectorInterceptor,
 } from './index.js'
@@ -95,68 +94,6 @@ describe('propertyInjectorInterceptor', () => {
     intercept(ctx, instance)
     expect(instance.propA).toBe('a')
     expect(instance.propB).toBe('b')
-  })
-})
-
-describe('methodInjectorInterceptor', () => {
-  const intercept = methodInjectorInterceptor()
-
-  it('returns null without calling resolvers', () => {
-    const resolver = vi.fn()
-    const ctx = makeCtx(newBinding({ methodResolvers: new Map([['init', [resolver]]]) }))
-    expect(intercept(ctx, null as any)).toBeNull()
-    expect(resolver).not.toHaveBeenCalled()
-  })
-
-  it('returns undefined without calling resolvers', () => {
-    const resolver = vi.fn()
-    const ctx = makeCtx(newBinding({ methodResolvers: new Map([['init', [resolver]]]) }))
-    expect(intercept(ctx, undefined as any)).toBeUndefined()
-    expect(resolver).not.toHaveBeenCalled()
-  })
-
-  it('returns instance unchanged when methodResolvers is empty', () => {
-    const instance = {}
-    const ctx = makeCtx(newBinding())
-    expect(intercept(ctx, instance)).toBe(instance)
-  })
-
-  it('calls method with no args when resolver list is empty', () => {
-    const method = vi.fn()
-    const instance = { init: method }
-    const ctx = makeCtx(newBinding({ methodResolvers: new Map([['init', []]]) }))
-    intercept(ctx, instance)
-    expect(method).toHaveBeenCalledOnce()
-    expect(method).toHaveBeenCalledWith()
-  })
-
-  it('calls method with resolved args', () => {
-    const method = vi.fn()
-    const resolverA = vi.fn().mockReturnValue('depA')
-    const resolverB = vi.fn().mockReturnValue('depB')
-    const instance = { init: method }
-    const ctx = makeCtx(newBinding({ methodResolvers: new Map([['init', [resolverA, resolverB]]]) }))
-    intercept(ctx, instance)
-    expect(method).toHaveBeenCalledWith('depA', 'depB')
-  })
-
-  it('calls multiple methods', () => {
-    const methodA = vi.fn()
-    const methodB = vi.fn()
-    const resolverA = vi.fn().mockReturnValue(1)
-    const resolverB = vi.fn().mockReturnValue(2)
-    const instance = { a: methodA, b: methodB }
-    const ctx = makeCtx(
-      newBinding({
-        methodResolvers: new Map([
-          ['a', [resolverA]],
-          ['b', [resolverB]],
-        ]),
-      }),
-    )
-    intercept(ctx, instance)
-    expect(methodA).toHaveBeenCalledWith(1)
-    expect(methodB).toHaveBeenCalledWith(2)
   })
 })
 

@@ -61,10 +61,6 @@ describe('graphToMermaid output, parsed by Mermaid', function () {
         readonly channels: Channel[],
         readonly deps: { repo: Repo; later: Repo },
       ) {}
-
-      setClock(clock: Clock): void {
-        this.clock = clock
-      }
     }
 
     const di = new CaffeineIoC({ decorators: false })
@@ -77,7 +73,7 @@ describe('graphToMermaid output, parsed by Mermaid', function () {
       t
         .toSelf([$i.allOf(Channel), $i.object({ repo: Repo, later: $i.defer(() => Repo) })])
         .injectProperty('audit', kAudit)
-        .injectMethod('setClock', kClock),
+        .injectProperty('clock', kClock),
     )
     await di.init()
 

@@ -865,7 +865,6 @@ export class CaffeineIoC implements Container {
           ctx: undefined,
           injectionResolvers: [],
           propertyResolvers: new Map(),
-          methodResolvers: new Map(),
         },
       ])
     }
@@ -1228,10 +1227,10 @@ export class CaffeineIoC implements Container {
         )
       }
 
-      if ((config.injectableProperties?.size ?? 0) > 0 || (config.injectableMethods?.size ?? 0) > 0) {
+      if ((config.injectableProperties?.size ?? 0) > 0) {
         throw new ErrInvalidBinding(
           `Cannot configure async binding for key "${keyStr(key)}":` +
-            `async bindings cannot have injectable properties or injectable methods.`,
+            `async bindings cannot have injectable properties.`,
         )
       }
     }
@@ -1246,15 +1245,6 @@ export class CaffeineIoC implements Container {
       (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
     if (ctor !== undefined) {
-      for (const [methodName, injections] of binding.injectableMethods) {
-        const method = ctor.prototype?.[methodName as string]
-        if (typeof method === 'function' && method.length > injections.length) {
-          throw new ErrInvalidBinding(
-            `Cannot configure "${keyStr(key)}": method "${String(methodName)}" has ${method.length} parameter(s) but ${injections.length} injection key(s) were specified`,
-          )
-        }
-      }
-
       // A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit
       // hook set on the spec (or an @OnLifecycle callback) still wins.
       if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
@@ -1806,7 +1796,7 @@ export class CaffeineIoC implements Container {
 
   /**
    * Returns async bindings sorted in dependency order using topological sort.
-   * Dependencies are derived from constructor injections only — property and method injections
+   * Dependencies are derived from constructor injections only — property injections
    * are excluded because they are not supported on async bindings.
    */
   private sortAsyncBindings(): [InjectionToken, Binding][] {
@@ -2091,12 +2081,6 @@ export class CaffeineIoC implements Container {
 
     for (const injection of binding.injectableProperties.values()) {
       push(injection.key as InjectionToken | undefined)
-    }
-
-    for (const injections of binding.injectableMethods.values()) {
-      for (let i = 0; i < injections.length; i++) {
-        push(injections[i].key as InjectionToken | undefined)
-      }
     }
   }
 

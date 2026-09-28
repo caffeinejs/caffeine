@@ -24,30 +24,6 @@ describe('cycle detection beyond required constructor edges', function () {
     await expect(di.init()).rejects.toThrow(ErrCircularDependency)
   })
 
-  it('should throw ErrCircularDependency for a mutual method-injection cycle', async function () {
-    class MethodA {
-      b!: MethodB
-
-      setB(b: MethodB) {
-        this.b = b
-      }
-    }
-
-    class MethodB {
-      a!: MethodA
-
-      setA(a: MethodA) {
-        this.a = a
-      }
-    }
-
-    const di = new CaffeineIoC({ checks: { circularReferences: true }, decorators: false })
-    di.bind(MethodA, t => t.toSelf().injectMethod('setB', MethodB))
-    di.bind(MethodB, t => t.toSelf().injectMethod('setA', MethodA))
-
-    await expect(di.init()).rejects.toThrow(ErrCircularDependency)
-  })
-
   it('should throw ErrCircularDependency for an allOf cycle without defer', async function () {
     abstract class Handler {}
 
