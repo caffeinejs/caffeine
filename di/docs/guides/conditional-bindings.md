@@ -335,8 +335,33 @@ at once: `.conditional([$cond.env('REGION', 'eu'), $cond.present(RedisClient)])`
 
 A binding made by hand with `.conditional()` waits for `init()` the way a decorated one does.
 Until then `has()` does not see it, and it leaves a binding already registered under its key
-alone. It replaces that binding only if its condition passes. Binding the same key again
-discards it, the same way the second of two `bind()` calls replaces the first.
+alone. It replaces that binding only if its condition passes, and never a conditional decorated
+one — see [Clashes](#clashes). Binding the same key again discards it, the same way the second
+of two `bind()` calls replaces the first.
+
+---
+
+## Clashes
+
+A binding decided at `init()` never silently replaces another binding of its key. `init()` throws
+`ErrRepeatedInjectableConfiguration` when:
+
+- a decorated binding whose condition passes meets any binding already registered under its key —
+  made by hand, by a module, or by decorators;
+- a binding made by hand with `.conditional()` passes where a conditional decorated binding of its key
+  passed too, whichever of the two is decided first.
+
+`bind()` of a decorated class starts from its decorators, conditions included, so binding a conditional
+decorated class by hand clashes with it when the condition passes. Replace a decorated binding with
+`rebind()`:
+
+```ts
+di.rebind(RedisCache, t => t.toClass(FakeRedisCache))
+```
+
+A binding made by hand still replaces another one made by hand, one a module made, and a decorated one
+registered when the container was built, as `bind()` always has. Conditions that exclude each other never
+clash, since only one of the bindings passes.
 
 ---
 

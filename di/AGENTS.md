@@ -9,6 +9,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `.conditional(c => c.missing(key))` removes itself.
 - Conditions are data built with `$cond`, each with a `kind`. `when` is handed nothing: a registry check is
   `present` / `missing`, whose key the container can read. Never hand a condition the container.
+- A binding decided at `compile()` never silently replaces another of its key: a decorated one meeting any
+  registration, or one made by hand meeting a decorated one decided there, throws
+  `ErrRepeatedInjectableConfiguration`. Compare binding ids, not objects: `configureBinding` registers a copy.
 - Profiles are not a condition kind. The active profile set only grows before compile, which is what lets a profiled
   binding register in the constructor; deciding profiles with the conditions would move that visibility and its
   errors to `init()`.

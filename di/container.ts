@@ -858,6 +858,9 @@ export class CaffeineIoC implements Container {
   /**
    * Restores bindings from the given snapshot into the container.
    * Must be called before {@link init}.
+   *
+   * A restored binding that carries conditions takes the place of a decorated binding of its key still waiting for
+   * its conditions: the snapshot holds its own copy of that decision.
    */
   restore(snap: Snapshot): void {
     if (this._ready) {
@@ -865,6 +868,12 @@ export class CaffeineIoC implements Container {
     }
 
     for (const [key, binding] of snap.entries()) {
+      if (binding.conditionals.length > 0) {
+        this._pendingConditionals = this._pendingConditionals.filter(e => e.byHand !== undefined || e.key !== key)
+        this._pendingProfiles = this._pendingProfiles.filter(e => e.key !== key)
+        this._pendingConfigKeys.delete(key)
+      }
+
       this.registerOrHold(key, binding, 'restore')
     }
   }
@@ -1958,12 +1967,46 @@ export class CaffeineIoC implements Container {
     return provider.factory({ container: this, key: Keys.kValuesProvider, binding: provider })
   }
 
+  // Registers a binding whose conditions passed at compile(). It never silently replaces another binding of its key:
+  // a decorated binding meeting any registration, or one made by hand meeting a decorated binding decided here, is a
+  // clash whichever of the two is decided first. A registration of its own, left by a compile() that threw half-way,
+  // stays as it is.
+  private registerDecided(entry: PendingBinding, binding: Binding, decoratedIDs: ReadonlySet<number>): number {
+    const existing = this.registry.get(entry.key)
+
+    if (existing !== undefined) {
+      if (existing.id === binding.id) {
+        return existing.id
+      }
+
+      if (entry.byHand === undefined || decoratedIDs.has(existing.id)) {
+        throw new ErrRepeatedInjectableConfiguration(
+          `Cannot register "${keyStr(entry.key)}": another binding is already registered under this key` +
+            solutions(
+              `Replace the decorated binding with rebind()`,
+              `Or let one of them yield with a condition, e.g. c.missing(key)`,
+            ),
+        )
+      }
+    }
+
+    this.configureBinding(entry.key, binding)
+
+    return this.registry.get(entry.key)!.id
+  }
+
   private async evaluatePendingConditionals(): Promise<void> {
     const justRegistered = new Set<number>()
+    const decoratedIDs = new Set<number>()
 
-    const registerEntry = (key: InjectionToken, binding: Binding): void => {
-      this.configureBinding(key, binding)
-      justRegistered.add(this.registry.get(key)!.id)
+    for (const entry of this._pendingConditionals) {
+      if (entry.byHand === undefined && entry.binding !== undefined) {
+        decoratedIDs.add(entry.binding.id)
+      }
+    }
+
+    const registerEntry = (entry: PendingBinding, binding: Binding): void => {
+      justRegistered.add(this.registerDecided(entry, binding, decoratedIDs))
     }
 
     for (const entry of this._pendingConditionals) {
@@ -1979,7 +2022,7 @@ export class CaffeineIoC implements Container {
       const pass = await this.passes(entry.key, binding)
 
       if (pass) {
-        registerEntry(entry.key, binding)
+        registerEntry(entry, binding)
         this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
 
         for (const provided of this._pendingConditionals) {
@@ -1995,7 +2038,7 @@ export class CaffeineIoC implements Container {
           const pPass = await this.passes(provided.key, providedBinding)
 
           if (pPass) {
-            registerEntry(provided.key, providedBinding)
+            registerEntry(provided, providedBinding)
             this.hooks.emit('onBindingRegistered', { key: provided.key, binding: providedBinding })
           } else {
             this.hooks.emit('onBindingNotRegistered', { key: provided.key, binding: providedBinding })
@@ -2030,7 +2073,7 @@ export class CaffeineIoC implements Container {
       const pass = (entry.byHand !== 'bind' || this.isRegistrable(binding)) && (await this.passes(entry.key, binding))
 
       if (pass) {
-        registerEntry(entry.key, binding)
+        registerEntry(entry, binding)
         this.hooks.emit('onBindingRegistered', { key: entry.key, binding })
       } else {
         this.hooks.emit('onBindingNotRegistered', { key: entry.key, binding })

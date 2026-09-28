@@ -534,7 +534,8 @@ export class BindingSpec<TValue, K = unknown> {
    *
    * The binding is not registered when `bind()` returns: it waits for `compile()`, where it is decided after the
    * decorated bindings. Its conditions therefore never see the binding itself, and a binding already registered under
-   * the key stays unless they pass — which is what lets `c.missing(key)` make it a default.
+   * the key stays unless they pass — which is what lets `c.missing(key)` make it a default. It never replaces a
+   * decorated binding that passed its own conditions: `init()` throws `ErrRepeatedInjectableConfiguration` instead.
    *
    * @param condition - A condition built with {@link $cond}, several, or a callback handed the same builders. The
    *   callback runs once, when this method is called.

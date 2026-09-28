@@ -8,7 +8,8 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  * then the component is not registered.
  *
  * Stacked, every condition must pass, the top-most first. On a `@Configuration` class, a condition that fails also
- * skips every `@Provides` method of the class.
+ * skips every `@Provides` method of the class. Once it passes, the binding never replaces another binding of its key:
+ * `init()` throws `ErrRepeatedInjectableConfiguration` instead, and `rebind()` is what replaces a decorated binding.
  *
  * @param condition - A condition built with {@link $cond}, or a callback handed the same builders. The callback runs
  *   once, when the class is decorated.
