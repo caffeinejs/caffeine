@@ -145,31 +145,6 @@ await di.init()
 
 ---
 
-## `metadataReader`
-
-**Default:** `undefined`
-
-A function `(key: InjectionToken) => Partial<Binding>` called for every binding at
-registration time. Its return value is merged into the binding, letting you
-inject metadata from an external source (config files, environment variables,
-feature flags) without decorators.
-
-```ts
-const di = new CaffeineIoC({
-  metadataReader: key => {
-    if (key === DbConnection) {
-      return { lazy: true }
-    }
-    return {}
-  },
-})
-```
-
-This is an advanced escape hatch. For most cases, decorators and binder options
-cover the same ground with less ceremony.
-
----
-
 ## All options at a glance
 
 | Option                      | Type                                            | Default                    |
@@ -180,4 +155,3 @@ cover the same ground with less ceremony.
 | `checks.scopes`             | `'compatible-scopes-only' \| 'no-mix' \| 'off'` | `'compatible-scopes-only'` |
 | `checks.circularReferences` | `boolean`                                       | `true`                     |
 | `decorators`                | `boolean`                                       | `true`                     |
-| `metadataReader`            | `MetadataReader`                                | `undefined`                |

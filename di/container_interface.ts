@@ -5,7 +5,6 @@ import { BindingSpec } from './binding_spec.js'
 import { HookListener } from './hooks.js'
 import { Injection, ResolveInjection } from './injection.js'
 import { InjectionToken, NamedToken, TokenValue } from './key.js'
-import { MetadataReader } from './metadata_reader.js'
 import type { Module, ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
@@ -49,13 +48,6 @@ export interface Options {
    * @defaultValue `false`
    */
   lazy?: boolean
-
-  /**
-   * Custom {@link MetadataReader} for the container.
-   *
-   * @defaultValue `undefined`
-   */
-  metadataReader?: MetadataReader
 
   /**
    * Checks to apply during container initialization.

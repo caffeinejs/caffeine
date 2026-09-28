@@ -10,7 +10,7 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
 
 - [Configuring the Container](./configuring-container.md) — all `CaffeineIoC` constructor
   options: default scope, lazy mode, profiles, scope validation, circular reference
-  detection, parent containers, and metadata readers.
+  detection, and parent containers.
 
 - [Auto Load Decorated Classes](./scanning-files.md) — use `scan()` to auto-import all
   decorated source files in a directory, eliminating manual import lists in

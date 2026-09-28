@@ -36,7 +36,6 @@ import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
 import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue } from './key.js'
 import type { OnBootstrap, OnDestroy } from './lifecycle.js'
-import { MetadataReader } from './metadata_reader.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
@@ -90,7 +89,6 @@ export class CaffeineIoC implements Container {
 
   private readonly bindingMembers = new Map<InjectionToken | Identifier, Set<number>>()
   private readonly labelMembers = new Map<symbol, Set<number>>()
-  private readonly metadataReader: MetadataReader
   private readonly lazy?: boolean
   private readonly circularReferences: boolean
   private readonly scopeID: NamedToken<Scope>
@@ -135,7 +133,6 @@ export class CaffeineIoC implements Container {
     this.circularReferences = opts.checks?.circularReferences ?? true
     this.scopeCheckMode = opts.checks?.scopes ?? 'compatible-scopes-only'
     this.scopeID = opts.defaultScopeID ?? Scopes.SINGLETON
-    this.metadataReader = opts.metadataReader || (() => ({}))
     this.scopes = new Map<NamedToken<Scope>, Scope>()
     this.modules = [...(opts.modules ?? [])]
 
@@ -1205,8 +1202,7 @@ export class CaffeineIoC implements Container {
       }
     }
 
-    const conf = { ...config, ...this.metadataReader(key) }
-    const binding = newBinding(conf)
+    const binding = newBinding<T>(config)
     if (config.async && !binding.scopeID) {
       binding.scopeID = Scopes.SINGLETON
     }

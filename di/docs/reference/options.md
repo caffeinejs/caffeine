@@ -194,35 +194,6 @@ See the [Modules guide](../guides/modules.md).
 
 ---
 
-### `metadataReader`
-
-```ts
-metadataReader?: MetadataReader
-```
-
-**Default:** `undefined`
-
-```ts
-type MetadataReader = (key: InjectionToken) => Partial<Binding>
-```
-
-A function called for every binding at registration time. Its return value is
-merged into the binding, allowing external metadata sources (config files,
-environment variables) to override defaults without decorators.
-
-```ts
-const di = new CaffeineIoC({
-  metadataReader: key => {
-    if (key === DbConnection) {
-      return { lazy: true }
-    }
-    return {}
-  },
-})
-```
-
----
-
 ## Summary
 
 | Field                       | Type                        | Default                    |
@@ -234,4 +205,3 @@ const di = new CaffeineIoC({
 | `checks.circularReferences` | `boolean`                   | `true`                     |
 | `decorators`                | `boolean`                   | `true`                     |
 | `modules`                   | `Array<Module \| ModuleFn>` | `[]`                       |
-| `metadataReader`            | `MetadataReader`            | `undefined`                |
