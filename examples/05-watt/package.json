@@ -1,5 +1,6 @@
 {
   "name": "@caffeinejs/example-watt",
+  "description": "Multiple Caffeine applications running in a Platformatic Watt runtime",
   "private": true,
   "type": "module",
   "scripts": {
