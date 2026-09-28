@@ -1,6 +1,8 @@
 import type { Chain } from '../../chain.js'
 import type { Interceptor } from '../../interceptor.js'
 import { sleep } from '../../internal/sleep.js'
+import type { FetchyRequest } from '../../request.js'
+import type { FetchyResponse } from '../../response.js'
 import type { RetryOptions } from '../../retry_options.js'
 
 /**
@@ -17,7 +19,7 @@ import type { RetryOptions } from '../../retry_options.js'
 export class RetryInterceptor implements Interceptor {
   static readonly INSTANCE = new RetryInterceptor()
 
-  async intercept(chain: Chain): Promise<Response> {
+  async intercept(chain: Chain): Promise<FetchyResponse> {
     const meta = chain.meta()
 
     if (meta.noRetry || !meta.retry) {
@@ -27,7 +29,7 @@ export class RetryInterceptor implements Interceptor {
     return this.attempt(chain, meta.retry, 1)
   }
 
-  private async attempt(chain: Chain, options: RetryOptions, current: number): Promise<Response> {
+  private async attempt(chain: Chain, options: RetryOptions, current: number): Promise<FetchyResponse> {
     const pristine = chain.request()
     const response = await chain.proceed(pristine.clone())
 
@@ -44,7 +46,7 @@ export class RetryInterceptor implements Interceptor {
     return this.attempt(chain, options, current + 1)
   }
 
-  private isRetryable(response: Response, request: Request, options: RetryOptions): boolean {
+  private isRetryable(response: FetchyResponse, request: FetchyRequest, options: RetryOptions): boolean {
     return !response.ok && options.statusCodes.includes(response.status) && options.methods.includes(request.method)
   }
 }

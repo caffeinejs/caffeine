@@ -1,8 +1,10 @@
 import { ErrFetchyHTTP } from './errors.js'
+import type { FetchyRequest } from './request.js'
+import type { FetchyResponse } from './response.js'
 import type { ResponseConverter } from './response_converter.js'
 
 export interface ResponseHandler {
-  handle(request: Request, response: Response): Promise<Response>
+  handle(request: FetchyRequest, response: FetchyResponse): Promise<FetchyResponse>
 }
 
 /**
@@ -12,7 +14,7 @@ export interface ResponseHandler {
 export class DefaultResponseHandler implements ResponseHandler {
   constructor(private readonly errorBodyConverter: ResponseConverter) {}
 
-  async handle(request: Request, response: Response): Promise<Response> {
+  async handle(request: FetchyRequest, response: FetchyResponse): Promise<FetchyResponse> {
     if (response.ok) {
       return response
     }
@@ -34,7 +36,7 @@ export class DefaultResponseHandler implements ResponseHandler {
  * that want to inspect the status themselves instead of relying on {@link ErrFetchyHTTP}.
  */
 export const NoopResponseHandler: ResponseHandler = {
-  handle(_request: Request, response: Response): Promise<Response> {
+  handle(_request: FetchyRequest, response: FetchyResponse): Promise<FetchyResponse> {
     return Promise.resolve(response)
   },
 }

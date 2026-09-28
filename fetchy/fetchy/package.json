@@ -36,19 +36,6 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
-    "test": "vitest run",
-    "bench": "node --expose-gc --import=tsx _benchmarks/post.bench.ts",
-    "bench:generate": "node ../../node_modules/@hey-api/openapi-ts/dist/run.mjs -f _benchmarks/heyapi.config.mjs && node ../../node_modules/orval/dist/bin/orval.mjs --config _benchmarks/orval.config.mjs"
-  },
-  "devDependencies": {
-    "@caffeinejs/fetchy-undici": "*",
-    "@hey-api/openapi-ts": "^0.99.0",
-    "axios": "^1.20.0",
-    "got": "^16.0.0",
-    "mitata": "^1.0.34",
-    "mlly": "^1.8.2",
-    "orval": "^8.33.0",
-    "tsx": "^4.23.15",
-    "undici": "^8.10.0"
+    "test": "vitest run"
   }
 }

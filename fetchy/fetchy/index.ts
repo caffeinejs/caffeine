@@ -21,12 +21,14 @@ export {
   ErrFetchyNoParameterHandler,
   FetchyError,
 } from './errors.js'
+export { FetchyHeaders } from './headers.js'
 export { mergeHeaders } from './headers_util.js'
 export type { Interceptor, InterceptorFunction } from './interceptor.js'
 export { toInterceptor } from './interceptor.js'
 export type { ParamDescriptor } from './internal/param_descriptor.js'
 export { MediaTypes } from './media_types.js'
 export { noop } from './noop.js'
+export { FetchyRequest } from './request.js'
 export type { RequestBodyConverter } from './request_body_converter.js'
 export {
   FormRequestBodyConverter,
@@ -34,6 +36,7 @@ export {
   RawRequestBodyConverter,
 } from './request_body_converter.js'
 export { RequestBuilder } from './request_builder.js'
+export type { FetchyResponse } from './response.js'
 export type { ResponseConverter } from './response_converter.js'
 export { JSONResponseConverter, RawResponseConverter, TextResponseConverter } from './response_converter.js'
 export type { ResponseHandler } from './response_handler.js'

@@ -1,5 +1,6 @@
 export const port = Number.parseInt(process.env.PORT ?? '', 10) || 3100
 export const concurrency = Number.parseInt(process.env.CONCURRENCY ?? '', 10) || 100
+export const warmupRounds = Number.parseInt(process.env.WARMUP ?? '', 10) || 200
 
 export const baseURL = `http://localhost:${port}`
 

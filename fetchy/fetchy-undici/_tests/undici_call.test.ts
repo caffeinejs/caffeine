@@ -1,3 +1,4 @@
+import { FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
 import { MockAgent } from 'undici'
 import { describe, expect, it } from 'vitest'
 
@@ -24,22 +25,55 @@ describe('UndiciCall', () => {
       },
     )
 
-    const response = await call.execute(new Request(`${ORIGIN}/users/1`))
+    const response = await call.execute(new FetchyRequest('GET', ORIGIN, '/users/1'))
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('application/json')
     expect(await response.json()).toEqual({ id: '1' })
   })
 
+  // A @RawResponse caller gets this response as is, and may stream a large body instead of buffering it.
+  it('still streams the body on demand', async () => {
+    const { call, mockPool } = newMockPool()
+    mockPool.intercept({ path: '/export', method: 'GET' }).reply(200, 'line 1\nline 2\n')
+
+    const response = await call.execute(new FetchyRequest('GET', ORIGIN, '/export'))
+    const chunks: string[] = []
+    const decoder = new TextDecoder()
+
+    for await (const chunk of response.body!) {
+      chunks.push(decoder.decode(chunk, { stream: true }))
+    }
+
+    expect(chunks.join('')).toBe('line 1\nline 2\n')
+    expect(response.bodyUsed).toBe(true)
+  })
+
+  // A body is read once. A second read fails the way it fails on a fetch Response, so a caller handles one error
+  // whichever transport answered.
+  it('rejects a second read as fetch does', async () => {
+    const { call, mockPool } = newMockPool()
+    mockPool.intercept({ path: '/users/1', method: 'GET' }).reply(200, { id: '1' })
+
+    const response = await call.execute(new FetchyRequest('GET', ORIGIN, '/users/1'))
+
+    expect(response.bodyUsed).toBe(false)
+    await response.text()
+    expect(response.bodyUsed).toBe(true)
+    await expect(response.json()).rejects.toThrow(new TypeError('Body is unusable: Body has already been read'))
+  })
+
   it('translates a POST request/response', async () => {
     const { call, mockPool } = newMockPool()
     mockPool.intercept({ path: '/users', method: 'POST' }).reply(201, { id: '1', name: 'Ada' })
 
-    const request = new Request(`${ORIGIN}/users`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Ada' }),
-    })
+    const request = new FetchyRequest(
+      'POST',
+      ORIGIN,
+      '/users',
+      new FetchyHeaders({ 'content-type': 'application/json' }),
+      JSON.stringify({ name: 'Ada' }),
+    )
 
     const response = await call.execute(request)
 
@@ -47,11 +81,25 @@ describe('UndiciCall', () => {
     expect(await response.json()).toEqual({ id: '1', name: 'Ada' })
   })
 
+  // The request builder never hands over a URLSearchParams, but an interceptor may. undici would write its entries
+  // one by one and fail, while fetch sends the form string.
+  it('sends a URLSearchParams body as its form string', async () => {
+    const { call, mockPool } = newMockPool()
+    mockPool.intercept({ path: '/form', method: 'POST', body: 'a=1&b=x+y' }).reply(200, {})
+
+    const request = new FetchyRequest('POST', ORIGIN, '/form')
+    request.body = new URLSearchParams({ a: '1', b: 'x y' })
+
+    const response = await call.execute(request)
+
+    expect(response.status).toBe(200)
+  })
+
   it('returns a non-2xx response without throwing', async () => {
     const { call, mockPool } = newMockPool()
     mockPool.intercept({ path: '/nowhere', method: 'GET' }).reply(404, { error: 'not found' })
 
-    const response = await call.execute(new Request(`${ORIGIN}/nowhere`))
+    const response = await call.execute(new FetchyRequest('GET', ORIGIN, '/nowhere'))
 
     expect(response.status).toBe(404)
     expect(response.ok).toBe(false)
@@ -62,7 +110,7 @@ describe('UndiciCall', () => {
     const { call, mockPool } = newMockPool()
     mockPool.intercept({ path: '/users/1', method: 'DELETE' }).reply(204, '')
 
-    const response = await call.execute(new Request(`${ORIGIN}/users/1`, { method: 'DELETE' }))
+    const response = await call.execute(new FetchyRequest('DELETE', ORIGIN, '/users/1'))
 
     expect(response.status).toBe(204)
     expect(response.body).toBeNull()
@@ -78,7 +126,7 @@ describe('UndiciCall', () => {
       },
     )
 
-    const response = await call.execute(new Request(`${ORIGIN}/login`, { method: 'POST' }))
+    const response = await call.execute(new FetchyRequest('POST', ORIGIN, '/login'))
 
     expect(response.headers.getSetCookie()).toEqual(['a=1', 'b=2'])
   })
@@ -88,7 +136,7 @@ describe('UndiciCall', () => {
     mockPool.intercept({ path: '/slow', method: 'GET' }).reply(200, {}).delay(200)
 
     const controller = new AbortController()
-    const request = new Request(`${ORIGIN}/slow`, { signal: controller.signal })
+    const request = new FetchyRequest('GET', ORIGIN, '/slow', new FetchyHeaders(), null, controller.signal)
 
     setTimeout(() => controller.abort(), 10)
 
@@ -99,6 +147,6 @@ describe('UndiciCall', () => {
     const { call, mockPool } = newMockPool()
     mockPool.intercept({ path: '/boom', method: 'GET' }).replyWithError(new Error('network down'))
 
-    await expect(call.execute(new Request(`${ORIGIN}/boom`))).rejects.toThrow('network down')
+    await expect(call.execute(new FetchyRequest('GET', ORIGIN, '/boom'))).rejects.toThrow('network down')
   })
 })

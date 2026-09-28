@@ -1,35 +1,32 @@
-import { Readable } from 'node:stream'
-
-import type { Call } from '@caffeinejs/fetchy'
+import type { Call, FetchyRequest, FetchyResponse } from '@caffeinejs/fetchy'
 import type { Dispatcher } from 'undici'
 
-import { fromUndiciHeaders, toUndiciHeaders } from './headers_util.js'
-
-const NULL_BODY_STATUSES = new Set([204, 205, 304])
+import { UndiciResponse } from './undici_response.js'
 
 /**
  * `Call` implementation dispatching through an `undici` `Dispatcher` (typically a `Pool`).
+ *
+ * It resolves with a {@link FetchyResponse} that is not an `instanceof Response`. Read or cancel its body, or the
+ * connection stays busy.
  */
 export class UndiciCall implements Call {
   constructor(private readonly dispatcher: Dispatcher) {}
 
-  async execute(request: Request): Promise<Response> {
-    const url = new URL(request.url)
+  async execute(request: FetchyRequest): Promise<FetchyResponse> {
+    const requestBody = request.body
 
     const data = await this.dispatcher.request({
-      path: url.pathname + url.search,
+      path: request.path,
       method: request.method as Dispatcher.HttpMethod,
-      headers: toUndiciHeaders(request.headers),
-      body: request.body === null ? null : Readable.fromWeb(request.body),
+      headers: request.headers.record,
+      // undici also sends a Blob, an ArrayBuffer and any (async) iterable, but a URLSearchParams it would write entry
+      // by entry, so it goes as the string fetch would have sent.
+      body: (requestBody instanceof URLSearchParams
+        ? requestBody.toString()
+        : requestBody) as Dispatcher.RequestOptions['body'],
       signal: request.signal,
     })
 
-    const body = NULL_BODY_STATUSES.has(data.statusCode) ? null : Readable.toWeb(data.body)
-
-    return new Response(body as ReadableStream<Uint8Array> | null, {
-      status: data.statusCode,
-      statusText: data.statusText,
-      headers: fromUndiciHeaders(data.headers),
-    })
+    return new UndiciResponse(data)
   }
 }

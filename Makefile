@@ -76,20 +76,27 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 	@npx oxlint --fix $*
 	@npx oxfmt $*
 
+# make matches a pattern with no slash against only the part of a goal after its last slash, so lint:% never matches a
+# nested workspace such as lint:fetchy/fetchy. A pattern that names the parent directory is matched whole.
+NESTED_WORKSPACE_PARENTS := integrations fetchy devtools di/examples examples plugins
+
+define lint_nested
+lint\:$(1)/%:
+	@npx oxlint --fix $(1)/$$*
+	@npx oxfmt $(1)/$$*
+endef
+
+$(foreach parent,$(NESTED_WORKSPACE_PARENTS),$(eval $(call lint_nested,$(parent))))
+
 .PHONY: bench
 bench: ## list available benchmarks
-	@echo "Available benchmarks: helloworld startup memory request request:bun mixedscopes authn caching di di-compare di-compile di-perf fastify testing resilience aspect config-read config-reload"
+	@echo "Available benchmarks: helloworld startup memory request request:bun mixedscopes authn caching di di-compare di-compile di-perf fastify fetchy testing resilience aspect config-read config-reload"
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
-	@echo "Fetchy HTTP client benchmark: make bench-fetchy"
 
 bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run build
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
-
-.PHONY: bench-fetchy
-bench-fetchy: ## run fetchy HTTP client benchmarks (vs fetch/axios/got/undici)
-	@npm run bench -w @caffeinejs/fetchy
 
 .PHONY: devtools
 devtools:

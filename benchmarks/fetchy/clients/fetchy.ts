@@ -1,4 +1,5 @@
-import { newClient } from '../../client_builder.js'
+import { newClient } from '@caffeinejs/fetchy'
+
 import { BenchAPI } from '../api.js'
 import { baseURL, benchBody, benchFilter, benchId } from '../config.js'
 import type { BenchClient } from './bench_client.js'

@@ -89,7 +89,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
 
     expect(callFactory.calls[0].lastRequest?.method).toBe('POST')
     expect(callFactory.calls[0].lastRequest?.url).toBe('http://example.test/users/')
-    await expect(callFactory.calls[0].lastRequest?.text()).resolves.toBe('{"name":"Grace"}')
+    expect(callFactory.calls[0].lastRequest?.body).toBe('{"name":"Grace"}')
     expect(user).toEqual({ id: '2', name: 'Grace' })
   })
 

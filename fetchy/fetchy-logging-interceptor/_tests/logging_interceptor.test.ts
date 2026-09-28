@@ -1,4 +1,4 @@
-import { ErrFetchyHTTP } from '@caffeinejs/fetchy'
+import { ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
 import { describe, expect, it } from 'vitest'
 
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from '../errors.js'
@@ -22,13 +22,15 @@ class SpyLogger implements Logger {
   }
 }
 
+const ORIGIN = 'http://example.test'
+
 function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
   return new Response(JSON.stringify(body), { status, statusText, headers: { 'content-type': 'application/json' } })
 }
 
 describe('LoggingInterceptor', () => {
   it('LoggingInterceptor.DEFAULT logs without throwing and passes the response through', async () => {
-    const request = new Request('http://example.test/users/1')
+    const request = new FetchyRequest('GET', ORIGIN, '/users/1')
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
     const response = await LoggingInterceptor.DEFAULT.intercept(chain)
@@ -39,11 +41,13 @@ describe('LoggingInterceptor', () => {
   it('logs request/response headers and body at Level.BODY', async () => {
     const logger = new SpyLogger()
     const interceptor = new LoggingInterceptor({ level: Level.BODY, logger })
-    const request = new Request('http://example.test/users', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Ada' }),
-    })
+    const request = new FetchyRequest(
+      'POST',
+      ORIGIN,
+      '/users',
+      new FetchyHeaders({ 'content-type': 'application/json' }),
+      JSON.stringify({ name: 'Ada' }),
+    )
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1', name: 'Ada' })))
 
     await interceptor.intercept(chain)
@@ -56,10 +60,24 @@ describe('LoggingInterceptor', () => {
     expect(logger.lines.some(line => line.startsWith('Body Size: '))).toBe(true)
   })
 
+  // Logging reads the body, and the response converter after it has to read it again.
+  it('leaves the response body readable after logging it at Level.BODY', async () => {
+    const interceptor = new LoggingInterceptor({ level: Level.BODY, logger: new SpyLogger() })
+    const chain = fakeChain(new FetchyRequest('GET', ORIGIN, '/users/1'), () =>
+      Promise.resolve(jsonResponse({ id: '1' }, 201, 'Created')),
+    )
+
+    const response = await interceptor.intercept(chain)
+
+    expect(response.status).toBe(201)
+    expect(response.statusText).toBe('Created')
+    expect(await response.json()).toEqual({ id: '1' })
+  })
+
   it('does not log anything at Level.NONE', async () => {
     const logger = new SpyLogger()
     const interceptor = new LoggingInterceptor({ level: Level.NONE, logger })
-    const request = new Request('http://example.test/users/1')
+    const request = new FetchyRequest('GET', ORIGIN, '/users/1')
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
     const response = await interceptor.intercept(chain)
@@ -73,9 +91,12 @@ describe('LoggingInterceptor', () => {
     const interceptor = new LoggingInterceptor({ level: Level.HEADERS, logger })
     interceptor.redactHeader('Authorization')
 
-    const request = new Request('http://example.test/users', {
-      headers: { authorization: 'super-secret-value' },
-    })
+    const request = new FetchyRequest(
+      'GET',
+      ORIGIN,
+      '/users',
+      new FetchyHeaders({ authorization: 'super-secret-value' }),
+    )
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
     await interceptor.intercept(chain)
@@ -95,7 +116,7 @@ describe('LoggingInterceptor', () => {
     const interceptor = new LoggingInterceptor({ level: Level.HEADERS, logger })
     interceptor.redactHeader('x-secret')
 
-    const request = new Request('http://example.test/nowhere')
+    const request = new FetchyRequest('GET', ORIGIN, '/nowhere')
     const errorResponse = new Response(null, {
       status: 404,
       statusText: 'Not Found',
@@ -114,7 +135,7 @@ describe('LoggingInterceptor', () => {
   it('logs a generic failure line for a non-ErrFetchyHTTP rejection, skipping the status block', async () => {
     const logger = new SpyLogger()
     const interceptor = new LoggingInterceptor({ level: Level.HEADERS, logger })
-    const request = new Request('http://example.test/users')
+    const request = new FetchyRequest('GET', ORIGIN, '/users')
     const chain = fakeChain(request, () => Promise.reject(new TypeError('network down')))
 
     await expect(interceptor.intercept(chain)).rejects.toThrow('network down')
@@ -126,11 +147,13 @@ describe('LoggingInterceptor', () => {
   it('omits the body for a non-textual content type at Level.BODY', async () => {
     const logger = new SpyLogger()
     const interceptor = new LoggingInterceptor({ level: Level.BODY, logger })
-    const request = new Request('http://example.test/upload', {
-      method: 'POST',
-      headers: { 'content-type': 'application/octet-stream' },
-      body: new Uint8Array([1, 2, 3]),
-    })
+    const request = new FetchyRequest(
+      'POST',
+      ORIGIN,
+      '/upload',
+      new FetchyHeaders({ 'content-type': 'application/octet-stream' }),
+      new Uint8Array([1, 2, 3]),
+    )
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ ok: true })))
 
     await interceptor.intercept(chain)
@@ -143,7 +166,7 @@ describe('LoggingInterceptor', () => {
     const interceptor = new LoggingInterceptor({ level: Level.BASIC, logger })
     interceptor.setLevel(Level.NONE)
 
-    const request = new Request('http://example.test/users/1')
+    const request = new FetchyRequest('GET', ORIGIN, '/users/1')
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
     await interceptor.intercept(chain)

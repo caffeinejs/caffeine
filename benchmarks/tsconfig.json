@@ -23,6 +23,7 @@
     "caching/caffeine/**",
     "testing/caffeine/**",
     "aspect/**",
+    "fetchy/**",
     "di/**"
   ]
 }

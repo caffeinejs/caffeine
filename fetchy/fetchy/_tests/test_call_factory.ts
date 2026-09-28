@@ -1,11 +1,13 @@
 import type { Call, CallFactory } from '../call.js'
+import type { FetchyRequest } from '../request.js'
+import type { FetchyResponse } from '../response.js'
 
 /**
  * Fake {@link Call} that records the last request it received and returns pre-programmed
  * responses, so tests can exercise the full pipeline without a real network.
  */
 export class TestCall implements Call {
-  lastRequest: Request | null = null
+  lastRequest: FetchyRequest | null = null
   private readonly responses: Response[] = []
 
   willRespond(response: Response): this {
@@ -13,7 +15,7 @@ export class TestCall implements Call {
     return this
   }
 
-  execute(request: Request): Promise<Response> {
+  execute(request: FetchyRequest): Promise<FetchyResponse> {
     this.lastRequest = request
     const response = this.responses.shift()
 

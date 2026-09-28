@@ -21,7 +21,7 @@
     "**/*.hbs",
     "benchmarks/di/testdata/third_party_legacy/**",
     "di/_tests/deno/**",
-    "fetchy/fetchy/_benchmarks/generated/**",
+    "benchmarks/fetchy/generated/**",
     "examples/03-petstore/generated/**",
     "package-lock.json"
   ]

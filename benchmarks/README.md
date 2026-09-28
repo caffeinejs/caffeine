@@ -25,6 +25,7 @@ Close everything else on the machine before a timing run, and do not run two ben
 | `authn`                        | JWT bearer verification and a role check                                     |
 | `caching`                      | A 16 KB JSON `GET` served from each framework's response cache, and uncached |
 | `fastify`                      | The server alone against its fetch-style routing plugin                      |
+| `fetchy`                       | One JSON `POST` through fetchy and through other HTTP clients                |
 | `startup`                      | Process start to listening, and bootstrap alone, for one six-module app      |
 | `memory`                       | Heap held by that app once built, over an empty process                      |
 | `testing`                      | Building an app, serving one request in-process, and closing it              |
@@ -85,6 +86,30 @@ These use mitata and run with `--expose-gc`.
 - Keep state out of the timed region and bounded across iterations: a container or counter that grows per
   iteration makes every later case depend on the ones before it.
 - Compare within a `summary()` group only. Cases in different groups measure different things.
+
+## HTTP clients
+
+`fetchy` sends one `POST /{id}?filter=...` with a JSON body through fetchy on its default `fetch` transport and on
+undici, and through `fetch`, `undici`, `axios`, `got` and the clients Hey API and Orval generate. The server runs
+in its own process. The clients share one process and run through mitata, `CONCURRENCY` requests at a time.
+
+| Variable      | Default | Meaning                                                |
+| ------------- | ------- | ------------------------------------------------------ |
+| `PORT`        | `3100`  | Port of the benchmark server                           |
+| `CONCURRENCY` | `100`   | Requests in flight per iteration                       |
+| `WARMUP`      | `200`   | Unmeasured rounds of `CONCURRENCY` requests per client |
+
+A fresh process keeps getting faster for roughly its first 15,000 requests, whichever client sends them, so every
+client is warmed before any is measured. Without it, the client that runs first reads several milliseconds slower
+than it is.
+
+To add a client, write `fetchy/clients/<name>.ts` exporting a `BenchClient` that sends the same request, and add it
+to `fetchy/clients/index.ts`.
+
+The Hey API and Orval clients are generated from `fetchy/openapi.yaml` and committed. After changing the spec,
+regenerate them with `npm run bench:fetchy:generate -w @caffeinejs/benchmarks`. Orval runs in `fetch` mode through
+`fetchy/custom_fetch.ts` and Hey API takes its base URL from `client.setConfig(...)`, so both reach the same server
+as the other clients.
 
 ## CI
 

@@ -131,7 +131,7 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
     const result = await api.putUser('1', { name: 'Ada' })
 
     expect(result).toEqual({ id: '1' })
-    expect(await call.lastRequest?.clone().json()).toEqual({ name: 'Ada' })
+    expect(JSON.parse(String(call.lastRequest?.body))).toEqual({ name: 'Ada' })
   })
 
   it('does not retry when the request method is not in the configured methods list', async () => {

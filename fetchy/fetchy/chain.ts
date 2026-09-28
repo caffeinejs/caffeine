@@ -1,5 +1,7 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
 import type { Interceptor } from './interceptor.js'
+import type { FetchyRequest } from './request.js'
+import type { FetchyResponse } from './response.js'
 
 /**
  * Linked-list interceptor chain: each interceptor decides whether to call
@@ -7,9 +9,9 @@ import type { Interceptor } from './interceptor.js'
  * network call), possibly after inspecting/mutating the request or the resulting response.
  */
 export interface Chain {
-  request(): Request
+  request(): FetchyRequest
 
-  proceed(request: Request): Promise<Response>
+  proceed(request: FetchyRequest): Promise<FetchyResponse>
 
   meta(): MethodSpec
 }
@@ -18,15 +20,15 @@ export class ChainExecutor implements Chain {
   private constructor(
     private readonly interceptors: readonly Interceptor[],
     private readonly index: number,
-    private readonly currentRequest: Request,
+    private readonly currentRequest: FetchyRequest,
     private readonly requestMeta: MethodSpec,
   ) {}
 
-  static first(interceptors: readonly Interceptor[], request: Request, meta: MethodSpec): ChainExecutor {
+  static first(interceptors: readonly Interceptor[], request: FetchyRequest, meta: MethodSpec): ChainExecutor {
     return new ChainExecutor(interceptors, 0, request, meta)
   }
 
-  request(): Request {
+  request(): FetchyRequest {
     return this.currentRequest
   }
 
@@ -34,7 +36,7 @@ export class ChainExecutor implements Chain {
     return this.requestMeta
   }
 
-  proceed(request: Request): Promise<Response> {
+  proceed(request: FetchyRequest): Promise<FetchyResponse> {
     const next = new ChainExecutor(this.interceptors, this.index + 1, request, this.requestMeta)
     return this.interceptors[this.index].intercept(next)
   }

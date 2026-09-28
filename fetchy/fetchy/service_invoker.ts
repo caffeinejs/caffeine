@@ -3,7 +3,9 @@ import type { CallAdapterFactory } from './call_adapter.js'
 import { ChainExecutor } from './chain.js'
 import type { MethodSpec } from './decorators/registrar/index.js'
 import type { Interceptor } from './interceptor.js'
+import type { FetchyRequest } from './request.js'
 import { RequestBuilder } from './request_builder.js'
+import type { FetchyResponse } from './response.js'
 import type { ResponseConverter } from './response_converter.js'
 import { DefaultResponseHandler } from './response_handler.js'
 
@@ -32,10 +34,14 @@ export function buildInvoker(context: InvokerContext, meta: MethodSpec): (...arg
   const requestBuilder = new RequestBuilder(context.baseURL, meta)
   const responseHandler = meta.responseHandler ?? new DefaultResponseHandler(context.errorResponseConverter)
   const interceptors = [...context.interceptors, terminalInterceptor(context.call)]
+  const execute: (request: FetchyRequest) => Promise<FetchyResponse> =
+    context.interceptors.length === 0
+      ? request => context.call.execute(request)
+      : request => ChainExecutor.first(interceptors, request, meta).proceed(request)
 
   const invoke = async (...args: unknown[]): Promise<unknown> => {
     const request = requestBuilder.toRequest(args)
-    const response = await ChainExecutor.first(interceptors, request, meta).proceed(request)
+    const response = await execute(request)
     const handled = await responseHandler.handle(request, response)
     return context.responseConverter.convert(handled)
   }

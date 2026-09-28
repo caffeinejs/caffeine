@@ -1,4 +1,11 @@
-import { ErrFetchyHTTP, type Chain, type Interceptor, MediaTypes } from '@caffeinejs/fetchy'
+import {
+  ErrFetchyHTTP,
+  type Chain,
+  type FetchyRequest,
+  type FetchyResponse,
+  type Interceptor,
+  MediaTypes,
+} from '@caffeinejs/fetchy'
 
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from './errors.js'
 import { Level } from './level.js'
@@ -60,7 +67,7 @@ export class LoggingInterceptor implements Interceptor {
     }
   }
 
-  async intercept(chain: Chain): Promise<Response> {
+  async intercept(chain: Chain): Promise<FetchyResponse> {
     const request = chain.request()
 
     if (this.level === Level.NONE) {
@@ -77,7 +84,7 @@ export class LoggingInterceptor implements Interceptor {
     }
 
     if (logBody) {
-      await this.logBodyTail(request, `--> END ${request.method}`)
+      this.logRequestBody(request, `--> END ${request.method}`)
     } else {
       this.logger.info(`--> END ${request.method}`)
     }
@@ -88,7 +95,7 @@ export class LoggingInterceptor implements Interceptor {
       const response = await chain.proceed(request)
       const took = now() - start
 
-      this.logger.info(`<-- ${response.status}${response.statusText ? ` ${response.statusText}` : ''} ${response.url}`)
+      this.logger.info(`<-- ${response.status}${response.statusText ? ` ${response.statusText}` : ''} ${request.url}`)
 
       if (logHeaders) {
         for (const [name, value] of response.headers) {
@@ -99,15 +106,17 @@ export class LoggingInterceptor implements Interceptor {
       this.logger.info(`Took: ${took}ms`)
       this.logger.info(`Body Size: ${response.headers.get('content-length') ?? 'unknown-length'}`)
 
+      let logged = response
+
       if (logBody) {
-        await this.logBodyTail(response, '<-- END HTTP')
+        logged = await this.logResponseBody(response, '<-- END HTTP')
       } else {
         this.logger.info('<-- END HTTP')
       }
 
       this.logger.info('')
 
-      return response
+      return logged
     } catch (err) {
       const took = now() - start
 
@@ -129,11 +138,11 @@ export class LoggingInterceptor implements Interceptor {
     }
   }
 
-  private logRequestHeaders(request: Request): void {
+  private logRequestHeaders(request: FetchyRequest): void {
     const contentType = request.headers.get('content-type')
     const contentLength = request.headers.get('content-length')
 
-    if (request.body !== null) {
+    if (request.body !== null && request.body !== undefined) {
       if (contentType) {
         this.logger.info(`Content-Type: ${contentType}`)
       }
@@ -148,18 +157,41 @@ export class LoggingInterceptor implements Interceptor {
     }
   }
 
-  private async logBodyTail(withBody: Request | Response, endLine: string): Promise<void> {
-    if (withBody.body === null) {
+  private logRequestBody(request: FetchyRequest, endLine: string): void {
+    const { body } = request
+
+    if (body === null || body === undefined) {
       this.logger.info(endLine)
       return
     }
 
-    if (!isTextual(withBody.headers.get('content-type'))) {
+    if (typeof body !== 'string' || !isTextual(request.headers.get('content-type'))) {
       this.logger.info(`${endLine} (body omitted)`)
       return
     }
 
-    const text = await withBody.clone().text()
+    this.logBodyText(body, endLine)
+  }
+
+  // Reading the body consumes it, so the caller gets a fresh response carrying the text that was read.
+  private async logResponseBody(response: FetchyResponse, endLine: string): Promise<FetchyResponse> {
+    if (response.body === null) {
+      this.logger.info(endLine)
+      return response
+    }
+
+    if (!isTextual(response.headers.get('content-type'))) {
+      this.logger.info(`${endLine} (body omitted)`)
+      return response
+    }
+
+    const text = await response.text()
+    this.logBodyText(text, endLine)
+
+    return new Response(text, { status: response.status, statusText: response.statusText, headers: response.headers })
+  }
+
+  private logBodyText(text: string, endLine: string): void {
     this.logger.info(text)
     this.logger.info(`${endLine} (${new TextEncoder().encode(text).length}-byte body)`)
   }

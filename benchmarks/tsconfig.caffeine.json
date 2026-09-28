@@ -12,6 +12,7 @@
   },
   "include": [
     "aspect/**/*.ts",
+    "fetchy/**/*.ts",
     "helloworld/caffeine/**/*.ts",
     "helloworld/caffeine-router/**/*.ts",
     "request/caffeine/**/*.ts",

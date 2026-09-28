@@ -1,3 +1,4 @@
+import { FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PoolOptionsBuilder } from '../pool_options_builder.js'
@@ -17,7 +18,7 @@ describe('UndiciCallFactory', () => {
     const factory = new UndiciCallFactory()
     const call = factory.provide(server.baseURL)
 
-    const response = await call.execute(new Request(`${server.baseURL}/ping?x=1`))
+    const response = await call.execute(new FetchyRequest('GET', server.baseURL, '/ping?x=1'))
     const body = (await response.json()) as { method: string; url: string }
 
     expect(response.status).toBe(200)
@@ -30,11 +31,13 @@ describe('UndiciCallFactory', () => {
     const call = factory.provide(server.baseURL)
 
     const response = await call.execute(
-      new Request(`${server.baseURL}/users`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: 'Ada' }),
-      }),
+      new FetchyRequest(
+        'POST',
+        server.baseURL,
+        '/users',
+        new FetchyHeaders({ 'content-type': 'application/json' }),
+        JSON.stringify({ name: 'Ada' }),
+      ),
     )
     const body = (await response.json()) as { method: string; body: string }
 
@@ -63,7 +66,7 @@ describe('UndiciCallFactory', () => {
     const factory = new UndiciCallFactory(options)
     const call = factory.provide(server.baseURL)
 
-    const response = await call.execute(new Request(`${server.baseURL}/ping`))
+    const response = await call.execute(new FetchyRequest('GET', server.baseURL, '/ping'))
 
     expect(response.status).toBe(200)
     await factory.pool()?.close()

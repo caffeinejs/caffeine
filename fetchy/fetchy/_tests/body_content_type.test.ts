@@ -7,11 +7,13 @@ import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
+import { Header } from '../decorators/params/header.js'
 import { Path } from '../decorators/path.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { POST } from '../decorators/verbs.js'
 import { MediaTypes } from '../media_types.js'
 import { noop } from '../noop.js'
+import type { FetchyRequest } from '../request.js'
 import {
   FormRequestBodyConverter,
   RawRequestBodyConverter,
@@ -69,6 +71,18 @@ class BodyAPI {
   createLegacy(_body: unknown): Promise<unknown> {
     return noop()
   }
+
+  @POST('/typed-after')
+  @Params([Body(), Header('content-type')])
+  createTypedAfter(_body: unknown, _contentType: string): Promise<unknown> {
+    return noop()
+  }
+
+  @POST('/typed-before')
+  @Params([Header('content-type'), Body()])
+  createTypedBefore(_contentType: string, _body: unknown): Promise<unknown> {
+    return noop()
+  }
 }
 
 function build(callFactory: TestCallFactory): any {
@@ -103,6 +117,15 @@ describe('the content-type of a converted body', () => {
     expect(await contentTypeOf(api => api.createDeclared({ name: 'Ada' }))).toBe('application/vnd.acme+json')
   })
 
+  // The converter's label only fills a gap, so a content-type argument wins wherever it sits. Labelling as the body
+  // was applied used to send `application/json, application/vnd.acme+json` when the header argument came second.
+  it('does not overwrite a content-type argument, before or after the body', async () => {
+    const contentType = 'application/vnd.acme+json'
+
+    expect(await contentTypeOf(api => api.createTypedAfter({ name: 'Ada' }, contentType))).toBe(contentType)
+    expect(await contentTypeOf(api => api.createTypedBefore(contentType, { name: 'Ada' }))).toBe(contentType)
+  })
+
   it('labels a form-encoded body from the form converter', async () => {
     expect(await contentTypeOf(api => api.createForm({ name: 'Ada' }))).toBe(MediaTypes.FORM_URL_ENCODED)
   })
@@ -135,7 +158,7 @@ class FieldDeclaredAPI {
 }
 
 describe('an operation declared as a field', () => {
-  async function callField(call: (api: any) => Promise<unknown>): Promise<Request> {
+  async function callField(call: (api: any) => Promise<unknown>): Promise<FetchyRequest> {
     const callFactory = new TestCallFactory()
     const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(FieldDeclaredAPI)
     callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
@@ -149,7 +172,7 @@ describe('an operation declared as a field', () => {
     const request = await callField(api => api.token('client_credentials'))
 
     expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
-    expect(await request.clone().text()).toBe(new URLSearchParams({ grant_type: 'client_credentials' }).toString())
+    expect(request.body).toBe(new URLSearchParams({ grant_type: 'client_credentials' }).toString())
   })
 
   it('applies @ContentType() in the field position', async () => {

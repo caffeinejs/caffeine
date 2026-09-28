@@ -1,3 +1,6 @@
+import type { FetchyRequest } from './request.js'
+import type { FetchyResponse } from './response.js'
+
 export class FetchyError extends Error {
   readonly code: string
 
@@ -68,13 +71,13 @@ export class ErrFetchyNoParameterHandler extends FetchyError {
  * response. Carries the originating request and response for inspection by callers.
  */
 export class ErrFetchyHTTP extends FetchyError {
-  readonly request: Request
+  readonly request: FetchyRequest
   readonly status: number
   readonly statusText: string
   readonly headers: Headers
   readonly body: unknown
 
-  constructor(request: Request, response: Response, body: unknown) {
+  constructor(request: FetchyRequest, response: FetchyResponse, body: unknown) {
     super(
       `Request "${request.method} ${request.url}" failed with status ${response.status} ${response.statusText}`,
       'ERR_FETCHY_HTTP',

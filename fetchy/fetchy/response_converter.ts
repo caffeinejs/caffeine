@@ -1,5 +1,7 @@
+import type { FetchyResponse } from './response.js'
+
 export interface ResponseConverter<T = unknown> {
-  convert(response: Response): Promise<T>
+  convert(response: FetchyResponse): Promise<T>
 }
 
 /**
@@ -7,7 +9,7 @@ export interface ResponseConverter<T = unknown> {
  * `undefined`.
  */
 export const JSONResponseConverter: ResponseConverter = {
-  async convert(response: Response): Promise<unknown> {
+  async convert(response: FetchyResponse): Promise<unknown> {
     if (response.status === 204) {
       return undefined
     }
@@ -17,10 +19,10 @@ export const JSONResponseConverter: ResponseConverter = {
 }
 
 /**
- * Passes the raw {@link Response} through untouched.
+ * Passes the transport's {@link FetchyResponse} through untouched.
  */
-export const RawResponseConverter: ResponseConverter<Response> = {
-  convert(response: Response): Promise<Response> {
+export const RawResponseConverter: ResponseConverter<FetchyResponse> = {
+  convert(response: FetchyResponse): Promise<FetchyResponse> {
     return Promise.resolve(response)
   },
 }
@@ -29,7 +31,7 @@ export const RawResponseConverter: ResponseConverter<Response> = {
  * Reads the body as plain text, treating an empty (204) response as `''`.
  */
 export const TextResponseConverter: ResponseConverter<string> = {
-  async convert(response: Response): Promise<string> {
+  async convert(response: FetchyResponse): Promise<string> {
     if (response.status === 204) {
       return ''
     }

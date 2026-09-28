@@ -81,7 +81,7 @@ describe('converters', () => {
 
     await api.createFormUser({ name: 'Ada' })
 
-    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(new URLSearchParams({ name: 'Ada' }).toString())
+    expect(callFactory.calls[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('FormRequestBodyConverter throws ErrFetchyInvalidFormBody for a flat array', () => {
@@ -140,7 +140,7 @@ describe('converters', () => {
 
     await api.createUser({ name: 'Ada' })
 
-    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe(new URLSearchParams({ name: 'Ada' }).toString())
+    expect(callFactory.calls[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('a method-level @UseRequestBodyConverter() overrides the class-level default', async () => {
@@ -150,6 +150,6 @@ describe('converters', () => {
 
     await api.createUserOverride('raw-body')
 
-    expect(await callFactory.calls[0].lastRequest?.clone().text()).toBe('raw-body')
+    expect(callFactory.calls[0].lastRequest?.body).toBe('raw-body')
   })
 })

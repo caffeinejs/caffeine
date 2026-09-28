@@ -1,5 +1,8 @@
+import type { FetchyRequest } from './request.js'
+import type { FetchyResponse } from './response.js'
+
 export interface Call {
-  execute(request: Request): Promise<Response>
+  execute(request: FetchyRequest): Promise<FetchyResponse>
 }
 
 export interface CallFactory {

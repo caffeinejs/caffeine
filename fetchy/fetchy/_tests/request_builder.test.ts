@@ -39,6 +39,35 @@ describe('RequestBuilder', () => {
     expect(request.method).toBe('GET')
   })
 
+  // A placeholder may repeat; every occurrence takes the same argument, as it did when the path was rewritten per call.
+  it('fills every occurrence of a repeated placeholder', () => {
+    const meta = methodMeta({
+      httpMethod: 'GET',
+      path: '/users/{id}/friends/{id}',
+      params: [{ kind: 'path', key: 'id', index: 0 }],
+    })
+
+    const request = new RequestBuilder('http://example.test', meta).toRequest(['1'])
+
+    expect(request.url).toBe('http://example.test/users/1/friends/1')
+  })
+
+  // undici's pool is bound to an origin and sends `path` as is, so a versioned base URL's own path has to be in the
+  // request path, or every call would miss the `/v1`.
+  it("keeps the base URL's own path in front of the method path", () => {
+    const meta = methodMeta({
+      httpMethod: 'GET',
+      path: '/users/{id}',
+      params: [{ kind: 'path', key: 'id', index: 0 }],
+    })
+
+    const request = new RequestBuilder('http://example.test/v1', meta).toRequest(['1'])
+
+    expect(request.origin).toBe('http://example.test')
+    expect(request.path).toBe('/v1/users/1')
+    expect(request.url).toBe('http://example.test/v1/users/1')
+  })
+
   it('appends query parameters, including arrays as repeated entries', () => {
     const meta = methodMeta({
       httpMethod: 'GET',
@@ -80,6 +109,21 @@ describe('RequestBuilder', () => {
     expect(request.headers.get('x-trace')).toBe('abc')
   })
 
+  // Header names are case-insensitive: a declared `accept` and an `Accept` argument are one header, joined the way
+  // `Headers.append` joins them, never two headers the server has to pick between.
+  it('joins a header argument onto a declared header of the same name, whatever its case', () => {
+    const meta = methodMeta({
+      httpMethod: 'GET',
+      path: '/users',
+      headers: new Headers({ accept: 'application/json' }),
+      params: [{ kind: 'header', key: 'Accept', index: 0 }],
+    })
+
+    const request = new RequestBuilder('http://example.test', meta).toRequest(['text/plain'])
+
+    expect([...request.headers]).toEqual([['accept', 'application/json, text/plain']])
+  })
+
   it('JSON-stringifies an object body', async () => {
     const meta = methodMeta({
       httpMethod: 'POST',
@@ -89,7 +133,7 @@ describe('RequestBuilder', () => {
 
     const request = new RequestBuilder('http://example.test', meta).toRequest([{ name: 'Ada' }])
 
-    await expect(request.text()).resolves.toBe('{"name":"Ada"}')
+    expect(request.body).toBe('{"name":"Ada"}')
   })
 
   it('passes a string body through untouched', async () => {
@@ -101,7 +145,24 @@ describe('RequestBuilder', () => {
 
     const request = new RequestBuilder('http://example.test', meta).toRequest(['raw-text'])
 
-    await expect(request.text()).resolves.toBe('raw-text')
+    expect(request.body).toBe('raw-text')
+  })
+
+  // undici cannot send a URLSearchParams at all, so it leaves the builder as the string fetch would have sent, with
+  // the label fetch would have given it.
+  it('sends a URLSearchParams body as a labelled form string', () => {
+    const meta = methodMeta({
+      httpMethod: 'POST',
+      path: '/form',
+      params: [{ kind: 'body', index: 0 }],
+    })
+
+    const request = new RequestBuilder('http://example.test', meta).toRequest([
+      new URLSearchParams({ a: '1', b: 'x y' }),
+    ])
+
+    expect(request.body).toBe('a=1&b=x+y')
+    expect(request.headers.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
   })
 
   it('builds a form-url-encoded body from form-field parameters', async () => {
@@ -117,7 +178,7 @@ describe('RequestBuilder', () => {
 
     const request = new RequestBuilder('http://example.test', meta).toRequest(['Ada', 30])
 
-    await expect(request.text()).resolves.toBe('name=Ada&age=30')
+    expect(request.body).toBe('name=Ada&age=30')
   })
 
   it('binds a signal parameter', () => {
@@ -130,8 +191,8 @@ describe('RequestBuilder', () => {
 
     const request = new RequestBuilder('http://example.test', meta).toRequest([controller.signal])
 
-    expect(request.signal.aborted).toBe(false)
+    expect(request.signal?.aborted).toBe(false)
     controller.abort()
-    expect(request.signal.aborted).toBe(true)
+    expect(request.signal?.aborted).toBe(true)
   })
 })

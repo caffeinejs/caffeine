@@ -6,6 +6,7 @@ import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
+import { FetchyHeaders } from '../headers.js'
 import { noop } from '../noop.js'
 import { captureMetadata } from './capture_metadata.js'
 
@@ -110,5 +111,48 @@ describe('header/form decorators', () => {
 
     // Applied bottom-up: @FormURLEncoded sets content-type first, @ContentType overrides it second.
     expect(headers?.get('content-type')).toBe('application/json')
+  })
+})
+
+describe('FetchyHeaders', () => {
+  // A transport sends the record as is, so two spellings of one name would reach the server as two headers.
+  it('treats names case-insensitively, so an interceptor replaces a declared header instead of duplicating it', () => {
+    const headers = new FetchyHeaders({ Authorization: 'Bearer declared' })
+
+    headers.set('authorization', 'Bearer refreshed')
+
+    expect(headers.get('AUTHORIZATION')).toBe('Bearer refreshed')
+    expect(headers.record).toEqual({ authorization: 'Bearer refreshed' })
+  })
+
+  it('joins appended values the way Headers.append does', () => {
+    const headers = new FetchyHeaders()
+
+    headers.append('Accept', 'application/json')
+    headers.append('accept', 'text/plain')
+
+    expect(headers.get('accept')).toBe(
+      new Headers([
+        ['accept', 'application/json'],
+        ['accept', 'text/plain'],
+      ]).get('accept'),
+    )
+  })
+
+  // The record is a plain object, so a name its prototype carries must not read as a header that was set.
+  it('does not report prototype members as headers', () => {
+    const headers = new FetchyHeaders()
+
+    expect(headers.get('constructor')).toBeNull()
+    expect(headers.has('toString')).toBe(false)
+  })
+
+  it('forgets a deleted header', () => {
+    const headers = new FetchyHeaders({ 'x-trace': '1' })
+
+    headers.delete('X-Trace')
+
+    expect(headers.has('x-trace')).toBe(false)
+    expect([...headers]).toEqual([])
   })
 })

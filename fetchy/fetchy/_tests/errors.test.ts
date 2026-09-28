@@ -8,6 +8,7 @@ import {
   ErrFetchyInvalidRoute,
   ErrFetchyNoParameterHandler,
 } from '../errors.js'
+import { FetchyRequest } from '../request.js'
 
 describe('errors', () => {
   it.each([
@@ -37,7 +38,7 @@ describe('errors', () => {
   })
 
   it('ErrFetchyHTTP carries request/response details', () => {
-    const request = new Request('http://x.test/users/1', { method: 'GET' })
+    const request = new FetchyRequest('GET', 'http://x.test', '/users/1')
     const response = new Response(null, { status: 404, statusText: 'Not Found' })
 
     const error = new ErrFetchyHTTP(request, response, { message: 'not found' })

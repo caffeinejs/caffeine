@@ -17,6 +17,7 @@ on:
           - di-compile
           - di-perf
           - fastify
+          - fetchy
           - helloworld
           - memory
           - mixedscopes

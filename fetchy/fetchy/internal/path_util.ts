@@ -15,7 +15,3 @@ export function normalizePath(path: string): string {
 export function joinPaths(base: string, path: string): string {
   return `${normalizePath(base)}${normalizePath(path)}` || '/'
 }
-
-export function pathParamPattern(key: string): RegExp {
-  return new RegExp(`\\{${key}\\}`, 'g')
-}
