@@ -1,6 +1,6 @@
-import { createReadStream, existsSync } from 'node:fs'
+import { createReadStream, existsSync, realpathSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { extname, join, sep } from 'node:path'
+import { extname, join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MIME: Record<string, string> = {
@@ -15,24 +15,42 @@ const MIME: Record<string, string> = {
 }
 
 const UI_DIST = join(fileURLToPath(import.meta.url), '..', '..', '..', '..', 'ui', 'dist')
+const UI_DIST_REAL = realpathSync.native(UI_DIST)
 
 export function serveStatic(req: IncomingMessage, res: ServerResponse): boolean {
-  const url = req.url ?? '/'
-  const isAPI = url.startsWith('/api/') || url === '/ws'
+  const rawUrl = req.url ?? '/'
+  const isAPI = rawUrl.startsWith('/api/') || rawUrl === '/ws'
   if (isAPI) {
     return false
   }
 
-  let fsPath = join(UI_DIST, url === '/' ? 'index.html' : url)
+  let pathname = '/'
+  try {
+    pathname = new URL(rawUrl, 'http://localhost').pathname
+    pathname = decodeURIComponent(pathname)
+  } catch {
+    res.writeHead(400)
+    res.end('Bad request')
+    return true
+  }
 
-  if (!fsPath.startsWith(UI_DIST + sep)) {
+  const relativePath = pathname === '/' ? 'index.html' : pathname.replace(/^[/\\]+/, '')
+  let fsPath = resolve(UI_DIST, relativePath)
+
+  try {
+    fsPath = realpathSync.native(fsPath)
+  } catch {
+    fsPath = resolve(UI_DIST, 'index.html')
+  }
+
+  if (!(fsPath === UI_DIST_REAL || fsPath.startsWith(UI_DIST_REAL + sep))) {
     res.writeHead(404)
     res.end('Not found')
     return true
   }
 
   if (!existsSync(fsPath)) {
-    fsPath = join(UI_DIST, 'index.html')
+    fsPath = resolve(UI_DIST, 'index.html')
   }
 
   if (!existsSync(fsPath)) {
