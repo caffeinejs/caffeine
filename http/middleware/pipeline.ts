@@ -20,6 +20,7 @@ interface Entry {
   readonly path: MiddlewarePath | undefined
   readonly hook: string | undefined
   readonly target: unknown
+  readonly factory: boolean
 }
 
 interface Resolved {
@@ -40,8 +41,8 @@ export interface ResolvedMiddleware {
 }
 
 /**
- * The application's middleware pipeline: what `app.use()` registers, resolved once at start-up for the adapter to
- * install.
+ * The application's middleware pipeline: what `app.use()` and `app.useFn()` register, resolved once at start-up
+ * for the adapter to install.
  *
  * Entries keep their registration order. Which hooks exist, and how a middleware is attached to one, is the
  * adapter's business: `H` is the names its hooks go by.
@@ -52,11 +53,20 @@ export class MiddlewarePipeline<H extends string = string> {
 
   /** Registers `target` at `hook`, optionally restricted to `path`. Throws once the pipeline has been resolved. */
   add(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+    return this.#add(path, target, hook, false)
+  }
+
+  /** Registers a factory that produces middleware once at start-up. */
+  addFactory(path: MiddlewarePath | undefined, target: unknown, hook?: H): this {
+    return this.#add(path, target, hook, true)
+  }
+
+  #add(path: MiddlewarePath | undefined, target: unknown, hook: H | undefined, factory: boolean): this {
     if (this.#sealed) {
       throw new ErrPipelineSealed()
     }
 
-    this.#entries.push({ path: path === '*' ? undefined : path, hook, target })
+    this.#entries.push({ path: path === '*' ? undefined : path, hook, target, factory })
     return this
   }
 
@@ -70,7 +80,7 @@ export class MiddlewarePipeline<H extends string = string> {
     this.#sealed = true
 
     return this.#entries.map(entry => {
-      const resolved = resolve(entry.target, context)
+      const resolved = resolve(entry.target, context, entry.factory)
       const hook = entry.hook ?? (resolved.hint === undefined ? undefined : String(resolved.hint))
 
       return { path: entry.path, hook, fn: resolved.fn }
@@ -78,7 +88,12 @@ export class MiddlewarePipeline<H extends string = string> {
   }
 }
 
-function resolve(target: unknown, context: HTTPSetupContext): Resolved {
+function resolve(target: unknown, context: HTTPSetupContext, factory: boolean): Resolved {
+  if (factory) {
+    const produced = (target as MiddlewareFactory)(context)
+    return { fn: fromFactory(produced), hint: hintOn(target as object) }
+  }
+
   if (isMiddlewareInstance(target)) {
     return { fn: adaptCaffeine((ctx, next) => target.handle(ctx, next)), hint: hintOn(target.constructor) }
   }
@@ -86,10 +101,6 @@ function resolve(target: unknown, context: HTTPSetupContext): Resolved {
   if (typeof target === 'function' && !isMiddlewareClass(target)) {
     if (target.length >= 3) {
       return { fn: target as NodeMiddleware, hint: undefined }
-    }
-    if (target.length === 1) {
-      const produced = (target as MiddlewareFactory)(context)
-      return { fn: fromFactory(produced), hint: hintOn(target) }
     }
     return { fn: adaptCaffeine(target as MiddlewareFn), hint: hintOn(target) }
   }
