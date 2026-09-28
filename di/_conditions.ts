@@ -16,6 +16,16 @@ function isHeldConfiguration(entry: Held): boolean {
   return entry.byHand === undefined && entry.providedByConfig === undefined && entry.binding!.configuration === true
 }
 
+// Adds `value` to the list `map` holds under `key`.
+function append<K, V>(map: Map<K, V[]>, key: K, value: V): void {
+  const list = map.get(key)
+  if (list === undefined) {
+    map.set(key, [value])
+  } else {
+    list.push(value)
+  }
+}
+
 // The keys a binding answers to once registered: its own, its names, and its base, which a configuration never maps.
 function answersTo(entry: Held): Array<InjectionToken | Identifier> {
   const binding = entry.binding!
@@ -51,12 +61,7 @@ function baseOrder<E extends Held>(pending: readonly E[]): E[] {
 
   for (const entry of held) {
     if (entry.providedByConfig !== undefined) {
-      const list = provided.get(entry.providedByConfig)
-      if (list === undefined) {
-        provided.set(entry.providedByConfig, [entry])
-      } else {
-        list.push(entry)
-      }
+      append(provided, entry.providedByConfig, entry)
     }
   }
 
@@ -75,6 +80,34 @@ function baseOrder<E extends Held>(pending: readonly E[]): E[] {
   }
 
   return order
+}
+
+// What each held binding waits for, as positions in the base order. A @Provides waits for its class, listed first, and
+// a binding whose present, missing or config condition checks a key waits for every other held binding answering to
+// that key, listed in ascending order, never for itself, and a class never for its own @Provides.
+function waitsOf(order: readonly Held[]): number[][] {
+  const answering = new Map<InjectionToken | Identifier, number[]>()
+  const classAt = new Map<InjectionToken, number>()
+
+  for (let i = 0; i < order.length; i++) {
+    for (const key of answersTo(order[i])) {
+      append(answering, key, i)
+    }
+
+    if (isHeldConfiguration(order[i])) {
+      classAt.set(order[i].key, i)
+    }
+  }
+
+  return order.map((entry, i) => {
+    const own = entry.providedByConfig === undefined ? undefined : classAt.get(entry.providedByConfig)
+    const checked = keysChecked(entry.binding!)
+      .flatMap(key => answering.get(key) ?? [])
+      .filter(j => j !== i && order[j].providedByConfig !== entry.key)
+      .sort((a, b) => a - b)
+
+    return [...new Set(own === undefined ? checked : [own, ...checked])]
+  })
 }
 
 // A min-heap of positions in the base order: the earliest binding free to be decided comes out first.
@@ -134,9 +167,10 @@ class Ready {
   }
 }
 
-// Walks from the earliest undecided binding through what it waits for, its class first, until a binding repeats, and
-// returns the earliest binding on that cycle. A binding that only waits on a cycle is never the one forced.
-function cycleStart(waits: number[][], classOf: Array<number | undefined>, decided: boolean[]): number {
+// Walks from the earliest undecided binding to the first binding it still waits for, and on, until a binding repeats,
+// and returns the earliest binding on that cycle. A binding that only waits on a cycle is never the one forced. A
+// @Provides leads to its class while the class is undecided, so the walk follows what gates it before anything else.
+function cycleStart(waits: readonly number[][], decided: readonly boolean[]): number {
   const seen = new Map<number, number>()
   const path: number[] = []
   let i = decided.indexOf(false)
@@ -144,86 +178,38 @@ function cycleStart(waits: number[][], classOf: Array<number | undefined>, decid
   while (!seen.has(i)) {
     seen.set(i, path.length)
     path.push(i)
-
-    const own = classOf[i]
-    i = own !== undefined && !decided[own] ? own : waits[i].find(j => !decided[j])!
+    i = waits[i].find(j => !decided[j])!
   }
 
   return Math.min(...path.slice(seen.get(i)))
 }
 
-// Orders the held bindings so each is decided after the held bindings it waits for. A @Provides waits for its class,
-// and a binding whose present, missing or config condition checks a key waits for every other held binding answering
-// to that key, never for itself, and a class never for its own @Provides. Among the bindings free to go, the earliest in
-// the base order goes first, so without such conditions the order is the base order. When none is free, the cycle is
-// broken at its earliest binding, decided as if the bindings it still waits for were absent; no decision is revisited.
-export function decisionOrder<E extends Held>(pending: readonly E[]): E[] {
-  const order = baseOrder(pending)
-  const n = order.length
-  const answering = new Map<InjectionToken | Identifier, number[]>()
-  const classAt = new Map<InjectionToken, number>()
-
-  for (let i = 0; i < n; i++) {
-    for (const key of answersTo(order[i])) {
-      const list = answering.get(key)
-      if (list === undefined) {
-        answering.set(key, [i])
-      } else {
-        list.push(i)
-      }
-    }
-
-    if (isHeldConfiguration(order[i])) {
-      classAt.set(order[i].key, i)
-    }
-  }
-
-  const classOf: Array<number | undefined> = []
-  const waits: number[][] = []
-  const remaining: number[] = []
-  const dependents: number[][] = order.map((): number[] => [])
-
-  for (let i = 0; i < n; i++) {
-    const entry = order[i]
-    const own = entry.providedByConfig === undefined ? undefined : classAt.get(entry.providedByConfig)
-    const waitsFor = new Set<number>(own === undefined ? [] : [own])
-
-    for (const key of keysChecked(entry.binding!)) {
-      for (const j of answering.get(key) ?? []) {
-        if (j !== i && order[j].providedByConfig !== entry.key) {
-          waitsFor.add(j)
-        }
-      }
-    }
-
-    classOf.push(own)
-    waits.push([...waitsFor].sort((a, b) => a - b))
-    remaining.push(waitsFor.size)
-
-    for (const j of waitsFor) {
-      dependents[j].push(i)
-    }
-  }
-
-  const decided = new Array<boolean>(n).fill(false)
+// The positions in the order they are decided. Among the bindings free to go, the earliest in the base order goes
+// first, so without waits the order is the base order. When none is free, the binding cycleStart picks is decided as
+// if the bindings it still waits for were absent, and no decision is revisited.
+function schedule(waits: readonly number[][]): number[] {
+  const remaining = waits.map(w => w.length)
+  const dependents = waits.map((): number[] => [])
+  const decided = waits.map(() => false)
   const ready = new Ready()
 
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < waits.length; i++) {
+    for (const j of waits[i]) {
+      dependents[j].push(i)
+    }
+
     if (remaining[i] === 0) {
       ready.push(i)
     }
   }
 
-  const result: E[] = []
+  const order: number[] = []
 
-  while (result.length < n) {
-    const next = ready.size > 0 ? ready.pop() : cycleStart(waits, classOf, decided)
-    if (decided[next]) {
-      continue
-    }
+  while (order.length < waits.length) {
+    const next = ready.size > 0 ? ready.pop() : cycleStart(waits, decided)
 
     decided[next] = true
-    result.push(order[next])
+    order.push(next)
 
     for (const d of dependents[next]) {
       remaining[d]--
@@ -233,5 +219,13 @@ export function decisionOrder<E extends Held>(pending: readonly E[]): E[] {
     }
   }
 
-  return result
+  return order
+}
+
+// Orders the held bindings so each is decided after the held bindings it waits for, a cycle broken at its earliest
+// binding.
+export function decisionOrder<E extends Held>(pending: readonly E[]): E[] {
+  const order = baseOrder(pending)
+
+  return schedule(waitsOf(order)).map(i => order[i])
 }

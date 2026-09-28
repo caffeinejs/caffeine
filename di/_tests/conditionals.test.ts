@@ -611,6 +611,30 @@ describe('Conditionals', function () {
       expect(di.getMany(Store).map(s => s.kind())).toEqual(['memory'])
     })
 
+    // A binding never waits for itself. A default checking its own key would otherwise be put off until nothing else
+    // could go, and decided after bindings declared later that it has nothing to do with.
+    it('should decide a default in declaration order among bindings it does not wait for', async function () {
+      class Audit {}
+
+      const decided: string[] = []
+      const record = (name: string) => () => {
+        decided.push(name)
+        return true
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(HandDefault, t =>
+        t
+          .toSelf()
+          .extends(Store)
+          .conditional([$cond.missing(Store), $cond.when(record('default'))]),
+      )
+      di.bind(Audit, t => t.toSelf().conditional(c => c.when(record('audit'))))
+      await di.init()
+
+      expect(decided).toEqual(['default', 'audit'])
+    })
+
     // Two defaults of one key wait for each other. The cycle is decided in declaration order: the first registers,
     // and the second sees it and yields.
     it('should register only the first declared of two defaults of one key', async function () {
@@ -637,6 +661,73 @@ describe('Conditionals', function () {
       expect(di.getMany(Store).map(s => s.kind())).toEqual(['other'])
     })
 
+    // The binding forced to break the cycle is freed again once the other default is decided, while Stats, waiting on
+    // both, is still to go. It must not be decided a second time.
+    it('should decide each condition once when a cycle is broken', async function () {
+      class Stats {}
+
+      const decide = vi.fn(() => true)
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(OtherDefault, t =>
+        t
+          .toSelf()
+          .extends(Store)
+          .conditional([$cond.missing(Store), $cond.when(decide)]),
+      )
+      bindDefault(di)
+      di.bind(Stats, t => t.toSelf().conditional(c => c.present(Store)))
+      await di.init()
+
+      expect(decide).toHaveBeenCalledTimes(1)
+      expect(di.has(Stats)).toBe(true)
+      expect(di.getMany(Store).map(s => s.kind())).toEqual(['other'])
+    })
+
+    // Two cycles meet at the primary @Provides: one through FallbackConf, one through its own class and the guard.
+    // Walking them, the @Provides leads to its class first, so PrimaryConf is decided before anything is guessed about
+    // the probe, the probe sees it, and FallbackConf yields. Led to FallbackConf instead, the walk would decide it as
+    // if the probe were absent, and it would stay registered beside the probe its condition says must be missing.
+    it('should break a cycle through a @Provides at its class', async function () {
+      const kPrimary = token<string>(Symbol('order-via-class-primary'))
+      const kFallback = token<string>(Symbol('order-via-class-fallback'))
+      const kGuard = token<string>(Symbol('order-via-class-guard'))
+      const kProbe = token<string>(Symbol('order-via-class-probe'))
+
+      @Configuration()
+      @Conditional(c => c.missing(kPrimary))
+      @Conditional(c => c.missing(kProbe))
+      @Profile('order-via-class')
+      class FallbackConf {
+        @Provides(kFallback)
+        fallback(): string {
+          return 'fallback'
+        }
+      }
+
+      @Configuration()
+      @Conditional(c => c.missing(kGuard))
+      @Profile('order-via-class')
+      class PrimaryConf {
+        @Provides(kPrimary)
+        @Conditional(c => c.missing(kFallback))
+        primary(): string {
+          return 'primary'
+        }
+      }
+
+      const di = new CaffeineIoC({ profiles: ['order-via-class'] })
+      di.bind(kGuard, t => t.toValue('guard').conditional(c => c.missing(kPrimary)))
+      di.bind(kProbe, t => t.toValue('probe').conditional(c => c.present(PrimaryConf)))
+      await di.init()
+
+      expect(di.get(kPrimary)).toBe('primary')
+      expect(di.has(kProbe)).toBe(true)
+      expect(di.has(FallbackConf)).toBe(false)
+      expect(di.has(kFallback)).toBe(false)
+      expect(di.has(kGuard)).toBe(false)
+    })
+
     it('should decide a @Provides after the held binding its condition checks', async function () {
       const kReport = token<string>(Symbol('order-report'))
 
@@ -658,6 +749,30 @@ describe('Conditionals', function () {
       await di.init()
 
       expect(di.get(kReport)).toBe('report')
+    })
+
+    // Decided before its class, a @Provides would find the class not passed yet and be left out.
+    it('should decide a @Provides after its class when the class waits for a later binding', async function () {
+      const kLog = token<string>(Symbol('order-class-waits'))
+
+      class Sink {}
+
+      @Configuration()
+      @Conditional(c => c.present(Sink))
+      @Profile('order-class-waits')
+      class LogConf {
+        @Provides(kLog)
+        log(): string {
+          return 'log'
+        }
+      }
+      void LogConf
+
+      const di = new CaffeineIoC({ profiles: ['order-class-waits'] })
+      di.bind(Sink, t => t.toSelf().conditional(c => c.when(() => true)))
+      await di.init()
+
+      expect(di.get(kLog)).toBe('log')
     })
 
     // A class whose condition checks a key it provides is a default for that key: it waits for every other binding
