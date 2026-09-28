@@ -74,7 +74,7 @@
     "oxlint-tsgolint": "^7.0.2002",
     "reflect-metadata": "^0.2.2",
     "tough-cookie": "^6.0.2",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "unplugin-swc": "^1.6.0",
     "vitest": "^5.0.1"
