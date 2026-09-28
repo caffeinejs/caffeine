@@ -9,7 +9,13 @@ import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrInvalidBinding, ErrInvalidDecorator, ErrMissingInjectionKey, ErrNoValuesProvider } from '../errors.js'
+import {
+  ErrInvalidBinding,
+  ErrInvalidDecorator,
+  ErrMissingInjectionKey,
+  ErrNoValuesProvider,
+  ErrRepeatedInjectableConfiguration,
+} from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
@@ -392,6 +398,110 @@ describe('Conditionals', function () {
       expect(di.has(PassingConf)).toBeTruthy()
       expect(di.has(kPassingProvide)).toBeTruthy()
       expect(di.get(kPassingProvide)).toEqual('value')
+    })
+  })
+
+  // A @Provides waits for the class that declares it, never for another class that provides the same key: tied by key,
+  // one failing class took every @Provides of that key down with it.
+  describe('a @Provides tied to its own configuration class', function () {
+    const kShared = token<string>(Symbol('shared-provide'))
+    const kDecidedApart = token<string>(Symbol('decided-apart-provide'))
+    const kTwice = token<string>(Symbol('twice-provide'))
+
+    @Configuration()
+    @Conditional(c => c.when(() => false))
+    @Profile('provides-own-class')
+    class FailingProvider {
+      @Provides(kShared)
+      value(): string {
+        return 'failing'
+      }
+    }
+
+    @Configuration()
+    @Profile('provides-own-class')
+    class PlainProvider {
+      @Provides(kShared)
+      value(): string {
+        return 'plain'
+      }
+    }
+
+    @Configuration()
+    @Conditional(c => c.when(() => false))
+    @Profile('provides-decided-apart')
+    class FailingFirst {
+      @Provides(kDecidedApart)
+      value(): string {
+        return 'failing'
+      }
+    }
+
+    @Configuration()
+    @Conditional(c => c.when(() => true))
+    @Profile('provides-decided-apart')
+    class PassingSecond {
+      @Provides(kDecidedApart)
+      value(): string {
+        return 'passing'
+      }
+    }
+
+    @Configuration()
+    @Conditional(c => c.when(() => true))
+    @Profile('provides-twice')
+    class PendingProvider {
+      @Provides(kTwice)
+      value(): string {
+        return 'pending'
+      }
+    }
+
+    @Configuration()
+    @Profile('provides-twice')
+    class FirstProvider {
+      @Provides(kTwice)
+      value(): string {
+        return 'first'
+      }
+    }
+
+    @Configuration()
+    @Profile('provides-twice')
+    class SecondProvider {
+      @Provides(kTwice)
+      value(): string {
+        return 'second'
+      }
+    }
+
+    void [FailingProvider, PlainProvider, FailingFirst, PassingSecond, PendingProvider, FirstProvider, SecondProvider]
+
+    it('should keep the @Provides of an unconditional class when another class providing its key fails', async function () {
+      const di = new CaffeineIoC({ profiles: ['provides-own-class'] })
+      await di.init()
+
+      expect(di.get(kShared)).toBe('plain')
+    })
+
+    it('should keep it when both classes wait for a profile added after construction', async function () {
+      const di = new CaffeineIoC()
+      di.addProfiles('provides-own-class')
+      await di.init()
+
+      expect(di.get(kShared)).toBe('plain')
+    })
+
+    it('should decide the @Provides of a conditional class by its own class, not the first one providing its key', async function () {
+      const di = new CaffeineIoC({ profiles: ['provides-decided-apart'] })
+      await di.init()
+
+      expect(di.get(kDecidedApart)).toBe('passing')
+    })
+
+    // Tied to the pending class by key, the two used to wait for it and hide that they provide the same key.
+    it('should refuse two unconditional @Provides of one key beside a conditional class providing it', function () {
+      expect(() => new CaffeineIoC({ profiles: ['provides-twice'] })).toThrow(ErrRepeatedInjectableConfiguration)
     })
   })
 

@@ -118,7 +118,7 @@ export class CaffeineIoC implements Container {
   private _pendingProfiles: PendingBinding[] = []
   private _pendingManualProfiles: PendingBinding[] = []
   private _pendingManualProfileKeys = new Set<InjectionToken>()
-  private _pendingConfigKeys: Map<InjectionToken, InjectionToken[]> = new Map()
+  private _pendingConfigKeys = new Set<InjectionToken>()
   private _evaluatingProfiles = false
   private _pendingConditionalKeys = new Set<InjectionToken>()
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
@@ -945,7 +945,7 @@ export class CaffeineIoC implements Container {
 
       if (binding.conditionals.length > 0) {
         if (binding.configuration) {
-          this._pendingConfigKeys.set(key, binding.keysProvided)
+          this._pendingConfigKeys.add(key)
         }
         this._pendingConditionals.push({ key, binding })
       } else {
@@ -955,7 +955,9 @@ export class CaffeineIoC implements Container {
     }
 
     for (const [key, config] of providedBindingConfigurations()) {
-      const configKey = this.findPendingConfigForKey(key)
+      // A @Provides waits for the class that declares it, and only when that class is itself waiting on conditions.
+      const source = config.getSource?.ctor
+      const configKey = source !== undefined && this._pendingConfigKeys.has(source) ? source : undefined
 
       if (this.queueProfiledConfig(key, config, configKey)) {
         continue
@@ -1426,7 +1428,7 @@ export class CaffeineIoC implements Container {
     this._pendingProfiles.push(entry)
 
     if (hasConditionals && config.isConfiguration === true && config.getSource === undefined) {
-      this._pendingConfigKeys.set(key, config.getKeysProvided ?? [])
+      this._pendingConfigKeys.add(key)
     }
 
     if (hasConditionals || providedByConfig !== undefined) {
@@ -1870,16 +1872,6 @@ export class CaffeineIoC implements Container {
     }
 
     return result.length === entries.length ? result : entries
-  }
-
-  private findPendingConfigForKey(key: InjectionToken): InjectionToken | undefined {
-    for (const [configKey, providedKeys] of this._pendingConfigKeys) {
-      if (providedKeys.includes(key)) {
-        return configKey
-      }
-    }
-
-    return undefined
   }
 
   /**
