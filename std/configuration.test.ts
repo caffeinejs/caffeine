@@ -254,8 +254,8 @@ describe('configuration as the DI values provider', () => {
     expect(repository.missing).toBe('fallback')
   })
 
-  // The handle is live and the config resolver calls the binding's factory on every read, so a transient
-  // resolved after a refresh sees the new value without anything having been rebound.
+  // The values are the live configuration object, so a transient resolved after a refresh sees the new value
+  // without anything having been rebound.
   it('follows a refresh', async () => {
     @Injectable([$i.value<DatabaseConfig, string>(c => c.database.host)])
     class Holder {
@@ -288,7 +288,7 @@ describe('configuration as the DI values provider', () => {
     const { builder, container } = appWith({
       provider: new InlineConfigSource({ database: { host: 'h', port: 1 } }),
     })
-    container.bindValuesProvider<{ own: string }>(t => t.toValue({ own: 'mine' }))
+    container.bindValuesProvider<{ own: string }>({ own: 'mine' })
     container.bind(Holder, t => t.toSelf())
 
     await builder.bootstrap()

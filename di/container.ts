@@ -25,6 +25,7 @@ import {
   ErrMultiplePrimary,
   ErrInvalidContainerState,
   ErrInjectableBase,
+  ErrNoValuesProvider,
 } from './errors.js'
 import { HookListener } from './hooks.js'
 import { Injection, InjectionDescriptor, ResolveInjection } from './injection.js'
@@ -115,6 +116,7 @@ export class CaffeineIoC implements Container {
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
   private _hasRequestScoped = false
   private _hasAsync = false
+  private _values: unknown
 
   /**
    * Creates a new container instance.
@@ -190,6 +192,26 @@ export class CaffeineIoC implements Container {
    */
   get hasRequestScope(): boolean {
     return this._hasRequestScoped
+  }
+
+  /**
+   * The values bound with {@link bindValuesProvider}, which `$i.value` injections read.
+   *
+   * @throws {@link ErrNoValuesProvider} if {@link bindValuesProvider} was never called
+   */
+  get values(): unknown {
+    if (this._values === undefined) {
+      throw new ErrNoValuesProvider()
+    }
+
+    return this._values
+  }
+
+  /**
+   * Whether {@link bindValuesProvider} was called, so that reading {@link values} does not throw.
+   */
+  get hasValues(): boolean {
+    return this._values !== undefined
   }
 
   /**
@@ -677,23 +699,30 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Registers a values provider under the well-known internal key, making it available for
-   * `$i.config` injections throughout the container.
+   * Sets the values that `$i.value` injections read, usually the application's configuration.
    *
-   * Syntax sugar for `bind(kValuesProvider)` — returns a {@link Binder} so the caller can
-   * choose any factory strategy and lifetime.
+   * The container holds the object itself, not a copy and not a binding: an injection reads it when its consumer is
+   * built, so a change made to it in place reaches every consumer built afterwards. Calling it again before the
+   * container compiles replaces the values.
+   *
+   * @throws {@link ErrInvalidContainerState} if the container has already been compiled, because its `$i.value`
+   * injections already hold the values
    *
    * @example
    * ```ts
-   * di.bindValuesProvider<AppConfig>(t => t.toValue(configHandle))
-   * di.bindValuesProvider<AppConfig>(t => t.toClass(MyConfigProvider).lifetime(Scopes.SINGLETON))
+   * di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
    * ```
    */
-  bindValuesProvider<T = unknown>(configure: (spec: BindingSpec<T>) => void): this {
-    return this.bind(
-      Keys.kValuesProvider as InjectionToken<T>,
-      configure as unknown as (spec: BindingSpec<unknown, InjectionToken<T>>) => void,
-    )
+  bindValuesProvider<T = unknown>(values: T): this {
+    notNil(values, 'Parameter values must not be null or undefined')
+
+    if (this._ready || this._compiled) {
+      throw new ErrInvalidContainerState('Cannot bind values: container has already been compiled')
+    }
+
+    this._values = values
+
+    return this
   }
 
   /**
@@ -805,7 +834,8 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Captures a snapshot of all non-internal bindings in their current state.
+   * Captures a snapshot of all non-internal bindings in their current state, and of the values bound with
+   * {@link bindValuesProvider}.
    * Works at any point — pre-init or post-init.
    * For testing purposes.
    */
@@ -840,11 +870,11 @@ export class CaffeineIoC implements Container {
       ])
     }
 
-    return new Snapshot(entries)
+    return new Snapshot(entries, this._values)
   }
 
   /**
-   * Restores bindings from the given snapshot into the container.
+   * Restores bindings from the given snapshot into the container, and the values when the snapshot carries any.
    * Must be called before {@link init}.
    */
   restore(snap: Snapshot): void {
@@ -854,6 +884,10 @@ export class CaffeineIoC implements Container {
 
     for (const [key, binding] of snap.entries()) {
       this.registerOrHold(key, binding, 'restore')
+    }
+
+    if (snap.values !== undefined) {
+      this._values = snap.values
     }
   }
 

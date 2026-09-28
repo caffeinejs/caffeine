@@ -342,6 +342,38 @@ describe('TestContainer', function () {
     })
   })
 
+  // Undecorated, so the containers built by the other tests do not pick up a consumer that needs values.
+  describe('values', function () {
+    class Settings {
+      constructor(readonly host: string) {}
+    }
+
+    function sourceWith(values: { host: string }): CaffeineIoC {
+      const source = new CaffeineIoC({ decorators: false })
+      source.bindValuesProvider(values)
+      source.bind(Settings, t => t.toClass(Settings, [$i.value<{ host: string }>(c => c.host)]))
+      return source
+    }
+
+    it('keeps the values of the source container, so $i.value resolves', async function () {
+      const source = sourceWith({ host: 'db.local' })
+      await source.init()
+
+      const di = newTestContainer(source).build()
+      await di.init()
+
+      expect(di.get(Settings).host).toBe('db.local')
+    })
+
+    it('lets a test replace the values on the container it builds', async function () {
+      const di = newTestContainer(sourceWith({ host: 'db.local' })).build()
+      di.bindValuesProvider({ host: 'test.local' })
+      await di.init()
+
+      expect(di.get(Settings).host).toBe('test.local')
+    })
+  })
+
   describe('TestPostProcessor', function () {
     it('records instances created during init()', async function () {
       const tracker = new InstanceTracker()

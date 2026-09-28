@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { type Options } from '../container_interface.js'
+import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { type Snapshot } from '../snapshot.js'
 
@@ -106,6 +107,35 @@ describe('ContainerSnapshot', function () {
       expect(testDi.get(kDb)).toBe('db-url')
       expect(testDi.get(kAPI)).toBe('api-url')
     })
+
+    // The values are not a binding, so a container rebuilt from a snapshot would otherwise lose every $i.value.
+    it('carries the values, which restore() binds into the new container', async function () {
+      class Svc {
+        constructor(readonly host: string) {}
+      }
+
+      const values = { host: 'db.local' }
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider(values)
+      di.bind(Svc, t => t.toClass(Svc, [$i.value<typeof values>(c => c.host)]))
+      await di.init()
+
+      const testDi = newContainerFromSnapshot(di.snapshot())
+      await testDi.init()
+
+      expect(testDi.values).toBe(values)
+      expect(testDi.get(Svc).host).toBe('db.local')
+    })
+
+    it('restoring a snapshot taken without values keeps the values the container has', function () {
+      const values = { host: 'own' }
+      const testDi = new CaffeineIoC({ decorators: false })
+      testDi.bindValuesProvider(values)
+
+      testDi.restore(new CaffeineIoC({ decorators: false }).snapshot())
+
+      expect(testDi.values).toBe(values)
+    })
   })
 
   describe('test doubles via snapshot', function () {
@@ -178,6 +208,18 @@ describe('ContainerSnapshot', function () {
       const snap = di.snapshot().filter(() => false)
 
       expect(snap.size).toBe(0)
+    })
+
+    it('keep the values, which are not a binding either one could drop', function () {
+      const values = { host: 'db.local' }
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider(values)
+      di.bind(kDb, t => t.toValue('db-url'))
+
+      const snap = di.snapshot()
+
+      expect(snap.filter(() => false).values).toBe(values)
+      expect(snap.exclude(kDb).values).toBe(values)
     })
   })
 

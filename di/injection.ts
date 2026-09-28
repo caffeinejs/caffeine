@@ -529,23 +529,23 @@ function just<T>(value: T): InjectionResult<T> {
 }
 
 /**
- * value creates an injection descriptor that injects a typed value from the registered
- * ValuesProvider, using either a selector function or a dot-separated string path.
+ * value creates an injection descriptor that injects a typed value from the values bound with
+ * `bindValuesProvider()`, using either a selector function or a dot-separated string path.
  *
  * An optional second argument sets a default value returned when the resolved value is
- * `undefined` or when no provider is registered. Supplying a default prevents
+ * `undefined` or when no values are bound. Supplying a default prevents
  * {@link ErrNoValuesProvider} from being thrown.
  * Note that `null` is a valid value.
  *
  * @param access - Selector function or dot-path string to the desired value.
- * @param defaultValue - Default returned when the resolved value is `undefined` or the
- *   provider is absent. `null` is a valid default. Pass `undefined` (or omit) for no default.
+ * @param defaultValue - Default returned when the resolved value is `undefined` or no values
+ *   are bound. `null` is a valid default. Pass `undefined` (or omit) for no default.
  *
  * @example
  * ```ts
  * type AppConfig = { database: { host: string; port: number } }
  *
- * di.bindValuesProvider<AppConfig>(t => t.toValue({ database: { host: 'localhost', port: 5432 } }))
+ * di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
  *
  * @Injectable([
  *   $i.value<AppConfig>(cfg => cfg.database.host),
@@ -634,7 +634,7 @@ export interface InjectionHelpers<C = unknown> {
   compose: typeof compose
 
   /**
-   * Injects a typed value from the registered ValuesProvider, by selector or dot-path.
+   * Injects a typed value from the values bound with `bindValuesProvider()`, by selector or dot-path.
    *
    * `T` falls back to `C`, which is what types a selector whose call names no type argument.
    */

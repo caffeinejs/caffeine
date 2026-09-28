@@ -11,6 +11,7 @@
   - [object](#object)
   - [defer](#defer)
   - [just](#just)
+  - [value](#value)
   - [compose](#compose)
 
 Prefer the `$i` helpers over building an `InjectionDescriptor` manually — they are
@@ -268,6 +269,37 @@ class DatabaseClient {
   ) {}
 }
 ```
+
+### value
+
+```ts
+$i.value<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionDescriptor<R>
+```
+
+Injects a value selected out of the values bound with
+[`di.bindValuesProvider()`](./container.md#bindvaluesprovider), either by a selector function or
+by a dot-separated path. The values are read when the consumer is built, so a change made to
+them in place reaches every consumer built afterwards.
+
+```ts
+type AppConfig = { database: { host: string; port: number } }
+
+di.bindValuesProvider<AppConfig>({ database: { host: 'localhost', port: 5432 } })
+
+@Injectable([$i.value<AppConfig>(cfg => cfg.database.host), $i.value<AppConfig>('database.port', 5432)])
+class DatabaseClient {
+  constructor(
+    readonly host: string,
+    readonly port: number,
+  ) {}
+}
+```
+
+`defaultValue` is used when the selected value is `undefined`; `null` is a value, not an
+absence. When no values were bound at all, the injection resolves to `defaultValue` if it has
+one, and to `undefined` if it is wrapped in `$i.optional`. Otherwise compiling the injection
+throws [`ErrNoValuesProvider`](./errors.md#errnovaluesprovider), naming the injection that
+needed the values; for a component, that happens at `init()`.
 
 ### compose
 

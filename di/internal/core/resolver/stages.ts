@@ -4,7 +4,6 @@ import { ErrMissingInjectionKey, ErrNoResolutionForKey, ErrNoValuesProvider } fr
 import type { InjectionMiddleware } from '../../../injection_resolver.js'
 import { Identifier, keyStr, TypedKey } from '../../../key.js'
 import type { Provider } from '../../../provider.js'
-import { Keys } from '../../../symbols.js'
 import { solutions } from '../../util/errutil/index.js'
 import { excludeSelf, uniqueBindingOrThrow } from './_binding_util.js'
 import { describeContext } from './_fmt.js'
@@ -104,16 +103,16 @@ type ConfigArgs = {
 }
 
 /**
- * Resolves a value out of the registered values provider.
+ * Resolves a value out of the values bound with `bindValuesProvider()`.
  *
- * @throws {@link ErrNoValuesProvider} when no provider is registered and the stage carries no default.
+ * @throws {@link ErrNoValuesProvider} when no values are bound, and the injection is neither optional nor has a
+ * default.
  */
 export const configStage: InjectionMiddleware = (ctx, _next, args) => {
   const { access, defaultValue } = args as ConfigArgs
   const hasDefault = defaultValue !== undefined
-  const providerBinding = ctx.container.getBinding(Keys.kValuesProvider) as Binding<unknown> | undefined
 
-  if (!providerBinding) {
+  if (!ctx.container.hasValues) {
     if (hasDefault) {
       return () => defaultValue
     }
@@ -125,6 +124,8 @@ export const configStage: InjectionMiddleware = (ctx, _next, args) => {
     return () => undefined
   }
 
+  // The object itself, not a copy: a change made to it in place reaches the consumers built afterwards.
+  const values = ctx.container.values
   const select: (provider: unknown) => unknown =
     typeof access === 'string'
       ? (() => {
@@ -136,7 +137,7 @@ export const configStage: InjectionMiddleware = (ctx, _next, args) => {
       : (access as (provider: unknown) => unknown)
 
   return () => {
-    const v = select(providerBinding.factory(providerBinding.ctx!))
+    const v = select(values)
 
     return v === undefined && hasDefault ? defaultValue : v
   }

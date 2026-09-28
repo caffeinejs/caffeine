@@ -1,5 +1,4 @@
 import {
-  Keys,
   kSelfRefresh,
   mod,
   Scopes,
@@ -19,8 +18,8 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
  *
  * - The live config object under the definition's key, and the store under its store key, when it names them.
  * - The store under the {@link ConfigStore} class, which is how the framework finds it.
- * - The current snapshot as the values provider, so `$i.value(c => c.database.host)` reads configuration. The value
- *   is read when the consumer is built.
+ * - The live config object as the values, so `$i.value(c => c.database.host)` reads configuration. The value is read
+ *   when the consumer is built.
  * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
  *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *
@@ -41,12 +40,11 @@ export function ConfigModule<T>(store: ConfigStore<T>): Module {
       t.toValue(store as ConfigStore<unknown>).internal(),
     )
 
-    // An application that bound its own values provider meant it. A module is handed the binding operations only,
-    // so the check walks the entries.
-    const boundAlready = [...container.entries()].some(([bound]) => bound === Keys.kValuesProvider)
-    if (!boundAlready) {
-      // Transient, so every injection reads the snapshot that is current then.
-      container.bindValuesProvider(t => t.toFactory(() => store.current).lifetime(Scopes.TRANSIENT))
+    // An application that bound its own values meant it.
+    if (!container.hasValues) {
+      // The live object rather than the current snapshot: it keeps one identity while every field follows every
+      // reload, so every injection reads the configuration that is current then.
+      container.bindValuesProvider(store.live)
     }
 
     const refresher: SelfRefreshable = {

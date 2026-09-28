@@ -1,11 +1,11 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, expectTypeOf } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ErrNoValuesProvider } from '../errors.js'
+import { ErrInvalidContainerState, ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
 import { compileChain } from '../internal/core/resolver/index.js'
+import { mod } from '../module.js'
 import { Scopes } from '../scope.js'
-import { Keys } from '../symbols.js'
 
 function ctx(
   container: CaffeineIoC,
@@ -15,19 +15,117 @@ function ctx(
   return { container, descriptor, key, kind: 'constructor' as const, member: '', index: 0 }
 }
 
-describe('$i.config', function () {
+describe('bindValuesProvider', function () {
+  it('takes the values themselves, not a callback that binds them', function () {
+    const di = new CaffeineIoC({ decorators: false })
+
+    expectTypeOf(di.bindValuesProvider<{ host: string }>)
+      .parameter(0)
+      .toEqualTypeOf<{ host: string }>()
+  })
+
+  it('makes reading the values throw ErrNoValuesProvider when nothing was bound', function () {
+    const di = new CaffeineIoC({ decorators: false })
+    const read = () => di.values
+
+    expect(di.hasValues).toBe(false)
+    expect(read).toThrow(ErrNoValuesProvider)
+    // A read is not an injection, so there is no injection site to name after the fix.
+    expect(read).toThrow(/call bindValuesProvider\(\) before init\(\)$/)
+  })
+
+  it('holds the object it is given, not a copy, before and after init', async function () {
+    const values = { host: 'localhost' }
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(di.hasValues).toBe(false)
+    expect(di.bindValuesProvider(values)).toBe(di)
+    expect(di.hasValues).toBe(true)
+    expect(di.values).toBe(values)
+
+    await di.init()
+
+    expect(di.values).toBe(values)
+  })
+
+  // Either would read back as "nothing bound", so the mistake would surface only as a missing value somewhere else.
+  it('rejects undefined and null', function () {
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(() => di.bindValuesProvider(undefined)).toThrow('Parameter values must not be null or undefined')
+    expect(() => di.bindValuesProvider(null)).toThrow('Parameter values must not be null or undefined')
+    expect(di.hasValues).toBe(false)
+  })
+
+  it('adds no binding, because the values are not an injectable', function () {
+    const di = new CaffeineIoC({ decorators: false })
+    const size = di.size
+
+    di.bindValuesProvider({ host: 'localhost' })
+
+    expect(di.size).toBe(size)
+  })
+
+  it('replaces the values when called again before init', async function () {
+    class Svc {
+      constructor(readonly host: string) {}
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bindValuesProvider({ host: 'first' })
+    di.bindValuesProvider({ host: 'second' })
+    di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
+    await di.init()
+
+    expect(di.get(Svc).host).toBe('second')
+  })
+
+  // The injections compiled by then already hold the values, so a later call would reach none of them.
+  it('throws ErrInvalidContainerState once the container has compiled', async function () {
+    const compiled = new CaffeineIoC({ decorators: false })
+    await compiled.compile()
+
+    expect(() => compiled.bindValuesProvider({ host: 'late' })).toThrow(ErrInvalidContainerState)
+    expect(compiled.hasValues).toBe(false)
+
+    const initialized = new CaffeineIoC({ decorators: false })
+    await initialized.init()
+
+    expect(() => initialized.bindValuesProvider({ host: 'late' })).toThrow(ErrInvalidContainerState)
+    expect(initialized.hasValues).toBe(false)
+  })
+
+  it('can be called from a module, which runs before the container compiles', async function () {
+    class Svc {
+      constructor(readonly host: string) {}
+    }
+
+    const di = new CaffeineIoC({
+      decorators: false,
+      modules: [mod('values', container => container.bindValuesProvider({ host: 'from-module' }))],
+    })
+    di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
+    await di.init()
+
+    expect(di.get(Svc).host).toBe('from-module')
+  })
+})
+
+describe('$i.value', function () {
   describe('validation', function () {
     it('throws ErrNoValuesProvider when no provider is registered and injection is required', function () {
       const di = new CaffeineIoC({ decorators: false })
-
-      expect(() =>
+      const compile = () =>
         compileChain(
           ctx(
             di,
             $i.value(cfg => cfg),
           ),
-        ),
-      ).toThrow(ErrNoValuesProvider)
+        )
+
+      expect(compile).toThrow(ErrNoValuesProvider)
+      // The injection site is what tells the reader which consumer needed the values.
+      expect(compile).toThrow('Error resolving "Consumer"')
     })
 
     it('does not throw when optional and no provider is registered', function () {
@@ -51,7 +149,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'localhost' }))
+      di.bindValuesProvider<{ host: string }>({ host: 'localhost' })
       di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
       await di.init()
 
@@ -64,7 +162,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ port: number }>(t => t.toValue({ port: 5432 }))
+      di.bindValuesProvider<{ port: number }>({ port: 5432 })
       di.bind(Svc, t => t.toClass(Svc, [$i.value<{ port: number }>(cfg => cfg.port)]))
       await di.init()
 
@@ -77,7 +175,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ enabled: boolean }>(t => t.toValue({ enabled: true }))
+      di.bindValuesProvider<{ enabled: boolean }>({ enabled: true })
       di.bind(Svc, t => t.toClass(Svc, [$i.value<{ enabled: boolean }>(cfg => cfg.enabled)]))
       await di.init()
 
@@ -95,7 +193,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ database: { host: 'db.local', port: 3306 } }))
+      di.bindValuesProvider<Cfg>({ database: { host: 'db.local', port: 3306 } })
       di.bind(Svc, t =>
         t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.database.host), $i.value<Cfg>(cfg => cfg.database.port)]),
       )
@@ -105,7 +203,7 @@ describe('$i.config', function () {
       expect(di.get(Svc).port).toBe(3306)
     })
 
-    it('resolves from a class-based provider bound with toClass', async function () {
+    it('resolves from a class instance', async function () {
       class AppCfg {
         readonly host = 'class-host'
         readonly port = 9000
@@ -119,7 +217,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppCfg>(t => t.toClass(AppCfg))
+      di.bindValuesProvider(new AppCfg())
       di.bind(Svc, t => t.toClass(Svc, [$i.value<AppCfg>(cfg => cfg.host), $i.value<AppCfg>(cfg => cfg.port)]))
       await di.init()
 
@@ -139,7 +237,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ a: 'alpha', b: 'beta', c: 'gamma' }))
+      di.bindValuesProvider<Cfg>({ a: 'alpha', b: 'beta', c: 'gamma' })
       di.bind(Svc, t =>
         t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.a), $i.value<Cfg>(cfg => cfg.b), $i.value<Cfg>(cfg => cfg.c)]),
       )
@@ -171,28 +269,11 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'optional-host' }))
+      di.bindValuesProvider<{ host: string }>({ host: 'optional-host' })
       di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value<{ host: string }>(cfg => cfg.host))]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('optional-host')
-    })
-  })
-
-  describe('factory provider', function () {
-    it('works with a factory-based provider bound with toFactory', async function () {
-      type Cfg = { dsn: string }
-
-      class Svc {
-        constructor(readonly dsn: string) {}
-      }
-
-      const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toFactory(() => ({ dsn: 'postgres://localhost/db' })))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<Cfg>(cfg => cfg.dsn)]))
-      await di.init()
-
-      expect(di.get(Svc).dsn).toBe('postgres://localhost/db')
     })
   })
 
@@ -205,7 +286,10 @@ describe('$i.config', function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }>(cfg => cfg.host)]))
 
-      await expect(di.init()).rejects.toThrow(ErrNoValuesProvider)
+      const init = di.init()
+
+      await expect(init).rejects.toThrow(ErrNoValuesProvider)
+      await expect(init).rejects.toThrow('Error resolving "Svc"')
     })
   })
 
@@ -216,7 +300,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'path-host' }))
+      di.bindValuesProvider<{ host: string }>({ host: 'path-host' })
       di.bind(Svc, t => t.toClass(Svc, [$i.value('host')]))
       await di.init()
 
@@ -231,7 +315,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ database: { host: 'nested-host' } }))
+      di.bindValuesProvider<Cfg>({ database: { host: 'nested-host' } })
       di.bind(Svc, t => t.toClass(Svc, [$i.value('database.host')]))
       await di.init()
 
@@ -246,7 +330,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Cfg>(t => t.toValue({ a: { b: { c: 'deep' } } }))
+      di.bindValuesProvider<Cfg>({ a: { b: { c: 'deep' } } })
       di.bind(Svc, t => t.toClass(Svc, [$i.value('a.b.c')]))
       await di.init()
 
@@ -259,7 +343,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Record<string, unknown>>(t => t.toValue({}))
+      di.bindValuesProvider<Record<string, unknown>>({})
       di.bind(Svc, t => t.toClass(Svc, [$i.optional($i.value('missing.key'))]))
       await di.init()
 
@@ -274,7 +358,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host?: string }>(t => t.toValue({}))
+      di.bindValuesProvider<{ host?: string }>({})
       di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host?: string }>(cfg => cfg.host, 'default-host')]))
       await di.init()
 
@@ -287,7 +371,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<Record<string, unknown>>(t => t.toValue({}))
+      di.bindValuesProvider<Record<string, unknown>>({})
       di.bind(Svc, t => t.toClass(Svc, [$i.value('host', 'path-default')]))
       await di.init()
 
@@ -300,11 +384,25 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ host: string }>(t => t.toValue({ host: 'real-host' }))
+      di.bindValuesProvider<{ host: string }>({ host: 'real-host' })
       di.bind(Svc, t => t.toClass(Svc, [$i.value('host', 'should-not-appear')]))
       await di.init()
 
       expect(di.get(Svc).val).toBe('real-host')
+    })
+
+    // `null` is a value the configuration holds, not an absence, so the default must not paper over it.
+    it('returns a null value as is, not the default', async function () {
+      class Svc {
+        constructor(readonly val: string | null) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindValuesProvider<{ host: string | null }>({ host: null })
+      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string | null }>(cfg => cfg.host, 'default-host')]))
+      await di.init()
+
+      expect(di.get(Svc).val).toBeNull()
     })
 
     it('non-optional with default succeeds when provider is absent', async function () {
@@ -330,10 +428,22 @@ describe('$i.config', function () {
 
       expect(di.get(Svc).val).toBe('opt-default')
     })
+
+    it('applies a null default when no values are bound', async function () {
+      class Svc {
+        constructor(readonly val: string | null) {}
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ host: string }, string | null>(cfg => cfg.host, null)]))
+      await di.init()
+
+      expect(di.get(Svc).val).toBeNull()
+    })
   })
 
-  describe('getter-based provider', function () {
-    it('selector form invokes getter on provider class', async function () {
+  describe('getter-based values', function () {
+    it('selector form invokes a getter on the values', async function () {
       class AppConfig {
         private _host = 'computed-host'
         get host() {
@@ -346,14 +456,14 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bindValuesProvider(new AppConfig())
       di.bind(Svc, t => t.toClass(Svc, [$i.value<AppConfig>(cfg => cfg.host)]))
       await di.init()
 
       expect(di.get(Svc).host).toBe('computed-host')
     })
 
-    it('string path form invokes getter on provider class', async function () {
+    it('string path form invokes a getter on the values', async function () {
       class AppConfig {
         private _host = 'path-computed-host'
         get host() {
@@ -366,7 +476,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bindValuesProvider(new AppConfig())
       di.bind(Svc, t => t.toClass(Svc, [$i.value('host')]))
       await di.init()
 
@@ -387,7 +497,7 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<AppConfig>(t => t.toClass(AppConfig))
+      di.bindValuesProvider(new AppConfig())
       di.bind(Svc, t => t.toClass(Svc, [$i.value<AppConfig>(cfg => cfg.baseURL)]))
       await di.init()
 
@@ -396,7 +506,7 @@ describe('$i.config', function () {
   })
 
   describe('refresh and reload', function () {
-    it('transient consumer sees mutation on the provider object between constructions', async function () {
+    it('transient consumer sees a change made in place to the values between constructions', async function () {
       const config = { host: 'initial' }
 
       class Svc {
@@ -404,30 +514,13 @@ describe('$i.config', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<typeof config>(t => t.toFactory(() => config))
+      di.bindValuesProvider(config)
       di.bind(Svc, t => t.toClass(Svc, [$i.value<typeof config>(c => c.host)]).lifetime(Scopes.TRANSIENT))
       await di.init()
 
       expect(di.get(Svc).host).toBe('initial')
       config.host = 'updated'
       expect(di.get(Svc).host).toBe('updated')
-    })
-
-    it('transient consumer picks up new provider instance after resetInstance', async function () {
-      let counter = 0
-
-      class Svc {
-        constructor(readonly n: number) {}
-      }
-
-      const di = new CaffeineIoC({ decorators: false })
-      di.bindValuesProvider<{ n: number }>(t => t.toFactory(() => ({ n: ++counter })))
-      di.bind(Svc, t => t.toClass(Svc, [$i.value<{ n: number }>(c => c.n)]).lifetime(Scopes.TRANSIENT))
-      await di.init()
-
-      expect(di.get(Svc).n).toBe(1)
-      await di.resetInstance(Keys.kValuesProvider)
-      expect(di.get(Svc).n).toBe(2)
     })
   })
 })

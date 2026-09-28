@@ -30,9 +30,8 @@
 
 ## Factory methods
 
-`BindingSpec<TValue, TKey>` is the object handed to the callback of `di.bind(key, …)`,
-`di.rebind(key, …)` and `di.bindValuesProvider(…)`. These methods select _how_ the key is
-resolved.
+`BindingSpec<TValue, TKey>` is the object handed to the callback of `di.bind(key, …)` and
+`di.rebind(key, …)`. These methods select _how_ the key is resolved.
 
 Every method returns the same instance, so one chain describes the whole binding. The
 container registers it once, when the callback returns — which is why `di.bind()` itself

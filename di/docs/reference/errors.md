@@ -140,6 +140,20 @@ import.
 
 ---
 
+### ErrNoValuesProvider
+
+**Code:** `ERR_NO_VALUES_PROVIDER`
+
+Thrown when the values are read but `di.bindValuesProvider()` was never called: by the
+container's `values` getter, and when a `$i.value()` injection that is neither optional nor
+has a default is compiled — by `init()` for a component, or by `resolver()` and `builder()`.
+The second names the injection that needed the values.
+
+**Fix:** Call `di.bindValuesProvider(values)` before `init()`, give the injection a default
+(`$i.value('database.port', 5432)`), or check `di.hasValues` before reading `di.values`.
+
+---
+
 ### ErrInvalidDecorator
 
 **Code:** `ERR_INVALID_DECORATOR`

@@ -346,7 +346,8 @@ export class TestContainer {
 export function newTestContainer(): TestContainer
 /**
  * Creates a new test container using the given {@link Container} as the base.
- * All the bindings from the base container will be available in the new container.
+ * All the bindings from the base container, and the values bound with `bindValuesProvider()`, will be available in
+ * the new container.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param container - The base container to use as the foundation for the test container.
@@ -354,7 +355,7 @@ export function newTestContainer(): TestContainer
 export function newTestContainer(container: Container): TestContainer
 /**
  * Creates a new test container using the given {@link Snapshot} as the base.
- * All the bindings from the snapshot will be available in the new container.
+ * All the bindings from the snapshot, and the values it carries, will be available in the new container.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param snap - The snapshot to use as the foundation for the test container.

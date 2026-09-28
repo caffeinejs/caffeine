@@ -88,6 +88,9 @@ a schema that keeps every key.
 | A value built from settings, or a reaction to a change   | `store.view(...)`                             | Yes: `value` is reassigned, `onChange` fires |
 | One value, fixed when the consumer is built              | `$i.value(c => c.database.host)`              | Only when the consumer is rebuilt            |
 
+`$i.value` reads the live object: a leaf it selects is fixed when the consumer is built, and a node it selects is the
+live node, which follows every reload.
+
 The ordinary way has no wrapper:
 
 ```ts

@@ -44,9 +44,7 @@ describe('$i.object', function () {
     di.bind(Beta, t => t.toSelf().extends(Plugin).order(2))
     di.bind(Singleton, t => t.toSelf())
     di.bind(Transient, t => t.toSelf().lifetime(Scopes.TRANSIENT))
-    di.bindValuesProvider<{ database: { host: string; port: number } }>(t =>
-      t.toValue({ database: { host: 'localhost', port: 5432 } }),
-    )
+    di.bindValuesProvider<{ database: { host: string; port: number } }>({ database: { host: 'localhost', port: 5432 } })
 
     await di.init()
 

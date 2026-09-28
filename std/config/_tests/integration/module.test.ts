@@ -1,4 +1,4 @@
-import { $i, CaffeineIoC, Injectable, Keys, Scopes, token, type NamedToken } from '@caffeinejs/di'
+import { $i, CaffeineIoC, Injectable, Scopes, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
@@ -56,7 +56,8 @@ describe('ConfigModule', () => {
 
     expect(container.has(kConfig)).toBe(false)
     expect(container.get(ConfigStore)).toBe(store)
-    expect(container.has(Keys.kValuesProvider)).toBe(true)
+    // The live object, not a snapshot: it is what lets $i.value follow a reload.
+    expect(container.values).toBe(store.live)
   })
 
   // The values provider is read when a consumer is built, so a transient built after a reload sees the new value.
@@ -82,6 +83,32 @@ describe('ConfigModule', () => {
     await store.reload()
 
     expect(container.get(Client).host).toBe('moved')
+  })
+
+  // A selected leaf is fixed when the consumer is built; a selected node is the live node itself.
+  it('hands $i.value a live node, which follows a reload without the consumer being rebuilt', async () => {
+    @Injectable([$i.value<AppConfig, AppConfig['http']>(c => c.http)])
+    class Client {
+      constructor(readonly http: AppConfig['http']) {}
+    }
+
+    const { source, state } = remote(data)
+    const store = await loadConfig<AppConfig>(
+      { schema, key: kConfig, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
+      { start: false },
+    )
+    const container = new CaffeineIoC({ decorators: false })
+    container.addModules(ConfigModule(store))
+    container.bind(Client, t => t.toSelf())
+    await container.init()
+
+    const client = container.get(Client)
+
+    state.data = { ...data, http: { host: 'moved', port: '1' } }
+    await store.reload()
+
+    expect(container.get(Client)).toBe(client)
+    expect(client.http.host).toBe('moved')
   })
 
   it('reloads the live sources when the container refreshes the configuration label', async () => {
@@ -198,6 +225,8 @@ describe('ConfigModule', () => {
 
     expect(container.get(kConfig).http.host).toBe('refreshed')
     expect(container.get(kDB).db.url).toBe('postgres://b')
+    // The second module finds values already bound and leaves them alone, as it would an application's own.
+    expect(container.values).toBe(appStore.live)
   })
 
   it('closes the store when the container is disposed', async () => {
