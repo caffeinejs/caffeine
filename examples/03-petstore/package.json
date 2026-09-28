@@ -1,5 +1,6 @@
 {
   "name": "@caffeinejs/example-petstore",
+  "description": "Pet store application with HTML, OpenAPI, authentication, and PostgreSQL",
   "private": true,
   "type": "module",
   "scripts": {

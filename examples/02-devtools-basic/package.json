@@ -1,5 +1,6 @@
 {
   "name": "@caffeinejs/example-devtools-basic",
+  "description": "Task API with Caffeine Devtools attached to a running HTTP application",
   "private": true,
   "type": "module",
   "scripts": {
