@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
 import { ErrBrewPathParam } from '../errors.js'
-import { joinURL } from '../url.js'
+import { fillPath, joinURL } from '../url.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
 
@@ -263,6 +263,18 @@ describe('brewer against an application in process', () => {
 })
 
 describe('fillPath', () => {
+  it('finds the parameter before a long malformed constraint', () => {
+    const started = performance.now()
+    expect(fillPath('/:id' + '('.repeat(100_000) + '\nx', { id: 'a/b' })).toBe('/a%2Fb')
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it('preserves constrained and optional parameters', () => {
+    expect(fillPath('/:id(^\\d+$)', { id: 42 })).toBe('/42')
+    expect(fillPath('/pets/:id?', {})).toBe('/pets')
+    expect(fillPath('/assets/*', { '*': 'a/b' })).toBe('/assets/a/b')
+  })
+
   describe('given a path parameter with no value', () => {
     it('should say which one, and where', async () => {
       const client = brewer<typeof app>(origin)

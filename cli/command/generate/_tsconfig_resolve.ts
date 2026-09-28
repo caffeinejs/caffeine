@@ -72,7 +72,12 @@ export async function buildAliasResolver(tsconfigPath: string): Promise<AliasRes
           spec.length >= entry.prefix.length + entry.suffix.length
         ) {
           const captured = spec.slice(entry.prefix.length, spec.length - entry.suffix.length)
-          return normalizeResolvedPath(resolve(baseAbs, entry.target.replace('*', captured)))
+          return normalizeResolvedPath(
+            resolve(
+              baseAbs,
+              entry.target.replaceAll('*', () => captured),
+            ),
+          )
         }
       }
       return undefined

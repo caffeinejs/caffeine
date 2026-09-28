@@ -1,6 +1,6 @@
 import { createReadStream, existsSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { extname, join } from 'node:path'
+import { extname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MIME: Record<string, string> = {
@@ -24,6 +24,12 @@ export function serveStatic(req: IncomingMessage, res: ServerResponse): boolean 
   }
 
   let fsPath = join(UI_DIST, url === '/' ? 'index.html' : url)
+
+  if (!fsPath.startsWith(UI_DIST + sep)) {
+    res.writeHead(404)
+    res.end('Not found')
+    return true
+  }
 
   if (!existsSync(fsPath)) {
     fsPath = join(UI_DIST, 'index.html')

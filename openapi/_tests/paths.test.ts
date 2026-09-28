@@ -3,6 +3,22 @@ import { describe, expect, it } from 'vitest'
 import { joinPaths, routeURL, templateParameters, translatePath } from '../generate/paths.js'
 
 describe('translatePath', () => {
+  it('keeps grouped and escaped constraints with their parameter', () => {
+    expect(translatePath('/pets/:id(^a(b|c)\\(d\\)$)?')).toEqual({
+      templates: ['/pets', '/pets/{id}'],
+      parameters: [{ name: 'id', pattern: 'a(b|c)\\(d\\)' }],
+    })
+  })
+
+  it('does not rescan unclosed constraints for every parameter', () => {
+    const path = '/' + ':id(('.repeat(20_000)
+    const started = performance.now()
+    const result = translatePath(path)
+    expect(result.parameters).toHaveLength(20_000)
+    expect(result.templates).toEqual(['/' + '{id}(('.repeat(20_000)])
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
   it('leaves a static path alone', () => {
     expect(translatePath('/pets')).toEqual({ templates: ['/pets'], parameters: [] })
   })
@@ -51,6 +67,16 @@ describe('translatePath', () => {
 })
 
 describe('templateParameters', () => {
+  it('stops scanning when many opening braces have no closing brace', () => {
+    const started = performance.now()
+    expect(templateParameters('/{id}/' + '{'.repeat(100_000))).toEqual(['id'])
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  it('preserves nonempty names and ignores empty placeholders', () => {
+    expect(templateParameters('/{}/{a{b}/{id}')).toEqual(['a{b', 'id'])
+  })
+
   it('reads the names a template references, in order', () => {
     expect(templateParameters('/users/{userId}/orders/{orderId}')).toEqual(['userId', 'orderId'])
   })

@@ -8,7 +8,8 @@ export type Duration = number | string
  */
 export const DURATION_PATTERN = '^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$'
 
-const re = /(\d+(?:\.\d+)?)(ms|s|m|h|d)/g
+// Consume digit runs even when no unit follows, rather than retrying at every digit.
+const re = /\d+(?:\.\d+)?/g
 
 export function parseDuration(value: Duration): number {
   if (typeof value === 'number') {
@@ -19,16 +20,13 @@ export function parseDuration(value: Duration): number {
   let match: RegExpExecArray | null
 
   while ((match = re.exec(value)) !== null) {
-    const n = parseFloat(match[1])
-    switch (match[2]) {
-      case 'ms':
-        total += n / 1000
-        break
+    const n = parseFloat(match[0])
+    switch (value[re.lastIndex]) {
       case 's':
         total += n
         break
       case 'm':
-        total += n * 60
+        total += value[re.lastIndex + 1] === 's' ? n / 1000 : n * 60
         break
       case 'h':
         total += n * 3600
@@ -36,6 +34,13 @@ export function parseDuration(value: Duration): number {
       case 'd':
         total += n * 86400
         break
+      default: {
+        // A later decimal can still form a duration: `1.2.3s` contains `2.3s`.
+        const dot = match[0].indexOf('.')
+        if (dot !== -1) {
+          re.lastIndex = match.index + dot + 1
+        }
+      }
     }
   }
 

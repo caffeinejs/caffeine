@@ -48,6 +48,18 @@ describe('parseDuration', () => {
   })
 
   describe('edge cases', () => {
+    it('keeps reading duration fragments inside malformed strings', () => {
+      expect(parseDuration('1.2.3s')).toBe(2.3)
+      expect(parseDuration('junk -2h, .5m and 1.s')).toBe(7500)
+      expect(parseDuration('1.2x3ms')).toBe(0.003)
+    })
+
+    it('skips long unitless numbers without retrying at every digit', () => {
+      const started = performance.now()
+      expect(parseDuration('9'.repeat(100_000) + 'x2s')).toBe(2)
+      expect(performance.now() - started).toBeLessThan(1000)
+    })
+
     it('"0s" → 0', () => {
       expect(parseDuration('0s')).toBe(0)
     })

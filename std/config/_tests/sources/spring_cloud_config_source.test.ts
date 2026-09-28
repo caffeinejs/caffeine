@@ -47,6 +47,19 @@ afterEach(() => {
 })
 
 describe('SpringCloudConfigSource', () => {
+  it('trims only trailing slashes, including a long run', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => body })
+    vi.stubGlobal('fetch', fetch)
+
+    const started = performance.now()
+    await source({ baseURLs: ['http://localhost:8888/config' + '/'.repeat(100_000)] }).load(context())
+    await source({ baseURLs: ['http://localhost:8888/' + '/'.repeat(100_000) + 'config'] }).load(context())
+
+    expect(fetch.mock.calls[0][0]).toBe('http://localhost:8888/config/caffeine/default')
+    expect(fetch.mock.calls[1][0]).toBe('http://localhost:8888/' + '/'.repeat(100_000) + 'config/caffeine/default')
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
+
   it('turns the property sources into layers, the one listed first winning', async () => {
     vi.stubGlobal('fetch', respond([{ ok: true, body }]))
 
