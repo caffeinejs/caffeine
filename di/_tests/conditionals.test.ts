@@ -916,6 +916,31 @@ describe('Conditionals', function () {
       )
     })
 
+    // Left to init(), a null key or an empty variable name would be decided without complaint, and a test that is not
+    // a function would fail as a bare TypeError.
+    it.each([
+      ['present', () => $cond.present(null as never), ErrMissingInjectionKey],
+      ['missing', () => $cond.missing(undefined as never), ErrMissingInjectionKey],
+      ['config', () => $cond.config(42 as never), ErrInvalidBinding],
+      ['env', () => $cond.env(''), ErrInvalidBinding],
+      ['when', () => $cond.when('true' as never), ErrInvalidBinding],
+    ])('should reject a bad argument to %s when the condition is built', function (name, build, type) {
+      expect(build).toThrow(type)
+      expect(build).toThrow(new RegExp(`^Cannot build an? ${name} condition: `))
+    })
+
+    it('should report what a callback threw when it is not an error', function () {
+      const di = new CaffeineIoC({ decorators: false })
+
+      expect(() =>
+        di.bind(Target, t =>
+          t.toSelf().conditional(() => {
+            throw 'no container here'
+          }),
+        ),
+      ).toThrow(/the callback threw "no container here"/)
+    })
+
     it('should take a condition built with $cond as well as a callback', async function () {
       @Injectable()
       @Conditional($cond.when(() => true))
