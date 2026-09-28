@@ -47,7 +47,7 @@ called, the instance is already resolved.
 
 - Scope must be singleton or refresh. Transient and request scopes are not allowed.
 - Always eager — instantiated during `init()` regardless of lazy configuration.
-- Property injection (`@InjectMember`) is not supported.
+- Property injection (`@Inject` on fields) is not supported.
 
 ```ts
 // Fluent API
