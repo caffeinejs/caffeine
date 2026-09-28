@@ -70,14 +70,18 @@ jobs:
       - name: Type Check
         run: npm run test:typecheck
 
-      - name: CLI Tests
-        run: npm test -w @caffeinejs/cli
+      - name: CLI Tests & Coverage
+        # Run from the repository root so LCOV paths include the cli/ prefix.
+        run: bun test ./cli --coverage --coverage-reporter=lcov --coverage-dir=cli/coverage
 
       - name: Memory Leak Test
         run: npm run test:memory
 
       - name: Test & Coverage
-        run: npm run test:coverage
+        run: |
+          npm run test:coverage
+          # Bun also covers temporary config fixtures; retain only the CLI source records.
+          awk '/^SF:/ { keep = /^SF:cli\// } keep' cli/coverage/lcov.info >> coverage/lcov.info
 
       - name: Coverage Summary
         run: node tools/coverage-summary.mjs

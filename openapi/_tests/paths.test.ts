@@ -3,6 +3,13 @@ import { describe, expect, it } from 'vitest'
 import { joinPaths, routeURL, templateParameters, translatePath } from '../generate/paths.js'
 
 describe('translatePath', () => {
+  it('preserves an unmatched closing parenthesis before a constrained parameter', () => {
+    expect(translatePath('/pets/)/:id(^\\d+$)')).toEqual({
+      templates: ['/pets/)/{id}'],
+      parameters: [{ name: 'id', pattern: '\\d+' }],
+    })
+  })
+
   it('keeps grouped and escaped constraints with their parameter', () => {
     expect(translatePath('/pets/:id(^a(b|c)\\(d\\)$)?')).toEqual({
       templates: ['/pets', '/pets/{id}'],
