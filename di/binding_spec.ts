@@ -605,7 +605,8 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Marks this binding as internal.
+   * Marks this binding as internal, for tools to read. Nothing else reads it: an internal binding is registered,
+   * resolved, snapshotted and overridden like any other.
    *
    * @internal
    */

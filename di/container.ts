@@ -77,6 +77,9 @@ interface HeldBinding {
 export class CaffeineIoC implements Container {
   private readonly modules: Array<Module | ModuleFn>
   private readonly declared: Declaration[] = []
+  // The declarations the constructor made, first in `declared`: the container's own bindings. A snapshot leaves them
+  // out, since the container it is restored into makes its own.
+  private readonly ownDeclarations: number
   private readonly overriders: ContainerOverride[] = []
   private readonly registry = new Map<InjectionToken, Binding>()
   private readonly bindings = new Map<InjectionToken | Identifier, Binding[]>()
@@ -160,6 +163,8 @@ export class CaffeineIoC implements Container {
       this.requestScopeManager = requestScopeManager
       this.bind(Keys.kRequestScopeManager, t => t.toValue(requestScopeManager).byPassPostProcessors().internal())
     }
+
+    this.ownDeclarations = this.declared.length
   }
 
   get [Symbol.toStringTag]() {
@@ -851,17 +856,16 @@ export class CaffeineIoC implements Container {
   /**
    * Captures what the container was told to hold: the bindings declared with {@link bind}, {@link rebind} and
    * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, and the values bound with
-   * {@link bindConfig}. Internal bindings are left out: every container binds its own.
+   * {@link bindConfig}. The container's own bindings (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out:
+   * every container binds its own.
    *
    * Restored with {@link restore}, it gives the same bindings whether it was taken before or after {@link init}.
    * For testing purposes.
    */
   snapshot(): Snapshot {
     const declarations: Declaration[] = []
-    for (const { key, binding, rebind } of this.declared) {
-      if (!binding.internal) {
-        declarations.push({ key, binding: copyBinding(binding), rebind })
-      }
+    for (const { key, binding, rebind } of this.declared.slice(this.ownDeclarations)) {
+      declarations.push({ key, binding: copyBinding(binding), rebind })
     }
 
     return new Snapshot({

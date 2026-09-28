@@ -363,6 +363,6 @@ di.get(Logger) // ConsoleLogger
 internal()
 ```
 
-Marks the binding as internal. Internal bindings are excluded from
-`getBindings()`, `getBindingsBy()`, and `getBindingsByLabel()` results when
-called from outside the container's own resolution logic.
+Marks the binding as internal, for tools to read. Nothing else reads it: an
+internal binding is registered, resolved, snapshotted and overridden like any
+other.

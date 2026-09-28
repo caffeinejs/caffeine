@@ -50,7 +50,7 @@ describe('ContainerSnapshot', function () {
       expect(testDi.get(kDb)).toBe('db-url')
     })
 
-    it('excludes internal bindings from snapshot', async function () {
+    it("leaves out the container's own bindings", async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(kDb, t => t.toValue('db-url'))
       await di.init()
@@ -58,6 +58,16 @@ describe('ContainerSnapshot', function () {
       const snap = di.snapshot()
 
       expect(snap.size).toBe(1)
+    })
+
+    it('carries a binding marked internal', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kDb, t => t.toValue('db-url').internal())
+
+      const testDi = newContainerFromSnapshot(di.snapshot())
+      await testDi.init()
+
+      expect(testDi.get(kDb)).toBe('db-url')
     })
 
     it('class bindings are re-compiled by new container', async function () {

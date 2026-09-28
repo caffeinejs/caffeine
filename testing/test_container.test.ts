@@ -845,12 +845,50 @@ describe('TestContainer', function () {
       expect(di.has(kHandDep)).toBe(false)
       expect(di.has(DecoratedDep)).toBe(false)
     })
+  })
 
-    it('keeps the container its internal bindings when it focuses', async function () {
-      const di = new TestContainer(source()).focus(DecoratedDep).build()
+  // `internal()` only marks a binding for tools: every filter reaches a marked binding as it reaches any other.
+  describe('a binding marked internal', function () {
+    const kLeaf = token<string>(Symbol('tc-internal-leaf'))
+    const kMarked = token<string>(Symbol('tc-internal-marked'))
+    const kRoot = token<string>(Symbol('tc-internal-root'))
+
+    function source(): CaffeineIoC {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kLeaf, t => t.toValue('leaf'))
+      di.bind(kMarked, t => t.toFunction((leaf: string) => `marked:${leaf}`, [kLeaf]).internal())
+      di.bind(kRoot, t => t.toFunction((marked: string) => `root:${marked}`, [kMarked]))
+      return di
+    }
+
+    it('keeps what a focused root reaches through it', async function () {
+      const di = new TestContainer(source()).focus(kRoot).build()
+      await di.init()
+
+      expect(di.get(kRoot)).toBe('root:marked:leaf')
+    })
+
+    it("is dropped when no focused root reaches it, as the container's own bindings are", async function () {
+      const di = new TestContainer(source()).focus(kLeaf).build()
       await di.compile()
 
-      expect(di.has(Keys.kRefresher)).toBe(true)
+      expect(di.has(kMarked)).toBe(false)
+      expect(di.has(Keys.kRefresher)).toBe(false)
+    })
+
+    it('is skipped', async function () {
+      const di = new TestContainer(source()).skip(kMarked).build()
+
+      await expect(di.assertResolvable()).rejects.toThrow(ErrUnresolvableDependencies)
+      expect(di.has(kMarked)).toBe(false)
+    })
+
+    it('is pruned with the isolated binding that alone needs it', async function () {
+      const di = new TestContainer(source()).isolateWithMock(kRoot, false, 'mock').build()
+      await di.compile()
+
+      expect(di.has(kMarked)).toBe(false)
+      expect(di.has(kLeaf)).toBe(false)
     })
   })
 

@@ -307,12 +307,11 @@ export class TestContainer {
   }
 
   /**
-   * Filters and replaces the bindings of the container once every one is registered. The container's own internal
-   * bindings are left alone.
+   * Filters and replaces the bindings of the container once every one is registered.
    */
   #apply(ops: OverrideOps): void {
     const all = [...ops.entries()]
-    let entries: [InjectionToken, Binding][] = all.filter(([, b]) => !b.internal)
+    let entries: [InjectionToken, Binding][] = all
     const keep = (predicate: (key: InjectionToken, binding: Binding) => boolean): void => {
       entries = entries.filter(([k, b]) => predicate(k, b))
     }
@@ -337,8 +336,8 @@ export class TestContainer {
     }
 
     const kept = new Set(entries.map(([k]) => k))
-    for (const [key, binding] of all) {
-      if (!binding.internal && !kept.has(key)) {
+    for (const [key] of all) {
+      if (!kept.has(key)) {
         ops.unbind(key)
       }
     }

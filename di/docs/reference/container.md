@@ -479,8 +479,9 @@ snapshot(): Snapshot
 Captures what the container was told to hold, as a `Snapshot`: the bindings
 declared with `bind()`, `rebind()` and `aspect()`, its modules, its profiles,
 whether it registers decorated bindings, and the values bound with
-`bindConfig()`. Internal bindings are left out: every container binds its own.
-Does not include instance state.
+`bindConfig()`. The container's own bindings (`Keys.kRefresher`,
+`Keys.kRequestScopeManager`) are left out: every container binds its own. Does
+not include instance state.
 
 It is not the registry. A container restored from it registers the decorated
 bindings, runs the modules and decides profiles and conditions itself, so a
