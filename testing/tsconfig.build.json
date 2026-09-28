@@ -17,6 +17,7 @@
       "path": "../http/tsconfig.build.json"
     }
   ],
+  "files": ["tls/_testdata/localhost.json"],
   "exclude": [
     "dist",
     "node_modules",
