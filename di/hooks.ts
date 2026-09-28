@@ -6,13 +6,17 @@ import { InjectionToken } from './key.js'
  * Represents a set of hooks that can be used to listen to events within a {@link Container} instance.
  */
 interface Hooks {
-  onSetup: { key: InjectionToken; binding: Binding }
+  /** A decorated class or `@Provides` was wired by `autoWire()`, whether it registers now or waits for `compile()`. */
+  onDecoratedBindingWired: { key: InjectionToken; binding: Binding }
 
+  /** A binding held back until `compile()` was registered there. One registered where it was made emits nothing. */
   onBindingRegistered: { key: InjectionToken; binding: Binding }
 
+  /**
+   * A binding held back until `compile()` was left out: none of its profiles is active, a condition failed, or it is
+   * a `@Provides` whose `@Configuration` class was left out.
+   */
   onBindingNotRegistered: { key: InjectionToken; binding: Binding }
-
-  onSetupComplete: {}
 
   onModuleRegistered: { name: string; index: number }
 

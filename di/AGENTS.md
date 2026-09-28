@@ -4,9 +4,12 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Bindings and keys
 
-- A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
-  must never see its own binding, or a default written as `.conditional(ctx => !ctx.container.has(key))` removes
-  itself.
+- A binding carrying conditions, or none of whose profiles is active yet, is held until `compile()` and registers
+  only if admitted there, however it was made. A condition must never see its own binding, or a default written as
+  `.conditional(ctx => !ctx.container.has(key))` removes itself.
+- `autoWire()` only emits `onDecoratedBindingWired` and calls `registerOrHold(key, binding, 'wire')` for each
+  `decoratedBindings()` entry. Decide profiles, conditions and `@Configuration` linkage in the stack, never in
+  `autoWire()`.
 - `token<T>(...)` brands an injection key only. Never use it for a label, tag, metadata key, resolver name or plain
   `Map` lookup.
 - `T` must name what the key resolves to: `token()`, `token<any>`, `token<unknown>`, `token<object>` and a class

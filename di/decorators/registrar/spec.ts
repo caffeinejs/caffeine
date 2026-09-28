@@ -69,22 +69,6 @@ export class DecoratedBindingConfig {
     return this.#tags
   }
 
-  get getConditionals(): Conditional[] | undefined {
-    return this.#conditionals
-  }
-
-  get isConfiguration(): boolean | undefined {
-    return this.#configuration
-  }
-
-  get getKeysProvided(): InjectionToken[] | undefined {
-    return this.#keysProvided
-  }
-
-  get getSource(): { ctor: Ctor; method: string | symbol } | undefined {
-    return this.#source
-  }
-
   profiles(profiles: string | string[]): this {
     this.#profiles ??= new Set()
 

@@ -14,10 +14,9 @@ container.hooks.on('onBindingInitialized', ({ key, instance }) => {
   - [off](#off)
   - [emit](#emit)
 - [Events](#events)
-  - [onSetup](#onsetup)
+  - [onDecoratedBindingWired](#ondecoratedbindingwired)
   - [onBindingRegistered](#onbindingregistered)
   - [onBindingNotRegistered](#onbindingnotregistered)
-  - [onSetupComplete](#onsetupcomplete)
   - [onModuleRegistered](#onmoduleregistered)
   - [onModuleRegistrationFailed](#onmoduleregistrationfailed)
   - [onBindingInitialized](#onbindinginitialized)
@@ -39,8 +38,8 @@ chaining. Throws if the same listener function is registered twice for the
 same event.
 
 ```ts
-container.hooks.on('onSetupComplete', () => {
-  console.log('Container ready')
+container.hooks.on('onDisposed', () => {
+  console.log('Container disposed')
 })
 ```
 
@@ -73,50 +72,52 @@ and module implementations.
 
 ## Events
 
-### onSetup
+### onDecoratedBindingWired
 
-Fired for each binding as the container processes it during startup. Fires
-before the binding is accepted or rejected.
+Fired by `autoWire()` for each decorated class and `@Provides` method, before
+the container registers the binding or holds it back for its profiles or
+conditions. It is the only event `autoWire()` emits.
+
+`autoWire()` runs in the constructor unless `decorators` is `false`. To observe
+it, attach the listener to a container created without decorators, then call
+`autoWire()`:
 
 ```ts
-container.hooks.on('onSetup', ({ key, binding }) => {
+const di = new CaffeineIoC({ decorators: false })
+
+di.hooks.on('onDecoratedBindingWired', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
+  // binding: Binding
 })
+
+di.autoWire()
 ```
 
 ### onBindingRegistered
 
-Fired when a binding passes all conditions (profiles, conditionals) and is
-accepted into the container.
+Fired during `compile()` / `init()` when a binding held back until then is
+registered: one with conditions, one none of whose profiles was active when it
+was made, or a `@Provides` waiting on its `@Configuration` class. A binding
+registered where it was made — by `bind()`, a module or `autoWire()` — emits
+nothing.
 
 ```ts
 container.hooks.on('onBindingRegistered', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
+  // binding: Binding
 })
 ```
 
 ### onBindingNotRegistered
 
-Fired when a binding is evaluated but skipped — for example, because its
-`@Profile` is not active or its `@ConditionalOn` predicate returned `false`.
+Fired during `compile()` / `init()` when a binding held back until then is left
+out: none of its profiles is active, a `@ConditionalOn` predicate returned
+`false`, or it is a `@Provides` whose `@Configuration` class was left out.
 
 ```ts
 container.hooks.on('onBindingNotRegistered', ({ key, binding }) => {
   // key: InjectionToken
-  // binding: BindingDecoratorConfig
-})
-```
-
-### onSetupComplete
-
-Fired once after all bindings have been processed and the container has
-finished its setup phase.
-
-```ts
-container.hooks.on('onSetupComplete', () => {
-  // no args
+  // binding: Binding
 })
 ```
 

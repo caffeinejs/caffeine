@@ -17,8 +17,10 @@ During construction:
 
 - Modules in `options.modules` are queued. They are not executed yet.
 - When `decorators: true` (the default), `autoWire()` is called automatically.
-  This scans the global decorator registry and registers every `@Injectable` and
-  `@Configuration` class that has been imported so far.
+  This scans the global decorator registry and hands every `@Injectable` and
+  `@Configuration` class imported so far, and their `@Provides` methods, to the
+  container. One with conditions, or none of whose profiles is active yet,
+  waits for init.
 - No instances are created.
 - The container is not usable for resolution yet.
 
@@ -37,8 +39,8 @@ During init, the container does all its heavy lifting:
 
 1. **Module graph** — collect reachable modules from `Options.modules` /
    `addModules()`, then run each module `fn` once.
-2. **Profile filtering** — bindings whose `@Profile` is not in the active set
-   are dropped.
+2. **Profile matching** — bindings held back because none of their profiles
+   was active are registered if one is active now, and left out otherwise.
 3. **Conditional evaluation** — `@ConditionalOn` predicates are evaluated;
    bindings that return `false` are dropped.
 4. **Scope validation** — the container checks that no binding violates the

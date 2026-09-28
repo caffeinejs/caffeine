@@ -527,6 +527,9 @@ export class BindingSpec<TValue, K = unknown> {
    * Restricts this binding to the given profiles. The binding is only active when
    * one of the given profiles is enabled in the container.
    *
+   * While none of them is active, the binding waits for `compile()`, as one with conditions does: `has()` does not see
+   * it, and a binding already registered under its key stays unless a profile added before then admits it.
+   *
    * @example
    * ```ts
    * container.bind(key, t => t.toClass(MockEmailService).profiles('test', 'development'))

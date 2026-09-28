@@ -342,6 +342,12 @@ one of them is enabled on the container.
 di.bind(MockEmailService, t => t.toSelf().profiles('test', 'development'))
 ```
 
+While none of its profiles is active, the binding waits for `compile()`, as one
+with conditions does. Until then it is not visible to `has()`, `entries()` or
+`size`, and it leaves a binding already registered under its key in place. It
+replaces that binding only if a profile added with `addProfiles()` before then
+admits it.
+
 ### extends
 
 ```ts

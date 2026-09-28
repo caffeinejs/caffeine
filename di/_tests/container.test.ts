@@ -609,7 +609,8 @@ describe('async singleton resolution timing (L-3)', function () {
       })
 
       it('should throw when a property injection dependency is missing', function () {
-        const di = new CaffeineIoC({ decorators: false })
+        // bind() inherits @Profile('arfr-checks'): with the profile off, the binding would wait for init().
+        const di = new CaffeineIoC({ decorators: false, profiles: ['arfr-checks'] })
         di.bind(ArfrSvcWithPropInjection, t => t.toSelf())
 
         let caught: ErrUnresolvableDependencies | undefined

@@ -141,6 +141,11 @@ Manual bindings use the same OR semantics as `@Profile`:
 di.bind(StubPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 ```
 
+A binding none of whose profiles is active yet waits for `init()`, like a
+decorated one: `has()` does not see it until then, and it leaves a binding
+already registered under its key in place unless one of its profiles is active
+by `init()`.
+
 ---
 
 ## `@Profile` vs `@ConditionalOn`

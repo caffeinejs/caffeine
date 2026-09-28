@@ -1,5 +1,5 @@
 import { Binding } from '../../binding.js'
-import { ErrInvalidDecorator } from '../../errors.js'
+import { ErrInvalidDecorator, ErrOrphanedBindingConfig } from '../../errors.js'
 import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
 import { InjectionToken } from '../../key.js'
@@ -160,6 +160,32 @@ export function addProvidedBindings<T>(key: InjectionToken<T>, config: Decorated
   notNil(config)
 
   ProvidedBindings.push([key, config])
+}
+
+/**
+ * Returns a fresh binding for every decorated class, then for every `@Provides` method of a configuration class.
+ *
+ * Classes come first: a `@Provides` binding waits on its configuration class when that class is held back, so the
+ * class must reach the container before it.
+ *
+ * @throws {@link ErrOrphanedBindingConfig} if a class carries binding decorators but was never made injectable
+ */
+export function decoratedBindings(): Array<[InjectionToken, Binding]> {
+  const out: Array<[InjectionToken, Binding]> = []
+
+  for (const [key, config] of Bindings) {
+    if (!Injectables.has(key)) {
+      throw new ErrOrphanedBindingConfig(key)
+    }
+
+    out.push([key, config.binding()])
+  }
+
+  for (const [key, config] of ProvidedBindings) {
+    out.push([key, config.binding()])
+  }
+
+  return out
 }
 
 /**

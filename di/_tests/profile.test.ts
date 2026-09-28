@@ -169,9 +169,9 @@ describe('BindingSpec.profiles()', function () {
     expect(di.has(FluentProfFail)).toBe(false)
   })
 
-  it('should leave another binding answering to the key of a removed component', async function () {
-    // Removing the binding registered under a key takes out that binding alone: one named after the key still
-    // answers to it. The whole list under the key used to go with it.
+  it('should leave another binding answering to the key of a component left out', async function () {
+    // A binding left out for its profile takes nothing with it: one named after the key still answers to it. The
+    // whole list under the key used to go with it.
     interface Store {
       kind(): string
     }
@@ -221,6 +221,74 @@ describe('BindingSpec.profiles()', function () {
     await di.init()
 
     expect(di.has(FluentProfCond)).toBe(false)
+  })
+
+  it('should hold a component back until init() while none of its profiles is active', async function () {
+    class FluentProfLate {}
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(FluentProfLate, t => t.toSelf().profiles('fluent-late'))
+
+    expect(di.has(FluentProfLate)).toBe(false)
+
+    di.addProfiles('fluent-late')
+    await di.init()
+
+    expect(di.has(FluentProfLate)).toBe(true)
+  })
+
+  it('should leave the binding registered under its key when the profile of a later one never activates', async function () {
+    interface Store {
+      kind(): string
+    }
+
+    const kStore = token<Store>(Symbol('fluent-prof-kept-store'))
+
+    class DefaultStore implements Store {
+      kind(): string {
+        return 'default'
+      }
+    }
+
+    class DevStore implements Store {
+      kind(): string {
+        return 'dev'
+      }
+    }
+
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(kStore, t => t.toClass(DefaultStore))
+    di.bind(kStore, t => t.toClass(DevStore).profiles('fluent-never'))
+    await di.init()
+
+    expect(di.get(kStore).kind()).toBe('default')
+  })
+
+  it('should not collide primaries of one name whose profiles are not both active', async function () {
+    interface Mailer {
+      kind(): string
+    }
+
+    const kMailer = token<Mailer>(Symbol('fluent-prof-mailer'))
+
+    class DevMailer implements Mailer {
+      kind(): string {
+        return 'dev'
+      }
+    }
+
+    class SmtpMailer implements Mailer {
+      kind(): string {
+        return 'smtp'
+      }
+    }
+
+    const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-prod'] })
+    di.bind(DevMailer, t => t.toSelf().names(kMailer).primary().profiles('fluent-dev'))
+    di.bind(SmtpMailer, t => t.toSelf().names(kMailer).primary().profiles('fluent-prod'))
+    await di.init()
+
+    expect(di.get(kMailer).kind()).toBe('smtp')
   })
 })
 

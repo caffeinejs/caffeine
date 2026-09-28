@@ -6,6 +6,7 @@ import { ConditionalOn } from '../decorators/conditional_on.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
+import { Named } from '../decorators/named.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { $i } from '../injection.js'
@@ -282,6 +283,16 @@ describe('Conditionals', function () {
         expect(di.get(Hasher)).toBeInstanceOf(DecoratedHasher)
       })
 
+      it('should let a default yield to a decorated implementation whose profile is added later', async function () {
+        // What an application does: autoWire() runs in the constructor, and the profiles come from its configuration.
+        const di = new CaffeineIoC()
+        bindDefault(di)
+        di.addProfiles('conditional-held-back-decorated')
+        await di.init()
+
+        expect(di.get(Hasher)).toBeInstanceOf(DecoratedHasher)
+      })
+
       it('should not be visible before init()', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.bind(ScryptHasher, t => t.toSelf().conditional(() => true))
@@ -390,6 +401,72 @@ describe('Conditionals', function () {
       expect(di.has(PassingConf)).toBeTruthy()
       expect(di.has(kPassingProvide)).toBeTruthy()
       expect(di.get(kPassingProvide)).toEqual('value')
+    })
+
+    it('should decide a conditional @Provides before a decorated default declared ahead of its class', async function () {
+      interface Cache {
+        kind(): string
+      }
+
+      const kCache = token<Cache>(Symbol('cascade-first-cache'))
+
+      // Declared first, so held back first: only deciding configuration first lets it see the @Provides below.
+      @Injectable()
+      @Named(kCache)
+      @Profile('cascade-first')
+      @ConditionalOn(ctx => !ctx.container.has(kCache))
+      class InMemoryCache implements Cache {
+        kind(): string {
+          return 'in-memory'
+        }
+      }
+
+      @Configuration()
+      @Profile('cascade-first')
+      class RedisConf {
+        @Provides(kCache)
+        @ConditionalOn(() => true)
+        cache(): Cache {
+          return { kind: () => 'redis' }
+        }
+      }
+      void RedisConf
+
+      const di = new CaffeineIoC({ profiles: ['cascade-first'] })
+      await di.init()
+
+      expect(di.has(InMemoryCache)).toBe(false)
+      expect(di.get(kCache).kind()).toBe('redis')
+    })
+
+    it('should keep the @Provides of a passing class when a failing class provides the same key', async function () {
+      const kSame = token<string>(Symbol('cascade-same-key'))
+
+      @Configuration()
+      @Profile('cascade-same-key')
+      @ConditionalOn(() => false)
+      class FailingSameKeyConf {
+        @Provides(kSame)
+        failing() {
+          return 'failing'
+        }
+      }
+
+      @Configuration()
+      @Profile('cascade-same-key')
+      class PassingSameKeyConf {
+        @Provides(kSame)
+        passing() {
+          return 'passing'
+        }
+      }
+      void PassingSameKeyConf
+
+      const di = new CaffeineIoC({ profiles: ['cascade-same-key'] })
+      await di.init()
+
+      expect(di.has(FailingSameKeyConf)).toBe(false)
+      expect(di.get(kSame)).toBe('passing')
     })
   })
 

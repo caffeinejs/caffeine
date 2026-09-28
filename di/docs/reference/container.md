@@ -207,9 +207,12 @@ none were bound, and ask `hasValues` first when that is a possibility.
 autoWire(): void
 ```
 
-Picks up all classes decorated with `@Injectable` that are registered in the
-global decorator registry and adds them to this container. Called automatically
-in the constructor when `decorators: true`.
+Picks up every class decorated with `@Injectable` and every `@Provides` method
+in the global decorator registry, and hands each to this container as `bind()`
+hands a binding made by hand: one with conditions, or none of whose profiles is
+active yet, waits for `compile()`. Emits
+[`onDecoratedBindingWired`](./hooks.md#ondecoratedbindingwired) for each.
+Called automatically in the constructor when `decorators: true`.
 
 Call it manually if you decorated classes are imported after the container was
 created.
@@ -220,8 +223,9 @@ created.
 addProfiles(profile: string, ...profiles: string[]): void
 ```
 
-Adds profiles to the container's active set. Profile matching runs during
-`compile()` / `init()`. Throws if the container has already been compiled.
+Adds profiles to the container's active set. A binding none of whose profiles
+was active when it was made waits for `compile()` / `init()`, so a profile added
+before then still admits it. Throws if the container has already been compiled.
 
 ```ts
 const di = new CaffeineIoC()

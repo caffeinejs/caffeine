@@ -243,65 +243,79 @@ describe('Hooks', function () {
   })
 
   describe('Container Lifetime Listener', function () {
-    const spy = vi.fn()
+    const kTest1 = token<string>(Symbol('test1'))
+    const kTest2 = token<string>(Symbol('test2'))
 
-    // 1
     @Injectable()
     class Dep {}
 
-    // 1
     class Incomplete {
       onDestroy() {}
     }
 
-    // 1
     class IncompleteWithProp {
       @Inject(token<string>(''))
       message!: string
     }
 
-    // 2
     @Injectable()
     @ConditionalOn(() => false)
     class NotValid {}
 
-    // 3 - belongs to profile 'test'; invisible to the no-profile container below
+    // Belongs to profile 'test', which the container below does not activate.
     @Injectable()
     @Profile('test')
     class OtherProfile {}
 
-    // 4
     @Configuration()
     class Conf {
-      // 5
-      @Provides(token<string>(Symbol('test1')))
+      @Provides(kTest1)
       @ConditionalOn(() => false)
       test1() {
         return 'test1'
       }
 
-      // 6
-      @Provides(token<string>(Symbol('test2')))
+      @Provides(kTest2)
       test2() {
         return 'test2'
       }
     }
 
-    it('should call inspector methods on container specific registration steps', async function () {
+    it('should announce every decorated binding at autoWire() and report the held ones at init()', async function () {
+      const wired: unknown[] = []
+      const registered: unknown[] = []
+      const notRegistered: unknown[] = []
+      const disposed = vi.fn()
+
       const di = new CaffeineIoC({ decorators: false })
 
-      di.hooks.on('onSetup', a => spy())
-      di.hooks.on('onBindingRegistered', a => spy())
-      di.hooks.on('onBindingNotRegistered', a => spy())
-      di.hooks.on('onSetupComplete', a => spy())
-      di.hooks.on('onDisposed', a => spy())
+      di.hooks.on('onDecoratedBindingWired', ({ key }) => wired.push(key))
+      di.hooks.on('onBindingRegistered', ({ key }) => registered.push(key))
+      di.hooks.on('onBindingNotRegistered', ({ key }) => notRegistered.push(key))
+      di.hooks.on('onDisposed', disposed)
 
       di.autoWire()
+
+      // autoWire() only announces: whether a binding registers is decided by the container.
+      expect(wired).toEqual(expect.arrayContaining([Dep, NotValid, OtherProfile, Conf, kTest1, kTest2]))
+      expect(wired).not.toContain(Incomplete)
+      expect(wired).not.toContain(IncompleteWithProp)
+      expect(registered).toHaveLength(0)
+      expect(notRegistered).toHaveLength(0)
+
       await di.init()
+
+      // Only the bindings held back until init() are reported. The ones registered at once are not.
+      expect(notRegistered).toEqual(expect.arrayContaining([NotValid, OtherProfile, kTest1]))
+      expect(notRegistered).not.toContain(kTest2)
+      expect(registered).not.toContain(Dep)
+      expect(registered).not.toContain(Conf)
+      expect(registered).not.toContain(kTest2)
+      expect(di.has(kTest2)).toBe(true)
 
       await di.dispose()
 
-      expect(spy).toHaveBeenCalledTimes(12)
+      expect(disposed).toHaveBeenCalledOnce()
     })
   })
 
@@ -314,13 +328,13 @@ describe('Hooks', function () {
 
       const hooks = new HookListener()
 
-      hooks.on('onSetupComplete', spy1)
-      hooks.on('onSetupComplete', spy2)
-      hooks.once('onSetupComplete', spy3)
+      hooks.on('onDecoratedBindingWired', spy1)
+      hooks.on('onDecoratedBindingWired', spy2)
+      hooks.once('onDecoratedBindingWired', spy3)
       hooks.on('onDisposed', spy4)
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
+      hooks.emit('onDecoratedBindingWired')
+      hooks.emit('onDecoratedBindingWired')
 
       expect(spy1).toHaveBeenCalledTimes(2)
       expect(spy2).toHaveBeenCalledTimes(2)
@@ -332,11 +346,11 @@ describe('Hooks', function () {
       spy3.mockReset()
       spy4.mockReset()
 
-      hooks.off('onSetupComplete', spy1)
+      hooks.off('onDecoratedBindingWired', spy1)
       hooks.off('onDisposed', spy2)
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
+      hooks.emit('onDecoratedBindingWired')
+      hooks.emit('onDecoratedBindingWired')
       hooks.emit('onDisposed')
 
       expect(spy1).not.toHaveBeenCalled()
@@ -349,10 +363,10 @@ describe('Hooks', function () {
       spy3.mockReset()
       spy4.mockReset()
 
-      hooks.removeAllListeners('onSetupComplete')
+      hooks.removeAllListeners('onDecoratedBindingWired')
 
-      hooks.emit('onSetupComplete')
-      hooks.emit('onSetupComplete')
+      hooks.emit('onDecoratedBindingWired')
+      hooks.emit('onDecoratedBindingWired')
       hooks.emit('onDisposed')
       hooks.emit('onDisposed')
 
@@ -366,10 +380,10 @@ describe('Hooks', function () {
       const spy = vi.fn()
       const hooks = new HookListener()
 
-      hooks.on('onSetupComplete', spy)
+      hooks.on('onDecoratedBindingWired', spy)
 
-      expect(() => hooks.on('onSetupComplete', spy)).toThrow()
-      expect(() => hooks.once('onSetupComplete', spy)).toThrow()
+      expect(() => hooks.on('onDecoratedBindingWired', spy)).toThrow()
+      expect(() => hooks.once('onDecoratedBindingWired', spy)).toThrow()
     })
 
     describe('once() duplicate check', function () {
@@ -377,39 +391,39 @@ describe('Hooks', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
+        listener.once('onDecoratedBindingWired', handler)
 
-        expect(() => listener.once('onSetup', handler)).toThrow()
+        expect(() => listener.once('onDecoratedBindingWired', handler)).toThrow()
       })
 
       it('should throw when on() is followed by once() with the same listener', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.on('onSetup', handler)
+        listener.on('onDecoratedBindingWired', handler)
 
-        expect(() => listener.once('onSetup', handler)).toThrow()
+        expect(() => listener.once('onDecoratedBindingWired', handler)).toThrow()
       })
 
       it('should throw when once() is followed by on() with the same listener', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
+        listener.once('onDecoratedBindingWired', handler)
 
-        expect(() => listener.on('onSetup', handler)).toThrow()
+        expect(() => listener.on('onDecoratedBindingWired', handler)).toThrow()
       })
 
       it('should allow re-registering the same listener after it has fired', function () {
         const listener = new HookListener()
         const handler = vi.fn()
 
-        listener.once('onSetup', handler)
-        listener.emit('onSetup', {} as any)
+        listener.once('onDecoratedBindingWired', handler)
+        listener.emit('onDecoratedBindingWired', {} as any)
 
-        expect(() => listener.once('onSetup', handler)).not.toThrow()
+        expect(() => listener.once('onDecoratedBindingWired', handler)).not.toThrow()
 
-        listener.emit('onSetup', {} as any)
+        listener.emit('onDecoratedBindingWired', {} as any)
 
         expect(handler).toHaveBeenCalledTimes(2)
       })
