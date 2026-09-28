@@ -1,17 +1,23 @@
+import type { IncomingMessage } from 'node:http'
 import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
 import cors from 'cors'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
-import { describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect } from 'vitest'
 
 import {
   type Context,
   Controller,
+  ErrHTTPForbidden,
   ErrPipelineSealed,
   Get,
+  type HTTPSetupContext,
   type Middleware,
+  type MiddlewareFn,
+  type NodeMiddleware,
+  type WebApplication,
   type FastifyMiddlewareHook,
   type Next,
   Router,
@@ -29,6 +35,7 @@ class MiddlewareController {
 void [MiddlewareController]
 
 const kTagger = token<Tagger>(Symbol('tagger'))
+const stringKey = token<Tagger>('mounted-tagger')
 
 class Tag {
   constructor(readonly value: string) {}
@@ -323,4 +330,318 @@ describe('middleware pipeline', () => {
     expect(order).toEqual(['hinted', 'second'])
     await app.close()
   })
+})
+
+describe('application.use with a path', () => {
+  let app: WebApplication | undefined
+
+  afterEach(async () => {
+    await app?.close()
+    app = undefined
+  })
+
+  function newPathApp() {
+    app = newApp(container => {
+      container.bind(Tagger, t => t.toClass(Tagger, [Tag]))
+      container.bind(Tag, t => t.toValue(new Tag('injected')))
+      container.bind(kTagger, t => t.toValue(new Tagger(new Tag('symbol'))))
+      container.bind(stringKey, t => t.toValue(new Tagger(new Tag('string'))))
+    })
+    return app
+  }
+
+  for (const hook of ['onRequest', 'preHandler'] as const) {
+    it.each(['function', 'node', 'instance', 'class', 'symbol', 'string', 'factory'] as const)(
+      `mounts a %s target with the ${hook} option without affecting sibling paths`,
+      async kind => {
+        const server = newPathApp()
+        const order: string[] = []
+        let factoryCalls = 0
+        server.mount(
+          new Router()
+            .get('/api/orders', () => {
+              order.push('handler')
+              return { ok: true }
+            })
+            .get('/apiary/orders', () => ({ public: true })),
+        )
+        const fn: MiddlewareFn = (ctx, next) => {
+          ctx.header('x-tag', 'function')
+          next()
+        }
+        const node: NodeMiddleware = (_req, res, next) => {
+          res.setHeader('x-tag', 'node')
+          next()
+        }
+        const factory = ({ container }: HTTPSetupContext): Middleware => {
+          factoryCalls++
+          return new Tagger(container.get(Tag))
+        }
+        // Keep each target's type intact so the check project verifies the public overloads too.
+        switch (kind) {
+          case 'function':
+            server.use('/api', fn, { hook })
+            break
+          case 'node':
+            server.use('/api', node, { hook })
+            break
+          case 'instance':
+            server.use('/api', new Tagger(new Tag('instance')), { hook })
+            break
+          case 'class':
+            server.use('/api', Tagger, { hook })
+            break
+          case 'symbol':
+            server.use('/api', kTagger, { hook })
+            break
+          case 'string':
+            server.use('/api', stringKey, { hook })
+            break
+          case 'factory':
+            server.use('/api', factory, { hook })
+            break
+        }
+        server.use((_ctx, next) => {
+          order.push('onRequest')
+          next()
+        })
+        server.use(
+          '/api',
+          (ctx, next) => {
+            order.push(`${hook}:${ctx.req.url}`)
+            next()
+          },
+          { hook },
+        )
+        await server.bootstrap()
+
+        for (let request = 0; request < 2; request++) {
+          order.length = 0
+          const response = await server.fetch('/api/orders')
+          expect(response.status).toBe(200)
+          expect(await response.json()).toEqual({ ok: true })
+          expect(response.headers.get('x-tag')).toBe(
+            {
+              function: 'function',
+              node: 'node',
+              instance: 'instance',
+              class: 'injected',
+              symbol: 'symbol',
+              string: 'string',
+              factory: 'injected',
+            }[kind],
+          )
+          expect(order).toEqual(['onRequest', `${hook}:/orders`, 'handler'])
+        }
+        const sibling = await server.fetch('/apiary/orders')
+        expect(sibling.status).toBe(200)
+        expect(await sibling.json()).toEqual({ public: true })
+        expect(sibling.headers.get('x-tag')).toBeNull()
+        expect(factoryCalls).toBe(kind === 'factory' ? 1 : 0)
+      },
+    )
+  }
+
+  it.each(['/api', '/api/'])(
+    'matches %s at segment boundaries, preserving queries and the handler URL',
+    async prefix => {
+      const server = newPathApp()
+      const seen: string[] = []
+      server.mount(new Router().get('/', ctx => ({ url: ctx.req.url })).get('/*', ctx => ({ url: ctx.req.url })))
+      server.use(prefix, (ctx, next) => {
+        seen.push(ctx.req.url)
+        next()
+      })
+      await server.bootstrap()
+
+      for (const [url, mounted] of [
+        ['/api', '/'],
+        ['/api/', '/'],
+        ['/api?next=/outside', '/?next=/outside'],
+        ['/api/orders/42?expand=items', '/orders/42?expand=items'],
+        ['/api/hello%20world%2Fitem?q=a%2Fb', '/hello%20world%2Fitem?q=a%2Fb'],
+        ['/apiary', undefined],
+        ['/api-v2/orders', undefined],
+        ['/outside?next=/api', undefined],
+        ['/', undefined],
+      ] as const) {
+        seen.length = 0
+        const response = await server.fetch(url)
+        expect(response.status, url).toBe(200)
+        expect(await response.json(), url).toEqual({ url })
+        expect(seen, url).toEqual(mounted === undefined ? [] : [mounted])
+      }
+    },
+  )
+
+  it('runs overlapping array prefixes once and composes mounts against the original URL', async () => {
+    const server = newPathApp()
+    const seen: string[] = []
+    const node: NodeMiddleware = (req, _res, next) => {
+      const originalURL = (req as IncomingMessage & { originalUrl: string }).originalUrl
+      seen.push(`node:${req.url}:${originalURL}`)
+      next()
+    }
+    server.use(['/api', '/api/orders', '/internal'] as const, node)
+    server.use('/api/orders/:id', (ctx, next) => {
+      seen.push(`parameter:${ctx.req.url}`)
+      next()
+    })
+    server.use('*', (ctx, next) => {
+      seen.push(`global:${ctx.req.url}`)
+      next()
+    })
+    server.mount(
+      new Router().get('/*', ctx => {
+        seen.push(`handler:${ctx.req.url}`)
+        return { ok: true }
+      }),
+    )
+    await server.bootstrap()
+
+    for (const [url, expected] of [
+      [
+        '/api/orders/a%2Fb/items?q=1',
+        ['node:/orders/a%2Fb/items?q=1:/api/orders/a%2Fb/items?q=1', 'parameter:/items?q=1'],
+      ],
+      ['/internal/jobs', ['node:/jobs:/internal/jobs']],
+      ['/internalized/jobs', []],
+    ] as const) {
+      seen.length = 0
+      const response = await server.fetch(url)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true })
+      expect(seen).toEqual([...expected, `global:${url}`, `handler:${url}`])
+    }
+  })
+
+  it('keeps state and mounted URLs isolated while concurrent middleware waits to call next', async () => {
+    const server = newPathApp()
+    type State = { tenant: string }
+    const barrier = Promise.withResolvers<void>()
+    let arrivals = 0
+    const tenancy: MiddlewareFn<State> = async (ctx, next) => {
+      const tenant = ctx.req.header('x-tenant') ?? ''
+      ctx.state.set('tenant', tenant)
+      if (++arrivals === 2) {
+        barrier.resolve()
+      }
+      await barrier.promise
+      ctx.header('x-mounted-url', ctx.req.url)
+      next()
+    }
+    server.use('/tenants/:tenant', tenancy)
+    server.mount(
+      new Router().vars<State>().get('/tenants/:tenant/orders', ctx => ({
+        tenant: ctx.state.get('tenant'),
+        url: ctx.req.url,
+      })),
+    )
+    await server.bootstrap()
+
+    const tenants = ['acme', 'globex']
+    const responses = await Promise.all(
+      tenants.map(tenant =>
+        server.fetch(`/tenants/${tenant}/orders?tenant=${tenant}`, { headers: { 'x-tenant': tenant } }),
+      ),
+    )
+    for (const [index, response] of responses.entries()) {
+      const tenant = tenants[index]
+      expect(response.status).toBe(200)
+      expect(response.headers.get('x-mounted-url')).toBe(`/orders?tenant=${tenant}`)
+      expect(await response.json()).toEqual({ tenant, url: `/tenants/${tenant}/orders?tenant=${tenant}` })
+    }
+    expect(arrivals).toBe(2)
+  })
+
+  it.each(['next', 'throw', 'reject'] as const)(
+    'propagates a mounted middleware failure via %s and keeps subsequent requests usable',
+    async mode => {
+      const server = newPathApp()
+      const reached: string[] = []
+      const error = new ErrHTTPForbidden('Access denied')
+      const fail: MiddlewareFn = (_ctx, next) => {
+        if (mode === 'next') {
+          next(error)
+          return
+        }
+        if (mode === 'throw') {
+          throw error
+        }
+        return Promise.reject(error)
+      }
+      server.use('/private', fail)
+      server.use('/private', (_ctx, next) => {
+        reached.push('same hook')
+        next()
+      })
+      server.use(
+        '/private',
+        (_ctx, next) => {
+          reached.push('later hook')
+          next()
+        },
+        { hook: 'preHandler' },
+      )
+      server.mount(
+        new Router()
+          .get('/private/data', () => {
+            reached.push('private handler')
+            return { secret: true }
+          })
+          .get('/public', () => ({ public: true })),
+      )
+      await server.bootstrap()
+
+      const denied = await server.fetch('/private/data')
+      expect(denied.status).toBe(403)
+      expect(await denied.json()).toMatchObject({ message: 'Access denied' })
+      expect(reached).toEqual([])
+      const allowed = await server.fetch('/public')
+      expect(allowed.status).toBe(200)
+      expect(await allowed.json()).toEqual({ public: true })
+      expect(reached).toEqual([])
+    },
+  )
+
+  it.each(['context', 'node'] as const)(
+    'stops same-hook middleware, later hooks and the handler after a mounted %s response',
+    async kind => {
+      const server = newPathApp()
+      const reached: string[] = []
+      if (kind === 'context') {
+        server.use('/private', (ctx, _next) => {
+          ctx.status(401).body('blocked')
+        })
+      } else {
+        const deny: NodeMiddleware = (_req, res, _next) => {
+          res.statusCode = 401
+          res.end('blocked')
+        }
+        server.use('/private', deny)
+      }
+      for (const hook of ['onRequest', 'preHandler'] as const) {
+        server.use(
+          '/private',
+          (_ctx, next) => {
+            reached.push(hook)
+            next()
+          },
+          { hook },
+        )
+      }
+      server.mount(
+        new Router().get('/private/data', () => {
+          reached.push('handler')
+          return { secret: true }
+        }),
+      )
+      await server.bootstrap()
+
+      const response = await server.fetch('/private/data')
+      expect(response.status).toBe(401)
+      expect(await response.text()).toBe('blocked')
+      expect(reached).toEqual([])
+    },
+  )
 })
