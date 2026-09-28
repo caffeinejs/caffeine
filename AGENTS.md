@@ -28,7 +28,6 @@ Keep code names, paths, and error text exact. Do not simplify those.
 
 - Conventional Commits: `<type>(<optional scope>): <description>`. Types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`.
 - Description under 72 characters, imperative mood, no trailing period.
-- One concern per pull request. Changed behaviour ships with its tests.
 - `make check` green before review; `make lint-markdown` when every changed file is `*.md`.
 - Never commit or push unless asked.
 

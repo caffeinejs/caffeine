@@ -14,6 +14,6 @@ The contributor is the author of record. Read the diff before submitting it, sta
 
 ## Not accepted
 
-- Output submitted without the contributor reading it
-- Secrets in the diff
-- Material the contributor cannot license under MIT
+- Output submitted without the contributor reading it.
+- Secrets in the diff.
+- Material the contributor cannot license under MIT.
