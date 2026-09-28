@@ -2,7 +2,7 @@ import { unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
@@ -551,6 +551,10 @@ describe('application name and profiles', () => {
 
   class EuOnly {}
 
+  @Injectable()
+  @Profile('opt')
+  class OptOnly {}
+
   it('defaults name to empty after bootstrap()', async () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.bootstrap()
@@ -609,6 +613,15 @@ describe('application name and profiles', () => {
     await app.bootstrap()
 
     expect(container.has(EuOnly)).toBe(true)
+  })
+
+  // Options rather than a container: the application builds the container from them, decorators: false included.
+  it('builds its container from the options it is given', async () => {
+    const app = createApplication({ container: { decorators: false, profiles: ['opt'] } })
+    await app.bootstrap()
+
+    expect(app.container.profiles.has('opt')).toBe(true)
+    expect(app.container.has(OptOnly)).toBe(false)
   })
 
   it('run() resolves to the application name and active profiles', async () => {

@@ -131,6 +131,19 @@ describe('registration', function () {
 
       expect(di.get(kKey)).toBe('replaced')
     })
+
+    it('keeps the conditional bindings of other keys', async function () {
+      const kKey = token<string>(Symbol('reg-rebind-key'))
+      const kOther = token<string>(Symbol('reg-rebind-other'))
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kOther, t => t.toValue('other').conditional(() => true))
+      di.rebind(kKey, t => t.toValue('replaced'))
+      await di.init()
+
+      expect(di.get(kOther)).toBe('other')
+      expect(di.get(kKey)).toBe('replaced')
+    })
   })
 
   describe('decorators: false', function () {
@@ -220,6 +233,18 @@ describe('registration', function () {
       await expect(di.assertResolvable()).rejects.toThrow(ErrUnresolvableDependencies)
       expect(di.ready).toBe(false)
     })
+
+    // It registers every binding, so one declared afterwards would miss its conditions, the overrides and the
+    // hooks, and init() would go on without it.
+    it('refuses a binding declared after it has run', async function () {
+      const kKey = token<string>(Symbol('reg-after-assert'))
+
+      const di = new CaffeineIoC({ decorators: false })
+      await di.assertResolvable()
+
+      expect(() => di.bind(kKey, t => t.toValue('late').conditional(() => true))).toThrow(ErrInvalidContainerState)
+      expect(() => di.rebind(kKey, t => t.toValue('late'))).toThrow(ErrInvalidContainerState)
+    })
   })
 
   describe('overrides()', function () {
@@ -271,6 +296,23 @@ describe('registration', function () {
       await di.init()
 
       expect(di.get(kKey)).toBe('added')
+    })
+
+    it('reads the registered bindings', async function () {
+      const kKey = token<string>(Symbol('reg-override-read'))
+      let keys: unknown[] = []
+      let count = 0
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kKey, t => t.toValue('value'))
+      di.overrides(ops => {
+        keys = [...ops.entries()].map(([key]) => key)
+        count = ops.getBindings(kKey).length
+      })
+      await di.init()
+
+      expect(keys).toContain(kKey)
+      expect(count).toBe(1)
     })
 
     it('runs in the order they were added', async function () {

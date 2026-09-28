@@ -323,41 +323,13 @@ export class TestContainer {
     }
 
     if (this.#focusRoots != null) {
-      const kept = new Set<InjectionToken>(this.#focusRoots)
-      for (const k of allTransitiveDeps(entries, this.#focusRoots)) {
-        kept.add(k)
-      }
-      keep(k => kept.has(k))
+      const focused = focusedKeys(entries, this.#focusRoots)
+      keep(k => focused.has(k))
     }
 
     if (this.#isolations.size > 0) {
-      const isolatedKeys = new Set(this.#isolations.keys())
-      const exclusiveKeys = new Set<InjectionToken>()
-      const allDepKeys = new Set<InjectionToken>()
-
-      for (const [key, { pruneSharedDependencies: pruneShared }] of this.#isolations) {
-        if (pruneShared) {
-          allDepKeys.add(key)
-        } else {
-          exclusiveKeys.add(key)
-        }
-      }
-
-      const pruned = new Set<InjectionToken>()
-
-      if (exclusiveKeys.size > 0) {
-        for (const k of exclusiveDeps(entries, exclusiveKeys)) {
-          pruned.add(k)
-        }
-      }
-
-      if (allDepKeys.size > 0) {
-        for (const k of allTransitiveDeps(entries, allDepKeys)) {
-          pruned.add(k)
-        }
-      }
-
-      keep(k => !pruned.has(k) && !isolatedKeys.has(k))
+      const pruned = this.#prunedByIsolation(entries)
+      keep(k => !pruned.has(k))
     }
 
     if (this.#skips.size > 0) {
@@ -379,6 +351,51 @@ export class TestContainer {
       ops.rebind(key, configure)
     }
   }
+
+  /**
+   * The isolated keys, and the dependencies each isolation prunes: only its exclusive ones, or all of them when it
+   * prunes shared dependencies too.
+   */
+  #prunedByIsolation(entries: [InjectionToken, Binding][]): Set<InjectionToken> {
+    const exclusiveKeys = new Set<InjectionToken>()
+    const allDepKeys = new Set<InjectionToken>()
+
+    for (const [key, { pruneSharedDependencies }] of this.#isolations) {
+      if (pruneSharedDependencies) {
+        allDepKeys.add(key)
+      } else {
+        exclusiveKeys.add(key)
+      }
+    }
+
+    const pruned = new Set<InjectionToken>(this.#isolations.keys())
+
+    if (exclusiveKeys.size > 0) {
+      for (const k of exclusiveDeps(entries, exclusiveKeys)) {
+        pruned.add(k)
+      }
+    }
+
+    if (allDepKeys.size > 0) {
+      for (const k of allTransitiveDeps(entries, allDepKeys)) {
+        pruned.add(k)
+      }
+    }
+
+    return pruned
+  }
+}
+
+/**
+ * The roots and everything they depend on.
+ */
+function focusedKeys(entries: [InjectionToken, Binding][], roots: Set<InjectionToken>): Set<InjectionToken> {
+  const focused = new Set<InjectionToken>(roots)
+  for (const k of allTransitiveDeps(entries, roots)) {
+    focused.add(k)
+  }
+
+  return focused
 }
 
 /**

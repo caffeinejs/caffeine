@@ -177,6 +177,10 @@ profiles or conditions leave only one of them. Use `rebind()` to replace a bindi
 
 Decorators are not read: a decorated class bound here gets only what its binding declares.
 
+Once the container has registered its bindings — `compile()`, `init()` or `assertResolvable()`
+has run — `bind()`, `rebind()` and `aspect()` throw `ErrInvalidContainerState`: a binding
+declared then would miss its conditions, the overrides and the hooks.
+
 ### rebind
 
 ```ts
@@ -454,7 +458,8 @@ dependencies exist, and there are no missing keys. Throws
 `ErrUnresolvableDependencies` listing every violation, not only the first.
 
 It registers the bindings first, as `compile()` does, without compiling them, so
-call it before `init()`: `init()` fails on the first missing dependency.
+call it before `init()`: `init()` fails on the first missing dependency. Once it
+has run, the container takes no more bindings.
 
 ```ts
 await di.assertResolvable()

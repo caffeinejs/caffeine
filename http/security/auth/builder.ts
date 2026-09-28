@@ -735,7 +735,12 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
 function wrapLazily<T>(container: FeatureConfigureKit['container'], key: InjectionToken<T>): Provider<T> {
   let provider: Provider<T> | undefined
 
-  return { get: () => (provider ??= container.wrap(key)).get() }
+  return {
+    get: () => {
+      provider ??= container.wrap(key)
+      return provider.get()
+    },
+  }
 }
 
 /** Stands in for an omitted options callback: the scheme runs on its own defaults plus whatever is configured. */

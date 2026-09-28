@@ -114,8 +114,8 @@ a component listed among its own dependencies.
 **Code:** `ERR_INVALID_CONTAINER_STATE`
 
 Thrown when an operation is called in the wrong phase — for example, calling
-`di.get()` before `await di.init()`, `bind()` after the container has compiled,
-or `addProfiles()`, `addModules()`, `restore()` or `overrides()` once it has
+`di.get()` before `await di.init()`, `bind()` after the container has registered
+its bindings (`compile()`, `init()` or `assertResolvable()` has run), or `addProfiles()`, `addModules()`, `restore()` or `overrides()` once it has
 started compiling.
 
 **Fix:** Declare everything before `init()`, and resolve only after it.

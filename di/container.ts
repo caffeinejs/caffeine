@@ -56,7 +56,6 @@ for (const [name, middleware, options] of builtInStages) {
 const DEFAULT_OPTIONS: Partial<Options> = {
   defaultScopeID: Scopes.SINGLETON,
   lazy: false,
-  decorators: true,
   checks: {
     circularReferences: true,
     scopes: 'compatible-scopes-only',
@@ -102,6 +101,7 @@ export class CaffeineIoC implements Container {
   private _ready = false
   private _initializing = false
   private _compiling = false
+  private _registered = false
   private _compiled = false
   private _registration: Promise<void> | undefined
   private _compilation: Promise<void> | undefined
@@ -674,7 +674,8 @@ export class CaffeineIoC implements Container {
    * @param key - The key to bind the type to.
    * @param configure - Describes the binding on the {@link BindingSpec} it receives.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    *
    * @example
    * ```ts
@@ -686,7 +687,7 @@ export class CaffeineIoC implements Container {
   bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
-    this.assertNotCompiled('Cannot bind')
+    this.assertNotRegistered('Cannot bind')
 
     const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, newBinding<TokenValue<K>>())
 
@@ -735,12 +736,13 @@ export class CaffeineIoC implements Container {
    * @param key - The key to rebind.
    * @param configure - Describes the replacement binding on the {@link BindingSpec} it receives.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    */
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this {
     notNil(key)
 
-    this.assertNotCompiled('Cannot rebind')
+    this.assertNotRegistered('Cannot rebind')
 
     const spec = new BindingSpec<TokenValue<K>, K>(key as InjectionToken<TokenValue<K>>, newBinding<TokenValue<K>>())
 
@@ -756,7 +758,8 @@ export class CaffeineIoC implements Container {
    *
    * @param cls - The aspect class to register. Must implement {@link MethodAspect}.
    *
-   * @throws {@link ErrInvalidContainerState} if the container has already been compiled
+   * @throws {@link ErrInvalidContainerState} if the container has already registered its bindings: {@link compile},
+   * {@link init} or {@link assertResolvable} has run
    *
    * @example
    * ```ts
@@ -772,7 +775,7 @@ export class CaffeineIoC implements Container {
   aspect<C extends Ctor<MethodAspect<any>>>(cls: C, configure: (spec: AspectSpec<InstanceType<C>, C>) => void): this {
     notNil(cls)
 
-    this.assertNotCompiled('Cannot bind aspect')
+    this.assertNotRegistered('Cannot bind aspect')
 
     const binding = newBinding<InstanceType<C>>({ type: cls, labels: [kAspectLabel] })
     const spec = new AspectSpec<InstanceType<C>, C>(cls as unknown as InjectionToken<InstanceType<C>>, binding)
@@ -1082,6 +1085,7 @@ export class CaffeineIoC implements Container {
    * Asserts that all bindings are resolvable, reporting every missing dependency at once.
    *
    * Registers the bindings first, as {@link compile} does, without compiling them: call it before {@link init}.
+   * Once it has run, the container takes no more bindings.
    *
    * @throws {@link ErrUnresolvableDependencies} if any binding is not resolvable
    */
@@ -1159,24 +1163,7 @@ export class CaffeineIoC implements Container {
     }
 
     if (config.async) {
-      if (config.lazy) {
-        throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
-      }
-
-      const allowed =
-        config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
-      if (!allowed) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
-        )
-      }
-
-      if ((config.injectableProperties?.size ?? 0) > 0) {
-        throw new ErrInvalidBinding(
-          `Cannot configure async binding for key "${keyStr(key)}":` +
-            `async bindings cannot have injectable properties.`,
-        )
-      }
+      assertAsyncBinding(key, config)
     }
 
     // A copy, so that nothing done to the registered binding reaches the declared one a snapshot is taken from.
@@ -1186,19 +1173,8 @@ export class CaffeineIoC implements Container {
     }
 
     const scopeID = binding.scopeID ? binding.scopeID : this.scopeID
-    const ctor: Ctor | undefined =
-      (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
 
-    if (ctor !== undefined) {
-      // A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit
-      // hook set on the spec (or an @OnLifecycle callback) still wins.
-      if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
-        binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
-      }
-      if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
-        binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
-      }
-    }
+    adoptLifecycleHooks(key, binding)
 
     const scope = this.scopes.get(scopeID)
     if (scope === undefined && scopeID !== Scopes.TRANSIENT) {
@@ -1206,13 +1182,7 @@ export class CaffeineIoC implements Container {
     }
 
     binding.scopeID = scopeID
-
-    binding.lazy =
-      binding.lazy === undefined && this.lazy === undefined
-        ? (scope?.lazy ?? true)
-        : binding.lazy === undefined
-          ? this.lazy
-          : binding.lazy
+    binding.lazy = binding.lazy ?? this.lazy ?? scope?.lazy ?? true
 
     this.registry.set(key, binding)
     // Joins the bindings already answering to the key through a name or a base rather than replacing them, so the
@@ -1571,6 +1541,10 @@ export class CaffeineIoC implements Container {
       this.hooks.emit('onBindingNotRegistered', { key, binding })
     }
     this._dropped = []
+
+    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
+    // the overrides and the hooks, so there is none.
+    this._registered = true
   }
 
   /**
@@ -1753,9 +1727,9 @@ export class CaffeineIoC implements Container {
     }
   }
 
-  private assertNotCompiled(action: string): void {
-    if (this._compiled || this._ready) {
-      throw new ErrInvalidContainerState(`${action}: container has already been compiled`)
+  private assertNotRegistered(action: string): void {
+    if (this._registered || this._compiled || this._ready) {
+      throw new ErrInvalidContainerState(`${action}: container has already registered its bindings`)
     }
   }
 
@@ -1964,6 +1938,48 @@ function configurationOf(binding: Binding): InjectionToken | undefined {
 
 function isConfigurationClass(binding: Binding): boolean {
   return binding.configuration === true && binding.source === undefined
+}
+
+/**
+ * Refuses what an async binding cannot be: lazy, scoped other than singleton or refresh, or property injected.
+ */
+function assertAsyncBinding(key: InjectionToken, config: Binding): void {
+  if (config.lazy) {
+    throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
+  }
+
+  const allowed =
+    config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
+  if (!allowed) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
+    )
+  }
+
+  if ((config.injectableProperties?.size ?? 0) > 0) {
+    throw new ErrInvalidBinding(
+      `Cannot configure async binding for key "${keyStr(key)}":` + `async bindings cannot have injectable properties.`,
+    )
+  }
+}
+
+/**
+ * A class binding opts into container lifecycle by implementing OnBootstrap / OnDestroy. An explicit hook set on the
+ * spec (or an @OnLifecycle callback) still wins.
+ */
+function adoptLifecycleHooks<T>(key: InjectionToken<T>, binding: Binding<T>): void {
+  const ctor: Ctor | undefined =
+    (binding.type as Ctor | undefined) ?? (typeof key === 'function' ? (key as Ctor) : undefined)
+  if (ctor === undefined) {
+    return
+  }
+
+  if (binding.bootstrap === undefined && typeof ctor.prototype?.onBootstrap === 'function') {
+    binding.bootstrap = (instance: T) => (instance as OnBootstrap).onBootstrap()
+  }
+  if (binding.preDestroy === undefined && typeof ctor.prototype?.onDestroy === 'function') {
+    binding.preDestroy = (instance: T) => (instance as OnDestroy).onDestroy()
+  }
 }
 
 /**
