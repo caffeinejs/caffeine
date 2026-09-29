@@ -231,11 +231,11 @@ no placeholder. Only a `$` right before `{` is special, and doubling it writes i
 placeholder.
 
 A placeholder sees what the application will see: every source, those registered after the file included, but not
-the schema's defaults, which apply at validation. A value that is itself interpolated is interpolated first, and a
-loop is an error. A placeholder that loses the merge is never looked at, so a base file's `${env:DB_PASSWORD}`
-overridden by `app-dev.yaml` needs no `DB_PASSWORD`. What a placeholder brings in is text, taken as it is: it is
-never interpolated again, and a `$t` schema converts it as it converts the environment. A number or a boolean it
-reads becomes text; an object or a list is an error.
+the schema's defaults, which apply at validation. A value that is itself interpolated is interpolated first; a loop,
+or a chain of references more than 32 deep, is an error. A placeholder that loses the merge is never looked at, so
+a base file's `${env:DB_PASSWORD}` overridden by `app-dev.yaml` needs no `DB_PASSWORD`. What a placeholder brings
+in is text, taken as it is: it is never interpolated again, and a `$t` schema converts it as it converts the
+environment. A number or a boolean it reads becomes text; an object or a list is an error.
 
 A variable that is unset, or a path nothing sets, with no default fails the load, or rejects a reload, with an
 `ErrConfigValidation` whose issues name each value. Only file sources interpolate, and `{ interpolate: false }`

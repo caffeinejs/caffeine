@@ -214,6 +214,16 @@ describe('interpolation of a config value', () => {
     expect(merge([file(data)])).toMatchObject({ a: 'h2', b: 'h1' })
   })
 
+  // `length` belongs to the array that holds a list, not to the configuration.
+  it.each([['${config:servers.length}'], ['${config:servers.first}']])(
+    'reaches into a list by index only: %s',
+    text => {
+      const [issue] = issuesOf([file({ servers: ['h1', 'h2'], a: text })])
+
+      expect(issue).toMatchObject({ path: 'a', message: expect.stringContaining('is not set') })
+    },
+  )
+
   it('interpolates the strings inside a list', () => {
     expect(merge([file({ tags: ['${env:A}', 'b'] })], { A: 'a' }).tags).toEqual(['a', 'b'])
   })
@@ -324,6 +334,40 @@ describe('interpolation chains', () => {
       },
     ])
   })
+
+  /** `n` values in one chain: `a0` refers to `a1`, and so on, and the last refers to plain text. */
+  function chain(n: number): Record<string, string> {
+    const data: Record<string, string> = {}
+    for (let i = 0; i < n; i++) {
+      data[`a${i}`] = `\${config:a${i + 1}}`
+    }
+    data[`a${n}`] = 'end'
+    return data
+  }
+
+  it('follows a chain 32 values deep', () => {
+    expect(Object.values(merge([file(chain(32))]))).toEqual(Array.from({ length: 33 }, () => 'end'))
+  })
+
+  // The chain fails where it starts, and only there: each value it goes through is shallow enough on its own.
+  it('refuses a chain 33 values deep, at the value that starts it', () => {
+    expect(issuesOf([file(chain(33))])).toEqual([
+      {
+        path: 'a0',
+        message: 'cannot interpolate the value from "file:app.json": its references run more than 32 deep',
+        code: 'ERR_CONFIG_INTERPOLATION',
+      },
+    ])
+  })
+
+  // Unbounded, one reference per stack frame, a chain of a few thousand values overflows the stack. Bounded, every
+  // value more than 32 from the end fails as an issue.
+  it('fails a chain thousands of values long with issues, never by overflowing the stack', () => {
+    const issues = issuesOf([file(chain(3000))])
+
+    expect(issues).toHaveLength(2968)
+    expect(issues[0]).toMatchObject({ path: 'a0', message: expect.stringContaining('more than 32 deep') })
+  })
 })
 
 // Only what the application's own authors wrote is ever read as a placeholder. Text that arrives through one, or
@@ -366,6 +410,21 @@ describe('interpolation safety', () => {
 })
 
 describe('interpolation errors', () => {
+  // A source of your own can mark its layers without the check a file source runs as it reads. Its mistakes still
+  // arrive as issues, with the character and never the text.
+  it('reports a malformed placeholder from a source that never checked it', () => {
+    const custom: ConfigLayer = { name: 'custom', data: freezeDeep({ a: 'x${evn:S3CRET}' }), interpolate: true }
+
+    expect(issuesOf([custom])).toEqual([
+      {
+        path: 'a',
+        message:
+          'cannot interpolate the value from "custom": the placeholder at character 2 has a prefix other than "env" or "config"',
+        code: 'ERR_CONFIG_INTERPOLATION',
+      },
+    ])
+  })
+
   it('collects every value that cannot be interpolated', () => {
     const issues = issuesOf([file({ a: '${env:A}', b: '${env:B}', c: 'fine' })])
 

@@ -10,7 +10,10 @@ type Env = Readonly<Record<string, string | undefined>>
 /** The longest text a value may reach through its placeholders. */
 const MAX_LENGTH = 1_048_576
 
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+/** The most values one chain of references may pass through. Deeper, the recursion would outgrow the stack. */
+const MAX_DEPTH = 32
+
+const ENV_NAME = /^[A-Za-z_]\w*$/
 const NOT_IN_PATH = /[\s${]/
 
 interface Placeholder {
@@ -41,6 +44,8 @@ interface Failure {
   readonly template: Template
   readonly placeholder: string | undefined
   readonly reason: string
+  /** A chain that ran too deep, which says nothing of the values it went through: never remembered for them. */
+  readonly deep?: true
 }
 
 /**
@@ -142,11 +147,20 @@ class Interpolation {
       return { template, placeholder: undefined, reason: `its references loop: ${loop}` }
     }
 
+    // The chain fails where it started. A value it went through may be shallow enough when it is filled in on its
+    // own, so none of them remembers this failure.
+    if (this.#resolving.length === MAX_DEPTH) {
+      const reason = `its references run more than ${MAX_DEPTH} deep`
+      return { template: this.#resolving[0], placeholder: undefined, reason, deep: true }
+    }
+
     this.#resolving.push(template)
     const value = this.#interpolate(template)
     this.#resolving.pop()
 
-    this.#done.set(template, value)
+    if (typeof value === 'string' || value.deep !== true) {
+      this.#done.set(template, value)
+    }
     return value
   }
 
@@ -233,11 +247,7 @@ function parseTemplate(text: string): (string | Placeholder)[] | Malformed {
       break
     }
     literal += text.slice(i, dollar)
-
-    let end = dollar
-    while (text[end] === '$') {
-      end++
-    }
+    const end = skipDollars(text, dollar)
 
     // Only a run of `$` right before `{` is special: each `$$` is one `$`, and an odd one out opens a placeholder.
     if (text[end] !== '{') {
@@ -278,6 +288,15 @@ function parseTemplate(text: string): (string | Placeholder)[] | Malformed {
   }
 
   return segments
+}
+
+/** The index just past the run of `$` that starts at `from`. */
+function skipDollars(text: string, from: number): number {
+  let end = from
+  while (text[end] === '$') {
+    end++
+  }
+  return end
 }
 
 /** The placeholder `body` describes, or why it describes none. `body` is what lies between `${` and `}`. */
