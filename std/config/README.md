@@ -169,7 +169,7 @@ anything.
 
 | Source                    | Reads                           | Changes by                                                     |
 | ------------------------- | ------------------------------- | -------------------------------------------------------------- |
-| `EnvConfigSource`         | the environment                 | nothing; loaded once                                           |
+| `EnvConfigSource`         | the environment, `.env` files   | nothing; loaded once                                           |
 | `ArgsConfigSource`        | the command line, via `.args()` | nothing; loaded once                                           |
 | `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
 | `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
@@ -179,6 +179,9 @@ anything.
 `SHUTDOWN__DRAIN_DELAY` reaches `shutdown.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
 Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped, and
 so is a variable whose path another one uses as a parent, with a warning. On the command line that is an error.
+
+An acronym does not survive the folding: `CACHE_TTL` reaches `cacheTtl`, never `cacheTTL`. A config file reaches
+such a key by reading the variable, `TTL: '${env:CACHE_TTL}'`, and so does the command line, `--cache.TTL=5s`.
 
 `TAGS__0` and `TAGS__1` make a list: keys that are the indices 0 to n - 1 become an array, from any flat source.
 Any other numeric keys stay keys, so `MESSAGES__404` beside `MESSAGES__500` makes a record.
@@ -238,8 +241,9 @@ in is text, taken as it is: it is never interpolated again, and a `$t` schema co
 environment. A number or a boolean it reads becomes text; an object or a list is an error.
 
 A variable that is unset, or a path nothing sets, with no default fails the load, or rejects a reload, with an
-`ErrConfigValidation` whose issues name each value. Only file sources interpolate, and `{ interpolate: false }`
-reads a file as written; a source of your own opts in with `interpolate: true` on its layers.
+`ErrConfigValidation` whose issues name each value. File sources and the dotenv files of an `EnvConfigSource`
+interpolate, and `{ interpolate: false }`, or `dotenv: { interpolate: false }`, reads them as written; the
+environment's own values never are. A source of your own opts in with `interpolate: true` on its layers.
 
 A file that interpolates can read every environment variable, so whoever can edit it can read the environment. A
 value built from a secret is a secret, and so is one another source can steer: in
@@ -265,6 +269,54 @@ and picks its overlays. Every source is loaded once, profile or not. That read c
 
 A profile is a name, since a file source makes a file name of it: `.`, `..` and a name holding `/` or `\` are refused
 with `ERR_CONFIG_PROFILE`, wherever they were named.
+
+---
+
+## Dotenv files
+
+`EnvConfigSource` can load dotenv files before it reads the environment. It brings no parser of its own: the
+application hands it a loader, and `@caffeinejs/std/config/nodejs` has one built on `process.loadEnvFile`:
+
+```ts
+import { EnvConfigSource } from '@caffeinejs/std/config'
+import { loadEnvFiles } from '@caffeinejs/std/config/nodejs'
+
+new EnvConfigSource({ prefix: 'PETSTORE_', dotenv: { loader: loadEnvFiles, path: './config' } })
+```
+
+The loader is called once, when the source first loads, with every file the active profiles could name, the most
+specific first: with `dev` then `prod` active, `config/.env.prod`, `config/.env.dev`, then `config/.env`. `baseName`
+replaces `.env`. The first file to set a variable wins, and a variable already set wins over every file, so the
+environment the application was started with keeps the last word. `process.loadEnvFile` and dotenv both work this
+way when handed the list as it is:
+
+```ts
+const loader: DotenvLoader = files => {
+  dotenv.config({ path: files, quiet: true })
+}
+```
+
+A loader that overrides lets a file outrank the environment the application was started with. A file that is not
+there is the loader's to skip: `loadEnvFiles` skips it, and fails the load on one that is there and cannot be read.
+
+The loader writes into the environment the source reads: `process.env`, unless `env` names another. From then on,
+that is the process's environment for every later reader, child processes included. An environment source
+registered before this one has already read what it needed.
+
+What the files set is a layer of its own, below the environment's, and its placeholders are filled in as a config
+file's are: `${env:NAME}` reads `process.env`, the files' own variables included, and `${config:path}` the merged
+tree. The environment keeps the text as the files wrote it; only the configuration sees the filled-in value. A
+literal `${` is written `$${`. A loader that expands values itself reads a placeholder its own way, so it goes with
+`dotenv: { loader, path, interpolate: false }`. The environment's own values are never interpolated.
+
+The profiles are decided before anything loads, so a dotenv file cannot name them: a variable from the files that
+reaches `caffeine.profiles` fails the load with `ERR_CONFIG_PROFILE`. The files follow only the profiles named up
+front; the ones a config file declares for itself never select a dotenv file.
+
+A dotenv file is as trusted as the code. Whoever can write it sets any variable the process reads from then on, the
+runtime's own among them: `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off certificate checks, and `NODE_ENV=test` turns
+off the framework's signal handling. A loader that runs commands runs what the file says. Keep the files out of
+version control and out of images.
 
 ---
 
@@ -310,9 +362,9 @@ The store logs under `{ name: 'config' }`: the first load, every reload with the
 failing and recovering sources, and failing listeners. Values are never logged, only paths. The issues of an
 `ErrConfigValidation` from a `$t` schema name a path and what was expected there, never the value: `$t.JSON` and
 `$t.List` report text they cannot read without quoting it. An interpolation error names the placeholder, its file
-and its path, never what it read or its default. Two messages are not the store's own and may quote
-text: a config file that does not parse, where the parser says what it stopped at, and the issues of a Standard
-Schema, which its library writes.
+and its path, never what it read or its default. Three messages are not the store's own and may quote
+text: a config file that does not parse, where the parser says what it stopped at; the issues of a Standard
+Schema, which its library writes; and what a dotenv loader throws, which the failed load carries.
 
 It also publishes on `node:diagnostics_channel`, costing nothing while nobody subscribes. `load` and `reload` are
 tracing channels; `change` is a plain one. The names are in `CONFIG_CHANNELS`.
@@ -348,7 +400,7 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | `ERR_CONFIG_DUPLICATE_SOURCE` | two sources share a name                                               |
 | `ERR_CONFIG_KEY_CONFLICT`     | an argument or an expanded key sets a path another uses as a parent    |
 | `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
-| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
+| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`; a dotenv file names one |
 | `ERR_CONFIG_INTERPOLATION`    | a placeholder is malformed or misplaced, or cannot be filled in        |
 | `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |
 
@@ -367,3 +419,4 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | Profiles              | `profiles.ts`                                              |
 | Container integration | `integration/module.ts`                                    |
 | Sources               | `sources/`                                                 |
+| Node.js dotenv loader | `nodejs/`                                                  |

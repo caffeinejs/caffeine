@@ -35,7 +35,13 @@ export {
 } from './observe.js'
 export { activeProfiles, hostProfiles, PROFILES_KEY } from './profiles.js'
 export { ArgsConfigSource, type ArgsConfigSourceOptions } from './sources/args_source.js'
-export { EnvConfigSource, type EnvAccessor, type EnvConfigSourceOptions } from './sources/env_source.js'
+export {
+  EnvConfigSource,
+  type DotenvLoader,
+  type DotenvOptions,
+  type EnvAccessor,
+  type EnvConfigSourceOptions,
+} from './sources/env_source.js'
 export { FileConfigSource, type ConfigFileParser, type FileConfigSourceOptions } from './sources/file_source.js'
 export { InlineConfigSource } from './sources/inline_source.js'
 export { JSONConfigSource } from './sources/json_source.js'
