@@ -7,7 +7,7 @@
 
 ## Prerequisites
 
-- Node.js >= 20
+- Node.js ^22.19 or >= 24 (CI runs 24)
 - npm >= 10
 
 ## Setup
