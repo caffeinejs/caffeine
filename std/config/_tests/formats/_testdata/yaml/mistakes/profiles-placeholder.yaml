@@ -1,0 +1,3 @@
+# The profiles pick which files are read, before anything is interpolated.
+caffeine:
+  profiles: ${env:PROFILES}

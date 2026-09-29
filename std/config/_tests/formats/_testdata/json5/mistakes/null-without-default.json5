@@ -1,0 +1,2 @@
+// A placeholder that reads null needs a default.
+{ nothing: null, a: '${config:nothing}' }

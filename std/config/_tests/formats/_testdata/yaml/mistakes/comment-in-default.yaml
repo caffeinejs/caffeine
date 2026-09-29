@@ -1,0 +1,2 @@
+# Unquoted, ` #` opens a YAML comment, which cuts the placeholder short. Quote a default that holds one.
+greeting: ${env:GREETING:-hello #1 fan}

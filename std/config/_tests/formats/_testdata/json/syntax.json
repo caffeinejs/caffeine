@@ -1,0 +1,6 @@
+{
+  "escapeSequence": "${env:NAME}\n${env:NAME}",
+  "quotes": "say \"${env:NAME}\"",
+  "unicode": "\u0024{env:NAME}",
+  "windowsPath": "C:\\data\\${env:NAME}"
+}

@@ -1,0 +1,10 @@
+# One definition, reused. An alias copies it whole; a merge key copies it under local overrides. A config path in a
+# copy still names the original, because config paths are absolute.
+primary: &db
+  host: ${env:DB_HOST:-localhost}
+  port: 5432
+  url: postgres://${config:primary.host}:${config:primary.port}/app
+replica: *db
+reporting:
+  <<: *db
+  host: reporting.internal

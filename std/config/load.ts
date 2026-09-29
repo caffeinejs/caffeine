@@ -24,7 +24,8 @@ export interface LoadConfigOptions {
  *
  * @throws ErrConfig `ERR_CONFIG_DUPLICATE_SOURCE`, `ERR_CONFIG_SOURCE`, `ERR_CONFIG_SOURCE_TIMEOUT`, or a source's own
  *   `ErrConfig`, when a source cannot be registered or loaded.
- * @throws ErrConfigValidation when the merged configuration does not satisfy the schema.
+ * @throws ErrConfigValidation when a placeholder cannot be interpolated, or the merged configuration does not
+ *   satisfy the schema.
  */
 export async function loadConfig<T>(
   definition: ConfigDefinition<T>,

@@ -1,0 +1,22 @@
+# YAML's own ways to write a string, each holding placeholders. The tests set NAME to "n" and leave MISSING unset.
+quotedDefault: '${env:MISSING:-a: b # c}'
+apostrophe: "it's ${env:NAME}"
+escapeSequence: "${env:NAME}\n${env:NAME}"
+escapedQuoted: '$${env:NAME}'
+literal: |
+  Hi ${env:NAME}
+  Bye
+literalStrip: |-
+  Hi ${env:NAME}
+  Bye
+folded: >
+  Hi ${env:NAME}
+  and bye
+tagged: !!str ${env:NAME}
+flow: ['${env:NAME}', 'x-${env:NAME}']
+commented: ${env:NAME} # ${evn:BROKEN
+# ${evn:ALSO_BROKEN}
+tilde: ~
+empty:
+fromTilde: ${config:tilde:-d}
+fromEmpty: ${config:empty:-d}

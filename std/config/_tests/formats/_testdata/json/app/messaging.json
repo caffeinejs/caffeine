@@ -1,0 +1,3 @@
+{
+  "messaging": { "queue": "${config:caffeine.name}.events", "deadLetter": "${config:messaging.queue}.dlq" }
+}

@@ -1,0 +1,35 @@
+# A service's own configuration. Every value that differs between environments comes from the environment, with a
+# default that works on a laptop.
+caffeine:
+  name: ${env:SERVICE_NAME:-orders}
+
+server:
+  host: ${env:HOST:-0.0.0.0}
+  port: ${env:PORT:-8080}
+  shutdownDelay: ${env:SHUTDOWN_DELAY:-5s}
+
+db:
+  host: localhost
+  port: 5432
+  name: orders
+  user: ${env:DB_USER:-orders}
+  password: dev-password
+  # Built from the values above, whichever source ends up setting them.
+  url: 'postgres://${config:db.user}@${config:db.host}:${config:db.port}/${config:db.name}'
+  pool:
+    max: ${env:POOL_MAX:-10}
+    ssl: ${env:DB_SSL:-false}
+
+features:
+  search: 'search-${env:SEARCH_BACKEND:-local}'
+  allowedOrigins:
+    - https://${env:DOMAIN:-localhost}
+    - https://admin.${env:DOMAIN:-localhost}
+
+banner: |
+  ${config:caffeine.name} listening on ${config:server.host}:${config:server.port}
+  Events go to ${config:messaging.queue}
+
+templates:
+  # Text for another templating system: `$${` writes a literal `${`.
+  greeting: 'Hello $${user.name}'

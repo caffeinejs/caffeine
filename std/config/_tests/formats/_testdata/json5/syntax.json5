@@ -1,0 +1,17 @@
+// JSON5's own ways to write a string, each holding placeholders. The tests set NAME to "n". A comment is never
+// read, so a broken placeholder in one is never seen: ${evn:BROKEN
+{
+  apostrophe: "it's ${env:NAME}",
+  quotes: 'say "${env:NAME}"',
+  continued: 'Hi ${env:NAME} \
+and bye',
+  // JSON5 drops a backslash before any character, and decodes a Unicode escape, before interpolation sees the
+  // text: both of these are live placeholders. Only `$${` keeps one literal.
+  backslash: '\${env:NAME}',
+  unicode: '\u0024{env:NAME}',
+  /* ${evn:ALSO_BROKEN */
+  hex: 0x1f90,
+  fromHex: 'port ${config:hex}',
+  infinite: Infinity,
+  fromInfinite: '${config:infinite}',
+}

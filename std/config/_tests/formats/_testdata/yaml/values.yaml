@@ -1,0 +1,18 @@
+# The values every format writes the same way. The tests set NAME to "n" and leave MISSING unset.
+plain: ${env:NAME}
+spacedDefault: ${env:MISSING:-No Name}
+url: postgres://${env:NAME}:5432/app
+escaped: $${env:NAME}
+fromEscaped: ${config:escaped}
+'${key}': ${env:NAME}
+list:
+  - ${env:NAME}
+  - x-${env:NAME}
+nested:
+  deep: ${env:NAME}
+nothing: null
+fromNothing: ${config:nothing:-d}
+port: 8080
+fromNumber: port ${config:port}
+enabled: true
+fromBoolean: ${config:enabled}

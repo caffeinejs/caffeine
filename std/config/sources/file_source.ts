@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 
 import { ErrConfig, messageOf } from '../errors.js'
+import { checkInterpolation } from '../interpolation.js'
 import { activeProfiles, PROFILES_KEY } from '../profiles.js'
 import { readPath } from '../tree.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from '../types.js'
@@ -22,6 +23,14 @@ export interface FileConfigSourceOptions {
   watch?: boolean
   /** Defaults to `file:<path>`. */
   name?: string
+  /**
+   * Whether `${env:NAME}` and `${config:path}` in the file's strings are filled in. **Defaults to `true`.** Every
+   * `${` must then open a well-formed placeholder, or be written `$${`, or the load fails.
+   *
+   * A placeholder can read any environment variable. Turn this off for a file written by someone who should not
+   * read the environment, or for one that must be read as written.
+   */
+  interpolate?: boolean
 }
 
 /**
@@ -36,6 +45,9 @@ export interface FileConfigSourceOptions {
  *
  * The tree is taken literally, so a key holding a dot is one key. A flat format expands its keys in the parser:
  * `new FileConfigSource('./app.ini', text => expandKeys(ini.parse(text)))`.
+ *
+ * Its strings are interpolated unless `interpolate` is `false`: `"${env:NAME:-No Name} and ${config:team.nickname}"`
+ * reads an environment variable, with a default, and a value of the merged configuration, from any source.
  */
 export class FileConfigSource implements ConfigSource {
   readonly name: string
@@ -43,12 +55,14 @@ export class FileConfigSource implements ConfigSource {
   readonly #path: string
   readonly #parse: ConfigFileParser
   readonly #missingIsFine: boolean
+  readonly #interpolate: boolean
 
   constructor(path: string, parse: ConfigFileParser, options: FileConfigSourceOptions = {}) {
     this.name = options.name ?? `file:${path}`
     this.#path = path
     this.#parse = parse
     this.#missingIsFine = options.optional ?? true
+    this.#interpolate = options.interpolate ?? true
 
     if (options.watch === true) {
       this.watch = changed => watchFiles(path, changed)
@@ -57,15 +71,18 @@ export class FileConfigSource implements ConfigSource {
 
   /**
    * @throws ErrConfig `ERR_CONFIG_FILE_PARSE` when a file does not parse to an object, naming the file.
+   * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed, or `caffeine.profiles` holds `${`,
+   *   naming the file and the path.
    */
   async load(context: ConfigLoadContext): Promise<readonly ConfigLayer[]> {
     const base = await this.#read(this.#path, this.#missingIsFine)
 
     const profiles = context.profiles.length > 0 ? context.profiles : activeProfiles(readPath(base, PROFILES_KEY))
     const layers: ConfigLayer[] = []
+    const interpolate = this.#interpolate
 
     if (base !== undefined) {
-      layers.push({ name: `file:${this.#path}`, data: base as ConfigObject })
+      layers.push({ name: `file:${this.#path}`, data: base as ConfigObject, interpolate })
     }
 
     // No sibling depends on another, so they are read together and layered in profile order.
@@ -78,7 +95,7 @@ export class FileConfigSource implements ConfigSource {
 
     for (const { path, profile, parsed } of siblings) {
       if (parsed !== undefined) {
-        layers.push({ name: `file:${path}`, data: parsed as ConfigObject, profile })
+        layers.push({ name: `file:${path}`, data: parsed as ConfigObject, profile, interpolate })
       }
     }
 
@@ -118,6 +135,10 @@ export class FileConfigSource implements ConfigSource {
         'Wrap the file contents in a top-level object',
         'Return an empty object from the parser when the file is empty',
       )
+    }
+
+    if (this.#interpolate) {
+      checkInterpolation(parsed as Record<string, unknown>, path)
     }
 
     return parsed as Record<string, unknown>

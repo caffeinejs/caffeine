@@ -3,8 +3,8 @@ import type { Logger } from '../logger/logger.js'
 import { ChangeNotifier } from './change_notifier.js'
 import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'
+import { mergeInterpolated } from './interpolation.js'
 import { createLive, syncLive } from './live.js'
-import { mergeLayers } from './merge.js'
 import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
 import { deepEquals, reconcile } from './reconcile.js'
 import { validateConfig } from './schema.js'
@@ -31,7 +31,7 @@ import type {
 /** Runs the first load. {@link loadConfig} calls it; nothing else should. */
 export const kFirstLoad: unique symbol = Symbol('@caffeinejs/config:first-load')
 
-/** The merged tree before validation. The application reads its own `caffeine` block from it. */
+/** The merged tree, interpolated, before validation. The application reads its own `caffeine` block from it. */
 export const kMergedTree: unique symbol = Symbol('@caffeinejs/config:merged-tree')
 
 type ReloadTrigger = Exclude<ConfigTrigger, 'static'>
@@ -142,7 +142,8 @@ export class ConfigStore<out T> {
    * Loads every source, merges, validates and freezes. A source that fails fails the load, unless it is optional.
    *
    * @throws ErrConfig `ERR_CONFIG_SOURCE`, `ERR_CONFIG_SOURCE_TIMEOUT`, or the source's own `ErrConfig`.
-   * @throws ErrConfigValidation when the merged tree does not satisfy the schema.
+   * @throws ErrConfigValidation when a placeholder cannot be interpolated, or the merged tree does not satisfy the
+   *   schema.
    */
   async [kFirstLoad](): Promise<void> {
     const started = performance.now()
@@ -162,7 +163,7 @@ export class ConfigStore<out T> {
       }
     }
 
-    const merged = mergeLayers(this.#layers())
+    const merged = mergeInterpolated(this.#layers())
     const validated = validateRoot(this.definition, merged)
 
     this.#merged = merged
@@ -424,10 +425,10 @@ export class ConfigStore<out T> {
       return this.#outcome('rejected', [], failures, [...candidates.keys()][0].rejected!.error)
     }
 
-    const merged = mergeLayers(this.#states.flatMap(state => candidates.get(state) ?? state.layers))
-
+    let merged: ConfigObject
     let validated: Record<string, unknown>
     try {
+      merged = mergeInterpolated(this.#states.flatMap(state => candidates.get(state) ?? state.layers))
       validated = validateRoot(this.definition, merged)
     } catch (thrown) {
       const error =
@@ -626,7 +627,13 @@ export class ConfigStore<out T> {
         this.#events.keyIgnored(name, layer.name, path)
       }
 
-      return Object.freeze({ name: layer.name, data, origins: layer.origins, profile: layer.profile })
+      return Object.freeze({
+        name: layer.name,
+        data,
+        origins: layer.origins,
+        profile: layer.profile,
+        interpolate: layer.interpolate,
+      })
     })
   }
 }
@@ -694,9 +701,20 @@ function validateRoot<T>(definition: ConfigDefinition<T>, merged: ConfigObject):
   return validated
 }
 
-/** Whether two sets of layers carry the same data. Provenance alone does not make a reload. */
+/**
+ * Whether two sets of layers carry the same data. Provenance alone does not make a reload; whether a layer
+ * interpolates changes what it means, so that does.
+ */
 function sameLayers(a: readonly ConfigLayer[], b: readonly ConfigLayer[]): boolean {
-  return a.length === b.length && a.every((layer, i) => layer.name === b[i].name && deepEquals(layer.data, b[i].data))
+  return (
+    a.length === b.length &&
+    a.every(
+      (layer, i) =>
+        layer.name === b[i].name &&
+        (layer.interpolate === true) === (b[i].interpolate === true) &&
+        deepEquals(layer.data, b[i].data),
+    )
+  )
 }
 
 /** Selected plain data is frozen. Anything else is the caller's own object and is left alone. */
