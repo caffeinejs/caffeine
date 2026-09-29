@@ -1,0 +1,4 @@
+# A typo on the second line of a block. The error counts characters from the start of the block's text.
+script: |
+  echo start
+  echo ${evn:NAME}

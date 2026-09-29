@@ -1,0 +1,33 @@
+# Every way YAML writes a string, each holding placeholders. The tests set NAME to "n" and leave MISSING unset.
+plain: ${env:NAME}
+plainSpacedDefault: ${env:MISSING:-No Name}
+plainURL: postgres://${env:NAME}:5432/app
+quotedDefault: '${env:MISSING:-a: b # c}'
+apostrophe: "it's ${env:NAME}"
+escapeSequence: "${env:NAME}\n${env:NAME}"
+escapedPlain: $${env:NAME}
+escapedQuoted: '$${env:NAME}'
+literal: |
+  Hi ${env:NAME}
+  Bye
+literalStrip: |-
+  Hi ${env:NAME}
+  Bye
+folded: >
+  Hi ${env:NAME}
+  and bye
+tagged: !!str ${env:NAME}
+flow: ['${env:NAME}', 'x-${env:NAME}']
+commented: ${env:NAME} # ${evn:BROKEN
+# ${evn:ALSO_BROKEN}
+'${key}': ${env:NAME}
+tilde: ~
+empty:
+nullWord: null
+fromTilde: ${config:tilde:-d}
+fromEmpty: ${config:empty:-d}
+fromNull: ${config:nullWord:-d}
+port: 8080
+enabled: true
+fromNumber: 'port ${config:port}'
+fromBoolean: ${config:enabled}

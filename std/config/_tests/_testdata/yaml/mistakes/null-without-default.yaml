@@ -1,0 +1,3 @@
+# `~` is null. A placeholder that reads it needs a default.
+nothing: ~
+a: ${config:nothing}

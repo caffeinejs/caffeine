@@ -1,0 +1,6 @@
+# Production has no laptop defaults: the environment must name the database.
+db:
+  host: ${env:DB_HOST}
+  password: ${env:DB_PASSWORD}
+  pool:
+    ssl: true
