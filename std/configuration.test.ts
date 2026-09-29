@@ -111,6 +111,20 @@ describe('newConfiguration', () => {
     expect(newConfiguration(schema, kConfig).loadTimeout(250).build().loadTimeoutMs).toBe(250)
   })
 
+  // Data once built, like the sources: what the loader and the paths were when build() ran is what loads.
+  it('carries the dotenv options into the definition, the last call winning', () => {
+    const loader = (): void => {}
+
+    const conf = newConfiguration(schema, kConfig)
+      .dotEnv({ loader, path: 'first' })
+      .dotEnv({ loader, path: 'config', baseName: 'app.env' })
+      .build()
+
+    expect(newConfiguration(schema, kConfig).build().dotenv).toBeUndefined()
+    expect(conf.dotenv).toEqual({ loader, path: 'config', baseName: 'app.env' })
+    expect(Object.isFrozen(conf.dotenv)).toBe(true)
+  })
+
   it('reflects new values after a config refresh', async () => {
     const { source, state } = remote({ server: { host: 'before', port: 80 } })
     const conf = newConfiguration(schema, kConfig).source(source).build()

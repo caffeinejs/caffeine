@@ -169,7 +169,7 @@ anything.
 
 | Source                    | Reads                           | Changes by                                                     |
 | ------------------------- | ------------------------------- | -------------------------------------------------------------- |
-| `EnvConfigSource`         | the environment, `.env` files   | nothing; loaded once                                           |
+| `EnvConfigSource`         | the environment                 | nothing; loaded once                                           |
 | `ArgsConfigSource`        | the command line, via `.args()` | nothing; loaded once                                           |
 | `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
 | `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
@@ -241,9 +241,10 @@ in is text, taken as it is: it is never interpolated again, and a `$t` schema co
 environment. A number or a boolean it reads becomes text; an object or a list is an error.
 
 A variable that is unset, or a path nothing sets, with no default fails the load, or rejects a reload, with an
-`ErrConfigValidation` whose issues name each value. File sources and the dotenv files of an `EnvConfigSource`
-interpolate, and `{ interpolate: false }`, or `dotenv: { interpolate: false }`, reads them as written; the
-environment's own values never are. A source of your own opts in with `interpolate: true` on its layers.
+`ErrConfigValidation` whose issues name each value. File sources interpolate, and `{ interpolate: false }` reads
+them as written; the environment's own values never are. A source of your own opts in with `interpolate: true` on its
+layers. Dotenv files expand their own `${env:NAME}` references as they load, before any source: see
+[Dotenv files](#dotenv-files).
 
 A file that interpolates can read every environment variable, so whoever can edit it can read the environment. A
 value built from a secret is a secret, and so is one another source can steer: in
@@ -255,17 +256,22 @@ goes. A default is text in the file, never a secret.
 ## Profiles
 
 An active profile selects overlay files: with `eu` then `canary` active, `app.json` is read, then `app-eu.json`,
-then `app-canary.json`, each overriding the one before. The profiles are decided before anything loads:
+then `app-canary.json`, each overriding the one before. The profiles are decided before any source loads, and nothing
+else names them:
 
-| Source                                                   | Read by                                   |
-| -------------------------------------------------------- | ----------------------------------------- |
-| The container: `new CaffeineIoC({ profiles: ['test'] })` | the application, off `container.profiles` |
-| The command line: `--caffeine.profiles=eu,dev`           | `hostProfiles()`, from `process.argv`     |
-| The environment: `CAFFEINE__PROFILES=eu,dev`             | `hostProfiles()`, from `process.env`      |
+| Source                                                     | Read by                                   |
+| ---------------------------------------------------------- | ----------------------------------------- |
+| The container: `new CaffeineIoC({ profiles: ['test'] })`   | the application, off `container.profiles` |
+| The application: `createApplication({ profiles: ['eu'] })` | the application, off its options          |
+| The command line: `--caffeine.profiles=eu,dev`             | `hostProfiles()`, from `process.argv`     |
+| The environment: `CAFFEINE_PROFILES=eu,dev`                | `hostProfiles()`, from `process.env`      |
 
-If none of the three named a profile, and only then, a file source reads `caffeine.profiles` from its own base file
-and picks its overlays. Every source is loaded once, profile or not. That read comes before interpolation, so
-`caffeine.profiles` in a file cannot hold `${`.
+They add up in that order, except that the command line, when given, replaces the environment. A profile named twice
+keeps its first place, and every source is loaded once, with the list. A `caffeine.profiles` in a file, a variable or
+any other source is an ordinary key: nothing reads it.
+
+`CAFFEINE_PROFILES` may also come from the base dotenv file, which loads before the profiles are read; one the
+environment already holds wins over it. See [Dotenv files](#dotenv-files).
 
 A profile is a name, since a file source makes a file name of it: `.`, `..` and a name holding `/` or `\` are refused
 with `ERR_CONFIG_PROFILE`, wherever they were named.
@@ -274,21 +280,30 @@ with `ERR_CONFIG_PROFILE`, wherever they were named.
 
 ## Dotenv files
 
-`EnvConfigSource` can load dotenv files before it reads the environment. It brings no parser of its own: the
-application hands it a loader, and `@caffeinejs/std/config/nodejs` has one built on `process.loadEnvFile`:
+A configuration can load dotenv files into `process.env` before any source loads. It brings no parser of its own:
+the application hands it a loader, and `@caffeinejs/std/config/nodejs` has one built on `process.loadEnvFile`:
 
 ```ts
+import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource } from '@caffeinejs/std/config'
 import { loadEnvFiles } from '@caffeinejs/std/config/nodejs'
 
-new EnvConfigSource({ prefix: 'PETSTORE_', dotenv: { loader: loadEnvFiles, path: './config' } })
+newConfiguration(ConfigSchema, kConfig)
+  .dotEnv({ loader: loadEnvFiles, path: './config' })
+  .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
+  .build()
 ```
 
-The loader is called once, when the source first loads, with every file the active profiles could name, the most
-specific first: with `dev` then `prod` active, `config/.env.prod`, `config/.env.dev`, then `config/.env`. `baseName`
-replaces `.env`. The first file to set a variable wins, and a variable already set wins over every file, so the
-environment the application was started with keeps the last word. `process.loadEnvFile` and dotenv both work this
-way when handed the list as it is:
+The base file loads first, `config/.env` unless `baseName` names another, and it may name the profiles:
+`CAFFEINE_PROFILES=dev` there counts as if the environment held it, so `--caffeine.profiles`, or a `CAFFEINE_PROFILES`
+the environment already holds, still wins. Once a profile is active, what the base set is taken back and the loader is
+called again with every file, the most specific first: with `dev` then `prod` active, `config/.env.prod`,
+`config/.env.dev`, then `config/.env`. Only the base names profiles: a `CAFFEINE_PROFILES` in a profile's file is not
+read.
+
+The first file to set a variable wins, and a variable already set wins over every file, so a profile's file overrides
+the base and the environment the application was started with keeps the last word. `process.loadEnvFile` and dotenv
+both work this way when handed the list as it is:
 
 ```ts
 const loader: DotenvLoader = files => {
@@ -297,21 +312,29 @@ const loader: DotenvLoader = files => {
 ```
 
 A loader that overrides lets a file outrank the environment the application was started with. A file that is not
-there is the loader's to skip: `loadEnvFiles` skips it, and fails the load on one that is there and cannot be read.
+there is the loader's to skip: `loadEnvFiles` skips it, and fails on one that is there and cannot be read. A loader
+that throws fails the load with `ERR_CONFIG_DOTENV`, before any source loads.
 
-The loader writes into the environment the source reads: `process.env`, unless `env` names another. From then on,
-that is the process's environment for every later reader, child processes included. An environment source
-registered before this one has already read what it needed.
+What the files set is expanded once every file has loaded, before any source, so an entry may read another from any
+of the files:
 
-What the files set is a layer of its own, below the environment's, and its placeholders are filled in as a config
-file's are: `${env:NAME}` reads `process.env`, the files' own variables included, and `${config:path}` the merged
-tree. The environment keeps the text as the files wrote it; only the configuration sees the filled-in value. A
-literal `${` is written `$${`. A loader that expands values itself reads a placeholder its own way, so it goes with
-`dotenv: { loader, path, interpolate: false }`. The environment's own values are never interpolated.
+```sh
+PORT=3000
+GREETING=${env:PORT} Hi
+```
 
-The profiles are decided before anything loads, so a dotenv file cannot name them: a variable from the files that
-reaches `caffeine.profiles` fails the load with `ERR_CONFIG_PROFILE`. The files follow only the profiles named up
-front; the ones a config file declares for itself never select a dotenv file.
+`${env:NAME}` reads an entry the files set, itself expanded first, or else the variable the environment holds, taken
+as it is: the value the process ends up with either way, so an entry the environment overrides reads as the
+environment's. `${env:NAME:-text}` falls back to `text` when the variable is unset or empty, and `$${` is a literal
+`${`. `${config:path}` is refused: no source has loaded yet. A malformed placeholder, a variable unset with no default,
+or references that loop fail the load with `ERR_CONFIG_INTERPOLATION`, naming the variable and never its value.
+`CAFFEINE_PROFILES` is expanded as soon as the base file has loaded, since it names the profiles: it can read the base
+file and the environment, not the file of a profile.
+
+The expanded text is what `process.env` holds from then on, for every reader: the sources, the features, child
+processes. An environment source reads it as any other variable, and never interpolates it again; one reading an
+`env` of its own sees none of it. A loader that expands values itself reads a placeholder its own way, so it goes with
+`.dotEnv({ loader, path, interpolate: false })`, which leaves the files' text as they wrote it.
 
 A dotenv file is as trusted as the code. Whoever can write it sets any variable the process reads from then on, the
 runtime's own among them: `NODE_TLS_REJECT_UNAUTHORIZED=0` turns off certificate checks, and `NODE_ENV=test` turns
@@ -378,9 +401,9 @@ sequenceDiagram
   participant App as Application.bootstrap()
   participant Store as ConfigStore
   participant Feat as each Feature
-  App->>App: decide the active profiles
-  App->>Store: loadConfig(definition), not started yet
-  App->>App: read caffeine.name and caffeine.profiles
+  App->>Store: loadConfig(definition, profiles named in code), not started yet
+  Store->>Store: the base dotenv file, the active profiles, their dotenv files, then every source
+  App->>App: read caffeine.name, and apply the store's profiles to the container
   App->>Feat: configure: the callback gets the live object and the store
   App->>App: logConfigLoaded, once the logger is final
   App->>App: container.init(), features bootstrap, platform set up
@@ -400,8 +423,9 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | `ERR_CONFIG_DUPLICATE_SOURCE` | two sources share a name                                               |
 | `ERR_CONFIG_KEY_CONFLICT`     | an argument or an expanded key sets a path another uses as a parent    |
 | `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
-| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`; a dotenv file names one |
-| `ERR_CONFIG_INTERPOLATION`    | a placeholder is malformed or misplaced, or cannot be filled in        |
+| `ERR_CONFIG_DOTENV`           | the dotenv loader failed, with what it threw as the cause              |
+| `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
+| `ERR_CONFIG_INTERPOLATION`    | a placeholder is malformed, or cannot be filled in                     |
 | `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |
 
 ---
@@ -417,6 +441,7 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | Schema                | `schema.ts`, `errors.ts`                                   |
 | Diagnostics           | `explain.ts`, `observe.ts`                                 |
 | Profiles              | `profiles.ts`                                              |
+| Dotenv files          | `dotenv.ts`                                                |
 | Container integration | `integration/module.ts`                                    |
 | Sources               | `sources/`                                                 |
 | Node.js dotenv loader | `nodejs/`                                                  |

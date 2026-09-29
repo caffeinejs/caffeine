@@ -12,9 +12,15 @@ import { EnvConfigSource } from '../../sources/env_source.js'
 import { JSONConfigSource } from '../../sources/json_source.js'
 import type { ConfigDefinition, ConfigSource } from '../../types.js'
 
-// Every variable these files set. Unset before each test, so the machine running it decides nothing, and restored
-// after, which also removes what `process.loadEnvFile` wrote.
-const VARIABLES = ['NODEJS_DOTENV_HOST', 'NODEJS_DOTENV_PORT', 'NODEJS_DOTENV_NAME', 'NODEJS_DOTENV_DB__URL']
+// Every variable these files set, and the one that names profiles. Unset before each test, so the machine running it
+// decides nothing, and restored after, which also removes what `process.loadEnvFile` wrote.
+const VARIABLES = [
+  'CAFFEINE_PROFILES',
+  'NODEJS_DOTENV_HOST',
+  'NODEJS_DOTENV_PORT',
+  'NODEJS_DOTENV_NAME',
+  'NODEJS_DOTENV_DB__URL',
+]
 
 let dir: string
 
@@ -38,11 +44,18 @@ async function write(name: string, ...lines: string[]): Promise<string> {
 
 // The prefix keeps every other variable of the process, the repository's own `.env` among them, out of the tree.
 function environment(): EnvConfigSource {
-  return new EnvConfigSource({ prefix: 'NODEJS_DOTENV_', dotenv: { loader: loadEnvFiles, path: dir } })
+  return new EnvConfigSource({ prefix: 'NODEJS_DOTENV_' })
 }
 
 function definition(sources: ConfigSource[]): ConfigDefinition {
-  return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return {
+    schema: passthroughConfigSchema,
+    key: undefined,
+    storeKey: undefined,
+    sources,
+    loadTimeoutMs: 30_000,
+    dotenv: { loader: loadEnvFiles, path: dir },
+  }
 }
 
 function thrown(run: () => void): unknown {
@@ -63,6 +76,18 @@ describe('loadEnvFiles', () => {
     const store = await loadConfig(definition([environment()]), { profiles: ['dev', 'prod'] })
 
     expect(store.current).toEqual({ host: 'prod', port: '2', name: 'base' })
+  })
+
+  // `process.loadEnvFile` sets what the base file holds as it reads it. Taken back before the profile's file loads, the
+  // base still names the profile, and loses to it.
+  it('takes the profiles the base file names, and lets the file of one win over the base', async () => {
+    await write('.env', 'CAFFEINE_PROFILES=dev', 'NODEJS_DOTENV_HOST=base', 'NODEJS_DOTENV_PORT=1')
+    await write('.env.dev', 'NODEJS_DOTENV_HOST=dev')
+
+    const store = await loadConfig(definition([environment()]))
+
+    expect(store.profiles).toEqual(['dev'])
+    expect(store.current).toEqual({ host: 'dev', port: '1' })
   })
 
   it('never replaces a variable the environment already has', async () => {
@@ -120,10 +145,11 @@ describe('loadEnvFiles', () => {
     const store = await loadConfig(definition([environment()]))
 
     expect(store.current).toEqual({ host: 'db.internal', db: { url: 'postgres://db.internal/app' } })
+    expect(process.env.NODEJS_DOTENV_DB__URL).toBe('postgres://db.internal/app')
   })
 
-  // Placeholders are filled in once every source has loaded, so a config file registered before the environment
-  // source still reads what the dotenv files set.
+  // The files load before any source, so a config file registered before the environment source still reads what
+  // they set.
   it('hands file values to a file source registered before the environment source', async () => {
     await write('.env', 'NODEJS_DOTENV_HOST=db.internal')
     const json = await write('app.json', JSON.stringify({ db: { url: 'postgres://${env:NODEJS_DOTENV_HOST}/app' } }))

@@ -22,6 +22,7 @@ export type {
   LiveConfig,
   ReadonlyConfig,
 } from './types.js'
+export type { DotenvLoader, DotenvOptions } from './dotenv.js'
 export { ErrConfig, ErrConfigValidation } from './errors.js'
 export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
 export { DEFAULT_LOAD_TIMEOUT_MS, loadConfig, type LoadConfigOptions } from './load.js'
@@ -33,15 +34,9 @@ export {
   type ConfigLoadMessage,
   type ConfigReloadMessage,
 } from './observe.js'
-export { activeProfiles, hostProfiles, PROFILES_KEY } from './profiles.js'
+export { activeProfiles, hostProfiles } from './profiles.js'
 export { ArgsConfigSource, type ArgsConfigSourceOptions } from './sources/args_source.js'
-export {
-  EnvConfigSource,
-  type DotenvLoader,
-  type DotenvOptions,
-  type EnvAccessor,
-  type EnvConfigSourceOptions,
-} from './sources/env_source.js'
+export { EnvConfigSource, type EnvAccessor, type EnvConfigSourceOptions } from './sources/env_source.js'
 export { FileConfigSource, type ConfigFileParser, type FileConfigSourceOptions } from './sources/file_source.js'
 export { InlineConfigSource } from './sources/inline_source.js'
 export { JSONConfigSource } from './sources/json_source.js'

@@ -1,10 +1,8 @@
 import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
 
 import {
-  activeProfiles,
   ConfigModule,
   DEFAULT_LOAD_TIMEOUT_MS,
-  hostProfiles,
   loadConfig,
   logConfigLoaded,
   type ConfigDefinition,
@@ -39,6 +37,14 @@ import { type ShutdownOptions, defaultShutdownOptions, kShutdownPolicy } from '.
 
 export interface ApplicationOptions<TConfig = unknown> {
   container?: Container | Options
+  /**
+   * Profiles to activate, merged with the container's own and with the host's: `--caffeine.profiles`, or else
+   * `CAFFEINE_PROFILES`, from the environment or the base dotenv file.
+   *
+   * The container's come first, then these, then the host's, and a profile named twice keeps its first place. A
+   * later profile's overlays win over an earlier one's.
+   */
+  profiles?: string[]
   /** Built with {@link newConfiguration}. Omitted, the application loads no source and keeps every key. */
   config?: ConfigDefinition<TConfig>
   /** A plain instance to use as-is, or `false` to disable the logger entirely. */
@@ -66,14 +72,12 @@ export const CAFFEINE_CONFIG_NAMESPACE = ['caffeine'] as const
  */
 export interface CaffeineConfig {
   name: string
-  profiles: string[]
 }
 
-export const DEFAULT_CAFFEINE_CONFIG: CaffeineConfig = { name: '', profiles: [] }
+export const DEFAULT_CAFFEINE_CONFIG: CaffeineConfig = { name: '' }
 
 export const caffeineConfigSchema = $t.Object({
   name: $t.String({ default: DEFAULT_CAFFEINE_CONFIG.name }),
-  profiles: $t.List($t.String(), { default: DEFAULT_CAFFEINE_CONFIG.profiles }),
 })
 
 /** Thrown when an application is configured after {@link Application.bootstrap} has started. */
@@ -146,6 +150,7 @@ export class Application<TConfig = unknown> {
   readonly #installed = new Set<string>()
   readonly #availability = new ApplicationAvailability()
   readonly #definition: ConfigDefinition<unknown>
+  readonly #optionProfiles: readonly string[]
 
   // Registered unconditionally: the drain policy applies to every application, probes or not. Configuration
   // reaches it only through `.shutdown((s, { config }) => s.config(...))`. Held so `.shutdown()` can configure
@@ -183,6 +188,9 @@ export class Application<TConfig = unknown> {
     } else {
       this.#container = new CaffeineIoC(c != null ? (c as Partial<Options>) : {})
     }
+
+    // A copy: a caller changing its array after construction does not change what `bootstrap()` activates.
+    this.#optionProfiles = [...(options.profiles ?? [])]
 
     // Loaded in `bootstrap()`, once the profiles are known. An application that declared nothing still loads: no
     // source, and a schema that keeps every key, so the framework's own block is read the same way.
@@ -369,7 +377,7 @@ export class Application<TConfig = unknown> {
    *
    * 1. the active profiles are decided;
    * 2. configuration **loads**, once, already profile-aware;
-   * 3. `caffeine.name` and the active profiles are applied;
+   * 3. `caffeine.name` is read, and the active profiles are applied to the container;
    * 4. `configure`, when passed, runs — configuration is still open, and {@link config} already answers;
    * 5. the application's {@link ApplicationAvailability} is bound;
    * 6. every feature **configures** — running the application's configure callback against its builder, then
@@ -406,15 +414,17 @@ export class Application<TConfig = unknown> {
   async #bootstrapOnce(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     this.#booting = true
 
-    // Decided before anything loads, so the load that follows is profile-aware on its first and only pass. The
-    // container's own set counts: `new CaffeineIoC({ profiles: ['test'] })` names a profile as surely as an
-    // argument does, and the three union the way `addProfiles` always has.
+    // The configuration settles the profiles as it loads, before any source: the ones named in code, then the host's,
+    // which the base dotenv file may name. The container's own set counts: `new CaffeineIoC({ profiles: ['test'] })`
+    // names a profile as surely as an argument does.
     //
-    // Empty, and only then, `FileConfigSource` falls back to the `caffeine.profiles` its base file declares.
-    const named = activeProfiles([...this.#container.profiles, ...hostProfiles()])
-
     // Not started yet: every feature configures against one revision, and the triggers arm once this is done.
-    const store = await loadConfig(this.#definition, { profiles: named, logger: () => this.#logger, start: false })
+    const store = await loadConfig(this.#definition, {
+      profiles: [...this.#container.profiles, ...this.#optionProfiles],
+      logger: () => this.#logger,
+      start: false,
+    })
+    const profiles = store.profiles
     this.#store = store
     this.#container.addModules(ConfigModule(store))
 
@@ -432,14 +442,12 @@ export class Application<TConfig = unknown> {
         readPath(store[kMergedTree], CAFFEINE_CONFIG_NAMESPACE) ?? {},
       ) as CaffeineConfig
 
-      // What was named up front wins. Nothing was, so the base config file decided, on the same load.
-      const profiles = named.length > 0 ? named : activeProfiles(caffeine.profiles)
       if (profiles.length > 0) {
         this.#container.addProfiles(profiles[0], ...profiles.slice(1))
       }
 
       this.#name = caffeine.name
-      this.#profiles = profiles
+      this.#profiles = [...profiles]
 
       // Before the feature list is read, and before `container.init()`. Configuration methods still pass.
       this.#configuring = true

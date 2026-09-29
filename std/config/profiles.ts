@@ -2,24 +2,17 @@ import { textList } from '../schema/text.js'
 import { ErrConfig } from './errors.js'
 import { hostArgv, parseArgv } from './sources/args_source.js'
 
-/**
- * Where the active-profile list lives in the configuration tree.
- *
- * The one location `std/config` knows by name. A feature never picks its own place in the tree, but the
- * profiles are read *before* anything loads — there is no configuration yet to say where they are — so the
- * framework's own namespace is fixed here, the same way `std/application.ts` fixes `caffeine`.
- */
-export const PROFILES_KEY = ['caffeine', 'profiles'] as const
+const ARG_PATH = 'caffeine.profiles'
 
-const ARG_PATH = PROFILES_KEY.join('.')
-const ENV_VAR = 'CAFFEINE__PROFILES'
+/** The environment variable that names the profiles. */
+export const PROFILES_VARIABLE = 'CAFFEINE_PROFILES'
 
 /**
  * Normalizes a raw active-profile value into a unique list, in first-seen order.
  *
- * Accepts what a source actually produces: a string array from a file, or delimited text
- * (`CAFFEINE__PROFILES=eu,dev`) from an environment variable or a command-line argument. Blank entries are
- * dropped, and a profile named twice keeps only its first position, so no source ever sees a duplicate.
+ * Accepts a string array, as code names them, or delimited text (`CAFFEINE_PROFILES=eu,dev`), as an environment
+ * variable or a command-line argument does. Blank entries are dropped, and a profile named twice keeps only its
+ * first position, so no source ever sees a duplicate.
  *
  * @throws ErrConfig `ERR_CONFIG_PROFILE` when a profile is `.` or `..`, or holds `/` or `\`.
  */
@@ -52,12 +45,13 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
 }
 
 /**
- * The profiles named on the command line or in the environment, read straight from the host — no source, no
+ * The profiles `--caffeine.profiles` or `CAFFEINE_PROFILES` name, read straight from the host — no source, no
  * merge, no load.
  *
- * This runs before configuration exists, which is the whole point: it is what lets a single load be
- * profile-aware instead of one probe pass followed by a real one. An argument wins over the environment, and
- * both go through {@link activeProfiles}, so `eu,dev` splits and dedupes exactly as a configured value would.
+ * This runs before any source loads, which is the whole point: it is what lets a single load be profile-aware
+ * instead of one probe pass followed by a real one. `loadConfig` calls it once the base dotenv file has loaded, so a
+ * `CAFFEINE_PROFILES` set there counts. An argument wins over the environment, and both go through
+ * {@link activeProfiles}: `eu,dev` names two profiles, and a repeated one counts once.
  *
  * Reading `process.argv` here is not the same opt-in {@link ArgsConfigSource} is: exactly one flag is
  * matched, so a process whose switches were meant for something else contributes nothing.
@@ -66,7 +60,7 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
  * @param env - Defaults to the host's own environment, for the same reason.
  */
 export function hostProfiles(argv: readonly string[] = hostArgv(), env = hostEnv()): string[] {
-  return activeProfiles(argProfiles(argv) ?? env[ENV_VAR] ?? [])
+  return activeProfiles(argProfiles(argv) ?? env[PROFILES_VARIABLE] ?? [])
 }
 
 /**

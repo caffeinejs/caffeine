@@ -232,14 +232,6 @@ describe.each(FORMATS)('$name', format => {
       expect((error as Error).message).not.toContain('hunter')
     })
 
-    it('refuses a placeholder in caffeine.profiles', async () => {
-      const path = fixture(format, 'mistakes/profiles-placeholder')
-
-      await expect(new FileConfigSource(path, format.parse).load(context())).rejects.toThrow(
-        `Cannot interpolate "caffeine.profiles" in config file "${path}"`,
-      )
-    })
-
     it('refuses a null a placeholder reads without a default', async () => {
       const error = await interpolateFixture(format, 'mistakes/null-without-default', {}).catch(
         (thrown: unknown) => thrown,

@@ -5,6 +5,7 @@ import type { StandardSchemaV1 } from '@standard-schema/spec'
 import type { Duration } from '../duration/duration.js'
 import type { Logger } from '../logger/logger.js'
 import type { AnySchema, InferSchema } from '../schema/schema.js'
+import type { DotenvOptions } from './dotenv.js'
 import type { ErrConfigValidation } from './errors.js'
 import type { ConfigStore } from './store.js'
 
@@ -124,6 +125,8 @@ export interface ConfigDefinition<T = unknown> {
   readonly sources: readonly ConfigSource[]
   /** Bounds each load of each source. */
   readonly loadTimeoutMs: number
+  /** Dotenv files loaded into `process.env` before any source. */
+  readonly dotenv?: DotenvOptions
 }
 
 /** Which trigger reloads a source. A `static` source is never reloaded. */

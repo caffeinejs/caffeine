@@ -4,8 +4,6 @@ import { basename, dirname, extname, join } from 'node:path'
 
 import { ErrConfig, messageOf } from '../errors.js'
 import { checkInterpolation } from '../interpolation.js'
-import { activeProfiles, PROFILES_KEY } from '../profiles.js'
-import { readPath } from '../tree.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from '../types.js'
 
 /** Turns a config file's text into the object it describes. May be synchronous or asynchronous. */
@@ -40,9 +38,6 @@ export interface FileConfigSourceOptions {
  * `app-canary.json`. A sibling overrides the base, a later profile overrides an earlier one, and a sibling that is
  * not there is skipped.
  *
- * When nothing named a profile up front, the base file decides, from the `caffeine.profiles` it declares. Only
- * the base: a sibling naming the siblings would need a second pass over every source.
- *
  * The tree is taken literally, so a key holding a dot is one key. A flat format expands its keys in the parser:
  * `new FileConfigSource('./app.ini', text => expandKeys(ini.parse(text)))`.
  *
@@ -71,13 +66,11 @@ export class FileConfigSource implements ConfigSource {
 
   /**
    * @throws ErrConfig `ERR_CONFIG_FILE_PARSE` when a file does not parse to an object, naming the file.
-   * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed, or `caffeine.profiles` holds `${`,
-   *   naming the file and the path.
+   * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed, naming the file and the path.
    */
   async load(context: ConfigLoadContext): Promise<readonly ConfigLayer[]> {
     const base = await this.#read(this.#path, this.#missingIsFine)
 
-    const profiles = context.profiles.length > 0 ? context.profiles : activeProfiles(readPath(base, PROFILES_KEY))
     const layers: ConfigLayer[] = []
     const interpolate = this.#interpolate
 
@@ -87,7 +80,7 @@ export class FileConfigSource implements ConfigSource {
 
     // No sibling depends on another, so they are read together and layered in profile order.
     const siblings = await Promise.all(
-      profiles.map(async profile => {
+      context.profiles.map(async profile => {
         const path = profilePath(this.#path, profile)
         return { path, profile, parsed: await this.#read(path, true) }
       }),

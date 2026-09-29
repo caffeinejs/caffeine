@@ -89,8 +89,8 @@ const variableFor = (key: string): string =>
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
     .toUpperCase()
 
-const foldedFrom = async (variable: string): Promise<string[]> => {
-  const [layer] = await new EnvConfigSource({ env: { [`BLOCK__${variable}`]: 'x' } }).load({
+const foldedFrom = (variable: string): string[] => {
+  const [layer] = new EnvConfigSource({ env: { [`BLOCK__${variable}`]: 'x' } }).load({
     logger: { warn: () => undefined },
   } as never)
 
@@ -104,13 +104,13 @@ describe('configuration keys', () => {
     expect(schemas.some(([name]) => name.startsWith(`${entry}.`))).toBe(true)
   })
 
-  it.each(schemas)('of %s are the ones their environment variables fold to', async (name, schema) => {
+  it.each(schemas)('of %s are the ones their environment variables fold to', (name, schema) => {
     const keys = keysOf(schema, name)
 
     expect(keys.length).toBeGreaterThan(0)
 
     for (const { path, key } of keys) {
-      expect(await foldedFrom(variableFor(key)), `${path}.${key}`).toEqual([key])
+      expect(foldedFrom(variableFor(key)), `${path}.${key}`).toEqual([key])
     }
   })
 })

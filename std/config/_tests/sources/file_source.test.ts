@@ -181,46 +181,23 @@ describe('FileConfigSource profile files', () => {
     expect(layers).toHaveLength(1)
   })
 
-  // Nothing named a profile up front, so the base file decides which siblings layer over it.
-  it('selects its own overlays from the caffeine.profiles its base declares', async () => {
+  // The profiles are chosen before any source loads. The base file's own `caffeine.profiles` is an ordinary key: the
+  // overlay it would pick is one no other source, and no bean, would follow.
+  it('selects no overlay from the caffeine.profiles its base declares', async () => {
     const base = await write('self.json', { caffeine: { profiles: ['eu'] }, region: 'base' })
     await write('self-eu.json', { region: 'eu' })
-
-    expect(merged(await new JSONConfigSource(base).load(context())).region).toBe('eu')
-  })
-
-  it('accepts delimited text for its own caffeine.profiles', async () => {
-    const base = await write('self-text.json', { caffeine: { profiles: 'eu,canary' }, region: 'base' })
-    await write('self-text-eu.json', { region: 'eu' })
-    await write('self-text-canary.json', { region: 'canary' })
-
-    expect(merged(await new JSONConfigSource(base).load(context())).region).toBe('canary')
-  })
-
-  it('lets the profiles named up front override the ones its base declares', async () => {
-    const base = await write('beaten.json', { caffeine: { profiles: ['dev'] }, region: 'base' })
-    await write('beaten-dev.json', { region: 'dev' })
-    await write('beaten-eu.json', { region: 'eu' })
-
-    expect(merged(await new JSONConfigSource(base).load(context(['eu']))).region).toBe('eu')
-  })
-
-  it('selects no overlay when its base declares no profile', async () => {
-    const base = await write('none.json', { region: 'base' })
-    await write('none-eu.json', { region: 'eu' })
 
     expect(await new JSONConfigSource(base).load(context())).toHaveLength(1)
   })
 
-  // `app/config-x/../../outside.json` is `outside.json`, a directory above the one configured. The profile is refused
-  // before any path is built from it, whether the base file or the application named it.
+  // `app/config-x/../../outside.json` is `outside.json`, a directory above the one configured. A profile named up front
+  // is refused before any path is built from it, and one the base file declares is never read.
   it('never reads a file outside its directory through a profile', async () => {
     await mkdir(join(dir, 'app'))
     await write('outside.json', { secret: 'outside' })
-    const refused = expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' })
 
     const declared = await write('app/config.json', { caffeine: { profiles: ['x/../../outside'] } })
-    await expect(new JSONConfigSource(declared).load(context())).rejects.toThrow(refused)
+    expect(await new JSONConfigSource(declared).load(context())).toHaveLength(1)
 
     const named = await write('app/named.json', { region: 'base' })
     const definition = {
@@ -230,7 +207,9 @@ describe('FileConfigSource profile files', () => {
       sources: [new JSONConfigSource(named)],
       loadTimeoutMs: 30_000,
     }
-    await expect(loadConfig(definition, { profiles: ['x/../../outside'] })).rejects.toThrow(refused)
+    await expect(loadConfig(definition, { profiles: ['x/../../outside'] })).rejects.toThrow(
+      expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' }),
+    )
   })
 })
 
@@ -279,18 +258,6 @@ describe('FileConfigSource interpolation', () => {
     expect((error as Error).message).toContain(
       `Cannot interpolate ${path} in config file "${file}": the placeholder at ${at}`,
     )
-  })
-
-  // The profiles pick which files are read, before anything is interpolated. Named up front or not, a placeholder
-  // there would be read as a profile name.
-  it.each([['${env:PROFILES}'], ['$${escaped}']])('refuses %s in caffeine.profiles', async profiles => {
-    const path = await write('profiles.json', { caffeine: { profiles } })
-
-    for (const named of [[], ['eu']]) {
-      await expect(new JSONConfigSource(path).load(context(named))).rejects.toThrow(
-        `Cannot interpolate "caffeine.profiles" in config file "${path}"`,
-      )
-    }
   })
 })
 

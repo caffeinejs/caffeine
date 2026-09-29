@@ -124,6 +124,11 @@ export class ConfigStore<out T> {
     return this.#current
   }
 
+  /** The active profiles every source loads with: the ones named in code, then the host's. */
+  get profiles(): readonly string[] {
+    return this.#profiles
+  }
+
   /** 0 after the first load, plus one per swap. A reload that changed nothing leaves it alone. */
   get revision(): number {
     return this.#revision

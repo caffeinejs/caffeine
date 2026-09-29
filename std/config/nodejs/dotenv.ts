@@ -1,10 +1,10 @@
 import { accessSync, constants } from 'node:fs'
 
 /**
- * Loads dotenv files into `process.env` with `process.loadEnvFile`, for the `dotenv` option of `EnvConfigSource`:
+ * Loads dotenv files into `process.env` with `process.loadEnvFile`, for `.dotEnv()` on a configuration:
  *
  * ```ts
- * new EnvConfigSource({ prefix: 'APP_', dotenv: { loader: loadEnvFiles, path: './config' } })
+ * newConfiguration(schema, kConfig).dotEnv({ loader: loadEnvFiles, path: './config' })
  * ```
  *
  * The first file to set a variable wins, and a variable already set wins over every file. Values are taken as

@@ -135,17 +135,6 @@ describe('interpolation syntax', () => {
       checkInterpolation({ '${key': 'v', a: '${env:A} ${config:b[0].c:-x}', n: 1, list: ['$${x}'] }, 'app.json'),
     ).not.toThrow()
   })
-
-  // The active profiles pick which files are read, so they are settled before anything is interpolated: a
-  // placeholder there would quietly select no profile file at all.
-  it.each([['${env:PROFILES}'], ['$${literal}'], [['eu', '${env:PROFILES}']]])(
-    'refuses ${ in caffeine.profiles: %j',
-    profiles => {
-      expect(() => checkInterpolation({ caffeine: { profiles } }, 'app.json')).toThrow(
-        'Cannot interpolate "caffeine.profiles',
-      )
-    },
-  )
 })
 
 describe('interpolation of an environment variable', () => {

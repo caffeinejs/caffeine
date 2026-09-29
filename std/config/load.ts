@@ -1,6 +1,7 @@
 import type { Logger } from '../logger/logger.js'
 import { noopLogger } from '../logger/noop.js'
-import { activeProfiles } from './profiles.js'
+import { loadDotenv } from './dotenv.js'
+import { activeProfiles, hostProfiles } from './profiles.js'
 import { ConfigStore, kFirstLoad } from './store.js'
 import type { ConfigDefinition } from './types.js'
 
@@ -8,7 +9,10 @@ import type { ConfigDefinition } from './types.js'
 export const DEFAULT_LOAD_TIMEOUT_MS = 30_000
 
 export interface LoadConfigOptions {
-  /** The active profiles. Duplicates and blanks are dropped. */
+  /**
+   * The profiles named in code. The host's follow them: `--caffeine.profiles`, or else `CAFFEINE_PROFILES`, which the
+   * base dotenv file may set. Duplicates and blanks are dropped.
+   */
   profiles?: readonly string[]
   /**
    * Where the store logs. A function is called on every event, so a logger replaced after start-up is followed.
@@ -20,8 +24,10 @@ export interface LoadConfigOptions {
 }
 
 /**
- * Loads a configuration: every source, merged, validated and frozen, ready to read.
+ * Loads a configuration: the dotenv files first, then every source, merged, validated and frozen, ready to read.
  *
+ * @throws ErrConfig `ERR_CONFIG_DOTENV` when the dotenv loader fails, `ERR_CONFIG_INTERPOLATION` when what the dotenv
+ *   files set cannot be expanded, or `ERR_CONFIG_PROFILE` when a profile is `.` or `..`, or holds `/` or `\`.
  * @throws ErrConfig `ERR_CONFIG_DUPLICATE_SOURCE`, `ERR_CONFIG_SOURCE`, `ERR_CONFIG_SOURCE_TIMEOUT`, or a source's own
  *   `ErrConfig`, when a source cannot be registered or loaded.
  * @throws ErrConfigValidation when a placeholder cannot be interpolated, or the merged configuration does not
@@ -34,7 +40,12 @@ export async function loadConfig<T>(
   const given = options.logger
   const logger = typeof given === 'function' ? given : () => given ?? noopLogger
 
-  const store = new ConfigStore<T>(definition, { profiles: activeProfiles(options.profiles ?? []), logger })
+  // Read once the base dotenv file has loaded, so a `CAFFEINE_PROFILES` it sets names profiles too.
+  const named = options.profiles ?? []
+  const profilesOf = (): string[] => activeProfiles([...named, ...hostProfiles()])
+  const profiles = definition.dotenv === undefined ? profilesOf() : await loadDotenv(definition.dotenv, profilesOf)
+
+  const store = new ConfigStore<T>(definition, { profiles, logger })
   try {
     await store[kFirstLoad]()
   } catch (error) {

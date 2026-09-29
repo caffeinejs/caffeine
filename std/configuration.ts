@@ -8,6 +8,7 @@ import {
   type ConfigSchema,
   type ConfigSource,
   type ConfigStore,
+  type DotenvOptions,
   type InferConfig,
 } from './config/index.js'
 import { type Duration, toMillis } from './duration/index.js'
@@ -24,6 +25,7 @@ export class ConfigurationBuilder<T = unknown> {
   readonly #storeKey: NamedToken<ConfigStore<T>> | undefined
   readonly #sources: ConfigSource[] = []
   #loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS
+  #dotenv: DotenvOptions | undefined
 
   constructor(schema: ConfigSchema<T>, key: NamedToken<T>, storeKey?: NamedToken<ConfigStore<T>>) {
     this.#schema = schema
@@ -57,6 +59,19 @@ export class ConfigurationBuilder<T = unknown> {
     return this
   }
 
+  /**
+   * Loads dotenv files into `process.env` before any source loads: the base file, then the files of the active
+   * profiles, the most specific winning. The environment the application was started with wins over every file.
+   * An entry may read another, or the environment, with `${env:NAME}`, expanded as the files load.
+   *
+   * The base file may name the profiles with `CAFFEINE_PROFILES`. `--caffeine.profiles`, and a `CAFFEINE_PROFILES`
+   * the environment already holds, win over it. Called again, it replaces the options.
+   */
+  dotEnv(options: DotenvOptions): this {
+    this.#dotenv = options
+    return this
+  }
+
   /** Finishes the configuration. What it returns is data, fixed from here on. */
   build(): ConfigDefinition<T> {
     return Object.freeze({
@@ -65,6 +80,7 @@ export class ConfigurationBuilder<T = unknown> {
       storeKey: this.#storeKey,
       sources: Object.freeze([...this.#sources]),
       loadTimeoutMs: this.#loadTimeoutMs,
+      dotenv: this.#dotenv === undefined ? undefined : Object.freeze({ ...this.#dotenv }),
     })
   }
 }
