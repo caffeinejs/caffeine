@@ -406,6 +406,44 @@ describe('reload', () => {
     expect(seen).toEqual([4])
   })
 
+  // A reload requested mid-run is queued, and starts only once the one in flight has ended.
+  it('lets settled wait for the reload queued behind the one in flight', async () => {
+    let version = 0
+    const gates: (() => void)[] = []
+    const remote: ConfigSource = {
+      name: 'remote',
+      live: true,
+      load: async () => {
+        const mine = version
+        if (mine > 0) {
+          await new Promise<void>(resolve => gates.push(resolve))
+        }
+        return [{ name: 'remote', data: { value: `v${mine}` } }]
+      },
+    }
+    const store = await loadConfig(definition([remote]))
+
+    version = 1
+    void store.reload()
+    await vi.waitFor(() => expect(gates).toHaveLength(1))
+    version = 2
+    void store.reload()
+
+    let settled = false
+    const settling = store.settled().then(() => {
+      settled = true
+    })
+    gates[0]()
+    await vi.waitFor(() => expect(gates).toHaveLength(2))
+
+    expect(settled).toBe(false)
+
+    gates[1]()
+    await settling
+
+    expect((store.current as { value: string }).value).toBe('v2')
+  })
+
   it('closes every source', async () => {
     const closed = vi.fn()
     const store = await loadConfig(definition([{ name: 'a', load: () => [] as ConfigLayer[], close: closed }]))

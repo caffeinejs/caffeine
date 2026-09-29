@@ -172,7 +172,7 @@ export function expandDotenv(
   // in a chain of references.
   const valueOf = (name: string): string | undefined => {
     const text = entries.get(name)
-    if (text === undefined || !text.includes('${')) {
+    if (!text?.includes('${')) {
       return text
     }
 
