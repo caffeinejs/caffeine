@@ -33,4 +33,4 @@ group('singleton', () => {
   bench('typedi', () => typeContainer.get(TypeSingletonRoot))
 })
 
-await run()
+await run({ colors: process.stdout.isTTY === true })

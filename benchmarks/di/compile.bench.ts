@@ -184,4 +184,4 @@ group('full boot (init + dispose) — 3 aspects x 2 predicate pointcuts', () => 
   }
 })
 
-await run()
+await run({ colors: process.stdout.isTTY === true })

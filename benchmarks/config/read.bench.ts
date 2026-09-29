@@ -163,4 +163,4 @@ group('megamorphic: c.app.server.port over 8 shapes', () => {
   })
 })
 
-await run()
+await run({ colors: process.stdout.isTTY === true })

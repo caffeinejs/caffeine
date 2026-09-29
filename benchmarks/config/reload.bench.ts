@@ -91,4 +91,4 @@ summary(() => {
   })
 })
 
-await run()
+await run({ colors: process.stdout.isTTY === true })

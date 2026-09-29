@@ -21,6 +21,6 @@ group('POST', () => {
   })
 })
 
-await run({ throw: true })
+await run({ throw: true, colors: process.stdout.isTTY === true })
 
 stop()
