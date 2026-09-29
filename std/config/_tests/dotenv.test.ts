@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DotenvLoader, DotenvOptions } from '../dotenv.js'
+import { ErrConfig } from '../errors.js'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { EnvConfigSource } from '../sources/env_source.js'
@@ -113,6 +114,22 @@ describe('dotenv files', () => {
     expect(store.current).toEqual({ host: 'dev', port: '1', name: 'environment' })
   })
 
+  // A loader that overrides lets the base file replace what the environment holds. Taken back with the rest of what the
+  // base set, the environment's own value is what the loader finds when it is handed every file.
+  it('gives back what the environment held before the base file replaced it', async () => {
+    vi.stubEnv('DOTENV_TEST_NAME', 'environment')
+    const seen: (string | undefined)[] = []
+    const loader: DotenvLoader = () => {
+      seen.push(process.env.DOTENV_TEST_NAME)
+      vi.stubEnv('DOTENV_TEST_NAME', 'base')
+    }
+
+    const store = await loadConfig(definition({ loader, path: 'config' }), { profiles: ['dev'] })
+
+    expect(seen).toEqual(['environment', 'environment'])
+    expect(store.current).toEqual({ name: 'base' })
+  })
+
   // The base file loads before the profiles are read, so what it names selects the profiles' dotenv files and every
   // source's overlays, as the environment would.
   it('takes the profiles the base file names with CAFFEINE_PROFILES', async () => {
@@ -213,6 +230,16 @@ describe('dotenv files', () => {
       cause: failure,
     })
     expect(load).not.toHaveBeenCalled()
+  })
+
+  // A loader that already reports in the configuration's own errors is heard as it is, never wrapped a second time.
+  it('fails the load with the ErrConfig the loader threw, as it is', async () => {
+    const failure = new ErrConfig('Cannot find the dotenv file "config/.env": it is required', 'ERR_CONFIG_DOTENV')
+    const loader: DotenvLoader = () => {
+      throw failure
+    }
+
+    await expect(loadConfig(definition({ loader, path: 'config' }))).rejects.toBe(failure)
   })
 
   // The expansion is what every reader of the environment gets, not only the configuration.

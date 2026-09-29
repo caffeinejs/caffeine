@@ -121,10 +121,6 @@ export function expandDotenv(
   const resolving: string[] = []
 
   const expand = (name: string, text: string): string => {
-    if (!text.includes('${')) {
-      return text
-    }
-
     const segments = parseTemplate(text)
     if (!Array.isArray(segments)) {
       throw errDotenv(
@@ -138,32 +134,7 @@ export function expandDotenv(
 
     let out = ''
     for (const segment of segments) {
-      if (typeof segment === 'string') {
-        out += segment
-      } else if (segment.prefix === 'config') {
-        throw errDotenv(
-          files,
-          name,
-          `"\${config:${segment.key}}" names a config value, and the dotenv files load before any source`,
-          'Read another variable with ${env:NAME}',
-          'Move the placeholder to a config file, which is filled in once every source has loaded',
-        )
-      } else {
-        const value = entries.has(segment.key)
-          ? valueOf(segment.key)
-          : Object.hasOwn(env, segment.key)
-            ? env[segment.key]
-            : undefined
-        if (value === undefined && segment.fallback === undefined) {
-          throw errDotenv(
-            files,
-            name,
-            `"\${env:${segment.key}}" is not set`,
-            'Set the variable, or give the placeholder a default: ${env:NAME:-text}',
-          )
-        }
-        out += value === undefined || value === '' ? (segment.fallback ?? '') : value
-      }
+      out += typeof segment === 'string' ? segment : resolve(name, segment)
 
       if (out.length > MAX_LENGTH) {
         throw errDotenv(files, name, `it is longer than ${MAX_LENGTH} characters`)
@@ -173,7 +144,38 @@ export function expandDotenv(
     return out
   }
 
-  const valueOf = (name: string): string => {
+  const resolve = (name: string, placeholder: Placeholder): string => {
+    if (placeholder.prefix === 'config') {
+      throw errDotenv(
+        files,
+        name,
+        `"\${config:${placeholder.key}}" names a config value, and the dotenv files load before any source`,
+        'Read another variable with ${env:NAME}',
+        'Move the placeholder to a config file, which is filled in once every source has loaded',
+      )
+    }
+
+    const value = valueOf(placeholder.key) ?? (Object.hasOwn(env, placeholder.key) ? env[placeholder.key] : undefined)
+    if (value === undefined && placeholder.fallback === undefined) {
+      throw errDotenv(
+        files,
+        name,
+        `"\${env:${placeholder.key}}" is not set`,
+        'Set the variable, or give the placeholder a default: ${env:NAME:-text}',
+      )
+    }
+
+    return value === undefined || value === '' ? (placeholder.fallback ?? '') : value
+  }
+
+  // An entry the files do not set is `undefined`, and one without a placeholder is its own value: neither is a step
+  // in a chain of references.
+  const valueOf = (name: string): string | undefined => {
+    const text = entries.get(name)
+    if (text === undefined || !text.includes('${')) {
+      return text
+    }
+
     const known = done.get(name)
     if (known !== undefined) {
       return known
@@ -188,7 +190,7 @@ export function expandDotenv(
     }
 
     resolving.push(name)
-    const value = expand(name, entries.get(name) ?? '')
+    const value = expand(name, text)
     resolving.pop()
 
     done.set(name, value)
@@ -196,9 +198,7 @@ export function expandDotenv(
   }
 
   for (const name of names) {
-    if (entries.has(name)) {
-      valueOf(name)
-    }
+    valueOf(name)
   }
 
   return done

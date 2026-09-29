@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ErrConfigValidation } from '../errors.js'
-import { checkInterpolation, mergeInterpolated } from '../interpolation.js'
+import { checkInterpolation, expandDotenv, mergeInterpolated } from '../interpolation.js'
 import { mergeLayers } from '../merge.js'
 import { freezeDeep, isPlainObject } from '../tree.js'
 import type { ConfigLayer, ConfigObject } from '../types.js'
@@ -484,5 +484,67 @@ describe('interpolation purity', () => {
     const layers = [file({ a: 'x', b: { c: [1, '$5'] } }), plain({ b: { d: 'y' } })]
 
     expect(mergeInterpolated(layers, {})).toEqual(mergeLayers(layers))
+  })
+})
+
+describe('dotenv expansion', () => {
+  function expand(entries: Env, env: Env = {}): Record<string, string> {
+    return Object.fromEntries(expandDotenv(new Map(Object.entries(entries)), env, 'config'))
+  }
+
+  /** The error `expandDotenv` throws for `entries`. */
+  function refused(entries: Env): Error {
+    try {
+      expand(entries)
+    } catch (error) {
+      return error as Error
+    }
+    return expect.fail('expected the entries to be refused')
+  }
+
+  // The rule of a config file: a default stands in for an empty value too, and without one an empty value is empty,
+  // not unset. Whether another entry or the environment holds the value makes no difference.
+  it.each<[string, Env, Env, string]>([
+    ['${env:A}', { A: '' }, {}, ''],
+    ['${env:A}', {}, { A: '' }, ''],
+    ['${env:A:-d}', { A: '' }, {}, 'd'],
+    ['${env:A:-d}', {}, { A: '' }, 'd'],
+  ])('reads %s with the entries %j and the environment %j as %j', (text, entries, env, expected) => {
+    expect(expand({ ...entries, X: text }, env).X).toBe(expected)
+  })
+
+  // A doubling chain turns a few lines into gigabytes. The cap stops it where it first goes too far.
+  it('refuses an entry that grows past 1 MiB, naming it', () => {
+    const entries: Env = { A0: 'x'.repeat(1024) }
+    for (let i = 1; i <= 11; i++) {
+      entries[`A${i}`] = `\${env:A${i - 1}}\${env:A${i - 1}}`
+    }
+
+    expect(refused(entries)).toMatchObject({
+      code: 'ERR_CONFIG_INTERPOLATION',
+      message: 'Cannot interpolate "A11" from the dotenv files in "config": it is longer than 1048576 characters',
+    })
+  })
+
+  /** `n` entries in one chain: `A0` reads `A1`, and so on, and the last is plain text. */
+  function chain(n: number): Env {
+    const entries: Env = {}
+    for (let i = 0; i < n; i++) {
+      entries[`A${i}`] = `\${env:A${i + 1}}`
+    }
+    entries[`A${n}`] = 'end'
+    return entries
+  }
+
+  // The same depth a config file's chain may reach: the plain text it ends on is no step in it.
+  it('follows a chain 32 entries deep', () => {
+    expect(expand(chain(32)).A0).toBe('end')
+  })
+
+  it('refuses a chain 33 entries deep, naming the entry that starts it', () => {
+    expect(refused(chain(33))).toMatchObject({
+      code: 'ERR_CONFIG_INTERPOLATION',
+      message: 'Cannot interpolate "A0" from the dotenv files in "config": its references run more than 32 deep',
+    })
   })
 })
