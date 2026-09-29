@@ -23,6 +23,15 @@ export interface ConfigLayer {
   /** Provenance finer than the layer, by dotted path: `server.port` to `env:APP_SERVER__PORT`. */
   readonly origins?: ReadonlyMap<string, string>
   readonly profile?: string
+  /**
+   * Whether the placeholders in this layer's strings are filled in once every layer has merged, before validation:
+   * `${env:NAME}` with an environment variable, `${config:path}` with a value of the merged configuration, and
+   * `${env:NAME:-text}` with `text` when there is nothing better. A placeholder that loses the merge is never filled
+   * in, and what one brings in is taken as it is.
+   *
+   * A placeholder can read any environment variable: set this only on text the application's own authors wrote.
+   */
+  readonly interpolate?: boolean
 }
 
 /** What a source is told while it loads. */

@@ -27,9 +27,9 @@ exceptions (see `CONVENTIONS.md`).
 | `ConfigSnapshot<T>`   | The validated tree at one revision. Frozen, and replaced rather than changed by a reload   |
 | `ConfigView<V>`       | A value derived from the configuration that the store keeps current, with its own listener |
 
-A source **loads** layers. Layers **merge** into one tree, later wins. The schema **validates** it into a
-snapshot. The store **swaps** the snapshot in and keeps the live object in step. After the first load, the whole
-pipeline is a **reload**.
+A source **loads** layers. Layers **merge** into one tree, later wins, and the placeholders in file values are
+**interpolated**. The schema **validates** it into a snapshot. The store **swaps** the snapshot in and keeps the live
+object in step. After the first load, the whole pipeline is a **reload**.
 
 ```mermaid
 flowchart TB
@@ -39,7 +39,8 @@ flowchart TB
   end
   S -->|"load, per source"| C["layers: frozen trees, the last good ones per source"]
   C --> M["merge: objects merge key by key, arrays and scalars replace"]
-  M --> V["validate against the schema: defaults, conversion, codecs, unknown keys dropped"]
+  M --> I["interpolate: file placeholders filled in from the environment and the merged tree"]
+  I --> V["validate against the schema: defaults, conversion, codecs, unknown keys dropped"]
   V --> W["swap: new snapshot, live object synced, views updated"]
   W --> N["listeners, logs, diagnostics channels"]
 ```
@@ -203,6 +204,50 @@ to contribute returns no layer; a source that cannot load throws.
 
 ---
 
+## Interpolation
+
+A file's strings can take their values from the environment and from the rest of the configuration:
+
+```yaml
+app:
+  name: '${env:NAME:-No Name} and ${config:team.nickname}'
+db:
+  url: 'postgres://${config:db.host}:${env:DB_PORT:-5432}/app'
+```
+
+| Placeholder                | Becomes                                                                         |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `${env:NAME}`              | the environment variable `NAME`                                                 |
+| `${config:db.host}`        | the value at `db.host`; `servers[0].host` and `servers.0.host` reach into lists |
+| `${env:NAME:-No Name}`     | `No Name` when `NAME` is unset or empty                                         |
+| `${config:db.host:-local}` | `local` when nothing sets `db.host`, or sets it to `null` or `''`               |
+| `$${`                      | a literal `${`                                                                  |
+
+The syntax is strict: `${` always opens a placeholder. A prefix other than `env` or `config`, a key that is not a
+variable name or a dotted path, an unclosed `${`, or anything but `:-` after the key fails the load with
+`ERR_CONFIG_INTERPOLATION`, naming the file, the path and the character. A default runs to the first `}` and holds
+no placeholder. Only a `$` right before `{` is special, and doubling it writes it: `$${env:X}` is the text
+`${env:X}`, `$$${env:X}` is a `$` and the value, and `pa$$word` stays as it is. In YAML, quote a value that holds a
+placeholder.
+
+A placeholder sees what the application will see: every source, those registered after the file included, but not
+the schema's defaults, which apply at validation. A value that is itself interpolated is interpolated first, and a
+loop is an error. A placeholder that loses the merge is never looked at, so a base file's `${env:DB_PASSWORD}`
+overridden by `app-dev.yaml` needs no `DB_PASSWORD`. What a placeholder brings in is text, taken as it is: it is
+never interpolated again, and a `$t` schema converts it as it converts the environment. A number or a boolean it
+reads becomes text; an object or a list is an error.
+
+A variable that is unset, or a path nothing sets, with no default fails the load, or rejects a reload, with an
+`ErrConfigValidation` whose issues name each value. Only file sources interpolate, and `{ interpolate: false }`
+reads a file as written; a source of your own opts in with `interpolate: true` on its layers.
+
+A file that interpolates can read every environment variable, so whoever can edit it can read the environment. A
+value built from a secret is a secret, and so is one another source can steer: in
+`https://${config:tenant}.hooks.example.com/?key=${env:HOOK_KEY}`, whoever sets `tenant` decides where the key
+goes. A default is text in the file, never a secret.
+
+---
+
 ## Profiles
 
 An active profile selects overlay files: with `eu` then `canary` active, `app.json` is read, then `app-eu.json`,
@@ -215,7 +260,8 @@ then `app-canary.json`, each overriding the one before. The profiles are decided
 | The environment: `CAFFEINE__PROFILES=eu,dev`             | `hostProfiles()`, from `process.env`      |
 
 If none of the three named a profile, and only then, a file source reads `caffeine.profiles` from its own base file
-and picks its overlays. Every source is loaded once, profile or not.
+and picks its overlays. Every source is loaded once, profile or not. That read comes before interpolation, so
+`caffeine.profiles` in a file cannot hold `${`.
 
 A profile is a name, since a file source makes a file name of it: `.`, `..` and a name holding `/` or `\` are refused
 with `ERR_CONFIG_PROFILE`, wherever they were named.
@@ -236,7 +282,8 @@ backing off from 1 s to 8 s. The source is reloaded as soon as it starts.
 A reload loads only the sources its trigger names; a static source is never loaded again. Reloads never overlap:
 one that arrives mid-run joins the single follow-up. Nor do a source's loads: until a load that timed out settles,
 the source is not asked again, and each attempt fails at once with `ERR_CONFIG_SOURCE_TIMEOUT`. If no source's
-layers changed, nothing is merged or validated.
+layers changed, nothing is merged or validated. Every merge interpolates afresh, so a value built from a live source
+follows it; the environment is read then, and a change to it alone reloads nothing.
 
 A reload is all or nothing. When the new tree fails validation the reload is rejected: the snapshot, the live
 object, the views and every source's layers stay as they were, and nobody is notified. A source that fails to load
@@ -256,12 +303,14 @@ store.explain('database.host') // the value, and every layer that sets it, winne
 store.inspect() // the revision, each source's trigger, layers and health, and the snapshot
 ```
 
-Both return every value as it is, a secret included, so treat what they return as sensitive.
+Both return every value as it is, a secret included, so treat what they return as sensitive. `explain()` shows a
+file layer's value as written, placeholders included, and the snapshot's value interpolated.
 
 The store logs under `{ name: 'config' }`: the first load, every reload with the paths that changed, rejections,
 failing and recovering sources, and failing listeners. Values are never logged, only paths. The issues of an
 `ErrConfigValidation` from a `$t` schema name a path and what was expected there, never the value: `$t.JSON` and
-`$t.List` report text they cannot read without quoting it. Two messages are not the store's own and may quote
+`$t.List` report text they cannot read without quoting it. An interpolation error names the placeholder, its file
+and its path, never what it read or its default. Two messages are not the store's own and may quote
 text: a config file that does not parse, where the parser says what it stopped at, and the issues of a Standard
 Schema, which its library writes.
 
@@ -300,6 +349,7 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | `ERR_CONFIG_KEY_CONFLICT`     | an argument or an expanded key sets a path another uses as a parent    |
 | `ERR_CONFIG_FILE_PARSE`       | a file does not parse to an object                                     |
 | `ERR_CONFIG_PROFILE`          | a profile is `.` or `..`, or holds `/` or `\`                          |
+| `ERR_CONFIG_INTERPOLATION`    | a placeholder is malformed or misplaced, or cannot be filled in        |
 | `ERR_CONFIG_VALIDATION`       | the tree does not satisfy the schema (`ErrConfigValidation`, `issues`) |
 
 ---
@@ -310,6 +360,7 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 | --------------------- | ---------------------------------------------------------- |
 | Vocabulary            | `types.ts`                                                 |
 | Trees                 | `tree.ts`, `merge.ts`, `reconcile.ts`, `live.ts`           |
+| Interpolation         | `interpolation.ts`                                         |
 | Runtime               | `store.ts`, `load.ts`, `triggers.ts`, `change_notifier.ts` |
 | Schema                | `schema.ts`, `errors.ts`                                   |
 | Diagnostics           | `explain.ts`, `observe.ts`                                 |

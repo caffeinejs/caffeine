@@ -234,6 +234,66 @@ describe('FileConfigSource profile files', () => {
   })
 })
 
+describe('FileConfigSource interpolation', () => {
+  it('marks every layer for interpolation unless told not to', async () => {
+    const base = await write('marked.json', { a: 'x' })
+    await write('marked-dev.json', { a: 'y' })
+
+    const on = await new JSONConfigSource(base).load(context(['dev']))
+    const off = await new JSONConfigSource(base, { interpolate: false }).load(context(['dev']))
+
+    expect(on.map(layer => layer.interpolate)).toEqual([true, true])
+    expect(off.map(layer => layer.interpolate)).toEqual([false, false])
+  })
+
+  it('reads a file as written when told not to interpolate, malformed placeholders included', async () => {
+    const path = await write('literal.json', { a: '${not a placeholder', b: '${evn:X}' })
+
+    const [layer] = await new JSONConfigSource(path, { interpolate: false }).load(context())
+
+    expect(layer.data).toEqual({ a: '${not a placeholder', b: '${evn:X}' })
+  })
+
+  it('takes a key holding ${ literally', async () => {
+    const path = await write('keys.json', { '${key}': 'v' })
+
+    const [layer] = await new JSONConfigSource(path).load(context())
+
+    expect(layer.data).toEqual({ '${key}': 'v' })
+  })
+
+  // Checked as each file is read, overridden or not: the load that brought the mistake fails, and names the file.
+  it.each([
+    ['the base file', { db: { url: 'x${evn:HOST}' } }, {}, 'base', '"db.url"', 'character 2'],
+    ['a profile file', { db: { url: 'fine' } }, { db: { url: '${env:HOST' } }, 'profile', '"db.url"', 'character 1'],
+    ['a list', { hosts: ['ok', '${env:}'] }, {}, 'base', '"hosts.1"', 'character 1'],
+    ['a value a profile file overrides', { a: '${field:x}' }, { a: 'fine' }, 'base', '"a"', 'character 1'],
+  ])('refuses a malformed placeholder in %s', async (_label, base, dev, culprit, path, at) => {
+    const basePath = await write('syntax.json', base)
+    const devPath = await write('syntax-dev.json', dev)
+    const file = culprit === 'base' ? basePath : devPath
+
+    const error = await new JSONConfigSource(basePath).load(context(['dev'])).catch((thrown: unknown) => thrown)
+
+    expect(error).toMatchObject({ name: 'ErrConfig', code: 'ERR_CONFIG_INTERPOLATION' })
+    expect((error as Error).message).toContain(
+      `Cannot interpolate ${path} in config file "${file}": the placeholder at ${at}`,
+    )
+  })
+
+  // The profiles pick which files are read, before anything is interpolated. Named up front or not, a placeholder
+  // there would be read as a profile name.
+  it.each([['${env:PROFILES}'], ['$${escaped}']])('refuses %s in caffeine.profiles', async profiles => {
+    const path = await write('profiles.json', { caffeine: { profiles } })
+
+    for (const named of [[], ['eu']]) {
+      await expect(new JSONConfigSource(path).load(context(named))).rejects.toThrow(
+        `Cannot interpolate "caffeine.profiles" in config file "${path}"`,
+      )
+    }
+  })
+})
+
 describe('FileConfigSource watching', () => {
   it('has no watcher unless asked for one', () => {
     expect(new JSONConfigSource('./app.json').watch).toBeUndefined()
