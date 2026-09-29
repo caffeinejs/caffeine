@@ -61,15 +61,11 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `npm run build`
-  2. `npm run test:typecheck`
-  3. `npm test`
-  4. `npm run lint:fix`
-  5. `make check` before asking for review — it also lints markdown, builds the CLI binary and the examples, and runs `test:memory`, which is what CI runs.
+  1. `make check`, and nothing else. It runs the pin check, `lint:fix`, `lint:markdown`, `build`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
 Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
 
-When in doubt on **code** scope, run the full suite. A README next to a TypeScript change does not make the task docs-only.
+When in doubt on **code** scope, run `make check`. A README next to a TypeScript change does not make the task docs-only.
 
 - `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`, or `node_modules/.bin/caffeine` is missing.
 - A new production dependency must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.

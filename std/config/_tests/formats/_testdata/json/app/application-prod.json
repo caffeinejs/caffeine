@@ -1,0 +1,3 @@
+{
+  "db": { "host": "${env:DB_HOST}", "password": "${env:DB_PASSWORD}", "pool": { "ssl": true } }
+}

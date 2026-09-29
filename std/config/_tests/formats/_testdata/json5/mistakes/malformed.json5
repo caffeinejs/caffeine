@@ -1,0 +1,2 @@
+// A typo in a placeholder's prefix. The error names the character, never the text around it: it may be a secret.
+{ db: { password: 'hunter${hunter2:x}' } }

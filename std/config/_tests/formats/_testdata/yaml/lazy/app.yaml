@@ -1,0 +1,3 @@
+# A secret the base file reads from the environment, which a profile file may replace.
+db:
+  password: ${env:DB_PASSWORD}

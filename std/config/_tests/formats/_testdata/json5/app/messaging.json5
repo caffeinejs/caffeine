@@ -1,0 +1,4 @@
+// A second file source. It refers into application.json5, which refers back into it.
+{
+  messaging: { queue: '${config:caffeine.name}.events', deadLetter: '${config:messaging.queue}.dlq' },
+}

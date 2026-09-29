@@ -1,0 +1,1 @@
+{ region: '${env:REGION:-eu}', bucket: 'data-${config:region}' }
