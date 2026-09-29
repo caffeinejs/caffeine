@@ -1,6 +1,6 @@
 import { once } from 'node:events'
-import { get } from 'node:https'
-import { createServer } from 'node:net'
+import { createServer, get, type Server } from 'node:https'
+import type { AddressInfo } from 'node:net'
 
 import { createWebApplication, newRouter, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -19,24 +19,16 @@ function getHTTPS(url: string): Promise<{ status: number; body: unknown }> {
   })
 }
 
-async function unusedPort(): Promise<number> {
-  const server = createServer().listen(0, '127.0.0.1')
-  await once(server, 'listening')
-
-  const address = server.address()
-  if (address === null || typeof address === 'string') {
-    throw new Error('Cannot get a TCP port for the TLS test')
-  }
-
-  await new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve())))
-  return address.port
-}
-
 describe('testTLS', () => {
+  let server: Server | undefined
   let app: WebApplication | undefined
 
   afterEach(async () => {
+    if (server?.listening) {
+      await new Promise<void>((resolve, reject) => server!.close(error => (error ? reject(error) : resolve())))
+    }
     await app?.close()
+    server = undefined
     app = undefined
   })
 
@@ -47,38 +39,37 @@ describe('testTLS', () => {
     expect(published.testTLSCertificate()).toBe(testTLSCertificate())
   })
 
-  it('serves HTTPS on a loopback port with the exported certificate trusted by the client', async () => {
-    app = createWebApplication().server(() => testTLS())
-    app.mount(newRouter().get('/ping', () => ({ ok: true })))
-
-    await app.run()
-
-    expect(app.address?.host).toBe('127.0.0.1')
-    expect(app.address?.port).toBeGreaterThan(0)
-    expect(app.address?.origin).toBe(`https://127.0.0.1:${app.address?.port}`)
-    expect(await getHTTPS(`${app.address!.origin}/ping`)).toEqual({ status: 200, body: { ok: true } })
-  })
-
-  it('composes with other server factory options', async () => {
-    app = createWebApplication()
-      .server(() => ({ factory: { bodyLimit: 2048 } }))
-      .server(() => testTLS())
-
-    await app.bootstrap()
-
-    expect(app.instance.initialConfig.bodyLimit).toBe(2048)
-    expect(app.instance.initialConfig.https).toBe(true)
-  })
-
-  it('allows the listener port to be overridden in the returned settings', async () => {
-    const port = await unusedPort()
+  // Only `key` and `cert`, so the result spreads into any TLS options object without dragging settings along.
+  it('returns only the key and the certificate', () => {
     const tls = testTLS()
-    app = createWebApplication().server(() => ({ ...tls, listener: { ...tls.listener, port } }))
+
+    expect(Object.keys(tls)).toEqual(['key', 'cert'])
+    expect(tls.key).toContain('-----BEGIN PRIVATE KEY-----')
+    expect(tls.cert).toBe(testTLSCertificate())
+  })
+
+  it('serves a bare Node HTTPS server trusted through the exported certificate', async () => {
+    server = createServer(testTLS(), (_request, response) => {
+      response.setHeader('content-type', 'application/json')
+      response.end(JSON.stringify({ ok: true }))
+    }).listen(0, '127.0.0.1')
+    await once(server, 'listening')
+
+    const { port } = server.address() as AddressInfo
+
+    expect(await getHTTPS(`https://127.0.0.1:${port}/ping`)).toEqual({ status: 200, body: { ok: true } })
+  })
+
+  it('serves a Caffeine web application over HTTPS', async () => {
+    app = createWebApplication().server(() => ({
+      factory: { https: testTLS() },
+      listener: { host: '127.0.0.1', port: 0 },
+    }))
     app.mount(newRouter().get('/ping', () => ({ ok: true })))
 
     await app.run()
 
-    expect(app.address?.port).toBe(port)
+    expect(app.address?.origin).toBe(`https://127.0.0.1:${app.address?.port}`)
     expect(await getHTTPS(`${app.address!.origin}/ping`)).toEqual({ status: 200, body: { ok: true } })
   })
 })

@@ -4,7 +4,8 @@ import { Guard, type GuardReturn } from '@caffeinejs/http/guards'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it, vi } from 'vitest'
 
-import { ErrTestClientAlreadyReady, ErrTestClientTarget, newTestContainer, testClient } from './index.js'
+import { newTestContainer } from '../test_container.js'
+import { ErrTestClientAlreadyReady, ErrTestClientTarget, testClient } from './index.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
 

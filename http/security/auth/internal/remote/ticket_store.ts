@@ -29,8 +29,8 @@ export interface RemoteAuthenticationTicket {
  * No production implementation ships with this package, deliberately. An in-process store is a
  * footgun once there is more than one instance: sessions break on the wrong node and
  * `removeBySubject` revokes only where it was called. Supply one
- * backed by whatever the deployment already shares — Redis, a database. `TestOAuthTicketStore`
- * in `@caffeinejs/testing` covers tests.
+ * backed by whatever the deployment already shares — Redis, a database. `TestOIDCTicketStore`
+ * in `@caffeinejs/testing/http` covers tests.
  */
 export interface RemoteAuthenticationTicketStore {
   /**

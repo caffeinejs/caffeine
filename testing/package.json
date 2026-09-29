@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/testing",
   "version": "0.0.0",
-  "description": "CaffeineJS HTTP testing utilities",
+  "description": "CaffeineJS testing utilities",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -11,9 +11,9 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./experimental": {
-      "types": "./dist/experimental/index.d.ts",
-      "default": "./dist/experimental/index.js"
+    "./http": {
+      "types": "./dist/http/index.d.ts",
+      "default": "./dist/http/index.js"
     },
     "./tls": {
       "types": "./dist/tls/index.d.ts",
@@ -30,14 +30,27 @@
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
+  "peerDependencies": {
     "@caffeinejs/brewer": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*",
     "@caffeinejs/http": "*"
   },
+  "peerDependenciesMeta": {
+    "@caffeinejs/brewer": {
+      "optional": true
+    },
+    "@caffeinejs/di": {
+      "optional": true
+    },
+    "@caffeinejs/http": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@caffeinejs/brewer": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
     "fastify": "^5.12.4"
   }
 }

@@ -233,7 +233,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    * Without one the sealed cookie is the session
    * and cannot be revoked before its TTL expires. Deliberately not defaulted, and no
    * production implementation ships: supply one backed by whatever the deployment already
-   * shares. `TestOIDCTicketStore` in `@caffeinejs/testing` covers tests.
+   * shares. `TestOIDCTicketStore` in `@caffeinejs/testing/http` covers tests.
    */
   ticketStore?: RemoteAuthenticationTicketStore
 
@@ -676,7 +676,7 @@ export class OIDCAuthenticationOptionsBuilder {
    *
    * Without one the cookie is the session and signing out only clears the responding
    * browser's copy. No production store ships — supply one backed by shared infrastructure
-   * such as Redis; `TestOIDCTicketStore` in `@caffeinejs/testing` covers tests.
+   * such as Redis; `TestOIDCTicketStore` in `@caffeinejs/testing/http` covers tests.
    */
   ticketStore(store: RemoteAuthenticationTicketStore): this {
     this.#options.ticketStore = store

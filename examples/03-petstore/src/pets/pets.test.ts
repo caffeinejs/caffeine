@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import { ErrFetchFailed, newReq, newURL, TestContainer, controllerTypedClient } from '@caffeinejs/testing'
+import { TestContainer } from '@caffeinejs/testing'
+import { ErrFetchFailed, newReq, newURL, controllerTypedClient } from '@caffeinejs/testing/http'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { type PetstoreApp, buildApp } from '../app.js'

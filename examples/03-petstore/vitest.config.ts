@@ -50,6 +50,7 @@ export default defineConfig({
       // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.
       '@caffeinejs/html': fileURLToPath(new URL('../../html/index.ts', import.meta.url)),
       '@caffeinejs/openapi': fileURLToPath(new URL('../../openapi/index.ts', import.meta.url)),
+      '@caffeinejs/testing/http': fileURLToPath(new URL('../../testing/http/index.ts', import.meta.url)),
       '@caffeinejs/testing': fileURLToPath(new URL('../../testing/index.ts', import.meta.url)),
       '@caffeinejs/brewer': fileURLToPath(new URL('../../brewer/index.ts', import.meta.url)),
     },

@@ -1,5 +1,3 @@
-import type { FastifyServerSettings } from '@caffeinejs/http'
-
 import fixture from './_testdata/localhost.json' with { type: 'json' }
 
 // This fixed TLS identity is deliberately public test data, not an application credential. Never use it for a
@@ -14,19 +12,16 @@ import fixture from './_testdata/localhost.json' with { type: 'json' }
 const { key, certificate } = fixture
 
 /**
- * Configures a loopback HTTPS server on an OS-assigned port for tests.
+ * Returns the fixed TLS identity for a loopback HTTPS server in tests.
  *
- * Return the settings from an `app.server(...)` callback. The certificate and private key are fixed and bundled
- * with this package; use them only for local tests. Trust the server in a client with {@link testTLSCertificate}.
+ * The private key and certificate are bundled with this package and cover `localhost`, `127.0.0.1` and `::1`; use
+ * them only for local tests. Trust the server in a client with {@link testTLSCertificate}.
  *
  * @example
- * createWebApplication().server(() => testTLS())
+ * createServer(testTLS(), handler).listen(0, '127.0.0.1') // node:https
  */
-export function testTLS(): FastifyServerSettings {
-  return {
-    factory: { https: { key, cert: certificate } },
-    listener: { host: '127.0.0.1', port: 0 },
-  }
+export function testTLS(): { key: string; cert: string } {
+  return { key, cert: certificate }
 }
 
 /** Returns the PEM certificate used by {@link testTLS}, suitable for a test client's `ca` option. */

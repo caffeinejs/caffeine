@@ -1,4 +1,5 @@
-import { newTestContainer, testClient } from '@caffeinejs/testing'
+import { newTestContainer } from '@caffeinejs/testing'
+import { testClient } from '@caffeinejs/testing/http'
 
 import { createContainer } from './app.js'
 import { hello } from './hello.routes.js'

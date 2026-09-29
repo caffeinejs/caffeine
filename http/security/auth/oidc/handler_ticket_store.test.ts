@@ -16,7 +16,7 @@ const SCHEME = 'OIDC'
 /**
  * These tests exercise the handler, not a store implementation, so they use the smallest
  * store that satisfies the contract. The shipped `TestOIDCTicketStore` lives in
- * `@caffeinejs/testing`, which depends on this package — importing it back would make the
+ * `@caffeinejs/testing/http`, which depends on this package — importing it back would make the
  * dependency circular for no gain here.
  */
 class FakeTicketStore implements RemoteAuthenticationTicketStore {
