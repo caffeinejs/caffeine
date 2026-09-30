@@ -17,11 +17,22 @@ const servers: ServerConfig[] = [
   { name: 'caffeine (no cache)', port: 3051, env: { BENCH_CACHE: 'off' }, ...built('caffeine', 'caffeine.js') },
   { name: 'nestjs', port: 3052, ...built('nestjs', 'nestjs.js') },
   { name: 'nestjs (no cache)', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
+  { name: 'hono', port: 3054, ...built('hono', 'hono.js') },
+  { name: 'hono (no cache)', port: 3055, env: { BENCH_CACHE: 'off' }, ...built('hono', 'hono.js') },
 ]
 
 await runLoadBenchmark({
   servers,
   readyPath: '/health',
   request: { path: '/api/products' },
-  versions: ['@nestjs/core', '@nestjs/cache-manager', 'cache-manager', '@caffeinejs/http', '@caffeinejs/caching'],
+  versions: [
+    '@nestjs/core',
+    '@nestjs/cache-manager',
+    'cache-manager',
+    'hono',
+    '@hono/node-server',
+    'undici',
+    '@caffeinejs/http',
+    '@caffeinejs/caching',
+  ],
 })

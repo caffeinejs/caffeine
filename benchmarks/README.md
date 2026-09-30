@@ -73,9 +73,14 @@ A fixture added to a load benchmark does the same work as its neighbours: the sa
 response schema, the same hooks. `npm run test:fixtures -w @caffeinejs/benchmarks` checks that each one answers
 correctly; CI runs it before any benchmark.
 
-In `caching`, the two caches are not the same work by design: NestJS's interceptor stores the handler's return
+In `caching`, the three caches are not the same work by design: NestJS's interceptor stores the handler's return
 value and serializes it again on every hit, with no `Cache-Control`, `ETag` or `Age`; Caffeine stores the
-serialized bytes and replays them with those headers. That difference is what each framework ships.
+serialized bytes and replays them with those headers; Hono's middleware stores the whole response in the Web
+Cache API and replays it with the `Cache-Control` it set, and no `ETag` or `Age`. That difference is what each
+framework ships.
+
+Node has no Web Cache API, and without one Hono's middleware caches nothing. Both Hono fixtures install
+undici's in-memory `caches` and, because it accepts only undici's own `Response`, undici's fetch globals too.
 
 ## Microbenchmarks
 

@@ -37,6 +37,8 @@ const servers: ServerConfig[] = [
   },
   { name: 'nestjs', cmd: 'node', port: 3052, ...built('nestjs', 'nestjs.js') },
   { name: 'nestjs (no cache)', cmd: 'node', port: 3053, env: { BENCH_CACHE: 'off' }, ...built('nestjs', 'nestjs.js') },
+  { name: 'hono', cmd: 'node', port: 3054, ...built('hono', 'hono.js') },
+  { name: 'hono (no cache)', cmd: 'node', port: 3055, env: { BENCH_CACHE: 'off' }, ...built('hono', 'hono.js') },
 ]
 
 async function waitForReady(url: string, timeoutMs = 15_000): Promise<void> {
