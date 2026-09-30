@@ -4,7 +4,7 @@ import { $t } from '../../schema/t.js'
 import { ErrConfigValidation } from '../errors.js'
 import { loadConfig } from '../load.js'
 import { validateConfig } from '../schema.js'
-import { InlineConfigSource } from '../sources/inline_source.js'
+import { InlineConfigSource } from '../sources/inline/index.js'
 
 const schema = $t.Object({
   server: $t.Object({

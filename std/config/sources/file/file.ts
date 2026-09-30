@@ -2,9 +2,9 @@ import { watch } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 
-import { ErrConfig, messageOf } from '../errors.js'
-import { checkInterpolation } from '../interpolation.js'
-import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from '../types.js'
+import { ErrConfig, messageOf } from '../../errors.js'
+import { checkInterpolation } from '../../interpolation.js'
+import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from '../../types.js'
 
 /** Turns a config file's text into the object it describes. May be synchronous or asynchronous. */
 export type ConfigFileParser = (text: string) => Record<string, unknown> | Promise<Record<string, unknown>>

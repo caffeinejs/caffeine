@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../../schema/t.js'
 import { loadConfig } from '../../load.js'
-import { ArgsConfigSource } from '../../sources/args_source.js'
-import { EnvConfigSource } from '../../sources/env_source.js'
+import { RecordingLogger } from '../../log.testkit.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../types.js'
-import { RecordingLogger } from '../log.testkit.js'
+import { ArgvConfigSource } from '../argv/index.js'
+import { EnvConfigSource } from './env.js'
 
 function context(logger = new RecordingLogger()): ConfigLoadContext {
   return { profiles: [], signal: new AbortController().signal, logger }
@@ -168,7 +168,7 @@ describe('text reaching the schema', () => {
     const argv = ['--version=1', '--zip=01310', '--build=1e3', '--flag=on', '--port=8080', '--verbose']
     const env = { VERSION: '1', ZIP: '01310', BUILD: '1e3', FLAG: 'on', PORT: '8080', VERBOSE: 'true' }
 
-    const fromArgs = await loadConfig(definition([new ArgsConfigSource({ argv })], schema))
+    const fromArgs = await loadConfig(definition([new ArgvConfigSource({ argv })], schema))
     const fromEnv = await loadConfig(definition([new EnvConfigSource({ env })], schema))
 
     expect(fromArgs.current).toEqual(fromEnv.current)

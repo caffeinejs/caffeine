@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
-import { InlineConfigSource } from '../sources/inline_source.js'
-import { JSONConfigSource } from '../sources/json_source.js'
+import { InlineConfigSource } from '../sources/inline/index.js'
+import { JSONConfigSource } from '../sources/json/index.js'
 import type { ConfigLoadContext, ConfigSource } from '../types.js'
 
 let dir: string

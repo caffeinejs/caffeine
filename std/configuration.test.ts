@@ -174,7 +174,7 @@ describe('newConfiguration', () => {
   it('reads command-line arguments, above every other source', async () => {
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ server: { host: 'from-code', port: 1 } }))
-      .args({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] })
+      .argv({ argv: ['/usr/bin/node', '/app/main.js', '--server.host=from-args'] })
       .build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
@@ -184,14 +184,14 @@ describe('newConfiguration', () => {
     await app.close()
   })
 
-  it('takes the host arguments when .args() names none', async () => {
+  it('takes the host arguments when .argv() names none', async () => {
     const original = process.argv
     process.argv = ['/usr/bin/node', '/app/main.js', '--server.host=from-process']
 
     try {
       const conf = newConfiguration(schema, kConfig)
         .source(new InlineConfigSource({ server: { host: 'from-code', port: 1 } }))
-        .args()
+        .argv()
         .build()
       const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 

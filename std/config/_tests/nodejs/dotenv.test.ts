@@ -8,8 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadConfig } from '../../load.js'
 import { loadEnvFiles } from '../../nodejs/dotenv.js'
 import { passthroughConfigSchema } from '../../schema.js'
-import { EnvConfigSource } from '../../sources/env_source.js'
-import { JSONConfigSource } from '../../sources/json_source.js'
+import { EnvConfigSource } from '../../sources/env/index.js'
+import { JSONConfigSource } from '../../sources/json/index.js'
 import type { ConfigDefinition, ConfigSource } from '../../types.js'
 
 // Every variable these files set, and the one that names profiles. Unset before each test, so the machine running it

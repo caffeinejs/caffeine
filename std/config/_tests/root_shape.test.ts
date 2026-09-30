@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
-import { InlineConfigSource } from '../sources/inline_source.js'
+import { InlineConfigSource } from '../sources/inline/index.js'
 import { kMergedTree } from '../store.js'
 import type { ConfigSchema } from '../types.js'
 

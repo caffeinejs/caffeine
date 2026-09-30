@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
-import { ArgsConfigSource } from '../sources/args_source.js'
+import { ArgvConfigSource } from '../sources/argv/index.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): ConfigDefinition<T> {
@@ -96,12 +96,12 @@ describe('ConfigStore.explain', () => {
   // `--servers[0].host=h` sets a path; asking why it has its value, spelled the same way, must find it.
   it('reads the bracket form of a path as the command line does', async () => {
     const argv = ['--servers[0].host=h']
-    const store = await loadConfig(definition([new ArgsConfigSource({ argv })], passthroughConfigSchema))
+    const store = await loadConfig(definition([new ArgvConfigSource({ argv })], passthroughConfigSchema))
 
     expect(store.explain('servers[0].host')).toMatchObject({
       path: 'servers.0.host',
       value: 'h',
-      layers: [{ layer: 'args', origin: 'args:--servers[0].host=h', value: 'h' }],
+      layers: [{ layer: 'argv', origin: 'argv:--servers[0].host=h', value: 'h' }],
     })
   })
 

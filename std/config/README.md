@@ -64,7 +64,7 @@ export const kAppConfig = token<AppConfig>(Symbol('petstore.config'))
 const conf = newConfiguration(appConfigSchema, kAppConfig)
   .source(new JSONConfigSource('./config/app.json'))
   .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
-  .args()
+  .argv()
   .build()
 
 createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
@@ -170,7 +170,7 @@ anything.
 | Source                    | Reads                           | Changes by                                                     |
 | ------------------------- | ------------------------------- | -------------------------------------------------------------- |
 | `EnvConfigSource`         | the environment                 | nothing; loaded once                                           |
-| `ArgsConfigSource`        | the command line, via `.args()` | nothing; loaded once                                           |
+| `ArgvConfigSource`        | the command line, via `.argv()` | nothing; loaded once                                           |
 | `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
 | `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
 | `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |

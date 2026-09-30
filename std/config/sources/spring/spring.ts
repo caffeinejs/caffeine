@@ -1,10 +1,10 @@
 import { setTimeout as delay } from 'node:timers/promises'
 
-import type { Duration } from '../../duration/duration.js'
-import { ErrConfig, messageOf } from '../errors.js'
-import { expandKeys } from '../merge.js'
-import { pollDelay } from '../triggers.js'
-import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource, ConfigValue } from '../types.js'
+import type { Duration } from '../../../duration/duration.js'
+import { ErrConfig, messageOf } from '../../errors.js'
+import { expandKeys } from '../../merge.js'
+import { pollDelay } from '../../triggers.js'
+import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource, ConfigValue } from '../../types.js'
 
 /** The pause before the first retry of a URL. It doubles per retry, as the pause of a failing poll does. */
 const RETRY_DELAY_MS = 100

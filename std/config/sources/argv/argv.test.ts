@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { ArgsConfigSource, type ArgsConfigSourceOptions } from '../../sources/args_source.js'
+import { ArgvConfigSource, type ArgvConfigSourceOptions } from './argv.js'
 
-function parse(argv: string[], options: Omit<ArgsConfigSourceOptions, 'argv'> = {}): unknown {
-  return new ArgsConfigSource({ ...options, argv }).load()[0].data
+function parse(argv: string[], options: Omit<ArgvConfigSourceOptions, 'argv'> = {}): unknown {
+  return new ArgvConfigSource({ ...options, argv }).load()[0].data
 }
 
-describe('ArgsConfigSource', () => {
+describe('ArgvConfigSource', () => {
   it('reads --key=value', () => {
     expect(parse(['--server.port=8080'])).toEqual({ server: { port: '8080' } })
   })
@@ -98,8 +98,8 @@ describe('ArgsConfigSource', () => {
   })
 
   it('records the argument each path came from', () => {
-    expect(new ArgsConfigSource({ argv: ['--server.port=8080'] }).load()[0].origins?.get('server.port')).toBe(
-      'args:--server.port=8080',
+    expect(new ArgvConfigSource({ argv: ['--server.port=8080'] }).load()[0].origins?.get('server.port')).toBe(
+      'argv:--server.port=8080',
     )
   })
 
@@ -108,8 +108,8 @@ describe('ArgsConfigSource', () => {
     process.argv = ['/usr/bin/node', '/app/main.js', '--server.port=7000']
 
     try {
-      expect(new ArgsConfigSource().load()[0].data).toEqual({ server: { port: '7000' } })
-      expect(new ArgsConfigSource({ argv: ['--server.port=8080'] }).load()[0].data).toEqual({
+      expect(new ArgvConfigSource().load()[0].data).toEqual({ server: { port: '7000' } })
+      expect(new ArgvConfigSource({ argv: ['--server.port=8080'] }).load()[0].data).toEqual({
         server: { port: '8080' },
       })
     } finally {
@@ -123,7 +123,7 @@ describe('ArgsConfigSource', () => {
     delete globalThis.process
 
     try {
-      expect(new ArgsConfigSource().load()[0].data).toEqual({})
+      expect(new ArgvConfigSource().load()[0].data).toEqual({})
     } finally {
       Object.defineProperty(globalThis, 'process', descriptor)
     }

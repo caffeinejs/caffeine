@@ -8,11 +8,11 @@ import { z } from 'zod'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { expandKeys } from '../merge.js'
-import { ArgsConfigSource } from '../sources/args_source.js'
-import { EnvConfigSource } from '../sources/env_source.js'
-import { FileConfigSource } from '../sources/file_source.js'
-import { InlineConfigSource } from '../sources/inline_source.js'
-import { JSONConfigSource } from '../sources/json_source.js'
+import { ArgvConfigSource } from '../sources/argv/index.js'
+import { EnvConfigSource } from '../sources/env/index.js'
+import { FileConfigSource } from '../sources/file/index.js'
+import { InlineConfigSource } from '../sources/inline/index.js'
+import { JSONConfigSource } from '../sources/json/index.js'
 import type { ConfigSchema, ConfigSource } from '../types.js'
 
 let dir: string
@@ -183,7 +183,7 @@ describe('a list set as text', () => {
 
   it('gives the same answer from the command line as from the environment', async () => {
     const store = await loadConfig<{ tags: string[] }>(
-      definition([new ArgsConfigSource({ argv: ['--tags=a,b,c'] })], listSchema),
+      definition([new ArgvConfigSource({ argv: ['--tags=a,b,c'] })], listSchema),
     )
 
     expect(store.current.tags).toEqual(['a', 'b', 'c'])

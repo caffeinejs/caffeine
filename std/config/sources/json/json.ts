@@ -1,4 +1,4 @@
-import { FileConfigSource, type FileConfigSourceOptions } from './file_source.js'
+import { FileConfigSource, type FileConfigSourceOptions } from '../file/index.js'
 
 /**
  * Configuration from a JSON file. The one format `std` parses itself, because the runtime carries the parser.

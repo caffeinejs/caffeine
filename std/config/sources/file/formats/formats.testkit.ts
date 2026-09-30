@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url'
 import JSON5 from 'json5'
 import { parse as parseYAML } from 'yaml'
 
-import { mergeInterpolated } from '../../interpolation.js'
-import { passthroughConfigSchema } from '../../schema.js'
-import { FileConfigSource, type ConfigFileParser } from '../../sources/file_source.js'
-import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../types.js'
+import { mergeInterpolated } from '../../../interpolation.js'
+import { passthroughConfigSchema } from '../../../schema.js'
+import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../../types.js'
+import { FileConfigSource, type ConfigFileParser } from '../file.js'
 
 // Each format keeps its files in `_testdata/<ext>/`, each named `<name>.<ext>`. The core set, the files
 // `core.test.ts` reads, is in every format's folder under the same names and with the same meaning, so one

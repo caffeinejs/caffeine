@@ -1,4 +1,4 @@
-import type { ConfigLayer, ConfigObject, ConfigSource } from '../types.js'
+import type { ConfigLayer, ConfigObject, ConfigSource } from '../../types.js'
 
 /** Configuration from a fixed object: embedded defaults, test fixtures. Loaded once, taken literally. */
 export class InlineConfigSource implements ConfigSource {

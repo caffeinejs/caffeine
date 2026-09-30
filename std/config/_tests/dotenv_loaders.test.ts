@@ -5,11 +5,11 @@ import { join } from 'node:path'
 import dotenv from 'dotenv'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DotenvLoader, DotenvOptions } from '../../dotenv.js'
-import { loadConfig } from '../../load.js'
-import { passthroughConfigSchema } from '../../schema.js'
-import { EnvConfigSource } from '../../sources/env_source.js'
-import type { ConfigDefinition } from '../../types.js'
+import type { DotenvLoader, DotenvOptions } from '../dotenv.js'
+import { loadConfig } from '../load.js'
+import { passthroughConfigSchema } from '../schema.js'
+import { EnvConfigSource } from '../sources/env/index.js'
+import type { ConfigDefinition } from '../types.js'
 
 // Every variable these files set, and the one that names profiles. Unset before each test, so the machine running it
 // decides nothing, and restored after, which also removes what the loaders wrote.

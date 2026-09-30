@@ -1,11 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mergeLayers } from '../../merge.js'
-import {
-  SpringCloudConfigSource,
-  type SpringCloudConfigSourceOptions,
-} from '../../sources/spring_cloud_config_source.js'
 import type { ConfigLoadContext, ConfigSource } from '../../types.js'
+import { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './spring.js'
 
 function context(profiles: string[] = ['default'], signal = new AbortController().signal): ConfigLoadContext {
   return { profiles, signal, logger: undefined as never }

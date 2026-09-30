@@ -4,12 +4,12 @@ import { join } from 'node:path'
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { $t } from '../../../schema/t.js'
-import { ErrConfigValidation } from '../../errors.js'
-import { loadConfig } from '../../load.js'
-import { EnvConfigSource } from '../../sources/env_source.js'
-import { FileConfigSource } from '../../sources/file_source.js'
-import type { ConfigDefinition, ConfigSource, InferConfig } from '../../types.js'
+import { $t } from '../../../../schema/t.js'
+import { ErrConfigValidation } from '../../../errors.js'
+import { loadConfig } from '../../../load.js'
+import type { ConfigDefinition, ConfigSource, InferConfig } from '../../../types.js'
+import { EnvConfigSource } from '../../env/index.js'
+import { FileConfigSource } from '../file.js'
 import { context, definition, fixture, FORMATS, interpolateFixture } from './formats.testkit.js'
 
 // What a file means must not depend on the format it is written in. Every scenario here runs once per format, over

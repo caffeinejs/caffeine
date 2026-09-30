@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import { parse as parseYAML } from 'yaml'
 
-import { FileConfigSource } from '../../sources/file_source.js'
+import { FileConfigSource } from '../file.js'
 import { context, fixture, interpolateFixture, loadText, yaml, type Format } from './formats.testkit.js'
 
 // YAML 1.2 has no merge key: `<<` is a key like any other unless the parser is told otherwise.

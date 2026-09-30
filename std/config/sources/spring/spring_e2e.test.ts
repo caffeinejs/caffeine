@@ -3,11 +3,8 @@ import { beforeAll, describe, expect, it } from 'vitest'
 
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { loadConfig } from '../../load.js'
-import {
-  SpringCloudConfigSource,
-  type SpringCloudConfigSourceOptions,
-} from '../../sources/spring_cloud_config_source.js'
 import type { ConfigSchema, ConfigSource } from '../../types.js'
+import { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './spring.js'
 
 // Runs against a real config server when one answers. Without one every test here is reported as skipped.
 const CONFIGSERVER_URL = process.env['CONFIGSERVER_URL'] ?? 'http://localhost:8888'

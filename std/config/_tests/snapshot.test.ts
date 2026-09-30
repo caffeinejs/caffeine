@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
-import { InlineConfigSource } from '../sources/inline_source.js'
+import { InlineConfigSource } from '../sources/inline/index.js'
 import type { ConfigSchema, ConfigSource } from '../types.js'
 
 interface App {

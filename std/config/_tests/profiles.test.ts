@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { activeProfiles, hostProfiles } from '../profiles.js'
-import { ArgsConfigSource } from '../sources/args_source.js'
+import { ArgvConfigSource } from '../sources/argv/index.js'
 
 describe('activeProfiles', () => {
   it('passes a string array through, trimmed', () => {
@@ -65,7 +65,7 @@ describe('hostProfiles', () => {
   })
 
   // A single run has to be redirectable without touching the environment it runs in — the same reason the
-  // args band sits above the env band in the configuration chain.
+  // argv band sits above the env band in the configuration chain.
   it('lets an argument beat the environment', () => {
     expect(hostProfiles(['--caffeine.profiles=arg'], { CAFFEINE_PROFILES: 'env' })).toEqual(['arg'])
   })
@@ -85,15 +85,15 @@ describe('hostProfiles', () => {
     expect(hostProfiles(['--', '--caffeine.profiles=eu'], noEnv)).toEqual([])
   })
 
-  // The profiles are read before anything loads, with the parser the args source uses: whatever spelling names a
+  // The profiles are read before anything loads, with the parser the argv source uses: whatever spelling names a
   // switch there names the profiles here.
-  it('reads the flag as the args source reads the same argument', () => {
+  it('reads the flag as the argv source reads the same argument', () => {
     for (const argv of [
       ['--caffeine.profiles=eu'],
       ['--caffeine:profiles', 'eu,dev'],
       ['/usr/bin/node', 'main.js', '--caffeine.profiles', 'eu', '--caffeine.profiles=dev'],
     ]) {
-      const tree = new ArgsConfigSource({ argv }).load()[0].data as { caffeine: { profiles: string } }
+      const tree = new ArgvConfigSource({ argv }).load()[0].data as { caffeine: { profiles: string } }
 
       expect(hostProfiles(argv, noEnv)).toEqual(activeProfiles(tree.caffeine.profiles))
     }

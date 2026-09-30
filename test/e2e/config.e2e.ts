@@ -117,7 +117,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
       }),
       new EnvConfigSource({ prefix: 'E2E_', env: { E2E_SERVER__PORT: '8081', E2E_FEATURES__BETA: 'false' } }),
     )
-    .args({ argv: ['--features.beta=true'] })
+    .argv({ argv: ['--features.beta=true'] })
     .source(overrides)
     .build()
 

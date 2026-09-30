@@ -1,8 +1,8 @@
-import { buildTree } from '../merge.js'
-import { splitKey } from '../tree.js'
-import type { ConfigLayer, ConfigSource } from '../types.js'
+import { buildTree } from '../../merge.js'
+import { splitKey } from '../../tree.js'
+import type { ConfigLayer, ConfigSource } from '../../types.js'
 
-export interface ArgsConfigSourceOptions {
+export interface ArgvConfigSourceOptions {
   /**
    * The arguments to read. Omitted, the host's own are used: `process.argv` where there is a `process`, nothing
    * where there is not.
@@ -14,7 +14,7 @@ export interface ArgsConfigSourceOptions {
   argv?: readonly string[]
   /** Short-switch expansions, e.g. `{ '-p': 'server.port' }`. */
   switchMappings?: Record<string, string>
-  /** Defaults to `args`. */
+  /** Defaults to `argv`. */
   name?: string
 }
 
@@ -36,13 +36,13 @@ export interface ArgsConfigSourceOptions {
  * `-`-prefixed token is skipped, so `process.argv`, `process.argv.slice(2)` and `Deno.args` all work as they are.
  * A later argument wins over an earlier one for the same key.
  */
-export class ArgsConfigSource implements ConfigSource {
+export class ArgvConfigSource implements ConfigSource {
   readonly name: string
   readonly #argv: readonly string[] | undefined
   readonly #switchMappings: Record<string, string>
 
-  constructor(options: ArgsConfigSourceOptions = {}) {
-    this.name = options.name ?? 'args'
+  constructor(options: ArgvConfigSourceOptions = {}) {
+    this.name = options.name ?? 'argv'
     this.#argv = options.argv
     this.#switchMappings = options.switchMappings ?? {}
   }
@@ -81,7 +81,7 @@ type Parsed = [path: string, value: string | undefined, origin: string]
 export function parseArgv(argv: readonly string[], switchMappings: Record<string, string>): Parsed[] {
   const out: Parsed[] = []
   const add = (key: string, value: string | undefined, token: string): void => {
-    out.push([key.split(':').join('.'), value, `args:${token}`])
+    out.push([key.split(':').join('.'), value, `argv:${token}`])
   }
 
   // Configuration only ever lives in the flags, so the interpreter and script paths ahead of them are skipped.

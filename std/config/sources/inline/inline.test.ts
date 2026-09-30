@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { InlineConfigSource } from '../../sources/inline_source.js'
 import type { ConfigSource } from '../../types.js'
+import { InlineConfigSource } from './inline.js'
 
 describe('InlineConfigSource', () => {
   it('contributes its object as one layer, named after the source', () => {

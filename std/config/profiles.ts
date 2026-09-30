@@ -1,6 +1,6 @@
 import { textList } from '../schema/text.js'
 import { ErrConfig } from './errors.js'
-import { hostArgv, parseArgv } from './sources/args_source.js'
+import { hostArgv, parseArgv } from './sources/argv/index.js'
 
 const ARG_PATH = 'caffeine.profiles'
 
@@ -53,7 +53,7 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
  * `CAFFEINE_PROFILES` set there counts. An argument wins over the environment, and both go through
  * {@link activeProfiles}: `eu,dev` names two profiles, and a repeated one counts once.
  *
- * Reading `process.argv` here is not the same opt-in {@link ArgsConfigSource} is: exactly one flag is
+ * Reading `process.argv` here is not the same opt-in {@link ArgvConfigSource} is: exactly one flag is
  * matched, so a process whose switches were meant for something else contributes nothing.
  *
  * @param argv - Defaults to the host's own arguments. Present so a test need not touch the real process.
@@ -64,7 +64,7 @@ export function hostProfiles(argv: readonly string[] = hostArgv(), env = hostEnv
 }
 
 /**
- * `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling, read as {@link ArgsConfigSource}
+ * `--caffeine.profiles=eu,dev`, `--caffeine.profiles eu,dev`, or the `:` spelling, read as {@link ArgvConfigSource}
  * reads any switch. Last occurrence wins.
  */
 function argProfiles(argv: readonly string[]): string | undefined {

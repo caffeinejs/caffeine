@@ -1,9 +1,9 @@
 import type { NamedToken } from '@caffeinejs/di'
 
 import {
-  ArgsConfigSource,
+  ArgvConfigSource,
   DEFAULT_LOAD_TIMEOUT_MS,
-  type ArgsConfigSourceOptions,
+  type ArgvConfigSourceOptions,
   type ConfigDefinition,
   type ConfigSchema,
   type ConfigSource,
@@ -49,8 +49,8 @@ export class ConfigurationBuilder<T = unknown> {
    * Reads configuration from the command line: the host's own arguments unless `options.argv` names others. Calling
    * this is the opt-in, and like any source it wins only over the sources added before it.
    */
-  args(options: ArgsConfigSourceOptions = {}): this {
-    return this.source(new ArgsConfigSource(options))
+  argv(options: ArgvConfigSourceOptions = {}): this {
+    return this.source(new ArgvConfigSource(options))
   }
 
   /** How long one load of one source may take. Defaults to 30 seconds. */
