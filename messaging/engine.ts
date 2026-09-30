@@ -91,7 +91,7 @@ export class MessagingContainer {
         .get()
 
       for (const spec of getHandlerConsumes(binding.type as object)) {
-        // A binding not in this integration's registry may belong to another messaging() integration; skip it
+        // A binding not in this integration's registry may belong to another Messaging() integration; skip it
         // here rather than failing — this integration only wires the bindings it declared.
         if (!this.#runtime.inbound.has(spec.binding)) {
           continue

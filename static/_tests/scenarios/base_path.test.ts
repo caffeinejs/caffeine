@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-import { newRouter, type WebApplication } from '@caffeinejs/http'
+import { newRouter, type WebApplication, Authentication, authentication, Authorization } from '@caffeinejs/http'
 import type { ListRender } from '@fastify/static'
 import type { RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -136,8 +136,9 @@ describe('a redirecting mount under a base path', () => {
   it('leaves the sign-in challenge on its routes with one base', async () => {
     app = isolated()
       .basePath('/api')
-      .authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login')))
-      .authorization(z => z.requireAuthenticatedByDefault())
+      .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
+      .with(authentication())
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .with(staticFiles(s => s.serve(dist, { prefix: '/files', redirect: true }))) as WebApplication
     await app.bootstrap()
 

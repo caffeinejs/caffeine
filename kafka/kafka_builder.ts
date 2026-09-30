@@ -28,9 +28,9 @@ import { KafkaTemplate } from './template.js'
 
 /**
  * Fluent configuration for one (optionally named) Kafka integration. Follows the repo feature-builder
- * convention (`.with(kafka(k => k.brokers(...).groupId(...)))`): it accumulates settings, then at `bootstrap()`
+ * convention (`.install(Kafka(k => k.brokers(...).groupId(...)))`): it accumulates settings, then at `bootstrap()`
  * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
- * the container under per-instance keys. A second integration is `.with(kafka('orders', k => ...))`.
+ * the container under per-instance keys. A second integration is `.install(Kafka('orders', k => ...))`.
  *
  * There is one read path for everything a configuration tree can carry. Configuration overlays fluent
  * methods for `brokers`, `clientId`, `groupId`, and the rest of the configurable slice:

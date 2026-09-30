@@ -1,4 +1,12 @@
-import { AuthenticationService, AuthenticationTicket, newRouter, type WebApplication } from '@caffeinejs/http'
+import {
+  AuthenticationService,
+  AuthenticationTicket,
+  newRouter,
+  type WebApplication,
+  Authentication,
+  authentication,
+  Authorization,
+} from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'
@@ -64,8 +72,9 @@ function bff(gatedPages: boolean): WebApplication {
     .get('/*', clientRouteOf(dist))
 
   return isolated()
-    .authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login')))
-    .authorization(z => z.requireAuthenticatedByDefault())
+    .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
+    .with(authentication())
+    .install(Authorization(z => z.requireAuthenticatedByDefault()))
     .with(staticFiles(s => s.serve(dist, { ...spaMount(), setHeaders: immutableAssets(dist) }, { anonymous: true })))
     .mount(auth, api, signIn, pages, rest) as WebApplication
 }

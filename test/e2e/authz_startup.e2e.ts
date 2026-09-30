@@ -1,4 +1,11 @@
-import { type AuthenticationBuilder, type AuthorizationBuilder, newRouter } from '@caffeinejs/http'
+import {
+  type AuthenticationBuilder,
+  type AuthorizationBuilder,
+  newRouter,
+  Authentication,
+  authentication,
+  Authorization,
+} from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp, type E2EApplication } from './internal/app.js'
@@ -35,8 +42,9 @@ describe('an application that must not start', () => {
   it('names a policy that was never registered', async () => {
     const error = await refusal(app =>
       app
-        .authentication(auth => auth.addJWTBearer(localJWT))
-        .authorization(authz => authz.addPolicy('engineering', p => p.requireAuthenticated()))
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
+        .install(Authorization(authz => authz.addPolicy('engineering', p => p.requireAuthenticated())))
         .mount(newRouter('/private').authorize({ policy: 'enginering' }).get('/', ok)),
     )
 
@@ -55,7 +63,10 @@ describe('an application that must not start', () => {
     ['the fallback policy', (authz: AuthorizationBuilder) => authz.fallbackPolicy(() => undefined)],
   ])('registers %s with no requirement in it', async (_label, configure) => {
     const error = await refusal(app =>
-      app.authentication(auth => auth.addJWTBearer(localJWT)).authorization(authz => configure(authz)),
+      app
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
+        .install(Authorization(authz => configure(authz))),
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTHZ_POLICY_EMPTY' })
@@ -64,7 +75,8 @@ describe('an application that must not start', () => {
   it('names an authentication scheme that was never registered', async () => {
     const error = await refusal(app =>
       app
-        .authentication(auth => auth.addJWTBearer(localJWT))
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
         .mount(
           newRouter('/private')
             .authorize({ schemes: ['Beaerer'] })
@@ -78,7 +90,9 @@ describe('an application that must not start', () => {
 
   it('registers several schemes and says which is the default for none of them', async () => {
     const error = await refusal(app =>
-      app.authentication(auth => auth.addJWTBearer(localJWT).addBasic(b => b.validate(() => null))),
+      app
+        .install(Authentication(auth => auth.addJWTBearer(localJWT).addBasic(b => b.validate(() => null))))
+        .with(authentication()),
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
@@ -96,7 +110,7 @@ describe('an application that must not start', () => {
       (auth: AuthenticationBuilder) => auth.addJWTBearer(localJWT).defaultForbid('Beaerer'),
     ],
   ])('misspells %s', async (_label, configure) => {
-    const error = await refusal(app => app.authentication(auth => configure(auth)))
+    const error = await refusal(app => app.install(Authentication(auth => configure(auth))).with(authentication()))
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_SCHEME_NOT_FOUND' })
     expect(String((error as Error).message)).toContain('"Beaerer"')
@@ -105,7 +119,11 @@ describe('an application that must not start', () => {
   // The second registration used to replace the first without a word.
   it('registers two schemes under one name', async () => {
     const error = await refusal(app =>
-      app.authentication(auth => auth.addJWTBearer('api', localJWT).addBasic('api', b => b.validate(() => null))),
+      app
+        .install(
+          Authentication(auth => auth.addJWTBearer('api', localJWT).addBasic('api', b => b.validate(() => null))),
+        )
+        .with(authentication()),
     )
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
@@ -113,14 +131,18 @@ describe('an application that must not start', () => {
   })
 
   it('configures authentication with no scheme at all', async () => {
-    const error = await refusal(app => app.authentication(auth => auth))
+    const error = await refusal(app => app.install(Authentication(auth => auth)).with(authentication()))
 
     expect(error).toMatchObject({ code: 'ERR_AUTH_CONFIGURATION' })
   })
 
   it('configures a JWT scheme that pins neither an issuer nor an audience', async () => {
     const error = await refusal(app =>
-      app.authentication(auth => auth.addJWTBearer(j => j.secret('e2e-hs256-secret-with-more-than-32-bytes-of-text'))),
+      app
+        .install(
+          Authentication(auth => auth.addJWTBearer(j => j.secret('e2e-hs256-secret-with-more-than-32-bytes-of-text'))),
+        )
+        .with(authentication()),
     )
 
     expect(String((error as Error).message)).toMatch(/an "issuer" is required/)
@@ -130,7 +152,9 @@ describe('an application that must not start', () => {
   // signs any identity they like.
   it('configures a JWT scheme whose HMAC secret is shorter than the hash', async () => {
     const error = await refusal(app =>
-      app.authentication(auth => auth.addJWTBearer(j => j.secret('short-secret').issuer('i').audience('a'))),
+      app
+        .install(Authentication(auth => auth.addJWTBearer(j => j.secret('short-secret').issuer('i').audience('a'))))
+        .with(authentication()),
     )
 
     expect(String((error as Error).message)).toMatch(/at least 32 bytes/)
@@ -140,21 +164,27 @@ describe('an application that must not start', () => {
   // then verify a token anyone signed with that public key.
   it('configures a JWT key resolver and names no algorithm', async () => {
     const error = await refusal(app =>
-      app.authentication(auth =>
-        auth.addJWTBearer(j =>
-          j
-            .keyResolver(() => new Uint8Array(32))
-            .issuer('i')
-            .audience('a'),
-        ),
-      ),
+      app
+        .install(
+          Authentication(auth =>
+            auth.addJWTBearer(j =>
+              j
+                .keyResolver(() => new Uint8Array(32))
+                .issuer('i')
+                .audience('a'),
+            ),
+          ),
+        )
+        .with(authentication()),
     )
 
     expect(String((error as Error).message)).toMatch(/"algorithm" is required/)
   })
 
   it('configures a cookie scheme whose secret is too short to derive a key from', async () => {
-    const error = await refusal(app => app.authentication(auth => auth.addCookie(c => c.sessionSecret('too-short'))))
+    const error = await refusal(app =>
+      app.install(Authentication(auth => auth.addCookie(c => c.sessionSecret('too-short')))).with(authentication()),
+    )
 
     expect(String((error as Error).message)).toMatch(/at least 32 characters/)
   })

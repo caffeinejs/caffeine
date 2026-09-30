@@ -18,6 +18,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Before a security review of `security/`, read [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md). Use
   the `security-audit` skill for vulnerabilities and `sharp-edges` for API and option design.
 - `assertAuthenticationConfigured` refuses a protected route with no scheme configured, not the gate.
+- `assertRoutesGated`, from the adapter's first `onReady` hook, refuses a route a gate would authorize that no gate
+  covers. Covered means registered in the context a gate installed on or one beneath it (gates record themselves in
+  `AuthenticationGates`), and not owned by another gate. Never judge coverage by `gateOwner` alone: a gate's
+  request hook reaches children created before it, while its stamp reaches only routes registered after it.
 - `skipAuthentication` (`authenticationExempt()`, `exemptFromAuthentication(route)`) skips authenticating, so
   `request.user` stays `null`; `auth.allowAnonymous` still authenticates and skips only authorization. Do not
   merge them.
@@ -33,8 +37,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Adapter and types
 
-- The health server hook resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
-  non-singleton indicator; nothing invalidates the cache at shutdown.
+- The `healthProbes()` plugin resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
+  non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
 - `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
 - The adapter applies the base path in `rewriteUrl`; never prefix at registration or rewrite `url` in `onRoute`.
@@ -48,7 +52,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   parameter.
 - No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
   (`collectRouteGroups(instance)`), not a scan in the adapter.
-- `$route` is fire-once, not get-or-create.
+- `$route` is fire-once, not get-or-create, and open only while the `.with(...)` loop installs. A later call is
+  recorded and thrown from `onReady`: avvio does not catch a callback-style plugin's throw.
 
 ## Routes
 

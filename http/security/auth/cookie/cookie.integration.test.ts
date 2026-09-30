@@ -23,6 +23,8 @@ import {
   createWebApplication,
   newRouter,
   $p,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
@@ -141,7 +143,9 @@ async function buildApp() {
   // Fast hasher keeps the test snappy; overrides the default ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication({ container })
-  builder.authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials())
+  builder
+    .install(Authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials()))
+    .with(authentication())
   const app = builder
   await app.bootstrap()
   return app
@@ -236,16 +240,20 @@ async function buildDurableApp(graceSeconds?: number) {
   container.bind(RememberMeTokenStore, t => t.toValue(store))
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication({ container })
-  builder.authentication(auth =>
-    auth
-      .addCookie(o => {
-        o.sessionSecret(SECRET).secure(false).rememberMe()
-        if (graceSeconds !== undefined) {
-          o.rememberMeRotationGraceSeconds(graceSeconds)
-        }
-      })
-      .addCredentials(),
-  )
+  builder
+    .install(
+      Authentication(auth =>
+        auth
+          .addCookie(o => {
+            o.sessionSecret(SECRET).secure(false).rememberMe()
+            if (graceSeconds !== undefined) {
+              o.rememberMeRotationGraceSeconds(graceSeconds)
+            }
+          })
+          .addCredentials(),
+      ),
+    )
+    .with(authentication())
   const app = builder
   await app.bootstrap()
   return { app, store }
@@ -465,14 +473,17 @@ describe('cookie sign-in under a base path', () => {
     container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
     const app = createWebApplication({ container })
       .basePath('/api')
-      .authentication(auth =>
-        auth
-          .addCookie(o => {
-            o.sessionSecret(SECRET).secure(false).loginPath('/login').accessDeniedPath('/denied')
-            cookie(o)
-          })
-          .addCredentials(),
+      .install(
+        Authentication(auth =>
+          auth
+            .addCookie(o => {
+              o.sessionSecret(SECRET).secure(false).loginPath('/login').accessDeniedPath('/denied')
+              cookie(o)
+            })
+            .addCredentials(),
+        ),
       )
+      .with(authentication())
       .mount(
         newRouter('/audit')
           .authorize({ roles: ['auditor'] })

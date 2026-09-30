@@ -1,4 +1,10 @@
-import { Claim, type OAuth2AuthenticationOptionsBuilder, newRouter } from '@caffeinejs/http'
+import {
+  Claim,
+  type OAuth2AuthenticationOptionsBuilder,
+  newRouter,
+  Authentication,
+  authentication,
+} from '@caffeinejs/http'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'
@@ -51,7 +57,11 @@ async function withApp(
   run: () => Promise<void>,
 ): Promise<void> {
   const running = await startApp(
-    app => app.authentication(auth => auth.addOAuth2(SCHEME, o => configure(spring(o)))).mount(routes()),
+    app =>
+      app
+        .install(Authentication(auth => auth.addOAuth2(SCHEME, o => configure(spring(o)))))
+        .with(authentication())
+        .mount(routes()),
     { port: PORT },
   )
 
@@ -103,7 +113,10 @@ describe.skipIf(!up)('OAuth 2.0 sign-in against Spring Authorization Server', ()
 
   it('refuses to start when a user info field is renamed into the role claim', async () => {
     const outcome = await startApp(
-      app => app.authentication(auth => auth.addOAuth2(SCHEME, o => spring(o).mapClaims({ roles: 'roles' }))),
+      app =>
+        app
+          .install(Authentication(auth => auth.addOAuth2(SCHEME, o => spring(o).mapClaims({ roles: 'roles' }))))
+          .with(authentication()),
       { port: PORT },
     ).then(
       // Closed before failing the case, or the port stays taken for every case after this one.
@@ -205,20 +218,23 @@ describe('OAuth 2.0 sign-in with a provider whose user identifier is a number', 
     const running = await startApp(
       app =>
         app
-          .authentication(auth =>
-            auth.addOAuth2(SCHEME, o =>
-              o
-                .clientID('stub-client')
-                .clientSecret('stub-secret')
-                .sessionSecret(SESSION_SECRET)
-                .callbackURL(`${ORIGIN}/oauth2/callback`)
-                .authorizationEndpoint(`${provider.origin}/authorize`)
-                .tokenEndpoint(`${provider.origin}/token`)
-                .userInfoEndpoint(`${provider.origin}/userinfo`)
-                .subjectClaim('id')
-                .mapClaims({ login: 'login' }),
+          .install(
+            Authentication(auth =>
+              auth.addOAuth2(SCHEME, o =>
+                o
+                  .clientID('stub-client')
+                  .clientSecret('stub-secret')
+                  .sessionSecret(SESSION_SECRET)
+                  .callbackURL(`${ORIGIN}/oauth2/callback`)
+                  .authorizationEndpoint(`${provider.origin}/authorize`)
+                  .tokenEndpoint(`${provider.origin}/token`)
+                  .userInfoEndpoint(`${provider.origin}/userinfo`)
+                  .subjectClaim('id')
+                  .mapClaims({ login: 'login' }),
+              ),
             ),
           )
+          .with(authentication())
           .mount(routes()),
       { port: PORT },
     )

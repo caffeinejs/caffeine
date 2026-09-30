@@ -90,14 +90,14 @@ export class ErrAuthzRequirementHandlerDuplicate extends ErrCaffeineWebApplicati
  * ErrAuthorizationRequired is thrown at start-up when routes are protected but authorization is not
  * configured.
  *
- * Authorization installs itself once `.authentication(...)` is configured, so an application that never
+ * Authorization installs itself once authentication is installed, so an application that never
  * called it either does not start.
  */
 export class ErrAuthorizationRequired extends ErrCaffeineWebApplication {
   constructor() {
     super(
       'Cannot start application: routes are protected but authorization is not configured: call ' +
-        '.authorization(authz => ...) or .authentication(auth => ...) on the application builder',
+        '".install(Authorization(authz => ...))" or ".install(Authentication(auth => ...))" on the application',
       'ERR_AUTHORIZATION_REQUIRED',
     )
     this.name = 'ErrAuthorizationRequired'

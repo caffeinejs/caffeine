@@ -5,7 +5,7 @@ import { deferred, FakeBroker } from './broker.testkit.js'
 import type { KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
-import { kafka, type KafkaConfigurer } from './plugin.js'
+import { Kafka, type KafkaConfigurer } from './plugin.js'
 import { KafkaTemplate } from './template.js'
 
 // A tagged deserializer so we can prove the right one reached the right consumer.
@@ -34,11 +34,11 @@ describe('per-listener deserializers', () => {
     const broker = new FakeBroker({ applyDeserializers: true })
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined
-        ? kafka(configure, { clients: broker.clients() })
-        : kafka(i, configure, { clients: broker.clients() })
+        ? Kafka(configure, { clients: broker.clients() })
+        : Kafka(i, configure, { clients: broker.clients() })
     const app = createApplication({})
       // Instance default = identity (so the JSON side passes through); the avro listener overrides it.
-      .with(
+      .install(
         kfk(k =>
           k
             .brokers('b')

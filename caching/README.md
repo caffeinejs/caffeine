@@ -307,8 +307,8 @@ installs nothing, under an application that installs nothing, fails at `app.boot
 
 Order matters in two places:
 
-- Install it after `.authentication(...)`. Guards run before the cache, on a hit as well as on a miss, so a
-  cached response never skips authorization.
+- Install it after the authentication gate, `.with(authentication())`. Guards run before the cache, on a hit as
+  well as on a miss, so a cached response never skips authorization.
 - Install it before a plugin that compresses responses. Installed after one, the cache is handed a stream, which
   is neither hashed nor stored, and `onSkip` is told (`stream`).
 

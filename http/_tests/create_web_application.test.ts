@@ -9,7 +9,15 @@ import {
 } from '@caffeinejs/std'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, createWebApplication } from '../index.js'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Authentication,
+  authentication,
+  Authorization,
+  Guards,
+} from '../index.js'
 
 describe('createWebApplication default Fastify form', () => {
   it('builds a working app with no adapter factory or Fastify instance', async () => {
@@ -74,7 +82,7 @@ describe('createWebApplication default Fastify form', () => {
       },
     }
 
-    const app = createWebApplication().with(probe)
+    const app = createWebApplication().install(probe)
     await app.bootstrap()
 
     expect(app.container.getOptional(kProbe)).toEqual({ value: 'hello' })
@@ -89,9 +97,11 @@ describe('configuring a started web application', () => {
     await app.bootstrap()
 
     expect(() => app.server(() => ({}))).toThrow(ErrApplicationStarted)
-    expect(() => app.authentication(a => a.default('Bearer'))).toThrow(ErrApplicationStarted)
-    expect(() => app.authorization(a => a.requireAuthenticatedByDefault())).toThrow(ErrApplicationStarted)
-    expect(() => app.guards(() => undefined)).toThrow(ErrApplicationStarted)
+    expect(() => app.install(Authentication(a => a.default('Bearer'))).with(authentication())).toThrow(
+      ErrApplicationStarted,
+    )
+    expect(() => app.install(Authorization(a => a.requireAuthenticatedByDefault()))).toThrow(ErrApplicationStarted)
+    expect(() => app.install(Guards(() => undefined))).toThrow(ErrApplicationStarted)
     expect(() => app.with(() => async () => undefined)).toThrow(ErrApplicationStarted)
   })
 })

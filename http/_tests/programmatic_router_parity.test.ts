@@ -19,6 +19,9 @@ import {
   version,
   type ActionResult,
   type GuardInput,
+  Authentication,
+  authentication,
+  Guards,
 } from '../index.js'
 
 class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
@@ -95,7 +98,9 @@ describe('programmatic router parity with the decorator feature set', () => {
       handler.result = AuthenticateResult.none()
 
       const builder = createWebApplication()
-      builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+      builder
+        .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+        .with(authentication())
       const app = builder.mount(router)
       await app.bootstrap()
 
@@ -118,7 +123,9 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       const handler = new FakeAuthHandler()
       const builder = createWebApplication()
-      builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+      builder
+        .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+        .with(authentication())
       const app = builder.mount(router)
       await app.bootstrap()
 
@@ -140,7 +147,9 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       const handler = new FakeAuthHandler()
       const builder = createWebApplication()
-      builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+      builder
+        .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+        .with(authentication())
       const app = builder.mount(router)
       await app.bootstrap()
 

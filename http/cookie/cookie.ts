@@ -1,9 +1,10 @@
-import { kFeatureName } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName } from '@caffeinejs/std'
 import { $t } from '@caffeinejs/std/schema'
 import FastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
+import fp from 'fastify-plugin'
 
-import { HTTPFeatureBuilder } from '../feature.js'
+import { kServerExtension, type FastifyExtension } from '../plugin.js'
 
 /** How the cookie feature registers `@fastify/cookie`. */
 export interface CookieOptions {
@@ -51,7 +52,7 @@ export const cookieConfigSchema = $t.Object({
  * its options: this feature stands down rather than registering a second time, which Fastify refuses over the
  * decorators already in place.
  */
-export class CookieBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
+export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'cookie'
 
   #config: Partial<CookieOptions> | undefined
@@ -89,23 +90,31 @@ export class CookieBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     return this
   }
 
-  protected override async server(instance: FastifyInstance): Promise<void> {
-    if (!(this.#enabled ?? this.#config?.enabled ?? true)) {
-      return
-    }
+  /**
+   * The plugin half. The application puts it in a head slot ahead of everything `.with(...)` registers. The
+   * enabled and stand-down checks live in the plugin body: both need the instance.
+   */
+  readonly [kServerExtension] = (): FastifyExtension =>
+    fp(
+      async (instance: FastifyInstance) => {
+        if (!(this.#enabled ?? this.#config?.enabled ?? true)) {
+          return
+        }
 
-    // The application registered the plugin on its own Fastify instance, so it owns the settings — including
-    // the secret, which this feature must not quietly replace. Registering again fails on the decorators.
-    if (instance.hasRequestDecorator('cookies')) {
-      return
-    }
+        // The application registered the plugin on its own Fastify instance, so it owns the settings — including
+        // the secret, which this feature must not quietly replace. Registering again fails on the decorators.
+        if (instance.hasRequestDecorator('cookies')) {
+          return
+        }
 
-    const secret = this.#secret ?? this.#config?.secret
-    const parseOptions = this.#parseOptions ?? this.#config?.parseOptions
+        const secret = this.#secret ?? this.#config?.secret
+        const parseOptions = this.#parseOptions ?? this.#config?.parseOptions
 
-    await instance.register(FastifyCookie, {
-      ...(secret !== undefined && { secret }),
-      ...(parseOptions !== undefined && { parseOptions }),
-    })
-  }
+        await instance.register(FastifyCookie, {
+          ...(secret !== undefined && { secret }),
+          ...(parseOptions !== undefined && { parseOptions }),
+        })
+      },
+      { name: 'caffeine-cookie' },
+    )
 }

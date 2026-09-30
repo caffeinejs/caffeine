@@ -1,5 +1,5 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { kFeatureConfigure, kFeatureName, newConfiguration } from '@caffeinejs/std'
+import { kFeatureConfigure, kFeatureName, newConfiguration, type Feature } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
@@ -11,40 +11,19 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { HTTPSetupContext } from '../adapter.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { ErrHTTPBadRequest } from '../error/http.js'
-import { kFeatureServer, type HTTPFeature } from '../feature.js'
 import { healthConfigSchema } from '../health/options.js'
-import { createWebApplication, health, type WebApplication } from '../index.js'
+import { createWebApplication, type WebApplication, healthProbes } from '../index.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
 
 /**
- * What an application installs on its server: the plugins its factories produce and its features' server hooks.
+ * What an application installs on its server: the plugins its `.with(...)` factories produce.
  *
- * These tests pin the ordering model — the order `.with(...)` was written, whatever a factory or a hook awaits, with
- * nothing sorted by what a plugin is — the slots the framework keeps at both ends, what a server hook is handed,
- * and a plugin belonging to one route group instead of the whole server.
+ * These tests pin the ordering model — the order `.with(...)` was written, whatever a factory awaits, with
+ * nothing sorted by what a plugin is — the slots the framework keeps at both ends, that an `.install(...)`
+ * never takes a slot at all, and a plugin belonging to one route group instead of the whole server.
  */
-
-/** A feature whose server hook registers one named plugin that records when it loaded. */
-function logging(name: string, log: string[]): HTTPFeature {
-  return {
-    [kFeatureName]: name,
-    [kFeatureConfigure](): void {
-      // Nothing to bind.
-    },
-    [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
-      await instance.register(
-        fp(
-          async () => {
-            log.push(name)
-          },
-          { name },
-        ),
-      )
-    },
-  }
-}
 
 /**
  * One `fastify-plugin`-wrapped plugin that stamps a response header.
@@ -89,80 +68,87 @@ describe('plugin registration', () => {
     expect(log).toEqual(['third', 'first', 'second'])
   })
 
-  // `.with` takes a factory or a feature. Both land in one list, so what matters is that neither kind jumps
-  // the other: the order is the order the calls were written.
-  it('interleaves features and plugins in the order they were written', async () => {
-    const log: string[] = []
+  // Where `.install(...)` sits in the chain cannot matter: every feature configures before the container
+  // initializes, and every factory runs at setup, after it — so the feature's binding is there for the factory
+  // whichever way round the calls were written.
+  it('yields the same wiring whether .install() is written before or after .with()', async () => {
+    const kGreeting = token<string>(Symbol('order-free.greeting'))
 
-    app = createWebApplication()
-      .with(stamping('plugin-a', 'x-a', log))
-      .with(logging('feature-b', log))
-      .with(stamping('plugin-c', 'x-c', log))
-      .with(logging('feature-d', log))
+    const greeting = (): Feature => ({
+      [kFeatureName]: 'greeting',
+      [kFeatureConfigure](kit) {
+        kit.container.bind(kGreeting, t => t.toValue('hello'))
+      },
+    })
+    const reading: HTTPPluginFactory = ({ container }) => {
+      const value = container.get(kGreeting)
+      const plugin: FastifyPluginAsync = async instance => {
+        instance.addHook('onRequest', (_request, reply, done) => {
+          reply.header('x-greeting', value)
+          done()
+        })
+      }
 
-    await app.bootstrap()
+      return fp(plugin, { name: 'greeting-reader' })
+    }
 
-    expect(log).toEqual(['plugin-a', 'feature-b', 'plugin-c', 'feature-d'])
+    const before = createWebApplication().install(greeting()).with(reading)
+    const after = createWebApplication().with(reading).install(greeting())
+
+    try {
+      await before.bootstrap()
+      await after.bootstrap()
+
+      expect((await before.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+      expect((await after.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+    } finally {
+      await before.close()
+      await after.close()
+    }
   })
 
-  // `addFeature` skips the name check `.with(...)` makes, and nothing else: a feature installed through it still
-  // wires the server, in the slot it was installed in.
-  it('runs the server hook of a feature installed with addFeature, in its slot', async () => {
-    const log: string[] = []
-
-    app = createWebApplication()
-      .with(stamping('before', 'x-before', log))
-      .addFeature(logging('added', log))
-      .with(stamping('after', 'x-after', log))
-
-    await app.bootstrap()
-
-    expect(log).toEqual(['before', 'added', 'after'])
-  })
-
-  // The authentication gate relies on this: a feature's slot is where it was written, so a hook that awaits
-  // before it registers anything cannot let a feature written after it register first.
-  it('keeps a server hook that awaits first at its written position', async () => {
-    const log: string[] = []
-
-    const slow: HTTPFeature = {
-      [kFeatureName]: 'slow',
+  // The decoration a dependent plugin fails loudly with: it answers for user installs and for the framework's
+  // own built-ins alike, since their names enter the same set.
+  it('answers $hasFeature on the instance for installed features and built-ins', async () => {
+    const idle: Feature = {
+      [kFeatureName]: 'idle',
       [kFeatureConfigure](): void {
         // Nothing to bind.
-      },
-      [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 10))
-        await instance.register(
-          fp(
-            async () => {
-              log.push('slow')
-            },
-            { name: 'slow' },
-          ),
-        )
       },
     }
 
-    app = createWebApplication()
-      .with(slow)
-      .with(stamping('after', 'x-after', log))
+    app = createWebApplication().install(idle)
 
     await app.bootstrap()
 
-    expect(log).toEqual(['slow', 'after'])
+    expect(app.instance.$hasFeature('idle')).toBe(true)
+    expect(app.instance.$hasFeature('cookie')).toBe(true)
+    expect(app.instance.$hasFeature('error-handling')).toBe(true)
+    expect(app.instance.$hasFeature('shutdown')).toBe(true)
+    expect(app.instance.$hasFeature('nope')).toBe(false)
   })
 
-  // The hook body is a plugin body, which is what makes a forgotten `await` harmless: what it registered loads as
-  // part of its slot, before the next one starts.
-  it('loads what a server hook registered without awaiting before the next slot', async () => {
+  // A factory runs before the server exists, so the same answer sits on its context.
+  it('answers hasFeature on the setup context handed to factories', async () => {
+    let seen: boolean[] = []
+
+    app = createWebApplication().with(context => {
+      seen = [context.hasFeature('cookie'), context.hasFeature('nope')]
+      return fp(async () => undefined, { name: 'has-feature-probe' })
+    })
+
+    await app.bootstrap()
+
+    expect(seen).toEqual([true, false])
+  })
+
+  // The plugin body loads in its slot, which is what makes a forgotten `await` harmless: what it registered
+  // loads as part of its slot, before the next one starts.
+  it('loads what a plugin registered without awaiting before the next slot', async () => {
     const log: string[] = []
 
-    const forgetful: HTTPFeature = {
-      [kFeatureName]: 'forgetful',
-      [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-      [kFeatureServer]: (instance: FastifyInstance): void => {
+    const forgetful: HTTPPluginFactory = () => {
+      const plugin = (instance: FastifyInstance, _opts: unknown, done: () => void): void => {
         void instance.register(
           fp(
             async () => {
@@ -171,7 +157,10 @@ describe('plugin registration', () => {
             { name: 'nested' },
           ),
         )
-      },
+        done()
+      }
+
+      return fp(plugin, { name: 'forgetful' })
     }
 
     app = createWebApplication()
@@ -183,66 +172,48 @@ describe('plugin registration', () => {
     expect(log).toEqual(['nested', 'after'])
   })
 
-  // Why the server was not simply put on the bootstrap kit: bootstrap runs before the adapter has set the server up.
-  // The hook runs where plugins run, on the application's own server, with what the framework decorates already
-  // there.
-  it('hands a server hook the application server, already decorated', async () => {
-    let seen: FastifyInstance | undefined
+  // The plugin body runs on the application's own server, with what the framework decorates already there.
+  it('hands a plugin the application server, already decorated', async () => {
     let decorated = false
 
-    const probe: HTTPFeature = {
-      [kFeatureName]: 'probe',
-      [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-      [kFeatureServer]: (instance: FastifyInstance): void => {
-        seen = instance
-        decorated = instance.hasDecorator('$container')
-      },
-    }
+    const probe: HTTPPluginFactory = () =>
+      fp(
+        async (instance: FastifyInstance) => {
+          decorated = instance.hasDecorator('$container')
+        },
+        { name: 'decoration-probe' },
+      )
 
     app = createWebApplication().with(probe)
 
     await app.bootstrap()
 
-    expect(seen).toBe(app.instance)
     expect(decorated).toBe(true)
   })
 
   // The logger feature configures alongside every other feature, so the logger is only final once they all have.
-  // What the factories and hooks are handed is built after that, which is why it carries the one `.logger(...)`
-  // asked for rather than the default the application started with.
-  it('hands factories and server hooks one context carrying the configured logger', async () => {
+  // What the factories are handed is built after that, which is why it carries the one `.logger(...)` asked for
+  // rather than the default the application started with.
+  it('hands every factory one context carrying the configured logger', async () => {
     const custom: Logger = { ...newNoopLogger() }
-    // One declared type for both, which is the point: the hook and the factory are handed the same object, and
-    // the hook used to be told it was a narrower one.
-    const seen: { factory?: HTTPSetupContext; hook?: HTTPSetupContext } = {}
-
-    const probe: HTTPFeature = {
-      [kFeatureName]: 'kit-probe',
-      [kFeatureConfigure](): void {
-        // Nothing to bind.
-      },
-      [kFeatureServer]: (_instance: FastifyInstance, kit: HTTPSetupContext): void => {
-        seen.hook = kit
-      },
-    }
+    const seen: { first?: HTTPSetupContext; second?: HTTPSetupContext } = {}
 
     app = createWebApplication()
       .logger(b => b.use(custom))
       .with(context => {
-        seen.factory = context
+        seen.first = context
         return fp(async () => undefined, { name: 'context-probe' })
       })
-      .with(probe)
+      .with(context => {
+        seen.second = context
+        return fp(async () => undefined, { name: 'context-probe-2' })
+      })
 
     await app.bootstrap()
 
-    expect(seen.hook).toBe(seen.factory)
-    expect(seen.factory?.logger).toBe(custom)
-    expect(seen.factory?.container).toBe(app.container)
-    // The container the hook is handed resolves; it was declared as lookup-only `ContainerOps` before.
-    expect(seen.hook?.container).toBe(app.container)
+    expect(seen.first).toBe(seen.second)
+    expect(seen.first?.logger).toBe(custom)
+    expect(seen.first?.container).toBe(app.container)
   })
 
   // An app-level factory is called once the container has initialized — not while features configure, where
@@ -588,13 +559,10 @@ describe('a plugin registered with its options', () => {
     expect((await app.fetch('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
   })
 
-  // The one test that has to keep compiling. `.with(...)` is a single signature over a union deliberately: a
-  // feature's callback takes its `config` type from it, and an overload — or a type parameter inferred from the
-  // same argument — would decide that type from the wrong place and silently hand the callback `unknown`.
-  // Widening the union's factory arm to accept a pair must not disturb that, so both arms are exercised on one
-  // typed application: if `C` ever regresses, `config.health` and `config.security` stop type-checking and
-  // `npm run test:typecheck` fails.
-  it('types both a feature callback and a pair against the application configuration', async () => {
+  // The one test that has to keep compiling: a plugin configurer and a bare factory returning a pair both take
+  // their `config` type from the application, so if `C` ever regresses, `config.health` and `config.security`
+  // stop type-checking and `npm run test:typecheck` fails.
+  it('types both a plugin configurer and a pair against the application configuration', async () => {
     const schema = $t.Object({ security: $t.Object({ header: $t.String() }), health: healthConfigSchema })
     const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
     const conf = newConfiguration(schema, kConfig)
@@ -604,7 +572,7 @@ describe('a plugin registered with its options', () => {
     const pets = newRouter('/pair-typed').get('/', () => ({ ok: true }))
 
     app = createWebApplication({ config: conf })
-      .with(health((h, { config }) => h.config(config.health)))
+      .with(healthProbes((h, { config }) => h.config(config.health)))
       .with(({ config }) => [fp(configurable('typed'), { name: 'typed' }), { header: config.security.header }])
       .mount(pets)
 

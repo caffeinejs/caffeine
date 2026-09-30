@@ -22,7 +22,7 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
   `process.env` for its own settings. `DATABASE_URL` is Prisma's: the CLI reads it from `prisma.config.ts`,
   and the client reads it through the driver adapter.
 - **Structured logging** with pino, at a level the configuration chooses.
-- **Kubernetes probes** via `.with(health())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
+- **Kubernetes probes** via `.with(healthProbes())`: `/livez`, `/readyz`, `/startupz`, and a database readiness indicator.
 - **Graceful shutdown** via `.shutdown()`: a drain that refuses readiness before it stops listening.
 - **Dockerised**: `docker-compose` brings up Postgres + the app, runs migrations, seeds demo data.
 
@@ -172,9 +172,9 @@ Two schemes, deliberately segregated:
 A route accepts **only** the schemes it names. So a signed-in GitHub session does not open the documentation, and
 Basic credentials do not authenticate the API — which is what makes the split real rather than cosmetic.
 
-`.authentication(...)` is written **first** among the installs in `app.ts`, because the gate has no reserved slot:
-it registers exactly where that call appears, so anything installed after it runs only for a request the gate let
-through.
+`.install(Authentication(...))` binds the schemes; the gate is `.with(authentication())`, written **first** among
+the plugins in `app.ts` because it has no reserved slot: it registers exactly where that call appears, so any
+plugin registered after it runs only for a request the gate let through.
 
 The two schemes also challenge differently, because they are obtained differently. Basic answers `401` with
 `WWW-Authenticate: Basic`, and the browser prompts. GitHub is a round trip to github.com that ends in a session

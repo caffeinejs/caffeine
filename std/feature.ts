@@ -45,7 +45,7 @@ export interface BootstrapKit<C = unknown> {
 
 /**
  * The keys a feature's lifecycle hangs off. Symbols so the lifecycle stays off the builder's autocomplete:
- * `.with(staticFiles(s => …))` sees the fluent surface and nothing else.
+ * `.install(Kafka(k => …))` sees the fluent surface and nothing else.
  */
 export const kFeatureName = Symbol('caffeine.feature.name')
 export const kFeatureConfigure = Symbol('caffeine.feature.configure')
@@ -61,7 +61,7 @@ export const kFeatureBootstrap = Symbol('caffeine.feature.bootstrap')
  */
 export interface Feature<C = unknown> {
   /**
-   * Stable identifier for this feature. It is the identity `.with` deduplicates on, so a feature accepting
+   * Stable identifier for this feature. It is the identity `.install` deduplicates on, so a feature accepting
    * an instance name folds it in (`kafka` vs `kafka:orders`) and one image cannot install the same instance
    * twice.
    */
@@ -80,9 +80,20 @@ export interface Feature<C = unknown> {
   [kFeatureBootstrap]?(kit: BootstrapKit<C>): void | Promise<void>
 }
 
-/** Thrown when `.with` installs a feature whose {@link kFeatureName} is already installed. */
+/** Thrown when `.install` installs a feature whose {@link kFeatureName} is already installed. */
 export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
   constructor(feature: string) {
     super(`Cannot install feature "${feature}": it is already installed`, 'ERR_FEATURE_ALREADY_INSTALLED')
+  }
+}
+
+/**
+ * Thrown by a component that depends on a feature the application never installed — a server plugin reading
+ * what only that feature's `.install(...)` binds, for one. The solutions name the missing install, so they
+ * come from the throw site.
+ */
+export class ErrFeatureNotInstalled extends ErrCaffeine {
+  constructor(feature: string, ...solutions: string[]) {
+    super(`Cannot use feature "${feature}": it is not installed`, 'ERR_FEATURE_NOT_INSTALLED', undefined, ...solutions)
   }
 }

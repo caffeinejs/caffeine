@@ -10,7 +10,7 @@ import { inMemoryBinder } from './binder.testkit.js'
 import { messagingConfigSchema } from './config.js'
 import { Consume } from './decorators/consume.js'
 import { MessageHandler } from './decorators/message_handler.js'
-import { messaging } from './plugin.js'
+import { Messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
@@ -47,8 +47,8 @@ describe('messaging configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }))
       .build()
-    const app = createApplication({ config: conf }).with(
-      messaging((m, { config }) =>
+    const app = createApplication({ config: conf }).install(
+      Messaging((m, { config }) =>
         m
           .config(config.messaging.default)
           .use('primary', inMemoryBinder())
@@ -72,8 +72,8 @@ describe('messaging configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
-      messaging((m, { config }) =>
+    const app = createApplication({ config: conf }).install(
+      Messaging((m, { config }) =>
         m
           .config(config.messaging.default)
           .use('primary', inMemoryBinder())
@@ -94,16 +94,16 @@ describe('messaging configuration', () => {
       .source(new InlineConfigSource({ messaging: { audit: { out: { log: { destination: 'audit.v2' } } } } }))
       .build()
     const app = createApplication({ config: conf })
-      .with(
-        messaging((m, { config }) =>
+      .install(
+        Messaging((m, { config }) =>
           m
             .config(config.messaging.default)
             .use('primary', inMemoryBinder())
             .out('log', { destination: 'log', via: 'primary' }),
         ),
       )
-      .with(
-        messaging('audit', (m, { config }) =>
+      .install(
+        Messaging('audit', (m, { config }) =>
           m
             .config(config.messaging.audit)
             .use('primary', inMemoryBinder())
@@ -128,8 +128,8 @@ describe('messaging configuration', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
-      messaging((m, { config }) =>
+    const app = createApplication({ config: conf }).install(
+      Messaging((m, { config }) =>
         m
           .config(config.messaging.default)
           .use('primary', inMemoryBinder())
@@ -162,8 +162,8 @@ describe('messaging configuration', () => {
       .build()
     const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
-      .with(
-        messaging((m, { config }) =>
+      .install(
+        Messaging((m, { config }) =>
           m
             .config(config.app.events)
             .use('primary', inMemoryBinder())
@@ -188,8 +188,8 @@ describe('messaging configuration', () => {
         }),
       )
       .build()
-    const app = createApplication({ config: conf }).with(
-      messaging((m, { config }) =>
+    const app = createApplication({ config: conf }).install(
+      Messaging((m, { config }) =>
         m
           .config(config.messaging.default)
           .use('primary', inMemoryBinder())

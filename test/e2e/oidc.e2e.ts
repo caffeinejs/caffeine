@@ -5,6 +5,9 @@ import {
   type OAuth2AuthenticationOptionsBuilder,
   type OIDCAuthenticationOptionsBuilder,
   newRouter,
+  Authentication,
+  authentication,
+  Authorization,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -113,9 +116,16 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
     let running: RunningApp
 
     beforeAll(async () => {
-      running = await startApp(app => app.authentication(auth => auth.addOIDC(OIDC, springOIDC)).mount(routes(OIDC)), {
-        port: PORT,
-      })
+      running = await startApp(
+        app =>
+          app
+            .install(Authentication(auth => auth.addOIDC(OIDC, springOIDC)))
+            .with(authentication())
+            .mount(routes(OIDC)),
+        {
+          port: PORT,
+        },
+      )
     })
 
     afterAll(() => running.close())
@@ -420,18 +430,21 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       const running = await startApp(
         app =>
           app
-            .authentication(auth =>
-              auth.addOIDC(OIDC, o =>
-                o
-                  .clientID('caffeine-oidc')
-                  .clientSecret('caffeine-oidc-secret')
-                  .sessionSecret(SESSION_SECRET)
-                  .callbackURL(`${ORIGIN}/oidc/callback`)
-                  .discoveryURL(OAUTH_SERVER)
-                  .issuer(OAUTH_SERVER)
-                  .scopes('openid', 'email'),
+            .install(
+              Authentication(auth =>
+                auth.addOIDC(OIDC, o =>
+                  o
+                    .clientID('caffeine-oidc')
+                    .clientSecret('caffeine-oidc-secret')
+                    .sessionSecret(SESSION_SECRET)
+                    .callbackURL(`${ORIGIN}/oidc/callback`)
+                    .discoveryURL(OAUTH_SERVER)
+                    .issuer(OAUTH_SERVER)
+                    .scopes('openid', 'email'),
+                ),
               ),
             )
+            .with(authentication())
             .mount(routes(OIDC)),
         { port: PORT },
       )
@@ -450,17 +463,20 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       const running = await startApp(
         app =>
           app
-            .authentication(auth =>
-              auth.addOIDC(OIDC, o =>
-                o
-                  .clientID('caffeine-oidc')
-                  .clientSecret('caffeine-oidc-secret')
-                  .sessionSecret(SESSION_SECRET)
-                  .callbackURL(`${ORIGIN}/oidc/callback`)
-                  .discoveryURL(OAUTH_SERVER)
-                  .issuer('http://localhost:9000/not-the-issuer'),
+            .install(
+              Authentication(auth =>
+                auth.addOIDC(OIDC, o =>
+                  o
+                    .clientID('caffeine-oidc')
+                    .clientSecret('caffeine-oidc-secret')
+                    .sessionSecret(SESSION_SECRET)
+                    .callbackURL(`${ORIGIN}/oidc/callback`)
+                    .discoveryURL(OAUTH_SERVER)
+                    .issuer('http://localhost:9000/not-the-issuer'),
+                ),
               ),
             )
+            .with(authentication())
             .mount(routes(OIDC)),
         { port: PORT },
       )
@@ -492,8 +508,9 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       running = await startApp(
         app =>
           app
-            .authentication(auth => auth.addOIDC(OIDC, springOIDC))
-            .authorization(authz => authz.requireAuthenticatedByDefault())
+            .install(Authentication(auth => auth.addOIDC(OIDC, springOIDC)))
+            .with(authentication())
+            .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
             .mount(newRouter('/dashboard').get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))),
         { port: PORT },
       )
@@ -526,16 +543,19 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       running = await startApp(
         app =>
           app
-            .authentication(auth =>
-              auth.addOIDC(OIDC, o =>
-                springOIDC(o)
-                  .ticketStore(store)
-                  .saveTokens()
-                  // Endpoints are configured by hand here, so nothing advertises where to end the session.
-                  .endSessionEndpoint(`${OAUTH_SERVER}/connect/logout`)
-                  .postLogoutRedirectURI(`${ORIGIN}/signed-out`),
+            .install(
+              Authentication(auth =>
+                auth.addOIDC(OIDC, o =>
+                  springOIDC(o)
+                    .ticketStore(store)
+                    .saveTokens()
+                    // Endpoints are configured by hand here, so nothing advertises where to end the session.
+                    .endSessionEndpoint(`${OAUTH_SERVER}/connect/logout`)
+                    .postLogoutRedirectURI(`${ORIGIN}/signed-out`),
+                ),
               ),
             )
+            .with(authentication())
             .mount(routes(OIDC)),
         { port: PORT },
       )
@@ -611,7 +631,10 @@ describe.skipIf(!up)('OIDC sign-in against Spring Authorization Server', () => {
       running = await startApp(
         app =>
           app
-            .authentication(auth => auth.addOIDC(OIDC, springOIDC).addOAuth2(OAUTH2, springOAuth2).default(OIDC))
+            .install(
+              Authentication(auth => auth.addOIDC(OIDC, springOIDC).addOAuth2(OAUTH2, springOAuth2).default(OIDC)),
+            )
+            .with(authentication())
             .mount(
               newRouter('/via-oidc')
                 .authorize({ schemes: [OIDC] })

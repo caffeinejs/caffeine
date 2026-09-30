@@ -9,11 +9,14 @@ import {
   Get,
   Post,
   createWebApplication,
-  health,
   newRouter,
   $p,
   type Context,
   type WebApplication,
+  Authentication,
+  authentication,
+  Authorization,
+  healthProbes,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -110,10 +113,11 @@ const auth = () =>
 
 function application(): WebApplication {
   return createWebApplication({})
-    .with(health())
+    .with(healthProbes())
     .with(staticFiles(s => s.serve(DIST, { ...spaMount(), setHeaders: immutableAssets(DIST) }, { anonymous: true })))
-    .authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login')))
-    .authorization(z => z.requireAuthenticatedByDefault())
+    .install(Authentication(a => a.addCookie(o => o.sessionSecret(SECRET).secure(false).loginPath('/login'))))
+    .with(authentication())
+    .install(Authorization(z => z.requireAuthenticatedByDefault()))
     .mount(auth(), apiMisses(), publicPages(), memberPages(), adminPages()) as WebApplication
 }
 

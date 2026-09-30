@@ -10,6 +10,8 @@ import {
   createWebApplication,
   newRouter,
   type AuthzRequirement,
+  Authentication,
+  authentication,
 } from '../../index.js'
 
 /**
@@ -80,7 +82,8 @@ describe('AuthorizationBuilder — two handlers for one requirement kind', () =>
     container.bind(AdmitsEveryRole, t => t.toSelf().lifetime(Scopes.SINGLETON).extends(AuthzRequirementHandler))
 
     const app = createWebApplication({ container })
-      .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()))
+      .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates())))
+      .with(authentication())
       .mount(
         newRouter('/admin')
           .authorize({ roles: ['admin'] })

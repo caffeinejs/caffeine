@@ -4,6 +4,7 @@ export {
   type BasicAuthenticationOptions,
   BasicAuthenticationOptionsBuilder,
 } from './basic/index.js'
+export { Authentication } from './authentication.js'
 export { AuthenticationBuilder } from './builder.js'
 export { authConfigSchema, SCHEME_SCHEMAS, type AuthConfig } from './config.js'
 export {
@@ -25,7 +26,12 @@ export {
   UserProvider,
 } from './credentials/index.js'
 export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
-export { ErrAuthConfiguration, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './errors.js'
+export {
+  ErrAuthConfiguration,
+  ErrAuthenticationGateRequired,
+  ErrAuthenticationRequired,
+  ErrAuthSchemeNotFound,
+} from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { isSafeReturnPath } from './internal/remote/config.js'
 export type { RemoteChallengeMode } from './internal/remote/handler.js'

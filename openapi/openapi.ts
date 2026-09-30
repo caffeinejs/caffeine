@@ -227,7 +227,7 @@ function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions):
         `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered` +
           solutions(
             known.length === 0
-              ? 'Register a scheme with .authentication(auth => auth.addJWTBearer(...)) before securing the document'
+              ? 'Register a scheme with .install(Authentication(auth => auth.addJWTBearer(...))) before securing the document'
               : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
           ),
       )

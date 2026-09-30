@@ -13,6 +13,8 @@ import {
   ScryptPasswordHasher,
   UserProvider,
   newRouter,
+  Authentication,
+  authentication,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -120,12 +122,15 @@ describe.skipIf(!up)('refresh tokens held in Redis', () => {
     running = await startApp(
       app =>
         app
-          .authentication(auth =>
-            auth
-              .addJWTBearer(localJWT)
-              .addCredentials()
-              .addRefreshTokens(r => r.resolve(principalOf).accessTTL('5m').refreshTTL('1h')),
+          .install(
+            Authentication(auth =>
+              auth
+                .addJWTBearer(localJWT)
+                .addCredentials()
+                .addRefreshTokens(r => r.resolve(principalOf).accessTTL('5m').refreshTTL('1h')),
+            ),
           )
+          .with(authentication())
           .mount(routes()),
       { container },
     )

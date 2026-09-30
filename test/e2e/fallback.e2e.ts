@@ -1,4 +1,11 @@
-import { authenticationExempt, health, newRouter } from '@caffeinejs/http'
+import {
+  authenticationExempt,
+  newRouter,
+  Authentication,
+  authentication,
+  Authorization,
+  healthProbes,
+} from '@caffeinejs/http'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -27,9 +34,10 @@ describe('a fallback policy in front of routes a plugin registered on the server
 
     running = await startApp(app =>
       app
-        .authentication(auth => auth.addJWTBearer(localJWT))
-        .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] }))
-        .with(health())
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
+        .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] })))
+        .with(healthProbes())
         .with(() =>
           fp(
             async (instance: FastifyInstance) => {

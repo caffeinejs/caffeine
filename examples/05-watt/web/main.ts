@@ -1,4 +1,4 @@
-import { createWebApplication, health, newRouter } from '@caffeinejs/http'
+import { createWebApplication, healthProbes, newRouter } from '@caffeinejs/http'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'
@@ -13,7 +13,7 @@ const routes = newRouter()
 const app = createWebApplication()
   // `/livez` on the public port as well: Watt's own `/status` also fails whenever readiness does, so a liveness
   // probe that must not restart the pod over a dependency points here instead.
-  .with(health())
+  .with(healthProbes())
   .mount(routes)
   // Served under the `application.basePath` this application's `watt.json` names, `/shop`: Watt hands it over as
   // `/shop/`, and the trailing slash is dropped. Watt types a missing one as `null`, which `.basePath(...)` takes

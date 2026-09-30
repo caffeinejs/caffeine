@@ -23,6 +23,7 @@ function setupContext(options: { config?: object; container?: Container } = {}):
     config: (options.config ?? {}) as LiveConfig<unknown>,
     store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
+    hasFeature: () => false,
   }
 }
 
@@ -259,7 +260,13 @@ describe('MiddlewarePipeline', () => {
     })
 
     const server = await serve(pipeline, {
-      setup: { container, config: {} as LiveConfig<unknown>, store: {} as ConfigStore<unknown>, logger },
+      setup: {
+        container,
+        config: {} as LiveConfig<unknown>,
+        store: {} as ConfigStore<unknown>,
+        logger,
+        hasFeature: () => false,
+      },
     })
     const res = await server.inject('/echo')
 

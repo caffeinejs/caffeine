@@ -1,11 +1,15 @@
 import type { Container } from '@caffeinejs/di'
-import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
+import { ErrFeatureNotInstalled } from '@caffeinejs/std'
+import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
+import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { type GatedRoute } from '../routing/fastify/route_config.js'
 import type { RouteGroup } from '../routing/route.js'
-import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
+import { ErrAuthenticationGateRequired, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
+import { AuthenticationGates } from './auth/gates.js'
+import { OIDCRoutesRef, oidcRoutesPlugin } from './auth/oidc/oidc_routes.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
 import { kAuthzHandlers, kAuthzOpts } from './authz/keys.js'
@@ -16,8 +20,8 @@ import { anonymousUser, mergePrincipals, type Principal } from './index.js'
 /**
  * Refuses an application that protects a route and never configured authentication.
  *
- * Checked apart from the gate because the gate exists only when `.authentication(...)` was called, and an
- * application that never called it is exactly the case being refused.
+ * Checked apart from the gate because a gate registered without the feature is already refused at its own
+ * factory, and an application that never installed `Authentication(...)` is exactly the case being refused.
  *
  * @throws ErrAuthenticationRequired when a route declares protection and nothing can authenticate a caller.
  */
@@ -32,91 +36,285 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
 }
 
 /**
- * Authenticates the request and, when the route is protected, authorizes it — in that order, in one Fastify
- * `onRequest` hook.
+ * Refuses a route naming an authentication scheme the feature never registered.
+ *
+ * A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would reject
+ * every caller with no indication of why. Refusing at start-up means a typo is an error next to the decorator
+ * that caused it, not a support ticket. One whole-table scan rather than a per-gate `onRoute` hook, so several
+ * gates do not repeat it and it fires whether or not a gate was registered at all. With the feature off there
+ * is nothing to resolve against; a protected route is then {@link assertAuthenticationConfigured}'s refusal.
+ *
+ * @throws ErrAuthSchemeNotFound when a compiled route names a scheme no `addX(...)` registered.
+ */
+export function assertRouteSchemesResolve(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+  const schemeProvider = container.getOptional(AuthenticationSchemeProvider)
+  if (schemeProvider === undefined) {
+    return
+  }
+
+  for (const group of routeGroups) {
+    for (const route of group.routes) {
+      for (const scheme of route.authorization.options?.schemes ?? []) {
+        if (schemeProvider.schemeFor(scheme) === undefined) {
+          throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
+        }
+      }
+    }
+  }
+}
+
+/** A route as it registered: its options, and the server context it registered on. */
+export interface RegisteredRoute {
+  /** Read once every route has registered: a later `onRoute` hook may still write the route's `$caffeine`. */
+  readonly route: RouteOptions
+  /** As the route registered: Fastify rewrites a prefixed `/` route's `url` without running the hooks again. */
+  readonly url: string
+  readonly method: string | readonly string[]
+  readonly context: object
+}
+
+/**
+ * Refuses a route a gate would authorize when no gate covers it.
+ *
+ * Installing `Authentication(...)` without a gate is supported — an application that only issues tokens — but a
+ * protected route no gate stands in front of would answer anyone. A route is protected when the gate would run an
+ * authorizer on it: the one its declaration compiled to, or the fallback policy for a route that declared nothing.
+ * It is covered by a gate installed on the context it registered in, or on one above it, unless another gate owns
+ * it — that one must cover it then. Where a gate sits among the plugins does not matter.
+ *
+ * Called once every route has registered, when every gate has stamped the routes it owns.
+ *
+ * @throws ErrAuthenticationRequired when a route is protected and authentication was never installed.
+ * @throws ErrAuthenticationGateRequired when a protected route has no gate over it.
+ */
+export function assertRoutesGated(container: Container, registered: readonly RegisteredRoute[]): void {
+  const fallback = fallbackFor(container)
+  const gates = container.getOptional(AuthenticationGates)?.installed ?? []
+  // Keyed by URL, so a GET route's HEAD twin — a route of its own — is named once, as `GET|HEAD`.
+  const ungated = new Map<string, Set<string>>()
+
+  for (const { route, url, method, context } of registered) {
+    const meta = route.config?.$caffeine
+    if (meta?.skipAuthentication === true || (meta?.auth ?? fallback?.forPath(url))?.authorizer == null) {
+      continue
+    }
+
+    const owner = meta?.gateOwner
+    const covered = gates.some(
+      gate =>
+        (gate.context === context || Object.prototype.isPrototypeOf.call(gate.context, context)) &&
+        (owner === undefined || owner === gate.id),
+    )
+
+    if (!covered) {
+      const methods = ungated.get(url) ?? new Set<string>()
+      for (const name of [method].flat()) {
+        methods.add(name)
+      }
+      ungated.set(url, methods)
+    }
+  }
+
+  if (ungated.size === 0) {
+    return
+  }
+
+  if (container.getOptional(AuthenticationService) === undefined) {
+    throw new ErrAuthenticationRequired()
+  }
+
+  throw new ErrAuthenticationGateRequired(Array.from(ungated, ([url, methods]) => `${[...methods].join('|')} ${url}`))
+}
+
+const kGateOptions = Symbol('caffeine.http.auth.gateOptions')
+
+/**
+ * Authors one gate's own settings. The callback runs while the factory builds the gate, handed the same
+ * {@link HTTPSetupContext} the factory gets, so a setting can come from the configuration or the container.
+ */
+export class AuthenticationGateBuilder {
+  #label = 'default'
+  #defaultScheme: string | undefined
+  #oidcRoutes = true
+
+  /**
+   * Names this gate. The label distinguishes the gate's `fastify-plugin` registration —
+   * `caffeine-authentication` for the default, `caffeine-authentication:<label>` otherwise — so a second gate
+   * on one registration chain (a scoped gate under a root one) must carry its own label, and an accidental
+   * duplicate is refused at start-up instead of authenticating every request twice.
+   */
+  name(label: string): this {
+    this.#label = label
+    return this
+  }
+
+  /**
+   * The scheme this gate authenticates — and, when it refuses, challenges — a route that names none with,
+   * overriding the application defaults for the routes this gate owns. A route naming its own schemes is
+   * untouched: those authenticate and challenge it, as everywhere else.
+   *
+   * Documentation keeps the application default: a compiled route's effective schemes — what openapi reads —
+   * state the application-wide default, not this override.
+   *
+   * @throws ErrAuthSchemeNotFound at start-up when no scheme is registered under `name`.
+   */
+  defaultScheme(name: string): this {
+    this.#defaultScheme = name
+    return this
+  }
+
+  /**
+   * Whether this gate may claim the OIDC login and callback routes, which the first installing gate registers
+   * once for the whole application. On by default. Turn it off on a gate registered inside a prefixed route
+   * group: the routes would land under the group's prefix, where the identity provider's `callbackURL` never
+   * arrives.
+   */
+  oidcRoutes(enabled: boolean): this {
+    this.#oidcRoutes = enabled
+    return this
+  }
+
+  [kGateOptions](): { label: string; defaultScheme: string | undefined; oidcRoutes: boolean } {
+    return { label: this.#label, defaultScheme: this.#defaultScheme, oidcRoutes: this.#oidcRoutes }
+  }
+}
+
+/**
+ * The authentication gate: authenticates the request and, when the route is protected, authorizes it — in
+ * that order, in one Fastify `onRequest` hook. Requires `Authentication(...)` to be installed; the feature
+ * binds what the gate runs on.
  *
  * Authorization is not separately registrable on purpose. Folding them together removes the ordering, and
  * with it the mistake of authorizing an identity nothing has established yet.
  *
  * The hook is added at `onRequest`, before the body is parsed or validated: an unauthenticated caller must
  * be answered 401, not a 400 describing the route's schema. Where the hook lands among the others is where
- * `.authentication(...)` was written: a plugin extended before it — CORS, whose headers a rejected
- * cross-origin request still needs on its way out — runs first, and one extended after it does not run for
- * a request the gate rejected.
+ * this gate was registered: a plugin registered before it — CORS, whose headers a rejected cross-origin
+ * request still needs on its way out — runs first, and one registered after it does not run for a request
+ * the gate rejected.
  *
- * A route registered straight on the server is gated too, by the fallback policy when the application set one.
- * It carries no `@Authorize` anyone could have forgotten, so nothing else would stand in front of it.
+ * Registered with `.with(authentication())`, the gate joins the root server and covers every route, wherever it
+ * sits among the plugins. With `router.plugin(authentication(g => g.name('admin')))` it joins that route group
+ * alone, covering exactly the group's routes. Each gate stamps the routes registered in its context after it,
+ * and where several gates cover a route the last stamp — the innermost gate's, for a group's own routes — decides
+ * which one authenticates and challenges it. A raw route registered straight on the server declares nothing, so
+ * the fallback policy decides it when the application set one.
+ *
+ * Start-up refuses a route a gate would authorize — one declaring protection, or one the fallback policy reaches
+ * — when no gate covers it: installing `Authentication(...)` is not what gates a request.
  *
  * A scheme reading its credential from a cookie needs no ordering care: the adapter registers `@fastify/cookie`
  * before any plugin, so the cookies are parsed whatever slot this lands in.
+ *
+ * @throws ErrFeatureNotInstalled at start-up when `Authentication(...)` is not installed.
+ * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
  */
-export function authenticationPlugin(): FastifyPluginAsync {
-  const plugin: FastifyPluginAsync = async instance => {
-    const container = instance.$container
+export function authentication<C = unknown>(
+  configure?: HTTPPluginConfigurer<AuthenticationGateBuilder, C>,
+): HTTPPluginFactory<C> {
+  return context => {
+    const builder = new AuthenticationGateBuilder()
+    configure?.(builder, context)
 
-    // Configuring authentication binds the coordinator and the scheme provider, and nothing else does — so
-    // their presence *is* the feature being on, with no separate flag to be written and then read out of
-    // sync with it.
-    const service = container.getOptional(AuthenticationService)
-    const schemeProvider = container.getOptional(AuthenticationSchemeProvider)
+    const { label, defaultScheme: override, oidcRoutes } = builder[kGateOptions]()
 
-    if (service === undefined || schemeProvider === undefined) {
-      return
+    // Factories run at start-up: a gate registered without the feature is a boot failure naming the fix,
+    // never a server that quietly authenticates nobody.
+    if (!context.hasFeature('auth')) {
+      throw new ErrFeatureNotInstalled(
+        'auth',
+        'Install authentication on the application: ".install(Authentication(a => a.addJWTBearer(...)))"',
+      )
     }
 
-    // A name that resolves to nothing authenticates nobody, and the failure is invisible: the route would
-    // reject every caller with no indication of why. Rejecting here means a typo is a start-up error next
-    // to the decorator that caused it, not a support ticket.
-    instance.addHook('onRoute', route => {
-      for (const scheme of route.config?.$caffeine?.compiled?.route.authorization.options?.schemes ?? []) {
-        if (schemeProvider.schemeFor(scheme) === undefined) {
-          throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
-        }
-      }
-    })
+    const container = context.container
+    const service = container.get(AuthenticationService)
+    const schemeProvider = container.get(AuthenticationSchemeProvider)
 
-    const defaultScheme = schemeProvider.defaultAuthenticateScheme
+    if (override !== undefined && schemeProvider.schemeFor(override) === undefined) {
+      throw new ErrAuthSchemeNotFound(override, schemeProvider.schemeNames)
+    }
+
+    const defaultScheme = override ?? schemeProvider.defaultAuthenticateScheme
     const fallback = fallbackFor(container)
+    const gates = container.get(AuthenticationGates)
+    const gateID = Symbol(label)
 
-    // Callback style, not `async`: a synchronous pass still needs the authenticate promise, but keeping the
-    // hook itself callback-shaped is what a hand-written Fastify hook does and matches the guard hook.
-    instance.addHook('onRequest', (request, reply, done) => {
-      // Absent only on the not-found context, which Fastify builds directly rather than as a route, so no
-      // `onRoute` hook ever stamped it. That falls to the fallback below, whose own `is404` check answers it —
-      // and answers it the way it always did, by authenticating and authorizing nothing.
-      const meta = request.routeOptions.config.$caffeine
+    const plugin: FastifyPluginAsync = async instance => {
+      // Where this gate reaches, for the start-up check that refuses a protected route no gate covers.
+      gates.installed.push({ id: gateID, context: instance })
 
-      if (meta?.skipAuthentication === true) {
-        done()
-        return
+      // The routes register once, claimed by the first gate to install — with a root gate that is always the
+      // root, since root slots load before any route group registers.
+      const oidc = oidcRoutes ? container.getOptional(OIDCRoutesRef) : undefined
+      if (oidc !== undefined && !oidc.claimed) {
+        oidc.claimed = true
+        await instance.register(oidcRoutesPlugin(oidc.meta))
       }
 
-      const route = meta?.auth ?? fallback?.for(request)
+      // Ownership stamp: hook chains run parent-first, so on a route covered by several gates the innermost
+      // gate's assignment lands last and wins — a plain assignment, deliberately not `??=`.
+      instance.addHook('onRoute', route => {
+        const meta = route.config?.$caffeine
+        if (meta !== undefined) {
+          meta.gateOwner = gateID
+        }
+      })
 
-      authenticateAndAuthorize(request.httpContext, service, defaultScheme, route).then(passed => {
-        if (passed) {
+      // Callback style, not `async`: a synchronous pass still needs the authenticate promise, but keeping the
+      // hook itself callback-shaped is what a hand-written Fastify hook does and matches the guard hook.
+      instance.addHook('onRequest', (request, reply, done) => {
+        // Absent only on the not-found context, which Fastify builds directly rather than as a route, so no
+        // `onRoute` hook ever stamped it. That falls to the fallback below, whose own `is404` check answers it —
+        // and answers it the way it always did, by authenticating and authorizing nothing.
+        const meta = request.routeOptions.config.$caffeine
+
+        if (meta?.skipAuthentication === true) {
           done()
           return
         }
 
-        // challenge()/forbid() only set status/headers (or a redirect). Sending flushes the reply, and not
-        // calling done() is what ends the lifecycle before the handler. A scheme that answered for itself has
-        // already sent, which `reply.sent` does not yet show while an `onSend` hook holds that send open.
-        if (!request.httpContext.sent) {
-          reply.send()
+        // A route another gate owns is that gate's to authenticate and challenge; standing down keeps it to
+        // one authentication per request whatever order the gates' hooks run in.
+        if (meta?.gateOwner !== undefined && meta.gateOwner !== gateID) {
+          done()
+          return
         }
-      }, done)
+
+        const route = meta?.auth ?? fallback?.for(request)
+
+        authenticateAndAuthorize(request.httpContext, service, defaultScheme, route, override).then(passed => {
+          if (passed) {
+            done()
+            return
+          }
+
+          // challenge()/forbid() only set status/headers (or a redirect). Sending flushes the reply, and not
+          // calling done() is what ends the lifecycle before the handler. A scheme that answered for itself has
+          // already sent, which `reply.sent` does not yet show while an `onSend` hook holds that send open.
+          if (!request.httpContext.sent) {
+            reply.send()
+          }
+        }, done)
+      })
+    }
+
+    return fp(plugin, {
+      name: label === 'default' ? 'caffeine-authentication' : `caffeine-authentication:${label}`,
     })
   }
-
-  return fp(plugin, { name: 'caffeine-authentication' })
 }
 
-/**
- * The fallback policy as it applies to a route the application's router did not compile, or `undefined` when the
- * application set none.
- */
-function fallbackFor(container: Container): { for(request: FastifyRequest): GatedRoute | undefined } | undefined {
+/** The fallback policy as it applies to a route the application's router did not compile. */
+interface Fallback {
+  /** For the route a request matched. */
+  for(request: FastifyRequest): GatedRoute | undefined
+  /** For the route registered under `path`, which is how start-up asks. */
+  forPath(path: string): GatedRoute | undefined
+}
+
+/** The application's {@link Fallback}, or `undefined` when it set no fallback policy. */
+function fallbackFor(container: Container): Fallback | undefined {
   const options = container.getOptional(kAuthzOpts)
   if (options?.fallbackPolicy === undefined) {
     return undefined
@@ -134,6 +332,9 @@ function fallbackFor(container: Container): { for(request: FastifyRequest): Gate
     return { exact, under: `${exact}/` }
   })
 
+  const forPath = (path: string): GatedRoute | undefined =>
+    except.some(({ exact, under }) => path === exact || path.startsWith(under)) ? undefined : gated
+
   return {
     for(request) {
       // A URL nothing matched has no route, so there is no route policy to apply: the not-found handler answers
@@ -144,19 +345,25 @@ function fallbackFor(container: Container): { for(request: FastifyRequest): Gate
 
       // The path the route was registered under, not the URL that was requested: no spelling of a URL can then
       // borrow the exemption of a route it did not match.
-      const path = request.routeOptions.url ?? ''
-
-      return except.some(({ exact, under }) => path === exact || path.startsWith(under)) ? undefined : gated
+      return forPath(request.routeOptions.url ?? '')
     },
+    forPath,
   }
 }
 
-/** Establishes `ctx.user`, then runs the route's authorization. Resolves to whether the request may go on. */
+/**
+ * Establishes `ctx.user`, then runs the route's authorization. Resolves to whether the request may go on.
+ *
+ * `challengeScheme` is a gate's `defaultScheme(...)` override, when it set one: a route that names no scheme
+ * is then challenged by the gate's own default rather than by the application's challenge chain, so the gate
+ * that authenticates a route is also the one whose scheme answers it.
+ */
 async function authenticateAndAuthorize(
   ctx: Context,
   service: AuthenticationService,
   defaultScheme: string,
   route: GatedRoute | undefined,
+  challengeScheme?: string,
 ): Promise<boolean> {
   const schemes = route?.schemes
   const named = schemes !== undefined && schemes.length > 0 && route?.allowAnonymous !== true
@@ -177,8 +384,9 @@ async function authenticateAndAuthorize(
 
   // A route that names schemes must be challenged by those, not by the application default. Otherwise a
   // Basic-protected route in a browser-first application answers with the default scheme's redirect, which
-  // an API client can neither follow nor satisfy. An unnamed route passes `undefined` and gets the default.
-  const challenged: Array<string | undefined> = schemes?.length ? [...schemes] : [undefined]
+  // an API client can neither follow nor satisfy. An unnamed route passes the gate's override, or `undefined`
+  // for the application's own challenge chain.
+  const challenged: Array<string | undefined> = schemes?.length ? [...schemes] : [challengeScheme]
 
   if (!ctx.user.authenticated) {
     // Every named scheme gets to contribute, each appending its own `WWW-Authenticate`, so a route accepting

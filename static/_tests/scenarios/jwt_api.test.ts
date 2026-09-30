@@ -1,4 +1,4 @@
-import { JWTService, newRouter, type WebApplication } from '@caffeinejs/http'
+import { JWTService, newRouter, type WebApplication, Authentication, authentication } from '@caffeinejs/http'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'
@@ -27,7 +27,8 @@ const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIEN
  */
 function publicSPA(): WebApplication {
   return isolated()
-    .authentication(a => a.addJWTBearer(j => j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE)))
+    .install(Authentication(a => a.addJWTBearer(j => j.secret(SECRET).issuer(ISSUER).audience(AUDIENCE))))
+    .with(authentication())
     .with(staticFiles(s => s.serve(dist, { ...spaMount(), setHeaders: immutableAssets(dist) }, { anonymous: true })))
     .mount(
       newRouter('/api')

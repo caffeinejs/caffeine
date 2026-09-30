@@ -2,7 +2,15 @@ import { fileURLToPath } from 'node:url'
 
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import { Claim, Identity, Principal, createWebApplication, health } from '@caffeinejs/http'
+import {
+  Claim,
+  Identity,
+  Principal,
+  createWebApplication,
+  Authentication,
+  authentication,
+  healthProbes,
+} from '@caffeinejs/http'
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
@@ -63,69 +71,73 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
         }
       })
 
-      // --- Installs, in the order they register. The authentication gate has no slot of its own: it lands
-      // exactly here, which is why it is written first — nothing reading `req.user` registers ahead of it.
-      .authentication((auth, { config }) =>
-        auth
-          // Basic, for the API documentation only. Demo credentials, overridable from the environment.
-          .addBasic('Basic', o =>
-            o
-              .realm('Petstore docs')
-              .validate((_ctx, username, password) =>
-                username === config.docs.user && password === config.docs.password
-                  ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', username, 'petstore')])])
-                  : null,
-              ),
-          )
-          // GitHub OAuth 2.0 browser login, and the application default: every route that does not name a
-          // scheme authenticates with it. Two routes come with it: the callback, from callbackURL, and the one
-          // that starts a sign-in, at loginPath. includeEmail fetches the verified primary email (adds the
-          // user:email scope).
-          .addGithub(
-            'GitHub',
-            o =>
+      // --- The authentication feature binds schemes and services into the container; where the `.install(...)`
+      // sits makes no difference. The gate — `.with(authentication())` below — is what takes a slot: it lands
+      // exactly where it is written, first among the plugins, so nothing reading `req.user` registers ahead of it.
+      .install(
+        Authentication((auth, { config }) =>
+          auth
+            // Basic, for the API documentation only. Demo credentials, overridable from the environment.
+            .addBasic('Basic', o =>
               o
-                .clientID(config.auth.github.clientId)
-                .clientSecret(config.auth.github.clientSecret)
-                .callbackURL(config.auth.github.callbackUrl)
-                .sessionSecret(config.auth.github.sessionSecret)
-                .sessionCookieName(GITHUB_SESSION_COOKIE)
-                .stateCookieName(GITHUB_STATE_COOKIE)
-                .defaultRedirectPath('/dashboard')
-                // Where the homepage's "Sign in" button points, and what a 401 names in `location`: going there
-                // starts the round trip to GitHub and comes back to `returnTo`, or to the dashboard without one.
-                .loginPath('/login/github')
-                // Nothing of GitHub's /user body becomes a claim unless it is named, and a role least of all: the
-                // body is unsigned, and much of it is whatever the user typed into their profile. Granting a role
-                // therefore takes a mapper, which also replaces the preset's own mapping — so it names the few
-                // fields the app renders, and keeps the sealed session cookie well under a browser's ~4 KB.
-                .claimMapper(u => {
-                  const claims = [
-                    // GitHub's id is a number; a subject is a string wherever it is read.
-                    new Claim('sub', String(u.id), GITHUB_ISSUER),
-                    new Claim('login', u.login, GITHUB_ISSUER),
-                    new Claim('name', u.name ?? u.login, GITHUB_ISSUER),
-                  ]
-                  if (u.email) {
-                    claims.push(new Claim('email', u.email, GITHUB_ISSUER))
-                  }
-                  if (u.avatar_url) {
-                    claims.push(new Claim('avatar_url', u.avatar_url, GITHUB_ISSUER))
-                  }
-                  // Grants every signed-in GitHub user the scope the pet write routes gate on. A real deployment
-                  // would map this from an org/team membership; stated plainly here because "any GitHub account can
-                  // write" is a demo decision, not an accident.
-                  claims.push(new Claim('roles', 'write:pets', GITHUB_ISSUER))
+                .realm('Petstore docs')
+                .validate((_ctx, username, password) =>
+                  username === config.docs.user && password === config.docs.password
+                    ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', username, 'petstore')])])
+                    : null,
+                ),
+            )
+            // GitHub OAuth 2.0 browser login, and the application default: every route that does not name a
+            // scheme authenticates with it. Two routes come with it: the callback, from callbackURL, and the one
+            // that starts a sign-in, at loginPath. includeEmail fetches the verified primary email (adds the
+            // user:email scope).
+            .addGithub(
+              'GitHub',
+              o =>
+                o
+                  .clientID(config.auth.github.clientId)
+                  .clientSecret(config.auth.github.clientSecret)
+                  .callbackURL(config.auth.github.callbackUrl)
+                  .sessionSecret(config.auth.github.sessionSecret)
+                  .sessionCookieName(GITHUB_SESSION_COOKIE)
+                  .stateCookieName(GITHUB_STATE_COOKIE)
+                  .defaultRedirectPath('/dashboard')
+                  // Where the homepage's "Sign in" button points, and what a 401 names in `location`: going there
+                  // starts the round trip to GitHub and comes back to `returnTo`, or to the dashboard without one.
+                  .loginPath('/login/github')
+                  // Nothing of GitHub's /user body becomes a claim unless it is named, and a role least of all: the
+                  // body is unsigned, and much of it is whatever the user typed into their profile. Granting a role
+                  // therefore takes a mapper, which also replaces the preset's own mapping — so it names the few
+                  // fields the app renders, and keeps the sealed session cookie well under a browser's ~4 KB.
+                  .claimMapper(u => {
+                    const claims = [
+                      // GitHub's id is a number; a subject is a string wherever it is read.
+                      new Claim('sub', String(u.id), GITHUB_ISSUER),
+                      new Claim('login', u.login, GITHUB_ISSUER),
+                      new Claim('name', u.name ?? u.login, GITHUB_ISSUER),
+                    ]
+                    if (u.email) {
+                      claims.push(new Claim('email', u.email, GITHUB_ISSUER))
+                    }
+                    if (u.avatar_url) {
+                      claims.push(new Claim('avatar_url', u.avatar_url, GITHUB_ISSUER))
+                    }
+                    // Grants every signed-in GitHub user the scope the pet write routes gate on. A real deployment
+                    // would map this from an org/team membership; stated plainly here because "any GitHub account can
+                    // write" is a demo decision, not an accident.
+                    claims.push(new Claim('roles', 'write:pets', GITHUB_ISSUER))
 
-                  return claims
-                }),
-            { includeEmail: true },
-          )
-          // GitHub is the default, so no controller in this application has to name a scheme. Anonymous
-          // requests to a guarded route are redirected into the OAuth flow rather than answered 401 — this is
-          // a browser-first demo, and the documentation (Basic) is the one place that differs.
-          .default('GitHub'),
+                    return claims
+                  }),
+              { includeEmail: true },
+            )
+            // GitHub is the default, so no controller in this application has to name a scheme. Anonymous
+            // requests to a guarded route are redirected into the OAuth flow rather than answered 401 — this is
+            // a browser-first demo, and the documentation (Basic) is the one place that differs.
+            .default('GitHub'),
+        ),
       )
+      .with(authentication())
       // JSX server-side rendering. Registering it is optional — `HTML(...)` renders without it — and what it
       // configures is whether the markup is prefixed with a doctype.
       .with(() => html())
@@ -162,7 +174,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       )
       .with(() => multipartPlugin())
       // Kubernetes probes: /livez, /readyz, /startupz.
-      .with(health())
+      .with(healthProbes())
       // The two features written as routers rather than controllers. Mounting is what carries their route types
       // onto the application, which is what a typed client reads back.
       .mount(ordersRouter, inventoriesRouter)

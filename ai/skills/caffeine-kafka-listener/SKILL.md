@@ -14,7 +14,7 @@ Do not implement Nest microservices RPC (reply topics, `@MessagePattern`).
 
 ## Steps
 
-1. `.with(kafka(k => k.brokers(...).groupId(...)))`. Named instance: `.with(kafka('orders', k => …))`.
+1. `.install(Kafka(k => k.brokers(...).groupId(...)))`. Named instance: `.install(Kafka('orders', k => …))`.
 2. Class `@KafkaHandler()` (or `{ instance: 'orders' }`). Methods `@KafkaListener({ topic: 'orders' })`.
 3. Optional `@KafkaParams(k => [k.value(), k.key()])`. Without it, the argument is `KafkaMessage`.
 4. Produce with injected `KafkaTemplate.send(topic, value)`.
@@ -24,9 +24,9 @@ Do not implement Nest microservices RPC (reply topics, `@MessagePattern`).
 
 ```ts
 import { createApplication } from '@caffeinejs/std'
-import { kafka, KafkaHandler, KafkaListener, KafkaParams, KafkaTemplate, $k } from '@caffeinejs/kafka'
+import { Kafka, KafkaHandler, KafkaListener, KafkaParams, KafkaTemplate, $k } from '@caffeinejs/kafka'
 
-const app = createApplication().with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
+const app = createApplication().install(Kafka(k => k.brokers('localhost:9092').groupId('svc')))
 
 @KafkaHandler()
 class Orders {

@@ -13,6 +13,9 @@ import {
   Principal,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
+  Authorization,
 } from '../../../index.js'
 
 class FakeOpaqueStore extends OpaqueTokenStore {
@@ -39,8 +42,10 @@ function opaqueBuilder() {
   const builder = createWebApplication({ container })
   // Only the policy this file's own controller references — no cross-section superset needed, since
   // each test file has an isolated decorator registrar.
-  builder.authorization(authz =>
-    authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')),
+  builder.install(
+    Authorization(authz =>
+      authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')),
+    ),
   )
   return builder
 }
@@ -59,7 +64,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueOkController]
 
     const builder = opaqueBuilder()
-    builder.authentication(auth => auth.addOpaqueToken())
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -82,7 +87,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueNoneController]
 
     const builder = opaqueBuilder()
-    builder.authentication(auth => auth.addOpaqueToken())
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -102,7 +107,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueBadController]
 
     const builder = opaqueBuilder()
-    builder.authentication(auth => auth.addOpaqueToken())
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -122,7 +127,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     void [OpaqueScopeController]
 
     const builder = opaqueBuilder()
-    builder.authentication(auth => auth.addOpaqueToken())
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
     const app = builder
     await app.bootstrap()
 

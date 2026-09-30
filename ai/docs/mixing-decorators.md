@@ -32,7 +32,7 @@ target by string (`target: 'Address'`), so entity modules never import each othe
 ```ts
 import { $repository, TypeORM } from '@caffeinejs/typeorm'
 
-app.with(TypeORM(t => t.dataSource({ type: 'postgres', url, entities: [CustomerEntity] })))
+app.install(TypeORM(t => t.dataSource({ type: 'postgres', url, entities: [CustomerEntity] })))
 
 @Injectable([$repository(CustomerEntity)])
 class Customers {

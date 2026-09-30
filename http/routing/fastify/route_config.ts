@@ -57,6 +57,15 @@ export interface CaffeineRouteConfig<R = FastifyRequest> {
    * Absent when nothing declared anything, which is the case the application's fallback policy answers.
    */
   auth?: GatedRoute
+
+  /**
+   * The authentication gate that owns this route: with several gates registered — one at the root, one inside
+   * a route group — each stamps the routes its context registers, hook chains run parent-first, and the last
+   * stamp is the innermost gate's. A gate's request hook stands down on a route another gate owns, so a route
+   * is authenticated and challenged exactly once, by the gate closest to it. A GET route's HEAD twin shares
+   * the config object, so both spellings share one owner.
+   */
+  gateOwner?: symbol
 }
 
 /**

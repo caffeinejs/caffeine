@@ -7,7 +7,7 @@ import { KafkaContext } from './context.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaParams } from './decorators/kafka_params.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { KafkaTemplate } from './template.js'
 
 const GROUP = 'ep-group'
@@ -99,8 +99,8 @@ describe('error pipeline', () => {
   it('retries a retryable failure until it succeeds', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')
@@ -123,8 +123,8 @@ describe('error pipeline', () => {
     dltReceived = deferred()
     const observed = deferred<unknown>()
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')
@@ -153,8 +153,8 @@ describe('error pipeline', () => {
   it('does not retry a not-retryable exception', async () => {
     notRetryState = { attempts: 0, onError: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')
@@ -179,8 +179,8 @@ describe('error pipeline', () => {
   it('commits after each success in record ack mode', async () => {
     retryState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')
@@ -207,8 +207,8 @@ describe('error pipeline', () => {
   it('commits when the handler calls ctx.ack() in manual mode', async () => {
     manualDone = deferred()
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('b').groupId(GROUP).ackMode('manual'), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('b').groupId(GROUP).ackMode('manual'), { clients: broker.clients() }),
     )
     const built = app
     await built.run()
@@ -224,8 +224,8 @@ describe('error pipeline', () => {
   it('re-delivers in-process on ctx.nack()', async () => {
     nackState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')

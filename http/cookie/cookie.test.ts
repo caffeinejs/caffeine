@@ -158,6 +158,27 @@ describe('ctx.req.cookie()', () => {
     ).toEqual({ tok: false })
   })
 
+  // What every cookie the application sets starts from, so a route states only where it differs.
+  it('starts every cookie a route sets from the parse options', async () => {
+    const setting = newRouter('/set').get('/', ctx => {
+      ctx.cookie('session', 'value')
+
+      return { ok: true }
+    })
+
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.parseOptions({ path: '/scoped', httpOnly: true }))
+        .mount(setting),
+    )
+
+    const issued = (await app.fetch('/set')).headers.getSetCookie()[0]
+
+    expect(issued).toMatch(/^session=value;/)
+    expect(issued).toContain('Path=/scoped')
+    expect(issued).toContain('HttpOnly')
+  })
+
   // The application owns the registration, secret included, so the feature stands down rather than failing the
   // start-up on decorators that are already there.
   it('leaves a server that registered the plugin itself alone', async () => {

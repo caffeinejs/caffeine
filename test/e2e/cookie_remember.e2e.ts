@@ -13,6 +13,8 @@ import {
   ScryptPasswordHasher,
   UserProvider,
   newRouter,
+  Authentication,
+  authentication,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -94,17 +96,20 @@ describe.skipIf(!up)('durable remember-me held in Redis', () => {
     return startApp(
       app =>
         app
-          .authentication(auth =>
-            auth
-              .addCookie(c => {
-                c.sessionSecret(SECRET).secure(false).rememberMe().rememberMeRotationGraceSeconds(GRACE_SECONDS)
+          .install(
+            Authentication(auth =>
+              auth
+                .addCookie(c => {
+                  c.sessionSecret(SECRET).secure(false).rememberMe().rememberMeRotationGraceSeconds(GRACE_SECONDS)
 
-                if (absolute !== undefined) {
-                  c.rememberMeMaxAge(3600).rememberMeAbsoluteMaxAge(absolute)
-                }
-              })
-              .addCredentials(),
+                  if (absolute !== undefined) {
+                    c.rememberMeMaxAge(3600).rememberMeAbsoluteMaxAge(absolute)
+                  }
+                })
+                .addCredentials(),
+            ),
           )
+          .with(authentication())
           .mount(routes()),
       { container },
     )

@@ -46,7 +46,7 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
- * `cacheInvalidate()` route extensions. Install it after `.authentication(...)`, and before a plugin that
+ * `cacheInvalidate()` route extensions. Install it after the authentication gate, `.with(authentication())`, and before a plugin that
  * compresses responses: a payload a compressor already turned into a stream is neither hashed nor stored.
  */
 export function HTTPCaching<C = unknown>(

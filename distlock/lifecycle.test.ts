@@ -6,7 +6,7 @@ import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { kDistLock } from './keys.js'
-import { distlock } from './plugin.js'
+import { DistributedLock } from './plugin.js'
 
 /**
  * Counts renewals, so a timer that outlived the application it belongs to is visible.
@@ -51,8 +51,8 @@ afterEach(async () => {
 })
 
 async function newApp(backend: Backend): Promise<{ lock: DistLock; close: () => Promise<void> }> {
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(
-    distlock(d => d.backend(backend)),
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+    DistributedLock(d => d.backend(backend)),
   )
 
   await app.bootstrap()

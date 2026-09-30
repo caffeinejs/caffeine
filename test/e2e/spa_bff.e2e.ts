@@ -1,6 +1,13 @@
 import { fileURLToPath } from 'node:url'
 
-import { ErrHTTPNotFound, newRouter, type Context } from '@caffeinejs/http'
+import {
+  ErrHTTPNotFound,
+  newRouter,
+  type Context,
+  Authentication,
+  authentication,
+  Authorization,
+} from '@caffeinejs/http'
 import { isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -74,21 +81,24 @@ async function bff(provider: StubProvider, gatedShell: boolean): Promise<Running
   return startApp(
     app => {
       const configured = app
-        .authentication(auth =>
-          auth.addOAuth2('stub', o =>
-            o
-              .clientID('spa-bff')
-              .clientSecret('spa-bff-secret')
-              .sessionSecret(SESSION_SECRET)
-              .callbackURL(`${ORIGIN}/oauth2/callback`)
-              .authorizationEndpoint(`${provider.origin}/authorize`)
-              .tokenEndpoint(`${provider.origin}/token`)
-              .userInfoEndpoint(`${provider.origin}/userinfo`)
-              .subjectClaim('sub')
-              .defaultRedirectPath('/dashboard'),
+        .install(
+          Authentication(auth =>
+            auth.addOAuth2('stub', o =>
+              o
+                .clientID('spa-bff')
+                .clientSecret('spa-bff-secret')
+                .sessionSecret(SESSION_SECRET)
+                .callbackURL(`${ORIGIN}/oauth2/callback`)
+                .authorizationEndpoint(`${provider.origin}/authorize`)
+                .tokenEndpoint(`${provider.origin}/token`)
+                .userInfoEndpoint(`${provider.origin}/userinfo`)
+                .subjectClaim('sub')
+                .defaultRedirectPath('/dashboard'),
+            ),
           ),
         )
-        .authorization(z => z.requireAuthenticatedByDefault())
+        .with(authentication())
+        .install(Authorization(z => z.requireAuthenticatedByDefault()))
         .with(site(gatedShell))
 
       // A gated site serves its own bundle from a compiled route, so the assets carry the page's policy.

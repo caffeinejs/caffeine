@@ -80,7 +80,7 @@ export class OpenAPIOptionsBuilder {
   }
 
   /**
-   * Declares a security scheme explicitly. Merged over the schemes derived from `.authentication(...)`, so it
+   * Declares a security scheme explicitly. Merged over the schemes derived from `Authentication(...)`, so it
    * is the way to describe one the framework cannot — notably a bare `addStrategy` handler.
    */
   securityScheme(name: string, scheme: SecuritySchemeObject): this {

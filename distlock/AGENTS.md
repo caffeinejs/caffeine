@@ -57,5 +57,5 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Scope
 
-- No HTTP: the feature returns `Feature<C>` and has no `server` hook.
+- No HTTP: the feature returns `Feature<C>`, installed with `.install(DistributedLock(...))`.
 - One lock service per application; there is no `instance` overload.

@@ -7,10 +7,23 @@ import { isRemoteAuthenticationError } from '../internal/remote/errors.js'
 import type { OIDCMeta } from './index.js'
 
 /**
+ * Holds what the OIDC routes are built from, for whichever authentication gate claims them.
+ *
+ * Bound by the authentication feature only when an OIDC/OAuth strategy was configured, so an absent binding
+ * still means "no OIDC" with no flag to read back. `claimed` is what keeps several gates from registering the
+ * routes twice: the first gate to install takes them, and root gates install before scoped ones.
+ */
+export class OIDCRoutesRef {
+  claimed = false
+
+  constructor(readonly meta: OIDCMeta) {}
+}
+
+/**
  * Registers the OIDC/OAuth2 callback routes.
  *
- * Contributed by the authentication builder only when an OIDC strategy was configured, so there is no "is it
- * on" question to answer here — the absence of this plugin is the answer.
+ * Contributed by the authentication gate only when the feature bound an {@link OIDCRoutesRef}, so there is no
+ * "is it on" question to answer here — the absence of this plugin is the answer.
  */
 export function oidcRoutesPlugin(meta: OIDCMeta): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {

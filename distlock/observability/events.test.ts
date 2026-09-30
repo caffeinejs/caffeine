@@ -10,7 +10,7 @@ import type { DistLockBuilder } from '../builder.js'
 import type { DistLock } from '../distlock.js'
 import { kDistLock } from '../keys.js'
 import { RecordingLogger } from '../log.testkit.js'
-import { distlock } from '../plugin.js'
+import { DistributedLock } from '../plugin.js'
 import { DIST_LOCK_CHANNELS, type AcquireContext } from './channels.js'
 
 const opened: Array<() => Promise<unknown>> = []
@@ -29,8 +29,8 @@ async function newApp(
   const container = new CaffeineIoC({ decorators: false })
   bind?.(container)
 
-  const app = createApplication({ container, logger: log }).with(
-    distlock(d => {
+  const app = createApplication({ container, logger: log }).install(
+    DistributedLock(d => {
       d.backend(new MemoryLockBackend())
       configure?.(d)
     }),

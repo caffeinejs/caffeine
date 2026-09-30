@@ -1,5 +1,5 @@
 import { token } from '@caffeinejs/di'
-import { authConfigSchema, newRouter } from '@caffeinejs/http'
+import { authConfigSchema, newRouter, Authentication, authentication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
@@ -28,7 +28,8 @@ function start(env: Record<string, string>) {
     app =>
       app
         // Named in lower case: an environment variable cannot address a scheme called `Bearer`.
-        .authentication((auth, { config }) => auth.config(config.auth).addJWTBearer('jwt', localJWT))
+        .install(Authentication((auth, { config }) => auth.config(config.auth).addJWTBearer('jwt', localJWT)))
+        .with(authentication())
         .mount(
           newRouter('/whoami')
             .authorize({})
@@ -82,20 +83,24 @@ describe('authentication options set from the environment', () => {
   it('takes an OAuth 2.0 client id and callback URL from the variables a deployment would write', async () => {
     const running = await startApp(
       app =>
-        app.authentication((auth, { config }) =>
-          auth
-            .config(config.auth)
-            .addOAuth2('oauth', o =>
-              o
-                .clientID('code-client')
-                .clientSecret('code-client-secret')
-                .sessionSecret('e2e-session-secret-at-least-32-chars!!')
-                .authorizationEndpoint('https://provider.invalid/authorize')
-                .tokenEndpoint('https://provider.invalid/token')
-                .userInfoEndpoint('https://provider.invalid/userinfo')
-                .callbackURL('http://localhost/auth/callback'),
+        app
+          .install(
+            Authentication((auth, { config }) =>
+              auth
+                .config(config.auth)
+                .addOAuth2('oauth', o =>
+                  o
+                    .clientID('code-client')
+                    .clientSecret('code-client-secret')
+                    .sessionSecret('e2e-session-secret-at-least-32-chars!!')
+                    .authorizationEndpoint('https://provider.invalid/authorize')
+                    .tokenEndpoint('https://provider.invalid/token')
+                    .userInfoEndpoint('https://provider.invalid/userinfo')
+                    .callbackURL('http://localhost/auth/callback'),
+                ),
             ),
-        ),
+          )
+          .with(authentication()),
       {
         config: configuredFrom({
           AUTH__SCHEMES__OAUTH__CLIENT_ID: 'env-client',

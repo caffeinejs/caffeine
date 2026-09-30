@@ -188,6 +188,25 @@ export class AuthorizationBuilder implements Feature {
   }
 }
 
+/**
+ * The authorization feature: policies, requirement handlers, the fallback policy, and the
+ * `AuthorizationService` user code injects.
+ *
+ * The callback runs immediately: there is nothing to read from the configuration tree, so there is no
+ * `(a, kit)` callback — unlike `Authentication((a, kit) => …)`. It is optional because a bare install is
+ * meaningful — the default decorator policy and nothing else — and it is what the application auto-installs
+ * when authentication is installed and authorization is not.
+ *
+ * ```ts
+ * .install(Authorization(z => z.requireAuthenticatedByDefault()))
+ * ```
+ */
+export function Authorization(configure?: (authz: AuthorizationBuilder) => void): Feature {
+  const builder = new AuthorizationBuilder()
+  configure?.(builder)
+  return builder
+}
+
 function built(policyOrConfigure: AuthzPolicy | ((builder: PolicyBuilder) => void)): AuthzPolicy {
   if (typeof policyOrConfigure !== 'function') {
     return policyOrConfigure

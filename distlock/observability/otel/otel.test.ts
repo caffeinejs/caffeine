@@ -24,7 +24,7 @@ import { FaultyBackend } from '../../backend.testkit.js'
 import { MemoryLockBackend } from '../../backend/memory/index.js'
 import type { DistLock } from '../../distlock.js'
 import { kDistLock } from '../../keys.js'
-import { distlock } from '../../plugin.js'
+import { DistributedLock } from '../../plugin.js'
 import { instrumentDistLock, type DistLockInstrumentationOptions } from './otel.js'
 
 const contextManager = new AsyncLocalStorageContextManager()
@@ -47,8 +47,8 @@ afterEach(async () => {
 })
 
 async function newLock(backend: Backend = new MemoryLockBackend()): Promise<DistLock> {
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), logger: false }).with(
-    distlock(d => d.backend(backend)),
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), logger: false }).install(
+    DistributedLock(d => d.backend(backend)),
   )
 
   await app.bootstrap()

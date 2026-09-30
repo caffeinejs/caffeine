@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
-import { kafka, type KafkaConfigurer } from './plugin.js'
+import { Kafka, type KafkaConfigurer } from './plugin.js'
 import { kafkaTemplate } from './symbols.js'
 import { KafkaTemplate } from './template.js'
 
@@ -121,11 +121,11 @@ describe('named kafka instances', () => {
     const broker = new FakeBroker()
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined
-        ? kafka(configure, { clients: broker.clients() })
-        : kafka(i, configure, { clients: broker.clients() })
+        ? Kafka(configure, { clients: broker.clients() })
+        : Kafka(i, configure, { clients: broker.clients() })
     const app = createApplication({})
-      .with(kfk(k => k.brokers('localhost:9092').groupId('default-group')))
-      .with(kfk(k => k.brokers('localhost:9092').groupId('orders-group'), 'orders'))
+      .install(kfk(k => k.brokers('localhost:9092').groupId('default-group')))
+      .install(kfk(k => k.brokers('localhost:9092').groupId('orders-group'), 'orders'))
 
     const built = app
     await built.run()

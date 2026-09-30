@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { newRouter } from '@caffeinejs/http'
+import { newRouter, Authentication, authentication } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -42,10 +42,16 @@ describe.skipIf(!up)('opaque bearer tokens held in Redis', () => {
     store = new RedisOpaqueTokenStore(redis, `caffeine:auth:e2e:${randomUUID()}`)
 
     bearer = await startApp(app =>
-      app.authentication(auth => auth.addOpaqueToken(o => o.store(store).realm('api'))).mount(routes()),
+      app
+        .install(Authentication(auth => auth.addOpaqueToken(o => o.store(store).realm('api'))))
+        .with(authentication())
+        .mount(routes()),
     )
     custom = await startApp(app =>
-      app.authentication(auth => auth.addOpaqueToken(o => o.store(store).scheme('Token'))).mount(routes()),
+      app
+        .install(Authentication(auth => auth.addOpaqueToken(o => o.store(store).scheme('Token'))))
+        .with(authentication())
+        .mount(routes()),
     )
   })
 

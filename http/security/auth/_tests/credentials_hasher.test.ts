@@ -7,6 +7,8 @@ import {
   ScryptPasswordHasher,
   UserProvider,
   createWebApplication,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
@@ -20,9 +22,11 @@ class Users extends UserProvider {
 function credentialsApp(container: CaffeineIoC) {
   container.bind(UserProvider, t => t.toValue(new Users()))
 
-  return createWebApplication({ container }).authentication(a =>
-    a.addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local')).addCredentials(),
-  )
+  return createWebApplication({ container })
+    .install(
+      Authentication(a => a.addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local')).addCredentials()),
+    )
+    .with(authentication())
 }
 
 // The application's own hasher has to win however it reaches the container. A lost one goes unnoticed at sign-in:

@@ -16,6 +16,8 @@ import {
   WebApplication,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
 } from '../../index.js'
 
 /**
@@ -58,20 +60,24 @@ class DefaultSchemeHandler extends BaseAuthenticationHandler<object> {
 function buildApp(): WebApplication {
   const builder = createWebApplication()
 
-  builder.authentication(auth =>
-    auth
-      .addStrategy('Default', new DefaultSchemeHandler())
-      .addBasic('Basic', b =>
-        b
-          .realm('Docs')
-          .validate((_ctx, user, pass) =>
-            user === 'admin' && pass === 'admin123'
-              ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', 'admin', '')])])
-              : null,
-          ),
-      )
-      .default('Default'),
-  )
+  builder
+    .install(
+      Authentication(auth =>
+        auth
+          .addStrategy('Default', new DefaultSchemeHandler())
+          .addBasic('Basic', b =>
+            b
+              .realm('Docs')
+              .validate((_ctx, user, pass) =>
+                user === 'admin' && pass === 'admin123'
+                  ? new Principal(true, [new Identity('Basic', true, [new Claim('sub', 'admin', '')])])
+                  : null,
+              ),
+          )
+          .default('Default'),
+      ),
+    )
+    .with(authentication())
 
   return builder as WebApplication
 }

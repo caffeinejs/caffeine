@@ -319,7 +319,7 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
     if (this.request.cookies === null) {
       throw new Error(
         'Cannot read cookies: @fastify/cookie has not parsed them yet for this request: register it before whatever ' +
-          'reads cookies, such as .authentication(...), and leave its "hook" option on "onRequest"',
+          'reads cookies, such as the authentication gate, and leave its "hook" option on "onRequest"',
       )
     }
   }

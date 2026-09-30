@@ -9,7 +9,7 @@ import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaParams } from './decorators/kafka_params.js'
 import { KafkaRetry } from './decorators/kafka_retry.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { retryTopics } from './retry/strategy.js'
 import { KafkaTemplate } from './template.js'
 
@@ -120,8 +120,8 @@ class IntegrationConsumer {
 const up = await brokerUp()
 
 describe.skipIf(!up)('kafka integration (real broker)', () => {
-  const app = createApplication({}).with(
-    kafka(k =>
+  const app = createApplication({}).install(
+    Kafka(k =>
       k
         .brokers(BROKER)
         .clientId('caffeine-kafka-it')

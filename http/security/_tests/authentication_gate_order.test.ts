@@ -1,22 +1,23 @@
-import { kFeatureConfigure, kFeatureName } from '@caffeinejs/std'
-import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'
+import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
 import {
   AuthenticateResult,
+  Authentication,
   Authorize,
   BaseAuthenticationHandler,
   Controller,
   Get,
+  authentication,
   createWebApplication,
-  kFeatureServer,
   type Context,
-  type HTTPFeature,
+  type HTTPPluginFactory,
 } from '../../index.js'
 
 /**
- * Where the authentication gate sits among the plugins, which is wherever `.authentication(...)` was written.
+ * Where the authentication gate sits among the plugins, which is wherever `.with(authentication())` was
+ * written.
  *
  * There is no band putting it behind everything any more, and that is the point: the two constraints pull
  * opposite ways and only the application knows which it wants. CORS must precede the gate, because a rejected
@@ -39,23 +40,17 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
 }
 
 /** Stands in for `@caffeinejs/cors`: stamps a header from an `onRequest` hook, and records that it ran. */
-function stamping(name: string, ran: string[]): HTTPFeature {
-  return {
-    [kFeatureName]: name,
-    [kFeatureConfigure](): void {
-      // Nothing to bind.
-    },
-    [kFeatureServer]: async (instance: FastifyInstance): Promise<void> => {
-      const plugin: FastifyPluginAsync = async server => {
-        server.addHook('onRequest', (_request, reply, done) => {
-          ran.push(name)
-          reply.header(`x-${name}`, 'yes')
-          done()
-        })
-      }
+function stamping(name: string, ran: string[]): HTTPPluginFactory {
+  return () => {
+    const plugin: FastifyPluginAsync = async server => {
+      server.addHook('onRequest', (_request, reply, done) => {
+        ran.push(name)
+        reply.header(`x-${name}`, 'yes')
+        done()
+      })
+    }
 
-      await instance.register(fp(plugin, { name }))
-    },
+    return fp(plugin, { name })
   }
 }
 
@@ -71,8 +66,9 @@ void [GuardedController]
 
 function guardedApp(ran: string[]) {
   return createWebApplication()
+    .install(Authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never')))
     .with(stamping('before', ran))
-    .authentication(auth => auth.addStrategy('Never', new NeverAuthenticates()).default('Never'))
+    .with(authentication())
     .with(stamping('after', ran))
 }
 

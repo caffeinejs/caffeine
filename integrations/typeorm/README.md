@@ -54,8 +54,8 @@ An unnamed feature binds its DataSource under TypeORM's `DataSource`. A named on
 
 ```ts
 const app = createApplication()
-  .with(TypeORM(t => t.dataSource(mainOptions)))
-  .with(TypeORM('reports', t => t.dataSource(reportsOptions)))
+  .install(TypeORM(t => t.dataSource(mainOptions)))
+  .install(TypeORM('reports', t => t.dataSource(reportsOptions)))
 
 @Injectable([$repository(UserEntity), $repository(EventEntity, 'reports')])
 class Dashboard {

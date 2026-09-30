@@ -16,7 +16,7 @@ import fp from 'fastify-plugin'
  * encapsulation context of its own and cover nothing. `csrf` is a plugin in its own right — it registers a
  * plugin *and* adds a hook of its own — so it is wrapped, for exactly that reason.
  *
- * Both are installed **before** `.authentication(...)` in `app.ts`. Hook *coverage* does not depend on order —
+ * Both are installed **before** the authentication gate, `.with(authentication())`, in `app.ts`. Hook *coverage* does not depend on order —
  * Fastify binds route contexts at `preReady` — but hook *execution* does, and a hook registered after the
  * authentication gate never runs for a request the gate rejected. Registering first is what puts the security
  * headers on a 401 and checks CSRF before a forged request reaches the auth path.

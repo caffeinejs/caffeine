@@ -1,8 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { health } from '../health/health.js'
-import { Router, constraints, createWebApplication, version } from '../index.js'
+import { Router, constraints, createWebApplication, version, healthProbes } from '../index.js'
 
 /**
  * Version is a routing key: the request must select one of two same-URL handlers *before* a handler runs.
@@ -96,7 +95,7 @@ describe('API versioning', () => {
 
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
-      .with(health())
+      .with(healthProbes())
       .mount(v1)
     await app.bootstrap()
 

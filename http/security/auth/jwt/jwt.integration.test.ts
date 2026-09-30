@@ -12,6 +12,8 @@ import {
   Status,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
@@ -54,7 +56,11 @@ describe('JWTBearerHandler', () => {
     void [JWTValidController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -77,7 +83,11 @@ describe('JWTBearerHandler', () => {
     void [JWTNoHeaderController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -98,7 +108,11 @@ describe('JWTBearerHandler', () => {
     void [JWTBadTokenController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -120,7 +134,11 @@ describe('JWTBearerHandler', () => {
     void [JWTExpiredController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -143,14 +161,18 @@ describe('JWTBearerHandler', () => {
     void [JWTWrongIssController]
 
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth.addJWTBearer(b =>
-        b
-          .secret(TEST_SECRET)
-          .jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] })
-          .allowAnyAudience(),
-      ),
-    )
+    builder
+      .install(
+        Authentication(auth =>
+          auth.addJWTBearer(b =>
+            b
+              .secret(TEST_SECRET)
+              .jwtOptions({ issuer: 'https://expected.example.com', algorithms: ['HS256'] })
+              .allowAnyAudience(),
+          ),
+        ),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -173,14 +195,18 @@ describe('JWTBearerHandler', () => {
     void [JWTWrongAudController]
 
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth.addJWTBearer(b =>
-        b
-          .secret(TEST_SECRET)
-          .jwtOptions({ audience: 'my-api', algorithms: ['HS256'] })
-          .allowAnyIssuer(),
-      ),
-    )
+    builder
+      .install(
+        Authentication(auth =>
+          auth.addJWTBearer(b =>
+            b
+              .secret(TEST_SECRET)
+              .jwtOptions({ audience: 'my-api', algorithms: ['HS256'] })
+              .allowAnyIssuer(),
+          ),
+        ),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -204,7 +230,11 @@ describe('JWTBearerHandler', () => {
     void [JWTSubClaimController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -229,7 +259,11 @@ describe('JWTBearerHandler', () => {
     void [JWTRoleController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -252,7 +286,11 @@ describe('JWTBearerHandler', () => {
     void [JWTArrayRolesController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -277,17 +315,21 @@ describe('JWTBearerHandler', () => {
     void [JWTOnValidatedController]
 
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth.addJWTBearer(b =>
-        b
-          .secret(TEST_SECRET)
-          .allowAnyIssuer()
-          .allowAnyAudience()
-          .onTokenValidated((_ctx, payload) => {
-            onTokenValidated(payload)
-          }),
-      ),
-    )
+    builder
+      .install(
+        Authentication(auth =>
+          auth.addJWTBearer(b =>
+            b
+              .secret(TEST_SECRET)
+              .allowAnyIssuer()
+              .allowAnyAudience()
+              .onTokenValidated((_ctx, payload) => {
+                onTokenValidated(payload)
+              }),
+          ),
+        ),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -315,17 +357,21 @@ describe('JWTBearerHandler', () => {
     void [JWTOnFailController]
 
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth.addJWTBearer(b =>
-        b
-          .secret(TEST_SECRET)
-          .allowAnyIssuer()
-          .allowAnyAudience()
-          .onFail((_ctx, err) => {
-            onFail(err)
-          }),
-      ),
-    )
+    builder
+      .install(
+        Authentication(auth =>
+          auth.addJWTBearer(b =>
+            b
+              .secret(TEST_SECRET)
+              .allowAnyIssuer()
+              .allowAnyAudience()
+              .onFail((_ctx, err) => {
+                onFail(err)
+              }),
+          ),
+        ),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -351,7 +397,11 @@ describe('JWTBearerHandler', () => {
     void [JWTRole403Controller]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -381,7 +431,11 @@ describe('JWTBearerHandler', () => {
     void [JWTStatusGuardController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -408,7 +462,11 @@ describe('JWTBearerHandler', () => {
     void [JWTAllowAnonController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 

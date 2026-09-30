@@ -18,6 +18,8 @@ import {
   RefreshTokenStore,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 const SECRET = 'a-very-long-test-secret-key-32-bytes!'
@@ -114,11 +116,15 @@ async function buildApp() {
   const store = new InMemoryRefreshStore()
   container.bind(RefreshTokenStore, t => t.toValue(store))
   const builder = createWebApplication({ container })
-  builder.authentication(a =>
-    a
-      .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
-      .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
-  )
+  builder
+    .install(
+      Authentication(a =>
+        a
+          .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
+          .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
+      ),
+    )
+    .with(authentication())
   const app = builder
   await app.bootstrap()
   return { app, store }

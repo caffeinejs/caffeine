@@ -1,5 +1,5 @@
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, health } from '@caffeinejs/http'
+import { createWebApplication, Authentication, authentication, Authorization, healthProbes } from '@caffeinejs/http'
 import { openapi } from '@caffeinejs/openapi'
 import type { Logger } from '@caffeinejs/std/logger'
 
@@ -56,24 +56,27 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       //
       // `challenge` and `forbid` both answer a browser navigation with a redirect and everything else with a
       // status, which is exactly the split a single-page application and its API need from one scheme.
-      .authentication((auth, { config }) =>
-        auth
-          .addCookie(o =>
-            o
-              .sessionSecret(config.auth.sessionSecret)
-              .cookieName(SESSION_COOKIE)
-              // Plain http in the demo; a Secure cookie would never come back. Turn on behind TLS.
-              .secure(config.auth.secureCookie)
-              .sameSite('lax')
-              .loginPath('/login')
-              .accessDeniedPath('/forbidden'),
-          )
-          // Binds CredentialsService and a default ScryptPasswordHasher. The UserProvider it resolves is
-          // `auth/users.ts`, which the module graph provides — there is no explicit binding anywhere.
-          .addCredentials(),
+      .install(
+        Authentication((auth, { config }) =>
+          auth
+            .addCookie(o =>
+              o
+                .sessionSecret(config.auth.sessionSecret)
+                .cookieName(SESSION_COOKIE)
+                // Plain http in the demo; a Secure cookie would never come back. Turn on behind TLS.
+                .secure(config.auth.secureCookie)
+                .sameSite('lax')
+                .loginPath('/login')
+                .accessDeniedPath('/forbidden'),
+            )
+            // Binds CredentialsService and a default ScryptPasswordHasher. The UserProvider it resolves is
+            // `auth/users.ts`, which the module graph provides — there is no explicit binding anywhere.
+            .addCredentials(),
+        ),
       )
+      .with(authentication())
       // A route that declares nothing is gated. The route somebody forgets is the safe one.
-      .authorization(z => z.requireAuthenticatedByDefault())
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
 
       .with(site)
       .with(
@@ -96,7 +99,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
             .secure('Cookie'),
         ),
       )
-      .with(health())
+      .with(healthProbes())
 
       // Order within `mount` does not decide matching — find-my-way prefers the longer static prefix — but
       // reading it API-first, then client routes, matches how the application is thought about.

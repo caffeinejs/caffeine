@@ -13,7 +13,7 @@ import {
   type ProducerClient,
   type ResolvedKafkaConfig,
 } from './config.js'
-import { kafka, type KafkaConfigurer } from './plugin.js'
+import { Kafka, type KafkaConfigurer } from './plugin.js'
 import type { KafkaRuntime } from './runtime.js'
 import { runtimeKey } from './symbols.js'
 
@@ -45,11 +45,11 @@ const env = (values: Record<string, string>) => new EnvConfigSource({ env: value
 describe('kafka configuration', () => {
   it('reads brokers from the configuration tree with no builder call at all', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { default: { brokers: ['from-config:9092'], groupId: 'from-config' } } }))
       .build()
-    const app = createApplication({ config: conf }).with(kfk((k, { config }) => k.config(config.kafka.default)))
+    const app = createApplication({ config: conf }).install(kfk((k, { config }) => k.config(config.kafka.default)))
 
     const built = app
     await built.bootstrap()
@@ -64,11 +64,11 @@ describe('kafka configuration', () => {
   // Named exception: kafka is config-wins once `config(...)` is wired.
   it('lets the environment override a builder-set broker list', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ KAFKA__DEFAULT__BROKERS: 'prod-1:9092,prod-2:9092' }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).brokers('localhost:9092').groupId('svc')),
     )
 
@@ -84,15 +84,15 @@ describe('kafka configuration', () => {
 
   it('keeps named instances apart, the unnamed one at kafka.default', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     // `GROUP_ID`, not `GROUPID`: the env provider folds underscores *within* a segment into camelCase, so an
     // all-uppercase run has no word boundary to find and `GROUPID` would resolve to `groupid`.
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ KAFKA__ORDERS__GROUP_ID: 'orders-canary' }))
       .build()
     const app = createApplication({ config: conf })
-      .with(kfk((k, { config }) => k.config(config.kafka.default).brokers('b1:9092').groupId('svc')))
-      .with(kfk((k, { config }) => k.config(config.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
+      .install(kfk((k, { config }) => k.config(config.kafka.default).brokers('b1:9092').groupId('svc')))
+      .install(kfk((k, { config }) => k.config(config.kafka.orders).brokers('b2:9092').groupId('orders'), 'orders'))
 
     const built = app
     await built.bootstrap()
@@ -117,13 +117,13 @@ describe('kafka configuration', () => {
     const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ app: { events: { groupId: 'from-moved-path' } } }))
       .build()
     const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
-      .with(kfk((k, { config }) => k.config(config.app.events).brokers('moved:9092')))
+      .install(kfk((k, { config }) => k.config(config.app.events).brokers('moved:9092')))
 
     const built = app
     await built.bootstrap()
@@ -141,11 +141,11 @@ describe('kafka configuration', () => {
     const onError = (): void => undefined
 
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(env({ KAFKA__DEFAULT__BROKERS: 'from-env:9092' }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).serializers(serializers).onError(onError)),
     )
 
@@ -165,11 +165,11 @@ describe('kafka configuration', () => {
     const topic = (): string => 'custom.DLT'
 
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { default: { brokers: ['b:9092'], deadLetter: true } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).deadLetter({ topic })),
     )
 
@@ -183,11 +183,11 @@ describe('kafka configuration', () => {
 
   it('honours a configured deadLetter: false when code set no object', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { default: { brokers: ['b:9092'], deadLetter: false } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).brokers('b:9092')),
     )
 
@@ -202,11 +202,11 @@ describe('kafka configuration', () => {
   // `.deadLetter(false)` is an explicit disable, not an unset scalar that configuration may turn back on.
   it('keeps an explicit deadLetter(false) against a configured true', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { default: { brokers: ['b:9092'], deadLetter: true } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).deadLetter(false)),
     )
 
@@ -221,11 +221,11 @@ describe('kafka configuration', () => {
   // `.deadLetter(false)` is an explicit disable, not an unset scalar that configuration may turn back on.
   it('keeps an explicit deadLetter(false) against a configured true', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { default: { brokers: ['b:9092'], deadLetter: true } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).deadLetter(false)),
     )
 
@@ -240,11 +240,11 @@ describe('kafka configuration', () => {
   // Activation is the builder call, never the tree.
   it('configures nothing for an instance the application never declared', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new InlineConfigSource({ kafka: { ghost: { brokers: ['nobody:9092'] } } }))
       .build()
-    const app = createApplication({ config: conf }).with(
+    const app = createApplication({ config: conf }).install(
       kfk((k, { config }) => k.config(config.kafka.default).brokers('real:9092')),
     )
 

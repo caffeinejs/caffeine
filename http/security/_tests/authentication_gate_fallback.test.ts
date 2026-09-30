@@ -11,9 +11,12 @@ import {
   Identity,
   Principal,
   createWebApplication,
-  health,
   authenticationExempt,
   newRouter,
+  Authentication,
+  authentication,
+  Authorization,
+  healthProbes,
 } from '../../index.js'
 
 /**
@@ -87,7 +90,8 @@ describe('the authentication gate and routes registered straight on the server',
   it('leaves them open when the application set no fallback policy', async () => {
     const app = await ready(
       createWebApplication()
-        .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
+        .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
+        .with(authentication())
         .with(plainRoutes()),
     )
 
@@ -98,9 +102,10 @@ describe('the authentication gate and routes registered straight on the server',
     function build() {
       return ready(
         createWebApplication()
-          .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
-          .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] }))
-          .with(health())
+          .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
+          .with(authentication())
+          .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets/'] })))
+          .with(healthProbes())
           .with(plainRoutes())
           .mount(newRouter('/compiled').get('/', ok)),
       )
@@ -152,8 +157,9 @@ describe('the authentication gate and routes registered straight on the server',
     it('still establishes a principal for a URL no route matches', async () => {
       const app = await ready(
         createWebApplication()
-          .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
-          .authorization(authz => authz.requireAuthenticatedByDefault())
+          .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
+          .with(authentication())
+          .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
           .with(() =>
             fp(
               async (instance: FastifyInstance) => {
@@ -174,8 +180,9 @@ describe('the authentication gate and routes registered straight on the server',
   it('keeps a failing authentication scheme away from the health probes', async () => {
     const app = await ready(
       createWebApplication()
-        .authentication(auth => auth.addStrategy('Broken', new BrokenScheme()))
-        .with(health())
+        .install(Authentication(auth => auth.addStrategy('Broken', new BrokenScheme())))
+        .with(authentication())
+        .with(healthProbes())
         .mount(newRouter('/compiled').get('/', ok)),
     )
 
@@ -188,8 +195,11 @@ describe('the authentication gate and routes registered straight on the server',
   it('excepts whole path segments, so a prefix written without its trailing slash opens no neighbour', async () => {
     const app = await ready(
       createWebApplication()
-        .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
-        .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets', '/admin-ui/users'] }))
+        .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
+        .with(authentication())
+        .install(
+          Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets', '/admin-ui/users'] })),
+        )
         .with(plainRoutes()),
     )
 
@@ -205,9 +215,10 @@ describe('the authentication gate and routes registered straight on the server',
     const app = await ready(
       createWebApplication()
         .basePath('/api')
-        .authentication(auth => auth.addStrategy('Header', new HeaderScheme()))
-        .authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets'] }))
-        .with(health())
+        .install(Authentication(auth => auth.addStrategy('Header', new HeaderScheme())))
+        .with(authentication())
+        .install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['/assets'] })))
+        .with(healthProbes())
         .with(plainRoutes()),
     )
 
@@ -221,9 +232,9 @@ describe('the authentication gate and routes registered straight on the server',
   it('refuses a path to except that is not absolute', () => {
     const building = createWebApplication()
 
-    expect(() => building.authorization(authz => authz.requireAuthenticatedByDefault({ except: ['assets/'] }))).toThrow(
-      expect.objectContaining({ code: 'ERR_AUTHZ_FALLBACK_EXCEPT' }),
-    )
+    expect(() =>
+      building.install(Authorization(authz => authz.requireAuthenticatedByDefault({ except: ['assets/'] }))),
+    ).toThrow(expect.objectContaining({ code: 'ERR_AUTHZ_FALLBACK_EXCEPT' }))
   })
 })
 
@@ -248,19 +259,22 @@ describe('the challenge of a route that names several schemes', () => {
   function build(schemes: string[]) {
     return ready(
       createWebApplication()
-        .authentication(auth =>
-          auth
-            .addBasic(b => b.realm('Docs').validate(() => null))
-            .addJWTBearer(j => j.secret(secret).issuer('issuer').audience('audience'))
-            .addCookie(c => c.sessionSecret(secret).secure(false).loginPath('/login'))
-            .addOpaqueToken('Key', o =>
-              o
-                .scheme('ApiKey')
-                .realm('Keys')
-                .store({ validate: () => null }),
-            )
-            .default('Bearer'),
+        .install(
+          Authentication(auth =>
+            auth
+              .addBasic(b => b.realm('Docs').validate(() => null))
+              .addJWTBearer(j => j.secret(secret).issuer('issuer').audience('audience'))
+              .addCookie(c => c.sessionSecret(secret).secure(false).loginPath('/login'))
+              .addOpaqueToken('Key', o =>
+                o
+                  .scheme('ApiKey')
+                  .realm('Keys')
+                  .store({ validate: () => null }),
+              )
+              .default('Bearer'),
+          ),
         )
+        .with(authentication())
         .mount(newRouter('/named').authorize({ schemes }).get('/', ok)),
     )
   }
@@ -315,7 +329,9 @@ describe('an application whose scheme reads cookies', () => {
   // lands in. Ordering this by hand used to be the application's job, and getting it wrong was a TypeError on
   // every request.
   it('starts with nothing registered by the application', async () => {
-    const app = createWebApplication().authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
+    const app = createWebApplication()
+      .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
+      .with(authentication())
 
     await expect(app.bootstrap()).resolves.toBeUndefined()
     await app.close()
@@ -331,7 +347,8 @@ describe('an application whose scheme reads cookies', () => {
           { name: 'early-route' },
         ),
       )
-      .authentication(auth => auth.addCookie(c => c.sessionSecret(secret)))
+      .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -342,7 +359,9 @@ describe('an application whose scheme reads cookies', () => {
   })
 
   it('asks nothing of an application whose schemes read no cookie', async () => {
-    const app = createWebApplication().authentication(auth => auth.addBasic(b => b.validate(() => null)))
+    const app = createWebApplication()
+      .install(Authentication(auth => auth.addBasic(b => b.validate(() => null))))
+      .with(authentication())
 
     await expect(app.bootstrap()).resolves.toBeUndefined()
     await app.close()

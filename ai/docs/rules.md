@@ -29,8 +29,13 @@ Plugins and builders, not Nest modules:
 ```ts
 createWebApplication({ container })
   .with(staticFiles(s => s.serve(dir, { prefix: '/static' })))
-  .with(kafka(k => k.brokers('localhost:9092').groupId('svc')))
+  .install(Kafka(k => k.brokers('localhost:9092').groupId('svc')))
 ```
+
+`.install(Feature(configure))` takes features — PascalCase factories, container binders, deduplicated and
+order-free. `.with(factory)` takes server plugins — camelCase factories, registered in written order, HTTP only.
+The authentication gate is a plugin: `.install(Authentication(a => …))` binds the schemes, `.with(authentication())`
+gates requests where it is written.
 
 `createApplication()` is headless. HTTP is `createWebApplication`. Side-effect-import controller / `@KafkaHandler` modules before `bootstrap()` so they register: the container reads the decorators when it compiles.
 

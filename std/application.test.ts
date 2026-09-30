@@ -24,6 +24,7 @@ import {
   ErrApplicationStarted,
   ErrConfigNotReady,
   ErrFeatureAlreadyInstalled,
+  ErrFeatureNotInstalled,
   FeatureBuilder,
   type BootstrapKit,
   type FeatureConfigureKit,
@@ -129,7 +130,7 @@ describe('Application lifecycle', () => {
         throw new Error('misconfigured')
       },
     }
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
       misconfigured,
     )
 
@@ -170,14 +171,14 @@ function tracker<C = unknown>(configure?: FeatureConfigurer<TrackerBuilder<C>, C
   return new TrackerBuilder<C>('track', configure as never)
 }
 
-/** An instanced feature: the instance folds into the name `.with` deduplicates on. */
+/** An instanced feature: the instance folds into the name `.install` deduplicates on. */
 function keyed(instance = 'default'): Feature {
   return new TrackerBuilder(instance === 'default' ? 'keyed' : `keyed:${instance}`)
 }
 
-describe('Application.with', () => {
+describe('Application.install', () => {
   it('installs the feature and bootstraps it', async () => {
-    const app = createApplication().with(tracker(t => t.capture('recorded')))
+    const app = createApplication().install(tracker(t => t.capture('recorded')))
 
     await app.bootstrap()
 
@@ -188,11 +189,11 @@ describe('Application.with', () => {
   it('returns the application it was called on', () => {
     const app = createApplication()
 
-    expect(app.with(tracker())).toBe(app)
+    expect(app.install(tracker())).toBe(app)
   })
 
   it('does not add methods to the application', () => {
-    const app = createApplication().with(tracker())
+    const app = createApplication().install(tracker())
 
     // @ts-expect-error features no longer contribute methods
     const missing: unknown = app.track
@@ -200,17 +201,51 @@ describe('Application.with', () => {
   })
 
   it('throws when a feature is installed twice', () => {
-    expect(() => createApplication().with(tracker()).with(tracker())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().install(tracker()).install(tracker())).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('throws when a keyed instance is installed twice', () => {
-    expect(() => createApplication().with(keyed()).with(keyed())).toThrow(ErrFeatureAlreadyInstalled)
-    expect(() => createApplication().with(keyed('orders')).with(keyed('orders'))).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().install(keyed()).install(keyed())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().install(keyed('orders')).install(keyed('orders'))).toThrow(
+      ErrFeatureAlreadyInstalled,
+    )
   })
 
   it('allows distinct keyed instances', () => {
-    const app = createApplication().with(keyed()).with(keyed('orders'))
+    const app = createApplication().install(keyed()).install(keyed('orders'))
     expect(app).toBeDefined()
+  })
+
+  it('answers hasFeature for installed features and for the built-ins', () => {
+    const app = createApplication()
+
+    expect(app.hasFeature('track')).toBe(false)
+    app.install(tracker())
+    expect(app.hasFeature('track')).toBe(true)
+
+    // Registered by the constructor, so a plugin depending on them can ask the same way.
+    expect(app.hasFeature('shutdown')).toBe(true)
+    expect(app.hasFeature('logger')).toBe(true)
+    expect(app.hasFeature('nope')).toBe(false)
+  })
+
+  // The built-ins hold names too: a user feature shadowing `logger` would configure twice and bind against the
+  // framework's own, so it is refused like any other duplicate.
+  it('throws when a feature reuses a built-in name', () => {
+    expect(() => createApplication().install(new TrackerBuilder('logger'))).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication().install(new TrackerBuilder('shutdown'))).toThrow(ErrFeatureAlreadyInstalled)
+  })
+
+  // What a dependent — a server plugin reading what only the feature binds — throws at start-up. Only its throw
+  // site knows which install is missing, so the fix it hands over is the one the reader acts on.
+  it('names the missing feature and carries the fix the dependent handed over', () => {
+    const err = new ErrFeatureNotInstalled('track', 'Install it: ".install(Track())"')
+
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe('ErrFeatureNotInstalled')
+    expect(err.code).toBe('ERR_FEATURE_NOT_INSTALLED')
+    expect(err.message).toMatch(/^Cannot use feature "track": it is not installed/)
+    expect(err.message).toContain('Install it: ".install(Track())"')
   })
 })
 
@@ -241,7 +276,7 @@ function widgetApp(feature: Feature<never>, size: number) {
   const conf = newConfiguration(widgetSchema, kWidgetConfig)
     .source(new InlineConfigSource({ widget: { size } }))
     .build()
-  return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature(feature)
+  return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(feature)
 }
 
 describe('feature lifecycle', () => {
@@ -291,7 +326,7 @@ describe('feature lifecycle', () => {
   it('runs a feature that reads no configuration at all', async () => {
     let configured = false
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install({
       get [kFeatureName](): string {
         return 'noop'
       },
@@ -319,7 +354,7 @@ describe('feature lifecycle', () => {
       .source(new InlineConfigSource({ widget: { size: 'not-a-number' } }))
       .build()
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).addFeature({
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install({
       get [kFeatureName](): string {
         return 'strict'
       },
@@ -339,7 +374,7 @@ describe('feature lifecycle', () => {
   it('configures before the container initializes, and bootstraps after', async () => {
     const order: string[] = []
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install({
       [kFeatureName]: 'order',
       [kFeatureConfigure](): void {
         order.push('configure')
@@ -367,7 +402,7 @@ describe('feature bootstrap', () => {
   it('readies a feature that declares no bootstrap hook', async () => {
     let configured = false
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).addFeature({
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install({
       [kFeatureName]: 'configure-only',
       [kFeatureConfigure](): void {
         configured = true
@@ -388,7 +423,7 @@ describe('feature bootstrap', () => {
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
       .logger(b => b.use(custom))
-      .addFeature({
+      .install({
         [kFeatureName]: 'reads-logger',
         [kFeatureConfigure](): void {
           // Nothing to bind.
@@ -421,7 +456,7 @@ describe('bootstrap() callback', () => {
       expect(config.widget.size).toBe(7)
       expect(application.name).toBe('petstore')
 
-      application.with({
+      application.install({
         [kFeatureName]: 'from-callback',
         [kFeatureConfigure](kit: FeatureConfigureKit<WidgetConfig>): void {
           seenSize = kit.config.widget.size
@@ -465,7 +500,7 @@ describe('bootstrap() callback', () => {
 
     await app.bootstrap(async (_config, application) => {
       order.push('callback')
-      application.with({
+      application.install({
         [kFeatureName]: 'ordered',
         [kFeatureConfigure](): void {
           order.push('configure')
@@ -530,8 +565,7 @@ describe('configuring a started application', () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.bootstrap()
 
-    expect(() => app.with(late)).toThrow(ErrApplicationStarted)
-    expect(() => app.addFeature(late)).toThrow(ErrApplicationStarted)
+    expect(() => app.install(late)).toThrow(ErrApplicationStarted)
     expect(() => app.shutdown(s => s.signals(false))).toThrow(ErrApplicationStarted)
   })
 
@@ -539,7 +573,7 @@ describe('configuring a started application', () => {
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     const ready = app.bootstrap()
 
-    expect(() => app.with(late)).toThrow(ErrApplicationStarted)
+    expect(() => app.install(late)).toThrow(ErrApplicationStarted)
 
     await ready
   })
@@ -1057,7 +1091,7 @@ describe('closing at any point of the lifecycle', () => {
     }
     const container = new CaffeineIoC({ decorators: false })
     container.bind(Failing, t => t.toSelf())
-    const app = createApplication({ container, logger }).with(failing)
+    const app = createApplication({ container, logger }).install(failing)
 
     const boot = async (): Promise<void> => {
       try {
@@ -1111,7 +1145,7 @@ describe('closing at any point of the lifecycle', () => {
         configured++
       },
     }
-    const app = createApplication().with(counting)
+    const app = createApplication().install(counting)
 
     await Promise.all([app.bootstrap(), app.bootstrap()])
 
@@ -1227,7 +1261,7 @@ describe('application health', () => {
     let bootstrapped = false
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
-    app.addFeature({
+    app.install({
       [kFeatureName]: 'reader',
       [kFeatureConfigure](): void {
         // Binds nothing: the bootstrap hook is what reads.

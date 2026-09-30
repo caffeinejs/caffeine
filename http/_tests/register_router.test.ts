@@ -9,7 +9,16 @@ import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { registerRouteGroup } from '../decorators/registrar/index.js'
-import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, createWebApplication } from '../index.js'
+import {
+  $p,
+  Keys,
+  type RouteAuthzOptions,
+  RouteBuilder,
+  WebApplication,
+  createWebApplication,
+  Authentication,
+  authentication,
+} from '../index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
@@ -81,7 +90,7 @@ describe('registerRouteGroup', () => {
 
   it('routes a controller bound during configure()', async () => {
     const builder = createWebApplication()
-    builder.addFeature(new ProgrammaticService())
+    builder.install(new ProgrammaticService())
     app = builder
     await app.bootstrap()
 
@@ -93,8 +102,12 @@ describe('registerRouteGroup', () => {
 
   it('applies authentication and authorization to the registered route', async () => {
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    builder.addFeature(new ProgrammaticService({ schemes: ['Bearer'] }))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
+    builder.install(new ProgrammaticService({ schemes: ['Bearer'] }))
     app = builder
     await app.bootstrap()
 
@@ -111,8 +124,12 @@ describe('registerRouteGroup', () => {
 
   it('enforces role requirements on the registered route', async () => {
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
-    builder.addFeature(new ProgrammaticService({ roles: ['ops'] }))
+    builder
+      .install(
+        Authentication(auth => auth.addJWTBearer(b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())),
+      )
+      .with(authentication())
+    builder.install(new ProgrammaticService({ roles: ['ops'] }))
     app = builder
     await app.bootstrap()
 
