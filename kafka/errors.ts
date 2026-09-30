@@ -39,7 +39,7 @@ export class ErrKafkaUnknownInstance extends ErrKafka {
     const known = configured.length > 0 ? configured.map(name => `"${name}"`).join(', ') : '(none)'
     super(
       `Cannot start Kafka handler "${handler}": no integration named "${instance}" is configured` +
-        `\n  - Declare the instance with .with(kafka("${instance}", k => k.brokers(...)))` +
+        `\n  - Declare the instance with .install(Kafka("${instance}", k => k.brokers(...)))` +
         '\n  - Or reassign the handler to a configured instance with @KafkaHandler({ instance: "..." })' +
         `\n  - Configured instances: ${known}`,
       'ERR_KAFKA_UNKNOWN_INSTANCE',
@@ -64,7 +64,7 @@ export class ErrKafkaMissingBrokers extends ErrKafka {
   constructor() {
     super(
       'Cannot start Kafka integration: no brokers configured' +
-        '\n  - Provide at least one broker, for example kafka({ brokers: "localhost:9092" })',
+        '\n  - Provide at least one broker, for example Kafka({ brokers: "localhost:9092" })',
       'ERR_KAFKA_MISSING_BROKERS',
     )
     this.name = 'ErrKafkaMissingBrokers'

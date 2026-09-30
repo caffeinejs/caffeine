@@ -7,7 +7,7 @@ import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { ErrLockNotAcquired } from './errors.js'
 import { kDistLock } from './keys.js'
-import { distlock } from './plugin.js'
+import { DistributedLock } from './plugin.js'
 
 /** Records what reached the backend, so the caller's signal can be followed all the way down. */
 class RecordingBackend implements Backend {
@@ -38,8 +38,8 @@ afterEach(async () => {
 })
 
 async function newLock(backend: Backend = new MemoryLockBackend()): Promise<DistLock> {
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(
-    distlock(d => d.backend(backend)),
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+    DistributedLock(d => d.backend(backend)),
   )
 
   await app.bootstrap()

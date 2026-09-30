@@ -1,10 +1,8 @@
 import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { FastifyInstance, FastifyPluginAsync, FastifyPluginCallback } from 'fastify'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../adapter.js'
 import type { Context } from '../../../context.js'
-import { kFeatureServer } from '../../../feature.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -12,6 +10,7 @@ import { sanitizeSchemeName } from '../internal/remote/config.js'
 import { claimsToSession, encodeSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
+import { OIDCRoutesRef, installOIDCRoutes } from './oidc_routes.js'
 import { resolveOIDCOptions } from './options.js'
 
 const SESSION_SECRET = 'multi-idp-test-secret-at-least-32ch!!'
@@ -45,11 +44,17 @@ function makeCtx(cookies: Record<string, string> = {}) {
   } as unknown as Context
 }
 
-/** Minimal kit double — configure touches bind/wrap. */
-function makeKit(): { kit: FeatureConfigureKit & HTTPSetupContext } {
-  const binding = () => ({
-    toValue: () => ({ internal: () => undefined }),
-  })
+/** Minimal kit double — configure touches bind/wrap. What it binds is captured, keyed by the binding key. */
+function makeKit(): { kit: FeatureConfigureKit & HTTPSetupContext; bound: Map<unknown, unknown> } {
+  const bound = new Map<unknown, unknown>()
+  const binding = (key: unknown, configure: (t: unknown) => void) => {
+    configure({
+      toValue: (value: unknown) => {
+        bound.set(key, value)
+        return { internal: () => undefined }
+      },
+    })
+  }
   const kit = {
     container: {
       bind: binding,
@@ -57,19 +62,7 @@ function makeKit(): { kit: FeatureConfigureKit & HTTPSetupContext } {
     },
   } as unknown as FeatureConfigureKit & HTTPSetupContext
 
-  return { kit }
-}
-
-/** A server double for the builder's server hook: it records what the hook registers, and registers nothing. */
-function recordingServer(): { server: FastifyInstance; registered: Array<FastifyPluginCallback | FastifyPluginAsync> } {
-  const registered: Array<FastifyPluginCallback | FastifyPluginAsync> = []
-  const server = {
-    register: (plugin: FastifyPluginCallback | FastifyPluginAsync) => {
-      registered.push(plugin)
-    },
-  } as unknown as FastifyInstance
-
-  return { server, registered }
+  return { kit, bound }
 }
 
 async function configure(build: (b: AuthenticationBuilder) => void): Promise<void> {
@@ -81,16 +74,20 @@ async function configure(build: (b: AuthenticationBuilder) => void): Promise<voi
 /**
  * Runs what configuring OIDC produced and collects the warnings it emitted.
  *
- * An unreachable strategy is only ever observable as a warning, so the plugin is registered against a server
- * double and the process warnings are captured — the same thing an application would see on its console.
+ * An unreachable strategy is only ever observable as a warning, so the routes the configure step bound through
+ * {@link OIDCRoutesRef} are installed against a server double and the process warnings are captured — the same
+ * thing an application would see on its console.
  */
 async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => void): Promise<string[]> {
   const builder = new AuthenticationBuilder()
   build(builder)
-  const { kit } = makeKit()
-  const { server: recorder, registered } = recordingServer()
+  const { kit, bound } = makeKit()
   await builder[kFeatureConfigure](kit)
-  await builder[kFeatureServer](recorder, kit)
+
+  const ref = bound.get(OIDCRoutesRef) as OIDCRoutesRef | undefined
+  if (ref === undefined) {
+    return []
+  }
 
   const warnings: string[] = []
   const emitWarning = vi.spyOn(process, 'emitWarning').mockImplementation(warning => {
@@ -107,15 +104,11 @@ async function configureAndCollectWarnings(build: (b: AuthenticationBuilder) => 
         onReady.push(hook)
       }
     },
-    hasRequestDecorator: () => true,
-    $container: { getOptional: () => undefined },
+    $basePath: '',
   }
 
   try {
-    for (const plugin of registered) {
-      // Every plugin the authentication builder registers is async-style; the registry itself accepts either.
-      await (plugin as FastifyPluginAsync)(server as never, {})
-    }
+    installOIDCRoutes(server as never, ref.meta)
 
     for (const hook of onReady) {
       await hook()

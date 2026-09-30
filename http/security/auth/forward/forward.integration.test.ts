@@ -1,7 +1,17 @@
 import { SignJWT } from 'jose'
 import { describe, it, expect } from 'vitest'
 
-import { Authorize, Claim, Controller, Get, Identity, Principal, createWebApplication } from '../../../index.js'
+import {
+  Authorize,
+  Claim,
+  Controller,
+  Get,
+  Identity,
+  Principal,
+  createWebApplication,
+  Authentication,
+  authentication,
+} from '../../../index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 const secretBytes = new TextEncoder().encode(TEST_SECRET)
@@ -21,19 +31,23 @@ async function signToken(payload: Record<string, unknown>): Promise<string> {
 describe('scheme negotiation (Forward, application)', () => {
   function forwardBuilder() {
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth
-        .addBasic('Basic', b =>
-          b.validate((_ctx, user, pass) =>
-            user === 'alice' && pass === 'secret'
-              ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-              : null,
-          ),
-        )
-        .addJWTBearer('Bearer', b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())
-        .forward('Forward', ctx => (ctx.req.header('authorization')?.startsWith('Basic ') ? 'Basic' : 'Bearer'))
-        .default('Forward'),
-    )
+    builder
+      .install(
+        Authentication(auth =>
+          auth
+            .addBasic('Basic', b =>
+              b.validate((_ctx, user, pass) =>
+                user === 'alice' && pass === 'secret'
+                  ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+                  : null,
+              ),
+            )
+            .addJWTBearer('Bearer', b => b.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())
+            .forward('Forward', ctx => (ctx.req.header('authorization')?.startsWith('Basic ') ? 'Basic' : 'Bearer'))
+            .default('Forward'),
+        ),
+      )
+      .with(authentication())
     return builder
   }
 

@@ -18,7 +18,7 @@ export type Recoverer = (error: unknown, message: Message, ctx: RecoverContext) 
 /**
  * The internal per-application messaging seam threaded into the engine and the bus. Holds the registered binder
  * instances (keyed by name) and the resolved inbound/outbound bindings (keyed by binding name). One runtime per
- * `messaging()` integration; unlike Kafka's per-instance runtime, the engine coordinates every binder.
+ * `Messaging()` integration; unlike Kafka's per-instance runtime, the engine coordinates every binder.
  */
 export interface MessagingRuntime {
   container: Container

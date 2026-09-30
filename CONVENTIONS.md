@@ -159,6 +159,15 @@ import type { ThingConfig } from './config.js'
 
 A package’s `index.ts` barrel aggregating that package’s **own** modules is not a passthrough and is fine.
 
+## Features and plugins
+
+Two registration verbs, two kinds of thing:
+
+- **`.install(feature)`** — on every `Application`. A feature is a container binder: deduplicated by `[kFeatureName]`, platform-agnostic, and order-free — every feature configures before the container initializes, so where an `.install(...)` sits in the chain does not matter. Feature factories are **PascalCase**: `Kafka()`, `Messaging()`, `DistributedLock()`, `TypeORM()`, `Health()`, `Authentication()`, `Authorization()`, `Guards()`.
+- **`.with(factory)`** — on `WebApplication` only. A factory produces a server plugin; factories run at setup, after `container.init()`, and install in the order the `.with(...)` calls are written. Never deduplicated. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
+
+A capability that binds _and_ wires the server ships both halves under one name, cased apart: `.install(Authentication(configure))` binds the schemes and services, `.with(authentication())` registers the gate. A plugin that depends on a feature asks `context.hasFeature(name)` in its factory (or `instance.$hasFeature(name)` in its body) and throws `ErrFeatureNotInstalled` — loudly, at start-up.
+
 ## Where a feature puts what it produces
 
 Where a value goes depends on who reads it, not on what is convenient:
@@ -170,7 +179,7 @@ Where a value goes depends on who reads it, not on what is convenient:
 | a setting code outside the feature must read          | a container binding, in `configure`    | `container.getOptional(key)`            |
 | something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
-| start-up wiring the server runs                       | the feature's `server` hook            | the adapter, in the feature's slot      |
+| start-up wiring the server runs                       | a plugin, from a factory               | `.with(factory)`, in its written slot   |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
 | a plugin's setting read per request                   | a Fastify decoration the plugin sets   | `request.server[kThing]`                |
 
@@ -182,11 +191,11 @@ Those are the only answers.
 - The application declares the whole schema by importing the feature's exported schema (`loggerConfigSchema`, `cookieConfigSchema`, `healthConfigSchema`, …), never by restating it. Importing it carries the feature's defaults into the tree; a block with required, undefaulted fields and no source fails validation at `bootstrap()`.
 - A feature nothing wired runs on its own defaults and its builder values alone.
 - A configuration node is live and a resolved options object is read once: `b.config(config.app.thing)` follows a reload, `b.port(config.app.thing.port)` reads a number once, and a bound value is not reached by a later reload. A feature that must act on a change takes a view instead: `(b, { store }) => b.config(store.view(t => t.app.thing))`.
-- A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` in the `server` hook is the whole act.
+- A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` inside the factory's plugin is the whole act. State a feature binds for its plugin goes through the container (`OIDCRoutesRef` is the model), never through shared builder fields.
 - The server's construction and listen settings are not a feature: `.server(configure)` hands them to the adapter, which builds the server in `setup()` once the container has initialized.
-- Under the Fastify adapter a feature's `server` hook body is a plugin body; the adapter registers it as one `fastify-plugin`-wrapped plugin, so `instance` is the root server. A plugin the hook registers reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it.
-- Plugins install in the order of the application's `.with(...)` calls. There are no stages and nothing is sorted by kind; a feature that must precede another is installed first. One slot finishes, including what its hook awaited and what it registered without awaiting, before the next starts.
-- One framework slot leads, in `WebApplication.configurers()` and nowhere else: error handling. The default not-found handler is not a feature; the adapter installs it after every plugin, and a plugin that set its own keeps it.
+- A plugin reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it. Registered at the root by `.with(...)`, an fp-wrapped plugin covers every route; registered on a route group by `router.plugin(...)` or `@Use(...)`, it covers that group alone.
+- Plugins install in the order of the application's `.with(...)` calls. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts.
+- Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookie parsing. The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
 
 ## Writing a feature
 
@@ -200,16 +209,14 @@ export interface Feature<C = unknown> {
 }
 ```
 
-- `[kFeatureName]` is the identity `.with` deduplicates on. A feature accepting an instance name folds it in (`kafka` vs `kafka:orders`).
+- `[kFeatureName]` is the identity `.install` deduplicates on. A feature accepting an instance name folds it in (`kafka` vs `kafka:orders`). Built-in names (`shutdown`, `logger`, `error-handling`, `cookie`) enter the same set, so a colliding user feature is refused, and `hasFeature(name)` answers for them too.
 - `[kFeatureConfigure]` runs after configuration has resolved and before the container initializes: `config` is readable and binding is open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings there. Its kit carries the application's logger.
-- An HTTP feature implements `HTTPFeature` from `@caffeinejs/http`, which adds `[kFeatureServer]`: handed the server at the feature's install position, after the container has initialized, with the same `HTTPSetupContext` a plugin factory receives. It is a property, not a method, so a feature written for one server does not compile on an application running another.
-- `HTTPFeature` states that kit as `HTTPSetupContext` with no `C`: a typed parameter on a property would make the interface invariant in `C`, and `function portOf(app: WebApplication)` could no longer take a configured application. `HTTPFeatureBuilder` restores it, so a subclass's `server(instance, kit)` reads `HTTPSetupContext<C>`.
+- A feature never touches a server. There is no server hook on the contract: server wiring is a plugin factory's, registered with `.with(...)`. A feature whose plugin needs what it resolved binds it (`OIDCRoutesRef`), and the plugin reads it from the container.
 - Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
 - The application's callback is `(builder, kit)`. The kit is the `FeatureConfigureKit` the feature's own `configure` receives: `config`, `store`, and `container.bind(...)`, but no `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` and is handed the `HTTPSetupContext`, where the container resolves and binding is closed.
-- An HTTP feature extends `HTTPFeatureBuilder<C>` and wires the server in `server`:
 
 ```ts
-export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
+export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'thing'
 
   #config: Partial<ThingConfig> | undefined
@@ -228,17 +235,13 @@ export class ThingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   protected configure(kit: FeatureConfigureKit<C>): void {
     kit.container.bind(kThingOptions, t => t.toValue(this.#size ?? this.#config?.size ?? DEFAULT_SIZE).internal())
   }
-
-  protected async server(instance: FastifyInstance): Promise<void> {
-    await instance.register(thingPlugin(this.#size ?? this.#config?.size ?? DEFAULT_SIZE))
-  }
 }
 ```
 
-- The package exports a factory function, generic over the application configuration type. An HTTP feature's factory returns `HTTPFeature<C>`, not `Feature<C>`, or the server it is written against goes unchecked:
+- The package exports a PascalCase factory function, generic over the application configuration type:
 
 ```ts
-export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C> {
+export function Thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C> {
   return new ThingBuilder<C>(configure as never)
 }
 ```
@@ -246,12 +249,13 @@ export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>
 - A feature taking an instance name overloads on it and folds it into `[kFeatureName]`:
 
 ```ts
-export function thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
-export function thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): HTTPFeature<C>
+export function Thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
+export function Thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
 ```
 
+- The plugin half, when the capability has one, is a separate camelCase factory in the same package: `HTTPPluginFactory<C>` built from an `HTTPPluginConfigurer` callback, reading what the feature bound out of the container and refusing a missing feature with `ErrFeatureNotInstalled` (`healthProbes()` and `authentication()` are the models).
 - Only the framework's pre-registered builders (shutdown policy, logger, cookies, error handling) hand a callback over with `builder[kAddConfigurer](configure)`, because they are constructed before an application can name one. Nothing else uses that symbol.
-- A feature the application cannot configure implements `Feature` / `HTTPFeature` directly, not `FeatureBuilder`: `AuthorizationBuilder` and `GuardsBuilder`. Having nothing to configure is what decides it, not how much work the phases do.
+- A feature the application cannot configure from the tree implements `Feature` directly, not `FeatureBuilder`: `AuthorizationBuilder` and `GuardsBuilder`, whose factories (`Authorization(fn)`, `Guards(fn)`) run their callback immediately with no kit. Having nothing to read from the configuration is what decides it, not how much work the phases do.
 
 ## Error messages
 

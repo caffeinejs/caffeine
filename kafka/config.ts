@@ -44,7 +44,7 @@ export type KafkaSerializers = Partial<Serializers<string, unknown, string, stri
 export type KafkaDeserializers = Partial<Deserializers<string, unknown, string, string>>
 
 /**
- * User-facing Kafka configuration, supplied through the plugin (`kafka({ ... })`) or, later, application
+ * User-facing Kafka configuration, supplied through the plugin (`Kafka({ ... })`) or, later, application
  * config. `brokers` is the only required field.
  */
 export interface KafkaConfig {

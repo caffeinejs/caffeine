@@ -17,7 +17,7 @@ export class ErrNoDataSource extends ErrTypeORM {
   constructor(key: InjectionToken | undefined, target: EntityTarget<ObjectLiteral>) {
     super(
       `Cannot inject a repository for "${entityName(target)}": no DataSource is bound to the key "${keyName(key)}"` +
-        '\n  - Install the feature with .with(TypeORM(t => t.dataSource(options)))' +
+        '\n  - Install the feature with .install(TypeORM(t => t.dataSource(options)))' +
         '\n  - Or provide one from a @Configuration class with @ProvidesAsync(DataSource)' +
         '\n  - If the repository is optional, wrap it with $i.optional($repository(Entity))',
       'ERR_NO_DATA_SOURCE',

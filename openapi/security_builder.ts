@@ -3,7 +3,7 @@ import type { OpenAPISecurityOptions } from './options.js'
 /**
  * Configures who may read the document.
  *
- * Authentication itself is configured the usual way, with `.authentication(...)`; this only references what
+ * Authentication itself is configured the usual way, with `.install(Authentication(...))`; this only references what
  * is already there by name. That keeps one declaration of each scheme rather than a second copy living in the
  * documentation configuration.
  */
@@ -13,7 +13,7 @@ export class OpenAPISecurityBuilder {
   #policy: string[] = []
 
   /**
-   * Which authentication schemes may satisfy the requirement, by the names given to `.authentication(...)`.
+   * Which authentication schemes may satisfy the requirement, by the names given to `Authentication(...)`.
    * An unknown name fails at boot rather than silently matching nothing.
    *
    * Naming a scheme selects which one authenticates and issues the challenge. It never *replaces* the
@@ -30,7 +30,7 @@ export class OpenAPISecurityBuilder {
     return this
   }
 
-  /** Named authorization policies the caller must satisfy, registered via `.authorization(...)`. */
+  /** Named authorization policies the caller must satisfy, registered via `Authorization(...)`. */
   policy(...names: string[]): this {
     this.#policy.push(...names)
     return this

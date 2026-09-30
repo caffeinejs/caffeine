@@ -25,6 +25,8 @@ import {
   authConfigSchema,
   createWebApplication,
   newRouter,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 /**
@@ -105,9 +107,12 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 3600 } } }),
     })
-      .authentication((a, { config }) =>
-        a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).rememberMe()),
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).rememberMe()),
+        ),
       )
+      .with(authentication())
       .mount(
         newRouter('/session')
           .authorize({ allowAnonymous: true })
@@ -145,20 +150,23 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication({
         config: configured({ schemes: { oauth: { loginPath: '/start' } } }),
       })
-        .authentication((a, { config }) =>
-          a
-            .config(config.auth)
-            .addOAuth2('oauth', o =>
-              o
-                .clientID(provider.clientID)
-                .clientSecret(provider.clientSecret)
-                .sessionSecret(SESSION_SECRET)
-                .authorizationEndpoint(provider.authorizationEndpoint)
-                .tokenEndpoint(provider.tokenEndpoint)
-                .userInfoEndpoint(provider.userInfoEndpoint)
-                .callbackURL(provider.callbackURL),
-            ),
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addOAuth2('oauth', o =>
+                o
+                  .clientID(provider.clientID)
+                  .clientSecret(provider.clientSecret)
+                  .sessionSecret(SESSION_SECRET)
+                  .authorizationEndpoint(provider.authorizationEndpoint)
+                  .tokenEndpoint(provider.tokenEndpoint)
+                  .userInfoEndpoint(provider.userInfoEndpoint)
+                  .callbackURL(provider.callbackURL),
+              ),
+          ),
         )
+        .with(authentication())
         .mount(protectedRoute)
       await app.bootstrap()
 
@@ -182,19 +190,22 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication({
         config: configured({ schemes: { oidc: { loginPath: '/oidc/start' } } }),
       })
-        .authentication((a, { config }) =>
-          a
-            .config(config.auth)
-            .addOIDC('oidc', o =>
-              o
-                .clientID(provider.clientID)
-                .clientSecret(provider.clientSecret)
-                .sessionSecret(SESSION_SECRET)
-                .issuer('https://provider.test')
-                .discoveryURL('https://provider.test/.well-known/openid-configuration')
-                .callbackURL(provider.callbackURL),
-            ),
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addOIDC('oidc', o =>
+                o
+                  .clientID(provider.clientID)
+                  .clientSecret(provider.clientSecret)
+                  .sessionSecret(SESSION_SECRET)
+                  .issuer('https://provider.test')
+                  .discoveryURL('https://provider.test/.well-known/openid-configuration')
+                  .callbackURL(provider.callbackURL),
+              ),
+          ),
         )
+        .with(authentication())
         .mount(protectedRoute)
       await app.bootstrap()
 
@@ -247,11 +258,14 @@ describe('authentication options set from the tree', () => {
 
     const appWith = (oidc: Record<string, unknown>) =>
       createWebApplication({ config: configured({ schemes: { oidc } }) })
-        .authentication((a, { config }) =>
-          a
-            .config(config.auth)
-            .addOIDC('oidc', o => o.clientSecret(provider.clientSecret).sessionSecret(SESSION_SECRET).issuer(ISSUER)),
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addOIDC('oidc', o => o.clientSecret(provider.clientSecret).sessionSecret(SESSION_SECRET).issuer(ISSUER)),
+          ),
         )
+        .with(authentication())
         .mount(protectedRoute)
 
     it('asks that provider, under that client, to come back to that callback', async () => {
@@ -315,20 +329,23 @@ describe('authentication options set from the tree', () => {
     it('completes a hand-assembled provider that has no discovery document', async () => {
       const manual = (oidc: Record<string, unknown>) =>
         createWebApplication({ config: configured({ schemes: { oidc } }) })
-          .authentication((a, { config }) =>
-            a
-              .config(config.auth)
-              .addOIDC('oidc', o =>
-                o
-                  .clientID('code-client')
-                  .clientSecret(provider.clientSecret)
-                  .sessionSecret(SESSION_SECRET)
-                  .issuer(ISSUER)
-                  .authorizationEndpoint(`${ISSUER}/authorize`)
-                  .tokenEndpoint(`${ISSUER}/token`)
-                  .callbackURL('https://app.test/signin/back'),
-              ),
+          .install(
+            Authentication((a, { config }) =>
+              a
+                .config(config.auth)
+                .addOIDC('oidc', o =>
+                  o
+                    .clientID('code-client')
+                    .clientSecret(provider.clientSecret)
+                    .sessionSecret(SESSION_SECRET)
+                    .issuer(ISSUER)
+                    .authorizationEndpoint(`${ISSUER}/authorize`)
+                    .tokenEndpoint(`${ISSUER}/token`)
+                    .callbackURL('https://app.test/signin/back'),
+                ),
+            ),
           )
+          .with(authentication())
           .mount(protectedRoute)
 
       await expect(manual({}).bootstrap()).rejects.toThrow(/provide discoveryURL or all of/)
@@ -351,22 +368,25 @@ describe('authentication options set from the tree', () => {
       const app = createWebApplication({
         config: configured({ schemes: { oidc: { postLogoutRedirectUri: 'https://app.test/signed-out' } } }),
       })
-        .authentication((a, { config }) =>
-          a
-            .config(config.auth)
-            .addOIDC('oidc', o =>
-              o
-                .clientID('code-client')
-                .clientSecret(provider.clientSecret)
-                .sessionSecret(SESSION_SECRET)
-                .issuer(ISSUER)
-                .authorizationEndpoint(`${ISSUER}/authorize`)
-                .tokenEndpoint(`${ISSUER}/token`)
-                .jwksURI(`${ISSUER}/jwks`)
-                .endSessionEndpoint(`${ISSUER}/logout`)
-                .callbackURL('https://app.test/signin/back'),
-            ),
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addOIDC('oidc', o =>
+                o
+                  .clientID('code-client')
+                  .clientSecret(provider.clientSecret)
+                  .sessionSecret(SESSION_SECRET)
+                  .issuer(ISSUER)
+                  .authorizationEndpoint(`${ISSUER}/authorize`)
+                  .tokenEndpoint(`${ISSUER}/token`)
+                  .jwksURI(`${ISSUER}/jwks`)
+                  .endSessionEndpoint(`${ISSUER}/logout`)
+                  .callbackURL('https://app.test/signin/back'),
+              ),
+          ),
         )
+        .with(authentication())
         .mount(
           newRouter('/session')
             .authorize({ allowAnonymous: true })
@@ -396,9 +416,12 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ schemes: { Cookie: { returnUrlParameter: 'next' } } }),
     })
-      .authentication((a, { config }) =>
-        a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).loginPath('/login')),
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.auth).addCookie(b => b.sessionSecret(SESSION_SECRET).secure(false).loginPath('/login')),
+        ),
       )
+      .with(authentication())
       .mount(
         newRouter('/reports')
           .authorize({})
@@ -435,21 +458,25 @@ describe('authentication options set from the tree', () => {
 
     const app = createWebApplication({
       config: configured({ schemes: { oauth: { tokenEndpointAuthMethod: 'client_secret_basic' } } }),
-    }).authentication((a, { config }) =>
-      a
-        .config(config.auth)
-        .addOAuth2('oauth', o =>
-          o
-            .clientID(provider.clientID)
-            .clientSecret(provider.clientSecret)
-            .sessionSecret(SESSION_SECRET)
-            .authorizationEndpoint(provider.authorizationEndpoint)
-            .tokenEndpoint(provider.tokenEndpoint)
-            .userInfoEndpoint(provider.userInfoEndpoint)
-            .subjectClaim('id')
-            .callbackURL(provider.callbackURL),
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a
+            .config(config.auth)
+            .addOAuth2('oauth', o =>
+              o
+                .clientID(provider.clientID)
+                .clientSecret(provider.clientSecret)
+                .sessionSecret(SESSION_SECRET)
+                .authorizationEndpoint(provider.authorizationEndpoint)
+                .tokenEndpoint(provider.tokenEndpoint)
+                .userInfoEndpoint(provider.userInfoEndpoint)
+                .subjectClaim('id')
+                .callbackURL(provider.callbackURL),
+            ),
         ),
-    )
+      )
+      .with(authentication())
     await app.bootstrap()
 
     // A whole round trip: the sign-in route hands out the state and its cookie, the callback spends them.
@@ -482,12 +509,16 @@ describe('authentication options set from the tree', () => {
     const app = createWebApplication({
       container,
       config: configured({ refresh: { absoluteTtl: 60, refreshTtl: '30d' } }),
-    }).authentication((a, { config }) =>
-      a
-        .config(config.auth)
-        .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
-        .addRefreshTokens(o => o.resolve(() => ada())),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a
+            .config(config.auth)
+            .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
+            .addRefreshTokens(o => o.resolve(() => ada())),
+        ),
+      )
+      .with(authentication())
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -517,12 +548,15 @@ describe('authentication options set from the tree', () => {
       container,
       config: configured({ refresh: { accessTtl: 60 } }),
     })
-      .authentication((a, { config }) =>
-        a
-          .config(config.auth)
-          .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
-          .addRefreshTokens(o => o.resolve(() => ada())),
+      .install(
+        Authentication((a, { config }) =>
+          a
+            .config(config.auth)
+            .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
+            .addRefreshTokens(o => o.resolve(() => ada())),
+        ),
       )
+      .with(authentication())
       .mount(
         newRouter('/reports')
           .authorize({})
@@ -565,12 +599,16 @@ describe('authentication options set from the tree', () => {
       return createWebApplication({
         container,
         config: configured({ credentials }),
-      }).authentication((a, { config }) =>
-        a
-          .config(config.auth)
-          .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
-          .addCredentials({ scheme: 'FromCode' }),
-      )
+      })
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addJWTBearer(b => b.secret(JWT_SECRET).issuer('local').audience('local'))
+              .addCredentials({ scheme: 'FromCode' }),
+          ),
+        )
+        .with(authentication())
     }
 
     // The role claim type decides what `isInRole` reads. Configured and not applied, every role check of a

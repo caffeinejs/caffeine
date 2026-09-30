@@ -22,11 +22,9 @@ import Fastify, {
   type FastifyRequest,
   type FastifyServerOptions,
 } from 'fastify'
-import fp from 'fastify-plugin'
 
 import type {
   Adapter,
-  AdapterExtensionEntry,
   AdapterExtensions,
   AdapterFactory,
   AdapterFactoryIn,
@@ -51,7 +49,7 @@ import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
 import type { RouteCompilers, RouteGroup } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
-import { assertAuthenticationConfigured, type Principal } from './security/index.js'
+import { assertAuthenticationConfigured, assertRouteSchemesResolve, type Principal } from './security/index.js'
 import { Keys } from './symbols.js'
 
 /**
@@ -145,6 +143,12 @@ declare module 'fastify' {
      */
     get $basePath(): string
     $route(name: string, build: (router: RouteGroupBuilder) => void): void
+    /**
+     * Whether `.install(...)` recorded a feature under this name, the framework's built-ins included. What a
+     * plugin body asks so it can fail loudly — at start-up, not per request — when the feature whose bindings
+     * it reads was never installed.
+     */
+    $hasFeature(name: string): boolean
   }
 
   interface FastifyRequest {
@@ -274,12 +278,14 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     })
 
     // The application's turn on the bare server, ahead of everything else this adapter decorates, hooks or
-    // registers: a plugin registered here loads before every feature's, and a not-found handler set here is kept.
+    // registers: a plugin registered here loads before every head slot and `.with(...)` plugin, and a
+    // not-found handler set here is kept.
     await input.customize?.(input.context, fastify)
 
     // Decorating the server
     fastify.decorate('$container', container)
     fastify.decorate('$basePath', input.basePath ?? '')
+    fastify.decorate('$hasFeature', (name: string) => input.context.hasFeature(name))
 
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
@@ -333,16 +339,16 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       routeGroups.push(input.compileRouteGroup(builder.toRouteGroup<FastifyRequest>(), { name }))
     })
 
-    // Every plugin the factories produced and every feature's server hook, in the order the application
-    // installed them — this package's own included. Registered one at a time and awaited, so a plugin sees what
-    // the one before it decorated. A plugin wrapped in `fastify-plugin` lands on this instance and therefore
-    // covers every route; an unwrapped one keeps what it registers to itself. That is the plugin author's call,
-    // not this loop's. `$route` (above) is what a plugin in this loop calls to add one more route. The form body
-    // parser goes first, so every plugin registers onto a server that has it.
+    // Every plugin the head slots and the factories produced, in the order the application installed them —
+    // this package's own included. Registered one at a time and awaited, so a plugin sees what the one before
+    // it decorated. A plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every
+    // route; an unwrapped one keeps what it registers to itself. That is the plugin author's call, not this
+    // loop's. `$route` (above) is what a plugin in this loop calls to add one more route. The form body parser
+    // goes first, so every plugin registers onto a server that has it.
     installFormBodyParser(fastify)
 
-    for (const entry of input.extensions.root()) {
-      await installExtension(fastify, entry.kind === 'feature' ? featurePlugin(entry) : entry.extension)
+    for (const extension of input.extensions.root()) {
+      await installExtension(fastify, extension)
     }
 
     // After every plugin, so one that took the not-found handler keeps it.
@@ -358,6 +364,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // Every plugin has had its turn, so whatever `$route` compiled is in `routeGroups` and the two scans see
     // the same table the registration loop below reads.
     assertAuthenticationConfigured(container, routeGroups)
+    assertRouteSchemesResolve(container, routeGroups)
     assertAuthorizationConfigured(container, routeGroups)
     assertRouteFeaturesInstalled(fastify, routeGroups, input.extensions)
 
@@ -567,25 +574,6 @@ function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefin
 }
 
 /**
- * A feature's server hook, as the plugin its slot registers.
- *
- * Wrapped in `fastify-plugin`, so the hook is handed the root server itself and what it adds covers every route.
- * Being a plugin is also what holds the next slot back until the hook, and whatever it registered without awaiting,
- * has loaded.
- */
-function featurePlugin<S extends FastifyInstance>(
-  entry: Extract<AdapterExtensionEntry<S, unknown>, { kind: 'feature' }>,
-): FastifyPluginAsync {
-  return fp(
-    async (instance: FastifyInstance) => {
-      // The root server is the one this adapter drives, so it is the caller's own server type.
-      await entry.install(instance as S)
-    },
-    { name: `@caffeinejs/http:feature:${entry.name}` },
-  )
-}
-
-/**
  * Registers what a factory produced on `server`, refusing what Fastify cannot register or already has.
  *
  * The one path every plugin takes — the application's, a router's, a controller's — so each is refused the same way.
@@ -660,7 +648,7 @@ function assertPluginNotRegistered(
 function assertRouteFeaturesInstalled(
   server: FastifyInstance,
   routeGroups: readonly RouteGroup<any>[],
-  extensions: Pick<AdapterExtensions<unknown, FastifyExtension>, 'of'>,
+  extensions: Pick<AdapterExtensions<FastifyExtension>, 'of'>,
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {
     for (const group of routeGroups) {

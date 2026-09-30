@@ -1,2 +1,7 @@
 export * from './identity.js'
-export { assertAuthenticationConfigured, authenticationPlugin } from './authentication_plugin.js'
+export {
+  assertAuthenticationConfigured,
+  assertRouteSchemesResolve,
+  authentication,
+  AuthenticationGateBuilder,
+} from './authentication_plugin.js'

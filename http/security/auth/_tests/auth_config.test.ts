@@ -14,6 +14,8 @@ import {
   Controller,
   Get,
   createWebApplication,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 import { SCHEME_SCHEMAS, authConfigSchema } from '../config.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
@@ -87,9 +89,13 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+        ),
+      )
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -108,9 +114,9 @@ describe('authentication configuration', () => {
   })
 
   it('leaves the code-set secret in place when configuration carries none', async () => {
-    const app = createWebApplication().authentication(a =>
-      a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
+    const app = createWebApplication()
+      .install(Authentication(a => a.addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience())))
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -129,9 +135,13 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.auth).addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!')),
+        ),
+      )
+      .with(authentication())
 
     await expect(app.bootstrap()).rejects.toThrow(/sessionSecret must be at least 32 characters/)
   })
@@ -153,13 +163,17 @@ describe('authentication configuration', () => {
 
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a
-        .config(config.auth)
-        .addBasic(b => b.realm('From Code').validate(() => null))
-        .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
-        .default('Basic'),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a
+            .config(config.auth)
+            .addBasic(b => b.realm('From Code').validate(() => null))
+            .addCookie(b => b.sessionSecret('a-perfectly-long-session-secret-value!!'))
+            .default('Basic'),
+        ),
+      )
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -183,12 +197,16 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a
-        .config(config.auth)
-        .addBasic(b => b.validate(() => null))
-        .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a
+            .config(config.auth)
+            .addBasic(b => b.validate(() => null))
+            .addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+        ),
+      )
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -206,14 +224,18 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a.config(config.auth).addBasic(b =>
-        b.realm('Coded').validate(() => {
-          validated++
-          return null
-        }),
-      ),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.auth).addBasic(b =>
+            b.realm('Coded').validate(() => {
+              validated++
+              return null
+            }),
+          ),
+        ),
+      )
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -241,9 +263,13 @@ describe('authentication configuration', () => {
       .build()
     const app = createWebApplication({
       config: conf,
-    }).authentication((a, { config }) =>
-      a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
-    )
+    })
+      .install(
+        Authentication((a, { config }) =>
+          a.config(config.app.auth).addJWTBearer(b => b.secret(CODE_SECRET).allowAnyIssuer().allowAnyAudience()),
+        ),
+      )
+      .with(authentication())
 
     await app.bootstrap()
 
@@ -264,9 +290,13 @@ describe('authentication configuration', () => {
     function appFrom(values: Record<string, string>) {
       const conf = newConfiguration(openSchema, kOpenConfig).source(env(values)).build()
 
-      return createWebApplication({ config: conf }).authentication((a, { config }) =>
-        a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
-      )
+      return createWebApplication({ config: conf })
+        .install(
+          Authentication((a, { config }) =>
+            a.config(config.auth).addJWTBearer('jwt', b => b.secret(CODE_SECRET).issuer('local').audience('local')),
+          ),
+        )
+        .with(authentication())
     }
 
     // "false" is a non-empty string, and a non-empty string is true.
@@ -321,20 +351,24 @@ describe('authentication configuration', () => {
         )
         .build()
 
-      const app = createWebApplication({ config: conf }).authentication((a, { config }) =>
-        a
-          .config(config.auth)
-          .addOAuth2('oauth', o =>
-            o
-              .clientID('code-client')
-              .clientSecret('code-client-secret')
-              .sessionSecret('a-perfectly-long-session-secret-value!!')
-              .authorizationEndpoint('https://provider.test/authorize')
-              .tokenEndpoint('https://provider.test/token')
-              .userInfoEndpoint('https://provider.test/userinfo')
-              .callbackURL('https://app.test/auth/callback'),
+      const app = createWebApplication({ config: conf })
+        .install(
+          Authentication((a, { config }) =>
+            a
+              .config(config.auth)
+              .addOAuth2('oauth', o =>
+                o
+                  .clientID('code-client')
+                  .clientSecret('code-client-secret')
+                  .sessionSecret('a-perfectly-long-session-secret-value!!')
+                  .authorizationEndpoint('https://provider.test/authorize')
+                  .tokenEndpoint('https://provider.test/token')
+                  .userInfoEndpoint('https://provider.test/userinfo')
+                  .callbackURL('https://app.test/auth/callback'),
+              ),
           ),
-      )
+        )
+        .with(authentication())
 
       await app.bootstrap()
 

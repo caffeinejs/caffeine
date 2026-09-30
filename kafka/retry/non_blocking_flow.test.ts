@@ -5,7 +5,7 @@ import { deferred, FakeBroker } from '../broker.testkit.js'
 import { KafkaHandler } from '../decorators/kafka_handler.js'
 import { KafkaListener } from '../decorators/kafka_listener.js'
 import { KafkaRetry } from '../decorators/kafka_retry.js'
-import { kafka } from '../plugin.js'
+import { Kafka } from '../plugin.js'
 import { KafkaTemplate } from '../template.js'
 import { retryTopics } from './strategy.js'
 
@@ -48,7 +48,7 @@ describe('non-blocking retry topics (end to end)', () => {
   it('walks a failing record through the retry topics until it succeeds', async () => {
     flowState = { attempts: 0, done: deferred() }
     const broker = new FakeBroker()
-    const app = createApplication({}).with(kafka(k => k.brokers('b').groupId(GROUP), { clients: broker.clients() }))
+    const app = createApplication({}).install(Kafka(k => k.brokers('b').groupId(GROUP), { clients: broker.clients() }))
     const built = app
     await built.run()
 
@@ -66,8 +66,8 @@ describe('non-blocking retry topics (end to end)', () => {
     poisonSeen = deferred()
     const dltReceived = deferred<Record<string, string>>()
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('b').groupId(GROUP).deadLetter(), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('b').groupId(GROUP).deadLetter(), { clients: broker.clients() }),
     )
     const built = app
     await built.run()

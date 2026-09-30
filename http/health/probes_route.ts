@@ -85,7 +85,7 @@ function assertNoCollision(server: FastifyInstance, probePaths: readonly string[
 
     throw new ErrHealthConfiguration(
       `Cannot mount health probes: a route is already registered at "${route.url}"` +
-        solutions('Move the probe with health(h => h.paths({ ... }))', 'Change the conflicting route path'),
+        solutions('Move the probe with healthProbes(p => p.paths({ ... }))', 'Change the conflicting route path'),
     )
   })
 }

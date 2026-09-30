@@ -16,6 +16,8 @@ import {
   Principal,
   Schema,
   createWebApplication,
+  Authentication,
+  authentication,
 } from '../../index.js'
 
 /**
@@ -75,9 +77,17 @@ function newApp() {
   const second = new HeaderSchemeHandler('Second', 'x-second')
 
   const builder = createWebApplication()
-  builder.authentication(auth =>
-    auth.addStrategy('Default', byDefault).addStrategy('First', first).addStrategy('Second', second).default('Default'),
-  )
+  builder
+    .install(
+      Authentication(auth =>
+        auth
+          .addStrategy('Default', byDefault)
+          .addStrategy('First', first)
+          .addStrategy('Second', second)
+          .default('Default'),
+      ),
+    )
+    .with(authentication())
 
   return { app: builder, byDefault, first, second }
 }

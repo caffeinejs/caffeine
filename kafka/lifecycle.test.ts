@@ -6,7 +6,7 @@ import type { KafkaConsumerEventPayload } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaListenerContainer } from './listener_container.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { containerKey } from './symbols.js'
 
 @KafkaHandler()
@@ -18,8 +18,8 @@ class LifecycleConsumer {
 describe('consumer lifecycle events + status', () => {
   it('re-emits normalized events and tracks status', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('b').groupId('lc-group'), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('b').groupId('lc-group'), { clients: broker.clients() }),
     )
     const built = app
     await built.run()

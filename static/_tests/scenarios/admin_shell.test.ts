@@ -1,4 +1,4 @@
-import { newRouter, type WebApplication } from '@caffeinejs/http'
+import { newRouter, type WebApplication, Authentication, authentication, Authorization } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'
@@ -28,7 +28,8 @@ import {
  */
 function adminSite(authenticateByDefault: boolean): WebApplication {
   const app = isolated()
-    .authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler()))
+    .install(Authentication(a => a.addStrategy('header', new HeaderAuthenticationHandler())))
+    .with(authentication())
     .with(staticFiles(s => s.serve(dist, { serve: false })))
     .mount(
       newRouter('/api')
@@ -44,7 +45,7 @@ function adminSite(authenticateByDefault: boolean): WebApplication {
     ) as WebApplication
 
   if (authenticateByDefault) {
-    app.authorization(z => z.requireAuthenticatedByDefault())
+    app.install(Authorization(z => z.requireAuthenticatedByDefault()))
   }
 
   return app

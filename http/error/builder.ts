@@ -1,8 +1,7 @@
 import { Scopes } from '@caffeinejs/di'
-import { kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { FastifyInstance } from 'fastify'
+import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 
-import { HTTPFeatureBuilder } from '../feature.js'
+import { kServerExtension, type FastifyExtension } from '../plugin.js'
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './plugin.js'
 
@@ -29,7 +28,7 @@ import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './plugin.js'
  * .errorHandling((e, { config }) => e.exposeStacktrace(config.app.debug))
  * ```
  */
-export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
+export class ErrorHandlingBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'error-handling'
 
   // Built here rather than in `configure`: the server hook reads the same instance, and an application that
@@ -98,7 +97,10 @@ export class ErrorHandlingBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     }
   }
 
-  protected override async server(instance: FastifyInstance): Promise<void> {
-    await instance.register(globalErrorHandlerPlugin(this.#ref, { exposeStacktrace: this.#exposeStacktrace }))
-  }
+  /**
+   * The plugin half. The application puts it in the first head slot, ahead of everything `.with(...)`
+   * registers, so every route and hook registered afterwards is covered by it.
+   */
+  readonly [kServerExtension] = (): FastifyExtension =>
+    globalErrorHandlerPlugin(this.#ref, { exposeStacktrace: this.#exposeStacktrace })
 }

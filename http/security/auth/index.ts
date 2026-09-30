@@ -4,6 +4,7 @@ export {
   type BasicAuthenticationOptions,
   BasicAuthenticationOptionsBuilder,
 } from './basic/index.js'
+export { Authentication } from './authentication.js'
 export { AuthenticationBuilder } from './builder.js'
 export { authConfigSchema, SCHEME_SCHEMAS, type AuthConfig } from './config.js'
 export {

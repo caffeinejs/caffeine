@@ -13,6 +13,8 @@ import {
   createWebApplication,
   newRouter,
   $p,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
@@ -34,22 +36,26 @@ function makeOIDCApp(
     builder.basePath(basePath)
   }
 
-  builder.authentication(auth =>
-    auth.addOIDC('Google', opts => {
-      opts
-        .clientID(CLIENT_ID)
-        .clientSecret('oidc-client-secret')
-        .sessionSecret(SESSION_SECRET)
-        .callbackURL(callbackURL)
-        .authorizationEndpoint(`${ISSUER}/auth`)
-        .tokenEndpoint(`${ISSUER}/token`)
-        .jwksURI(`${ISSUER}/jwks`)
-        .issuer(ISSUER)
-      if (jwksResolver) {
-        opts.jwksResolver(jwksResolver)
-      }
-    }),
-  )
+  builder
+    .install(
+      Authentication(auth =>
+        auth.addOIDC('Google', opts => {
+          opts
+            .clientID(CLIENT_ID)
+            .clientSecret('oidc-client-secret')
+            .sessionSecret(SESSION_SECRET)
+            .callbackURL(callbackURL)
+            .authorizationEndpoint(`${ISSUER}/auth`)
+            .tokenEndpoint(`${ISSUER}/token`)
+            .jwksURI(`${ISSUER}/jwks`)
+            .issuer(ISSUER)
+          if (jwksResolver) {
+            opts.jwksResolver(jwksResolver)
+          }
+        }),
+      ),
+    )
+    .with(authentication())
   return builder
 }
 

@@ -21,7 +21,7 @@ import {
   type ReleaseContext,
   type WithLockContext,
 } from './observability/channels.js'
-import { distlock } from './plugin.js'
+import { DistributedLock } from './plugin.js'
 
 interface Published {
   readonly channel: keyof typeof DIST_LOCK_CHANNELS
@@ -48,8 +48,8 @@ async function newApp(
   configure?: (d: DistLockBuilder) => void,
 ): Promise<{ lock: DistLock; log: RecordingLogger }> {
   const log = new RecordingLogger()
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), logger: log }).with(
-    distlock(d => {
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), logger: log }).install(
+    DistributedLock(d => {
       d.backend(backend)
       configure?.(d)
     }),

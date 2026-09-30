@@ -5,7 +5,7 @@ import { deferred, FakeBroker } from './broker.testkit.js'
 import type { DeserializationErrorRecord, KafkaMessage } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { KafkaTemplate } from './template.js'
 
 // Isolated in its own file: a value deserializer that always throws.
@@ -29,8 +29,8 @@ describe('deserialization-error path', () => {
     const received = deferred<{ error: unknown; record: DeserializationErrorRecord }>()
 
     const broker = new FakeBroker({ applyDeserializers: true })
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('b')

@@ -6,7 +6,7 @@ import {
   CaffeineDistLock,
   DEFAULT_DIST_LOCK_OPTIONS,
   ErrLockNotAcquired,
-  distlock,
+  DistributedLock,
   kDistLock,
   kDistLockBackend,
   type Lock,
@@ -139,7 +139,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         const container = new CaffeineIoC({ decorators: false })
         container.bind(kDistLockBackend, t => t.toValue(new RedisLockBackend(clients[0])))
 
-        const app = createApplication({ container }).with(distlock(d => d.backend(kDistLockBackend)))
+        const app = createApplication({ container }).install(DistributedLock(d => d.backend(kDistLockBackend)))
         await app.bootstrap()
 
         try {

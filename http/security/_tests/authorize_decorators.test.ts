@@ -16,6 +16,9 @@ import {
   Roles,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
+  Authorization,
 } from '../../index.js'
 
 // ---------------------------------------------------------------------------
@@ -64,7 +67,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -87,7 +92,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'sub', value: 'u1' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -110,7 +117,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = AuthenticateResult.fail(new Error('bad token'))
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -139,7 +148,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -167,7 +178,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -195,7 +208,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -223,7 +238,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -246,7 +263,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -269,7 +288,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -292,7 +313,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -326,7 +349,9 @@ describe('auth configurer (fake handler)', () => {
     void [CustomChallengeController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', new CustomChallengeHandler()).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', new CustomChallengeHandler()).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -361,7 +386,9 @@ describe('auth configurer (fake handler)', () => {
     void [CustomForbidController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', new CustomForbidHandler()).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', new CustomForbidHandler()).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -386,7 +413,9 @@ describe('auth configurer (fake handler)', () => {
     handler.result = successTicket([{ type: 'sub', value: 'alice' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -420,7 +449,9 @@ describe('authorization policies', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -443,7 +474,9 @@ describe('authorization policies', () => {
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -466,8 +499,10 @@ describe('authorization policies', () => {
     handler.result = successTicket([{ type: 'roles', value: 'admin' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    builder.authorization(authz => authz.addPolicy('AdminOnly', b => b.role('admin')))
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
+    builder.install(Authorization(authz => authz.addPolicy('AdminOnly', b => b.role('admin'))))
     const app = builder
     await app.bootstrap()
 
@@ -490,11 +525,15 @@ describe('authorization policies', () => {
     handler.result = successTicket([{ type: 'roles', value: 'viewer' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    builder.authorization(authz => {
-      authz.addPolicy('AdminOnly', b => b.role('admin'))
-      authz.addPolicy('AdminOnly2', b => b.role('admin'))
-    })
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
+    builder.install(
+      Authorization(authz => {
+        authz.addPolicy('AdminOnly', b => b.role('admin'))
+        authz.addPolicy('AdminOnly2', b => b.role('admin'))
+      }),
+    )
     const app = builder
     await app.bootstrap()
 
@@ -517,12 +556,16 @@ describe('authorization policies', () => {
     handler.result = AuthenticateResult.none()
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    builder.authorization(authz => {
-      authz.addPolicy('AdminOnly', b => b.role('admin'))
-      authz.addPolicy('AdminOnly2', b => b.role('admin'))
-      authz.authorizeDecoratorDefaultPolicy(b => b.requireAuthenticated())
-    })
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
+    builder.install(
+      Authorization(authz => {
+        authz.addPolicy('AdminOnly', b => b.role('admin'))
+        authz.addPolicy('AdminOnly2', b => b.role('admin'))
+        authz.authorizeDecoratorDefaultPolicy(b => b.requireAuthenticated())
+      }),
+    )
     const app = builder
     await app.bootstrap()
 
@@ -545,12 +588,16 @@ describe('authorization policies', () => {
     handler.result = successTicket([{ type: 'permission', value: 'orders:read' }])
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addStrategy('default', handler).default('default'))
-    builder.authorization(authz => {
-      authz.addPolicy('AdminOnly', b => b.role('admin'))
-      authz.addPolicy('AdminOnly2', b => b.role('admin'))
-      authz.addPolicy('CanReadOrders', b => b.claim('permission', 'orders:read'))
-    })
+    builder
+      .install(Authentication(auth => auth.addStrategy('default', handler).default('default')))
+      .with(authentication())
+    builder.install(
+      Authorization(authz => {
+        authz.addPolicy('AdminOnly', b => b.role('admin'))
+        authz.addPolicy('AdminOnly2', b => b.role('admin'))
+        authz.addPolicy('CanReadOrders', b => b.claim('permission', 'orders:read'))
+      }),
+    )
     const app = builder
     await app.bootstrap()
 

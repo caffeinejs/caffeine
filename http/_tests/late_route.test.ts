@@ -12,6 +12,7 @@ import {
   type GuardInput,
   type HTTPPluginFactory,
   type WebApplication,
+  Guards,
 } from '../index.js'
 
 /** A plugin registered through `.with(...)`, so it runs at the exact point `$route` is meant to be called from. */

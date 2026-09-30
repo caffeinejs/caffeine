@@ -1,6 +1,14 @@
 import { gunzipSync } from 'node:zlib'
 
-import { authenticationExempt, health, newRouter, type WebApplication } from '@caffeinejs/http'
+import {
+  authenticationExempt,
+  newRouter,
+  type WebApplication,
+  Authentication,
+  authentication,
+  Authorization,
+  healthProbes,
+} from '@caffeinejs/http'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'
@@ -45,7 +53,7 @@ describe('a single-page application next to the plugins an application runs in p
   })
 
   it('leaves the health probes to the health plugin', async () => {
-    app = isolated().with(health()).with(files()).mount(api(), pages()) as WebApplication
+    app = isolated().with(healthProbes()).with(files()).mount(api(), pages()) as WebApplication
     await app.bootstrap()
 
     const live = await app.fetch('/livez', { headers: PROBE })
@@ -60,7 +68,7 @@ describe('a single-page application next to the plugins an application runs in p
   // A probe is not a browser: a disabled probe path is a 404 the orchestrator can act on, not a page.
   it('does not answer a disabled probe with the shell', async () => {
     app = isolated()
-      .with(health(h => h.enabled(false)))
+      .with(healthProbes(h => h.enabled(false)))
       .with(files())
       .mount(api(), pages()) as WebApplication
     await app.bootstrap()
@@ -178,8 +186,9 @@ describe('a single-page application next to the plugins an application runs in p
   // wildcard *is* every route it has — is exempt in name only and answers 401 for the whole bundle.
   it('exempts the wildcard route of an anonymous mount, not only its per-file routes', async () => {
     app = isolated()
-      .authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler()))
-      .authorization(authz => authz.requireAuthenticatedByDefault())
+      .install(Authentication(auth => auth.addStrategy('header', new HeaderAuthenticationHandler())))
+      .with(authentication())
+      .install(Authorization(authz => authz.requireAuthenticatedByDefault()))
       .with(staticFiles(s => s.serve(fixtures, { prefix: '/bundle' }, { anonymous: true }))) as WebApplication
     await app.bootstrap()
 

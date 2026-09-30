@@ -258,7 +258,7 @@ export function validateDocument(document: OpenAPIDocument): void {
               'which components.securitySchemes does not define' +
               solutions(
                 `Declare it with .securityScheme("${name}", { ... }) on the OpenAPI builder`,
-                'Register it through .authentication(...) so it can be described automatically',
+                'Register it through .install(Authentication(...)) so it can be described automatically',
               ),
           )
         }

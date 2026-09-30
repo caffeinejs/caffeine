@@ -7,7 +7,7 @@ import type { SecurityRequirementObject, SecuritySchemeObject } from '../spec/sp
  * Turns the application's registered authentication schemes into `components.securitySchemes`.
  *
  * The descriptors come from http's authentication builder, which records how each scheme expects credentials
- * at the moment it constructs the handler. Nothing here restates configuration: the `.authentication(...)`
+ * at the moment it constructs the handler. Nothing here restates configuration: the `Authentication(...)`
  * call that registers a scheme is its single declaration.
  *
  * Explicit `.securityScheme(...)` declarations are merged last, so a user can always override or add one the

@@ -1,4 +1,4 @@
-import { Claim, Identity, Principal, newRouter } from '@caffeinejs/http'
+import { Claim, Identity, Principal, newRouter, Authentication, authentication } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -26,17 +26,20 @@ describe('HTTP Basic authentication', () => {
   beforeAll(async () => {
     running = await startApp(app =>
       app
-        .authentication(auth =>
-          auth.addBasic(b =>
-            b
-              .realm('Docs')
-              .validate((_ctx, user, password) =>
-                USERS.get(user) === password
-                  ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-                  : null,
-              ),
+        .install(
+          Authentication(auth =>
+            auth.addBasic(b =>
+              b
+                .realm('Docs')
+                .validate((_ctx, user, password) =>
+                  USERS.get(user) === password
+                    ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+                    : null,
+                ),
+            ),
           ),
         )
+        .with(authentication())
         .mount(
           newRouter('/docs')
             .authorize({})
@@ -102,7 +105,8 @@ describe('HTTP Basic authentication with a realm that needs quoting', () => {
   const challengeFor = async (realm: string): Promise<BrowserResponse> => {
     const running = await startApp(app =>
       app
-        .authentication(auth => auth.addBasic(b => b.realm(realm).validate(() => null)))
+        .install(Authentication(auth => auth.addBasic(b => b.realm(realm).validate(() => null))))
+        .with(authentication())
         .mount(
           newRouter('/docs')
             .authorize({})

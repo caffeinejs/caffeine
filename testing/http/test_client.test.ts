@@ -1,5 +1,5 @@
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Router, createWebApplication, Guards } from '@caffeinejs/http'
 import { Guard, type GuardReturn } from '@caffeinejs/http/guards'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it, vi } from 'vitest'
@@ -284,7 +284,7 @@ describe('testClient()', () => {
       await using client = testClient(router, {
         configure: builder => {
           builder.container.bind(DenyGuard, t => t.toSelf())
-          builder.guards(guards => guards.global(DenyGuard))
+          builder.install(Guards(guards => guards.global(DenyGuard)))
         },
       })
 

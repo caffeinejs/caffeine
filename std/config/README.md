@@ -150,7 +150,7 @@ request. A selector that throws during a swap is logged and leaves the view as i
 A feature registers nothing here. The application hands it what it wants, in the configure callback:
 
 ```ts
-.with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
+.install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
 .with(thing((b, { store }) => b.config(store.view(t => t.app.thing))))
 .logger((b, { config }) => b.config(config.app.log))
 ```

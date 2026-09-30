@@ -77,7 +77,7 @@ describe('FeatureBuilder', () => {
   it('runs on its own defaults when nothing configured it', async () => {
     const g = gadget()
 
-    await headless().with(g).bootstrap()
+    await headless().install(g).bootstrap()
 
     expect(g.resolved).toEqual(DEFAULTS)
   })
@@ -85,7 +85,7 @@ describe('FeatureBuilder', () => {
   it('keeps a fluent value when no configuration is wired', async () => {
     const g = gadget(b => b.size(7))
 
-    await headless().with(g).bootstrap()
+    await headless().install(g).bootstrap()
 
     expect(g.resolved?.size).toBe(7)
   })
@@ -99,7 +99,7 @@ describe('FeatureBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
 
@@ -113,7 +113,7 @@ describe('FeatureBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
 
@@ -135,7 +135,7 @@ describe('FeatureBuilder', () => {
     const conf = newConfiguration(appSchema, kAppConfig)
       .source(new InlineConfigSource({ app: { gadget: { size: 12 } } }))
       .build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
 
@@ -145,7 +145,7 @@ describe('FeatureBuilder', () => {
   it('merges through a fluent method that builds on what it already wrote', async () => {
     const g = gadget(b => b.label('wide').suffix('-ish'))
 
-    await headless().with(g).bootstrap()
+    await headless().install(g).bootstrap()
 
     expect(g.resolved?.label).toBe('wide-ish')
   })
@@ -169,7 +169,7 @@ describe('FeatureBuilder', () => {
     }
 
     await headless()
-      .with(new Ordered(b => (b as Ordered).mark()))
+      .install(new Ordered(b => (b as Ordered).mark()))
       .bootstrap()
 
     expect(order).toEqual(['configure', 'bootstrap'])
@@ -192,7 +192,7 @@ describe('FeatureBuilder', () => {
     }
 
     await headless()
-      .with(new Ordered(b => (b as Ordered).mark()))
+      .install(new Ordered(b => (b as Ordered).mark()))
       .bootstrap()
 
     expect(order).toEqual(['callback', 'configure'])
@@ -210,7 +210,7 @@ describe('FeatureBuilder', () => {
 
     const g = gadget<AppConfig>((b, { config }) => b.config(config.app.gadget))
     const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(g)
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
 

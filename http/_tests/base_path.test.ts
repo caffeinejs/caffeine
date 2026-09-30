@@ -14,11 +14,11 @@ import {
   Get,
   RouteBuilder,
   createWebApplication,
-  health,
   newRouter,
   type HTTPPluginFactory,
   type NodeMiddleware,
   type WebApplication,
+  healthProbes,
 } from '../index.js'
 
 /**
@@ -340,7 +340,7 @@ describe('an application under a base path', () => {
           instance.get('/callback-raw', async () => ({ source: 'serverCallback' }))
         })
         .with(lateRoute())
-        .with(health())
+        .with(healthProbes())
         .with(() =>
           fp(
             async (instance: FastifyInstance) => {
@@ -447,7 +447,7 @@ describe('an application under a base path', () => {
     })
 
     it('still refuses a route that takes a probe path, both being relative to the application', async () => {
-      const failing = createWebApplication().basePath('/api').with(health()).mount(echo('/livez'))
+      const failing = createWebApplication().basePath('/api').with(healthProbes()).mount(echo('/livez'))
 
       await expect(failing.bootstrap()).rejects.toThrow(/already registered at "\/livez"/)
     })

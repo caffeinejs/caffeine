@@ -1,7 +1,7 @@
 import { createHmac, createPublicKey, type JsonWebKeyInput } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { type JWTAuthenticationOptionsBuilder, newRouter } from '@caffeinejs/http'
+import { type JWTAuthenticationOptionsBuilder, newRouter, Authentication, authentication } from '@caffeinejs/http'
 import { createRemoteJWKSet } from 'jose'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -81,7 +81,10 @@ describe.skipIf(!up)('JWT bearer as a resource server for Spring-issued tokens',
 
   beforeAll(async () => {
     running = await startApp(app =>
-      app.authentication(auth => auth.addJWTBearer('api', j => resourceServer(j))).mount(routes()),
+      app
+        .install(Authentication(auth => auth.addJWTBearer('api', j => resourceServer(j))))
+        .with(authentication())
+        .mount(routes()),
     )
     token = await clientCredentialsToken(API, `${API}-secret`, 'api.read')
   })
@@ -175,7 +178,10 @@ describe.skipIf(!up)('JWT bearer as a resource server for Spring-issued tokens',
     it('a genuine token when the issuer it names is not the one expected', async () => {
       const elsewhere = await startApp(app =>
         app
-          .authentication(auth => auth.addJWTBearer('api', j => resourceServer(j, `${OAUTH_SERVER}/another-issuer`)))
+          .install(
+            Authentication(auth => auth.addJWTBearer('api', j => resourceServer(j, `${OAUTH_SERVER}/another-issuer`))),
+          )
+          .with(authentication())
           .mount(routes()),
       )
 
@@ -201,7 +207,8 @@ describe('JWT bearer, whoever issued the token', () => {
   beforeAll(async () => {
     running = await startApp(app =>
       app
-        .authentication(auth => auth.addJWTBearer(localJWT))
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
         .mount(
           newRouter('/whoami')
             .authorize({})
@@ -237,13 +244,16 @@ describe('JWT bearer, whoever issued the token', () => {
   it('says nothing about a failure that is the server’s own', async () => {
     const broken = await startApp(app =>
       app
-        .authentication(auth =>
-          auth.addJWTBearer(j =>
-            localJWT(j)
-              .algorithm('RS256')
-              .keyResolver(() => Promise.reject(new Error('connect ECONNREFUSED 10.1.2.3:443 "jwks.internal"'))),
+        .install(
+          Authentication(auth =>
+            auth.addJWTBearer(j =>
+              localJWT(j)
+                .algorithm('RS256')
+                .keyResolver(() => Promise.reject(new Error('connect ECONNREFUSED 10.1.2.3:443 "jwks.internal"'))),
+            ),
           ),
         )
+        .with(authentication())
         .mount(
           newRouter('/whoami')
             .authorize({})

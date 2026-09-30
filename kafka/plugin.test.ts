@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { ErrKafkaMissingBrokers } from './errors.js'
-import { kafka, type KafkaConfigurer } from './plugin.js'
+import { Kafka, type KafkaConfigurer } from './plugin.js'
 import { kafkaTemplate, Keys } from './symbols.js'
 import { KafkaTemplate } from './template.js'
 
@@ -20,18 +20,18 @@ function noopClients(): KafkaClients {
 }
 
 describe('kafka feature', () => {
-  it('returns the same builder from .with()', () => {
+  it('returns the same builder from .install()', () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
-    expect(app.with(kfk(k => k.brokers('localhost:9092')))).toBe(app)
+    expect(app.install(kfk(k => k.brokers('localhost:9092')))).toBe(app)
   })
 
   it('binds the default template and a labelled engine through configure()', async () => {
     const container = new CaffeineIoC()
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    const app = createApplication({ container }).with(kfk(k => k.brokers('localhost:9092').groupId('g')))
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
+    const app = createApplication({ container }).install(kfk(k => k.brokers('localhost:9092').groupId('g')))
 
     const built = app
     await built.bootstrap()
@@ -46,10 +46,10 @@ describe('kafka feature', () => {
 
   it('binds distinct templates for multiple named instances', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
     const app = createApplication({})
-      .with(kfk(k => k.brokers('b1').groupId('g')))
-      .with(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
+      .install(kfk(k => k.brokers('b1').groupId('g')))
+      .install(kfk(k => k.brokers('b2').groupId('g'), 'orders'))
 
     const built = app
     await built.bootstrap()
@@ -69,17 +69,17 @@ describe('kafka feature', () => {
   // configuration failure.
   it('rejects at bootstrap() when an instance has no brokers', async () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    const app = createApplication({}).with(kfk(k => k.groupId('g'))) // no brokers
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
+    const app = createApplication({}).install(kfk(k => k.groupId('g'))) // no brokers
 
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
   it('throws when the same instance is installed twice', () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
-      i === undefined ? kafka(configure, { clients: noopClients() }) : kafka(i, configure, { clients: noopClients() })
-    expect(() => createApplication({}).with(kfk()).with(kfk())).toThrow(ErrFeatureAlreadyInstalled)
-    expect(() => createApplication({}).with(kfk(undefined, 'orders')).with(kfk(undefined, 'orders'))).toThrow(
+      i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })
+    expect(() => createApplication({}).install(kfk()).install(kfk())).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => createApplication({}).install(kfk(undefined, 'orders')).install(kfk(undefined, 'orders'))).toThrow(
       ErrFeatureAlreadyInstalled,
     )
   })

@@ -1,10 +1,7 @@
 import { DeferredCtor, Provider, type Ctor, type InjectionToken, type NamedToken } from '@caffeinejs/di'
-import { kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
-import type { FastifyInstance } from 'fastify'
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import { Context } from '../../context.js'
-import { HTTPFeatureBuilder } from '../../feature.js'
-import { authenticationPlugin } from '../authentication_plugin.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
@@ -42,7 +39,7 @@ import {
 import type { GithubPresetOptions } from './oauth/provider/github.js'
 import { GOOGLE_ISSUER, OIDCAuthenticationHandler, OIDCAuthenticationOptionsBuilder } from './oidc/index.js'
 import type { OAuthCallbackHandler, OIDCMeta } from './oidc/index.js'
-import { oidcRoutesPlugin } from './oidc/oidc_routes.js'
+import { OIDCRoutesRef } from './oidc/oidc_routes.js'
 import { OpaqueTokenAuthenticationHandler } from './opaque/opaque.js'
 import { OpaqueTokenAuthenticationOptionsBuilder } from './opaque/opaque_options.js'
 import { OpaqueTokenStore } from './opaque/opaque_token_store.js'
@@ -185,11 +182,11 @@ function oauthKind(
   }
 }
 
-export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
+export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'auth'
 
   readonly #schemes: Map<string, InjectionToken<AuthenticationHandler> | AuthenticationHandler> = new Map()
-  readonly #options: Partial<AuthenticationOptions>
+  readonly #options: Partial<AuthenticationOptions> = {}
   readonly #oidcHandlers: OAuthCallbackHandler[] = []
   // How each scheme expects credentials, recorded here because this is the one place that knows: `addStrategy`
   // receives a handler it cannot interrogate, and by configure time everything is a Provider wrapper.
@@ -203,12 +200,6 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
   #credentials: CredentialsServiceOptions | undefined
   #refreshConfigure: ((options: RefreshTokenOptionsBuilder) => void) | undefined
   #refresh: RefreshTokenOptions | undefined
-  #oidcMeta: OIDCMeta | undefined
-
-  constructor(options: Partial<AuthenticationOptions> = {}) {
-    super()
-    this.#options = options
-  }
 
   /**
    * Reads the default schemes, each scheme's own options, the credentials block and the refresh block from a
@@ -219,7 +210,7 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
    * see {@link AuthConfig} for how that name has to be spelled for an environment variable to reach it.
    *
    * ```ts
-   * .authentication((a, { config }) => a.config(config.app.auth).addJWTBearer('jwt', j => j.issuer('local')))
+   * .install(Authentication((a, { config }) => a.config(config.app.auth).addJWTBearer('jwt', j => j.issuer('local'))))
    * ```
    */
   config(config: Partial<AuthConfig>): this {
@@ -457,16 +448,6 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
     this.#doConfigure(kit)
   }
 
-  protected override async server(instance: FastifyInstance): Promise<void> {
-    // The gate lands where `.authentication(...)` was written: everything installed before it runs ahead of
-    // the hook, everything after it only for a request the hook let through.
-    await instance.register(authenticationPlugin())
-
-    if (this.#oidcMeta !== undefined) {
-      await instance.register(oidcRoutesPlugin(this.#oidcMeta))
-    }
-  }
-
   /**
    * Builds each declared scheme from its merged options, then wires everything into the container.
    *
@@ -653,9 +634,10 @@ export class AuthenticationBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
         unreachableCandidates: this.#unreachableCandidates(defaultScheme),
       }
 
-      // Set only here, so "no OIDC strategy was configured" is expressed as the routes plugin not existing
-      // rather than as a flag it would have to read back and check.
-      this.#oidcMeta = meta
+      // Bound only here, so "no OIDC strategy was configured" is expressed as the binding not existing rather
+      // than as a flag to read back and check. The first authentication gate to install claims the routes
+      // through the ref.
+      kit.container.bind(OIDCRoutesRef, t => t.toValue(new OIDCRoutesRef(meta)).internal())
     }
   }
 

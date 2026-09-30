@@ -8,6 +8,8 @@ import {
   Identity,
   Principal,
   newRouter,
+  Authentication,
+  authentication,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -61,21 +63,24 @@ describe('routes that name their authentication schemes', () => {
   beforeAll(async () => {
     running = await startApp(app =>
       app
-        .authentication(auth =>
-          auth
-            .addJWTBearer(localJWT)
-            .addBasic(b =>
-              b
-                .realm('Reports')
-                .validate((_ctx, user, password) =>
-                  user === 'analyst' && password === 'analyst123'
-                    ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-                    : null,
-                ),
-            )
-            .addStrategy('APIKey', new APIKeyHandler())
-            .default('Bearer'),
+        .install(
+          Authentication(auth =>
+            auth
+              .addJWTBearer(localJWT)
+              .addBasic(b =>
+                b
+                  .realm('Reports')
+                  .validate((_ctx, user, password) =>
+                    user === 'analyst' && password === 'analyst123'
+                      ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+                      : null,
+                  ),
+              )
+              .addStrategy('APIKey', new APIKeyHandler())
+              .default('Bearer'),
+          ),
         )
+        .with(authentication())
         .mount(newRouter('/default').authorize({}).get('/', identities))
         .mount(
           newRouter('/either-header')
@@ -182,13 +187,16 @@ describe('a default scheme that forwards to the one a request calls for', () => 
   beforeAll(async () => {
     running = await startApp(app =>
       app
-        .authentication(auth =>
-          auth
-            .addJWTBearer(localJWT)
-            .addStrategy('APIKey', apiKeys)
-            .forward('PerCaller', ctx => (ctx.req.header('x-api-key') === undefined ? 'Bearer' : 'APIKey'))
-            .default('PerCaller'),
+        .install(
+          Authentication(auth =>
+            auth
+              .addJWTBearer(localJWT)
+              .addStrategy('APIKey', apiKeys)
+              .forward('PerCaller', ctx => (ctx.req.header('x-api-key') === undefined ? 'Bearer' : 'APIKey'))
+              .default('PerCaller'),
+          ),
         )
+        .with(authentication())
         .mount(newRouter('/default').authorize({}).get('/', subject))
         .mount(
           newRouter('/asks-again')
@@ -235,12 +243,15 @@ describe('a forwarding scheme told to forward to itself', () => {
   it('fails the request at once', async () => {
     const running = await startApp(app =>
       app
-        .authentication(auth =>
-          auth
-            .addJWTBearer(localJWT)
-            .forward('PerCaller', ctx => ctx.req.header('x-scheme') ?? 'Bearer')
-            .default('PerCaller'),
+        .install(
+          Authentication(auth =>
+            auth
+              .addJWTBearer(localJWT)
+              .forward('PerCaller', ctx => ctx.req.header('x-scheme') ?? 'Bearer')
+              .default('PerCaller'),
+          ),
         )
+        .with(authentication())
         .mount(
           newRouter('/default')
             .authorize({})

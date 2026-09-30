@@ -12,7 +12,7 @@ import { distLockConfigSchema } from './config.js'
 import type { DistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
 import { kDistLock, kDistLockBackend } from './keys.js'
-import { distlock } from './plugin.js'
+import { DistributedLock } from './plugin.js'
 
 /**
  * Records the lease duration of every attempt, so a resolved setting can be observed from outside: `ttls[0]`
@@ -72,8 +72,8 @@ async function newLock(
     .source(new InlineConfigSource({ app: { distlock: tree } }))
     .build()
 
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
-    distlock<AppConfig>((d, { config }) => {
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+    DistributedLock<AppConfig>((d, { config }) => {
       d.backend(backend).config(config.app.distlock)
       fluent?.(d)
     }),
@@ -166,8 +166,8 @@ describe('distlock configuration', () => {
   it('refuses to start when the retry jitter is outside 0..1', async () => {
     const conf = newConfiguration(appConfigSchema, kConfig).source(new InlineConfigSource({})).build()
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
-      distlock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(2)),
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(2)),
     )
 
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
@@ -179,8 +179,8 @@ describe('distlock configuration', () => {
       .source(new InlineConfigSource({ app: { distlock: { ttl: '30000' } } }))
       .build()
 
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).with(
-      distlock<AppConfig>((d, { config }) => d.backend(new MemoryLockBackend()).config(config.app.distlock)),
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      DistributedLock<AppConfig>((d, { config }) => d.backend(new MemoryLockBackend()).config(config.app.distlock)),
     )
     const booting = app.bootstrap()
 
@@ -197,14 +197,14 @@ describe('distlock configuration', () => {
   // Failing at start-up rather than at the first lock: a fleet that booted without a backend has already told
   // its orchestrator it is healthy.
   it('refuses to start without a backend', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(distlock())
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(DistributedLock())
 
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
   })
 
   it('refuses to start when the backend key resolves to nothing', async () => {
-    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(
-      distlock(d => d.backend(kDistLockBackend)),
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+      DistributedLock(d => d.backend(kDistLockBackend)),
     )
 
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrDistLockConfiguration)
@@ -214,7 +214,7 @@ describe('distlock configuration', () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(kDistLockBackend, t => t.toValue(new MemoryLockBackend()))
 
-    const app = createApplication({ container }).with(distlock(d => d.backend(kDistLockBackend)))
+    const app = createApplication({ container }).install(DistributedLock(d => d.backend(kDistLockBackend)))
 
     await app.bootstrap()
     opened.push(() => app.close())

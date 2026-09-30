@@ -25,11 +25,10 @@ import type {
 import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
 import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
-import { HTTPFeatureBuilder, kFeatureServer, type HTTPFeature } from '../feature.js'
-import { health } from '../health/health.js'
+import { healthProbes } from '../index.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
 import type { ResolvedMiddleware } from '../middleware/pipeline.js'
-import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
+import { pluginName, type AnyFastifyPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory } from '../plugin.js'
 import { blend } from '../routing/programmatic/blend.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -117,15 +116,12 @@ function onBare() {
   })
 }
 
-/** A feature written against the fake server. */
-function fakeFeature(name: string): HTTPFeature<unknown, FakeServer> {
+/** A feature, which is adapter-free by construction: it binds and never touches a server. */
+function fakeFeature(name: string): Feature {
   return {
     [kFeatureName]: name,
     [kFeatureConfigure](): void {
       // Nothing to bind.
-    },
-    [kFeatureServer]: (): void => {
-      // The recording adapter never runs a hook.
     },
   }
 }
@@ -133,9 +129,10 @@ function fakeFeature(name: string): HTTPFeature<unknown, FakeServer> {
 const noop: FastifyPluginAsync = async () => undefined
 
 describe('an application on an adapter that is not Fastify', () => {
-  // The contract's whole claim at run time: the adapter gets the root list in the order it was written, with error
-  // handling first and the cookie parsing behind it — the two the application registers itself, before anything
-  // `.with(...)` adds — and resolves the middleware pipeline with no server in sight.
+  // The contract's whole claim at run time: the adapter gets the root list in the order it was written, with the
+  // error-handling head slot first and the cookie one behind it — the two the application registers itself, before
+  // anything `.with(...)` adds. A feature installed anywhere in the chain takes no slot at all, and the middleware
+  // pipeline resolves with no server in sight.
   it('hands the adapter its extensions in order and a pipeline it resolves alone', async () => {
     const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
     const unit =
@@ -144,23 +141,19 @@ describe('an application on an adapter that is not Fastify', () => {
 
     const app = onFake(adapter)
       .with(unit('first'))
-      .with(fakeFeature('second'))
+      .install(fakeFeature('slotless'))
       .with(unit('third'))
       .use((_ctx, next) => next(), { hook: 'after' })
 
     await app.bootstrap()
 
+    // The head slots are the built-ins' Fastify plugins, pushed under the application's one cast; their
+    // `fastify-plugin` names tell them apart.
     const root = (adapter.input?.extensions.root() ?? []).map(entry =>
-      entry.kind === 'feature' ? `feature:${entry.name}` : `extension:${entry.extension.unit}`,
+      typeof entry === 'function' ? `head:${pluginName(entry as unknown as AnyFastifyPlugin)}` : entry.unit,
     )
 
-    expect(root).toEqual([
-      'feature:error-handling',
-      'feature:cookie',
-      'extension:first',
-      'feature:second',
-      'extension:third',
-    ])
+    expect(root).toEqual(['head:caffeine-error-handling', 'head:caffeine-cookie', 'first', 'third'])
     expect(adapter.middlewares.map(middleware => middleware.hook)).toEqual(['after'])
 
     await app.close()
@@ -193,18 +186,22 @@ describe('adapter types', () => {
     expectTypeOf<AnyAdapterTypes>().toEqualTypeOf<FastifyTypes>()
   })
 
-  it('refuses what another adapter installs', () => {
-    // @ts-expect-error a feature written for another server
-    createWebApplication().with(fakeFeature('elsewhere'))
+  it('refuses what another adapter installs, and takes a feature on any adapter', () => {
+    // Refused at compile time, and loudly at run time too; the runtime error's shape is plugin.test.ts's to pin.
+    // @ts-expect-error a feature is not a plugin factory
+    expect(() => createWebApplication().with(fakeFeature('elsewhere'))).toThrow()
 
-    // @ts-expect-error a Fastify feature on an application that does not run Fastify
-    onFake().with(health())
+    // @ts-expect-error a factory producing a Fastify plugin on an application that does not run Fastify
+    onFake().with(healthProbes())
 
     // @ts-expect-error a Fastify plugin on an application that does not run Fastify
     onFake().with(() => noop)
 
     onFake().with(() => ({ unit: 'fake' }))
-    onFake().with(fakeFeature('fits'))
+
+    // A feature never touches a server, so it installs whatever the adapter is.
+    onFake().install(fakeFeature('fits'))
+    createWebApplication().install(fakeFeature('anywhere'))
 
     // @ts-expect-error an adapter that installs nothing takes no factory
     onBare().with(() => ({ unit: 'nothing' }))
@@ -306,16 +303,8 @@ describe('configure callback typing', () => {
     readonly [kFeatureName] = 'plain-probe'
   }
 
-  class ServerSideBuilder<C = unknown> extends HTTPFeatureBuilder<C> {
-    readonly [kFeatureName] = 'server-side-probe'
-  }
-
   function plain<C = unknown>(configure?: FeatureConfigurer<PlainBuilder<C>, C>): Feature<C> {
     return new PlainBuilder<C>(configure as never)
-  }
-
-  function serverSide<C = unknown>(configure?: FeatureConfigurer<ServerSideBuilder<C>, C>): HTTPFeature<C> {
-    return new ServerSideBuilder<C>(configure as never)
   }
 
   class PluginSideBuilder {}
@@ -327,15 +316,14 @@ describe('configure callback typing', () => {
     }
   }
 
-  // `.with(...)` is overloaded, and only the overload TypeScript tries first contextually types a callback. Each
-  // call shape must still reach the application's configuration type rather than fall back to `unknown` — a
-  // feature through its `FeatureConfigureKit`, a plugin factory's builder through its `HTTPSetupContext`.
-  it('types the callback against the application configuration, whichever overload takes it', () => {
+  // Each call shape must reach the application's configuration type rather than fall back to `unknown` — a
+  // feature through its `FeatureConfigureKit` on `.install(...)`, a plugin factory's builder through its
+  // `HTTPSetupContext` on `.with(...)`.
+  it('types the callback against the application configuration, on either registration', () => {
     const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({})).build()
 
     const app = createWebApplication({ config: conf })
-      .with(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
-      .with(serverSide((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .install(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
       .with(pluginSide((_b, context) => expectTypeOf(context.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
 
     expect(app).toBeDefined()

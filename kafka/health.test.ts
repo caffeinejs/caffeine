@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { KafkaHealthIndicator } from './health.js'
 import type { KafkaContainerStatus } from './listener_container.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { Keys } from './symbols.js'
 
 function containerWith(statuses: Record<string, KafkaContainerStatus>): CaffeineIoC {
@@ -90,9 +90,9 @@ class Database extends HealthIndicator {
 
 // Kafka's indicator used to register only while nothing else extended HealthIndicator, so an application with a
 // check of its own lost Kafka's readiness without a word. Readiness is now something each instance asks for.
-describe('kafka(k => k.health())', () => {
+describe('Kafka(k => k.health())', () => {
   it('registers no indicator unless an instance asks for one', async () => {
-    const app = createApplication({}).with(kafka(k => k.brokers('localhost:9092'), { clients: noopClients() }))
+    const app = createApplication({}).install(Kafka(k => k.brokers('localhost:9092'), { clients: noopClients() }))
     await app.bootstrap()
 
     expect(app.container.has(KafkaHealthIndicator)).toBe(false)
@@ -101,7 +101,9 @@ describe('kafka(k => k.health())', () => {
   })
 
   it('registers the indicator next to one the application bound', async () => {
-    const app = createApplication({}).with(kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }))
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }),
+    )
     app.container.bind(Database, t => t.toSelf().extends(HealthIndicator))
     await app.bootstrap()
 
@@ -114,8 +116,8 @@ describe('kafka(k => k.health())', () => {
 
   it('reports only the instances that asked for it', async () => {
     const app = createApplication({})
-      .with(kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }))
-      .with(kafka('audit', k => k.brokers('localhost:9092'), { clients: noopClients() }))
+      .install(Kafka(k => k.brokers('localhost:9092').health(), { clients: noopClients() }))
+      .install(Kafka('audit', k => k.brokers('localhost:9092'), { clients: noopClients() }))
     await app.bootstrap()
 
     expect(Object.keys(app.container.get(KafkaHealthIndicator).check().data ?? {})).toEqual(['default'])

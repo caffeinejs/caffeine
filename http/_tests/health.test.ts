@@ -10,9 +10,17 @@ import {
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'
-import type { HealthBuilder } from '../health/builder.js'
-import { health } from '../health/health.js'
-import { Authorize, Controller, Get, createWebApplication } from '../index.js'
+import type { HealthProbesBuilder } from '../health/probes_plugin.js'
+import {
+  Authentication,
+  Authorize,
+  Controller,
+  Get,
+  Health,
+  authentication,
+  createWebApplication,
+  healthProbes,
+} from '../index.js'
 
 class DownIndicator extends HealthIndicator {
   get name(): string {
@@ -95,10 +103,10 @@ function bindIndicators(app: WebApplication, ...indicators: Array<Ctor<HealthInd
 }
 
 async function start(
-  configure?: (health: HealthBuilder) => void,
+  configure?: (health: HealthProbesBuilder) => void,
   ...indicators: Array<Ctor<HealthIndicator> | HealthIndicator>
 ): Promise<WebApplication> {
-  const app = createWebApplication().with(health(configure ?? (() => {})))
+  const app = createWebApplication().with(healthProbes(configure ?? (() => {})))
 
   bindIndicators(app, ...indicators)
   await app.run()
@@ -206,7 +214,7 @@ describe('health probes', () => {
     ['mounted', true],
     ['switched off', false],
   ] as const)('rejects a non-singleton indicator at ready with the probes %s', async (_label, enabled) => {
-    const app = createWebApplication().with(health(h => h.enabled(enabled)))
+    const app = createWebApplication().with(healthProbes(h => h.enabled(enabled)))
     app.container.bind(DownIndicator, t => t.toSelf().lifetime(Scopes.TRANSIENT).extends(HealthIndicator))
 
     try {
@@ -237,7 +245,11 @@ describe('health probes', () => {
   })
 
   it('applies its budgets to every caller of the application health', async () => {
-    const app = await start(h => h.indicatorTimeout(20), SlowIndicator)
+    const app = createWebApplication()
+      .install(Health(h => h.indicatorTimeout(20)))
+      .with(healthProbes())
+    bindIndicators(app, SlowIndicator)
+    await app.run()
 
     try {
       const result = await app.container.get(ApplicationHealth).readiness()
@@ -251,7 +263,11 @@ describe('health probes', () => {
 
   // An application polled by something other than HTTP still tunes the evaluation here.
   it('applies its budgets with the probes switched off', async () => {
-    const app = await start(h => h.enabled(false).indicatorTimeout(20), SlowIndicator)
+    const app = createWebApplication()
+      .install(Health(h => h.indicatorTimeout(20)))
+      .with(healthProbes(p => p.enabled(false)))
+    bindIndicators(app, SlowIndicator)
+    await app.run()
 
     try {
       expect((await probe(app, '/readyz')).status).toBe(404)
@@ -355,10 +371,13 @@ describe('health probes', () => {
     void [SecuredController]
 
     const app = createWebApplication()
-      .authentication(auth =>
-        auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
+      .install(
+        Authentication(auth =>
+          auth.addJWTBearer(o => o.secret('a-very-long-development-secret-value').allowAnyIssuer().allowAnyAudience()),
+        ),
       )
-      .with(health())
+      .with(authentication())
+      .with(healthProbes())
 
     await app.run()
 

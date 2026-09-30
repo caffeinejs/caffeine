@@ -33,8 +33,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Adapter and types
 
-- The health server hook resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
-  non-singleton indicator; nothing invalidates the cache at shutdown.
+- The `healthProbes()` plugin resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
+  non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
 - `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
 - The adapter applies the base path in `rewriteUrl`; never prefix at registration or rewrite `url` in `onRoute`.

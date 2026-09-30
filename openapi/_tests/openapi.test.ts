@@ -15,6 +15,8 @@ import {
   Status,
   WebApplication,
   createWebApplication,
+  Authentication,
+  authentication,
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std/schema'
@@ -87,7 +89,8 @@ function buildApp(configure: OpenAPIConfigurer = () => {}): WebApplication {
 function newBuilder(configure?: OpenAPIConfigurer) {
   return createWebApplication({})
     .with(openapi(configure))
-    .authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience()))
+    .install(Authentication(auth => auth.addJWTBearer(j => j.secret(TEST_SECRET).allowAnyIssuer().allowAnyAudience())))
+    .with(authentication())
 }
 
 function operationAt(document: OpenAPIDocument, path: string, method = 'get'): OperationObject | undefined {

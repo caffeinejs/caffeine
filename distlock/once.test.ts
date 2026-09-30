@@ -6,7 +6,7 @@ import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLock } from './distlock.js'
 import { kDistLock } from './keys.js'
-import { distlock } from './plugin.js'
+import { DistributedLock } from './plugin.js'
 
 /**
  * Counts renewals and takes real time answering them, so an action that ends while one is on the wire — the
@@ -46,8 +46,8 @@ afterEach(async () => {
 })
 
 async function newLock(backend: Backend = new MemoryLockBackend()): Promise<DistLock> {
-  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).with(
-    distlock(d => d.backend(backend)),
+  const app = createApplication({ container: new CaffeineIoC({ decorators: false }) }).install(
+    DistributedLock(d => d.backend(backend)),
   )
 
   await app.bootstrap()

@@ -42,7 +42,7 @@ export interface ErrorStatusOptions {
 export interface OpenAPISecurityOptions {
   /**
    * Which authentication schemes may satisfy the requirement. Names must match schemes registered through
-   * `.authentication(...)`; an unknown one fails at boot.
+   * `Authentication(...)`; an unknown one fails at boot.
    */
   schemes?: string[]
   roles?: string[]
@@ -59,7 +59,7 @@ export interface OpenAPIOptions {
   security?: SecurityRequirementObject[]
   /** Tags declared up front, merged with those derived from `@APIGroup`. */
   tags: TagObject[]
-  /** Schemes declared explicitly, merged over any derived from `.authentication(...)`. */
+  /** Schemes declared explicitly, merged over any derived from `Authentication(...)`. */
   securitySchemes: Record<string, SecuritySchemeObject>
   /** Whether to derive `securitySchemes` from the application's registered authentication schemes. */
   deriveSecuritySchemes: boolean

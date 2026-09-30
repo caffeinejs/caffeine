@@ -26,8 +26,6 @@ import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
 import { solutions } from './error/util.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
-import { kFeatureServer, type HTTPFeature } from './feature.js'
-import { GuardsBuilder } from './guards/builder.js'
 import {
   MiddlewarePipeline,
   isMiddlewareOptions,
@@ -40,12 +38,12 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
+import { kServerExtension } from './plugin.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
 import type { RouteGroup } from './routing/route.js'
-import { AuthenticationBuilder } from './security/auth/builder.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { Keys } from './symbols.js'
 
@@ -66,12 +64,15 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  * another is given. `setup()` builds routing and sets the adapter up; `start()` runs it;
  * `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
  *
- * Configures fluently, and is itself the running instance — there is no separate builder:
+ * Configures fluently, and is itself the running instance — there is no separate builder. Features (container
+ * binders) are installed with `.install(...)`, in any order; server plugins are registered with `.with(...)`,
+ * in the order that matters:
  *
  * ```ts
  * createWebApplication()
+ *   .install(Authentication(auth => auth.addJWTBearer(b => b.secret(SECRET))))
+ *   .with(authentication())
  *   .with(staticFiles(s => s.serve('public')))
- *   .authentication(auth => auth.addJWTBearer(b => b.secret(SECRET)))
  *   .server(() => ({ listener: { port: 3000 } }))
  * ```
  */
@@ -89,8 +90,8 @@ export class WebApplication<
 
   readonly #adapter: Adapter<T>
   readonly #middlewares = new MiddlewarePipeline<T['hook']>()
-  readonly #extensions = new AdapterExtensions<T['instance'], T['extension']>()
-  readonly #installs: Install<T, C>[] = []
+  readonly #extensions = new AdapterExtensions<T['extension']>()
+  readonly #plugins: AdapterExtensionFactory<T['extension'], C>[] = []
   readonly #serverConfigurers: ServerConfigurer<T, C>[] = []
   readonly #serverCustomizers: ServerCustomizer<T, C>[] = []
   #basePath: BasePathConfigurer<C> | undefined
@@ -99,39 +100,24 @@ export class WebApplication<
   #mounted: Router<any, any, any, any, any, any>[] = []
   #built = false
 
-  // Held rather than built per `configurers()` call: the instance that configured is the one whose server hook
-  // installs, and it holds what its configure step bound.
+  // Held as fields: the instance that configured is the one whose head-slot plugin installs, and it holds
+  // what its configure step bound.
   readonly #errorHandling = new ErrorHandlingBuilder<C>()
-
-  #authBuilder: AuthenticationBuilder<C> | undefined
-  #authzBuilder: AuthorizationBuilder | undefined
-  #guardsBuilder: GuardsBuilder | undefined
   readonly #cookieBuilder = new CookieBuilder<C>()
 
   constructor(adapterFactory: AdapterFactory<T>, options: WebApplicationOptions<C> = {}) {
     super(options)
 
-    // Registered unconditionally and ahead of everything `.with(...)` installs, so cookies are parsed before
-    // any plugin that reads one runs — the authentication gate included, wherever `.authentication(...)` put
-    // it. Only the error handler is installed earlier, and it reads no cookies.
-    this.addFeature(this.#cookieBuilder)
+    // Installed unconditionally, so their names are dedupe-protected and `$hasFeature` answers for them. The
+    // order here is configure order only; the server order is the head slots in `#registerExtensions`: error
+    // handling first, then cookies, ahead of everything `.with(...)` registers — so cookies are parsed before
+    // any plugin that reads one runs, the authentication gate included.
+    this.install(this.#errorHandling)
+    this.install(this.#cookieBuilder)
 
     // Graceful shutdown is `Application`'s own unconditional feature — inherited, not duplicated here.
 
     this.#adapter = adapterFactory({ container: this.container })
-  }
-
-  /**
-   * Installs a feature without the name check `.with(...)` makes, and records its place in the list
-   * `.with(factory)` appends to, so a feature's server hook and a factory's extension install in the order they
-   * were written.
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  override addFeature(feature: Feature): this {
-    super.addFeature(feature)
-    this.#installs.push({ feature: feature as Feature<C> })
-    return this
   }
 
   /**
@@ -239,9 +225,9 @@ export class WebApplication<
   }
 
   /**
-   * Installs a feature, or an extension of the application's adapter from a factory — under Fastify, a plugin.
-   * Both take their position in the same list as `.authentication(...)`, so features and plugins install in the
-   * order these calls are written:
+   * Registers a server plugin from a factory — under Fastify, one producing a plugin or a `[plugin, options]`
+   * pair. Plugins install in the order these calls are written, after the framework's own head slots (error
+   * handling, cookies):
    *
    * ```ts
    * createWebApplication()
@@ -255,109 +241,45 @@ export class WebApplication<
    * registering it directly is what puts its hooks on every route, while a wrapper would take an encapsulation
    * context of its own and cover nothing.
    *
-   * A feature is deduplicated by name — see {@link Application.with}. A factory is never deduplicated — two
-   * calls register two plugins. A `fastify-plugin` name already on that instance is refused at register time.
-   * A factory producing another adapter's extension, or an {@link HTTPFeature} written for another server, does
-   * not compile.
+   * A factory is never deduplicated — two calls register two plugins. A `fastify-plugin` name already on that
+   * instance is refused at register time. A factory producing another adapter's extension does not compile.
    *
-   * @throws ErrFeatureAlreadyInstalled when a feature with the same name is already installed.
-   * @throws ErrApplicationStarted when {@link ready} has already started.
+   * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
+   * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
+   *
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  // One signature taking the union, not one overload per shape. A generic argument such as
-  // `HTTPCaching((b, ctx) => …)` has its callback typed against the first overload TypeScript tries, and those
-  // types stick: whichever shape came second — a factory like `HTTPCaching()`, or an `HTTPFeature` factory such
-  // as `health()` — silently inferred C as unknown instead of the application's configuration type.
-  override with(
-    featureOrFactory: AdapterExtensionFactory<T['extension'], C> | HTTPFeature<C, T['instance']> | PlainFeature<C>,
-  ): this {
-    if (typeof featureOrFactory === 'function') {
-      this.assertConfigurable()
-      this.#installs.push({ factory: featureOrFactory })
-      return this
-    }
-
-    // Records its place through `addFeature`, which the base class calls once the name check has passed.
-    return super.with(featureOrFactory)
-  }
-
-  /**
-   * Configures authentication, and puts the gate where this call is written.
-   *
-   * The `onRequest` hook that authenticates and authorizes registers at this position among the plugins, so a
-   * feature or plugin registered before this call runs ahead of it — `cors()`, whose headers a rejected cross-origin
-   * request still needs — and one registered after it never runs for a request the gate rejected.
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  authentication(configure: FeatureConfigurer<AuthenticationBuilder<C>, C>): this {
+  with(factory: AdapterExtensionFactory<T['extension'], C>): this {
     this.assertConfigurable()
 
-    if (this.#authBuilder == null) {
-      this.#authBuilder = new AuthenticationBuilder()
-      this.addFeature(this.#authBuilder)
+    // The compiler already refuses a feature here; this catches one smuggled past it, where the silent
+    // alternative would be an extension the adapter cannot install.
+    if (typeof factory !== 'function') {
+      const name = (factory as Partial<Feature<C>>)[kFeatureName]
+      throw new ErrConfiguration(
+        typeof name === 'string'
+          ? `Cannot register feature "${name}" with ".with(...)": a feature is not a server plugin` +
+              solutions('Install a feature with ".install(...)", at any position in the chain')
+          : `Cannot register an HTTP plugin: expected a plugin factory function, got ${typeof factory}` +
+              solutions(
+                'Pass a factory: ".with(({ config }) => [plugin, options])"',
+                'Install a feature with ".install(feature)"',
+              ),
+      )
     }
 
-    this.#authBuilder[kAddConfigurer](configure)
-
+    this.#plugins.push(factory)
     return this
   }
 
   /**
-   * Configures authorization. Runs immediately: there is nothing to read from the configuration tree, so
-   * there is no `(a, kit)` callback and nothing is queued for bootstrap — unlike `.cookie((k, kit) => …)`.
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  authorization(configure: (authz: AuthorizationBuilder) => void): this {
-    this.assertConfigurable()
-
-    if (this.#authzBuilder == null) {
-      this.#authzBuilder = new AuthorizationBuilder()
-      this.addFeature(this.#authzBuilder)
-    }
-
-    configure(this.#authzBuilder)
-    return this
-  }
-
-  /**
-   * Lists the container Keys of guards that run on every route, in registration order, before
-   * controller- and method-level `@UseGuards`.
-   *
-   * Runs immediately: guards have nothing to read from the configuration tree, so there is no `(g, kit)`
-   * callback and nothing is queued for bootstrap — unlike `.cookie((k, kit) => …)`.
-   *
-   * Does not bind the classes. Each Key must already be a container-managed Guard.
-   * Calling this is not required for `@UseGuards` on controllers.
-   *
-   * ```ts
-   * createWebApplication()
-   *   .guards(g => g.global(RolesGuard, kNamedAuthGuard))
-   * ```
-   *
-   * @throws ErrApplicationStarted when {@link ready} has already started.
-   */
-  guards(configure: (guards: GuardsBuilder) => void): this {
-    this.assertConfigurable()
-
-    if (this.#guardsBuilder == null) {
-      this.#guardsBuilder = new GuardsBuilder()
-      this.addFeature(this.#guardsBuilder)
-    }
-
-    configure(this.#guardsBuilder)
-    return this
-  }
-
-  /**
-   * Auto-installs authorization when authentication was configured and `.authorization(...)` never was —
-   * so a protected route still gets a default policy — after the {@link ready} callback and before the base
-   * class captures the feature list. Neither call made means authorization stays off, by design.
+   * Auto-installs authorization when authentication was installed and `Authorization(...)` never was — so a
+   * protected route still gets a default policy — after the {@link bootstrap} callback and before the base
+   * class captures the feature list. Neither installed means authorization stays off, by design.
    */
   protected override beforeConfigure(): void {
-    if (this.#authBuilder != null && this.#authzBuilder == null) {
-      this.#authzBuilder = new AuthorizationBuilder()
-      this.addFeature(this.#authzBuilder)
+    if (this.hasFeature('auth') && !this.hasFeature('authz')) {
+      this.install(new AuthorizationBuilder())
     }
   }
 
@@ -384,9 +306,9 @@ export class WebApplication<
   }
 
   /**
-   * Hands `callback` the setup context and then the server the adapter builds at {@link ready}, right after it is
-   * constructed and before the adapter decorates or registers anything on it: a plugin registered here loads ahead
-   * of every feature, and a not-found handler set here is kept.
+   * Hands `callback` the setup context and then the server the adapter builds at {@link bootstrap}, right after it
+   * is constructed and before the adapter decorates or registers anything on it: a plugin registered here loads
+   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept.
    *
    * Calls accumulate and run in call order.
    *
@@ -473,39 +395,18 @@ export class WebApplication<
   }
 
   /**
-   * The configure and bootstrap order.
-   *
-   * Error handling leads, and its server hook installs first too, so every route and hook the rest register is
-   * already covered by it. Everything after it — this package's own features and the user's alike — runs in the
-   * order `.with(...)` calls were written.
-   */
-  protected override configurers(): Feature[] {
-    return [this.#errorHandling, ...this.features]
-  }
-
-  /**
-   * Fills the list the adapter installs on the root server: error handling first, then every feature and factory
-   * in the order it was installed. A factory is called here, in that order. A feature's server hook is handed
-   * over to run in its slot.
+   * Fills the list the adapter installs on the root server: the framework's head slots — error handling first,
+   * so every route and hook the rest register is already covered by it, then cookies — and then every
+   * `.with(...)` factory, called here in the order the calls were written.
    */
   async #registerExtensions(context: HTTPSetupContext<C>): Promise<void> {
-    this.#addServerHook(this.#errorHandling, context)
+    // Not checked against `T`: the built-ins are written against Fastify whatever the adapter, exactly as
+    // their configure halves are. A foreign adapter receives two extensions it cannot install.
+    this.#extensions.add(this.#errorHandling[kServerExtension]() as T['extension'])
+    this.#extensions.add(this.#cookieBuilder[kServerExtension]() as T['extension'])
 
-    for (const install of this.#installs) {
-      if ('factory' in install) {
-        this.#extensions.add(await install.factory(context))
-      } else {
-        this.#addServerHook(install.feature, context)
-      }
-    }
-  }
-
-  /** Hands the adapter a feature's server hook, if it has one. Features without one wire no server. */
-  #addServerHook(feature: Feature<C>, context: HTTPSetupContext<C>): void {
-    // Not checked against `T`: `.with(...)` checked what the application was given, and the built-in features
-    // are written against Fastify whatever the adapter.
-    if (hasServerHook<C, T['instance']>(feature)) {
-      this.#extensions.addFeature(feature[kFeatureName], instance => feature[kFeatureServer](instance, context))
+    for (const factory of this.#plugins) {
+      this.#extensions.add(await factory(context))
     }
   }
 
@@ -597,6 +498,7 @@ export class WebApplication<
       config: this.liveConfig,
       store: this.configStore,
       logger: this.log,
+      hasFeature: name => this.hasFeature(name),
     }
 
     // The live object is deliberately LiveConfig<unknown> on the base class (see std's Application); it is this
@@ -694,9 +596,9 @@ export class WebApplication<
 /**
  * Creates a web application.
  *
- * Install features with `.with(feature)` or `.with(feature(configure))` rather than here: it can be
- * called at any point in the chain before `bootstrap()`. Configuration is built separately with
- * `newConfiguration` and passed in as `{ config }`. A plugin factory is
+ * Features are installed with `.install(Feature(configure))` and server plugins are registered with
+ * `.with(factory)`, at any point in the chain before `bootstrap()` — only `.with(...)` order matters.
+ * Configuration is built separately with `newConfiguration` and passed in as `{ config }`. A plugin factory is
  * `.with(({ config }) => [fastifyCors, config.app.cors.options])`.
  *
  * ```ts
@@ -764,21 +666,6 @@ type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D e
 
 /** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */
 type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | undefined | Promise<string | undefined>
-
-/** One entry in the order `.with(...)` was called: a feature, or a factory producing the adapter's extension. */
-type Install<T extends AdapterTypes, C> =
-  | { readonly feature: Feature<C> }
-  | { readonly factory: AdapterExtensionFactory<T['extension'], C> }
-
-/**
- * A feature with no server hook. Spelled out so an {@link HTTPFeature} written for another server cannot pass for a
- * plain feature.
- */
-type PlainFeature<C> = Feature<C> & { readonly [kFeatureServer]?: never }
-
-function hasServerHook<C, I>(feature: Feature<C>): feature is HTTPFeature<C, I> {
-  return typeof (feature as Partial<HTTPFeature<C, I>>)[kFeatureServer] === 'function'
-}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

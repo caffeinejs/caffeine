@@ -6,7 +6,7 @@ import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage }
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { KafkaParams } from './decorators/kafka_params.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 import { KafkaTemplate } from './template.js'
 
 // --- a minimal in-memory broker: producer sends are delivered to consumer streams by topic -----------------
@@ -162,8 +162,8 @@ const GROUP = 'kafka-test-default'
 describe('KafkaListenerContainer', () => {
   it('dispatches a produced message to the matching @KafkaListener (singleton)', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app
@@ -180,8 +180,8 @@ describe('KafkaListenerContainer', () => {
 
   it('dispatches within a request scope for a request-scoped handler', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app
@@ -197,8 +197,8 @@ describe('KafkaListenerContainer', () => {
 
   it('routes a handler failure to the onError hook instead of crashing the stream', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(
+    const app = createApplication({}).install(
+      Kafka(
         k =>
           k
             .brokers('localhost:9092')
@@ -222,8 +222,8 @@ describe('KafkaListenerContainer', () => {
 
   it('extracts handler arguments via @KafkaParams', async () => {
     const broker = new FakeBroker()
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('localhost:9092').groupId(GROUP), { clients: broker.clients() }),
     )
 
     const built = app

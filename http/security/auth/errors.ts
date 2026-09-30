@@ -53,7 +53,7 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
   constructor() {
     super(
       'Cannot start application: routes are protected but authentication is not configured: call ' +
-        '.authentication(auth => ...) on the application builder',
+        '".install(Authentication(auth => ...))" on the application',
       'ERR_AUTHENTICATION_REQUIRED',
     )
     this.name = 'ErrAuthenticationRequired'

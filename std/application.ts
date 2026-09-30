@@ -140,7 +140,7 @@ export class ErrConfigNotReady extends ErrCaffeine {
  *
  * ```ts
  * createApplication({ config: conf })
- *   .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
+ *   .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
  *   .shutdown(s => s.drainDelay('5s'))
  * ```
  */
@@ -202,8 +202,8 @@ export class Application<TConfig = unknown> {
       loadTimeoutMs: DEFAULT_LOAD_TIMEOUT_MS,
     }
 
-    // Pushed directly, not through `addFeature`: a subclass's private fields do not exist yet while this
-    // constructor runs, so an overridden method cannot be called from here.
+    // Pushed directly, not through `install`: a subclass's private fields do not exist yet while this
+    // constructor runs, so an overridable method cannot be called from here.
     this.#register(this.#shutdownBuilder)
     this.#register(this.#loggerBuilder)
 
@@ -272,21 +272,18 @@ export class Application<TConfig = unknown> {
     return this.liveConfig as LiveConfig<TConfig>
   }
 
-  addFeature(feature: Feature<TConfig>): this {
-    this.assertConfigurable()
-    this.#register(feature)
-    return this
-  }
-
   /**
-   * Records a feature without going through {@link addFeature}, which a subclass overrides — the constructor
-   * runs before the subclass's own fields exist, so calling the override from there reads them unset.
+   * Records a feature without {@link install}'s dedupe refusal, and without virtual dispatch — the constructor
+   * runs before a subclass's own fields exist, so an overridable method cannot be called from there. The name
+   * still enters the installed set, so {@link hasFeature} answers for built-ins and a user feature colliding
+   * with a built-in name is refused loudly.
    *
    * This is also the one place the application's configuration type is erased. `#features` is
    * `Feature<unknown>[]` because the store behind the kits is `ConfigStore<unknown>` by design, and a feature's
    * hooks take their kit as a method, so the parameter is bivariant and the erasure holds both ways.
    */
   #register(feature: Feature<TConfig>): void {
+    this.#installed.add(feature[kFeatureName])
     this.#features.push(feature as Feature)
   }
 
@@ -298,8 +295,12 @@ export class Application<TConfig = unknown> {
 
   /**
    * Installs a feature. Callable at any point before {@link bootstrap}, and once per {@link kFeatureName} — an
-   * instanced feature (`kafka('orders')`) carries a distinct name, so it does not clash with the default
+   * instanced feature (`Kafka('orders')`) carries a distinct name, so it does not clash with the default
    * instance.
+   *
+   * A feature binds into the container; it never wires a server, so where an `.install(...)` call sits in the
+   * chain does not matter. Every feature configures before the container initializes, and before any server
+   * plugin runs.
    *
    * The feature's configure callback is written where the feature is constructed, and its second argument is
    * typed against the schema the `config` constructor option declared.
@@ -308,13 +309,13 @@ export class Application<TConfig = unknown> {
    * const conf = newConfiguration(schema, kConfig).build()
    *
    * createApplication({ config: conf })
-   *   .with(kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
+   *   .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
    * ```
    *
    * @throws ErrFeatureAlreadyInstalled when a feature with the same {@link kFeatureName} is already installed.
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  with(feature: Feature<TConfig>): this {
+  install(feature: Feature<TConfig>): this {
     this.assertConfigurable()
 
     const name = feature[kFeatureName]
@@ -322,9 +323,17 @@ export class Application<TConfig = unknown> {
     if (this.#installed.has(name)) {
       throw new ErrFeatureAlreadyInstalled(name)
     }
-    this.#installed.add(name)
 
-    return this.addFeature(feature)
+    this.#register(feature)
+    return this
+  }
+
+  /**
+   * Whether a feature carrying this {@link kFeatureName} is installed, the application's own built-ins
+   * (`shutdown`, `logger`) included.
+   */
+  hasFeature(name: string): boolean {
+    return this.#installed.has(name)
   }
 
   /**
@@ -466,10 +475,10 @@ export class Application<TConfig = unknown> {
       // inject it rather than closing over a kit field. The lifecycle writes to this object.
       this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
 
-      // Every application has one probe service, whether or not anything exposes it: `health()` serves the HTTP
-      // probes from it, and anything else injects the same instance, so every caller shares one evaluation. A
+      // Every application has one probe service, whether or not anything exposes it: `healthProbes()` serves the
+      // HTTP probes from it, and anything else injects the same instance, so every caller shares one evaluation. A
       // singleton even on a container whose default scope is not, for that reason; lazy, so an application that
-      // never asks never snapshots its indicators. The budgets are what `health()` bound, if it was installed.
+      // never asks never snapshots its indicators. The budgets are what `Health()` bound, if it was installed.
       this.#container.bind(ApplicationHealth, t =>
         t
           .toFactory(
@@ -789,7 +798,7 @@ export class Application<TConfig = unknown> {
     return this.#ready
   }
 
-  /** The features installed on the application (before any framework-prepended ones). */
+  /** The features installed on the application. */
   protected get features(): readonly Feature[] {
     return this.#features
   }
@@ -851,9 +860,8 @@ export class Application<TConfig = unknown> {
 /**
  * Creates a headless {@link Application}. Mirrors the HTTP `createWebApplication`.
  *
- * Install features with `.with(feature)` or `.with(feature(configure))` — can be called at any point in the
- * chain before `bootstrap()`. Configuration is built separately with `newConfiguration` and passed in as
- * `{ config }`.
+ * Install features with `.install(Feature(configure))` — can be called at any point in the chain before
+ * `bootstrap()`. Configuration is built separately with `newConfiguration` and passed in as `{ config }`.
  */
 export function createApplication<TConfig = unknown>(options?: ApplicationOptions<TConfig>): Application<TConfig> {
   return new Application(options)

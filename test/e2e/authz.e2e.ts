@@ -9,6 +9,9 @@ import {
   Get,
   Roles,
   newRouter,
+  Authentication,
+  authentication,
+  Authorization,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -378,14 +381,17 @@ describe('what an authorization declaration means to each caller', () => {
 
     running = await startApp(app =>
       app
-        .authentication(auth => auth.addJWTBearer(localJWT))
-        .authorization(authz =>
-          authz
-            .addPolicy('engineering', p => p.requireAuthenticated().claim('dept', 'eng'))
-            .addPolicy('on-call', p => p.requireAuthenticated().claim('groups', 'on-call'))
-            .addPolicy('internal', p => p.assert(ctx => ctx.req.header('x-internal') === 'yes'))
-            .addPolicy('owner', p => p.resource<Doc>((user, doc) => doc.owner === user.findFirst('sub')?.value))
-            .requireAuthenticatedByDefault(),
+        .install(Authentication(auth => auth.addJWTBearer(localJWT)))
+        .with(authentication())
+        .install(
+          Authorization(authz =>
+            authz
+              .addPolicy('engineering', p => p.requireAuthenticated().claim('dept', 'eng'))
+              .addPolicy('on-call', p => p.requireAuthenticated().claim('groups', 'on-call'))
+              .addPolicy('internal', p => p.assert(ctx => ctx.req.header('x-internal') === 'yes'))
+              .addPolicy('owner', p => p.resource<Doc>((user, doc) => doc.owner === user.findFirst('sub')?.value))
+              .requireAuthenticatedByDefault(),
+          ),
         )
         .mount(programmatic()),
     )

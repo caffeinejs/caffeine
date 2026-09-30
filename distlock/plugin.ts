@@ -11,9 +11,9 @@ export type DistLockConfigurer<C = unknown> = FeatureConfigurer<DistLockBuilder<
  * A backend is mandatory, and `MemoryLockBackend` comes from `@caffeinejs/distlock/backend/memory`:
  *
  * ```ts
- * .with(distlock(d => d.backend(new MemoryLockBackend()).ttl('1m')))
+ * .install(DistributedLock(d => d.backend(new MemoryLockBackend()).ttl('1m')))
  * ```
  */
-export function distlock<C = unknown>(configure?: DistLockConfigurer<C>): Feature<C> {
+export function DistributedLock<C = unknown>(configure?: DistLockConfigurer<C>): Feature<C> {
   return new DistLockBuilder<C>(configure)
 }

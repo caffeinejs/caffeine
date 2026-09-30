@@ -81,8 +81,9 @@ function verdict(probe: string, result: ProbeResult): WattCheckResult {
   and the coalescing, which are what keep Watt's uncached polling — every worker, on every `/ready` and every
   `/status` — off your dependencies.
 - **Keep the body terse.** The probe server is public; `outcomes` name your dependencies.
-- The checks share one evaluation with the `/readyz` that `.with(health())` serves, and the budgets set there
-  apply to both. Keep `probeDeadline` (3 s by default) under Watt's `healthChecksTimeouts`.
+- The checks share one evaluation with the `/readyz` that `.with(healthProbes())` serves, and the budgets
+  `.install(Health(h => …))` binds apply to both. Keep `probeDeadline` (3 s by default) under Watt's
+  `healthChecksTimeouts`.
 
 ## Starting an application
 
@@ -103,7 +104,7 @@ internal applications, which other applications reach through the runtime withou
 ### Script mode
 
 ```ts
-const app = createWebApplication().with(health()).mount(routes)
+const app = createWebApplication().with(healthProbes()).mount(routes)
 
 await app.bootstrap()
 registerWattChecks(app)
@@ -161,7 +162,7 @@ export async function close(): Promise<void> {
 }
 ```
 
-A headless application has no `health()` to tune its budgets with and runs on the defaults: 2 s per indicator, 3 s
+A headless application tunes its budgets with `.install(Health(h => …))` or runs on the defaults: 2 s per indicator, 3 s
 per probe, results reused for 1 s. To change them, bind `kHealthRegistryOptions` from `@caffeinejs/std/health`
 before `bootstrap()`.
 
@@ -190,7 +191,7 @@ twice — a later call waits for the first and resolves.
 - **Readiness:** Watt's `/ready`.
 - **Liveness:** Watt's `/status` also fails while any application boots, drains or has a critical indicator down.
   Accept that — and prefer `critical: false` for dependencies every replica shares, or one outage restarts the
-  fleet — or point the liveness probe at the entrypoint's `/livez` from `.with(health())`, which reports that
+  fleet — or point the liveness probe at the entrypoint's `/livez` from `.with(healthProbes())`, which reports that
   application's liveness alone.
 - **Startup:** Watt has no startup probe. Use `/ready` with a generous `failureThreshold`, or the entrypoint's
   `/startupz`.

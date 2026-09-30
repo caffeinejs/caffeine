@@ -30,6 +30,7 @@ import {
   GuardResult,
   type Context,
   type WebApplication,
+  Guards,
 } from '../index.js'
 import type { GuardInput } from './guard.js'
 
@@ -338,7 +339,7 @@ describe('use_guards', () => {
 
   it('runs global, then controller, then method', async () => {
     order.length = 0
-    const app = createWebApplication().guards(g => g.global(GlobalGuard))
+    const app = createWebApplication().install(Guards(g => g.global(GlobalGuard)))
     await app.bootstrap()
 
     const res = await app.fetch('/use-guards/both')
@@ -362,7 +363,7 @@ describe('use_guards', () => {
 
   it('runs a guard listed at several levels once, at its first position', async () => {
     order.length = 0
-    const app = createWebApplication().guards(g => g.global(RepeatedGuard))
+    const app = createWebApplication().install(Guards(g => g.global(RepeatedGuard)))
     await app.bootstrap()
 
     const res = await app.fetch('/use-guards-repeated')
@@ -424,7 +425,7 @@ describe('builder', () => {
   void [ListedGuard, NotAGuard, BuilderOkController, BuilderUseController]
 
   it('runs a global guard listed by InjectionToken on every route', async () => {
-    const app = createWebApplication().guards(g => g.global(ListedGuard))
+    const app = createWebApplication().install(Guards(g => g.global(ListedGuard)))
     await app.bootstrap()
 
     const res = await app.fetch('/builder-ok')
@@ -433,7 +434,7 @@ describe('builder', () => {
     await app.close()
   })
 
-  it('does not require .guards() for @UseGuards on a controller', async () => {
+  it('does not require .install(Guards()) for @UseGuards on a controller', async () => {
     const app = buildApp()
     await app.bootstrap()
 
@@ -445,13 +446,13 @@ describe('builder', () => {
 
   it('rejects a missing InjectionToken at start-up', async () => {
     const kMissing = token<Guard>(Symbol('missing-guard'))
-    const app = createWebApplication().guards(g => g.global(kMissing))
+    const app = createWebApplication().install(Guards(g => g.global(kMissing)))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
 
   it('rejects an InjectionToken that is not a Guard at start-up', async () => {
-    const app = createWebApplication().guards(g => g.global(NotAGuard as never))
+    const app = createWebApplication().install(Guards(g => g.global(NotAGuard as never)))
 
     await expect(app.bootstrap()).rejects.toThrow(ErrGuardConfiguration)
   })
@@ -839,7 +840,7 @@ describe('authorization', () => {
   void [AuthGuard, RolesGuard, CatsController]
 
   async function ready() {
-    const app = createWebApplication().guards(g => g.global(AuthGuard, RolesGuard))
+    const app = createWebApplication().install(Guards(g => g.global(AuthGuard, RolesGuard)))
     await app.bootstrap()
     return app
   }

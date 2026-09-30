@@ -11,6 +11,8 @@ import {
   Principal,
   createWebApplication,
   $p,
+  Authentication,
+  authentication,
 } from '../../../index.js'
 
 function basicHeader(user: string, pass: string): string {
@@ -31,15 +33,19 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicOkController]
 
     const builder = createWebApplication()
-    builder.authentication(auth =>
-      auth.addBasic(b =>
-        b.validate((_ctx, user, pass) =>
-          user === 'alice' && pass === 'secret'
-            ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
-            : null,
+    builder
+      .install(
+        Authentication(auth =>
+          auth.addBasic(b =>
+            b.validate((_ctx, user, pass) =>
+              user === 'alice' && pass === 'secret'
+                ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+                : null,
+            ),
+          ),
         ),
-      ),
-    )
+      )
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -60,7 +66,9 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicChallengeController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null)))
+    builder
+      .install(Authentication(auth => auth.addBasic(b => b.realm('My App').validate(() => null))))
+      .with(authentication())
     const app = builder
     await app.bootstrap()
 
@@ -81,7 +89,7 @@ describe('BasicAuthenticationHandler (application)', () => {
     void [BasicBadController]
 
     const builder = createWebApplication()
-    builder.authentication(auth => auth.addBasic(b => b.validate(() => null)))
+    builder.install(Authentication(auth => auth.addBasic(b => b.validate(() => null)))).with(authentication())
     const app = builder
     await app.bootstrap()
 

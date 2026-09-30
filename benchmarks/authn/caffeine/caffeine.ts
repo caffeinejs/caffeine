@@ -1,4 +1,14 @@
-import { Authorize, Controller, Get, JWTService, Post, Status, createWebApplication } from '@caffeinejs/http'
+import {
+  Authorize,
+  Controller,
+  Get,
+  JWTService,
+  Post,
+  Status,
+  createWebApplication,
+  Authentication,
+  authentication,
+} from '@caffeinejs/http'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
 
@@ -23,8 +33,10 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication().authentication(auth =>
-  auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h')),
-)
+const app = createWebApplication()
+  .install(
+    Authentication(auth => auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h'))),
+  )
+  .with(authentication())
 
 await app.run({ port: PORT, host: '0.0.0.0' })

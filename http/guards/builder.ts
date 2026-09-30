@@ -26,3 +26,21 @@ export class GuardsBuilder implements Feature {
     kit.container.bind(kGlobalGuards, t => t.toValue(this.#keys).lifetime(Scopes.SINGLETON).internal())
   }
 }
+
+/**
+ * The global-guards feature: the container Keys of guards that run on every route, in registration order,
+ * before controller- and method-level `@UseGuards`.
+ *
+ * The callback runs immediately: guards have nothing to read from the configuration tree, so there is no
+ * `(g, kit)` callback — unlike `Authentication((a, kit) => …)`. Installing it is not required for
+ * `@UseGuards` on controllers.
+ *
+ * ```ts
+ * .install(Guards(g => g.global(RolesGuard, kNamedAuthGuard)))
+ * ```
+ */
+export function Guards(configure: (guards: GuardsBuilder) => void): Feature {
+  const builder = new GuardsBuilder()
+  configure(builder)
+  return builder
+}

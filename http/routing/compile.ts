@@ -45,8 +45,8 @@ export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMe
  * sources compiling routes into the same application see one guard instance per key and one set of policies.
  */
 export function createRouteGroupCompiler(container: Container): RouteGroupCompiler {
-  // Absent when the application never installed authorization — no `.authentication(...)` and no explicit
-  // `.authorization(...)`. A protected route with authorization absent is refused separately, at start-up, by
+  // Absent when the application never installed authorization — no authentication feature and no explicit
+  // `Authorization(...)`. A protected route with authorization absent is refused separately, at start-up, by
   // `assertAuthorizationConfigured` — not here, so the failure names the real cause instead of a missing
   // handler/policy.
   const authzOpts = container.getOptional<AuthorizationOptions>(kAuthzOpts)
@@ -57,7 +57,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
     : undefined
 
   const compiledGuards = new Map<InjectionToken<Guard>, CompiledGuard<Guard>>()
-  // Absent when the application never called `.guards(...)` — no global guards, same as an empty list.
+  // Absent when the application never installed `Guards(...)` — no global guards, same as an empty list.
   const globalGuardKeys = container.getOptional(kGlobalGuards) ?? []
   const globalGuards = dedupe(compileGuardKeys(container, globalGuardKeys, 'application', compiledGuards))
 

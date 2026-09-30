@@ -217,13 +217,16 @@ declarations **add up**: none replaces another, on one route or across the level
 
 ## Health
 
-`.with(health())` mounts `/livez`, `/readyz` and `/startupz`. The probes answer from `ApplicationHealth`
+`.with(healthProbes())` mounts `/livez`, `/readyz` and `/startupz`. The probes answer from `ApplicationHealth`
 (`@caffeinejs/std/health`), which every application has — headless ones too — so any other caller, such as a
 readiness check a host polls, a custom route or a test, reads the same instance as `app.health`, or injects it, and
-shares one evaluation with the routes.
+shares one evaluation with the routes. The evaluation budgets are the `Health()` feature's:
+`.install(Health(h => h.cacheTTL('2s')))` tunes them with or without the probes mounted.
 
 ```ts
-const app = createWebApplication().with(health(h => h.cacheTTL('2s')))
+const app = createWebApplication()
+  .install(Health(h => h.cacheTTL('2s')))
+  .with(healthProbes())
 await app.run()
 
 const readiness = await app.health.readiness() // { ok, checks, outcomes }
@@ -232,8 +235,8 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
 - An indicator is a singleton bean extending `HealthIndicator`; `@Injectable()` auto-extends it. It joins
   `readiness` unless its `groups` say otherwise — keep dependencies out of `liveness`. `critical: false` reports
   `degraded` instead of failing the probe.
-- The budgets set on `health()` — `indicatorTimeout`, `probeDeadline`, `cacheTTL` — apply to every caller, even
-  with `.enabled(false)`. Without `health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
+- The budgets set on `Health()` — `indicatorTimeout`, `probeDeadline`, `cacheTTL` — apply to every caller, probes
+  mounted or not. Without `Health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
 - Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
   `app.health` as [docs/watt.md](../../docs/watt.md) shows.
 

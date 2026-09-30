@@ -31,9 +31,16 @@ export type FastifyPluginWithOptions = readonly [
 export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
 
 /**
+ * Keys the server half of a framework built-in: the extension `WebApplication` itself puts in a head slot,
+ * ahead of everything `.with(...)` registers. Symbol-keyed so it stays off the fluent surface the
+ * `.cookie(...)` and `.errorHandling(...)` callbacks see.
+ */
+export const kServerExtension = Symbol('caffeine.http.server.extension')
+
+/**
  * Produces a Fastify plugin from what the application resolved at start-up: its configuration, its container and
- * its logger. What `.with(...)` takes on a Fastify application when the argument is a function, and how a
- * third-party Fastify plugin is configured from the application's own settings.
+ * its logger. What `.with(...)` takes on a Fastify application, and how a third-party Fastify plugin is
+ * configured from the application's own settings.
  *
  * A plugin taking options is handed back **with** them, as a pair, rather than wrapped in a plugin that closes
  * over them. `@fastify/cors` and every other official plugin already wraps itself in `fastify-plugin`, so
@@ -44,7 +51,7 @@ export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
  * callback-style or async, this package's own or a third party's untouched.
  *
  * Called once, after `container.init()`, so `container.get(...)` is legal here. Its slot is where the `.with(...)`
- * call was written, so an `await` inside the factory cannot reorder it relative to `.authentication(...)`.
+ * call was written, so an `await` inside the factory cannot reorder it relative to the plugins around it.
  *
  * Encapsulation is the plugin author's to decide, exactly as it is for `@fastify/cors` or any other plugin.
  * Wrap it in `fastify-plugin` and its hooks and decorations apply to the context it was registered in; leave

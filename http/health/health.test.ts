@@ -7,73 +7,60 @@ import { kHealthRegistryOptions } from '@caffeinejs/std/health'
 import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { WebApplication, createWebApplication } from '../index.js'
-import { HealthBuilder } from './builder.js'
+import { Health, WebApplication, createWebApplication, healthProbes } from '../index.js'
 import { ErrHealthConfiguration } from './errors.js'
-import { health } from './health.js'
 import { healthConfigSchema, type HealthConfig } from './options.js'
+import { HealthProbesBuilder } from './probes_plugin.js'
 
-describe('HealthBuilder.resolve', () => {
+describe('HealthProbesBuilder.resolve', () => {
   it('enables the probes by default, with no call at all', () => {
-    expect(new HealthBuilder().resolve().enabled).toBe(true)
+    expect(new HealthProbesBuilder().resolve().enabled).toBe(true)
   })
 
   it('lets an explicit call turn them off', () => {
-    expect(new HealthBuilder().enabled(false).resolve().enabled).toBe(false)
+    expect(new HealthProbesBuilder().enabled(false).resolve().enabled).toBe(false)
   })
 
   it('gates the default on the environment once .k8s() is called', () => {
     // No KUBERNETES_SERVICE_HOST under the test runner.
-    expect(new HealthBuilder().k8s().resolve().enabled).toBe(false)
-  })
-
-  it('normalizes every duration to milliseconds', () => {
-    const options = new HealthBuilder().indicatorTimeout('500ms').probeDeadline(1_500).cacheTTL('1s').resolve()
-
-    expect(options).toMatchObject({
-      indicatorTimeoutMs: 500,
-      probeDeadlineMs: 1_500,
-      cacheTTLMs: 1_000,
-    })
+    expect(new HealthProbesBuilder().k8s().resolve().enabled).toBe(false)
   })
 
   it('drives the configuration from a configured block', () => {
-    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: true }
+    const config: Partial<HealthConfig> = { verbose: true, paths: { ready: '/health/ready' } }
 
-    const options = new HealthBuilder().config(config).resolve()
+    const options = new HealthProbesBuilder().config(config).resolve()
 
     expect(options).toMatchObject({
       enabled: true,
-      indicatorTimeoutMs: 30,
-      cacheTTLMs: 9_000,
       verbose: true,
+      paths: { ready: '/health/ready' },
     })
   })
 
-  // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
+  // Per key: `verbose` was named in code and stands, while everything the code left alone comes from the
   // block the callback wired.
-  it('keeps a code-set duration and takes the rest from the configured block', () => {
-    const config: Partial<HealthConfig> = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: true }
+  it('keeps a code-set value and takes the rest from the configured block', () => {
+    const config: Partial<HealthConfig> = { verbose: false, exclude: true }
 
-    const options = new HealthBuilder().cacheTTL('10ms').probeDeadline('7s').config(config).resolve()
+    const options = new HealthProbesBuilder().verbose().config(config).resolve()
 
     expect(options).toMatchObject({
       // Named in code, so it stands...
-      cacheTTLMs: 10,
       verbose: true,
-      // ...and the builder value stands for what it does not.
-      probeDeadlineMs: 7_000,
+      // ...and the block stands for what the code left alone.
+      exclude: true,
     })
   })
 
   it('lets a configured enabled win over both the fluent default and .k8s()', () => {
-    const options = new HealthBuilder().k8s().config({ enabled: true }).resolve()
+    const options = new HealthProbesBuilder().k8s().config({ enabled: true }).resolve()
 
     expect(options.enabled).toBe(true)
   })
 })
 
-describe('health()', () => {
+describe('healthProbes() and Health()', () => {
   const rootSchema = $t.Object({ health: healthConfigSchema })
   const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
@@ -99,7 +86,7 @@ describe('health()', () => {
   })
 
   it('mounts the probes just by being installed', async () => {
-    app = createWebApplication().with(health())
+    app = createWebApplication().with(healthProbes())
 
     await app.run()
 
@@ -119,7 +106,7 @@ describe('health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
 
-    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
 
     await app.bootstrap()
 
@@ -133,11 +120,38 @@ describe('health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__CACHE_TTL: '5s' } }))
       .build()
 
-    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ config: conf }).install(Health((h, { config }) => h.config(config.health)))
 
     await app.bootstrap()
 
     expect(app.container.get(kHealthRegistryOptions).cacheTTLMs).toBe(5_000)
+  })
+
+  it('normalizes every budget to milliseconds and binds them for the whole application', async () => {
+    app = createWebApplication().install(Health(h => h.indicatorTimeout('500ms').probeDeadline(1_500).cacheTTL('1s')))
+
+    await app.bootstrap()
+
+    expect(app.container.get(kHealthRegistryOptions)).toEqual({
+      indicatorTimeoutMs: 500,
+      probeDeadlineMs: 1_500,
+      cacheTTLMs: 1_000,
+    })
+  })
+
+  // Per key: `cacheTTL` was named in code and stands, while everything the code left alone comes from the
+  // block the callback wired.
+  it('keeps a code-set budget and takes the rest from the configured block', async () => {
+    app = createWebApplication().install(
+      Health(h => h.cacheTTL('10ms').config({ indicatorTimeout: '30ms', cacheTtl: '9s' })),
+    )
+
+    await app.bootstrap()
+
+    expect(app.container.get(kHealthRegistryOptions)).toMatchObject({
+      cacheTTLMs: 10,
+      indicatorTimeoutMs: 30,
+    })
   })
 
   // A bare number names no unit. Read as duration text it was 0: every indicator that awaits was cancelled on the
@@ -147,7 +161,7 @@ describe('health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__INDICATOR_TIMEOUT: '5000' } }))
       .build()
     const booting = createWebApplication({ config: conf })
-      .with(health((h, { config }) => h.config(config.health)))
+      .with(healthProbes((h, { config }) => h.config(config.health)))
       .bootstrap()
 
     await expect(booting).rejects.toThrow(ErrConfigValidation)
@@ -160,10 +174,10 @@ describe('health()', () => {
       .source(new EnvConfigSource({ env: { HEALTH__PROBE_DEADLINE: '0s' } }))
       .build()
     const fromCode = createWebApplication()
-      .with(health(h => h.indicatorTimeout(0)))
+      .install(Health(h => h.indicatorTimeout(0)))
       .bootstrap()
     const fromConfig = createWebApplication({ config: conf })
-      .with(health((h, { config }) => h.config(config.health)))
+      .install(Health((h, { config }) => h.config(config.health)))
       .bootstrap()
 
     await expect(fromCode).rejects.toThrow(ErrHealthConfiguration)
@@ -177,7 +191,7 @@ describe('health()', () => {
     const conf = newConfiguration(rootSchema, kRootConfig)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
       .build()
-    app = createWebApplication({ config: conf }).with(health())
+    app = createWebApplication({ config: conf }).with(healthProbes())
 
     await app.run()
 
@@ -189,7 +203,7 @@ describe('health()', () => {
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema, kConfig).source(mutable).build()
-    app = createWebApplication({ config: conf }).with(health((h, { config }) => h.config(config.health)))
+    app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
 
     await app.run()
 
@@ -206,7 +220,7 @@ describe('health()', () => {
   // health() reads the application's own ApplicationAvailability off the container rather than a fresh one —
   // otherwise liveness would never reflect what the application lifecycle actually does to it.
   it("reflects the application's own availability, not a container-constructed one", async () => {
-    app = createWebApplication().with(health())
+    app = createWebApplication().with(healthProbes())
 
     await app.run()
 

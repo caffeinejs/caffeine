@@ -44,20 +44,20 @@ class Users {
 
 describe('TypeORM() feature', function () {
   it('should refuse a second unnamed instance', function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     // Both would bind under TypeORM's `DataSource`, and the second would silently shadow or fight the first.
-    expect(() => app.with(TypeORM(t => t.dataSource(memory())))).toThrow(ErrFeatureAlreadyInstalled)
+    expect(() => app.install(TypeORM(t => t.dataSource(memory())))).toThrow(ErrFeatureAlreadyInstalled)
   })
 
   it('should allow a named instance alongside the unnamed one', function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
-    expect(() => app.with(TypeORM('reports', t => t.dataSource(memory())))).not.toThrow()
+    expect(() => app.install(TypeORM('reports', t => t.dataSource(memory())))).not.toThrow()
   })
 
   it('should fail bootstrap() when the callback never provides options', async function () {
-    const app = newApplication().with(TypeORM(() => undefined))
+    const app = newApplication().install(TypeORM(() => undefined))
 
     opened.push(() => app.close())
 
@@ -69,7 +69,7 @@ describe('TypeORM() feature', function () {
 
 describe('TypeORM() over a real database', function () {
   it('should hand a working repository, connected before bootstrap() returns', async function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
@@ -92,7 +92,7 @@ describe('TypeORM() over a real database', function () {
       ) {}
     }
 
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(Shop, t => t.toClass(Shop, [$repository(UserEntity), $repository(OrderEntity)]))
 
@@ -113,7 +113,7 @@ describe('TypeORM() over a real database', function () {
   })
 
   it('should roll back a transaction started from the injected repository', async function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
@@ -142,7 +142,7 @@ describe('TypeORM() over a real database', function () {
       constructor(readonly users: Repository<User>) {}
     }
 
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
     app.container.bind(Readers, t => t.toClass(Readers, [$repository(UserEntity)]))
@@ -163,7 +163,7 @@ describe('TypeORM() over a real database', function () {
       ) {}
     }
 
-    const app = newApplication().with(TypeORM('reports', t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM('reports', t => t.dataSource(memory())))
 
     app.container.bind(Pair, t =>
       t.toClass(Pair, [$repository(UserEntity, 'reports'), $repository(UserEntity, dataSourceKey('reports'))]),
@@ -188,8 +188,8 @@ describe('TypeORM() over a real database', function () {
     }
 
     const app = newApplication()
-      .with(TypeORM(t => t.dataSource(memory())))
-      .with(TypeORM('reports', t => t.dataSource(memory())))
+      .install(TypeORM(t => t.dataSource(memory())))
+      .install(TypeORM('reports', t => t.dataSource(memory())))
 
     app.container.bind(Service, t => t.toClass(Service, [$repository(UserEntity), $repository(UserEntity, 'reports')]))
 
@@ -210,7 +210,7 @@ describe('TypeORM() over a real database', function () {
   })
 
   it('should reopen a database exported before the application closed', async function () {
-    const first = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const first = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     first.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
@@ -221,7 +221,9 @@ describe('TypeORM() over a real database', function () {
 
     await first.close()
 
-    const second = newApplication().with(TypeORM(t => t.dataSource(memory({ synchronize: false, database: snapshot }))))
+    const second = newApplication().install(
+      TypeORM(t => t.dataSource(memory({ synchronize: false, database: snapshot }))),
+    )
 
     second.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
@@ -247,7 +249,7 @@ describe('TypeORM() lifecycle', function () {
       }
     }
 
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     app.container.bind(AuditLog, t => t.toClass(AuditLog, [$repository(UserEntity)]))
 
@@ -268,7 +270,7 @@ describe('TypeORM() lifecycle', function () {
   })
 
   it('should wait for the connection to close before close() resolves', async function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     await app.bootstrap()
     opened.push(() => app.close())
@@ -294,7 +296,7 @@ describe('TypeORM() lifecycle', function () {
   })
 
   it('should leave close() safe to call twice', async function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory())))
+    const app = newApplication().install(TypeORM(t => t.dataSource(memory())))
 
     await app.bootstrap()
 
@@ -317,7 +319,9 @@ describe('TypeORM() lifecycle', function () {
   })
 
   it('should reject bootstrap() when the database cannot be opened', async function () {
-    const app = newApplication().with(TypeORM(t => t.dataSource(memory({ database: new Uint8Array([1, 2, 3, 4, 5]) }))))
+    const app = newApplication().install(
+      TypeORM(t => t.dataSource(memory({ database: new Uint8Array([1, 2, 3, 4, 5]) }))),
+    )
 
     app.container.bind(Users, t => t.toClass(Users, [$repository(UserEntity)]))
 
@@ -332,8 +336,8 @@ describe('TypeORM() lifecycle', function () {
 
   it('should close every instance when several are installed', async function () {
     const app = newApplication()
-      .with(TypeORM(t => t.dataSource(memory())))
-      .with(TypeORM('reports', t => t.dataSource(memory())))
+      .install(TypeORM(t => t.dataSource(memory())))
+      .install(TypeORM('reports', t => t.dataSource(memory())))
 
     await app.bootstrap()
 

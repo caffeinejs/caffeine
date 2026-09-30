@@ -10,6 +10,8 @@ import {
   UserProvider,
   isSafeReturnPath,
   newRouter,
+  Authentication,
+  authentication,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -126,25 +128,28 @@ describe('cookie session behind a credentials login', () => {
     running = await startApp(
       app =>
         app
-          .authentication(auth =>
-            auth
-              .addCookie(c =>
-                c
-                  .sessionSecret(SESSION_SECRET)
-                  // Plain http on localhost; a Secure cookie would never be sent back.
-                  .secure(false)
-                  .loginPath('/login')
-                  .accessDeniedPath('/denied')
-                  .validatePrincipal((_ctx, principal) => {
-                    if (outage) {
-                      throw new Error('the user store is unreachable')
-                    }
+          .install(
+            Authentication(auth =>
+              auth
+                .addCookie(c =>
+                  c
+                    .sessionSecret(SESSION_SECRET)
+                    // Plain http on localhost; a Secure cookie would never be sent back.
+                    .secure(false)
+                    .loginPath('/login')
+                    .accessDeniedPath('/denied')
+                    .validatePrincipal((_ctx, principal) => {
+                      if (outage) {
+                        throw new Error('the user store is unreachable')
+                      }
 
-                    return revoked.has(String(principal.findFirst('sub')?.value)) ? null : principal
-                  }),
-              )
-              .addCredentials(),
+                      return revoked.has(String(principal.findFirst('sub')?.value)) ? null : principal
+                    }),
+                )
+                .addCredentials(),
+            ),
           )
+          .with(authentication())
           .mount(routes()),
       { container },
     )
@@ -353,9 +358,12 @@ describe('a session cookie with the __Host- prefix', () => {
     const running = await startApp(
       app =>
         app
-          .authentication(auth =>
-            auth.addCookie(c => c.sessionSecret(SESSION_SECRET).cookieName(NAME)).addCredentials(),
+          .install(
+            Authentication(auth =>
+              auth.addCookie(c => c.sessionSecret(SESSION_SECRET).cookieName(NAME)).addCredentials(),
+            ),
           )
+          .with(authentication())
           .mount(routes()),
       { container },
     )

@@ -13,6 +13,9 @@ import {
   Principal,
   WebApplication,
   createWebApplication,
+  Authentication,
+  authentication,
+  Authorization,
 } from '../../index.js'
 
 /**
@@ -62,9 +65,11 @@ void [UndecoratedController, OptedOutController]
 function buildApp(withFallback: boolean): WebApplication {
   const builder = createWebApplication()
 
-  builder.authentication(auth => auth.addStrategy('Header', new HeaderSchemeHandler()).default('Header'))
+  builder
+    .install(Authentication(auth => auth.addStrategy('Header', new HeaderSchemeHandler()).default('Header')))
+    .with(authentication())
   if (withFallback) {
-    builder.authorization(authz => authz.requireAuthenticatedByDefault())
+    builder.install(Authorization(authz => authz.requireAuthenticatedByDefault()))
   }
 
   return builder as WebApplication

@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, newRouter, type Context } from '../../../index.js'
+import { createWebApplication, newRouter, type Context, Authentication, authentication } from '../../../index.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
@@ -32,20 +32,23 @@ function pinoTo(logged: LogEntry[], level = 'warn') {
 function application(onFail?: (ctx: Context, error: Error) => void, logged: LogEntry[] = []) {
   return createWebApplication()
     .server(() => ({ factory: { logger: pinoTo(logged) } }))
-    .authentication(auth =>
-      auth.addOIDC('Provider', o => {
-        o.clientID('client')
-          .clientSecret('client-secret')
-          .sessionSecret(SESSION_SECRET)
-          .callbackURL('https://app.example.com/oidc/callback')
-          .discoveryURL(ISSUER)
-          .issuer(ISSUER)
+    .install(
+      Authentication(auth =>
+        auth.addOIDC('Provider', o => {
+          o.clientID('client')
+            .clientSecret('client-secret')
+            .sessionSecret(SESSION_SECRET)
+            .callbackURL('https://app.example.com/oidc/callback')
+            .discoveryURL(ISSUER)
+            .issuer(ISSUER)
 
-        if (onFail !== undefined) {
-          o.onFail(onFail)
-        }
-      }),
+          if (onFail !== undefined) {
+            o.onFail(onFail)
+          }
+        }),
+      ),
     )
+    .with(authentication())
     .mount(
       newRouter().mount(
         newRouter('/account')

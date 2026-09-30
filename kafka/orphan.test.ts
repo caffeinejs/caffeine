@@ -5,7 +5,7 @@ import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'
 import { KafkaHandler } from './decorators/kafka_handler.js'
 import { KafkaListener } from './decorators/kafka_listener.js'
 import { ErrKafkaUnknownInstance } from './errors.js'
-import { kafka } from './plugin.js'
+import { Kafka } from './plugin.js'
 
 function noopClients(): KafkaClients {
   const producer: ProducerClient = { send: () => Promise.resolve(), close: () => Promise.resolve() }
@@ -27,8 +27,8 @@ class GhostConsumer {
 
 describe('orphan handler detection', () => {
   it('fails fast at run() when a handler targets an unconfigured instance', async () => {
-    const app = createApplication({}).with(
-      kafka(k => k.brokers('localhost:9092').groupId('g'), { clients: noopClients() }),
+    const app = createApplication({}).install(
+      Kafka(k => k.brokers('localhost:9092').groupId('g'), { clients: noopClients() }),
     ) // only the default instance
 
     await expect(app.run()).rejects.toBeInstanceOf(ErrKafkaUnknownInstance)

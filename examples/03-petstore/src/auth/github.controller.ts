@@ -8,7 +8,7 @@ import { Dashboard } from './html/Dashboard.js'
 // that starts it (/login/github, its `loginPath`) and the one GitHub comes back to (/login/github/callback).
 //
 // Hidden from the OpenAPI document: these are browser redirects and rendered pages, not API operations. The
-// GitHub scheme itself still appears under components.securitySchemes, derived from .authentication(...).
+// GitHub scheme itself still appears under components.securitySchemes, derived from Authentication(...).
 @APIGroup({ hidden: true })
 @Controller('/', [AuthenticationService])
 export class GithubAuthController {
