@@ -1,10 +1,5 @@
-import {
-  InlineConfigSource,
-  loadConfig,
-  type ConfigSchema,
-  type ConfigView,
-  type LiveConfig,
-} from '@caffeinejs/std/config'
+import { loadConfig, type ConfigSchema, type ConfigView, type LiveConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { bench, do_not_optimize, group, run, summary } from 'mitata'
 

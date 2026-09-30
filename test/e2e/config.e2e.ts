@@ -5,15 +5,11 @@ import { join } from 'node:path'
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
-import {
-  ConfigStore,
-  EnvConfigSource,
-  InlineConfigSource,
-  JSONConfigSource,
-  SpringCloudConfigSource,
-  type ConfigSource,
-  type InferConfig,
-} from '@caffeinejs/std/config'
+import { ConfigStore, type ConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
+import { JSONConfigSource } from '@caffeinejs/std/config/json'
+import { SpringCloudConfigSource } from '@caffeinejs/std/config/spring'
 import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 

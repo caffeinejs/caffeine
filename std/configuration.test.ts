@@ -2,13 +2,8 @@ import { $i, CaffeineIoC, Scopes, token, type NamedToken } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 
-import {
-  CONFIG_REFRESH_LABEL,
-  ConfigStore,
-  InlineConfigSource,
-  type ConfigSource,
-  type InferConfig,
-} from './config/index.js'
+import { CONFIG_REFRESH_LABEL, ConfigStore, type ConfigSource, type InferConfig } from './config/index.js'
+import { InlineConfigSource } from './config/sources/inline/index.js'
 import { newConfiguration } from './configuration.js'
 import { createApplication } from './index.js'
 import { $t } from './schema/t.js'

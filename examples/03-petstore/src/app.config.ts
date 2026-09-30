@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
-import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import type { InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'
 
 /**

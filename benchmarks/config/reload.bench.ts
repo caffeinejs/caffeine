@@ -1,10 +1,6 @@
-import {
-  EnvConfigSource,
-  InlineConfigSource,
-  loadConfig,
-  type ConfigSchema,
-  type ConfigSource,
-} from '@caffeinejs/std/config'
+import { loadConfig, type ConfigSchema, type ConfigSource } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { bench, do_not_optimize, run, summary } from 'mitata'
 

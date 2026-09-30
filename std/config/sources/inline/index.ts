@@ -1,1 +1,1 @@
-export * from './inline.js'
+export { InlineConfigSource } from './inline.js'

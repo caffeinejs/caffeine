@@ -1,1 +1,1 @@
-export * from './yaml.js'
+export { YAMLConfigSource } from './yaml.js'

@@ -1,1 +1,1 @@
-export * from './spring.js'
+export { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './spring.js'

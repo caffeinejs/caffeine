@@ -1,7 +1,8 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { CONFIG_REFRESH_LABEL, InlineConfigSource, type ConfigSource } from './config/index.js'
+import { CONFIG_REFRESH_LABEL, type ConfigSource } from './config/index.js'
+import { InlineConfigSource } from './config/sources/inline/index.js'
 import { kFeatureName } from './feature.js'
 import { FeatureBuilder, type FeatureConfigurer } from './feature_builder.js'
 import { createApplication, newConfiguration } from './index.js'

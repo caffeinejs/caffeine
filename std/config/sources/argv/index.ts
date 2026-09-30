@@ -1,1 +1,1 @@
-export * from './argv.js'
+export { ArgvConfigSource, type ArgvConfigSourceOptions } from './argv.js'

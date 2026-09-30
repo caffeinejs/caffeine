@@ -6,7 +6,9 @@ import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigSource, JSONConfigSource, type DotenvLoader, type InferConfig } from './config/index.js'
+import type { DotenvLoader, InferConfig } from './config/index.js'
+import { InlineConfigSource } from './config/sources/inline/index.js'
+import { JSONConfigSource } from './config/sources/json/index.js'
 import {
   ApplicationHealth,
   ErrHealthIndicatorNotSingleton,

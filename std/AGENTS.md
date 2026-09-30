@@ -5,6 +5,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `index.ts` exports only the root-level modules: `application`, `configuration`, `feature`, `feature_builder`.
 - Each sub-directory (`duration/`, `schema/`, `shutdown/`, …) is its own `package.json` `exports` subpath and is
   never re-exported from `index.ts`; outside `std/`, import it as `@caffeinejs/std/<sub>`.
+- Each config source, `config/sources/<name>/`, is its own `exports` subpath, `@caffeinejs/std/config/<name>`, and
+  is never re-exported from `config/index.ts`. Its `index.ts` names the public surface; code in `std` reaches a
+  helper it leaves out, such as `parseArgv`, through the module file.
 - Health indicators reach `ApplicationHealth` only as container beans bound with `.extends(HealthIndicator)`; do
   not add a registration API beside that.
 - Nothing in `health/` knows about HTTP: rendering and routes stay in `http/health/`.

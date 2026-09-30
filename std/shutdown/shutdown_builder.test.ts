@@ -3,13 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   CONFIG_REFRESH_LABEL,
-  EnvConfigSource,
   ErrConfigValidation,
-  InlineConfigSource,
   type ConfigDefinition,
   type ConfigSource,
   type InferConfig,
 } from '../config/index.js'
+import { EnvConfigSource } from '../config/sources/env/index.js'
+import { InlineConfigSource } from '../config/sources/inline/index.js'
 import { createApplication, newConfiguration } from '../index.js'
 import { $t } from '../schema/t.js'
 import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'

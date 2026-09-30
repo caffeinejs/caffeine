@@ -1,6 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName, newConfiguration } from '@caffeinejs/std'
-import { InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import type { InferConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 import { $t } from '@caffeinejs/std/schema'
 import { type FastifyInstance, type FastifyPluginAsync } from 'fastify'

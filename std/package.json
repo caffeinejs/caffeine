@@ -19,9 +19,37 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
+    "./config/argv": {
+      "types": "./dist/config/sources/argv/index.d.ts",
+      "default": "./dist/config/sources/argv/index.js"
+    },
+    "./config/env": {
+      "types": "./dist/config/sources/env/index.d.ts",
+      "default": "./dist/config/sources/env/index.js"
+    },
+    "./config/file": {
+      "types": "./dist/config/sources/file/index.d.ts",
+      "default": "./dist/config/sources/file/index.js"
+    },
+    "./config/inline": {
+      "types": "./dist/config/sources/inline/index.d.ts",
+      "default": "./dist/config/sources/inline/index.js"
+    },
+    "./config/json": {
+      "types": "./dist/config/sources/json/index.d.ts",
+      "default": "./dist/config/sources/json/index.js"
+    },
     "./config/nodejs": {
       "types": "./dist/config/nodejs/index.d.ts",
       "default": "./dist/config/nodejs/index.js"
+    },
+    "./config/spring": {
+      "types": "./dist/config/sources/spring/index.d.ts",
+      "default": "./dist/config/sources/spring/index.js"
+    },
+    "./config/yaml": {
+      "types": "./dist/config/sources/yaml/index.d.ts",
+      "default": "./dist/config/sources/yaml/index.js"
     },
     "./duration": {
       "types": "./dist/duration/index.d.ts",

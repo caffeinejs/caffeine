@@ -1,1 +1,1 @@
-export * from './json.js'
+export { JSONConfigSource } from './json.js'

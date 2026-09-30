@@ -1,9 +1,7 @@
 import type { NamedToken } from '@caffeinejs/di'
 
 import {
-  ArgvConfigSource,
   DEFAULT_LOAD_TIMEOUT_MS,
-  type ArgvConfigSourceOptions,
   type ConfigDefinition,
   type ConfigSchema,
   type ConfigSource,
@@ -11,6 +9,7 @@ import {
   type DotenvOptions,
   type InferConfig,
 } from './config/index.js'
+import { ArgvConfigSource, type ArgvConfigSourceOptions } from './config/sources/argv/index.js'
 import { type Duration, toMillis } from './duration/index.js'
 
 /**

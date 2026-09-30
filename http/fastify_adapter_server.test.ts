@@ -1,12 +1,8 @@
 import { token } from '@caffeinejs/di'
 import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/std'
-import {
-  CONFIG_REFRESH_LABEL,
-  EnvConfigSource,
-  InlineConfigSource,
-  type ConfigSource,
-  type InferConfig,
-} from '@caffeinejs/std/config'
+import { CONFIG_REFRESH_LABEL, type ConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 

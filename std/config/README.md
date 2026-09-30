@@ -5,7 +5,8 @@ application's own schema, and read as a plain object. A live source can change p
 runs, and every reader of the configuration sees the new values without asking.
 
 ```ts
-import { EnvConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import type { InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
 ```
 
 One rule runs through all of it: **a fluent method is the last word.** Configuration reaches a feature because the
@@ -177,6 +178,10 @@ anything.
 | `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |
 | `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
 
+Each source is its own entry point, named after its folder in `sources/`:
+`import { EnvConfigSource } from '@caffeinejs/std/config/env'`, and likewise `argv`, `file`, `inline`, `json`,
+`spring` and `yaml`. `@caffeinejs/std/config` itself exports none of them.
+
 `SHUTDOWN__DRAIN_DELAY` reaches `shutdown.drainDelay`: `__` splits segments and `_` within a segment folds to camelCase.
 Without a prefix every variable of the process is read; a name that maps to no path, such as `_`, is skipped, and
 so is a variable whose path another one uses as a parent, with a warning. On the command line that is an error.
@@ -290,7 +295,7 @@ the application hands it a loader, and `@caffeinejs/std/config/nodejs` has one b
 
 ```ts
 import { newConfiguration } from '@caffeinejs/std'
-import { EnvConfigSource } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { loadEnvFiles } from '@caffeinejs/std/config/nodejs'
 
 newConfiguration(ConfigSchema, kConfig)

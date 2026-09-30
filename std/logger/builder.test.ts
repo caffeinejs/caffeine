@@ -2,7 +2,7 @@ import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Application } from '../application.js'
-import { InlineConfigSource } from '../config/index.js'
+import { InlineConfigSource } from '../config/sources/inline/index.js'
 import { newConfiguration } from '../configuration.js'
 import { $t } from '../schema/t.js'
 import { LoggerBuilder } from './builder.js'

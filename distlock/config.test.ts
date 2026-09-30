@@ -1,6 +1,7 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
 import { createApplication, newConfiguration } from '@caffeinejs/std'
-import { ErrConfigValidation, InlineConfigSource, type InferConfig } from '@caffeinejs/std/config'
+import { ErrConfigValidation, type InferConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 

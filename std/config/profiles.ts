@@ -1,6 +1,6 @@
 import { textList } from '../schema/text.js'
 import { ErrConfig } from './errors.js'
-import { hostArgv, parseArgv } from './sources/argv/index.js'
+import { hostArgv, parseArgv } from './sources/argv/argv.js'
 
 const ARG_PATH = 'caffeine.profiles'
 

@@ -7,7 +7,8 @@ import {
   type Feature,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
-import { InlineConfigSource, type InferConfig, type LiveConfig } from '@caffeinejs/std/config'
+import type { InferConfig, LiveConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'

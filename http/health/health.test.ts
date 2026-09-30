@@ -1,13 +1,8 @@
 import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
-import {
-  CONFIG_REFRESH_LABEL,
-  EnvConfigSource,
-  ErrConfigValidation,
-  InlineConfigSource,
-  type InferConfig,
-  type ConfigSource,
-} from '@caffeinejs/std/config'
+import { CONFIG_REFRESH_LABEL, ErrConfigValidation, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { kHealthRegistryOptions } from '@caffeinejs/std/health'
 import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'

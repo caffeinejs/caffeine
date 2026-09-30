@@ -1,6 +1,6 @@
-import type { YAMLError } from 'yaml'
+import { LineCounter, parseAllDocuments, type YAMLError } from 'yaml'
 
-import { configDocuments, FileConfigSource, type FileConfigSourceOptions } from '../file/index.js'
+import { configDocuments, FileConfigSource, type FileConfigSourceOptions } from '../file/file.js'
 
 /**
  * Configuration from a YAML file, with profile siblings layered over it as for any {@link FileConfigSource}.
@@ -18,9 +18,7 @@ export class YAMLConfigSource extends FileConfigSource {
   }
 }
 
-async function parseYAML(text: string): Promise<Record<string, unknown>> {
-  // Loaded on first use, so an application that reads no YAML never pays for the parser.
-  const { LineCounter, parseAllDocuments } = await import('yaml')
+function parseYAML(text: string): Record<string, unknown> {
   const lineCounter = new LineCounter()
   const documents = parseAllDocuments(text, { merge: true, lineCounter, prettyErrors: false })
 
