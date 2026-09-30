@@ -15,6 +15,8 @@ import {
   $p,
   Authentication,
   authentication,
+  type AuthenticationGateBuilder,
+  type HTTPPluginConfigurer,
 } from '../../../index.js'
 import { encodeSession, claimsToSession } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
@@ -29,7 +31,11 @@ const SCHEME = 'Google'
 
 function makeOIDCApp(
   jwksResolver?: (uri: string) => JWTVerifyGetKey,
-  { basePath, callbackURL = CALLBACK_URL }: { basePath?: string; callbackURL?: string } = {},
+  {
+    basePath,
+    callbackURL = CALLBACK_URL,
+    gate,
+  }: { basePath?: string; callbackURL?: string; gate?: HTTPPluginConfigurer<AuthenticationGateBuilder> } = {},
 ) {
   const builder = createWebApplication()
   if (basePath !== undefined) {
@@ -55,7 +61,7 @@ function makeOIDCApp(
         }),
       ),
     )
-    .with(authentication())
+    .with(authentication(gate))
   return builder
 }
 
@@ -102,6 +108,32 @@ describe('OIDC integration', () => {
     expect(parsed.searchParams.get('nonce')).toBeTruthy()
     expect(parsed.searchParams.get('code_challenge')).toBeTruthy()
     expect(parsed.searchParams.get('code_challenge_method')).toBe('S256')
+  })
+
+  // The login and callback routes register once, claimed by the first gate that may: one that opts out takes
+  // nothing, and leaves them to the next.
+  describe('the gate that claims the login and callback routes', () => {
+    it('registers neither under a gate that opts out', async () => {
+      const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) })
+      await app.bootstrap()
+
+      expect((await app.fetch(`${CALLBACK_PATH}/login?returnTo=/x`)).status).toBe(404)
+      expect((await app.fetch(`${CALLBACK_PATH}?code=code&state=oidc-st`)).status).toBe(404)
+    })
+
+    it('leaves them to a later gate when the root gate opts out', async () => {
+      const scoped = newRouter('/oidc-claim-scoped')
+        .plugin(authentication(g => g.name('scoped')))
+        .get('/', () => ({ ok: true }))
+
+      const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) }).mount(scoped)
+      await app.bootstrap()
+
+      const res = await app.fetch(`${CALLBACK_PATH}/login?returnTo=/x`)
+
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toContain(`${ISSUER}/auth`)
+    })
   })
 
   describe('callback flow', () => {

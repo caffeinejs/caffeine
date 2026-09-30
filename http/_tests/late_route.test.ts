@@ -1,5 +1,5 @@
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { type FastifyInstance } from 'fastify'
+import { type FastifyInstance, type FastifyPluginCallback } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -9,6 +9,7 @@ import {
   RouteBuilder,
   RouteGroupBuilder,
   createWebApplication,
+  newRouter,
   type GuardInput,
   type HTTPPluginFactory,
   type WebApplication,
@@ -152,5 +153,60 @@ describe('$route', () => {
     await app.bootstrap()
 
     expect(constructions).toBe(1)
+  })
+
+  describe('outside a .with(...) plugin', () => {
+    const scoped = (router: RouteGroupBuilder) =>
+      router.path('/scoped').routes([
+        new RouteBuilder()
+          .method('GET')
+          .path('/x')
+          .handle(() => ({ ok: true })),
+      ])
+
+    // A route group's plugin loads once the route table has closed: its group would miss the start-up checks and
+    // the registration both, so the start is refused rather than the route quietly never being served.
+    it('refuses a group added by a plugin a router registered', async () => {
+      app = createWebApplication().mount(
+        newRouter('/owner')
+          .plugin(() => async (instance: FastifyInstance) => {
+            instance.$route('scoped', scoped)
+          })
+          .get('/', () => ({})),
+      ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CONFIGURATION',
+        message: expect.stringMatching(
+          /^Cannot add route group "scoped": "\$route" is open only to a plugin registered with "\.with\(\.\.\.\)"/,
+        ),
+      })
+      app = undefined
+    })
+
+    // Thrown on the spot, the refusal would escape a callback-style plugin as an uncaught exception.
+    it('refuses it from a callback-style plugin as well, failing the start and not the process', async () => {
+      const plugin: FastifyPluginCallback = (instance, _options, done) => {
+        instance.$route('scoped', scoped)
+        done()
+      }
+
+      app = createWebApplication().mount(
+        newRouter('/owner-callback')
+          .plugin(() => plugin)
+          .get('/', () => ({})),
+      ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_CONFIGURATION' })
+      app = undefined
+    })
+
+    it('throws at once when called after start-up', async () => {
+      const running = createWebApplication()
+      app = running
+      await running.bootstrap()
+
+      expect(() => running.instance.$route('scoped', scoped)).toThrow(/^Cannot add route group "scoped"/)
+    })
   })
 })

@@ -1,4 +1,5 @@
 import { ErrCaffeineWebApplication } from '../../error/common.js'
+import { solutions } from '../../error/util.js'
 
 /**
  * ErrAuthSchemeNotFound is thrown when a scheme name does not resolve to a registered handler.
@@ -53,9 +54,42 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
   constructor() {
     super(
       'Cannot start application: routes are protected but authentication is not configured: call ' +
-        '".install(Authentication(auth => ...))" on the application',
+        '".install(Authentication(auth => ...))" and ".with(authentication())" on the application',
       'ERR_AUTHENTICATION_REQUIRED',
     )
     this.name = 'ErrAuthenticationRequired'
+  }
+}
+
+/**
+ * ErrAuthenticationGateRequired is thrown at start-up when a route requires authentication and no authentication
+ * gate covers it.
+ *
+ * Installing `Authentication(...)` binds what a gate runs on, but only a gate authenticates a request: one
+ * registered with `.with(authentication())` covers every route, one registered on a router covers that router's.
+ * Served with neither, a protected route would answer anyone, so the application does not start.
+ */
+export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
+  constructor(routes: readonly string[]) {
+    const one = routes.length === 1
+    const named = routes
+      .slice(0, 5)
+      .map(route => `"${route}"`)
+      .join(', ')
+    const more = routes.length > 5 ? ` and ${routes.length - 5} more` : ''
+
+    super(
+      `Cannot start application: ${one ? 'route' : 'routes'} ${named}${more} ${one ? 'requires' : 'require'} ` +
+        `authentication and no authentication gate covers ${one ? 'it' : 'them'}` +
+        solutions(
+          'Register the gate on the application, where it covers every route: ".with(authentication())"',
+          'Or register one on the router holding the route: "router.plugin(authentication())"',
+          'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
+            'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +
+            'from an "onRoute" hook for a route another plugin registers',
+        ),
+      'ERR_AUTHENTICATION_GATE_REQUIRED',
+    )
+    this.name = 'ErrAuthenticationGateRequired'
   }
 }

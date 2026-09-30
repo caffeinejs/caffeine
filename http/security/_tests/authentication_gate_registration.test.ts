@@ -139,18 +139,19 @@ describe('gate registration', () => {
     }
   })
 
-  // With no root gate, only the gated group is guarded: a scoped gate's hooks never see the routes outside
-  // its context, fallback policy or not.
+  // With no root gate, only the gated group is guarded: a scoped gate's hooks never see the routes outside its
+  // context. The open route declares nothing — under a fallback policy it would be protected, and start-up would
+  // refuse it for having no gate over it.
   it('guards only the gated group when every gate is scoped', async () => {
     const { a } = schemes()
     const open = newRouter('/scoped-only-open').get('/', () => ({ ok: true }))
     const gated = newRouter('/scoped-only-gated')
       .plugin(authentication())
+      .authorize()
       .get('/', () => ({ ok: true }))
 
     const app = createWebApplication()
       .install(Authentication(auth => auth.addStrategy('A', a).default('A')))
-      .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .mount(open, gated)
 
     try {

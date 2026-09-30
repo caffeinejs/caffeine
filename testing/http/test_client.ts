@@ -102,7 +102,7 @@ interface Fetchable {
  * ```ts
  * const client = testClient([pets, orders], {
  *   inject: { repository: fake },
- *   configure: app => app.install(Authentication(auth => auth.scheme(bearer))),
+ *   configure: app => app.install(Authentication(auth => auth.addStrategy('Bearer', bearer))).with(authentication()),
  * })
  * ```
  *

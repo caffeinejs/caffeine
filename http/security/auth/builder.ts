@@ -24,6 +24,7 @@ import { UserProvider } from './credentials/user_provider.js'
 import type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
 import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from './errors.js'
 import { ForwardAuthenticationHandler } from './forward/forward.js'
+import { AuthenticationGates } from './gates.js'
 import type { AuthenticationHandler } from './handler.js'
 import { JWTAuthenticationHandler } from './jwt/jwt.js'
 import { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
@@ -576,6 +577,8 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     kit.container.bind(AuthenticationService, t => t.toValue(service).internal())
     kit.container.bind(AuthenticationSchemeProvider, t => t.toValue(schemeProvider).internal())
     kit.container.bind(kAuthSchemeDescriptors, t => t.toValue(this.#descriptors).internal())
+    // Unconditional: with no gate registered at all, the start-up check still has a list to find none in.
+    kit.container.bind(AuthenticationGates, t => t.toValue(new AuthenticationGates()).internal())
 
     // Share each JWT scheme's service (verify + sign) for injection into token-issuing controllers.
     // Every JWT scheme is reachable via its keyed token; the default JWT scheme (or the first, if the

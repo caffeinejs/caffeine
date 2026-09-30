@@ -24,6 +24,7 @@ import {
   ErrApplicationStarted,
   ErrConfigNotReady,
   ErrFeatureAlreadyInstalled,
+  ErrFeatureNotInstalled,
   FeatureBuilder,
   type BootstrapKit,
   type FeatureConfigureKit,
@@ -233,6 +234,18 @@ describe('Application.install', () => {
   it('throws when a feature reuses a built-in name', () => {
     expect(() => createApplication().install(new TrackerBuilder('logger'))).toThrow(ErrFeatureAlreadyInstalled)
     expect(() => createApplication().install(new TrackerBuilder('shutdown'))).toThrow(ErrFeatureAlreadyInstalled)
+  })
+
+  // What a dependent — a server plugin reading what only the feature binds — throws at start-up. Only its throw
+  // site knows which install is missing, so the fix it hands over is the one the reader acts on.
+  it('names the missing feature and carries the fix the dependent handed over', () => {
+    const err = new ErrFeatureNotInstalled('track', 'Install it: ".install(Track())"')
+
+    expect(err).toBeInstanceOf(Error)
+    expect(err.name).toBe('ErrFeatureNotInstalled')
+    expect(err.code).toBe('ERR_FEATURE_NOT_INSTALLED')
+    expect(err.message).toMatch(/^Cannot use feature "track": it is not installed/)
+    expect(err.message).toContain('Install it: ".install(Track())"')
   })
 })
 
