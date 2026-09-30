@@ -114,7 +114,7 @@ export class CaffeineIoC implements Container {
   private _dropped: [InjectionToken, Binding][] = []
   private _sortedAsyncEntries: [InjectionToken, Binding][] = []
   private _aspectScopeCache: Set<NamedToken<Scope>> | null = null
-  private _hasRequestScoped = false
+  private _hasRequestScope = false
   private _hasAsync = false
   private _values: unknown
 
@@ -190,7 +190,7 @@ export class CaffeineIoC implements Container {
    * Whether the container has at least one request scoped component.
    */
   get hasRequestScope(): boolean {
-    return this._hasRequestScoped
+    return this._hasRequestScope
   }
 
   /**
@@ -1198,7 +1198,7 @@ export class CaffeineIoC implements Container {
     this.mapAbstract(binding)
 
     if (binding.scopeID === Scopes.REQUEST) {
-      this._hasRequestScoped = true
+      this._hasRequestScope = true
     }
 
     if (binding.async) {
