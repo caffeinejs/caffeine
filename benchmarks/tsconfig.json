@@ -16,7 +16,6 @@
     "helloworld/caffeine/**",
     "helloworld/caffeine-router/**",
     "request/caffeine/**",
-    "request/caffeine-middleware/**",
     "request/caffeine-request-scope/**",
     "mixedscopes/caffeine/**",
     "authn/caffeine/**",

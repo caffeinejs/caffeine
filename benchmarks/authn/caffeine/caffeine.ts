@@ -27,5 +27,4 @@ const app = createWebApplication().authentication(auth =>
   auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h')),
 )
 
-await app.bootstrap()
-await app.instance.listen({ port: PORT, host: '0.0.0.0' })
+await app.run({ port: PORT, host: '0.0.0.0' })

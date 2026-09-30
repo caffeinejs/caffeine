@@ -18,7 +18,6 @@ const servers: ServerConfig[] = [
   { name: 'express', port: 3027, ...built('express', 'express.js') },
   { name: 'caffeine', port: 3023, ...built('caffeine', 'caffeine.js') },
   { name: 'caffeine-request-scope', port: 3025, ...built('caffeine-request-scope', 'caffeine.js') },
-  { name: 'caffeine-middleware', port: 3026, ...built('caffeine-middleware', 'caffeine.js') },
   { name: 'elysia', port: 3024, ...built('elysia', 'elysia.js') },
 ]
 

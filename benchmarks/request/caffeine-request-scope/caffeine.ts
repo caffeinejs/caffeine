@@ -1,5 +1,18 @@
 import { $i, Injectable, Lifetime, Scopes, type Provider } from '@caffeinejs/di'
-import { Controller, Get, createWebApplication, Args, Post, Schema, $p, FastifyContext } from '@caffeinejs/http'
+import {
+  Controller,
+  Get,
+  createWebApplication,
+  Args,
+  Post,
+  Schema,
+  $p,
+  FastifyContext,
+  GuardResult,
+  UseGuards,
+  type Guard,
+  type GuardInput,
+} from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std/schema'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
@@ -24,6 +37,16 @@ const responseSchema = {
   }),
 }
 
+@Injectable()
+class APIKeyGuard implements Guard {
+  guard(input: GuardInput): boolean | GuardResult {
+    if (input.context.req.header('x-api-key') !== 'benchmark') {
+      return GuardResult.unauthenticated('Invalid API key')
+    }
+    return true
+  }
+}
+
 // The single difference from the plain caffeine request benchmark: one request-scoped dependency.
 // Injecting it activates the container's per-request scope, so this variant measures the cost of
 // creating and disposing a request scope on every request.
@@ -45,6 +68,7 @@ class AppController {
   }
 
   @Post('/api/test/:text/:num/:bool')
+  @UseGuards(APIKeyGuard)
   @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
   helloWorld(
@@ -71,20 +95,11 @@ class AppController {
 
 void [AppController]
 
-const app = createWebApplication().serverCallback((_context, server) => {
-  server.addHook('onRequest', (req, reply, done) => {
-    reply.header('x-request-id', Math.random().toString(36).slice(2))
-    done()
-  })
+const app = createWebApplication()
 
-  server.addHook('preHandler', (req, reply, done) => {
-    if (req.url.startsWith('/api/') && req.headers['x-api-key'] !== 'benchmark') {
-      reply.code(401).send({ error: 'Unauthorized' })
-      return
-    }
-    done()
-  })
+app.use((ctx, next) => {
+  ctx.header('x-request-id', Math.random().toString(36).slice(2))
+  return next()
 })
 
-await app.bootstrap()
-await app.instance.listen({ port: PORT, host: '0.0.0.0' })
+await app.run({ port: PORT, host: '0.0.0.0' })

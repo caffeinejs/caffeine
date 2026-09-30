@@ -10,8 +10,7 @@ import './payment/payment.controller.js'
 
 const started = performance.now()
 const app = createWebApplication()
-await app.bootstrap()
-await app.instance.listen({ port: 3013, host: '127.0.0.1' })
+await app.run({ port: 3013, host: '127.0.0.1' })
 // performance.now() counts from process start, so `start` covers module loading; `bootstrap` does not.
 const listening = performance.now()
 process.stdout.write(`start: ${listening.toFixed(3)}ms\nbootstrap: ${(listening - started).toFixed(3)}ms\n`)

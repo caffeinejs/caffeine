@@ -14,5 +14,4 @@ void [AppController]
 
 const app = createWebApplication()
 
-await app.bootstrap()
-await app.instance.listen({ port: PORT, host: '0.0.0.0' })
+await app.run({ port: PORT, host: '0.0.0.0' })

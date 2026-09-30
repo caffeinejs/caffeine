@@ -16,7 +16,6 @@
     "helloworld/caffeine/**/*.ts",
     "helloworld/caffeine-router/**/*.ts",
     "request/caffeine/**/*.ts",
-    "request/caffeine-middleware/**/*.ts",
     "request/caffeine-request-scope/**/*.ts",
     "mixedscopes/caffeine/**/*.ts",
     "authn/caffeine/**/*.ts",

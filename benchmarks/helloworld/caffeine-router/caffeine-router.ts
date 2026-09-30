@@ -7,5 +7,4 @@ router.get('/').handler(() => ({ hello: 'world' }))
 
 const app = createWebApplication().mount(router)
 
-await app.bootstrap()
-await app.instance.listen({ port: PORT, host: '0.0.0.0' })
+await app.run({ port: PORT, host: '0.0.0.0' })
