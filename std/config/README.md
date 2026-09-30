@@ -173,6 +173,7 @@ anything.
 | `ArgvConfigSource`        | the command line, via `.argv()` | nothing; loaded once                                           |
 | `FileConfigSource`        | one file and its profile files  | `{ watch: true }`: reloaded when the file or a sibling changes |
 | `JSONConfigSource`        | a `.json` file                  | as `FileConfigSource`                                          |
+| `YAMLConfigSource`        | a `.yaml` file, every document  | as `FileConfigSource`                                          |
 | `InlineConfigSource`      | a fixed object                  | nothing; loaded once                                           |
 | `SpringCloudConfigSource` | a Spring Cloud Config server    | `reload()`, and `pollInterval` if set                          |
 
@@ -194,9 +195,13 @@ object from one variable.
 A source's tree is taken literally. A format with no nesting of its own expands dotted keys in its parser:
 
 ```ts
-new FileConfigSource('./config/app.yaml', text => YAML.parse(text))
+new FileConfigSource('./config/app.json5', text => JSON5.parse(text))
 new FileConfigSource('./config/app.ini', text => expandKeys(ini.parse(text)))
 ```
+
+`YAMLConfigSource` reads every document of a file, split by `---`, as a layer of its own, in order: a later document
+wins over an earlier one, as a later source does, and `explain()` names it, `file:./config/app.yaml#2` for the
+second. An empty document adds nothing, and merge keys (`<<: *defaults`) are read.
 
 Layers merge per key, later winning. An array is replaced whole, so a later source can shorten or clear a list. A
 key named `__proto__`, `constructor` or `prototype` is dropped and logged, never merged.

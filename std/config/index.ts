@@ -41,4 +41,5 @@ export { FileConfigSource, type ConfigFileParser, type FileConfigSourceOptions }
 export { InlineConfigSource } from './sources/inline/index.js'
 export { JSONConfigSource } from './sources/json/index.js'
 export { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './sources/spring/index.js'
+export { YAMLConfigSource } from './sources/yaml/index.js'
 export { ConfigStore } from './store.js'

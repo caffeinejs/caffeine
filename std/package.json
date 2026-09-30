@@ -69,7 +69,8 @@
   "dependencies": {
     "@caffeinejs/di": "*",
     "@sinclair/typebox": "^0.34.52",
-    "@standard-schema/spec": "^1.1.0"
+    "@standard-schema/spec": "^1.1.0",
+    "yaml": "^2.9.1"
   },
   "peerDependencies": {
     "pino": "^10.3.1"
@@ -83,7 +84,6 @@
     "dotenv": "^17.4.2",
     "json5": "^2.2.3",
     "pino": "^10.3.1",
-    "yaml": "^2.9.1",
     "zod": "^4.6.5"
   }
 }

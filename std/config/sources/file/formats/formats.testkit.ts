@@ -4,32 +4,41 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import JSON5 from 'json5'
-import { parse as parseYAML } from 'yaml'
 
 import { mergeInterpolated } from '../../../interpolation.js'
 import { passthroughConfigSchema } from '../../../schema.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../../types.js'
-import { FileConfigSource, type ConfigFileParser } from '../file.js'
+import { JSONConfigSource } from '../../json/index.js'
+import { YAMLConfigSource } from '../../yaml/index.js'
+import { FileConfigSource, type FileConfigSourceOptions } from '../file.js'
 
 // Each format keeps its files in `_testdata/<ext>/`, each named `<name>.<ext>`. The core set, the files
 // `core.test.ts` reads, is in every format's folder under the same names and with the same meaning, so one
 // expectation serves every format. A file only one format has belongs to that format's own suite.
 
-/** A config file format: the parser a `FileConfigSource` is handed, and the extension its files carry. */
+/** A config file format: the source an application reads it with, and the extension its files carry. */
 export interface Format {
   readonly name: string
   readonly ext: string
-  readonly parse: ConfigFileParser
+  readonly source: (path: string, options?: FileConfigSourceOptions) => FileConfigSource
 }
 
-export const json: Format = { name: 'JSON', ext: 'json', parse: text => JSON.parse(text) as Record<string, unknown> }
+export const json: Format = {
+  name: 'JSON',
+  ext: 'json',
+  source: (path, options) => new JSONConfigSource(path, options),
+}
 
-export const yaml: Format = { name: 'YAML', ext: 'yaml', parse: text => parseYAML(text) as Record<string, unknown> }
+export const yaml: Format = {
+  name: 'YAML',
+  ext: 'yaml',
+  source: (path, options) => new YAMLConfigSource(path, options),
+}
 
 export const json5: Format = {
   name: 'JSON5',
   ext: 'json5',
-  parse: text => JSON5.parse(text) as Record<string, unknown>,
+  source: (path, options) => new FileConfigSource(path, text => JSON5.parse(text) as Record<string, unknown>, options),
 }
 
 export const FORMATS: readonly Format[] = [json, yaml, json5]
@@ -59,7 +68,7 @@ export async function interpolateFixture(
   env: Record<string, string>,
   profiles: string[] = [],
 ): Promise<Record<string, unknown>> {
-  const layers = await new FileConfigSource(fixture(format, name), format.parse).load(context(profiles))
+  const layers = await format.source(fixture(format, name)).load(context(profiles))
   return mergeInterpolated(layers, env) as Record<string, unknown>
 }
 
@@ -72,10 +81,13 @@ export async function loadText(format: Format, text: string): Promise<{ error: u
   try {
     const path = join(dir, `app.${format.ext}`)
     await writeFile(path, `${text}\n`, 'utf8')
-    const error = await new FileConfigSource(path, format.parse).load(context()).then(
-      () => undefined,
-      (thrown: unknown) => thrown,
-    )
+    const error = await format
+      .source(path)
+      .load(context())
+      .then(
+        () => undefined,
+        (thrown: unknown) => thrown,
+      )
     return { error, path }
   } finally {
     await rm(dir, { recursive: true, force: true })

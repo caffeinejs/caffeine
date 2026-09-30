@@ -1,14 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
-import { parse as parseYAML } from 'yaml'
 
-import { FileConfigSource } from '../file.js'
-import { context, fixture, interpolateFixture, loadText, yaml, type Format } from './formats.testkit.js'
-
-// YAML 1.2 has no merge key: `<<` is a key like any other unless the parser is told otherwise.
-const yamlWithMergeKeys: Format = {
-  ...yaml,
-  parse: text => parseYAML(text, { merge: true }) as Record<string, unknown>,
-}
+import { context, fixture, interpolateFixture, loadText, yaml } from './formats.testkit.js'
 
 describe('YAML syntax', () => {
   const rows: [string, unknown][] = [
@@ -44,9 +36,10 @@ describe('YAML syntax', () => {
   })
 })
 
+// YAML 1.2 has no merge key: without the source reading them, `<<` would be a key like any other.
 describe('YAML anchors and merge keys', () => {
   it('interpolates an alias at every path it is copied to', async () => {
-    const out = await interpolateFixture(yamlWithMergeKeys, 'anchors', {})
+    const out = await interpolateFixture(yaml, 'anchors', {})
 
     expect(out.primary).toEqual({ host: 'localhost', port: 5432, url: 'postgres://localhost:5432/app' })
     expect(out.replica).toEqual(out.primary)
@@ -55,13 +48,13 @@ describe('YAML anchors and merge keys', () => {
   // A merge key copies a placeholder's text, and a config path is absolute: the copy still reads the path it names,
   // whatever the map it landed in overrides.
   it('keeps a merged reference pointing at the path it names', async () => {
-    const out = await interpolateFixture(yamlWithMergeKeys, 'anchors', {})
+    const out = await interpolateFixture(yaml, 'anchors', {})
 
     expect(out.reporting).toEqual({ host: 'reporting.internal', port: 5432, url: 'postgres://localhost:5432/app' })
   })
 
   it('carries the environment into every copy', async () => {
-    const out = await interpolateFixture(yamlWithMergeKeys, 'anchors', { DB_HOST: 'db.internal' })
+    const out = await interpolateFixture(yaml, 'anchors', { DB_HOST: 'db.internal' })
 
     expect(out).toEqual({
       primary: { host: 'db.internal', port: 5432, url: 'postgres://db.internal:5432/app' },
@@ -77,7 +70,7 @@ describe('YAML mistakes', () => {
   it('refuses a placeholder a YAML comment cut short', async () => {
     const path = fixture(yaml, 'mistakes/comment-in-default')
 
-    await expect(new FileConfigSource(path, yaml.parse).load(context())).rejects.toThrow(
+    await expect(yaml.source(path).load(context())).rejects.toThrow(
       `Cannot interpolate "greeting" in config file "${path}": the placeholder at character 1 is not closed`,
     )
   })
@@ -85,7 +78,7 @@ describe('YAML mistakes', () => {
   it('counts the character across the lines of a block', async () => {
     const path = fixture(yaml, 'mistakes/malformed-in-block')
 
-    await expect(new FileConfigSource(path, yaml.parse).load(context())).rejects.toThrow(
+    await expect(yaml.source(path).load(context())).rejects.toThrow(
       `Cannot interpolate "script" in config file "${path}": the placeholder at character 17 has a prefix other than "env" or "config"`,
     )
   })

@@ -1,9 +1,9 @@
 import { FileConfigSource, type FileConfigSourceOptions } from '../file/index.js'
 
 /**
- * Configuration from a JSON file. The one format `std` parses itself, because the runtime carries the parser.
- * Anything else, YAML, TOML or JSON5, is a {@link FileConfigSource} handed the parse function of whichever library
- * the application already depends on.
+ * Configuration from a JSON file. `std` parses JSON and YAML itself, the latter with `YAMLConfigSource`. Anything
+ * else, TOML or JSON5, is a {@link FileConfigSource} handed the parse function of whichever library the application
+ * already depends on.
  */
 export class JSONConfigSource extends FileConfigSource {
   constructor(path: string, options: FileConfigSourceOptions = {}) {

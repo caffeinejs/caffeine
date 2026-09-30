@@ -9,6 +9,16 @@ import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from 
 /** Turns a config file's text into the object it describes. May be synchronous or asynchronous. */
 export type ConfigFileParser = (text: string) => Record<string, unknown> | Promise<Record<string, unknown>>
 
+const kDocuments = Symbol('config file documents')
+
+/**
+ * What a parser returns for a file that holds several documents, in the order they apply. Each is a layer of its
+ * own, so a later one wins over an earlier one, and an empty one, `null`, adds nothing.
+ */
+export function configDocuments(documents: readonly unknown[]): Record<string, unknown> {
+  return { [kDocuments]: documents }
+}
+
 export interface FileConfigSourceOptions {
   /**
    * Whether a missing base file is acceptable. **Defaults to `true`**: an absent file contributes nothing. A file
@@ -69,39 +79,38 @@ export class FileConfigSource implements ConfigSource {
    * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed, naming the file and the path.
    */
   async load(context: ConfigLoadContext): Promise<readonly ConfigLayer[]> {
-    const base = await this.#read(this.#path, this.#missingIsFine)
-
     const layers: ConfigLayer[] = []
     const interpolate = this.#interpolate
 
-    if (base !== undefined) {
-      layers.push({ name: `file:${this.#path}`, data: base as ConfigObject, interpolate })
+    for (const { name, data } of await this.#read(this.#path, this.#missingIsFine)) {
+      layers.push({ name, data, interpolate })
     }
 
     // No sibling depends on another, so they are read together and layered in profile order.
     const siblings = await Promise.all(
-      context.profiles.map(async profile => {
-        const path = profilePath(this.#path, profile)
-        return { path, profile, parsed: await this.#read(path, true) }
-      }),
+      context.profiles.map(async profile => ({
+        profile,
+        read: await this.#read(profilePath(this.#path, profile), true),
+      })),
     )
 
-    for (const { path, profile, parsed } of siblings) {
-      if (parsed !== undefined) {
-        layers.push({ name: `file:${path}`, data: parsed as ConfigObject, profile, interpolate })
+    for (const { profile, read } of siblings) {
+      for (const { name, data } of read) {
+        layers.push({ name, data, profile, interpolate })
       }
     }
 
     return layers
   }
 
-  async #read(path: string, missingIsFine: boolean): Promise<Record<string, unknown> | undefined> {
+  /** What the file at `path` holds: nothing when it is missing and may be, otherwise a layer per document. */
+  async #read(path: string, missingIsFine: boolean): Promise<Pick<ConfigLayer, 'name' | 'data'>[]> {
     let text: string
     try {
       text = await readFile(path, 'utf8')
     } catch (error) {
       if (missingIsFine && (error as { code?: string }).code === 'ENOENT') {
-        return undefined
+        return []
       }
       throw error
     }
@@ -119,6 +128,10 @@ export class FileConfigSource implements ConfigSource {
       )
     }
 
+    if (isDocuments(parsed)) {
+      return this.#documents(path, parsed[kDocuments])
+    }
+
     // An array or a scalar would otherwise merge as a plausible-looking set of nonsense keys.
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new ErrConfig(
@@ -134,7 +147,39 @@ export class FileConfigSource implements ConfigSource {
       checkInterpolation(parsed as Record<string, unknown>, path)
     }
 
-    return parsed as Record<string, unknown>
+    return [{ name: `file:${path}`, data: parsed as ConfigObject }]
+  }
+
+  /**
+   * A layer per document that holds anything. With more than one, each is named after its place in the file,
+   * `file:<path>#2` for the second, so a value and a failure both point at the document they came from.
+   */
+  #documents(path: string, documents: readonly unknown[]): Pick<ConfigLayer, 'name' | 'data'>[] {
+    const found: [n: number, data: Record<string, unknown>][] = []
+
+    for (const [i, document] of documents.entries()) {
+      // An empty document adds nothing.
+      if (document === null) {
+        continue
+      }
+      if (typeof document !== 'object' || Array.isArray(document)) {
+        throw new ErrConfig(
+          `Cannot parse config file "${path}": document ${i + 1} is ${describe(document)}, but every document must be a mapping at the top level`,
+          'ERR_CONFIG_FILE_PARSE',
+          undefined,
+          'Make every document in the file a mapping, or remove it',
+        )
+      }
+      found.push([i + 1, document as Record<string, unknown>])
+    }
+
+    return found.map(([n, data]) => {
+      const file = found.length > 1 ? `${path}#${n}` : path
+      if (this.#interpolate) {
+        checkInterpolation(data, file)
+      }
+      return { name: `file:${file}`, data: data as ConfigObject }
+    })
   }
 }
 
@@ -176,6 +221,10 @@ export function concernsFile(path: string, filename: string | null): boolean {
   return (
     filename === basename(path) || filename === '..data' || (filename.startsWith(`${stem}-`) && filename.endsWith(ext))
   )
+}
+
+function isDocuments(value: unknown): value is { [kDocuments]: readonly unknown[] } {
+  return typeof value === 'object' && value !== null && kDocuments in value
 }
 
 function describe(value: unknown): string {

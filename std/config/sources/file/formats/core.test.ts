@@ -9,7 +9,6 @@ import { ErrConfigValidation } from '../../../errors.js'
 import { loadConfig } from '../../../load.js'
 import type { ConfigDefinition, ConfigSource, InferConfig } from '../../../types.js'
 import { EnvConfigSource } from '../../env/index.js'
-import { FileConfigSource } from '../file.js'
 import { context, definition, fixture, FORMATS, interpolateFixture } from './formats.testkit.js'
 
 // What a file means must not depend on the format it is written in. Every scenario here runs once per format, over
@@ -53,11 +52,7 @@ const APP_VARIABLES = [
 describe.each(FORMATS)('$name', format => {
   function application(...later: ConfigSource[]): ConfigDefinition<App> {
     return definition<App>(
-      [
-        new FileConfigSource(fixture(format, 'app/application'), format.parse),
-        new FileConfigSource(fixture(format, 'app/messaging'), format.parse),
-        ...later,
-      ],
+      [format.source(fixture(format, 'app/application')), format.source(fixture(format, 'app/messaging')), ...later],
       appSchema,
     )
   }
@@ -223,7 +218,10 @@ describe.each(FORMATS)('$name', format => {
     it('refuses a malformed placeholder as the file is read', async () => {
       const path = fixture(format, 'mistakes/malformed')
 
-      const error = await new FileConfigSource(path, format.parse).load(context()).catch((thrown: unknown) => thrown)
+      const error = await format
+        .source(path)
+        .load(context())
+        .catch((thrown: unknown) => thrown)
 
       expect(error).toMatchObject({ code: 'ERR_CONFIG_INTERPOLATION' })
       expect((error as Error).message).toContain(
@@ -264,7 +262,7 @@ describe.each(FORMATS)('$name', format => {
     })
 
     function watched() {
-      return loadConfig(definition([new FileConfigSource(path, format.parse, { watch: true })]), { start: false })
+      return loadConfig(definition([format.source(path, { watch: true })]), { start: false })
     }
 
     it('interpolates an edited file again', async () => {
