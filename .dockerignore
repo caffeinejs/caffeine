@@ -4,5 +4,7 @@
 **/dist
 **/*.tsbuildinfo
 **/.env
+**/.env.*
+!**/.env.example
 .git
 examples/03-petstore/src/__caffeine__.gen.ts

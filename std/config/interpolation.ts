@@ -1,7 +1,6 @@
 import type { SchemaIssue } from '../schema/schema.js'
 import { ErrConfig, ErrConfigValidation } from './errors.js'
 import { mergeLayers } from './merge.js'
-import { PROFILES_KEY } from './profiles.js'
 import { isIndex, isPlainObject, splitKey } from './tree.js'
 import type { ConfigLayer, ConfigObject } from './types.js'
 
@@ -79,21 +78,12 @@ export function mergeInterpolated(layers: readonly ConfigLayer[], env: Env = pro
  * Checks the syntax of every placeholder in a file as it is read, overridden or not, so that a malformed one fails
  * the load that brought it. The error names the file, the path and the character, never the text.
  *
- * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed, or when `caffeine.profiles` holds `${`.
+ * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed.
  */
 export function checkInterpolation(data: Readonly<Record<string, unknown>>, file: string): void {
   mapLeaves(data, [], (value, parts) => {
     if (typeof value !== 'string' || !value.includes('${')) {
       return value
-    }
-
-    if (parts[0] === PROFILES_KEY[0] && parts[1] === PROFILES_KEY[1]) {
-      throw errInterpolation(
-        file,
-        parts,
-        'the active profiles are chosen before anything is interpolated',
-        'Name the profiles with CAFFEINE__PROFILES or --caffeine.profiles',
-      )
     }
 
     const segments = parseTemplate(value)
@@ -109,6 +99,109 @@ export function checkInterpolation(data: Readonly<Record<string, unknown>>, file
 
     return value
   })
+}
+
+/**
+ * Expands the `${env:NAME}` placeholders in what the dotenv files set, as they load and before any source has. A
+ * reference reads another entry the files set, expanded first, or else the variable `env` holds, as it is: the value
+ * the process ends up with either way.
+ *
+ * Only `names`, and what they read, are expanded: every entry unless told otherwise.
+ *
+ * @throws ErrConfig `ERR_CONFIG_INTERPOLATION` when a placeholder is malformed or names a config value, a variable is
+ *   unset with no default, or the references loop, run too deep or grow too long. It names the variable, never a value.
+ */
+export function expandDotenv(
+  entries: ReadonlyMap<string, string>,
+  env: Env,
+  files: string,
+  names: Iterable<string> = entries.keys(),
+): Map<string, string> {
+  const done = new Map<string, string>()
+  const resolving: string[] = []
+
+  const expand = (name: string, text: string): string => {
+    const segments = parseTemplate(text)
+    if (!Array.isArray(segments)) {
+      throw errDotenv(
+        files,
+        name,
+        `the placeholder at character ${segments.at + 1} ${segments.reason}`,
+        'Write "$${" for a "${" that is not a placeholder',
+        'Set interpolate: false in .dotEnv() to take the files as written',
+      )
+    }
+
+    let out = ''
+    for (const segment of segments) {
+      out += typeof segment === 'string' ? segment : resolve(name, segment)
+
+      if (out.length > MAX_LENGTH) {
+        throw errDotenv(files, name, `it is longer than ${MAX_LENGTH} characters`)
+      }
+    }
+
+    return out
+  }
+
+  const resolve = (name: string, placeholder: Placeholder): string => {
+    if (placeholder.prefix === 'config') {
+      throw errDotenv(
+        files,
+        name,
+        `"\${config:${placeholder.key}}" names a config value, and the dotenv files load before any source`,
+        'Read another variable with ${env:NAME}',
+        'Move the placeholder to a config file, which is filled in once every source has loaded',
+      )
+    }
+
+    const value = valueOf(placeholder.key) ?? (Object.hasOwn(env, placeholder.key) ? env[placeholder.key] : undefined)
+    if (value === undefined && placeholder.fallback === undefined) {
+      throw errDotenv(
+        files,
+        name,
+        `"\${env:${placeholder.key}}" is not set`,
+        'Set the variable, or give the placeholder a default: ${env:NAME:-text}',
+      )
+    }
+
+    return value === undefined || value === '' ? (placeholder.fallback ?? '') : value
+  }
+
+  // An entry the files do not set is `undefined`, and one without a placeholder is its own value: neither is a step
+  // in a chain of references.
+  const valueOf = (name: string): string | undefined => {
+    const text = entries.get(name)
+    if (!text?.includes('${')) {
+      return text
+    }
+
+    const known = done.get(name)
+    if (known !== undefined) {
+      return known
+    }
+
+    const start = resolving.indexOf(name)
+    if (start !== -1) {
+      throw errDotenv(files, resolving[0], `its references loop: ${[...resolving.slice(start), name].join(' -> ')}`)
+    }
+    if (resolving.length === MAX_DEPTH) {
+      throw errDotenv(files, resolving[0], `its references run more than ${MAX_DEPTH} deep`)
+    }
+
+    resolving.push(name)
+    const value = expand(name, text)
+    resolving.pop()
+
+    done.set(name, value)
+    return value
+  }
+
+  for (const name of names) {
+    valueOf(name)
+  }
+
+  return done
 }
 
 class Interpolation {
@@ -418,6 +511,15 @@ function describe(failure: Failure, path: string): string {
 function errInterpolation(file: string, parts: readonly string[], reason: string, ...solutions: string[]): ErrConfig {
   return new ErrConfig(
     `Cannot interpolate "${parts.join('.')}" in config file "${file}": ${reason}`,
+    'ERR_CONFIG_INTERPOLATION',
+    undefined,
+    ...solutions,
+  )
+}
+
+function errDotenv(files: string, name: string, reason: string, ...solutions: string[]): ErrConfig {
+  return new ErrConfig(
+    `Cannot interpolate "${name}" from the dotenv files in "${files}": ${reason}`,
     'ERR_CONFIG_INTERPOLATION',
     undefined,
     ...solutions,

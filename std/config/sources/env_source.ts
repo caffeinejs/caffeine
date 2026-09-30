@@ -15,8 +15,6 @@ export interface EnvConfigSourceOptions {
   prefix?: string
   /** Splits a variable name into path segments. Defaults to `__`. */
   separator?: string
-  /** Turns a variable name, prefix removed, into a dotted path. Replaces the default folding entirely. */
-  transformKey?: (key: string) => string
   /** Defaults to `env`, or `env:<prefix>`. */
   name?: string
 }
@@ -29,26 +27,28 @@ export interface EnvConfigSourceOptions {
  * and `1` for a number field. A Standard Schema must convert for itself, as `z.coerce.number()` does.
  *
  * An acronym does not survive the folding, `CACHE_TTL` becomes `cacheTtl`: nothing in an upper-case name says
- * where an acronym starts. Reach such a key from a file, the command line, or {@link EnvConfigSourceOptions.transformKey}.
+ * where an acronym starts. Reach such a key from the command line, or from a file whose value reads the variable:
+ * `TTL: '${env:CACHE_TTL}'`.
  *
  * Without a prefix every variable of the process is read, and only the schema decides which ones count. A variable
  * whose name maps to no path, such as `_` or `__CF_USER_TEXT_ENCODING`, is skipped. So is one whose path another
  * variable uses as a parent, `OTEL__RESOURCE` beside `OTEL__RESOURCE__ATTRIBUTES`, with a warning: the parent wins,
  * and a variable that belongs to some other tool cannot stop the application from starting.
+ *
+ * Values are never interpolated: one that looks like a placeholder is data. The configuration's dotenv files are
+ * expanded as they load, before this source reads what they set.
  */
 export class EnvConfigSource implements ConfigSource {
   readonly name: string
   readonly #env: EnvAccessor | undefined
   readonly #prefix: string | undefined
-  readonly #transformKey: (key: string) => string
+  readonly #separator: string
 
   constructor(options: EnvConfigSourceOptions = {}) {
-    const separator = options.separator ?? '__'
-
     this.name = options.name ?? (options.prefix ? `env:${options.prefix}` : 'env')
     this.#env = options.env
     this.#prefix = options.prefix
-    this.#transformKey = options.transformKey ?? (key => foldKey(key, separator))
+    this.#separator = options.separator ?? '__'
   }
 
   load(context: ConfigLoadContext): readonly ConfigLayer[] {
@@ -62,7 +62,7 @@ export class EnvConfigSource implements ConfigSource {
       }
 
       const parts = splitKey(
-        this.#transformKey(this.#prefix === undefined ? variable : variable.slice(this.#prefix.length)),
+        foldKey(this.#prefix === undefined ? variable : variable.slice(this.#prefix.length), this.#separator),
       )
       if (parts.includes('')) {
         continue

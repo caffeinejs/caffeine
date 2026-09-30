@@ -34,33 +34,28 @@ function definition(sources: ConfigSource[]) {
 describe('profile selection', () => {
   // Deciding the profiles before anything loads is what lets every source load exactly once.
   it('loads every source exactly once, profile or no profile', async () => {
-    const base = await write('count.json', { caffeine: { profiles: ['dev'] } })
+    const base = await write('count.json', { a: 0 })
     await write('count-dev.json', { a: 1 })
     const load = vi.spyOn(JSONConfigSource.prototype, 'load')
 
-    await loadConfig(definition([new JSONConfigSource(base)]))
+    const store = await loadConfig(definition([new JSONConfigSource(base)]), { profiles: ['dev'] })
 
     expect(load).toHaveBeenCalledTimes(1)
+    expect((store.current as { a: unknown }).a).toBe(1)
   })
 
-  it('lets a base file select its own overlay from the caffeine.profiles it declares', async () => {
-    const base = await write('app.json', { caffeine: { profiles: 'prod' }, db: { host: 'base' } })
+  // Only the profiles named up front select files. A base file's own `caffeine.profiles` is an ordinary key: the
+  // overlay it would pick is one no other source, and no bean, would follow.
+  it('selects nothing from the caffeine.profiles a base file declares', async () => {
+    const base = await write('app.json', { caffeine: { profiles: ['prod'] }, db: { host: 'base' } })
     await write('app-prod.json', { db: { host: 'prod' } })
+    await write('app-eu.json', { db: { host: 'eu' } })
 
-    const store = await loadConfig(definition([new JSONConfigSource(base)]))
+    const unnamed = await loadConfig(definition([new JSONConfigSource(base)]))
+    const named = await loadConfig(definition([new JSONConfigSource(base)]), { profiles: ['eu'] })
 
-    expect((store.current as { db: unknown }).db).toEqual({ host: 'prod' })
-  })
-
-  // Named up front, by the container, `--caffeine.profiles` or `CAFFEINE__PROFILES`, the base file gets no vote.
-  it('lets the profiles named up front win over the ones the base file declares', async () => {
-    const base = await write('stated.json', { caffeine: { profiles: ['dev'] }, db: { host: 'base' } })
-    await write('stated-dev.json', { db: { host: 'dev' } })
-    await write('stated-eu.json', { db: { host: 'eu' } })
-
-    const store = await loadConfig(definition([new JSONConfigSource(base)]), { profiles: ['eu'] })
-
-    expect((store.current as { db: unknown }).db).toEqual({ host: 'eu' })
+    expect((unnamed.current as { db: unknown }).db).toEqual({ host: 'base' })
+    expect((named.current as { db: unknown }).db).toEqual({ host: 'eu' })
   })
 
   // A value that only exists after a load cannot decide what that load reads. It still lands in the tree.

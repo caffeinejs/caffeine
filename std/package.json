@@ -19,6 +19,10 @@
       "types": "./dist/config/index.d.ts",
       "default": "./dist/config/index.js"
     },
+    "./config/nodejs": {
+      "types": "./dist/config/nodejs/index.d.ts",
+      "default": "./dist/config/nodejs/index.js"
+    },
     "./duration": {
       "types": "./dist/duration/index.d.ts",
       "default": "./dist/duration/index.js"
@@ -76,6 +80,7 @@
     }
   },
   "devDependencies": {
+    "dotenv": "^17.4.2",
     "json5": "^2.2.3",
     "pino": "^10.3.1",
     "yaml": "^2.9.1",

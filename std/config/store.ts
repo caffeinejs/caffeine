@@ -124,6 +124,11 @@ export class ConfigStore<out T> {
     return this.#current
   }
 
+  /** The active profiles every source loads with: the ones named in code, then the host's. */
+  get profiles(): readonly string[] {
+    return this.#profiles
+  }
+
   /** 0 after the first load, plus one per swap. A reload that changed nothing leaves it alone. */
   get revision(): number {
     return this.#revision
@@ -272,8 +277,10 @@ export class ConfigStore<out T> {
 
   /** Resolves once no reload is running or queued and no change delivery is running or pending. For tests. */
   async settled(): Promise<void> {
-    while (this.#running !== undefined) {
+    if (this.#running !== undefined) {
+      // A run that ends starts the one queued behind it, if any: settle again once this one has.
       await this.#running
+      return this.settled()
     }
 
     await Promise.all([this.#notifier.settled(), ...[...this.#views].map(state => state.notifier.settled())])

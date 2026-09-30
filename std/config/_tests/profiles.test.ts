@@ -10,7 +10,7 @@ describe('activeProfiles', () => {
   })
 
   it('splits delimited text so an environment variable can name several', () => {
-    // `CAFFEINE__PROFILES=eu,dev` arrives as one string; without the split only "eu,dev" would be a profile.
+    // `CAFFEINE_PROFILES=eu,dev` arrives as one string; without the split only "eu,dev" would be a profile.
     expect(activeProfiles('eu, dev')).toEqual(['eu', 'dev'])
   })
 
@@ -54,14 +54,20 @@ describe('hostProfiles', () => {
     expect(hostProfiles(['--caffeine:profiles=eu'], noEnv)).toEqual(['eu'])
   })
 
-  it('reads CAFFEINE__PROFILES', () => {
-    expect(hostProfiles([], { CAFFEINE__PROFILES: 'eu, dev' })).toEqual(['eu', 'dev'])
+  it('reads CAFFEINE_PROFILES', () => {
+    expect(hostProfiles([], { CAFFEINE_PROFILES: 'eu, dev' })).toEqual(['eu', 'dev'])
+  })
+
+  // `CAFFEINE__PROFILES` is how an environment source spells the configuration key `caffeine.profiles`, which
+  // nothing reads. Read here too, it would name profiles through a key the rest of the framework ignores.
+  it('reads nothing from CAFFEINE__PROFILES', () => {
+    expect(hostProfiles([], { CAFFEINE__PROFILES: 'eu' })).toEqual([])
   })
 
   // A single run has to be redirectable without touching the environment it runs in — the same reason the
   // args band sits above the env band in the configuration chain.
   it('lets an argument beat the environment', () => {
-    expect(hostProfiles(['--caffeine.profiles=arg'], { CAFFEINE__PROFILES: 'env' })).toEqual(['arg'])
+    expect(hostProfiles(['--caffeine.profiles=arg'], { CAFFEINE_PROFILES: 'env' })).toEqual(['arg'])
   })
 
   it('names nothing when neither says anything', () => {
@@ -79,8 +85,8 @@ describe('hostProfiles', () => {
     expect(hostProfiles(['--', '--caffeine.profiles=eu'], noEnv)).toEqual([])
   })
 
-  // The profiles are read before anything loads, but from the same command line: an argument that names a profile
-  // there has to name the same one to the args source, whatever spelling it uses.
+  // The profiles are read before anything loads, with the parser the args source uses: whatever spelling names a
+  // switch there names the profiles here.
   it('reads the flag as the args source reads the same argument', () => {
     for (const argv of [
       ['--caffeine.profiles=eu'],
@@ -101,6 +107,6 @@ describe('hostProfiles', () => {
     const refused = expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' })
 
     expect(() => hostProfiles(['--caffeine.profiles=../secrets'], noEnv)).toThrow(refused)
-    expect(() => hostProfiles([], { CAFFEINE__PROFILES: 'eu,x/../../etc' })).toThrow(refused)
+    expect(() => hostProfiles([], { CAFFEINE_PROFILES: 'eu,x/../../etc' })).toThrow(refused)
   })
 })

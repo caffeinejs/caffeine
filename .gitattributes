@@ -1,6 +1,11 @@
 * text=auto eol=lf
 
+# Lock files
+package-lock.json linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+yarn.lock linguist-generated=true
+
 # AI
-skills-lock.json linguist-generated
-.agents/skills/** linguist-generated
-.agents/skills/README.md -linguist-generated
+skills-lock.json linguist-generated=true
+.agents/skills/** linguist-generated=true
+.agents/skills/README.md -linguist-generated=true

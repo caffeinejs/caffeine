@@ -6,7 +6,7 @@ import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
-import { InlineConfigSource, JSONConfigSource, type InferConfig } from './config/index.js'
+import { InlineConfigSource, JSONConfigSource, type DotenvLoader, type InferConfig } from './config/index.js'
 import {
   ApplicationHealth,
   ErrHealthIndicatorNotSingleton,
@@ -572,8 +572,8 @@ describe('application name and profiles', () => {
     expect(app.name).toBe('petstore')
   })
 
-  it('applies CAFFEINE__PROFILES to the container', async () => {
-    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+  it('applies CAFFEINE_PROFILES to the container', async () => {
+    vi.stubEnv('CAFFEINE_PROFILES', 'eu')
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.bootstrap()
@@ -581,10 +581,10 @@ describe('application name and profiles', () => {
     expect(app.container.profiles.has('eu')).toBe(true)
   })
 
-  // The container's own set is a profile source in its own right, and the three up-front sources union
-  // rather than replace each other: a container built for `test` still picks up what the environment names.
+  // The container's own set is a profile source in its own right, and the up-front sources union rather than
+  // replace each other: a container built for `test` still picks up what the environment names.
   it('unions the environment onto a user-supplied container', async () => {
-    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+    vi.stubEnv('CAFFEINE_PROFILES', 'eu')
 
     const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
     const app = createApplication({ container })
@@ -605,13 +605,33 @@ describe('application name and profiles', () => {
   })
 
   it('registers a profiled bean when the active profiles include it', async () => {
-    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+    vi.stubEnv('CAFFEINE_PROFILES', 'eu')
 
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const app = createApplication({ container })
     await app.bootstrap()
 
+    expect(container.has(EuOnly)).toBe(true)
+  })
+
+  // The base dotenv file loads before the profiles are read, so what it names switches beans on as the environment
+  // would. The loader sets the variable whenever it reads the base file, as a real one does.
+  it('activates the profiles the base dotenv file names', async () => {
+    vi.stubEnv('CAFFEINE_PROFILES', undefined)
+    const loader: DotenvLoader = filenames => {
+      if (filenames.at(-1)?.endsWith('.env') && process.env.CAFFEINE_PROFILES === undefined) {
+        vi.stubEnv('CAFFEINE_PROFILES', 'eu')
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
+    const conf = newConfiguration(caffeineSchema, kConfig).dotEnv({ loader, path: 'config' }).build()
+    const app = createApplication({ container, config: conf })
+    await app.bootstrap()
+
+    expect(app.profiles).toEqual(['eu'])
     expect(container.has(EuOnly)).toBe(true)
   })
 
@@ -624,8 +644,36 @@ describe('application name and profiles', () => {
     expect(app.container.has(OptOnly)).toBe(false)
   })
 
+  it('activates the profiles its options name', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
+    const app = createApplication({ container, profiles: ['eu'] })
+    await app.bootstrap()
+
+    expect(app.profiles).toEqual(['eu'])
+    expect(container.has(EuOnly)).toBe(true)
+  })
+
+  // The order is the overlay order, a later profile's files winning: the container's, the options', then the host's.
+  it('merges its options with the container and the environment, naming each profile once', async () => {
+    vi.stubEnv('CAFFEINE_PROFILES', 'dev,eu')
+
+    const container = new CaffeineIoC({ decorators: false, profiles: ['test', 'eu'] })
+    const app = createApplication({ container, profiles: ['eu', 'canary', 'test'] })
+    await app.bootstrap()
+
+    expect(app.profiles).toEqual(['test', 'eu', 'canary', 'dev'])
+  })
+
+  // A file source makes a file name of a profile, wherever it was named.
+  it('refuses a profile in its options that is a path', async () => {
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), profiles: ['../secrets'] })
+
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_CONFIG_PROFILE' })
+  })
+
   it('run() resolves to the application name and active profiles', async () => {
-    vi.stubEnv('CAFFEINE__PROFILES', 'eu')
+    vi.stubEnv('CAFFEINE_PROFILES', 'eu')
 
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
@@ -641,7 +689,7 @@ describe('application name and profiles', () => {
   })
 
   it('deduplicates the active profiles before applying them', async () => {
-    vi.stubEnv('CAFFEINE__PROFILES', 'eu,eu,dev')
+    vi.stubEnv('CAFFEINE_PROFILES', 'eu,eu,dev')
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
     await app.bootstrap()
@@ -649,19 +697,20 @@ describe('application name and profiles', () => {
     expect(app.profiles).toEqual(['eu', 'dev'])
   })
 
-  // A value that only exists once the tree has resolved cannot decide what that resolve reads, so an inline
-  // source never selects a config file overlay. It still reaches the tree, and with nothing named up front
-  // the application falls back to it.
-  it('ignores a source-declared profile once anything named one up front', async () => {
-    const container = new CaffeineIoC({ decorators: false, profiles: ['test'] })
+  // A value that only exists once the tree has resolved cannot decide what that resolve reads. Taken up after the
+  // load, it would switch on the beans of a profile whose overlays never loaded, so it stays an ordinary key.
+  it('activates no profile a source carries', async () => {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(EuOnly, t => t.toSelf().profiles('eu'))
     const conf = newConfiguration(caffeineSchema, kConfig)
       .source(new InlineConfigSource({ caffeine: { profiles: ['eu'] } }))
       .build()
     const app = createApplication({ container, config: conf })
     await app.bootstrap()
 
-    expect(app.profiles).toEqual(['test'])
+    expect(app.profiles).toEqual([])
     expect(container.profiles.has('eu')).toBe(false)
+    expect(container.has(EuOnly)).toBe(false)
   })
 })
 
@@ -681,14 +730,29 @@ describe('profile-segregated config files', () => {
     }
   })
 
-  it('loads the overlay named by the base file own caffeine.profiles', async () => {
-    // End to end, and the reason the file provider reads its own base: nothing named a profile up front, so
-    // the base file decides, on the single resolve, which sibling layers over it.
+  // A base file naming its own profiles would pick overlays that no other source, and no bean, follows.
+  it('loads no overlay a base file names for itself', async () => {
     const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base', profiles: ['eu'] } }))
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
     const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
+    await app.bootstrap()
+
+    expect(app.name).toBe('base')
+    expect(app.profiles).toEqual([])
+  })
+
+  it('loads the overlay named by the application options', async () => {
+    const base = await writeTmp('app-opt.json', JSON.stringify({ caffeine: { name: 'base' } }))
+    await writeTmp('app-opt-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
+
+    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
+    const app = createApplication({
+      container: new CaffeineIoC({ decorators: false }),
+      config: conf,
+      profiles: ['eu'],
+    })
     await app.bootstrap()
 
     expect(app.name).toBe('eu-app')

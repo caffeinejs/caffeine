@@ -44,10 +44,6 @@ describe('EnvConfigSource', () => {
     })
   })
 
-  it('takes a transformKey that replaces the folding', () => {
-    expect(load({ env: { CACHE_TTL: '5s' }, transformKey: () => 'cache.TTL' }).data).toEqual({ cache: { TTL: '5s' } })
-  })
-
   it('builds a list from indexed variables', () => {
     expect(load({ env: { TAGS__0: 'a', TAGS__1: 'b' } }).data).toEqual({ tags: ['a', 'b'] })
   })
@@ -97,6 +93,14 @@ describe('EnvConfigSource', () => {
 
   it('records the variable each path came from', () => {
     expect(load({ env: { APP_PORT: '9000' } }).origins?.get('appPort')).toBe('env:APP_PORT')
+  })
+
+  // Whoever set a variable, its value is data: one that looks like a placeholder could otherwise read a secret.
+  it('takes a value that looks like a placeholder as data', () => {
+    const layer = load({ env: { MIRROR: '${config:secret}' } })
+
+    expect(layer.data).toEqual({ mirror: '${config:secret}' })
+    expect(layer.interpolate).toBeUndefined()
   })
 
   it('is named env, or env and its prefix, unless told otherwise', () => {
