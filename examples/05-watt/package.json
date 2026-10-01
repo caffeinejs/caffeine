@@ -13,7 +13,7 @@
     "@caffeinejs/std": "*",
     "@platformatic/globals": "^3.70.0",
     "@platformatic/node": "^3.70.0",
-    "fastify": "^5.12.4",
+    "fastify": "^5.12.5",
     "wattpm": "^3.70.0"
   },
   "devDependencies": {

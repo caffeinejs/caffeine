@@ -12,6 +12,6 @@
     "@caffeinejs/devtools": "*",
     "@caffeinejs/std": "*",
     "@caffeinejs/http": "*",
-    "fastify": "^5.12.4"
+    "fastify": "^5.12.5"
   }
 }

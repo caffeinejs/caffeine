@@ -38,7 +38,7 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/std": "*",
     "@fastify/cookie": "^11.1.2",
-    "fastify": "^5.12.4",
+    "fastify": "^5.12.5",
     "fastify-plugin": "^6.0.0",
     "jose": "^6.2.10",
     "path-to-regexp": "^8.4.2"
