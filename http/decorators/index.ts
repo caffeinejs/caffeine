@@ -1,6 +1,7 @@
 export * from './allow_anonymous.js'
 export * from './args.js'
 export * from './authorize.js'
+export * from './bind_to.js'
 export * from './body_as_buffer.js'
 export * from './body_as_stream.js'
 export * from './body_limit.js'

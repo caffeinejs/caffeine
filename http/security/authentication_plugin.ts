@@ -193,12 +193,13 @@ export class AuthenticationGateBuilder {
  * request still needs on its way out — runs first, and one registered after it does not run for a request
  * the gate rejected.
  *
- * Registered with `.with(authentication())`, the gate joins the root server and covers every route, wherever it
- * sits among the plugins. With `router.plugin(authentication(g => g.name('admin')))` it joins that route group
- * alone, covering exactly the group's routes. Each gate stamps the routes registered in its context after it,
- * and where several gates cover a route the last stamp — the innermost gate's, for a group's own routes — decides
- * which one authenticates and challenges it. A raw route registered straight on the server declares nothing, so
- * the fallback policy decides it when the application set one.
+ * Registered with `.with(authentication())`, the gate joins the application's own server and covers every route
+ * it serves, wherever it sits among the plugins; registered with an ops server's `o.with(authentication())`, it
+ * covers that server's routes the same way. With `router.plugin(authentication(g => g.name('admin')))` it joins
+ * that route group alone, covering exactly the group's routes. Each gate stamps the routes registered in its
+ * context after it, and where several gates cover a route the last stamp — the innermost gate's, for a group's own
+ * routes — decides which one authenticates and challenges it. A raw route registered straight on the server
+ * declares nothing, so the fallback policy decides it when the application set one.
  *
  * Start-up refuses a route a gate would authorize — one declaring protection, or one the fallback policy reaches
  * — when no gate covers it: installing `Authentication(...)` is not what gates a request.

@@ -1,6 +1,7 @@
 import { Container, InjectionToken } from '@caffeinejs/di'
 import { compileGuardKeys, type CompiledGuard } from '@caffeinejs/std/framework'
 
+import { boundTo } from '../binding.js'
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
 import { solutions } from '../error/util.js'
 import type { Guard } from '../guards/index.js'
@@ -170,6 +171,7 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
       // Kept on the router rather than merged down: group-level metadata describes the group, and a reader
       // that wants both levels reads them separately rather than receiving one flattened bag.
       detail: spec.detail,
+      boundTo: boundTo(spec.labels),
       routes: spec.routes.map(compileRoute),
     }
   }

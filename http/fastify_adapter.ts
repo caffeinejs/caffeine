@@ -6,7 +6,6 @@ import type { Socket } from 'node:net'
 import { Server as TLSServer } from 'node:tls'
 
 import { Container, Scopes } from '@caffeinejs/di'
-import { ErrApplicationNotReady } from '@caffeinejs/std'
 import { ConfigStore } from '@caffeinejs/std/config'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { CookieSerializeOptions } from '@fastify/cookie'
@@ -29,6 +28,7 @@ import type {
   AdapterFactory,
   AdapterFactoryIn,
   AdapterIn,
+  AdapterServer,
   AdapterTypes,
   ContextPlatform,
   ServerAddress,
@@ -210,13 +210,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       ) => unknown[] | Promise<unknown[]>,
   }
 
-  /** Built in {@link setup}; there is no server before that. */
-  #fastify: FastifyInstance | undefined
-  /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
-  #listener: FastifyListenOptions | undefined
-  /** What {@link forceTeardown} cuts on a server with no `closeAllConnections()`. `undefined` on one that has it. */
-  #sockets: Set<Socket> | undefined
-  #container: Container
+  readonly #container: Container
   readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
 
   constructor(kit: AdapterFactoryIn) {
@@ -231,29 +225,13 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   }
 
   /**
-   * Listens with the options `run(...)` was given merged over the `listener` section `.server(...)` returned,
-   * the former winning key by key. With neither, Fastify's own default applies.
+   * Builds one Fastify server and hands it back ready. Every server this adapter builds shares the request context
+   * binding and the parameter compilers, and nothing else.
+   *
+   * A build that fails closes what it had built before rethrowing: the caller never receives that server to close,
+   * and a plugin that loaded before the failure still gets its `onClose`.
    */
-  async run(options?: FastifyListenOptions): Promise<void> {
-    const fastify = this.#server()
-
-    // Fastify defaults `localhost` and an OS-assigned port only for an absent argument: `listen({})` is refused
-    // by Node, which wants a port or a path.
-    if (this.#listener === undefined && options === undefined) {
-      await fastify.listen()
-      return
-    }
-
-    // A fresh object every call: `listen()` writes into what it is handed.
-    await fastify.listen({ ...this.#listener, ...options })
-  }
-
-  async setup(input: AdapterIn<FastifyTypes>): Promise<void> {
-    const container = this.#container
-    // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
-    // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
-    const routeGroups = [...input.routeGroups]
-
+  async setup(input: AdapterIn<FastifyTypes>): Promise<AdapterServer<FastifyTypes>> {
     // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
@@ -261,25 +239,43 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     const fastify = Fastify(
       withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
     )
-    this.#fastify = fastify
 
-    // An HTTP/2 server has no `closeAllConnections()`, so the adapter keeps its connections for `forceTeardown()`.
+    // An HTTP/2 server has no `closeAllConnections()`, so the server keeps its connections for `forceTeardown()`.
     // `close()` ends HTTP/2 sessions only gracefully — Node's own and Fastify's `forceCloseConnections` alike
     // call `session.close()`, which waits for the streams still open — so a stream that overran the budget is
-    // cut here or not at all. A socket is what an HTTP/2 session and an `allowHTTP1` connection both run on, and
+    // cut there or not at all. A socket is what an HTTP/2 session and an `allowHTTP1` connection both run on, and
     // destroying it ends either.
+    let sockets: Set<Socket> | undefined
     if (typeof fastify.server.closeAllConnections !== 'function') {
-      const sockets = new Set<Socket>()
+      const open = new Set<Socket>()
       fastify.server.on('connection', (socket: Socket) => {
-        sockets.add(socket)
-        socket.once('close', () => sockets.delete(socket))
+        open.add(socket)
+        socket.once('close', () => open.delete(socket))
       })
-      this.#sockets = sockets
+      sockets = open
     }
 
     // Copied and read once: `listen()` writes into what it is handed, a live configuration node refuses that, and
     // the address has to stop moving once the socket is bound.
-    this.#listener = listener === undefined ? undefined : { ...listener }
+    const server = new FastifyAdapterServer(fastify, listener === undefined ? undefined : { ...listener }, sockets)
+
+    try {
+      await this.#wire(fastify, input)
+    } catch (err) {
+      await fastify.close().catch(() => undefined)
+      throw err
+    }
+
+    return server
+  }
+
+  /** Everything {@link setup} does to a server once it is constructed: decorations, hooks, plugins, routes, `ready()`. */
+  async #wire(fastify: FastifyInstance, input: AdapterIn<FastifyTypes>): Promise<void> {
+    const container = this.#container
+    // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
+    // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
+    const routeGroups = [...input.routeGroups]
+    const { factory = {} } = input.server
 
     // Every route that registers, with the context it registered on, for the gate check once they all have.
     const registered: RegisteredRoute[] = []
@@ -453,10 +449,40 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     await fastify.ready()
   }
+}
 
-  // Both tolerate a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
+/** One server {@link FastifyAdapter} built. */
+class FastifyAdapterServer implements AdapterServer<FastifyTypes> {
+  readonly #fastify: FastifyInstance
+  /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
+  readonly #listener: FastifyListenOptions | undefined
+  /** What {@link forceTeardown} cuts on a server with no `closeAllConnections()`. `undefined` on one that has it. */
+  readonly #sockets: Set<Socket> | undefined
+
+  constructor(fastify: FastifyInstance, listener: FastifyListenOptions | undefined, sockets: Set<Socket> | undefined) {
+    this.#fastify = fastify
+    this.#listener = listener
+    this.#sockets = sockets
+  }
+
+  /**
+   * Listens with the options `run(...)` was given merged over the `listener` section `.server(...)` returned,
+   * the former winning key by key. With neither, Fastify's own default applies.
+   */
+  async run(options?: FastifyListenOptions): Promise<void> {
+    // Fastify defaults `localhost` and an OS-assigned port only for an absent argument: `listen({})` is refused
+    // by Node, which wants a port or a path.
+    if (this.#listener === undefined && options === undefined) {
+      await this.#fastify.listen()
+      return
+    }
+
+    // A fresh object every call: `listen()` writes into what it is handed.
+    await this.#fastify.listen({ ...this.#listener, ...options })
+  }
+
   async teardown(): Promise<void> {
-    await this.#fastify?.close()
+    await this.#fastify.close()
   }
 
   /**
@@ -466,7 +492,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
    */
   forceTeardown(): Promise<void> {
     if (this.#sockets === undefined) {
-      this.#fastify?.server.closeAllConnections()
+      this.#fastify.server.closeAllConnections()
     } else {
       for (const socket of this.#sockets) {
         socket.destroy()
@@ -477,16 +503,16 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   }
 
   get instance(): FastifyInstance {
-    return this.#server()
+    return this.#fastify
   }
 
   get address(): ServerAddress | undefined {
-    const server = this.#fastify?.server
-    const bound = server?.address()
+    const server = this.#fastify.server
+    const bound = server.address()
 
-    // `undefined` before the server is built; `null` when nothing is listening; a string when bound to a unix
-    // socket or a named pipe, which has no host/port to report.
-    if (server === undefined || bound == null || typeof bound === 'string') {
+    // `null` when nothing is listening; a string when bound to a unix socket or a named pipe, which has no
+    // host/port to report.
+    if (bound == null || typeof bound === 'string') {
       return undefined
     }
 
@@ -496,17 +522,8 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     return { host: bound.address, port: bound.port, origin: originOf(scheme, bound.address, bound.port) }
   }
 
-  /** @throws ErrApplicationNotReady before {@link setup} built the server. */
-  #server(): FastifyInstance {
-    if (this.#fastify === undefined) {
-      throw new ErrApplicationNotReady('reach the server')
-    }
-
-    return this.#fastify
-  }
-
   async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
-    const fastify = this.#server()
+    const fastify = this.#fastify
     let request: Request
 
     if (input instanceof Request) {

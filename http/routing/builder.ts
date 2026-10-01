@@ -33,6 +33,7 @@ export class RouteGroupBuilder {
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
+  #labels?: Map<symbol, unknown>
 
   path(path: string) {
     this.#path = path
@@ -135,6 +136,16 @@ export class RouteGroupBuilder {
     return this
   }
 
+  /**
+   * Labels the group under `key`, for whoever selects groups by it. A later label under the same key replaces an
+   * earlier one.
+   */
+  label(key: symbol, value: unknown): this {
+    this.#labels ??= new Map()
+    this.#labels.set(key, value)
+    return this
+  }
+
   toRouteGroup<R>(): RouteGroupSpec<R> {
     return {
       path: normalizeGroupPath(this.#path ?? ''),
@@ -152,6 +163,7 @@ export class RouteGroupBuilder {
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
       guards: this.#guards,
+      labels: this.#labels,
     }
   }
 }
