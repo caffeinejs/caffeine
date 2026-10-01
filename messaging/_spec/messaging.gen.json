@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MessagingConfigSchema",
+  "type": "object",
+  "properties": {
+    "in": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "type": "string"
+            },
+            "via": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string"
+            },
+            "contentType": {
+              "type": "string"
+            },
+            "retry": {
+              "type": "object",
+              "required": [
+                "attempts"
+              ],
+              "properties": {
+                "attempts": {
+                  "type": "number"
+                },
+                "backoff": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "delay"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "fixed",
+                          "type": "string"
+                        },
+                        "delay": {
+                          "type": "number"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "type",
+                        "delay"
+                      ],
+                      "properties": {
+                        "type": {
+                          "const": "exponential",
+                          "type": "string"
+                        },
+                        "delay": {
+                          "type": "number"
+                        },
+                        "multiplier": {
+                          "type": "number"
+                        },
+                        "max": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "options": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "out": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "destination": {
+              "type": "string"
+            },
+            "via": {
+              "type": "string"
+            },
+            "contentType": {
+              "type": "string"
+            },
+            "options": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

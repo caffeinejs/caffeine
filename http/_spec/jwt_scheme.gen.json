@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JWTSchemeConfigSchema",
+  "type": "object",
+  "properties": {
+    "secret": {
+      "type": "string"
+    },
+    "issuer": {
+      "type": "string"
+    },
+    "audience": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "algorithm": {
+      "type": "string"
+    },
+    "expiresIn": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        }
+      ]
+    },
+    "roleClaimType": {
+      "type": "string"
+    },
+    "includeErrorDetails": {
+      "type": "boolean"
+    }
+  }
+}

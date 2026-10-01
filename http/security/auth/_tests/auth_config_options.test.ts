@@ -27,7 +27,7 @@ import {
   Authentication,
   authentication,
 } from '../../../index.js'
-import { AuthConfigSchema } from '../../../schema.js'
+import type { AuthConfig } from '../config.js'
 
 /**
  * Options that reach a scheme from the configuration tree and from nowhere else in these tests.
@@ -36,7 +36,8 @@ import { AuthConfigSchema } from '../../../schema.js'
  * and leaves the deployment running on a default its operator believes was changed.
  */
 
-const schema = $t.Object({ auth: $t.Object({ ...AuthConfigSchema.properties }, { default: {} }) })
+// What the builder does with a value, not whether the value validates: the block is carried through as written.
+const schema = $t.Object({ auth: $t.Unsafe<AuthConfig>($t.Record($t.String(), $t.Unknown(), { default: {} })) })
 const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config.options'))
 
 const SESSION_SECRET = 'a-perfectly-long-session-secret-value!!'

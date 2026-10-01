@@ -7,8 +7,8 @@ import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { openapi } from '../openapi.js'
+import type { OpenAPIConfig } from '../options.js'
 import { kBuild, OpenAPIOptionsBuilder } from '../options_builder.js'
-import { OpenAPIConfigSchema } from '../schema.js'
 import type { OpenAPIDocument } from '../spec/spec.js'
 
 // What a fluent method sets is final, and `config(...)` fills in only what no method set: a deployment can
@@ -62,8 +62,18 @@ describe('OpenAPIOptionsBuilder.config', () => {
   })
 })
 
-describe('openapi() under OpenAPIConfigSchema', () => {
-  const schema = $t.Object({ openapi: $t.Object(OpenAPIConfigSchema.properties, { default: {} }) })
+describe('openapi() configured from the tree', () => {
+  const schema = $t.Object({
+    openapi: $t.Object(
+      {
+        info: $t.Optional($t.Unsafe<OpenAPIConfig['info']>($t.Record($t.String(), $t.Unknown()))),
+        routes: $t.Optional(
+          $t.Object({ json: $t.Optional($t.String()), docs: $t.Optional($t.Union([$t.String(), $t.Literal(false)])) }),
+        ),
+      },
+      { default: {} },
+    ),
+  })
   const kConfig = token<InferConfig<typeof schema>>(Symbol('openapi.config.test'))
 
   let app: WebApplication | undefined

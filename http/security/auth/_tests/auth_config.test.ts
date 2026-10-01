@@ -17,30 +17,26 @@ import {
   Authentication,
   authentication,
 } from '../../../index.js'
-import {
-  AuthConfigSchema,
-  BasicSchemeConfigSchema,
-  CookieSchemeConfigSchema,
-  JWTSchemeConfigSchema,
-} from '../../../schema.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
-// The application owns the schema: it declares where the authentication block lives — importing the feature's
-// own schema for the scheme-independent half — and `a.config(c.auth)` hands the feature that node.
-//
-// `schemes` is declared **precisely**, splicing in each kind's own schema, so each scheme's options are validated.
+// The application owns the schema: it declares where the authentication block lives, with each scheme it
+// configures typed, and `a.config(c.auth)` hands the feature that node.
+const jwtBlock = $t.Object({ secret: $t.Optional($t.String()), includeErrorDetails: $t.Optional($t.Boolean()) })
+
 const rootSchema = $t.Object({
   auth: $t.Object(
     {
-      ...AuthConfigSchema.properties,
+      defaultAuthenticateScheme: $t.Optional($t.String()),
       schemes: $t.Optional(
         $t.Object(
           {
-            jwt: $t.Optional(JWTSchemeConfigSchema),
-            Bearer: $t.Optional(JWTSchemeConfigSchema),
-            Basic: $t.Optional(BasicSchemeConfigSchema),
-            Cookie: $t.Optional(CookieSchemeConfigSchema),
+            jwt: $t.Optional(jwtBlock),
+            Bearer: $t.Optional(jwtBlock),
+            Basic: $t.Optional($t.Object({ realm: $t.Optional($t.String()) })),
+            Cookie: $t.Optional(
+              $t.Object({ sessionSecret: $t.Optional($t.String()), cookieName: $t.Optional($t.String()) }),
+            ),
           },
           { default: {} },
         ),
@@ -257,7 +253,7 @@ describe('authentication configuration', () => {
       app: $t.Object({
         auth: $t.Object({
           defaultAuthenticateScheme: $t.Optional($t.String()),
-          schemes: $t.Optional($t.Object({ Bearer: $t.Optional(JWTSchemeConfigSchema) })),
+          schemes: $t.Optional($t.Object({ Bearer: $t.Optional(jwtBlock) })),
         }),
       }),
     })
@@ -286,10 +282,27 @@ describe('authentication configuration', () => {
     await app.close()
   })
 
-  // The schema the package exports for the block accepts every kind's keys under each scheme, typed, so what an
-  // environment variable carries is converted when the configuration loads.
-  describe("under the exported schema, which accepts every kind's keys", () => {
-    const openSchema = $t.Object({ auth: $t.Object({ ...AuthConfigSchema.properties }, { default: {} }) })
+  // Keyed by scheme name with each key typed, so what an environment variable carries is converted when the
+  // configuration loads.
+  describe('under a schema keyed by scheme name', () => {
+    const openSchema = $t.Object({
+      auth: $t.Object(
+        {
+          schemes: $t.Optional(
+            $t.Record(
+              $t.String(),
+              $t.Object({
+                includeErrorDetails: $t.Optional($t.Boolean()),
+                clientId: $t.Optional($t.String()),
+                callbackUrl: $t.Optional($t.String()),
+                usePkce: $t.Optional($t.Boolean()),
+              }),
+            ),
+          ),
+        },
+        { default: {} },
+      ),
+    })
     const kOpenConfig = token<InferConfig<typeof openSchema>>(Symbol('app.config.open'))
 
     function appFrom(values: Record<string, string>) {

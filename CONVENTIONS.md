@@ -202,9 +202,11 @@ Those are the only answers.
 Every feature a user can tune from the tree has one schema describing its options. The feature never imports it.
 
 - **It satisfies the options.** What the schema decodes, read-only, is assignable to `Partial<Options>`, where `Options` is what the builder's `config(...)` takes (or what the plugin factory takes, for one with no builder). Only the data members are in it: a function, a class, an instance or a schema stays in code. The file asserts it at compile time: `type _Satisfies = SchemaSatisfies<KafkaConfig, InferConfig<typeof KafkaConfigSchema>>`.
-- **The dependency points one way.** `schema.ts` imports the feature's option types. Nothing a package ships imports a `schema.ts`, and no barrel re-exports one; `test/schema_imports.test.ts` fails otherwise.
+- **The dependency points one way.** A schema imports the feature's option types. Nothing a package ships outside `_spectypes/` imports from it, and no barrel re-exports it; `test/spectypes.test.ts` fails otherwise.
 - **The name is `<Feature>ConfigSchema`**, PascalCase under the acronym rules: `KafkaConfigSchema`, `OpenAPIConfigSchema`, `HTTPCachingConfigSchema`.
-- **It lives in `schema.ts` at the package root**, and `std`, whose `schema/` is the `$t` dialect, keeps one per entry point (`logger/schema.ts`, `shutdown/schema.ts`). It is internal, on purpose, until its public shape is settled: no `exports` subpath and no barrel reaches it.
+- **It lives in `_spectypes/` at the package root**, one file per schema (`http/_spectypes/health.ts`, `http/_spectypes/auth.ts`, …), with a barrel `index.ts`. A file may declare several top-level schemas to build the one it configures with, and exports only that one. It is internal, on purpose, until its public shape is settled: no `exports` subpath and no package barrel reaches it.
+- **Its JSON Schema is generated into `_spec/`**, mirroring the file: `_spectypes/health.ts` becomes `_spec/health.gen.json`. `make spec` (after `npm run build`) writes it, it is committed, and `make check` fails when it is stale. Never edit it by hand; `tools/generate-spec.mjs` is a pipe of stages, so another output is one more stage.
+- **Tests below the package root restate what they need.** The `_` privacy rule keeps them from importing `../_spectypes`, so they declare the block they configure inline; a test at the package root imports `./_spectypes/index.js`.
 - **Nothing is defaulted in it.** The feature owns its defaults; a default in the schema would be a second place to change it.
 - Every key is one an environment variable folds to (`test/config_keys.test.ts`), which is why an option spelled `cacheTTL` in code is `cacheTtl` in the schema.
 

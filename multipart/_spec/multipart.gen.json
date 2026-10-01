@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MultipartConfigSchema",
+  "type": "object",
+  "properties": {
+    "throwFileSizeLimit": {
+      "type": "boolean"
+    },
+    "limits": {
+      "type": "object",
+      "properties": {
+        "fieldNameSize": {
+          "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+          "type": "string"
+        },
+        "fieldSize": {
+          "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+          "type": "string"
+        },
+        "fileSize": {
+          "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+          "type": "string"
+        },
+        "fields": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "files": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "headerPairs": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "parts": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      }
+    }
+  }
+}

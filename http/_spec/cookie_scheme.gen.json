@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CookieSchemeConfigSchema",
+  "type": "object",
+  "properties": {
+    "sessionSecret": {
+      "type": "string"
+    },
+    "cookieName": {
+      "type": "string"
+    },
+    "rememberMe": {
+      "type": "boolean"
+    },
+    "rememberMeCookieName": {
+      "type": "string"
+    },
+    "rememberMeRotationGraceSeconds": {
+      "type": "number"
+    },
+    "rememberMeAbsoluteMaxAge": {
+      "type": "number"
+    },
+    "challengeMode": {
+      "anyOf": [
+        {
+          "const": "auto",
+          "type": "string"
+        },
+        {
+          "const": "redirect",
+          "type": "string"
+        },
+        {
+          "const": "status",
+          "type": "string"
+        }
+      ]
+    },
+    "loginPath": {
+      "type": "string"
+    },
+    "accessDeniedPath": {
+      "type": "string"
+    },
+    "returnUrlParameter": {
+      "type": "string"
+    },
+    "maxAge": {
+      "type": "number"
+    },
+    "rememberMeMaxAge": {
+      "type": "number"
+    },
+    "secure": {
+      "type": "boolean"
+    },
+    "sameSite": {
+      "anyOf": [
+        {
+          "const": "strict",
+          "type": "string"
+        },
+        {
+          "const": "lax",
+          "type": "string"
+        },
+        {
+          "const": "none",
+          "type": "string"
+        }
+      ]
+    },
+    "path": {
+      "type": "string"
+    },
+    "roleClaimType": {
+      "type": "string"
+    }
+  }
+}

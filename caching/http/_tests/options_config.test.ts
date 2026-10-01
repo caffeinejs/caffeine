@@ -6,7 +6,6 @@ import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { HTTPCachingConfigSchema } from '../../schema.js'
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import { CacheControl, HTTPCaching } from '../index.js'
 import { HTTPCachingOptionsBuilder, kBuild } from '../options_builder.js'
@@ -25,8 +24,8 @@ describe('HTTPCachingOptionsBuilder.config', () => {
   })
 })
 
-describe('HTTPCaching under HTTPCachingConfigSchema', () => {
-  const schema = $t.Object({ cache: $t.Object(HTTPCachingConfigSchema.properties, { default: {} }) })
+describe('HTTPCaching configured from the tree', () => {
+  const schema = $t.Object({ cache: $t.Object({ statusHeader: $t.Optional($t.String()) }, { default: {} }) })
   const kConfig = token<InferConfig<typeof schema>>(Symbol('caching.config.test'))
 
   let close: (() => Promise<unknown>) | undefined

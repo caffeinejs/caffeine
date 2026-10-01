@@ -12,7 +12,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { View, ViewBuilder, ViewEngineBuilder, view } from '../index.js'
 import { kBuild } from '../keys.js'
-import { ViewConfigSchema } from '../schema.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
@@ -422,7 +421,9 @@ describe('ViewEngineBuilder', () => {
 
     void [ConfiguredController]
 
-    const schema = $t.Object({ view: $t.Object(ViewConfigSchema.properties, { default: {} }) })
+    const schema = $t.Object({
+      view: $t.Object({ root: $t.Optional($t.String()), viewExt: $t.Optional($t.String()) }, { default: {} }),
+    })
     const kConfig = token<InferConfig<typeof schema>>(Symbol('view.config.test'))
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ view: { root: templatesRoot, viewExt: 'hbs' } }))

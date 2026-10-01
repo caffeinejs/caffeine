@@ -39,11 +39,16 @@ check: ## run all checks
 	@npm run lint:fix
 	@npm run lint:markdown
 	@npm run build
+	@npm run spec:check
 	@$(MAKE) cli/dist/caffeine
 	@npm run build:examples
 	@npm run test:typecheck
 	@npm run test:memory
 	@npm test
+
+.PHONY: spec
+spec: ## generate each feature's _spec/ JSON Schema from its _spectypes/ (run after build)
+	@npm run spec:gen
 
 .PHONY: fmt
 fmt: ## format code

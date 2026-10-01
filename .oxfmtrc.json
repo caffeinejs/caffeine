@@ -17,6 +17,7 @@
     ".claude/skills/**",
     "**/*.gen.mod.ts",
     "cli/caffeinerc.schema.json",
+    "**/_spec/**",
     "prisma/migrations/**",
     "**/*.hbs",
     "benchmarks/di/testdata/third_party_legacy/**",

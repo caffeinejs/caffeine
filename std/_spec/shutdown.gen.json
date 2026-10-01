@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ShutdownConfigSchema",
+  "type": "object",
+  "properties": {
+    "drainDelay": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "shutdownTimeout": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "terminationGracePeriod": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "signals": {
+      "anyOf": [
+        {
+          "const": false,
+          "type": "boolean"
+        },
+        {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "const": "SIGTERM",
+                    "type": "string"
+                  },
+                  {
+                    "const": "SIGINT",
+                    "type": "string"
+                  },
+                  {
+                    "const": "SIGHUP",
+                    "type": "string"
+                  },
+                  {
+                    "const": "SIGQUIT",
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

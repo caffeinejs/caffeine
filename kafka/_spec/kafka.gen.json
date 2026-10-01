@@ -1,0 +1,112 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "KafkaConfigSchema",
+  "type": "object",
+  "properties": {
+    "brokers": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "clientId": {
+      "type": "string"
+    },
+    "groupId": {
+      "type": "string"
+    },
+    "ackMode": {
+      "anyOf": [
+        {
+          "const": "auto",
+          "type": "string"
+        },
+        {
+          "const": "record",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "type": "string"
+        }
+      ]
+    },
+    "retry": {
+      "type": "object",
+      "required": [
+        "attempts"
+      ],
+      "properties": {
+        "attempts": {
+          "type": "number"
+        },
+        "backoff": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "delay"
+              ],
+              "properties": {
+                "type": {
+                  "const": "fixed",
+                  "type": "string"
+                },
+                "delay": {
+                  "type": "number"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "delay"
+              ],
+              "properties": {
+                "type": {
+                  "const": "exponential",
+                  "type": "string"
+                },
+                "delay": {
+                  "type": "number"
+                },
+                "multiplier": {
+                  "type": "number"
+                },
+                "max": {
+                  "type": "number"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "topicProvisioning": {
+      "type": "object",
+      "properties": {
+        "autoCreate": {
+          "type": "boolean"
+        },
+        "partitions": {
+          "type": "number"
+        },
+        "replicas": {
+          "type": "number"
+        }
+      }
+    },
+    "deadLetter": {
+      "type": "boolean"
+    }
+  }
+}

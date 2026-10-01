@@ -6,10 +6,10 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
+import { KafkaConfigSchema } from './_spectypes/index.js'
 import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
 import { Kafka, type KafkaConfigurer } from './plugin.js'
 import type { KafkaRuntime } from './runtime.js'
-import { KafkaConfigSchema } from './schema.js'
 import { runtimeKey } from './symbols.js'
 
 // The application owns the schema: it declares one block per kafka instance — by importing the feature's own

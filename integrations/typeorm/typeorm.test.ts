@@ -6,12 +6,12 @@ import { $t } from '@caffeinejs/std/schema'
 import { DataSource, type DataSourceOptions, type Repository } from 'typeorm'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { TypeORMConfigSchema } from './_spectypes/index.js'
 import { type Order, OrderEntity, type User, UserEntity } from './_testdata/entities.testkit.js'
 import { ErrMissingDataSourceOptions } from './errors.js'
 import { $repository } from './injection.js'
 import { dataSourceKey } from './keys.js'
 import { TypeORM } from './plugin.js'
-import { TypeORMConfigSchema } from './schema.js'
 
 /** What the sql.js driver adds to the entity manager. Not on TypeORM's barrel, so it is named structurally. */
 type ExportableManager = { exportDatabase(): Uint8Array }

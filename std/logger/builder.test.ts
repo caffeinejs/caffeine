@@ -11,7 +11,6 @@ import { ConsoleLogger } from './console/console.js'
 import { ErrInvalidLogLevel, ErrLoggerAlreadyConfigured } from './errors.js'
 import { logToken } from './keys.js'
 import { noopLogger } from './noop.js'
-import { LoggerConfigSchema } from './schema.js'
 
 const schema = $t.Object({ logEnabled: $t.Boolean() })
 type AppConfig = { logEnabled: boolean }
@@ -23,7 +22,9 @@ function appWithConfig(logEnabled: boolean) {
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }
 
-const sliceSchema = $t.Object({ log: LoggerConfigSchema })
+const sliceSchema = $t.Object({
+  log: $t.Object({ level: $t.Optional($t.String()), enabled: $t.Optional($t.Boolean()) }),
+})
 type SliceConfig = { log: LoggerConfig }
 const kSlice = token<SliceConfig>(Symbol('logger_builder.test.slice'))
 
@@ -153,7 +154,7 @@ describe('Application integration', () => {
   })
 
   // Every other configurable feature takes a whole node with `config(...)`; the logger took settings one at a
-  // time, so an application had to restate the mapping instead of composing `LoggerConfigSchema`.
+  // time, so an application had to restate the mapping instead of handing the block over whole.
   describe('config(node)', () => {
     it('reads the level and the enabled flag off the node', async () => {
       const app = appWithSlice({ level: 'debug', enabled: true })

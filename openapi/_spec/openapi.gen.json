@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenAPIConfigSchema",
+  "type": "object",
+  "properties": {
+    "routes": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "type": "string"
+        },
+        "json": {
+          "type": "string"
+        },
+        "yaml": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "docs": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "const": false,
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+    },
+    "version": {
+      "anyOf": [
+        {
+          "const": "3.1.1",
+          "type": "string"
+        },
+        {
+          "const": "3.2.0",
+          "type": "string"
+        }
+      ]
+    },
+    "info": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {}
+      }
+    },
+    "servers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "patternProperties": {
+          "^(.*)$": {}
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "patternProperties": {
+          "^(.*)$": {}
+        }
+      }
+    },
+    "externalDocs": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {}
+      }
+    },
+    "security": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "patternProperties": {
+          "^(.*)$": {}
+        }
+      }
+    },
+    "securitySchemes": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "patternProperties": {
+            "^(.*)$": {}
+          }
+        }
+      }
+    },
+    "deriveSecuritySchemes": {
+      "type": "boolean"
+    },
+    "dedupeComponents": {
+      "type": "boolean"
+    },
+    "validate": {
+      "type": "boolean"
+    },
+    "ui": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {}
+      }
+    },
+    "infer": {
+      "type": "object",
+      "properties": {
+        "validation": {
+          "type": "boolean"
+        },
+        "auth": {
+          "type": "boolean"
+        }
+      }
+    },
+    "errors": {
+      "type": "object",
+      "properties": {
+        "validation": {
+          "type": "number"
+        },
+        "unauthorized": {
+          "type": "number"
+        },
+        "forbidden": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

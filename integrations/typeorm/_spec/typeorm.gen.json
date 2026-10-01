@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TypeORMConfigSchema",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string"
+    },
+    "host": {
+      "type": "string"
+    },
+    "port": {
+      "minimum": 0,
+      "maximum": 65535,
+      "type": "integer"
+    },
+    "username": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "database": {
+      "type": "string"
+    },
+    "schema": {
+      "type": "string"
+    },
+    "synchronize": {
+      "type": "boolean"
+    },
+    "logging": {
+      "type": "boolean"
+    }
+  }
+}

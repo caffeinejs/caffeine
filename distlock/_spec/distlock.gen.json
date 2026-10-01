@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "DistLockConfigSchema",
+  "type": "object",
+  "properties": {
+    "ttl": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "wait": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "retryDelay": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "retryJitter": {
+      "minimum": 0,
+      "maximum": 1,
+      "type": "number"
+    }
+  }
+}

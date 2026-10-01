@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ViewConfigSchema",
+  "type": "object",
+  "properties": {
+    "root": {
+      "type": "string"
+    },
+    "viewExt": {
+      "type": "string"
+    },
+    "layout": {
+      "type": "string"
+    },
+    "charset": {
+      "type": "string"
+    },
+    "production": {
+      "type": "boolean"
+    },
+    "includeViewExtension": {
+      "type": "boolean"
+    },
+    "maxCache": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "defaultContext": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {}
+      }
+    },
+    "options": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {}
+      }
+    }
+  }
+}

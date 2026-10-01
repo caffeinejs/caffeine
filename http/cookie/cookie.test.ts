@@ -9,9 +9,10 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { $p, Args, Controller, createWebApplication, FastifyContext, Get, newRouter } from '../index.js'
-import { CookieConfigSchema } from '../schema.js'
 
-const schema = $t.Object({ app: $t.Object({ cookie: CookieConfigSchema }) })
+const schema = $t.Object({
+  app: $t.Object({ cookie: $t.Object({ enabled: $t.Boolean({ default: true }), secret: $t.Optional($t.String()) }) }),
+})
 
 const kConfig = token<InferConfig<typeof schema>>(Symbol('cookie.app.config'))
 

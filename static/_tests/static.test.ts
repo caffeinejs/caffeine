@@ -9,7 +9,6 @@ import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { staticFiles } from '../index.js'
-import { StaticConfigSchema } from '../schema.js'
 
 const fixtures = fileURLToPath(new URL('./_testdata/fixtures', import.meta.url))
 const fixtures2 = fileURLToPath(new URL('./_testdata/fixtures2', import.meta.url))
@@ -71,8 +70,10 @@ describe('static feature', () => {
 })
 
 // A deployment can point the mounts somewhere else without touching code, and a mount written in code stands.
-describe('static feature under StaticConfigSchema', () => {
-  const schema = $t.Object({ static: $t.Object(StaticConfigSchema.properties, { default: {} }) })
+describe('static feature configured from the tree', () => {
+  // Only `root` is declared: every other key is a `@fastify/static` option, kept as written.
+  const mount = $t.Object({ root: $t.String() }, { additionalProperties: $t.Unknown() })
+  const schema = $t.Object({ static: $t.Object({ mounts: $t.Optional($t.Array(mount)) }, { default: {} }) })
   const kConfig = token<InferConfig<typeof schema>>(Symbol('static.config.test'))
   type AppConfig = InferConfig<typeof schema>
 

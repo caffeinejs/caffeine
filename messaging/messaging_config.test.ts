@@ -6,12 +6,12 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
+import { MessagingConfigSchema } from './_spectypes/index.js'
 import { inMemoryBinder } from './binder.testkit.js'
 import { Consume } from './decorators/consume.js'
 import { MessageHandler } from './decorators/message_handler.js'
 import { Messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
-import { MessagingConfigSchema } from './schema.js'
 import { runtimeKey } from './symbols.js'
 
 // Every inbound binding needs a consumer: the engine now starts during `bootstrap()` (via the `MessagingLifecycle`

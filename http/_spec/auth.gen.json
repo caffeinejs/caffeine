@@ -1,0 +1,345 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuthConfigSchema",
+  "type": "object",
+  "properties": {
+    "defaultAuthenticateScheme": {
+      "type": "string"
+    },
+    "defaultChallengeScheme": {
+      "type": "string"
+    },
+    "defaultForbidScheme": {
+      "type": "string"
+    },
+    "schemes": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "object",
+          "properties": {
+            "secret": {
+              "type": "string"
+            },
+            "issuer": {
+              "type": "string"
+            },
+            "audience": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "algorithm": {
+              "type": "string"
+            },
+            "expiresIn": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            },
+            "roleClaimType": {
+              "type": "string"
+            },
+            "includeErrorDetails": {
+              "type": "boolean"
+            },
+            "realm": {
+              "type": "string"
+            },
+            "scheme": {
+              "type": "string"
+            },
+            "sessionSecret": {
+              "type": "string"
+            },
+            "cookieName": {
+              "type": "string"
+            },
+            "rememberMe": {
+              "type": "boolean"
+            },
+            "rememberMeCookieName": {
+              "type": "string"
+            },
+            "rememberMeRotationGraceSeconds": {
+              "type": "number"
+            },
+            "rememberMeAbsoluteMaxAge": {
+              "type": "number"
+            },
+            "challengeMode": {
+              "anyOf": [
+                {
+                  "const": "auto",
+                  "type": "string"
+                },
+                {
+                  "const": "redirect",
+                  "type": "string"
+                },
+                {
+                  "const": "status",
+                  "type": "string"
+                }
+              ]
+            },
+            "loginPath": {
+              "type": "string"
+            },
+            "accessDeniedPath": {
+              "type": "string"
+            },
+            "returnUrlParameter": {
+              "type": "string"
+            },
+            "maxAge": {
+              "type": "number"
+            },
+            "rememberMeMaxAge": {
+              "type": "number"
+            },
+            "secure": {
+              "type": "boolean"
+            },
+            "sameSite": {
+              "anyOf": [
+                {
+                  "const": "strict",
+                  "type": "string"
+                },
+                {
+                  "const": "lax",
+                  "type": "string"
+                },
+                {
+                  "const": "none",
+                  "type": "string"
+                }
+              ]
+            },
+            "path": {
+              "type": "string"
+            },
+            "clientId": {
+              "type": "string"
+            },
+            "clientSecret": {
+              "type": "string"
+            },
+            "authorizationEndpoint": {
+              "type": "string"
+            },
+            "tokenEndpoint": {
+              "type": "string"
+            },
+            "userInfoEndpoint": {
+              "type": "string"
+            },
+            "callbackUrl": {
+              "type": "string"
+            },
+            "defaultRedirectPath": {
+              "type": "string"
+            },
+            "scopes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sessionCookieName": {
+              "type": "string"
+            },
+            "sessionCookieTtlSeconds": {
+              "type": "number"
+            },
+            "stateCookieName": {
+              "type": "string"
+            },
+            "secureCookie": {
+              "type": "boolean"
+            },
+            "httpTimeoutMs": {
+              "type": "number"
+            },
+            "showPii": {
+              "type": "boolean"
+            },
+            "usePkce": {
+              "type": "boolean"
+            },
+            "subjectClaim": {
+              "type": "string"
+            },
+            "tokenEndpointAuthMethod": {
+              "anyOf": [
+                {
+                  "const": "auto",
+                  "type": "string"
+                },
+                {
+                  "const": "client_secret_basic",
+                  "type": "string"
+                },
+                {
+                  "const": "client_secret_post",
+                  "type": "string"
+                }
+              ]
+            },
+            "tokenRequestHeaders": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {
+                  "type": "string"
+                }
+              }
+            },
+            "userInfoHeaders": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {
+                  "type": "string"
+                }
+              }
+            },
+            "mapClaims": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {
+                  "type": "string"
+                }
+              }
+            },
+            "discoveryUrl": {
+              "type": "string"
+            },
+            "jwksUri": {
+              "type": "string"
+            },
+            "allowPlainPkce": {
+              "type": "boolean"
+            },
+            "clockToleranceSeconds": {
+              "type": "number"
+            },
+            "discoveryCacheTtlSeconds": {
+              "type": "number"
+            },
+            "getClaimsFromUserInfoEndpoint": {
+              "type": "boolean"
+            },
+            "saveTokens": {
+              "type": "boolean"
+            },
+            "postLogoutRedirectUri": {
+              "type": "string"
+            },
+            "endSessionEndpoint": {
+              "type": "string"
+            },
+            "prompt": {
+              "anyOf": [
+                {
+                  "const": "none",
+                  "type": "string"
+                },
+                {
+                  "const": "login",
+                  "type": "string"
+                },
+                {
+                  "const": "consent",
+                  "type": "string"
+                },
+                {
+                  "const": "select_account",
+                  "type": "string"
+                }
+              ]
+            },
+            "loginHint": {
+              "type": "string"
+            },
+            "acrValues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "maxAgeSeconds": {
+              "type": "number"
+            },
+            "extraAuthorizationParams": {
+              "type": "object",
+              "patternProperties": {
+                "^(.*)$": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "properties": {
+        "scheme": {
+          "type": "string"
+        },
+        "roleClaimType": {
+          "type": "string"
+        }
+      }
+    },
+    "refresh": {
+      "type": "object",
+      "properties": {
+        "accessTtl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "refreshTtl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        },
+        "absoluteTtl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

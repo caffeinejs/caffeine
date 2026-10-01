@@ -1,52 +1,27 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import * as std from '@caffeinejs/std'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { globbySync } from 'globby'
 import { describe, expect, it } from 'vitest'
-
-import * as caching from '../caching/dist/schema.js'
-import * as devtools from '../devtools/dist/schema.js'
-import * as distlock from '../distlock/dist/schema.js'
-import * as html from '../html/dist/schema.js'
-import * as http from '../http/dist/schema.js'
-import * as typeorm from '../integrations/typeorm/dist/schema.js'
-import * as kafka from '../kafka/dist/schema.js'
-import * as messaging from '../messaging/dist/schema.js'
-import * as multipart from '../multipart/dist/schema.js'
-import * as openapi from '../openapi/dist/schema.js'
-import * as staticFiles from '../static/dist/schema.js'
-import * as logger from '../std/dist/logger/schema.js'
-import * as shutdown from '../std/dist/shutdown/schema.js'
-import * as view from '../view/dist/schema.js'
 
 // Every configuration key a feature declares has to be one an environment variable reaches. `EnvConfigSource`
 // lowercases each word of a name and camel-cases the rest, so `CACHE_TTL` becomes `cacheTtl`: a key spelled
 // `cacheTTL` is reached by no variable at all, and validation drops the folded one at bootstrap() without a word.
 //
-// Schemas are found by name, every `*ConfigSchema` a schema module exports, so one added later is covered without
-// touching this file. A package that starts declaring configuration adds its `schema.ts` here. The schemas are not
-// published through a package subpath yet, so each is read from the package's build output.
-const entryPoints: Record<string, object> = {
-  caching,
-  devtools,
-  distlock,
-  html,
-  http,
-  kafka,
-  logger,
-  messaging,
-  multipart,
-  openapi,
-  shutdown,
-  static: staticFiles,
-  std,
-  typeorm,
-  view,
-}
+// The feature schemas are read from the JSON Schema generated beside each package's `_spectypes/`
+// (`make spec`), so a schema added later is covered without touching this file. `make check` fails when that JSON
+// is stale.
+const root = fileURLToPath(new URL('..', import.meta.url))
 
-const schemas: Array<[string, unknown]> = Object.entries(entryPoints).flatMap(([entry, exports]) =>
-  Object.entries(exports)
-    .filter(([name]) => name.endsWith('ConfigSchema'))
-    .map(([name, schema]): [string, unknown] => [`${entry}.${name}`, schema]),
-)
+const specs = globbySync('**/_spec/*.gen.json', { cwd: root, ignore: ['**/node_modules/**', '**/dist/**'] })
+
+const schemas: Array<[string, unknown]> = [
+  ...specs.map((file): [string, unknown] => [file, JSON.parse(readFileSync(`${root}${file}`, 'utf8'))]),
+  // The framework's own block, which is not a feature's.
+  ['std.caffeineConfigSchema', std.caffeineConfigSchema],
+]
 
 interface DeclaredKey {
   path: string
@@ -105,10 +80,9 @@ const foldedFrom = (variable: string): string[] => {
 }
 
 describe('configuration keys', () => {
-  // Without this the guard below passes vacuously for an entry point whose schema was renamed or stopped being
-  // exported.
-  it.each(Object.keys(entryPoints))('are declared by %s', entry => {
-    expect(schemas.some(([name]) => name.startsWith(`${entry}.`))).toBe(true)
+  // Without this the guard below passes vacuously the day the generated files move.
+  it('are found for every feature', () => {
+    expect(specs.length).toBeGreaterThan(10)
   })
 
   it.each(schemas)('of %s are the ones their environment variables fold to', (name, schema) => {

@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OAuthSchemeConfigSchema",
+  "type": "object",
+  "properties": {
+    "clientId": {
+      "type": "string"
+    },
+    "clientSecret": {
+      "type": "string"
+    },
+    "sessionSecret": {
+      "type": "string"
+    },
+    "authorizationEndpoint": {
+      "type": "string"
+    },
+    "tokenEndpoint": {
+      "type": "string"
+    },
+    "userInfoEndpoint": {
+      "type": "string"
+    },
+    "callbackUrl": {
+      "type": "string"
+    },
+    "defaultRedirectPath": {
+      "type": "string"
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sessionCookieName": {
+      "type": "string"
+    },
+    "sessionCookieTtlSeconds": {
+      "type": "number"
+    },
+    "stateCookieName": {
+      "type": "string"
+    },
+    "secureCookie": {
+      "type": "boolean"
+    },
+    "roleClaimType": {
+      "type": "string"
+    },
+    "httpTimeoutMs": {
+      "type": "number"
+    },
+    "showPii": {
+      "type": "boolean"
+    },
+    "challengeMode": {
+      "anyOf": [
+        {
+          "const": "auto",
+          "type": "string"
+        },
+        {
+          "const": "redirect",
+          "type": "string"
+        },
+        {
+          "const": "status",
+          "type": "string"
+        }
+      ]
+    },
+    "loginPath": {
+      "type": "string"
+    },
+    "usePkce": {
+      "type": "boolean"
+    },
+    "subjectClaim": {
+      "type": "string"
+    },
+    "tokenEndpointAuthMethod": {
+      "anyOf": [
+        {
+          "const": "client_secret_basic",
+          "type": "string"
+        },
+        {
+          "const": "client_secret_post",
+          "type": "string"
+        }
+      ]
+    },
+    "tokenRequestHeaders": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "string"
+        }
+      }
+    },
+    "userInfoHeaders": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "string"
+        }
+      }
+    },
+    "mapClaims": {
+      "type": "object",
+      "patternProperties": {
+        "^(.*)$": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

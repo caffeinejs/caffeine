@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HealthConfigSchema",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "paths": {
+      "type": "object",
+      "properties": {
+        "live": {
+          "type": "string"
+        },
+        "ready": {
+          "type": "string"
+        },
+        "startup": {
+          "type": "string"
+        }
+      }
+    },
+    "indicatorTimeout": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "probeDeadline": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "cacheTtl": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "verbose": {
+      "type": "boolean"
+    },
+    "exclude": {
+      "type": "boolean"
+    }
+  }
+}

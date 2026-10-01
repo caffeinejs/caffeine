@@ -6,19 +6,33 @@ import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
-// Not published through a package subpath yet, so read from the package's build output.
-import { AuthConfigSchema } from '../../http/dist/schema.js'
 import { startApp } from './internal/app.js'
 import { Browser } from './internal/browser/index.js'
 import { localJWT } from './internal/tokens.js'
 
 /**
- * Authentication options arriving from the environment, through the schema the package exports for the block.
- * That schema types every scheme's keys, so loading the configuration turns the text of an environment variable
- * into the boolean or the number an option is.
+ * Authentication options arriving from the environment, through an application schema keyed by scheme name with
+ * each key typed, so loading the configuration turns the text of an environment variable into the boolean or the
+ * number an option is.
  */
 
-const schema = $t.Object({ auth: $t.Object({ ...AuthConfigSchema.properties }, { default: {} }) })
+const schema = $t.Object({
+  auth: $t.Object(
+    {
+      schemes: $t.Optional(
+        $t.Record(
+          $t.String(),
+          $t.Object({
+            includeErrorDetails: $t.Optional($t.Boolean()),
+            clientId: $t.Optional($t.String()),
+            callbackUrl: $t.Optional($t.String()),
+          }),
+        ),
+      ),
+    },
+    { default: {} },
+  ),
+})
 const kConfig = token<InferConfig<typeof schema>>(Symbol('e2e.auth.config'))
 
 function configuredFrom(env: Record<string, string>) {

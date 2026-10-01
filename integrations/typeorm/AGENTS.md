@@ -4,8 +4,8 @@ Follow the root [`AGENTS.md`](../../AGENTS.md), plus:
 
 - `dataSource(options)` takes `DataSourceOptions` whole, entities included. Do not add an `entities(...)` method or a
   per-setting fluent method.
-- `config(options)` fills in what `dataSource(...)` left out. `TypeORMConfigSchema` (`schema.ts`, internal) carries
-  only the connection settings a deployment tunes; the driver `type` and the entities stay in code.
+- `config(options)` fills in what `dataSource(...)` left out. `TypeORMConfigSchema` (`_spectypes/typeorm.ts`,
+  internal) carries only the connection settings a deployment tunes; the driver `type` and the entities stay in code.
 - `registerStage(kRepositoryStage, …)` runs at module scope in `injection.ts`, beside `$repository`, and
   `package.json` `"sideEffects"` names `./dist/injection.js`. Do not move the registration to `index.ts`, which is
   not on the allowlist, and do not export the stage or the symbol naming it.

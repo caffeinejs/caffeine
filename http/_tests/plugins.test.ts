@@ -15,7 +15,6 @@ import { createWebApplication, type WebApplication, healthProbes } from '../inde
 import type { HTTPPluginFactory } from '../plugin.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
-import { HealthConfigSchema } from '../schema.js'
 
 /**
  * What an application installs on its server: the plugins its `.with(...)` factories produce.
@@ -563,7 +562,10 @@ describe('a plugin registered with its options', () => {
   // their `config` type from the application, so if `C` ever regresses, `config.health` and `config.security`
   // stop type-checking and `npm run test:typecheck` fails.
   it('types both a plugin configurer and a pair against the application configuration', async () => {
-    const schema = $t.Object({ security: $t.Object({ header: $t.String() }), health: HealthConfigSchema })
+    const schema = $t.Object({
+      security: $t.Object({ header: $t.String() }),
+      health: $t.Object({ enabled: $t.Optional($t.Boolean()) }),
+    })
     const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
     const conf = newConfiguration(schema, kConfig)
       .source(new InlineConfigSource({ security: { header: 'x-from-config' } }))

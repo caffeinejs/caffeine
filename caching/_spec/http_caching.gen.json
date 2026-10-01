@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HTTPCachingConfigSchema",
+  "type": "object",
+  "properties": {
+    "statusHeader": {
+      "type": "string"
+    },
+    "storeTimeout": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "lockTimeout": {
+      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "type": "string"
+    },
+    "varyByQuery": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "maxEntrySize": {
+      "pattern": "^\\d+(?:[bB]|[kKmMgGtTpP][bB]?)?$",
+      "type": "string"
+    }
+  }
+}

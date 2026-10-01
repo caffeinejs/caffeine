@@ -5,6 +5,7 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { DistLockConfigSchema } from './_spectypes/index.js'
 import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
@@ -12,7 +13,6 @@ import type { DistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
 import { kDistLock, kDistLockBackend } from './keys.js'
 import { DistributedLock } from './plugin.js'
-import { DistLockConfigSchema } from './schema.js'
 
 /**
  * Records the lease duration of every attempt, so a resolved setting can be observed from outside: `ttls[0]`

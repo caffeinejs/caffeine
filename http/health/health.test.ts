@@ -8,7 +8,6 @@ import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Health, WebApplication, createWebApplication, healthProbes } from '../index.js'
-import { HealthConfigSchema } from '../schema.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthConfig } from './options.js'
 import { HealthProbesBuilder } from './probes_plugin.js'
@@ -62,7 +61,14 @@ describe('HealthProbesBuilder.resolve', () => {
 })
 
 describe('healthProbes() and Health()', () => {
-  const rootSchema = $t.Object({ health: HealthConfigSchema })
+  const rootSchema = $t.Object({
+    health: $t.Object({
+      enabled: $t.Optional($t.Boolean()),
+      indicatorTimeout: $t.Optional($t.Duration()),
+      probeDeadline: $t.Optional($t.Duration()),
+      cacheTtl: $t.Optional($t.Duration()),
+    }),
+  })
   const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
   const schema = $t.Object({
