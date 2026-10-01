@@ -6,7 +6,18 @@ export {
 } from './basic/index.js'
 export { Authentication } from './authentication.js'
 export { AuthenticationBuilder } from './builder.js'
-export { authConfigSchema, SCHEME_SCHEMAS, type AuthConfig } from './config.js'
+export type {
+  AuthConfig,
+  AuthCredentialsConfig,
+  AuthSchemeConfig,
+  BasicSchemeConfig,
+  CookieSchemeConfig,
+  JWTSchemeConfig,
+  OAuthSchemeConfig,
+  OIDCSchemeConfig,
+  OpaqueSchemeConfig,
+  RefreshTokenConfig,
+} from './config.js'
 export {
   CookieAuthenticationHandler,
   type CookieAuthenticationOptions,

@@ -187,8 +187,8 @@ Those are the only answers.
 
 - No side channel between a feature and the configuration: a feature registers no slice, publishes no key, and adds no field to the resolved configuration object. A value the application needs once everything is up is either configuration, read out of the tree by the callback, or a binding.
 - A fluent method is the last word: `s.drainDelay('5s')` is what the feature runs on. Configuration reaches a feature only because the application's configure callback handed it over (`.shutdown((s, { config }) => s.config(config.app.shutdown))`). The more specific wins: a setter beats the block `config(...)` handed over.
-- Exceptions, where `config(...)` overlays what the fluent methods set: authentication scheme options (a secret in the tree redirects one written in code); kafka (`brokers`, `clientId`, `groupId`, and the rest of the configurable slice); messaging binding destinations (and the other keys a binding's config slice declares).
-- The application declares the whole schema by importing the feature's exported schema (`loggerConfigSchema`, `cookieConfigSchema`, `healthConfigSchema`, …), never by restating it. Importing it carries the feature's defaults into the tree; a block with required, undefaulted fields and no source fails validation at `bootstrap()`.
+- Exceptions, where `config(...)` overlays what the fluent methods set: authentication scheme options (a secret in the tree redirects one written in code); kafka (`brokers`, `clientId`, `groupId`, and every other key `config(...)` carries); messaging binding destinations (and the other binding options `config(...)` carries).
+- The application declares its whole schema itself; a feature's own schema is internal to its package for now. A block with required, undefaulted fields and no source fails validation at `bootstrap()`.
 - A feature nothing wired runs on its own defaults and its builder values alone.
 - A configuration node is live and a resolved options object is read once: `b.config(config.app.thing)` follows a reload, `b.port(config.app.thing.port)` reads a number once, and a bound value is not reached by a later reload. A feature that must act on a change takes a view instead: `(b, { store }) => b.config(store.view(t => t.app.thing))`.
 - A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` inside the factory's plugin is the whole act. State a feature binds for its plugin goes through the container (`OIDCRoutesRef` is the model), never through shared builder fields.
@@ -196,6 +196,17 @@ Those are the only answers.
 - A plugin reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it. Registered at the root by `.with(...)`, an fp-wrapped plugin covers every route; registered on a route group by `router.plugin(...)` or `@Use(...)`, it covers that group alone.
 - Plugins install in the order of the application's `.with(...)` calls. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts.
 - Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookie parsing. The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
+
+## A feature's configuration schema
+
+Every feature a user can tune from the tree has one schema describing its options. The feature never imports it.
+
+- **It satisfies the options.** What the schema decodes, read-only, is assignable to `Partial<Options>`, where `Options` is what the builder's `config(...)` takes (or what the plugin factory takes, for one with no builder). Only the data members are in it: a function, a class, an instance or a schema stays in code. The file asserts it at compile time: `type _Satisfies = SchemaSatisfies<KafkaConfig, InferConfig<typeof KafkaConfigSchema>>`.
+- **The dependency points one way.** `schema.ts` imports the feature's option types. Nothing a package ships imports a `schema.ts`, and no barrel re-exports one; `test/schema_imports.test.ts` fails otherwise.
+- **The name is `<Feature>ConfigSchema`**, PascalCase under the acronym rules: `KafkaConfigSchema`, `OpenAPIConfigSchema`, `HTTPCachingConfigSchema`.
+- **It lives in `schema.ts` at the package root**, and `std`, whose `schema/` is the `$t` dialect, keeps one per entry point (`logger/schema.ts`, `shutdown/schema.ts`). It is internal, on purpose, until its public shape is settled: no `exports` subpath and no barrel reaches it.
+- **Nothing is defaulted in it.** The feature owns its defaults; a default in the schema would be a second place to change it.
+- Every key is one an environment variable folds to (`test/config_keys.test.ts`), which is why an option spelled `cacheTTL` in code is `cacheTtl` in the schema.
 
 ## Writing a feature
 

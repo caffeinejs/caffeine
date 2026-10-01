@@ -8,11 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 import type { DistLockBuilder } from './builder.js'
-import { distLockConfigSchema } from './config.js'
 import type { DistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
 import { kDistLock, kDistLockBackend } from './keys.js'
 import { DistributedLock } from './plugin.js'
+import { DistLockConfigSchema } from './schema.js'
 
 /**
  * Records the lease duration of every attempt, so a resolved setting can be observed from outside: `ttls[0]`
@@ -46,7 +46,7 @@ afterEach(async () => {
 })
 
 const appConfigSchema = $t.Object(
-  { app: $t.Object({ distlock: $t.Object(distLockConfigSchema.properties, { default: {} }) }, { default: {} }) },
+  { app: $t.Object({ distlock: $t.Object(DistLockConfigSchema.properties, { default: {} }) }, { default: {} }) },
   { default: {} },
 )
 
@@ -188,10 +188,11 @@ describe('distlock configuration', () => {
     await expect(booting).rejects.toThrow('app.distlock.ttl')
   })
 
-  it('publishes the schema from the barrel, so an application can compose it', async () => {
-    const { distLockConfigSchema: fromBarrel } = await import('./index.js')
+  // The schema is internal to the package for now; the feature never reads it.
+  it('does not export the config schema from the package barrel', async () => {
+    const barrel: Record<string, unknown> = await import('./index.js')
 
-    expect(fromBarrel).toBe(distLockConfigSchema)
+    expect(Object.keys(barrel).filter(name => name.endsWith('ConfigSchema'))).toEqual([])
   })
 
   // Failing at start-up rather than at the first lock: a fleet that booted without a backend has already told

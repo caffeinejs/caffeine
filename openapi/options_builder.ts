@@ -5,6 +5,7 @@ import {
   defaultOpenAPIOptions,
   type ErrorStatusOptions,
   type InferenceOptions,
+  type OpenAPIConfig,
   type OpenAPIOptions,
 } from './options.js'
 import { OpenAPISecurityBuilder } from './security_builder.js'
@@ -29,15 +30,37 @@ import type {
  */
 export const kBuild = Symbol('caffeine.openapi.build')
 
+/** What the fluent methods set, and nothing else: the keyed blocks hold only the keys a method wrote. */
+type FluentOptions = Partial<Omit<OpenAPIOptions, 'routes' | 'infer' | 'errors'>> & {
+  routes?: OpenAPIConfig['routes']
+  infer?: Partial<InferenceOptions>
+  errors?: Partial<ErrorStatusOptions>
+}
+
 /**
  * Fluent authoring for {@link OpenAPIOptions}, e.g. `openapi(o => o.version('3.2.0').info({...}))`.
  *
  * Most of what ends up in the document is not configured here at all — it is read from the routes the
  * application already declares. This builder covers the document-level facts nothing else can know (title,
  * version, servers), where the document is served, and who may read it.
+ *
+ * What a fluent method sets is final: {@link config} fills in only what no method set.
  */
 export class OpenAPIOptionsBuilder {
-  readonly #options: OpenAPIOptions = defaultOpenAPIOptions()
+  readonly #options: FluentOptions = {}
+  #config: Partial<OpenAPIConfig> | undefined
+
+  /**
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.openapi`.
+   *
+   * Every other method on this builder wins over what the node carries. Keyed blocks (`routes`, `ui`, `infer`,
+   * `errors`, `securitySchemes`) merge key by key; a list (`servers`, `tags`, `security`) set by a method replaces
+   * the configured one.
+   */
+  config(config: Partial<OpenAPIConfig>): this {
+    this.#config = config
+    return this
+  }
 
   /** The OpenAPI version to emit. Defaults to `3.1.1`; `3.2.0` unlocks the QUERY method and 3.2-only fields. */
   version(version: OpenAPIVersion): this {
@@ -53,7 +76,7 @@ export class OpenAPIOptionsBuilder {
 
   /** Adds a server the API is reachable at. Call it more than once for more than one. */
   server(url: string | ServerObject, description?: string): this {
-    this.#options.servers.push(
+    ;(this.#options.servers ??= []).push(
       typeof url === 'string' ? { url, ...(description === undefined ? {} : { description }) } : url,
     )
     return this
@@ -75,7 +98,7 @@ export class OpenAPIOptionsBuilder {
 
   /** Declares a tag up front, so its description exists even before a controller uses it. */
   tag(tag: TagObject): this {
-    this.#options.tags.push(tag)
+    ;(this.#options.tags ??= []).push(tag)
     return this
   }
 
@@ -84,7 +107,7 @@ export class OpenAPIOptionsBuilder {
    * is the way to describe one the framework cannot — notably a bare `addStrategy` handler.
    */
   securityScheme(name: string, scheme: SecuritySchemeObject): this {
-    this.#options.securitySchemes[name] = scheme
+    this.#options.securitySchemes = { ...this.#options.securitySchemes, [name]: scheme }
     return this
   }
 
@@ -96,25 +119,25 @@ export class OpenAPIOptionsBuilder {
 
   /** Mounts every document endpoint under a common prefix. */
   base(path: string): this {
-    this.#options.routes.base = path
+    this.#options.routes = { ...this.#options.routes, base: path }
     return this
   }
 
   /** Where the JSON document is served. */
   json(path: string): this {
-    this.#options.routes.json = path
+    this.#options.routes = { ...this.#options.routes, json: path }
     return this
   }
 
   /** Where the YAML document is served; `false` disables it. */
   yaml(path: string | false): this {
-    this.#options.routes.yaml = path === false ? undefined : path
+    this.#options.routes = { ...this.#options.routes, yaml: path }
     return this
   }
 
   /** Where the documentation UI is served; `false` disables it and drops the Scalar dependency entirely. */
   docs(path: string | false): this {
-    this.#options.routes.docs = path === false ? undefined : path
+    this.#options.routes = { ...this.#options.routes, docs: path }
     return this
   }
 
@@ -164,13 +187,13 @@ export class OpenAPIOptionsBuilder {
 
   /** Which responses to add that no schema declared. Both are on by default. */
   infer(infer: Partial<InferenceOptions>): this {
-    Object.assign(this.#options.infer, infer)
+    this.#options.infer = { ...this.#options.infer, ...infer }
     return this
   }
 
   /** The status codes used for inferred responses — set `validation` to match your error handler. */
   errors(errors: Partial<ErrorStatusOptions>): this {
-    Object.assign(this.#options.errors, errors)
+    this.#options.errors = { ...this.#options.errors, ...errors }
     return this
   }
 
@@ -256,6 +279,39 @@ export class OpenAPIOptionsBuilder {
   }
 
   [kBuild](): OpenAPIOptions {
-    return this.#options
+    const defaults = defaultOpenAPIOptions()
+    const config = this.#config ?? {}
+    const options = this.#options
+    const routes = { ...defaults.routes, ...config.routes, ...options.routes }
+
+    // The configuration's objects are read-only snapshots; the document is built from copies it can own.
+    return {
+      ...defaults,
+      ...options,
+      version: options.version ?? config.version ?? defaults.version,
+      info: options.info ?? (structuredClone(config.info) as InfoObject | undefined) ?? defaults.info,
+      servers: options.servers ?? (structuredClone(config.servers) as ServerObject[] | undefined) ?? [],
+      externalDocs:
+        options.externalDocs ?? (structuredClone(config.externalDocs) as ExternalDocumentationObject | undefined),
+      security: options.security ?? (structuredClone(config.security) as SecurityRequirementObject[] | undefined),
+      tags: options.tags ?? (structuredClone(config.tags) as TagObject[] | undefined) ?? [],
+      securitySchemes: {
+        ...(structuredClone(config.securitySchemes) as Record<string, SecuritySchemeObject> | undefined),
+        ...options.securitySchemes,
+      },
+      deriveSecuritySchemes:
+        options.deriveSecuritySchemes ?? config.deriveSecuritySchemes ?? defaults.deriveSecuritySchemes,
+      routes: {
+        base: routes.base,
+        json: routes.json,
+        yaml: routes.yaml === false ? undefined : routes.yaml,
+        docs: routes.docs === false ? undefined : routes.docs,
+      },
+      ui: config.ui === undefined && options.ui === undefined ? undefined : { ...config.ui, ...options.ui },
+      infer: { ...defaults.infer, ...config.infer, ...options.infer },
+      errors: { ...defaults.errors, ...config.errors, ...options.errors },
+      dedupeComponents: options.dedupeComponents ?? config.dedupeComponents ?? defaults.dedupeComponents,
+      validate: options.validate ?? config.validate,
+    }
   }
 }

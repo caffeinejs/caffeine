@@ -12,10 +12,11 @@ import { EnvConfigSource } from '../config/sources/env/index.js'
 import { InlineConfigSource } from '../config/sources/inline/index.js'
 import { createApplication, newConfiguration } from '../index.js'
 import { $t } from '../schema/t.js'
-import { kShutdownPolicy, shutdownConfigSchema, type ShutdownOptions } from './shutdown_options.js'
+import { ShutdownConfigSchema } from './schema.js'
+import { kShutdownPolicy, type ShutdownOptions } from './shutdown_options.js'
 import { noopSignalDispatcher, type SignalDispatcher } from './signals.js'
 
-const appSchema = $t.Object({ shutdown: shutdownConfigSchema })
+const appSchema = $t.Object({ shutdown: ShutdownConfigSchema })
 type AppConfig = InferConfig<typeof appSchema>
 const kAppConfig = token<AppConfig>(Symbol('app.config'))
 

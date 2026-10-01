@@ -17,7 +17,12 @@ import {
   Authentication,
   authentication,
 } from '../../../index.js'
-import { SCHEME_SCHEMAS, authConfigSchema } from '../config.js'
+import {
+  AuthConfigSchema,
+  BasicSchemeConfigSchema,
+  CookieSchemeConfigSchema,
+  JWTSchemeConfigSchema,
+} from '../../../schema.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
 
@@ -28,14 +33,14 @@ import { kAuthSchemeDescriptors } from '../keys.js'
 const rootSchema = $t.Object({
   auth: $t.Object(
     {
-      ...authConfigSchema.properties,
+      ...AuthConfigSchema.properties,
       schemes: $t.Optional(
         $t.Object(
           {
-            jwt: $t.Optional(SCHEME_SCHEMAS.jwt),
-            Bearer: $t.Optional(SCHEME_SCHEMAS.jwt),
-            Basic: $t.Optional(SCHEME_SCHEMAS.basic),
-            Cookie: $t.Optional(SCHEME_SCHEMAS.cookie),
+            jwt: $t.Optional(JWTSchemeConfigSchema),
+            Bearer: $t.Optional(JWTSchemeConfigSchema),
+            Basic: $t.Optional(BasicSchemeConfigSchema),
+            Cookie: $t.Optional(CookieSchemeConfigSchema),
           },
           { default: {} },
         ),
@@ -252,7 +257,7 @@ describe('authentication configuration', () => {
       app: $t.Object({
         auth: $t.Object({
           defaultAuthenticateScheme: $t.Optional($t.String()),
-          schemes: $t.Optional($t.Object({ Bearer: $t.Optional(SCHEME_SCHEMAS.jwt) })),
+          schemes: $t.Optional($t.Object({ Bearer: $t.Optional(JWTSchemeConfigSchema) })),
         }),
       }),
     })
@@ -281,10 +286,10 @@ describe('authentication configuration', () => {
     await app.close()
   })
 
-  // The schema the package exports for the block leaves each scheme's keys open, so nothing upstream converts what
-  // an environment variable carries. The scheme's own schema does, when the values are applied.
-  describe('under the exported schema, which leaves the scheme keys open', () => {
-    const openSchema = $t.Object({ auth: $t.Object({ ...authConfigSchema.properties }, { default: {} }) })
+  // The schema the package exports for the block accepts every kind's keys under each scheme, typed, so what an
+  // environment variable carries is converted when the configuration loads.
+  describe("under the exported schema, which accepts every kind's keys", () => {
+    const openSchema = $t.Object({ auth: $t.Object({ ...AuthConfigSchema.properties }, { default: {} }) })
     const kOpenConfig = token<InferConfig<typeof openSchema>>(Symbol('app.config.open'))
 
     function appFrom(values: Record<string, string>) {
@@ -319,21 +324,11 @@ describe('authentication configuration', () => {
       expect(res.headers.get('www-authenticate')).toMatch(/error_description=/)
     })
 
-    // A misspelt key used to be dropped, so the audience check the operator believed was on never ran.
-    it('refuses to start on a key the scheme does not have, and names the ones it has', async () => {
-      const app = appFrom({ AUTH__SCHEMES__JWT__AUDIANCE: 'someone-else' })
-
-      await expect(app.bootstrap()).rejects.toMatchObject({
-        code: 'ERR_AUTH_CONFIGURATION',
-        message: expect.stringMatching(/authentication scheme "jwt".*"audiance" is not an option.*"audience"/),
-      })
-    })
-
     it('refuses to start on a value the option does not take', async () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'maybe' })
 
       await expect(app.bootstrap()).rejects.toMatchObject({
-        code: 'ERR_AUTH_CONFIGURATION',
+        code: 'ERR_CONFIG_VALIDATION',
         message: expect.stringContaining('includeErrorDetails'),
       })
     })

@@ -1,6 +1,5 @@
 import { type Duration, toMillis } from '@caffeinejs/std/duration'
 import { defaultHealthRegistryOptions } from '@caffeinejs/std/health'
-import { $t } from '@caffeinejs/std/schema'
 import { isKubernetes } from '@caffeinejs/std/shutdown'
 
 interface EnvLike {
@@ -76,33 +75,6 @@ export interface HealthConfig {
   verbose?: boolean
   exclude?: boolean
 }
-
-/**
- * The schema governing the health slice.
- *
- * Every member is optional, and nothing is defaulted here: the resolved defaults are environment-dependent
- * (`isKubernetes`) and are applied by {@link mergeHealthConfig} afterwards. So the tree carries only what
- * somebody actually set — in code, in a file, in the environment or on the command line — and absence keeps its
- * meaning instead of being overwritten by a default written into a low band.
- *
- * The budgets are `$t.Duration()`: `HEALTH__INDICATOR_TIMEOUT=5000` or `'5 hours'` fails validation at `bootstrap()`
- * rather than reaching a timer as 0.
- */
-export const healthConfigSchema = $t.Object({
-  enabled: $t.Optional($t.Boolean()),
-  paths: $t.Optional(
-    $t.Object({
-      live: $t.Optional($t.String()),
-      ready: $t.Optional($t.String()),
-      startup: $t.Optional($t.String()),
-    }),
-  ),
-  indicatorTimeout: $t.Optional($t.Duration()),
-  probeDeadline: $t.Optional($t.Duration()),
-  cacheTtl: $t.Optional($t.Duration()),
-  verbose: $t.Optional($t.Boolean()),
-  exclude: $t.Optional($t.Boolean()),
-})
 
 /**
  * Folds a resolved health slice onto the defaults, producing the millisecond-normalized options.

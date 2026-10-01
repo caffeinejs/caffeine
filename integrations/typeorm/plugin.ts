@@ -13,7 +13,7 @@ export type TypeORMConfigurer<C = unknown> = FeatureConfigurer<TypeORMBuilder<C>
  * @param instance - Names this DataSource, so an application can install several. The unnamed one is bound
  *   under TypeORM's `DataSource`; a named one under `dataSourceKey(instance)`.
  *
- * @throws {@link ErrMissingDataSourceOptions} at `bootstrap()`, when the callback never calls `dataSource(...)`.
+ * @throws {@link ErrMissingDataSourceOptions} at `bootstrap()`, when no driver `type` was named.
  */
 export function TypeORM<C = unknown>(configure: TypeORMConfigurer<C>): Feature<C>
 export function TypeORM<C = unknown>(instance: string, configure: TypeORMConfigurer<C>): Feature<C>

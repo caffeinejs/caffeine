@@ -1,5 +1,5 @@
 export * from './builder.js'
-export * from './config.js'
+export type * from './config.js'
 export * from './errors.js'
 export * from './send.js'
 export * from './spa.js'

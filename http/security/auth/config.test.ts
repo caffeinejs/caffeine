@@ -1,78 +1,75 @@
+import { validateSchema } from '@caffeinejs/std/schema'
 import { describe, expect, it, vi } from 'vitest'
 
-import { SCHEME_CONFIG, SCHEME_SCHEMAS, applyScheme, validated } from './config.js'
+import {
+  BasicSchemeConfigSchema,
+  CookieSchemeConfigSchema,
+  JWTSchemeConfigSchema,
+  OAuthSchemeConfigSchema,
+  OIDCSchemeConfigSchema,
+  OpaqueSchemeConfigSchema,
+} from '../../schema.js'
+import { SCHEME_CONFIG, applyScheme, type AuthSchemeConfig } from './config.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
 
-/**
- * What reaches a scheme's options builder from the configuration tree. The tree may carry text where an option is a
- * boolean or a number — an environment variable is text, and the application's schema may leave a scheme's keys
- * open — so the kind's own schema is what types the values, on the way in.
- */
+const SCHEMAS = {
+  jwt: JWTSchemeConfigSchema,
+  basic: BasicSchemeConfigSchema,
+  cookie: CookieSchemeConfigSchema,
+  opaque: OpaqueSchemeConfigSchema,
+  oidc: OIDCSchemeConfigSchema,
+  oauth: OAuthSchemeConfigSchema,
+  github: OAuthSchemeConfigSchema,
+} as const
+
+/** What reaches a scheme's options builder from a scheme's configuration block. */
 describe('applyScheme', () => {
-  it('hands each option the type it takes, whatever the tree carried', () => {
-    const values = validated(
-      SCHEME_CONFIG.cookie,
-      { secure: 'false', rememberMe: 'true', maxAge: '3600', cookieName: 'session' },
-      'authentication scheme "Cookie"',
-    )
-
-    expect(values).toEqual({ secure: false, rememberMe: true, maxAge: 3600, cookieName: 'session' })
-  })
-
-  it('calls the setter of every key the tree carries, and of no other', () => {
+  it('calls the setter of every key the block carries, and of no other', () => {
     const builder = { secure: vi.fn(), maxAge: vi.fn(), cookieName: vi.fn() }
 
-    applyScheme(
-      builder as unknown as CookieAuthenticationOptionsBuilder,
-      SCHEME_CONFIG.cookie as never,
-      { secure: 'false', maxAge: '60', cookieName: undefined },
-      'authentication scheme "Cookie"',
-    )
+    applyScheme(builder as unknown as CookieAuthenticationOptionsBuilder, SCHEME_CONFIG.cookie, {
+      secure: false,
+      maxAge: 60,
+      cookieName: undefined,
+    })
 
     expect(builder.secure).toHaveBeenCalledWith(false)
     expect(builder.maxAge).toHaveBeenCalledWith(60)
     expect(builder.cookieName).not.toHaveBeenCalled()
   })
 
-  // Dropped instead, a misspelt key leaves the operator believing a check is on that never ran.
-  it('refuses a key the kind does not have, naming it and the ones it has', () => {
-    expect(() => validated(SCHEME_CONFIG.jwt, { audiance: 'api' }, 'authentication scheme "jwt"')).toThrow(
-      /Cannot configure authentication scheme "jwt": "audiance" is not an option of it \(options: .*"audience"/,
-    )
+  // A scheme's block accepts every kind's keys, because only the `addX(...)` call knows the kind.
+  it('does not read a key another kind declares', () => {
+    const builder = { secure: vi.fn() }
+    const block: AuthSchemeConfig = { secure: true, audience: 'api' }
+
+    applyScheme(builder as unknown as CookieAuthenticationOptionsBuilder, SCHEME_CONFIG.cookie, block)
+
+    expect(builder.secure).toHaveBeenCalledWith(true)
   })
 
-  it('refuses a value the option does not take, naming the option', () => {
-    expect(() => validated(SCHEME_CONFIG.oidc, { allowPlainPkce: 'perhaps' }, 'authentication scheme "sso"')).toThrow(
-      /Cannot configure authentication scheme "sso": allowPlainPkce/,
-    )
-  })
+  it('applies nothing when the configuration carries nothing for the scheme', () => {
+    const builder = { secure: vi.fn() }
 
-  it('applies nothing when the tree carries nothing for the scheme', () => {
-    expect(validated(SCHEME_CONFIG.basic, {}, 'authentication scheme "Basic"')).toEqual({})
+    applyScheme(builder as unknown as CookieAuthenticationOptionsBuilder, SCHEME_CONFIG.cookie, undefined)
+
+    expect(builder.secure).not.toHaveBeenCalled()
   })
 
   // A key in the schema with no setter validates and then goes nowhere, which reads as configured and is not.
   it.each(Object.keys(SCHEME_CONFIG) as Array<keyof typeof SCHEME_CONFIG>)(
     'has a setter for every key the %s schema declares',
     kind => {
-      const declared = Object.keys(SCHEME_SCHEMAS[kind].properties)
+      const declared = Object.keys(SCHEMAS[kind].properties)
 
-      expect(Object.keys(SCHEME_CONFIG[kind].appliers).toSorted()).toEqual(declared.toSorted())
+      expect(Object.keys(SCHEME_CONFIG[kind]).toSorted()).toEqual(declared.toSorted())
     },
   )
 
   // Plain OAuth 2.0 has no discovery document to negotiate from, so `auto` is OpenID Connect's alone.
   it('takes a token endpoint authentication method for OAuth 2.0, but has nothing to pick one from', () => {
-    const where = 'authentication scheme "GitHub"'
-
-    expect(validated(SCHEME_CONFIG.oauth, { tokenEndpointAuthMethod: 'client_secret_basic' }, where)).toEqual({
-      tokenEndpointAuthMethod: 'client_secret_basic',
-    })
-    expect(() => validated(SCHEME_CONFIG.oauth, { tokenEndpointAuthMethod: 'auto' }, where)).toThrow(
-      /tokenEndpointAuthMethod/,
-    )
-    expect(validated(SCHEME_CONFIG.oidc, { tokenEndpointAuthMethod: 'auto' }, where)).toEqual({
-      tokenEndpointAuthMethod: 'auto',
-    })
+    expect(validateSchema(OAuthSchemeConfigSchema, { tokenEndpointAuthMethod: 'client_secret_basic' }).ok).toBe(true)
+    expect(validateSchema(OAuthSchemeConfigSchema, { tokenEndpointAuthMethod: 'auto' }).ok).toBe(false)
+    expect(validateSchema(OIDCSchemeConfigSchema, { tokenEndpointAuthMethod: 'auto' }).ok).toBe(true)
   })
 })

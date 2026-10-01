@@ -22,12 +22,12 @@ import {
   type SeriesTokenRecord,
   type SeriesTokenRotation,
   UserProvider,
-  authConfigSchema,
   createWebApplication,
   newRouter,
   Authentication,
   authentication,
 } from '../../../index.js'
+import { AuthConfigSchema } from '../../../schema.js'
 
 /**
  * Options that reach a scheme from the configuration tree and from nowhere else in these tests.
@@ -36,7 +36,7 @@ import {
  * and leaves the deployment running on a default its operator believes was changed.
  */
 
-const schema = $t.Object({ auth: $t.Object({ ...authConfigSchema.properties }, { default: {} }) })
+const schema = $t.Object({ auth: $t.Object({ ...AuthConfigSchema.properties }, { default: {} }) })
 const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config.options'))
 
 const SESSION_SECRET = 'a-perfectly-long-session-secret-value!!'

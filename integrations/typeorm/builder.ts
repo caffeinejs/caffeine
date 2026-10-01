@@ -9,7 +9,8 @@ import { dataSourceKey, DEFAULT_INSTANCE } from './keys.js'
  * Builds one TypeORM DataSource and hands its lifecycle to the container.
  *
  * It restates none of TypeORM's configuration: {@link dataSource} takes `DataSourceOptions` in full, so every
- * driver option is available and entities travel in those options.
+ * driver option is available and entities travel in those options. {@link config} fills in what
+ * {@link dataSource} left out, from the configuration tree.
  */
 export class TypeORMBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
@@ -18,11 +19,24 @@ export class TypeORMBuilder<C = unknown> extends FeatureBuilder<C> {
 
   readonly #name: string
   #options: DataSourceOptions | undefined
+  #config: Partial<DataSourceOptions> | undefined
 
   constructor(name: string = DEFAULT_INSTANCE, configure?: FeatureConfigurer<never, C>) {
     super(configure)
 
     this.#name = name
+  }
+
+  /**
+   * Reads connection settings from a node of the configuration tree, e.g. `config.app.db`.
+   *
+   * {@link dataSource} wins over what the node carries. The driver `type` and the entities are code: name them
+   * with {@link dataSource}.
+   */
+  config(config: Partial<DataSourceOptions>): this {
+    this.#config = config
+
+    return this
   }
 
   /**
@@ -37,9 +51,9 @@ export class TypeORMBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    const options = this.#options
+    const options = { ...this.#config, ...definedOnly(this.#options) } as DataSourceOptions
 
-    if (options === undefined) {
+    if (options.type === undefined) {
       throw new ErrMissingDataSourceOptions(this[kFeatureName])
     }
 
@@ -53,4 +67,9 @@ export class TypeORMBuilder<C = unknown> extends FeatureBuilder<C> {
       t.toAsyncFactory(() => new DataSource(options).initialize()).preDestroy(ds => ds.destroy()),
     )
   }
+}
+
+/** The keys of `value` that hold something: an `undefined` written in code does not hide what configuration set. */
+function definedOnly<T extends object>(value: T | undefined): Partial<T> {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, v]) => v !== undefined)) as Partial<T>
 }

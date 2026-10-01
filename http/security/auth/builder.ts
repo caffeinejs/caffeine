@@ -8,11 +8,16 @@ import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import {
   SCHEME_CONFIG,
   applyScheme,
-  credentialsConfigSchema,
   refresh,
-  validated,
   type AuthConfig,
-  type SchemeConfigSpec,
+  type AuthSchemeConfig,
+  type BasicSchemeConfig,
+  type CookieSchemeConfig,
+  type JWTSchemeConfig,
+  type OAuthSchemeConfig,
+  type OIDCSchemeConfig,
+  type OpaqueSchemeConfig,
+  type SchemeAppliers,
   type SchemeKind,
 } from './config.js'
 import { CookieAuthenticationHandler } from './cookie/cookie.js'
@@ -67,7 +72,7 @@ interface SchemeRegistration {
   name: string
   kind: SchemeKind
   /** @param configured - What the configuration tree carries for this scheme. */
-  build(configured: Record<string, unknown>): BuiltScheme
+  build(configured: AuthSchemeConfig | undefined): BuiltScheme
 }
 
 interface BuiltScheme {
@@ -80,13 +85,13 @@ interface BuiltScheme {
 
 /** What building one kind of scheme takes: the options builder it starts from, the configuration it accepts, and
  * the handler its options make. */
-interface SchemeKindSpec<B> {
+interface SchemeKindSpec<B, K extends object> {
   options(): B
-  config: SchemeConfigSpec<B>
+  config: SchemeAppliers<B, K>
   build(name: string, options: B): BuiltScheme
 }
 
-const JWT_KIND: SchemeKindSpec<JWTAuthenticationOptionsBuilder> = {
+const JWT_KIND: SchemeKindSpec<JWTAuthenticationOptionsBuilder, JWTSchemeConfig> = {
   options: () => new JWTAuthenticationOptionsBuilder(),
   config: SCHEME_CONFIG.jwt,
   build: (name, options) => ({
@@ -95,7 +100,7 @@ const JWT_KIND: SchemeKindSpec<JWTAuthenticationOptionsBuilder> = {
   }),
 }
 
-const BASIC_KIND: SchemeKindSpec<BasicAuthenticationOptionsBuilder> = {
+const BASIC_KIND: SchemeKindSpec<BasicAuthenticationOptionsBuilder, BasicSchemeConfig> = {
   options: () => new BasicAuthenticationOptionsBuilder(),
   config: SCHEME_CONFIG.basic,
   build: (name, options) => ({
@@ -104,7 +109,7 @@ const BASIC_KIND: SchemeKindSpec<BasicAuthenticationOptionsBuilder> = {
   }),
 }
 
-const COOKIE_KIND: SchemeKindSpec<CookieAuthenticationOptionsBuilder> = {
+const COOKIE_KIND: SchemeKindSpec<CookieAuthenticationOptionsBuilder, CookieSchemeConfig> = {
   options: () => new CookieAuthenticationOptionsBuilder(),
   config: SCHEME_CONFIG.cookie,
   build: (name, options) => {
@@ -117,7 +122,7 @@ const COOKIE_KIND: SchemeKindSpec<CookieAuthenticationOptionsBuilder> = {
   },
 }
 
-const OPAQUE_KIND: SchemeKindSpec<OpaqueTokenAuthenticationOptionsBuilder> = {
+const OPAQUE_KIND: SchemeKindSpec<OpaqueTokenAuthenticationOptionsBuilder, OpaqueSchemeConfig> = {
   options: () => new OpaqueTokenAuthenticationOptionsBuilder(),
   config: SCHEME_CONFIG.opaque,
   build: (name, options) => {
@@ -134,7 +139,7 @@ const OPAQUE_KIND: SchemeKindSpec<OpaqueTokenAuthenticationOptionsBuilder> = {
   },
 }
 
-const OIDC_KIND: SchemeKindSpec<OIDCAuthenticationOptionsBuilder> = {
+const OIDC_KIND: SchemeKindSpec<OIDCAuthenticationOptionsBuilder, OIDCSchemeConfig> = {
   options: () => new OIDCAuthenticationOptionsBuilder(),
   config: SCHEME_CONFIG.oidc,
   build: (name, options) => {
@@ -160,7 +165,7 @@ const OIDC_KIND: SchemeKindSpec<OIDCAuthenticationOptionsBuilder> = {
  */
 function oauthKind(
   preset: (options: OAuth2AuthenticationOptions) => OAuth2AuthenticationOptions = options => options,
-): SchemeKindSpec<OAuth2AuthenticationOptionsBuilder> {
+): SchemeKindSpec<OAuth2AuthenticationOptionsBuilder, OAuthSchemeConfig> {
   return {
     options: () => new OAuth2AuthenticationOptionsBuilder(),
     config: SCHEME_CONFIG.oauth,
@@ -239,7 +244,12 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
    * which scheme is the implicit default when only one exists, and a `Map` keeps a key's original position
    * when its value is replaced later.
    */
-  #register<B>(name: string, kind: SchemeKind, spec: SchemeKindSpec<B>, configure: (options: B) => void): this {
+  #register<B, K extends object>(
+    name: string,
+    kind: SchemeKind,
+    spec: SchemeKindSpec<B, K>,
+    configure: (options: B) => void,
+  ): this {
     this.#reserve(name)
     this.#registrations.push({
       name,
@@ -250,7 +260,8 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
         const options = spec.options()
 
         configure(options)
-        applyScheme(options, spec.config, configured, `authentication scheme "${name}"`)
+        // An OAuth 2.0 scheme reads `tokenEndpointAuthMethod` off the wider OpenID Connect union.
+        applyScheme(options, spec.config, configured as K | undefined)
 
         return spec.build(name, options)
       },
@@ -459,7 +470,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   #buildSchemes(): void {
     for (const registration of this.#registrations) {
-      const built = registration.build(this.#config?.schemes?.[registration.name] ?? {})
+      const built = registration.build(this.#config?.schemes?.[registration.name])
 
       this.#describe(registration.name, built.descriptor)
       this.#schemes.set(registration.name, built.handler)
@@ -472,13 +483,12 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     if (this.#refreshConfigure !== undefined) {
       const builder = new RefreshTokenOptionsBuilder()
       this.#refreshConfigure(builder)
-      applyScheme(builder, refresh, this.#config?.refresh ?? {}, 'refresh tokens')
+      applyScheme(builder, refresh, this.#config?.refresh)
       this.#refresh = builder.build()
     }
 
     if (this.#credentials !== undefined && this.#config?.credentials !== undefined) {
-      const configured = validated({ schema: credentialsConfigSchema }, this.#config.credentials, 'credentials')
-      this.#credentials = { ...this.#credentials, ...stripUndefined(configured) }
+      this.#credentials = { ...this.#credentials, ...stripUndefined(this.#config.credentials) }
     }
   }
 

@@ -1,20 +1,4 @@
-import { $t } from '@caffeinejs/std/schema'
 import { FastifyStaticOptions } from '@fastify/static'
-
-/**
- * The shape of a `static` block an application may declare in its configuration tree.
- *
- * The builder reads no configuration itself: what a fluent method sets is final. This type and
- * {@link staticConfigSchema} exist so an application that wants its mounts to come from a file or the
- * environment can declare the block, and hand the values over in its own callback:
- *
- * ```ts
- * .with(staticFiles((s, { config }) => s.serve(config.static.mounts[0].root)))
- * ```
- */
-export interface StaticConfig {
-  mounts?: StaticMount[]
-}
 
 /**
  * A single static mount — a full `@fastify/static` options object (`root` required, plus `prefix`, `index`,
@@ -58,22 +42,14 @@ export interface ResolvedStatic {
 }
 
 /**
- * A third-party option bag, carried through the tree untouched.
- *
- * It has to be a `Record` rather than a declared object: `Value.Clean` strips every property a schema does not
- * name — even under `additionalProperties: true` — so declaring a partial mirror of `@fastify/static`'s
- * options would silently drop the rest, and a callback option with it. A `Record` of unknowns is validated as
- * "an object" and handed on with every key intact.
+ * One mount as a configuration tree carries it: the root, Caffeine's `anonymous`, and any `@fastify/static`
+ * option that is data (`prefix`, `index`, `wildcard`, `maxAge`, ...), handed to `@fastify/static` untouched.
  */
-const optionBag = (): ReturnType<typeof $t.Record> => $t.Record($t.String(), $t.Unknown())
+export type StaticMountConfig = { readonly root: string | readonly string[]; readonly anonymous?: boolean } & Readonly<
+  Record<string, unknown>
+>
 
-/**
- * The schema of the `static` block in {@link StaticConfig}.
- *
- * The `@fastify/static` mount options are not ours — they are numerous, they move between releases, and a
- * hand-maintained mirror would reject options that work. The block reaches the builder only through the
- * application's own callback.
- */
-export const staticConfigSchema = $t.Object({
-  mounts: $t.Optional($t.Array(optionBag())),
-})
+/** What `StaticBuilder.config` accepts. */
+export interface StaticOptions {
+  mounts?: readonly StaticMountConfig[]
+}

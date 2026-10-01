@@ -15,16 +15,31 @@ import type { HTTPCacheStore } from './store.js'
  */
 export const kBuild = Symbol('caffeine.caching.build')
 
-/** Fluent authoring for {@link HTTPCachingOptions}, e.g. `HTTPCaching(b => b.store(myStore))`. */
+/**
+ * Fluent authoring for {@link HTTPCachingOptions}, e.g. `HTTPCaching(b => b.store(myStore))`.
+ *
+ * What a fluent method sets is final: {@link config} fills in only what no method set.
+ */
 export class HTTPCachingOptionsBuilder {
+  #config: Partial<HTTPCachingOptions> | undefined
   #store: HTTPCacheStore | InjectionToken<HTTPCacheStore> | undefined
   #etagGenerator: ETagGenerator | InjectionToken<ETagGenerator> | undefined
   #statusHeader: string | undefined
   #observer: CacheObserver | InjectionToken<CacheObserver> | undefined
   #storeTimeout: Duration | undefined
   #lockTimeout: Duration | undefined
-  #varyByQuery: string[] | undefined
+  #varyByQuery: readonly string[] | undefined
   #maxEntrySize: ByteSize | undefined
+
+  /**
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.caching`.
+   *
+   * Every other method on this builder wins over what the node carries.
+   */
+  config(config: Partial<HTTPCachingOptions>): this {
+    this.#config = config
+    return this
+  }
 
   /** The store backing cached responses, or a token to resolve one from the container. Required. */
   store(store: HTTPCacheStore | InjectionToken<HTTPCacheStore>): this {
@@ -66,7 +81,7 @@ export class HTTPCachingOptionsBuilder {
   }
 
   /** The query parameters a store key carries, for every route that does not list its own. `[]` leaves the query out. */
-  varyByQuery(names: string[]): this {
+  varyByQuery(names: readonly string[]): this {
     this.#varyByQuery = names
     return this
   }
@@ -80,14 +95,14 @@ export class HTTPCachingOptionsBuilder {
 
   [kBuild](): HTTPCachingOptions {
     return {
-      store: this.#store,
-      etagGenerator: this.#etagGenerator,
-      statusHeader: this.#statusHeader,
-      observer: this.#observer,
-      storeTimeout: this.#storeTimeout,
-      lockTimeout: this.#lockTimeout,
-      varyByQuery: this.#varyByQuery,
-      maxEntrySize: this.#maxEntrySize,
+      store: this.#store ?? this.#config?.store,
+      etagGenerator: this.#etagGenerator ?? this.#config?.etagGenerator,
+      statusHeader: this.#statusHeader ?? this.#config?.statusHeader,
+      observer: this.#observer ?? this.#config?.observer,
+      storeTimeout: this.#storeTimeout ?? this.#config?.storeTimeout,
+      lockTimeout: this.#lockTimeout ?? this.#config?.lockTimeout,
+      varyByQuery: this.#varyByQuery ?? this.#config?.varyByQuery,
+      maxEntrySize: this.#maxEntrySize ?? this.#config?.maxEntrySize,
     }
   }
 }

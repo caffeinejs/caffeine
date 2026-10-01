@@ -61,7 +61,7 @@ export interface HTTPCachingOptions {
    * Parameters outside the list, `utm_source` for one, do not fragment the cache. `[]` leaves the whole query
    * out; unset, the whole query counts.
    */
-  varyByQuery?: string[]
+  varyByQuery?: readonly string[]
   /**
    * The largest payload stored, as `'1MB'`, `'512kb'` or a number of bytes. A larger response goes out and is
    * not stored, reported to `observer.onSkip`. Unset, there is no limit.

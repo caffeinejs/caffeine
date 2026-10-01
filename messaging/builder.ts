@@ -5,7 +5,7 @@ import { type AnySchema } from '@caffeinejs/std/schema'
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'
 import { MessageBus } from './bus.js'
-import type { BindingConfig, MessagingConfigSlice } from './config.js'
+import type { MessagingConfig } from './config.js'
 import { MessagingContainer } from './engine.js'
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 import { ErrMissingDestination } from './errors.js'
@@ -45,16 +45,15 @@ export interface OutBindingOptions {
  * `bootstrap()` its bootstrap builds the runtime and binds the engine + `MessageBus` into the container.
  * A second integration is `.install(Messaging('audit', m => ...))`.
  *
- * Configuration overlays what `.in(...)` / `.out(...)` set for everything a binding's config slice
- * declares: a destination written in code is a default a deployment can redirect once {@link config}
- * is wired.
+ * Configuration overlays what `.in(...)` / `.out(...)` set for every key it carries: a destination written in
+ * code is a default a deployment can redirect once {@link config} is wired.
  */
 export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
     return this.#name === DEFAULT_BINDER ? 'messaging' : `messaging:${this.#name}`
   }
 
-  #config: Partial<MessagingConfigSlice> | undefined
+  #config: Partial<MessagingConfig> | undefined
   readonly #name: string
   readonly #binders = new Map<string, Binder | BinderFactory>()
   readonly #inbound = new Map<string, InBindingOptions>()
@@ -105,14 +104,13 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Reads the declared bindings' configurable halves from a node of the configuration tree, e.g.
-   * `config.app.messaging`.
+   * Reads the declared bindings' options from a node of the configuration tree, e.g. `config.app.messaging`.
    *
    * Applied **over** what `.in(...)` / `.out(...)` set, so a destination written in code is a default. Only
    * bindings the builder declared are resolved: a binding named in the tree that no `.in(...)` created has
    * nothing to attach to, and declaring one is a code act.
    */
-  config(config: Partial<MessagingConfigSlice>): this {
+  config(config: Partial<MessagingConfig>): this {
     this.#config = config
     return this
   }
@@ -158,7 +156,7 @@ export class MessagingBuilder<C = unknown> extends FeatureBuilder<C> {
 
 function bindingsOf(
   declared: ReadonlyMap<string, InBindingOptions | OutBindingOptions>,
-  configured: Partial<Record<string, BindingConfig>> | undefined,
+  configured: Readonly<Record<string, Partial<InBindingOptions | OutBindingOptions>>> | undefined,
 ): Map<string, ConsumerBinding | ProducerBinding> {
   const out = new Map<string, ConsumerBinding | ProducerBinding>()
 

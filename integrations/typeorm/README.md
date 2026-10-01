@@ -36,13 +36,15 @@ The connection is open before `bootstrap()` returns and closed during `close()`,
 `dataSource` takes TypeORM's own `DataSourceOptions`, in full. This package restates none of them, so every
 driver option works and a TypeORM upgrade needs no change here. Entities travel in those options.
 
-Settings from the configuration tree arrive the way every feature receives them — the application's callback
-reads its own schema and hands the values over:
+Settings from the configuration tree arrive the way every feature receives them: the application's callback
+hands a node over with `config(...)`, and `dataSource(...)` wins over what it carries. The node holds connection
+settings (`url`, `host`, `port`, `username`, `password`, `database`, `synchronize`, …); the driver `type` and the
+entities stay in code:
 
 ```ts
-app.with(
+app.install(
   TypeORM<AppConfig>((t, { config }) =>
-    t.dataSource({ type: 'postgres', url: config.app.db.url, entities: [UserEntity] }),
+    t.config(config.app.db).dataSource({ type: 'postgres', entities: [UserEntity] }),
   ),
 )
 ```
@@ -139,4 +141,4 @@ fails `bootstrap()` instead of one request at a time.
 | ----------------------------- | ------------------------------------------------------------ |
 | `ErrNoDataSource`             | A repository injection names a key no DataSource is bound to |
 | `ErrNoUniqueDataSource`       | Several DataSources answer to the key and none is `@Primary` |
-| `ErrMissingDataSourceOptions` | The configure callback never called `dataSource(...)`        |
+| `ErrMissingDataSourceOptions` | No driver `type` from `dataSource(...)` or `config(...)`     |

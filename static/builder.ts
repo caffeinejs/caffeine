@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import type { MountOptions, ResolvedStatic, StaticMount, StaticRoot } from './config.js'
+import type { MountOptions, ResolvedStatic, StaticMount, StaticOptions, StaticRoot } from './config.js'
 
 /**
  * Materializes a {@link StaticBuilder} into the {@link ResolvedStatic} it built.
@@ -17,11 +17,22 @@ export const kBuild = Symbol('caffeine.static.build')
  * Each `.serve(...)` call adds one mount; multiple mounts serve multiple directories, and the plugin handles
  * `@fastify/static`'s single-decorate constraint.
  *
- * What a fluent method sets is final — there is no `.config(...)` to read a mount from the configuration
- * tree. An application that wants them configured reads its own block in the callback.
+ * What a fluent method sets is final: the mounts {@link config} carries are served only when no `.serve(...)`
+ * was called.
  */
 export class StaticBuilder {
   #mounts: ResolvedStatic['mounts'] = []
+  #config: Partial<StaticOptions> | undefined
+
+  /**
+   * Reads the mounts from a node of the configuration tree, e.g. `config.app.static`.
+   *
+   * Used only when no `.serve(...)` was called: mounts written in code replace the configured ones.
+   */
+  config(config: Partial<StaticOptions>): this {
+    this.#config = config
+    return this
+  }
 
   /**
    * Serves `root` as static files.
@@ -47,7 +58,16 @@ export class StaticBuilder {
 
   /** Folds the mounts into what the plugin actually runs with. */
   [kBuild](): ResolvedStatic {
-    return { mounts: [...this.#mounts] }
+    if (this.#mounts.length > 0 || this.#config?.mounts === undefined) {
+      return { mounts: [...this.#mounts] }
+    }
+
+    return {
+      mounts: this.#config.mounts.map(({ root, anonymous, ...options }) => ({
+        mount: { ...options, root: resolveRoot(root) } as StaticMount,
+        anonymous: anonymous === true,
+      })),
+    }
   }
 }
 

@@ -158,8 +158,7 @@ A feature registers nothing here. The application hands it what it wants, in the
 - **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does
   not. A feature's own resolved options are a plain object read once, when the feature configures.
 - **The application's schema is the only schema.** A feature seeds nothing, so a block declared with required,
-  undefaulted fields and no source to fill them fails validation. Splice the feature's exported schema
-  (`loggerConfigSchema`, `healthConfigSchema`, …) rather than restating it.
+  undefaulted fields and no source to fill them fails validation.
 
 The callback runs once, when the application readies: after configuration has loaded and before the feature binds
 anything.

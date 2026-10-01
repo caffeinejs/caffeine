@@ -6,21 +6,16 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
-import {
-  kafkaConfigSchema,
-  type ConsumerClient,
-  type KafkaClients,
-  type ProducerClient,
-  type ResolvedKafkaConfig,
-} from './config.js'
+import type { ConsumerClient, KafkaClients, ProducerClient, ResolvedKafkaConfig } from './config.js'
 import { Kafka, type KafkaConfigurer } from './plugin.js'
 import type { KafkaRuntime } from './runtime.js'
+import { KafkaConfigSchema } from './schema.js'
 import { runtimeKey } from './symbols.js'
 
 // The application owns the schema: it declares one block per kafka instance — by importing the feature's own
 // schema rather than restating it — and each `.extend` points its instance at the matching block.
 // The feature's own schema, given a default so a block a test never configures still materializes.
-const instanceSchema = $t.Object(kafkaConfigSchema.properties, { default: {} })
+const instanceSchema = $t.Object(KafkaConfigSchema.properties, { default: {} })
 const rootSchema = $t.Object({
   kafka: $t.Object({ default: instanceSchema, orders: instanceSchema }, { default: {} }),
 })

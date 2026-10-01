@@ -9,8 +9,8 @@ import { mergeHealthConfig, type HealthConfig, type HealthOptions } from './opti
 /**
  * Fluently builds the budgets `Health()` binds once, when it configures.
  *
- * What a fluent method sets is final. To let the environment redirect a budget, read it from the
- * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema:
+ * What a fluent method sets is final. To let the environment redirect a budget, declare a block of
+ * {@link HealthConfig} in the application's schema and hand its node over:
  *
  * ```ts
  * .install(Health((h, { config }) => h.config(config.app.health)))

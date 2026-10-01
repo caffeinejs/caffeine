@@ -7,11 +7,11 @@ import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { inMemoryBinder } from './binder.testkit.js'
-import { messagingConfigSchema } from './config.js'
 import { Consume } from './decorators/consume.js'
 import { MessageHandler } from './decorators/message_handler.js'
 import { Messaging } from './plugin.js'
 import type { MessagingRuntime } from './runtime.js'
+import { MessagingConfigSchema } from './schema.js'
 import { runtimeKey } from './symbols.js'
 
 // Every inbound binding needs a consumer: the engine now starts during `bootstrap()` (via the `MessagingLifecycle`
@@ -27,7 +27,7 @@ void [OrdersConsumer]
 // The application owns the schema: it declares one block per messaging instance — by importing the feature's
 // own schema, given a default so a block a test never configures still materializes — and each `.extend`
 // points its instance at the matching block.
-const instanceSchema = $t.Object(messagingConfigSchema.properties, { default: {} })
+const instanceSchema = $t.Object(MessagingConfigSchema.properties, { default: {} })
 const rootSchema = $t.Object({
   messaging: $t.Object({ default: instanceSchema, audit: instanceSchema }, { default: {} }),
 })
@@ -206,8 +206,9 @@ describe('messaging configuration', () => {
     await built.close()
   })
 
-  it('exports the config schema from the package barrel', async () => {
-    const { messagingConfigSchema: fromBarrel } = await import('./index.js')
-    expect(fromBarrel).toBeDefined()
+  // The schema is internal to the package for now; the feature never reads it.
+  it('does not export the config schema from the package barrel', async () => {
+    const barrel: Record<string, unknown> = await import('./index.js')
+    expect(Object.keys(barrel).filter(name => name.endsWith('ConfigSchema'))).toEqual([])
   })
 })

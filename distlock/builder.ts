@@ -6,12 +6,11 @@ import { toMillis, type Duration } from '@caffeinejs/std/duration'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 
 import type { Backend } from './backend.js'
-import type { DistLockConfigSlice } from './config.js'
 import { CaffeineDistLock } from './distlock.js'
 import { ErrDistLockConfiguration } from './errors.js'
 import { kDistLock } from './keys.js'
 import type { LockEventMap } from './observability/channels.js'
-import { DEFAULT_DIST_LOCK_OPTIONS, type DistLockOptions } from './options.js'
+import { DEFAULT_DIST_LOCK_OPTIONS, type DistLockConfig, type DistLockOptions } from './options.js'
 
 type Listener = (...args: unknown[]) => void
 
@@ -27,7 +26,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'distlock'
 
   #backend: Backend | InjectionToken<Backend> | undefined
-  #config: Partial<DistLockConfigSlice> | undefined
+  #config: Partial<DistLockConfig> | undefined
   #ttl: Duration | undefined
   #wait: Duration | undefined
   #retryDelay: Duration | undefined
@@ -99,7 +98,7 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
    * The node is read once, when the feature configures. Every other method on this builder wins over what it
    * carries.
    */
-  config(config: Partial<DistLockConfigSlice>): this {
+  config(config: Partial<DistLockConfig>): this {
     this.#config = config
     return this
   }

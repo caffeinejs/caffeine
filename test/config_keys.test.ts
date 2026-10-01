@@ -1,45 +1,52 @@
-import * as distlock from '@caffeinejs/distlock'
-import * as http from '@caffeinejs/http'
-import * as kafka from '@caffeinejs/kafka'
-import * as messaging from '@caffeinejs/messaging'
-import * as openapi from '@caffeinejs/openapi'
-import * as staticFiles from '@caffeinejs/static'
 import * as std from '@caffeinejs/std'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
-import * as logger from '@caffeinejs/std/logger'
-import * as shutdown from '@caffeinejs/std/shutdown'
 import { describe, expect, it } from 'vitest'
+
+import * as caching from '../caching/dist/schema.js'
+import * as devtools from '../devtools/dist/schema.js'
+import * as distlock from '../distlock/dist/schema.js'
+import * as html from '../html/dist/schema.js'
+import * as http from '../http/dist/schema.js'
+import * as typeorm from '../integrations/typeorm/dist/schema.js'
+import * as kafka from '../kafka/dist/schema.js'
+import * as messaging from '../messaging/dist/schema.js'
+import * as multipart from '../multipart/dist/schema.js'
+import * as openapi from '../openapi/dist/schema.js'
+import * as staticFiles from '../static/dist/schema.js'
+import * as logger from '../std/dist/logger/schema.js'
+import * as shutdown from '../std/dist/shutdown/schema.js'
+import * as view from '../view/dist/schema.js'
 
 // Every configuration key a feature declares has to be one an environment variable reaches. `EnvConfigSource`
 // lowercases each word of a name and camel-cases the rest, so `CACHE_TTL` becomes `cacheTtl`: a key spelled
 // `cacheTTL` is reached by no variable at all, and validation drops the folded one at bootstrap() without a word.
 //
-// Schemas are found by name, every `*ConfigSchema` an entry point exports, so one added later is covered without
-// touching this file. A package that starts declaring configuration adds its entry point here.
+// Schemas are found by name, every `*ConfigSchema` a schema module exports, so one added later is covered without
+// touching this file. A package that starts declaring configuration adds its `schema.ts` here. The schemas are not
+// published through a package subpath yet, so each is read from the package's build output.
 const entryPoints: Record<string, object> = {
+  caching,
+  devtools,
   distlock,
+  html,
   http,
   kafka,
   logger,
   messaging,
+  multipart,
   openapi,
   shutdown,
   static: staticFiles,
   std,
+  typeorm,
+  view,
 }
 
-const schemas: Array<[string, unknown]> = [
-  ...Object.entries(entryPoints).flatMap(([entry, exports]) =>
-    Object.entries(exports)
-      .filter(([name]) => name.endsWith('ConfigSchema'))
-      .map(([name, schema]): [string, unknown] => [`${entry}.${name}`, schema]),
-  ),
-  // The blocks under `auth.schemes.<name>`, one per scheme kind, which an application splices in by hand.
-  ...Object.entries(http.SCHEME_SCHEMAS).map(([kind, schema]): [string, unknown] => [
-    `http.SCHEME_SCHEMAS.${kind}`,
-    schema,
-  ]),
-]
+const schemas: Array<[string, unknown]> = Object.entries(entryPoints).flatMap(([entry, exports]) =>
+  Object.entries(exports)
+    .filter(([name]) => name.endsWith('ConfigSchema'))
+    .map(([name, schema]): [string, unknown] => [`${entry}.${name}`, schema]),
+)
 
 interface DeclaredKey {
   path: string

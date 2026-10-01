@@ -1,5 +1,8 @@
-import { CaffeineIoC, type OnDestroy } from '@caffeinejs/di'
-import { createApplication, ErrFeatureAlreadyInstalled } from '@caffeinejs/std'
+import { CaffeineIoC, token, type OnDestroy } from '@caffeinejs/di'
+import { createApplication, ErrFeatureAlreadyInstalled, newConfiguration } from '@caffeinejs/std'
+import type { InferConfig } from '@caffeinejs/std/config'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { $t } from '@caffeinejs/std/schema'
 import { DataSource, type DataSourceOptions, type Repository } from 'typeorm'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -8,6 +11,7 @@ import { ErrMissingDataSourceOptions } from './errors.js'
 import { $repository } from './injection.js'
 import { dataSourceKey } from './keys.js'
 import { TypeORM } from './plugin.js'
+import { TypeORMConfigSchema } from './schema.js'
 
 /** What the sql.js driver adds to the entity manager. Not on TypeORM's barrel, so it is named structurally. */
 type ExportableManager = { exportDatabase(): Uint8Array }
@@ -64,6 +68,51 @@ describe('TypeORM() feature', function () {
     // Nothing else can report this: an empty builder would otherwise bind a DataSource with no driver and
     // fail somewhere inside TypeORM.
     await expect(app.bootstrap()).rejects.toThrow(ErrMissingDataSourceOptions)
+  })
+
+  // The driver decides which of TypeORM's option shapes applies, so connection settings alone build nothing.
+  it('should fail bootstrap() when the configuration carries settings but no driver type', async function () {
+    const app = newApplication().install(TypeORM(t => t.config({ synchronize: true })))
+
+    opened.push(() => app.close())
+
+    await expect(app.bootstrap()).rejects.toThrow(ErrMissingDataSourceOptions)
+  })
+})
+
+// A deployment can redirect the connection without touching code, and a setting written in code stands.
+describe('TypeORM() config', function () {
+  it('should fill in what dataSource() left out, and let dataSource() win', async function () {
+    const app = newApplication().install(
+      TypeORM(t => t.config({ logging: false, synchronize: false }).dataSource(memory())),
+    )
+
+    await app.bootstrap()
+    opened.push(() => app.close())
+
+    const { options } = app.container.get(DataSource)
+
+    expect(options.logging).toBe(false)
+    expect(options.synchronize).toBe(true)
+  })
+
+  it('should read the settings the environment carries under TypeORMConfigSchema', async function () {
+    const schema = $t.Object({ db: $t.Object(TypeORMConfigSchema.properties, { default: {} }) })
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('typeorm.config.test'))
+    const conf = newConfiguration(schema, kConfig)
+      .source(new EnvConfigSource({ env: { DB__SYNCHRONIZE: 'true' } }))
+      .build()
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
+      TypeORM<InferConfig<typeof schema>>((t, { config }) =>
+        t.config(config.db).dataSource(memory({ synchronize: undefined })),
+      ),
+    )
+
+    await app.bootstrap()
+    opened.push(() => app.close())
+
+    expect(app.container.get(DataSource).options.synchronize).toBe(true)
   })
 })
 

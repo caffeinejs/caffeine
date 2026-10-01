@@ -10,8 +10,8 @@ import { installHealthProbes } from './probes_route.js'
 /**
  * Fluently builds what `healthProbes()` mounts: whether, where, and how the probes answer.
  *
- * What a fluent method sets is final. To let the environment redirect a setting, read it from the
- * configuration; {@link healthConfigSchema} is exported so an application can splice it into its own schema.
+ * What a fluent method sets is final. To let the environment redirect a setting, declare a block of
+ * {@link HealthConfig} in the application's schema and hand its node to {@link config}.
  * The budgets the probes answer under are not configured here — they are the health feature's,
  * `.install(Health(...))`.
  */

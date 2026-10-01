@@ -21,6 +21,7 @@ export type {
   InferConfig,
   LiveConfig,
   ReadonlyConfig,
+  SchemaSatisfies,
 } from './types.js'
 export type { DotenvLoader, DotenvOptions } from './dotenv.js'
 export { ErrConfig, ErrConfigValidation } from './errors.js'

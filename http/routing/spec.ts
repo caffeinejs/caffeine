@@ -64,7 +64,7 @@ export type RouteInvoker = (...args: unknown[]) => unknown
  * Schema that converts to JSON Schema.
  *
  * This is the authoring shape, not the runtime one: each slot is compiled to JSON Schema once, while routes are
- * being registered, and Fastify's Ajv does all request-time validation. See `../schema/compile_route_schema.ts` for
+ * being registered, and Fastify's Ajv does all request-time validation. See `./schema/compile_route_schema.ts` for
  * the compilation and the per-slot strictness policy.
  */
 export interface RouteValidationSchema {

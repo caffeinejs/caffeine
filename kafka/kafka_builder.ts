@@ -7,7 +7,7 @@ import {
   type DeserializationErrorHandler,
   type KafkaAckMode,
   type KafkaClients,
-  type KafkaConfigSlice,
+  type KafkaConfig,
   type KafkaDeserializers,
   type KafkaMessage,
   type ResolvedKafkaConfig,
@@ -32,21 +32,19 @@ import { KafkaTemplate } from './template.js'
  * time its `configure()` binds this instance's runtime, `KafkaTemplate`, and `KafkaListenerContainer` into
  * the container under per-instance keys. A second integration is `.install(Kafka('orders', k => ...))`.
  *
- * There is one read path for everything a configuration tree can carry. Configuration overlays fluent
- * methods for `brokers`, `clientId`, `groupId`, and the rest of the configurable slice:
- * `k.brokers('localhost:9092')` is a default a deployment can redirect once {@link config} is wired.
- * The members that cannot be configuration — serializers, the classifier, the recoverer, the error hooks —
- * stay on the builder and are merged in afterwards.
+ * There is one read path for everything {@link config} is handed. It overlays the fluent methods for
+ * `brokers`, `clientId`, `groupId`, and every other key it carries: `k.brokers('localhost:9092')` is a default a
+ * deployment can redirect once {@link config} is wired.
  */
 export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
     return this.#name === DEFAULT_INSTANCE ? 'kafka' : `kafka:${this.#name}`
   }
 
-  #config: Partial<KafkaConfigSlice> | undefined
+  #config: Partial<KafkaConfig> | undefined
   readonly #name: string
   readonly #clients: KafkaClients
-  #brokers?: string | string[]
+  #brokers?: string | readonly string[]
   #clientId?: string
   #groupId?: string
   #serializers?: KafkaSerializers
@@ -73,19 +71,19 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Reads the settings from a node of the configuration tree, e.g. `config.app.kafka`.
+   * Reads the settings from a node of the configuration tree, e.g. `config.app.kafka`, or from an object written
+   * in code.
    *
-   * Applied **over** what the fluent methods set, so `k.brokers(...)` is a default a deployment can redirect.
-   * The serializers, the retry strategy, the classifier, the recoverer and the error hooks are functions and
-   * cannot travel through a tree — they stay on the builder and are merged in either way.
+   * Applied **over** what the fluent methods set, so `k.brokers(...)` is a default a deployment can redirect. The
+   * one exception is `deadLetter`: a `.deadLetter(...)` call stands.
    */
-  config(config: Partial<KafkaConfigSlice>): this {
+  config(config: Partial<KafkaConfig>): this {
     this.#config = config
     return this
   }
 
   /** One or more `host:port` bootstrap brokers. Required. */
-  brokers(brokers: string | string[]): this {
+  brokers(brokers: string | readonly string[]): this {
     this.#brokers = brokers
     return this
   }
@@ -260,10 +258,8 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
    *   builder: the brokers may arrive from either, so this is the first moment the answer is known.
    */
   #resolve(): ResolvedKafkaConfig {
-    const brokers =
-      this.#config?.brokers ??
-      (this.#brokers === undefined ? undefined : Array.isArray(this.#brokers) ? [...this.#brokers] : [this.#brokers]) ??
-      []
+    const configured = this.#config?.brokers ?? this.#brokers
+    const brokers = configured === undefined ? [] : typeof configured === 'string' ? [configured] : [...configured]
 
     if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
       throw new ErrKafkaMissingBrokers()
@@ -277,20 +273,20 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
         ackMode: this.#config?.ackMode ?? this.#ackMode,
         retry: this.#config?.retry ?? this.#retry,
         topicProvisioning: this.#config?.topicProvisioning ?? this.#topicProvisioning,
-        serializers: this.#serializers,
-        deserializers: this.#deserializers,
-        retryStrategy: this.#retryStrategy,
-        deadLetterManager: this.#deadLetterManager,
+        serializers: this.#config?.serializers ?? this.#serializers,
+        deserializers: this.#config?.deserializers ?? this.#deserializers,
+        retryStrategy: this.#config?.retryStrategy ?? this.#retryStrategy,
+        deadLetterManager: this.#config?.deadLetterManager ?? this.#deadLetterManager,
         // Named in code — including an explicit `false` — stands. Configuration fills it in only when
-        // `.deadLetter(...)` was never called. The object form cannot travel through a tree either way.
+        // `.deadLetter(...)` was never called.
         deadLetter: this.#deadLetterSet ? this.#deadLetter : (this.#config?.deadLetter ?? this.#deadLetter),
-        notRetryable: this.#notRetryable,
-        retryable: this.#retryable,
-        classifier: this.#classifier,
-        recoverer: this.#recoverer,
-        onDeserializationError: this.#onDeserializationError,
-        onError: this.#onError,
-      } as never,
+        notRetryable: this.#config?.notRetryable ?? this.#notRetryable,
+        retryable: this.#config?.retryable ?? this.#retryable,
+        classifier: this.#config?.classifier ?? this.#classifier,
+        recoverer: this.#config?.recoverer ?? this.#recoverer,
+        onDeserializationError: this.#config?.onDeserializationError ?? this.#onDeserializationError,
+        onError: this.#config?.onError ?? this.#onError,
+      },
       { serializers: defaultSerializers, deserializers: defaultDeserializers },
     )
   }

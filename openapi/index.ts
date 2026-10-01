@@ -1,4 +1,3 @@
-export * from './config.js'
 export * from './decorators/index.js'
 export * from './errors.js'
 export * from './openapi.js'

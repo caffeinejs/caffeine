@@ -44,8 +44,8 @@ export class ErrNoUniqueDataSource extends ErrTypeORM {
 export class ErrMissingDataSourceOptions extends ErrTypeORM {
   constructor(feature: string) {
     super(
-      `Cannot configure feature "${feature}": no data source options were provided` +
-        '\n  - Call .dataSource(options) in the configure callback, as TypeORM(t => t.dataSource({ ... }))',
+      `Cannot configure feature "${feature}": no data source type was provided` +
+        "\n  - Call .dataSource(options) in the configure callback, as TypeORM(t => t.dataSource({ type: 'postgres', ... }))",
       'ERR_MISSING_DATA_SOURCE_OPTIONS',
     )
     this.name = 'ErrMissingDataSourceOptions'

@@ -99,6 +99,22 @@ type ReadonlyConfigValue<V> = V extends readonly (infer U)[]
 /** The type an application gives its configuration: `type AppConfig = InferConfig<typeof schema>`. */
 export type InferConfig<S extends AnySchema> = ReadonlyConfig<InferSchema<S>>
 
+type KeyOfAny<T> = T extends unknown ? keyof T : never
+
+/**
+ * Compiles only when `Config` can be handed to a `config(...)` taking `Partial<Options>` and declares no top-level
+ * key `Options` lacks. A feature's configuration schema asserts it against itself:
+ *
+ * @example
+ * ```ts
+ * type _Satisfies = SchemaSatisfies<KafkaConfig, InferConfig<typeof KafkaConfigSchema>>
+ * ```
+ */
+export type SchemaSatisfies<
+  Options,
+  Config extends Partial<Options> & { readonly [K in Exclude<keyof Config, KeyOfAny<Options>>]: never },
+> = Config
+
 /**
  * The config object an application injects. One identity for the life of the store, and every field follows
  * every reload.

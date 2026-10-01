@@ -17,6 +17,7 @@ import type { ViewOptions } from './view.js'
 export class ViewEngineBuilder {
   readonly #name: string | undefined
   #options: Partial<ViewOptions> = {}
+  #config: Partial<ViewOptions> | undefined
 
   /**
    * @param name - The engine registration name (`@fastify/view`'s `propertyName`), decorating
@@ -29,6 +30,17 @@ export class ViewEngineBuilder {
   /** Engine registration name; `undefined` is the default `reply.view`. */
   get engineName(): string | undefined {
     return this.#name
+  }
+
+  /**
+   * Reads this engine's settings from a node of the configuration tree, e.g. `config.app.view`.
+   *
+   * Every other method on this builder wins over what the node carries. The engine itself is a module, so it is
+   * still named with {@link engine}.
+   */
+  config(config: Partial<ViewOptions>): this {
+    this.#config = config
+    return this
   }
 
   /**
@@ -117,13 +129,20 @@ export class ViewEngineBuilder {
    * @throws ErrConfiguration when no engine was configured.
    */
   [kBuild](): ViewOptions {
-    if (!this.#options.engine) {
+    const options = { ...this.#config, ...definedOnly(this.#options) }
+
+    if (!options.engine) {
       throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
     }
 
     return {
-      ...this.#options,
+      ...options,
       ...(this.#name === undefined ? {} : { propertyName: this.#name }),
     } as ViewOptions
   }
+}
+
+/** The keys of `value` that hold something: an `undefined` written in code does not hide what configuration set. */
+function definedOnly<T extends object>(value: T | undefined): Partial<T> {
+  return Object.fromEntries(Object.entries(value ?? {}).filter(([, v]) => v !== undefined)) as Partial<T>
 }

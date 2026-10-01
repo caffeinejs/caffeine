@@ -1,5 +1,4 @@
 import { FeatureBuilder, kFeatureName } from '@caffeinejs/std'
-import { $t } from '@caffeinejs/std/schema'
 import FastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
@@ -20,19 +19,6 @@ export interface CookieOptions {
 }
 
 /**
- * The shape the cookie feature expects wherever the application decides to keep its settings — import it into
- * an application schema (`$t.Object({ app: $t.Object({ cookie: cookieConfigSchema }) })`) rather than
- * restating the fields, then hand that node to {@link CookieBuilder.config}.
- *
- * `parseOptions` is not part of it: a serializer's `encode` is a function, which no configuration source can
- * carry, so those defaults are set with {@link CookieBuilder.parseOptions}.
- */
-export const cookieConfigSchema = $t.Object({
-  enabled: $t.Boolean({ default: true }),
-  secret: $t.Optional($t.String()),
-})
-
-/**
  * Configures the cookie parsing every application gets.
  *
  * The feature is registered unconditionally and ahead of everything `.with(...)` installs, so cookies are
@@ -40,9 +26,8 @@ export const cookieConfigSchema = $t.Object({
  * gate included — has an order to get right. What a call adds is what registration cannot guess: the signing
  * secret, without which `ctx.req.signedCookie()` has nothing to verify with.
  *
- * What a fluent method sets is final. To let the environment carry the secret, read it from the
- * configuration — {@link cookieConfigSchema} is exported so an application can splice it into its own schema
- * rather than restate the fields:
+ * What a fluent method sets is final. To let the environment carry the secret, declare a block of
+ * {@link CookieOptions} in the application's schema and hand its node over:
  *
  * ```ts
  * .cookie((k, { config }) => k.config(config.app.cookie))

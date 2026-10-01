@@ -13,8 +13,8 @@ import {
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
 import { attachGuardHook } from '../../guards/fastify.js'
 import { Responder } from '../../response.js'
-import { compileRouteSchema } from '../../schema/compile_route_schema.js'
 import type { RouteCompilers, RouteGroup } from '../route.js'
+import { compileRouteSchema } from '../schema/compile_route_schema.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
 

@@ -8,18 +8,10 @@ import { type FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import {
-  $p,
-  Args,
-  Controller,
-  cookieConfigSchema,
-  createWebApplication,
-  FastifyContext,
-  Get,
-  newRouter,
-} from '../index.js'
+import { $p, Args, Controller, createWebApplication, FastifyContext, Get, newRouter } from '../index.js'
+import { CookieConfigSchema } from '../schema.js'
 
-const schema = $t.Object({ app: $t.Object({ cookie: cookieConfigSchema }) })
+const schema = $t.Object({ app: $t.Object({ cookie: CookieConfigSchema }) })
 
 const kConfig = token<InferConfig<typeof schema>>(Symbol('cookie.app.config'))
 

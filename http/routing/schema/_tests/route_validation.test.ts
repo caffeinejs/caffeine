@@ -12,7 +12,7 @@ import {
   Args,
   Post,
   Schema,
-} from '../../index.js'
+} from '../../../index.js'
 import { compileRouteSchema } from '../compile_route_schema.js'
 
 const CreatePet = $t.Object({

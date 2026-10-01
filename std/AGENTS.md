@@ -5,6 +5,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `index.ts` exports only the root-level modules: `application`, `configuration`, `feature`, `feature_builder`.
 - Each sub-directory (`duration/`, `schema/`, `shutdown/`, …) is its own `package.json` `exports` subpath and is
   never re-exported from `index.ts`; outside `std/`, import it as `@caffeinejs/std/<sub>`.
+- A feature's configuration schema is `<sub>/schema.ts` (`logger/schema.ts`, `shutdown/schema.ts`) and is internal:
+  no `exports` subpath, never re-exported from `<sub>/index.ts`. `schema/` is the `$t` dialect, not a configuration
+  schema.
 - Each config source, `config/sources/<name>/`, is its own `exports` subpath, `@caffeinejs/std/config/<name>`, and
   is never re-exported from `config/index.ts`. Its `index.ts` names the public surface; code in `std` reaches a
   helper it leaves out, such as `parseArgv`, through the module file.

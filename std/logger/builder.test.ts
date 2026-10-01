@@ -6,11 +6,12 @@ import { InlineConfigSource } from '../config/sources/inline/index.js'
 import { newConfiguration } from '../configuration.js'
 import { $t } from '../schema/t.js'
 import { LoggerBuilder } from './builder.js'
-import { loggerConfigSchema, type LoggerConfig } from './config.js'
+import type { LoggerConfig } from './config.js'
 import { ConsoleLogger } from './console/console.js'
 import { ErrInvalidLogLevel, ErrLoggerAlreadyConfigured } from './errors.js'
 import { logToken } from './keys.js'
 import { noopLogger } from './noop.js'
+import { LoggerConfigSchema } from './schema.js'
 
 const schema = $t.Object({ logEnabled: $t.Boolean() })
 type AppConfig = { logEnabled: boolean }
@@ -22,7 +23,7 @@ function appWithConfig(logEnabled: boolean) {
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }
 
-const sliceSchema = $t.Object({ log: loggerConfigSchema })
+const sliceSchema = $t.Object({ log: LoggerConfigSchema })
 type SliceConfig = { log: LoggerConfig }
 const kSlice = token<SliceConfig>(Symbol('logger_builder.test.slice'))
 
@@ -152,7 +153,7 @@ describe('Application integration', () => {
   })
 
   // Every other configurable feature takes a whole node with `config(...)`; the logger took settings one at a
-  // time, so an application had to restate the mapping instead of composing `loggerConfigSchema`.
+  // time, so an application had to restate the mapping instead of composing `LoggerConfigSchema`.
   describe('config(node)', () => {
     it('reads the level and the enabled flag off the node', async () => {
       const app = appWithSlice({ level: 'debug', enabled: true })

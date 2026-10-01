@@ -1,4 +1,5 @@
 import type { Route, RouteAuthzOptions, RouteGroup } from '@caffeinejs/http'
+import type { ReadonlyConfig } from '@caffeinejs/std/config'
 import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type {
@@ -122,6 +123,38 @@ export interface OpenAPIOptions {
 
   /** Raw components merged into the generated ones, for the parts the generator never produces. */
   components: ComponentsObject | undefined
+}
+
+/**
+ * What `OpenAPIOptionsBuilder.config` accepts: the part of {@link OpenAPIOptions} that can live in a configuration
+ * tree.
+ *
+ * Absent: everything that is a function (`operationId`, `tagFor`, `schemaName`, `transformDocument`), a schema
+ * (`errorSchema`), a document to serve, and the security policy the endpoints are compiled against (`secure`).
+ *
+ * `yaml` and `docs` accept `false` to switch an endpoint off. The specification's objects are read-only here,
+ * as a configuration tree hands them over.
+ */
+export interface OpenAPIConfig {
+  version?: OpenAPIVersion
+  info?: ReadonlyConfig<InfoObject>
+  servers?: readonly ReadonlyConfig<ServerObject>[]
+  externalDocs?: ReadonlyConfig<ExternalDocumentationObject>
+  security?: readonly ReadonlyConfig<SecurityRequirementObject>[]
+  tags?: readonly ReadonlyConfig<TagObject>[]
+  securitySchemes?: Readonly<Record<string, ReadonlyConfig<SecuritySchemeObject>>>
+  deriveSecuritySchemes?: boolean
+  routes?: {
+    base?: string
+    json?: string
+    yaml?: string | false
+    docs?: string | false
+  }
+  ui?: Readonly<Record<string, unknown>>
+  infer?: Partial<InferenceOptions>
+  errors?: Partial<ErrorStatusOptions>
+  dedupeComponents?: boolean
+  validate?: boolean
 }
 
 /** Where an imported document comes from. */

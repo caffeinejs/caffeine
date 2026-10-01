@@ -1,12 +1,18 @@
 import { fileURLToPath } from 'node:url'
 
+import { token } from '@caffeinejs/di'
 import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
+import { newConfiguration } from '@caffeinejs/std'
+import type { InferConfig } from '@caffeinejs/std/config'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
+import { $t } from '@caffeinejs/std/schema'
 import * as ejs from 'ejs'
 import handlebars from 'handlebars'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { View, ViewBuilder, ViewEngineBuilder, view } from '../index.js'
 import { kBuild } from '../keys.js'
+import { ViewConfigSchema } from '../schema.js'
 
 const templatesRoot = fileURLToPath(new URL('./_testdata/templates', import.meta.url))
 const ejsRoot = fileURLToPath(new URL('./_testdata/templates-ejs', import.meta.url))
@@ -378,6 +384,63 @@ describe('ViewEngineBuilder', () => {
 
     expect(options.charset).toBe('ascii')
     expect(options.viewExt).toBe('pug')
+  })
+
+  // A deployment can move the templates without touching code, and a setting written in code stands.
+  it('config() fills in what no method set', () => {
+    const options = new ViewEngineBuilder()
+      .config({ root: templatesRoot, viewExt: 'html', production: true })
+      .engine({ handlebars })
+      .extension('hbs')
+      [kBuild]() as { root: string; viewExt: string; production: boolean }
+
+    expect(options.root).toBe(templatesRoot)
+    expect(options.viewExt).toBe('hbs')
+    expect(options.production).toBe(true)
+  })
+
+  // `engine(e)` without engine options leaves them unset; it must not erase the ones the configuration carries.
+  it('config() keeps its engine options when engine() names none', () => {
+    const options = new ViewEngineBuilder()
+      .config({ options: { strict: true } })
+      .engine({ handlebars })
+      [kBuild]() as {
+      options: object
+    }
+
+    expect(options.options).toEqual({ strict: true })
+  })
+
+  it('renders from the root and extension the configuration names', async () => {
+    @Controller('/view-configured')
+    class ConfiguredController {
+      @Get('/show')
+      show() {
+        return View('hello', { name: 'Grace' })
+      }
+    }
+
+    void [ConfiguredController]
+
+    const schema = $t.Object({ view: $t.Object(ViewConfigSchema.properties, { default: {} }) })
+    const kConfig = token<InferConfig<typeof schema>>(Symbol('view.config.test'))
+    const conf = newConfiguration(schema, kConfig)
+      .source(new InlineConfigSource({ view: { root: templatesRoot, viewExt: 'hbs' } }))
+      .build()
+    const app = createWebApplication({ config: conf }).with(
+      view<InferConfig<typeof schema>>((v, { config }) => v.add(e => e.config(config.view).engine({ handlebars }))),
+    )
+
+    try {
+      await app.bootstrap()
+
+      const res = await app.fetch('/view-configured/show')
+
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('Hello Grace')
+    } finally {
+      await app.close()
+    }
   })
 })
 
