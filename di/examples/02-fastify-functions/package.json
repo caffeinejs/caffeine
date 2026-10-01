@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@caffeinejs/di": "*",
-    "fastify": "^5.12.4"
+    "fastify": "^5.12.5"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
