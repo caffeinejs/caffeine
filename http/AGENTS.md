@@ -61,9 +61,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - The adapter is a server factory. Every `setup(input)` builds one independent `AdapterServer`, sharing only the
   request context binding and the parameter compilers.
-- `WebApplication` builds its own server and each ops server through `setup(input)`, and owns their lifecycle. Its
-  own server listens first, since Watt takes over the first listen to complete. It also closes first, so ops servers
-  answer through the drain.
+- Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
+  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Ops(...)` binds one per
+  name. Nothing in that path is ops-specific: a server differs only by its name, which routers bind to.
+- The application's own server listens first, since Watt takes over the first listen to complete. It also closes
+  first, so ops servers answer through the drain.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
   never filters or compiles them.
 - Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
@@ -76,9 +78,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - An ops server has no gate unless its own `o.with(...)` registers one; a gate covers only the server it was
   registered on. `OIDCRoutesRef.claimed` is shared, so the OIDC routes go to the first gate to install, and the
   application's own server is built first.
-- An ops server's `authorize(...)` reaches compiled routes through its outer group and raw routes through the
-  `caffeine-ops-authorization` slot, ahead of its own plugins. That slot stamps `$caffeine.auth` on a raw route
-  that is not exempt and declared none.
+- No server declares authorization of its own. A route requires what its router or controller declares, and an
+  undeclared or raw one answers to the fallback policy, on every server alike.
 
 ## Routes
 

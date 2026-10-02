@@ -3,7 +3,6 @@ import { Container } from '@caffeinejs/di'
 import { ErrConfiguration } from '../error/common.js'
 import { solutions } from '../error/util.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
-import { inheritGroupSpec } from './inherit.js'
 import type { RouteGroup } from './route.js'
 import type { RouteGroupSpec } from './spec.js'
 
@@ -47,12 +46,9 @@ export interface Routing<R> {
   /**
    * Compiles every declared group whose labels `accept` takes, in the order the sources declared them.
    *
-   * `outer` is a group every selected one is nested in, outermost: its declarations reach each group the way a
-   * parent router's reach a child.
-   *
    * @throws ErrConfiguration when `accept` takes a group an earlier call already selected: two servers would serve it.
    */
-  select(accept: (labels: RouteGroupLabels) => boolean, outer?: RouteGroupSpec<R>): RouteGroup<R>[]
+  select(accept: (labels: RouteGroupLabels) => boolean): RouteGroup<R>[]
 
   /** The declared groups no {@link select} call has taken yet. */
   unselected(): readonly DeclaredRouteGroup<R>[]
@@ -83,7 +79,7 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
   return {
     compileRouteGroup,
 
-    select(accept, outer) {
+    select(accept) {
       const groups: RouteGroup<R>[] = []
 
       for (const group of declared) {
@@ -100,10 +96,7 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
 
         taken.add(group)
 
-        const compiled = compileRouteGroup(
-          outer === undefined ? group.spec : inheritGroupSpec(outer, group.spec),
-          group.meta(),
-        )
+        const compiled = compileRouteGroup(group.spec, group.meta())
         if (group.scopes !== undefined) {
           compiled.scopes = group.scopes
         }

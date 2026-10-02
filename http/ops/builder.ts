@@ -21,12 +21,9 @@ import {
   type Next,
   type NodeMiddleware,
 } from '../middleware/middleware.js'
-import { MiddlewarePipeline } from '../middleware/pipeline.js'
 import type { HTTPPluginFactory } from '../plugin.js'
 import { assertPluginFactory } from '../plugin_factory.js'
-import { foldAuthz } from '../routing/inherit.js'
-import type { RouteAuthz, RouteAuthzOptions } from '../routing/spec.js'
-import { OpsDefinition } from './definition.js'
+import { ServerDefinition } from '../server_definition.js'
 
 /**
  * Fluently builds one ops server: a server of its own, on its own port, serving the routers bound to it with
@@ -38,6 +35,10 @@ import { OpsDefinition } from './definition.js'
  * own server reaches it, an authentication gate included, and neither do the base path and the server callbacks. A
  * router's own plugins and guards, `router.plugin(...)` or `@Use(...)` and `router.guards(...)` or
  * `@UseGuards(...)`, go wherever the router does.
+ *
+ * What a route on it requires is what its router or controller declares, `router.authorize(...)` or
+ * `@Authorize(...)`, exactly as on the application's own server. Authenticating takes a gate registered here,
+ * `with(authentication())`.
  */
 export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
@@ -45,14 +46,12 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   readonly #name: string
-  readonly #server: ServerConfigurer<FastifyTypes, C>[] = []
-  readonly #plugins: HTTPPluginFactory<C>[] = []
-  readonly #middlewares = new MiddlewarePipeline<FastifyMiddlewareHook>()
-  #authz: RouteAuthz | undefined
+  readonly #definition: ServerDefinition<FastifyTypes, C>
 
   constructor(name: string, configure?: FeatureConfigurer<OpsBuilder<C>, C>) {
     super(configure as FeatureConfigurer<never, C> | undefined)
     this.#name = name
+    this.#definition = new ServerDefinition<FastifyTypes, C>(name)
   }
 
   /**
@@ -65,7 +64,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    * ```
    */
   server(configure: ServerConfigurer<FastifyTypes, C>): this {
-    this.#server.push(configure)
+    this.#definition.server.push(configure)
     return this
   }
 
@@ -79,7 +78,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    */
   with(factory: HTTPPluginFactory<C>): this {
     assertPluginFactory(factory)
-    this.#plugins.push(factory)
+    this.#definition.plugins.push(factory)
     return this
   }
 
@@ -120,7 +119,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
     options?: MiddlewareOptions<FastifyMiddlewareHook>,
   ): this {
     const parsed = parseUse<C, FastifyMiddlewareHook>(pathOrTarget, targetOrOptions, options, arguments.length)
-    this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
+    this.#definition.middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
@@ -140,46 +139,16 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
     options?: MiddlewareOptions<FastifyMiddlewareHook>,
   ): this {
     const parsed = parseUse<C, FastifyMiddlewareHook>(pathOrTarget, targetOrOptions, options, arguments.length)
-    this.#middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
-    return this
-  }
-
-  /**
-   * Authorizes every route the server serves, as the outermost router those routes are nested in: the declaration
-   * `router.authorize(...)` takes, reaching each route the way a parent router's does.
-   *
-   * Requirements add up: a route declaring a policy of its own needs both. A route declared public stays public.
-   * A route naming schemes of its own authenticates with those instead. Naming schemes alone still requires an
-   * authenticated principal. A route a plugin registers straight on the server answers to it too, unless it is
-   * exempt from authentication, as a health probe is.
-   *
-   * Authenticating takes a gate on this server, `with(authentication())`: the application's own does not cover it,
-   * and start-up refuses a protected route no gate covers. The schemes it names are the ones `Authentication(...)`
-   * registered.
-   *
-   * ```ts
-   * .install(Ops('admin', o => o.with(authentication()).authorize({ schemes: ['basic'], roles: ['operator'] })))
-   * ```
-   *
-   * @throws ErrAuthenticationRequired at start-up when it declares protection and `Authentication(...)` is not
-   *   installed.
-   */
-  authorize(options: RouteAuthzOptions = {}): this {
-    this.#authz = foldAuthz(this.#authz, options)
+    this.#definition.middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    const definition = new OpsDefinition(
-      this.#name,
-      [...this.#server] as ServerConfigurer<FastifyTypes>[],
-      this.#authz,
-      [...this.#plugins] as HTTPPluginFactory[],
-      this.#middlewares,
-    )
-
-    kit.container.bind(token<OpsDefinition>(Symbol.for(`@caffeinejs/http:ops:${this.#name}`)), t =>
-      t.toValue(definition).extends(OpsDefinition).internal(),
+    kit.container.bind(token<ServerDefinition>(Symbol.for(`@caffeinejs/http:ops:${this.#name}`)), t =>
+      t
+        .toValue(this.#definition as unknown as ServerDefinition)
+        .extends(ServerDefinition)
+        .internal(),
     )
   }
 }

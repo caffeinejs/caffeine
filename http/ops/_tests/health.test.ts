@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   AuthenticateResult,
   Authentication,
+  Authorization,
   BaseAuthenticationHandler,
   Ops,
   authentication,
@@ -72,16 +73,16 @@ describe('health probes on an ops server', () => {
     expect(await status(app.address!.origin, '/readyz')).toBe(200)
   })
 
-  it('stays exempt from the authorization of the server serving it', async () => {
+  it('stays exempt from the fallback policy on the server serving it', async () => {
     app = createWebApplication()
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()).default('Nobody')))
+      .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .install(
         Ops('admin', o =>
           o
             .server(() => ({ listener }))
             .with(authentication())
-            .with(healthProbes())
-            .authorize({ roles: ['operator'] }),
+            .with(healthProbes()),
         ),
       )
       .mount(

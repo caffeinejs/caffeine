@@ -56,7 +56,7 @@ class OpsScheme extends BaseAuthenticationHandler<object> {
 const operator = { 'x-ops': 'alice:operator' }
 
 /**
- * Two ops servers: `admin`, authorized behind a gate of its own and with a small body limit, and `metrics`, open and
+ * Two ops servers: `admin`, its router authorized behind a gate of its own and with a small body limit, and `metrics`, open and
  * serving the probes. `adminPlugin` is one more plugin on `admin`.
  */
 function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
@@ -64,9 +64,7 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
     .install(
       Ops('admin', o => {
-        o.server(() => ({ factory: { bodyLimit: 64 }, listener }))
-          .with(authentication())
-          .authorize({ schemes: ['Ops'], roles: ['operator'] })
+        o.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
 
         if (adminPlugin !== undefined) {
           o.with(adminPlugin)
@@ -80,6 +78,7 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
     .mount(
       newRouter('/admin')
         .with(bindTo('admin'))
+        .authorize({ schemes: ['Ops'], roles: ['operator'] })
         .post('/echo', ctx => ({ received: ctx.req.body() })),
       newRouter('/metrics')
         .with(bindTo('metrics'))

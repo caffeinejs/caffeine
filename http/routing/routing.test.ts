@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { bindTo } from '../decorators/bind_to.js'
 import { RouteBuilder, RouteGroupBuilder } from './builder.js'
 import { buildRouting, type DeclaredRouteGroup, type RouteSource } from './routing.js'
-import type { RouteGroupSpec } from './spec.js'
 
 /**
  * Which server serves a group is decided by selecting on the group's labels, once, before anything compiles: a
@@ -80,22 +79,6 @@ describe('route selection', () => {
     )
 
     expect(routing.select(() => true).map(group => group.name)).toEqual(['a', 'b', 'c'])
-  })
-
-  it('nests every selected group in the outer group, whose authorization comes first', async () => {
-    const reader = declared('reader', g => g.authorize({ roles: ['reader'] }))
-    const outer: RouteGroupSpec<unknown> = {
-      path: '',
-      routes: [],
-      accept: [],
-      contentType: '',
-      authz: { allowAnonymous: false, defaultPolicy: false, policies: [], roleGroups: [['operator']] },
-    }
-
-    const [group] = buildRouting([source(reader.group)], await container()).select(() => true, outer)
-
-    // Both are required, the outer one as the outermost level a parent router would be.
-    expect(group.routes[0].authorization.options?.roleGroups).toEqual([['operator'], ['reader']])
   })
 
   it('names the server a group is bound to on the compiled group, and nothing for an unbound one', async () => {

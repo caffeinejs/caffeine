@@ -264,14 +264,14 @@ const app = createWebApplication({ config })
         .server(() => ({ listener: config.app.admin }))
         .with(authentication())
         .with(healthProbes())
-        .use(AuditLog)
-        .authorize({ schemes: ['ops'], roles: ['operator'] }),
+        .use(AuditLog),
     ),
   )
   .with(authentication())
   .mount(
     newRouter('/jobs')
       .with(bindTo('admin'))
+      .authorize({ schemes: ['ops'], roles: ['operator'] })
       .get('/', () => jobs.list()),
   )
 
@@ -286,24 +286,19 @@ app.ops.get('admin')?.address // { host, port, origin }
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.with(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
   start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
-- **What it gets.** The ops server is built like the application's own server: the same request context, error
-  handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for itself follows
-  it: `router.plugin(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
+- **What it gets.** The ops server is built through the same path as the application's own server: the same request
+  context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
+  itself follows it: `router.plugin(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
 - **Plugins and middleware are per server.** `o.with(...)`, `o.use(...)` and `o.useFn(...)` take what the
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
   head slots. Nothing registered on the application reaches an ops server, an authentication gate included, and
   `.basePath(...)` and `.serverCallback(...)` never do.
 - **Settings.** `o.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
   switched by configuration there too.
-- **Authorization.** `o.authorize(...)` takes what `router.authorize(...)` takes, and the server is the outermost
-  router of every route it serves:
-  - requirements add up: a route declaring its own policy needs both;
-  - a route declared public stays public;
-  - naming only `schemes` still requires an authenticated caller;
-  - a route a plugin registers straight on the server answers to it too, unless it is exempt from authentication,
-    as health probes are;
-  - the application's fallback policy reaches a route on it only when neither the route nor the server declared
-    anything.
+- **Authorization.** There is nothing ops-specific: a route on an ops server requires what its router or controller
+  declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one, or one a plugin registers straight
+  on the server, answers to the application's fallback policy, exactly as on the application's own server. Health
+  probes stay exempt.
 
   Authenticating on an ops server takes a gate registered there, `o.with(authentication())`: the application's gate
   does not cover it, and start-up refuses a protected route no gate covers. The OIDC login routes go to the first
