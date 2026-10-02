@@ -113,6 +113,41 @@ export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions 
   return keys.every(key => key === 'hook')
 }
 
+/**
+ * Reads what a `use(...)` or `useFn(...)` call was given: a path or none, then the middleware, then `{ hook }`.
+ *
+ * @param argCount - How many arguments the call was given: a string no middleware follows is a container key, not
+ *   a path.
+ */
+export function parseUse<C, H extends string>(
+  pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
+  targetOrOptions:
+    | MiddlewareTarget<C>
+    | MiddlewareOptions<H>
+    | ((req: never, res: never, next: Next) => void)
+    | undefined,
+  options: MiddlewareOptions<H> | undefined,
+  argCount: number,
+): { path: MiddlewarePath | undefined; target: unknown; hook?: H } {
+  const asPath =
+    Array.isArray(pathOrTarget) ||
+    (typeof pathOrTarget === 'string' && argCount >= 2 && !isMiddlewareOptions(targetOrOptions))
+
+  if (asPath) {
+    return {
+      path: pathOrTarget as MiddlewarePath,
+      target: targetOrOptions,
+      hook: options?.hook,
+    }
+  }
+
+  return {
+    path: undefined,
+    target: pathOrTarget,
+    hook: isMiddlewareOptions(targetOrOptions) ? (targetOrOptions.hook as H | undefined) : undefined,
+  }
+}
+
 /** Whether `ref` is a middleware class rather than a plain middleware function. */
 export function isMiddlewareClass(ref: unknown): ref is Ctor<Middleware> {
   return (

@@ -239,6 +239,80 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
   mounted or not. Without `Health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
 - Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
   `app.health` as [docs/watt.md](../../docs/watt.md) shows.
+- To serve the probes on an [ops server](#ops-servers), register the plugin there:
+  `Ops('admin', o => o.with(healthProbes()))`. They stay exempt from authentication there, and the application's own
+  server serves them only if its `.with(...)` registers them too.
+
+## Ops servers
+
+An ops server is one more port, serving only the routers bound to it: metrics, probes or an admin API kept off the
+public one. Each is named, and an application may install several.
+
+```ts
+const app = createWebApplication({ config })
+  .install(
+    Authentication(a =>
+      a
+        .addBasic('ops', b => b.validate(checkOperator))
+        .addJWTBearer('api', j => j.secret(SECRET))
+        .default('api'),
+    ),
+  )
+  .install(
+    Ops('admin', (o, { config }) =>
+      o
+        .server(() => ({ listener: config.app.admin }))
+        .with(authentication())
+        .with(healthProbes())
+        .use(AuditLog),
+    ),
+  )
+  .with(authentication())
+  .mount(
+    newRouter('/jobs')
+      .with(bindTo('admin'))
+      .authorize({ schemes: ['ops'], roles: ['operator'] })
+      .get('/', () => jobs.list()),
+  )
+
+@BindTo('admin')
+@Controller('/metrics')
+export class MetricsController {}
+
+await app.run()
+app.ops.get('admin')?.address // { host, port, origin }
+```
+
+- **Binding is per router.** `@BindTo(name)` on a controller and `router.with(bindTo(name))` bind every route under
+  it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
+  start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
+- **What it gets.** The ops server is built through the same path as the application's own server: the same request
+  context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
+  itself follows it: `router.plugin(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
+- **Plugins and middleware are per server.** `o.with(...)`, `o.use(...)` and `o.useFn(...)` take what the
+  application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
+  head slots. Nothing registered on the application reaches an ops server, an authentication gate included, and
+  `.basePath(...)` and `.serverCallback(...)` never do.
+- **Settings.** `o.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
+  switched by configuration there too.
+- **Authorization.** There is nothing ops-specific: a route on an ops server requires what its router or controller
+  declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one, or one a plugin registers straight
+  on the server, answers to the application's fallback policy, exactly as on the application's own server. Health
+  probes stay exempt.
+
+  Authenticating on an ops server takes a gate registered there, `o.with(authentication())`: the application's gate
+  does not cover it, and start-up refuses a protected route no gate covers. The OIDC login routes go to the first
+  gate to install. The application's own server is built first, so its gate takes them when it has one;
+  `authentication(g => g.oidcRoutes(false))` keeps them off an ops server's gate.
+
+- **Lifecycle.** `run()` listens on the application's own server first, then on each ops server on its own
+  `listener`; what `run(...)` is given does not reach them. `close()` closes the application's own server first, so
+  probes and metrics answer through the drain.
+- **Clients and tests.** A typed client reaches ops routes given that server's origin:
+  `brewer<App>(app.ops.get('admin')!.address!.origin)`. A test injects with `app.ops.get('admin')!.fetch('/jobs')`;
+  `app.fetch(...)` reaches the application's own server only.
+- **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to an ops server are
+  left out of the main document.
 
 ## Typed client — `@caffeinejs/brewer`
 

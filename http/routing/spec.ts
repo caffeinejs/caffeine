@@ -26,6 +26,8 @@ export interface RouteGroupSpec<R> {
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
+  /** What labelled the group, keyed by whoever reads it: which server serves it, for one. */
+  labels?: Map<symbol, unknown>
 }
 
 export interface RouteSpec<R> {

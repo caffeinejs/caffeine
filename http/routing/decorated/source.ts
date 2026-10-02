@@ -1,4 +1,4 @@
-import { Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
+import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 
 import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
@@ -6,8 +6,8 @@ import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from
 import { solutions } from '../../error/util.js'
 import { Keys } from '../../symbols.js'
 import type { RouteGroupMeta } from '../compile.js'
-import { kErrorUnhandled, type RouteDispatch, type RouteGroup, type RouteGroupErrorHandler } from '../route.js'
-import type { RouteBuildContext, RouteSource } from '../routing.js'
+import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from '../route.js'
+import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
 import type { RouteSpec, RouteGroupSpec } from '../spec.js'
 
 /** The instance a route is dispatched on, as the adapter stashes it for the request. */
@@ -27,15 +27,11 @@ type ControllerInstance = Record<string | symbol, (...args: unknown[]) => unknow
 export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'controller'
 
-  build(ctx: RouteBuildContext): RouteGroup<R>[] {
-    const container = ctx.container
-    const controllers = container.getBindingsByLabel(Keys.CONTROLLER)
-    const routeGroups = new Array<RouteGroup<R>>(controllers.length)
-
-    for (let i = 0; i < controllers.length; i++) {
-      const { key, binding } = controllers[i]
-      const rd = getRouteGroup(key as Function)
-      if (!rd) {
+  collect(container: Container): DeclaredRouteGroup<R>[] {
+    return container.getBindingsByLabel(Keys.CONTROLLER).map(({ key, binding }) => {
+      // `@Controller` registers a class's route definition under the class itself: any other key has none.
+      const rd = typeof key === 'function' ? getRouteGroup(key) : undefined
+      if (rd === undefined || typeof key !== 'function') {
         throw new ErrCaffeineWebApplication(
           `Cannot build router: no route definition found for router "${String(key)}"`,
           'ERR_HTTP_MISSING_ROUTER',
@@ -43,22 +39,25 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
       }
 
       const spec = rd.toRouteGroup<R>()
-      const provider = container.wrap(key as InjectionToken<ControllerInstance>)
 
-      const group = ctx.compileRouteGroup(spec, meta<R>(spec, key, binding.scopeID === Scopes.SINGLETON, provider))
-
-      if (typeof key === 'function' && controllerPlugins(key).length > 0) {
-        group.scopes = [key]
+      return {
+        name: key.name,
+        spec,
+        // Deferred: a controller resolves its instance here, and one no server selects is never instantiated.
+        meta: () =>
+          controllerMeta<R>(
+            spec,
+            key,
+            binding.scopeID === Scopes.SINGLETON,
+            container.wrap(key as InjectionToken<ControllerInstance>),
+          ),
+        scopes: controllerPlugins(key).length > 0 ? [key] : undefined,
       }
-
-      routeGroups[i] = group
-    }
-
-    return routeGroups
+    })
   }
 }
 
-function meta<R>(
+function controllerMeta<R>(
   spec: RouteGroupSpec<R>,
   key: InjectionToken,
   isSingleton: boolean,

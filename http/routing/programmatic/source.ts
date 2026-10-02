@@ -1,5 +1,6 @@
-import type { RouteGroup } from '../route.js'
-import type { RouteBuildContext, RouteSource } from '../routing.js'
+import type { Container } from '@caffeinejs/di'
+
+import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
 import { stateOf, type RouterState } from './_state.js'
 import { flattenRouter } from './flatten.js'
 import type { Router } from './router.js'
@@ -21,8 +22,8 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
     this.#routers = routers
   }
 
-  build(ctx: RouteBuildContext): RouteGroup<R>[] {
-    const groups: RouteGroup<R>[] = []
+  collect(container: Container): DeclaredRouteGroup<R>[] {
+    const groups: DeclaredRouteGroup<R>[] = []
 
     // Every value `.handler()` returns names the router it was opened from, so mounting routes declared as
     // separate statements hands the same state over more than once. All of these start at the same path, so the
@@ -38,10 +39,8 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
 
       seen.add(state)
 
-      for (const flat of flattenRouter<R>(state, ctx.container)) {
-        const group = ctx.compileRouteGroup(flat.spec, { name: flat.name })
-        group.scopes = flat.scopes
-        groups.push(group)
+      for (const flat of flattenRouter<R>(state, container)) {
+        groups.push({ name: flat.name, spec: flat.spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })
       }
     }
 

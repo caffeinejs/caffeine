@@ -1,9 +1,8 @@
 import {
   Application,
+  ErrApplicationNotReady,
   kAddConfigurer,
-  kFeatureName,
   type ApplicationOptions,
-  type Feature,
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
@@ -13,13 +12,13 @@ import {
   type Adapter,
   type AdapterExtensionFactory,
   type AdapterFactory,
+  type AdapterServer,
   type AdapterTypes,
   type HTTPSetupContext,
   type ServerAddress,
   type ServerConfigurer,
   type ServerCustomizer,
 } from './adapter.js'
-import { normalizeBasePath } from './base_path.js'
 import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
@@ -27,8 +26,6 @@ import { ErrConfiguration } from './error/common.js'
 import { solutions } from './error/util.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
 import {
-  MiddlewarePipeline,
-  isMiddlewareOptions,
   type MiddlewareFactory,
   type MiddlewareFn,
   type MiddlewareOptions,
@@ -38,13 +35,19 @@ import {
   type Next,
   type NodeMiddleware,
 } from './middleware/index.js'
+import { parseUse } from './middleware/middleware.js'
+import type { OpsServer } from './ops/builder.js'
+import { opsServers } from './ops/servers.js'
 import { kServerExtension } from './plugin.js'
+import { assertPluginFactory } from './plugin_factory.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
 import type { RouteGroup } from './routing/route.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
+import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
+import { ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -89,12 +92,12 @@ export class WebApplication<
   declare readonly __deps?: DEPS
 
   readonly #adapter: Adapter<T>
-  readonly #middlewares = new MiddlewarePipeline<T['hook']>()
-  readonly #extensions = new AdapterExtensions<T['extension']>()
-  readonly #plugins: AdapterExtensionFactory<T['extension'], C>[] = []
-  readonly #serverConfigurers: ServerConfigurer<T, C>[] = []
-  readonly #serverCustomizers: ServerCustomizer<T, C>[] = []
-  #basePath: BasePathConfigurer<C> | undefined
+  /** What the application's own server is built from: what its fluent methods registered. */
+  readonly #own = new ServerDefinition<T, C>()
+  /** Every server, the application's own first, once {@link setup} has read them. */
+  #servers: ServerSet<T> | undefined
+  /** The ops servers `Ops(...)` installed, once {@link setup} has built them. */
+  #ops: ReadonlyMap<string, OpsServer<T>> | undefined
   #runArgs: T['runArgs'] | undefined
   #routeGroups: RouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
@@ -126,7 +129,7 @@ export class WebApplication<
    * @throws ErrApplicationNotReady before {@link ready} has built it.
    */
   get instance(): T['instance'] {
-    return this.#adapter.instance
+    return this.#ownServer().instance
   }
 
   /**
@@ -134,7 +137,21 @@ export class WebApplication<
    * socket actually got, so it is the way to reach an application started on port `0`.
    */
   get address(): ServerAddress | undefined {
-    return this.#adapter.address
+    return this.#servers?.own?.address
+  }
+
+  /**
+   * The ops servers `Ops(...)` installed, by name and in install order: empty when none was. Each one's `address` is
+   * where to point a client at the routes bound to it.
+   *
+   * @throws ErrApplicationNotReady before {@link ready} has built them.
+   */
+  get ops(): ReadonlyMap<string, OpsServer<T>> {
+    if (this.#ops === undefined) {
+      throw new ErrApplicationNotReady('reach the ops servers')
+    }
+
+    return this.#ops
   }
 
   get routeGroups(): RouteGroup<T['request']>[] {
@@ -145,8 +162,9 @@ export class WebApplication<
     return this.#routeGroups
   }
 
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
-    return this.#adapter.fetch(request, options)
+  /** @throws ErrApplicationNotReady before {@link ready} has built the server. */
+  async fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
+    return this.#ownServer().fetch(request, options)
   }
 
   /**
@@ -168,6 +186,9 @@ export class WebApplication<
    *
    * A middleware naming the variables it writes is taken at its word: the routers it ends up in front of are
    * declared elsewhere, so nothing here checks that they declare the same ones.
+   *
+   * The pipeline runs on the application's own server alone. An ops server has its own:
+   * `Ops(name, o => o.use(...))`.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -197,7 +218,7 @@ export class WebApplication<
     options?: MiddlewareOptions<T['hook']>,
   ): this {
     const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
-    this.#middlewares.add(parsed.path, parsed.target, parsed.hook)
+    this.#own.middlewares.add(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
@@ -211,6 +232,8 @@ export class WebApplication<
    * ```ts
    * app.useFn('*', ({ config }) => rateLimit(config.limits))
    * ```
+   *
+   * Like {@link use}, it reaches the application's own server and no ops server.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
@@ -220,14 +243,14 @@ export class WebApplication<
     options?: MiddlewareOptions<T['hook']>,
   ): this {
     const parsed = parseUse<C, T['hook']>(pathOrTarget, targetOrOptions, options, arguments.length)
-    this.#middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
+    this.#own.middlewares.addFactory(parsed.path, parsed.target, parsed.hook)
     return this
   }
 
   /**
    * Registers a server plugin from a factory — under Fastify, one producing a plugin or a `[plugin, options]`
-   * pair. Plugins install in the order these calls are written, after the framework's own head slots (error
-   * handling, cookies):
+   * pair. Plugins install on the application's own server, in the order these calls are written, after the
+   * framework's own head slots (error handling, cookies):
    *
    * ```ts
    * createWebApplication()
@@ -235,6 +258,8 @@ export class WebApplication<
    *   .with(({ config }) => [fastifyCors, config.app.cors.options])
    *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
+   *
+   * An ops server installs none of them. It has its own: `Ops(name, o => o.with(...))`.
    *
    * A factory needing to configure its plugin hands the plugin back together with its options, rather than
    * wrapping it in one that closes over them: an official plugin already wraps itself in `fastify-plugin`, so
@@ -251,24 +276,9 @@ export class WebApplication<
    */
   with(factory: AdapterExtensionFactory<T['extension'], C>): this {
     this.assertConfigurable()
+    assertPluginFactory(factory)
 
-    // The compiler already refuses a feature here; this catches one smuggled past it, where the silent
-    // alternative would be an extension the adapter cannot install.
-    if (typeof factory !== 'function') {
-      const name = (factory as Partial<Feature<C>>)[kFeatureName]
-      throw new ErrConfiguration(
-        typeof name === 'string'
-          ? `Cannot register feature "${name}" with ".with(...)": a feature is not a server plugin` +
-              solutions('Install a feature with ".install(...)", at any position in the chain')
-          : `Cannot register an HTTP plugin: expected a plugin factory function, got ${typeof factory}` +
-              solutions(
-                'Pass a factory: ".with(({ config }) => [plugin, options])"',
-                'Install a feature with ".install(feature)"',
-              ),
-      )
-    }
-
-    this.#plugins.push(factory)
+    this.#own.plugins.push(factory)
     return this
   }
 
@@ -284,7 +294,8 @@ export class WebApplication<
   }
 
   /**
-   * Configures the server the adapter builds at {@link ready}.
+   * Configures the server the adapter builds at {@link ready}: the application's own. An ops server takes its
+   * settings from `Ops(name, o => o.server(...))`.
    *
    * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
    * under Fastify `{ factory, listener }`, the constructor options and the listen options. To reach the server
@@ -301,14 +312,15 @@ export class WebApplication<
    */
   server(configure: ServerConfigurer<T, C>): this {
     this.assertConfigurable()
-    this.#serverConfigurers.push(configure)
+    this.#own.server.push(configure)
     return this
   }
 
   /**
    * Hands `callback` the setup context and then the server the adapter builds at {@link bootstrap}, right after it
    * is constructed and before the adapter decorates or registers anything on it: a plugin registered here loads
-   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept.
+   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept. An ops server is
+   * never handed over.
    *
    * Calls accumulate and run in call order.
    *
@@ -320,13 +332,13 @@ export class WebApplication<
    */
   serverCallback(callback: ServerCustomizer<T, C>): this {
     this.assertConfigurable()
-    this.#serverCustomizers.push(callback)
+    this.#own.customizers.push(callback)
     return this
   }
 
   /**
    * Serves the whole application under `basePath`, for one placed behind a gateway or a proxy that forwards a
-   * path prefix with the request.
+   * path prefix with the request. An ops server is served from its root.
    *
    * The server takes the base off a request's path before routing, so everything the application declares stays
    * written as if it were served from the root: routes from any source, plugin routes such as the health probes,
@@ -352,7 +364,7 @@ export class WebApplication<
    */
   basePath(basePath: string | BasePathConfigurer<C>): this {
     this.assertConfigurable()
-    this.#basePath = typeof basePath === 'string' ? () => basePath : basePath
+    this.#own.basePath = typeof basePath === 'string' ? () => basePath : basePath
     return this
   }
 
@@ -394,20 +406,14 @@ export class WebApplication<
     return this
   }
 
-  /**
-   * Fills the list the adapter installs on the root server: the framework's head slots — error handling first,
-   * so every route and hook the rest register is already covered by it, then cookies — and then every
-   * `.with(...)` factory, called here in the order the calls were written.
-   */
-  async #registerExtensions(context: HTTPSetupContext<C>): Promise<void> {
+  /** The framework's head slots, built fresh for one server: error handling first, then cookies. */
+  #headSlots(): T['extension'][] {
     // Not checked against `T`: the built-ins are written against Fastify whatever the adapter, exactly as
     // their configure halves are. A foreign adapter receives two extensions it cannot install.
-    this.#extensions.add(this.#errorHandling[kServerExtension]() as T['extension'])
-    this.#extensions.add(this.#cookieBuilder[kServerExtension]() as T['extension'])
-
-    for (const factory of this.#plugins) {
-      this.#extensions.add(await factory(context))
-    }
+    return [
+      this.#errorHandling[kServerExtension]() as T['extension'],
+      this.#cookieBuilder[kServerExtension]() as T['extension'],
+    ]
   }
 
   /**
@@ -417,12 +423,13 @@ export class WebApplication<
    * resolved and the container has initialized — so a factory here sees exactly what one passed to the
    * application's `.with(...)` sees, but for its configuration's type.
    */
-  async #registerScopedExtensions(context: HTTPSetupContext): Promise<void> {
+  async #scopedExtensions(context: HTTPSetupContext): Promise<AdapterExtensions<T['extension']>> {
+    const extensions = new AdapterExtensions<T['extension']>()
     const register = async (scope: object, factories: readonly AdapterExtensionFactory<unknown>[]): Promise<void> => {
       for (const factory of factories) {
         // Unchecked: a router's binding was checked when it was mounted, but a controller's `@Use(...)` never
         // meets the application's type. The adapter refuses what it cannot install.
-        this.#extensions.add((await factory(context)) as T['extension'], scope)
+        extensions.add((await factory(context)) as T['extension'], scope)
       }
     }
 
@@ -439,6 +446,8 @@ export class WebApplication<
 
       await register(key, controllerPlugins(key))
     }
+
+    return extensions
   }
 
   /**
@@ -488,8 +497,16 @@ export class WebApplication<
   }
 
   protected override async setup(): Promise<void> {
-    const { routeGroups, compileRouteGroup } = buildRouting<T['request']>(this.routeSources(), this.container)
-    this.#routeGroups = routeGroups
+    const routing = buildRouting<T['request']>(this.routeSources(), this.container)
+    const servers = new ServerSet<T>([
+      this.#own as ServerDefinition<T>,
+      ...(this.container.getManyOptional(ServerDefinition) as ServerDefinition<T>[]),
+    ])
+    this.#servers = servers
+
+    // Every group compiles here, before any server is built, so a route that cannot compile fails before anything
+    // has started. Each server serves the routers bound to it; the application's own, the unbound ones.
+    this.#routeGroups = servers.select(routing)
     this.#built = true
 
     // One context for everything built from here on. `log` is the configured logger by now.
@@ -501,67 +518,19 @@ export class WebApplication<
       hasFeature: name => this.hasFeature(name),
     }
 
-    // The live object is deliberately LiveConfig<unknown> on the base class (see std's Application); it is this
-    // application's own configuration for its own C, so the application's own factories get it typed.
-    //
-    // The server's own settings first: they describe what everything below registers onto, and a callback that
-    // fails should do so before a factory with side effects has run.
-    const server = await this.#resolveServerOptions(context as HTTPSetupContext<C>)
-    const basePath = normalizeBasePath(await this.#basePath?.(context as HTTPSetupContext<C>))
-    await this.#registerExtensions(context as HTTPSetupContext<C>)
-    await this.#registerScopedExtensions(context)
-
-    await this.#adapter.setup({
-      routeGroups: this.#routeGroups,
-      compileRouteGroup,
+    await servers.setup(this.#adapter, {
       context,
-      middlewares: this.#middlewares,
-      extensions: this.#extensions,
-      server,
-      customize: this.#serverCustomizer(),
-      basePath,
+      headSlots: () => this.#headSlots(),
+      scopedExtensions: () => this.#scopedExtensions(context),
+      compileRouteGroup: routing.compileRouteGroup,
     })
+
+    this.#ops = opsServers(servers.named!)
   }
 
-  /**
-   * Folds every `.server(configure)` result into one, section by section: a section that is an object is
-   * shallow-merged over the one before it, anything else replaces. Sections are copied, never aliased — a live
-   * configuration node is read-only, and the adapter writes into what it is handed.
-   */
-  async #resolveServerOptions(context: HTTPSetupContext<C>): Promise<T['serverOptions']> {
-    const merged: Record<string, unknown> = {}
-
-    for (const configure of this.#serverConfigurers) {
-      for (const [section, value] of Object.entries(await configure(context))) {
-        if (value === undefined) {
-          continue
-        }
-
-        const current = merged[section]
-        merged[section] = isPlainObject(value) ? { ...(isPlainObject(current) ? current : {}), ...value } : value
-      }
-    }
-
-    return merged as T['serverOptions']
-  }
-
-  /** Every `.serverCallback(...)` callback as one, run in call order; `undefined` when there is none. */
-  #serverCustomizer(): ServerCustomizer<T> | undefined {
-    if (this.#serverCustomizers.length === 0) {
-      return undefined
-    }
-
-    const customizers = [...this.#serverCustomizers]
-
-    return async (context, instance) => {
-      for (const customize of customizers) {
-        await customize(context as HTTPSetupContext<C>, instance)
-      }
-    }
-  }
-
-  protected override start(): Promise<void> {
-    return this.#adapter.run(...((this.#runArgs ?? []) as T['runArgs']))
+  protected override async start(): Promise<void> {
+    // The application's own server first: under Watt, the first listen to complete is the one it takes over.
+    await this.#servers?.run((this.#runArgs ?? []) as T['runArgs'])
   }
 
   protected override runInfo(): WebRunInfo {
@@ -570,7 +539,8 @@ export class WebApplication<
 
   /**
    * Readies the application if needed and starts the server with what the adapter's `run` takes — under Fastify,
-   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key.
+   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key. Each ops
+   * server listens after it, on its own settings alone.
    *
    * Runs once: a second call is refused rather than joined, since it would otherwise lose its listen options.
    *
@@ -584,12 +554,33 @@ export class WebApplication<
     return super.run() as Promise<WebRunInfo>
   }
 
-  protected override stop(): Promise<void> {
-    return this.#adapter.teardown()
+  // Tolerates a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
+  protected override async stop(): Promise<void> {
+    // The application's own server first, so probes and metrics on an ops server answer throughout its drain.
+    const failures = (await this.#servers?.teardown()) ?? []
+
+    if (failures.length === 1) {
+      throw failures[0]
+    }
+
+    if (failures.length > 1) {
+      throw new AggregateError(failures, 'Cannot close every server')
+    }
   }
 
   protected override async forceStop(): Promise<void> {
-    await this.#adapter.forceTeardown?.()
+    await this.#servers?.forceTeardown()
+  }
+
+  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
+  #ownServer(): AdapterServer<T> {
+    const server = this.#servers?.own
+
+    if (server === undefined) {
+      throw new ErrApplicationNotReady('reach the server')
+    }
+
+    return server
   }
 }
 
@@ -624,35 +615,6 @@ export function createWebApplication(
     : new WebApplication(fastifyAdapterFactory(), first ?? {})
 }
 
-function parseUse<C, H extends string>(
-  pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
-  targetOrOptions:
-    | MiddlewareTarget<C>
-    | MiddlewareOptions<H>
-    | ((req: never, res: never, next: Next) => void)
-    | undefined,
-  options: MiddlewareOptions<H> | undefined,
-  argCount: number,
-): { path: MiddlewarePath | undefined; target: unknown; hook?: H } {
-  const asPath =
-    Array.isArray(pathOrTarget) ||
-    (typeof pathOrTarget === 'string' && argCount >= 2 && !isMiddlewareOptions(targetOrOptions))
-
-  if (asPath) {
-    return {
-      path: pathOrTarget as MiddlewarePath,
-      target: targetOrOptions,
-      hook: options?.hook,
-    }
-  }
-
-  return {
-    path: undefined,
-    target: pathOrTarget,
-    hook: isMiddlewareOptions(targetOrOptions) ? (targetOrOptions.hook as H | undefined) : undefined,
-  }
-}
-
 /** The routes one router declares, distributed so a union of routers folds into a union of their routes. */
 type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R, any> ? R : never
 
@@ -663,10 +625,3 @@ type RoutesOfRouter<T> = T extends Router<any, any, any, any, infer R, any> ? R 
  * application that mounted one report `undefined` as its dependencies. It contributes nothing instead.
  */
 type DepsOfRouter<T> = T extends Router<any, any, infer D, any, any, any> ? (D extends undefined ? never : D) : never
-
-/** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */
-type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | undefined | Promise<string | undefined>
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}

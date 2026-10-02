@@ -144,6 +144,17 @@ passes, and since `/status` fails with readiness, an orchestrator restarts the p
 Do not export an unrelated `build` or `create`, and do not give the entry module a default export: Watt looks for
 the factory on the default export when there is one.
 
+### Ops servers
+
+An `Ops(...)` server listens in `run()`, after the application's own server, on its own `listener`.
+
+- In script mode Watt takes over the first listen to complete, which is the application's own, so an ops server binds
+  the port it names: a real port, in every worker.
+- In factory mode `run()` never runs, and an ops server never listens.
+- A fixed ops port collides as soon as an application runs more than one worker.
+
+Under Watt, answer health through Watt's own checks, as below, rather than probes on an ops server.
+
 ### Headless workers
 
 A worker with no HTTP server — a Kafka consumer, a scheduler — runs in script mode as a background application:

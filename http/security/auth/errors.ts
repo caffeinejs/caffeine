@@ -66,8 +66,10 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
  * gate covers it.
  *
  * Installing `Authentication(...)` binds what a gate runs on, but only a gate authenticates a request: one
- * registered with `.with(authentication())` covers every route, one registered on a router covers that router's.
- * Served with neither, a protected route would answer anyone, so the application does not start.
+ * registered with `.with(authentication())` covers every route of the application's own server, one registered on
+ * an ops server with `o.with(authentication())` covers every route of that server, and one registered on a router
+ * covers that router's routes. Served with none, a protected route would answer anyone, so the application does not
+ * start.
  */
 export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
   constructor(routes: readonly string[]) {
@@ -82,7 +84,10 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
       `Cannot start application: ${one ? 'route' : 'routes'} ${named}${more} ${one ? 'requires' : 'require'} ` +
         `authentication and no authentication gate covers ${one ? 'it' : 'them'}` +
         solutions(
-          'Register the gate on the application, where it covers every route: ".with(authentication())"',
+          'Register the gate on the application, where it covers every route of its own server: ' +
+            '".with(authentication())"',
+          'Or, for a route an ops server serves, register one on that server: ' +
+            '"Ops(name, o => o.with(authentication()))"',
           'Or register one on the router holding the route: "router.plugin(authentication())"',
           'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
             'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +

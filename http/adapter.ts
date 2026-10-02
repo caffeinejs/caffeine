@@ -109,10 +109,13 @@ export type ServerCustomizer<T extends AdapterTypes, C = unknown> = (
   instance: T['instance'],
 ) => void | Promise<void>
 
-/** What an application hands its adapter to set the server up with. */
+/** What an application hands its adapter to set one server up with. */
 export interface AdapterIn<T extends AdapterTypes> {
   routeGroups: RouteGroup<T['request']>[]
-  /** The compiler {@link buildRouting} built the groups above with — reused by `$route` for a late one. */
+  /**
+   * What `$route` compiles a late group with: the compiler {@link buildRouting} built the groups above with, applied
+   * the way this server applies it to every group it serves.
+   */
   compileRouteGroup: RouteGroupCompiler
   /** What the application hands everything it builds at start-up. The middleware factories run against it. */
   context: HTTPSetupContext
@@ -132,21 +135,32 @@ export interface AdapterIn<T extends AdapterTypes> {
 }
 
 /**
- * What drives the server behind a {@link WebApplication}. `T` names every type that belongs to that server, and is
+ * Builds the servers behind a {@link WebApplication}. `T` names every type that belongs to the server library, and is
  * what the application, its routers and each request's context are typed with.
  */
 export interface Adapter<T extends AdapterTypes> {
-  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
+  /**
+   * Builds one server from `input.server`, hands it to `input.customize`, then wires everything else onto it. The
+   * server comes back ready and not listening.
+   *
+   * Each call builds a server of its own, sharing nothing with another but the adapter's request context: the
+   * application calls it for its own server, and once more for every other server it runs.
+   */
+  setup(input: AdapterIn<T>): Promise<AdapterServer<T>>
+}
+
+/** A server an {@link Adapter} built. Whoever asked for it runs it and tears it down. */
+export interface AdapterServer<T extends AdapterTypes> {
   get instance(): T['instance']
 
   /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
   get address(): ServerAddress | undefined
 
-  /** Builds the server from `input.server`, hands it to `input.customize`, then wires everything else onto it. */
-  setup(input: AdapterIn<T>): Promise<void>
-  /** Starts listening. The arguments are what {@link WebApplication.run} was given, untouched. */
+  /**
+   * Starts listening on the settings the server was built with. The application hands its own server what
+   * {@link WebApplication.run} was given, untouched, and any other server nothing.
+   */
   run(...args: T['runArgs']): Promise<void>
-  /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 
   teardown(): Promise<void>
@@ -228,5 +242,20 @@ export class AdapterExtensions<X> {
   /** What `scope`, a mounted router or a controller class, installs in front of its own routes. */
   of(scope: object): readonly X[] {
     return this.#scoped.get(scope) ?? []
+  }
+
+  /**
+   * The scoped extensions registered so far, in front of another root list: what one more server installs when it
+   * serves groups of the same routers and controllers.
+   */
+  withRoot(root: readonly X[]): AdapterExtensions<X> {
+    const extensions = new AdapterExtensions<X>()
+    extensions.#root.push(...root)
+
+    for (const [scope, scoped] of this.#scoped) {
+      extensions.#scoped.set(scope, scoped)
+    }
+
+    return extensions
   }
 }

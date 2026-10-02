@@ -52,6 +52,12 @@ export interface RouteGroup<R = FastifyRequest> {
   detail?: RouteGroupDetail
 
   /**
+   * The server the group is bound to, as `bindTo(...)` or `@BindTo(...)` named it; `undefined` on the application's
+   * own server. Metadata: which server serves the group was decided before it compiled.
+   */
+  boundTo?: string
+
+  /**
    * What installed the features whose plugins register inside this group's context, outermost first.
    *
    * A programmatic group lists its own router and every router it is nested under, so a plugin extended on a

@@ -52,8 +52,34 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   parameter.
 - No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
   (`collectRouteGroups(instance)`), not a scan in the adapter.
-- `$route` is fire-once, not get-or-create, and open only while the `.with(...)` loop installs. A later call is
-  recorded and thrown from `onReady`: avvio does not catch a callback-style plugin's throw.
+- `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
+  plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
+  callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
+  another server.
+
+## Servers
+
+- The adapter is a server factory. Every `setup(input)` builds one independent `AdapterServer`, sharing only the
+  request context binding and the parameter compilers.
+- Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
+  `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Ops(...)` binds one per
+  name. Nothing in that path is ops-specific: a server differs only by its name, which routers bind to.
+- The application's own server listens first, since Watt takes over the first listen to complete. It also closes
+  first, so ops servers answer through the drain.
+- Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
+  never filters or compiles them.
+- Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
+- `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
+- A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches an ops server
+  only through that server's own `o.with(...)`, `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the
+  package barrel import `ops/`.
+- Each server reads `GlobalErrorHandlerRef` right after its own root loop. The servers are built one after another,
+  so no server reads the ref another server wrote.
+- An ops server has no gate unless its own `o.with(...)` registers one; a gate covers only the server it was
+  registered on. `OIDCRoutesRef.claimed` is shared, so the OIDC routes go to the first gate to install, and the
+  application's own server is built first.
+- No server declares authorization of its own. A route requires what its router or controller declares, and an
+  undeclared or raw one answers to the fallback policy, on every server alike.
 
 ## Routes
 

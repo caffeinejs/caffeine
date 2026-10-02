@@ -76,7 +76,8 @@ function normalizeList(value: string | string[] | undefined): string[] {
  * Follows the group-to-route merge the compiler already performs: the inner value wins where a field holds one
  * value, and the two are combined where a field holds a set. `catchBy` is the exception — a nested group that
  * names its own handlers replaces the parent's rather than adding to them, because two handlers for one error
- * type is a configuration error, not a merge.
+ * type is a configuration error, not a merge. `labels` are the other: the outer group's win, so a nested group is
+ * selected the way its parent is.
  */
 export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupSpec<R>): RouteGroupSpec<R> {
   return {
@@ -92,6 +93,7 @@ export function inheritGroupSpec<R>(outer: RouteGroupSpec<R>, inner: RouteGroupS
     detail: mergeDetail(outer.detail, inner.detail),
     guards: concat(outer.guards, inner.guards),
     catchBy: inner.catchBy?.length ? inner.catchBy : outer.catchBy,
+    labels: mergeMap(inner.labels, outer.labels),
   }
 }
 

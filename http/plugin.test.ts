@@ -100,4 +100,16 @@ describe('WebApplication.with()', () => {
       'Cannot register an HTTP plugin: expected a plugin factory function, got object',
     )
   })
+
+  // Read naively, the feature check would throw a `TypeError` here before the refusal could name the value.
+  it('refuses null and undefined the same way', () => {
+    // @ts-expect-error a plugin factory is a function
+    expect(() => createWebApplication().with(null)).toThrow(
+      'Cannot register an HTTP plugin: expected a plugin factory function, got null',
+    )
+    // @ts-expect-error a plugin factory is a function
+    expect(() => createWebApplication().with(undefined)).toThrow(
+      'Cannot register an HTTP plugin: expected a plugin factory function, got undefined',
+    )
+  })
 })

@@ -44,6 +44,7 @@
     "path-to-regexp": "^8.4.2"
   },
   "devDependencies": {
+    "@caffeinejs/testing": "*",
     "@fastify/compress": "^9.2.0",
     "@fastify/cors": "^11.3.0",
     "@types/cors": "^2.8.19",

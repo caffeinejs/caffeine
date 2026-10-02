@@ -18,6 +18,7 @@ import type {
   AdapterExtensionFactory,
   AdapterFactory,
   AdapterIn,
+  AdapterServer,
   AdapterTypes,
   AnyAdapterTypes,
   ContextPlatform,
@@ -80,13 +81,20 @@ class RecordingAdapter<T extends AdapterTypes> implements Adapter<T> {
 
   constructor(readonly instance: T['instance']) {}
 
-  get address(): undefined {
-    return undefined
-  }
-
-  async setup(input: AdapterIn<T>): Promise<void> {
+  async setup(input: AdapterIn<T>): Promise<AdapterServer<T>> {
     this.input = input
     this.middlewares = input.middlewares.resolve(input.context)
+
+    return new RecordingServer(this.instance)
+  }
+}
+
+/** The server {@link RecordingAdapter} hands back: it never listens and answers nothing. */
+class RecordingServer<T extends AdapterTypes> implements AdapterServer<T> {
+  constructor(readonly instance: T['instance']) {}
+
+  get address(): undefined {
+    return undefined
   }
 
   run(): Promise<void> {
