@@ -1,4 +1,6 @@
 import type { Container } from '@caffeinejs/di'
+import type { FastifyInstance } from 'fastify'
+import fp from 'fastify-plugin'
 
 import type {
   Adapter,
@@ -13,11 +15,12 @@ import { ErrConfiguration } from '../error/common.js'
 import { solutions } from '../error/util.js'
 import type { MiddlewarePipeline } from '../middleware/pipeline.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from '../routing/compile.js'
+import type { GatedRoute } from '../routing/fastify/route_config.js'
 import { inheritGroupSpec } from '../routing/inherit.js'
 import type { RouteGroup } from '../routing/route.js'
 import type { Routing } from '../routing/routing.js'
 import type { RouteGroupSpec } from '../routing/spec.js'
-import { ErrAuthSchemeNotFound } from '../security/auth/errors.js'
+import { ErrAuthenticationRequired, ErrAuthSchemeNotFound } from '../security/auth/errors.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
 import { compileRoutePolicy, kAuthzEvaluators, kAuthzHandlers, kAuthzOpts } from '../security/authz/index.js'
 import type { OpsServer } from './builder.js'
@@ -29,6 +32,11 @@ interface Entry<T extends AdapterTypes> {
   /** What every group it serves is nested in: the server's authorization, and its name as their binding. */
   readonly outer: RouteGroupSpec<T['request']>
   groups: RouteGroup<T['request']>[]
+  /**
+   * What a route a plugin registers straight on the server answers to: the server's `authorize(...)`, compiled.
+   * `undefined` when it declared nothing.
+   */
+  rawRoutes?: GatedRoute
   server?: AdapterServer<T>
 }
 
@@ -91,30 +99,42 @@ export class OpsServerSet<T extends AdapterTypes> {
   }
 
   /**
-   * Refuses a server's `authorize(...)` naming a scheme or a policy nothing registered — at start-up, even when no
-   * route of the server compiles it: a raw route, such as a health probe, compiles nothing.
+   * Compiles each server's `authorize(...)` for the routes a plugin registers straight on it, refusing at start-up
+   * what could never be enforced — even when no route of the server compiles it: a raw route, such as a health
+   * probe, compiles nothing.
    *
+   * @throws ErrAuthenticationRequired for a server declaring protection with `Authentication(...)` never installed.
    * @throws ErrAuthSchemeNotFound for a scheme `Authentication(...)` never registered.
    * @throws ErrAuthzPolicyNotFound for a policy `Authorization(...)` never registered.
    */
-  assertDeclarations(container: Container): void {
+  compileAuthorization(container: Container): void {
     const schemeProvider = container.getOptional(AuthenticationSchemeProvider)
     const authzOpts = container.getOptional(kAuthzOpts)
 
-    for (const { definition } of this.#entries) {
-      const authz = definition.authz
+    for (const entry of this.#entries) {
+      const authz = entry.definition.authz
       if (authz === undefined) {
         continue
       }
 
+      // Nothing could authenticate a caller, so a server declaring protection would answer anyone.
+      if (schemeProvider === undefined && !authz.allowAnonymous) {
+        throw new ErrAuthenticationRequired()
+      }
+
       for (const scheme of authz.schemes ?? []) {
-        if (schemeProvider !== undefined && schemeProvider.schemeFor(scheme) === undefined) {
-          throw new ErrAuthSchemeNotFound(scheme, schemeProvider.schemeNames)
+        if (schemeProvider?.schemeFor(scheme) === undefined) {
+          throw new ErrAuthSchemeNotFound(scheme, schemeProvider?.schemeNames)
         }
       }
 
-      if (authzOpts !== undefined) {
-        compileRoutePolicy(authzOpts, container.get(kAuthzEvaluators), container.get(kAuthzHandlers), authz)
+      entry.rawRoutes = {
+        schemes: authz.schemes,
+        allowAnonymous: authz.allowAnonymous,
+        authorizer:
+          authzOpts === undefined
+            ? undefined
+            : compileRoutePolicy(authzOpts, container.get(kAuthzEvaluators), container.get(kAuthzHandlers), authz),
       }
     }
   }
@@ -136,7 +156,13 @@ export class OpsServerSet<T extends AdapterTypes> {
       const server = await input.resolveServerOptions(definition.server as readonly ServerConfigurer<T>[], context)
       const root = input.headSlots()
 
-      // Its own `.with(...)` factories, in the order they were written, after the framework's head slots.
+      // Ahead of its own plugins, so every route one registers straight on the server meets the server's
+      // `authorize(...)` as its routers' routes do.
+      if (entry.rawRoutes !== undefined) {
+        root.push(authorizeRawRoutes(entry.rawRoutes) as T['extension'])
+      }
+
+      // Its own `.with(...)` factories, in the order they were written, after the framework's slots.
       for (const factory of definition.plugins) {
         root.push((await factory(context)) as T['extension'])
       }
@@ -220,6 +246,27 @@ function opsCompiler<T extends AdapterTypes>(compile: RouteGroupCompiler, entry:
   }
 }
 
+/**
+ * Holds every route a plugin registers straight on an ops server to the server's `authorize(...)`, the way its
+ * routers' routes are held: a route exempt from authentication, a health probe's, stays exempt, and one that
+ * declared its own keeps it.
+ */
+function authorizeRawRoutes(auth: GatedRoute) {
+  return fp(
+    async (instance: FastifyInstance) => {
+      // After the adapter's own `onRoute` hook, which gives every route its `$caffeine`.
+      instance.addHook('onRoute', route => {
+        const meta = route.config?.$caffeine
+
+        if (meta !== undefined && meta.compiled === undefined && !meta.skipAuthentication) {
+          meta.auth ??= auth
+        }
+      })
+    },
+    { name: 'caffeine-ops-authorization' },
+  )
+}
+
 function opsServer<T extends AdapterTypes>(name: string, server: AdapterServer<T>): OpsServer<T> {
   return {
     name,
@@ -238,7 +285,8 @@ export function unknownServer(name: string, installed: readonly string[]): strin
   const solutions = [`Install it: ".install(Ops('${name}', ...))"`]
 
   if (installed.length > 0) {
-    solutions.push(`Or bind to an installed server: ${installed.map(candidate => `"${candidate}"`).join(', ')}`)
+    const names = installed.map(candidate => `"${candidate}"`).join(', ')
+    solutions.push(`Or bind to an installed server: ${names}`)
   }
 
   return solutions

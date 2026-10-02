@@ -150,7 +150,8 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    *
    * Requirements add up: a route declaring a policy of its own needs both. A route declared public stays public.
    * A route naming schemes of its own authenticates with those instead. Naming schemes alone still requires an
-   * authenticated principal.
+   * authenticated principal. A route a plugin registers straight on the server answers to it too, unless it is
+   * exempt from authentication, as a health probe is.
    *
    * Authenticating takes a gate on this server, `with(authentication())`: the application's own does not cover it,
    * and start-up refuses a protected route no gate covers. The schemes it names are the ones `Authentication(...)`
@@ -159,6 +160,9 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    * ```ts
    * .install(Ops('admin', o => o.with(authentication()).authorize({ schemes: ['basic'], roles: ['operator'] })))
    * ```
+   *
+   * @throws ErrAuthenticationRequired at start-up when it declares protection and `Authentication(...)` is not
+   *   installed.
    */
   authorize(options: RouteAuthzOptions = {}): this {
     this.#authz = foldAuthz(this.#authz, options)

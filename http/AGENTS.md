@@ -76,6 +76,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - An ops server has no gate unless its own `o.with(...)` registers one; a gate covers only the server it was
   registered on. `OIDCRoutesRef.claimed` is shared, so the OIDC routes go to the first gate to install, and the
   application's own server is built first.
+- An ops server's `authorize(...)` reaches compiled routes through its outer group and raw routes through the
+  `caffeine-ops-authorization` slot, ahead of its own plugins. That slot stamps `$caffeine.auth` on a raw route
+  that is not exempt and declared none.
 
 ## Routes
 

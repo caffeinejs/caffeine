@@ -137,6 +137,71 @@ describe('the lifecycle of an ops server', () => {
     expect((error as Error).message).toContain('"admin"')
   })
 
+  it('refuses a router bound to a name when no ops server is installed, offering only to install one', async () => {
+    app = createWebApplication().mount(
+      newRouter('/jobs')
+        .with(bindTo('nowhere'))
+        .get('/', () => ({})),
+    ) as WebApplication
+
+    const error = await app.bootstrap().catch((error: unknown) => error)
+
+    expect((error as Error).message).toContain(`.install(Ops('nowhere', ...))`)
+    expect((error as Error).message).not.toContain('Or bind to an installed server')
+  })
+
+  // A server that cannot close is reported, and the rest are closed all the same.
+  describe('a server that cannot close', () => {
+    /** A plugin whose server fails to close with `failure`, once it has stopped listening. */
+    const failingToClose = (failure: Error) => () =>
+      fp(async (instance: FastifyInstance) => {
+        instance.addHook('onClose', (_instance, done) => done(failure))
+      })
+
+    it('reports an ops server that cannot close, the others closed all the same', async () => {
+      const failure = new Error('ops cannot close')
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.server(() => ({ listener })).with(failingToClose(failure))))
+        .server(() => ({ listener }))
+        .mount(jobs()) as WebApplication
+
+      await app.run()
+      const servers = [app.instance, app.ops.get('admin')!.instance]
+
+      const error = await app.close().catch((error: unknown) => error)
+
+      expect(error).toBeInstanceOf(AggregateError)
+      expect((error as AggregateError).errors).toHaveLength(1)
+      expect((error as AggregateError).errors[0]).toBe(failure)
+      expect(servers.map(instance => instance.server.listening)).toEqual([false, false])
+      app = undefined
+    })
+
+    it("reports every server that cannot close together, the application's own first", async () => {
+      const ownFailure = new Error('own cannot close')
+      const opsFailure = new Error('ops cannot close')
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.server(() => ({ listener })).with(failingToClose(opsFailure))))
+        .server(() => ({ listener }))
+        .with(failingToClose(ownFailure))
+        .mount(jobs()) as WebApplication
+
+      await app.run()
+
+      const error = await app.close().catch((error: unknown) => error)
+      const closing = (error as AggregateError).errors[0] as AggregateError
+
+      expect(closing).toBeInstanceOf(AggregateError)
+      expect(closing.message).toBe('Cannot close every server')
+      expect(closing.errors).toHaveLength(2)
+      expect(closing.errors[0]).toBe(ownFailure)
+      expect(closing.errors[1]).toBe(opsFailure)
+      app = undefined
+    })
+  })
+
   it('has no ops servers to reach before bootstrap, and none when none was installed', async () => {
     app = createWebApplication()
 

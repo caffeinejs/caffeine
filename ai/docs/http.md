@@ -300,6 +300,8 @@ app.ops.get('admin')?.address // { host, port, origin }
   - requirements add up: a route declaring its own policy needs both;
   - a route declared public stays public;
   - naming only `schemes` still requires an authenticated caller;
+  - a route a plugin registers straight on the server answers to it too, unless it is exempt from authentication,
+    as health probes are;
   - the application's fallback policy reaches a route on it only when neither the route nor the server declared
     anything.
 

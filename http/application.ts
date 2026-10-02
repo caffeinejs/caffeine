@@ -529,7 +529,7 @@ export class WebApplication<
     this.#built = true
 
     assertEveryRouterServed(routing, ops.names)
-    ops.assertDeclarations(this.container)
+    ops.compileAuthorization(this.container)
 
     // One context for everything built from here on. `log` is the configured logger by now.
     const context: HTTPSetupContext = {
@@ -714,7 +714,7 @@ export function createWebApplication(
  * Refuses a router bound to a name no installed server has. Nothing would serve it, and serving it on the
  * application's own server instead would expose what its binding kept off that server.
  */
-function assertEveryRouterServed(routing: Routing<unknown>, installed: readonly string[]): void {
+function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly string[]): void {
   const [unserved] = routing.unselected()
 
   if (unserved === undefined) {

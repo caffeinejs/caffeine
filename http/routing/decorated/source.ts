@@ -29,8 +29,9 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
 
   collect(container: Container): DeclaredRouteGroup<R>[] {
     return container.getBindingsByLabel(Keys.CONTROLLER).map(({ key, binding }) => {
-      const rd = getRouteGroup(key as Function)
-      if (!rd) {
+      // `@Controller` registers a class's route definition under the class itself: any other key has none.
+      const rd = typeof key === 'function' ? getRouteGroup(key) : undefined
+      if (rd === undefined || typeof key !== 'function') {
         throw new ErrCaffeineWebApplication(
           `Cannot build router: no route definition found for router "${String(key)}"`,
           'ERR_HTTP_MISSING_ROUTER',
@@ -40,7 +41,7 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
       const spec = rd.toRouteGroup<R>()
 
       return {
-        name: typeof key === 'function' ? key.name : String(key),
+        name: key.name,
         spec,
         // Deferred: a controller resolves its instance here, and one no server selects is never instantiated.
         meta: () =>
@@ -50,7 +51,7 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             binding.scopeID === Scopes.SINGLETON,
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
-        scopes: typeof key === 'function' && controllerPlugins(key).length > 0 ? [key] : undefined,
+        scopes: controllerPlugins(key).length > 0 ? [key] : undefined,
       }
     })
   }

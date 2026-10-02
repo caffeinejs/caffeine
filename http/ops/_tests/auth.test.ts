@@ -1,3 +1,4 @@
+import type { FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
@@ -14,6 +15,7 @@ import {
   authentication,
   bindTo,
   createWebApplication,
+  healthProbes,
   newRouter,
   type WebApplication,
 } from '../../index.js'
@@ -261,6 +263,72 @@ describe('an ops server with authentication and authorization', () => {
     })
   })
 
+  // A route a plugin registers on the server directly compiles nothing, so the server's declaration is all it answers
+  // to; a health probe's is exempt.
+  describe('routes a plugin registers straight on the server', () => {
+    const raw = () => async (instance: FastifyInstance) => {
+      instance.get('/raw', async () => ({ raw: true }))
+    }
+
+    it("holds them to the server's authorization, health probes aside", async () => {
+      app = createWebApplication()
+        .install(schemes())
+        .install(
+          Ops('admin', o =>
+            o
+              .server(() => ({ listener }))
+              .with(authentication())
+              .with(healthProbes())
+              .with(raw)
+              .authorize({ schemes: ['Ops'], roles: ['operator'] }),
+          ),
+        ) as WebApplication
+
+      await app.run()
+
+      expect(await status(opsOrigin(), '/raw')).toBe(401)
+      expect(await status(opsOrigin(), '/raw', { 'x-ops': 'bob:viewer' })).toBe(403)
+      expect(await status(opsOrigin(), '/raw', { 'x-ops': 'alice:operator' })).toBe(200)
+      expect(await status(opsOrigin(), '/livez')).toBe(200)
+    })
+
+    it("refuses one the server's authorization protects when no gate covers it", async () => {
+      app = createWebApplication()
+        .install(schemes())
+        .install(
+          Ops('admin', o =>
+            o
+              .server(() => ({ listener }))
+              .with(raw)
+              .authorize({ roles: ['operator'] }),
+          ),
+        ) as WebApplication
+
+      const error = await app.bootstrap().catch((error: unknown) => error)
+
+      expect(error).toMatchObject({ code: 'ERR_AUTHENTICATION_GATE_REQUIRED' })
+      expect((error as Error).message).toContain('/raw')
+    })
+
+    it('opens them on a server declared public, under a fallback policy', async () => {
+      app = createWebApplication()
+        .install(schemes())
+        .install(Authorization(z => z.requireAuthenticatedByDefault()))
+        .install(
+          Ops('admin', o =>
+            o
+              .server(() => ({ listener }))
+              .with(raw)
+              .authorize({ allowAnonymous: true }),
+          ),
+        ) as WebApplication
+
+      await app.run()
+
+      expect(await status(opsOrigin(), '/raw')).toBe(200)
+    })
+  })
+
   describe('OIDC', () => {
     const oidc = () =>
       Authentication(auth =>
@@ -322,6 +390,15 @@ describe('an ops server with authentication and authorization', () => {
       app = createWebApplication()
         .install(Ops('admin', o => o.server(() => ({ listener })).authorize({ roles: ['operator'] })))
         .mount(metrics()) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
+    })
+
+    // An ops server serving nothing yet still declared what it protects.
+    it('refuses a server declaring protection with authentication never installed, with nothing to protect', async () => {
+      app = createWebApplication().install(
+        Ops('admin', o => o.server(() => ({ listener })).authorize({ roles: ['operator'] })),
+      ) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
     })

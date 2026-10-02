@@ -67,8 +67,9 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
  *
  * Installing `Authentication(...)` binds what a gate runs on, but only a gate authenticates a request: one
  * registered with `.with(authentication())` covers every route of the application's own server, one registered on
- * an ops server with `o.with(authentication())` every route of that server, and one registered on a router that
- * router's. Served with none, a protected route would answer anyone, so the application does not start.
+ * an ops server with `o.with(authentication())` covers every route of that server, and one registered on a router
+ * covers that router's routes. Served with none, a protected route would answer anyone, so the application does not
+ * start.
  */
 export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
   constructor(routes: readonly string[]) {
