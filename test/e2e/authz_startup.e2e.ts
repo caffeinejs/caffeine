@@ -34,7 +34,7 @@ async function refusal(configure: (app: E2EApplication) => unknown): Promise<unk
 
 describe('an application that must not start', () => {
   it('protects a route and configures no authentication', async () => {
-    const error = await refusal(app => app.mount(newRouter('/private').authorize({}).get('/', ok)))
+    const error = await refusal(app => app.mount(newRouter('/private').authorize().get('/', ok)))
 
     expect(error).toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
   })

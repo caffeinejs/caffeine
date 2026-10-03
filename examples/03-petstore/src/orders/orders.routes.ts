@@ -22,7 +22,7 @@ const orders = new Router('/orders')
   .inject({ repository: OrdersRepository })
   // Bare, so every route asks for the application's default policy — an authenticated caller. The same thing
   // `@Authorize()` declares on a controller.
-  .authorize({})
+  .authorize()
 
 export const ordersRouter = orders
   .post('/')

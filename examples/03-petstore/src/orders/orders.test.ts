@@ -127,7 +127,7 @@ describe('orders feature (via @caffeinejs/testing and brewer)', () => {
     expect((await client.orders({ id: created.id }).get({ headers: sessionHeader(session) })).status).toBe(404)
   })
 
-  // `.authorize({})` on the router is what `@Authorize()` is on a controller. GitHub is the application's
+  // `.authorize()` on the router is what `@Authorize()` is on a controller. GitHub is the application's
   // default scheme, so an anonymous caller is refused rather than let through.
   it('refuses an anonymous order', async () => {
     expect((await client.orders.post({ body: { petId } })).status).toBe(401)

@@ -99,7 +99,7 @@ describe('$route', () => {
       lateRoute(router => {
         router
           .path('/late')
-          .authorize({})
+          .authorize()
           .routes([
             new RouteBuilder()
               .method('GET')

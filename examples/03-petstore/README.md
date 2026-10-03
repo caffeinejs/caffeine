@@ -73,7 +73,7 @@ Orders and inventories are written as chains, in `*.routes.ts`, and mounted in `
 ```ts
 export const ordersRouter = new Router('/orders')
   .inject({ repository: OrdersRepository })
-  .authorize({})
+  .authorize()
   .get('/:id')
   .schema({ params: OrderIdParamSchema, response: { 200: OrderSchema } })
   .handler((ctx, deps) => deps.repository.get(ctx.req.param().id))

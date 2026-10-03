@@ -48,7 +48,7 @@ function start(env: Record<string, string>) {
         .with(authentication())
         .mount(
           newRouter('/whoami')
-            .authorize({})
+            .authorize()
             .get('/', () => ({ ok: true })),
         ),
     { config: configuredFrom(env) },

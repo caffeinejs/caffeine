@@ -58,11 +58,11 @@ function springOAuth2(o: OAuth2AuthenticationOptionsBuilder): OAuth2Authenticati
 // would carry the routes of all the others.
 function routes(scheme: string) {
   const identity = newRouter('/me')
-    .authorize({})
+    .authorize()
     .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, email: ctx.user.findFirst('email')?.value }))
 
   const reports = newRouter('/reports')
-    .authorize({})
+    .authorize()
     .get('/:year', ctx => ({ year: ctx.req.param('year'), tab: ctx.req.query('tab') }))
 
   const session = newRouter()

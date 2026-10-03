@@ -52,7 +52,7 @@ function application(onFail?: (ctx: Context, error: Error) => void, logged: LogE
     .mount(
       newRouter().mount(
         newRouter('/account')
-          .authorize({})
+          .authorize()
           .get('/', () => ({ ok: true })),
         newRouter('/sign-out').get('/', () => {
           throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${ISSUER}": ${UNREACHABLE}`)

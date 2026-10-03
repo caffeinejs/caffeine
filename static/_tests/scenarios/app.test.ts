@@ -82,7 +82,7 @@ const publicPages = () =>
 const memberPages = () =>
   newRouter()
     .detail('http', { internal: true })
-    .authorize({})
+    .authorize()
     .get('/dashboard', shellDocument)
     .get('/dashboard/*', clientRoute)
     .get('/settings', shellDocument)

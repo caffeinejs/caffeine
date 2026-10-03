@@ -81,7 +81,7 @@ describe('routes that name their authentication schemes', () => {
           ),
         )
         .with(authentication())
-        .mount(newRouter('/default').authorize({}).get('/', identities))
+        .mount(newRouter('/default').authorize().get('/', identities))
         .mount(
           newRouter('/either-header')
             .authorize({ schemes: ['Basic', 'Bearer'] })
@@ -197,10 +197,10 @@ describe('a default scheme that forwards to the one a request calls for', () => 
           ),
         )
         .with(authentication())
-        .mount(newRouter('/default').authorize({}).get('/', subject))
+        .mount(newRouter('/default').authorize().get('/', subject))
         .mount(
           newRouter('/asks-again')
-            .authorize({})
+            .authorize()
             .inject({ auth: AuthenticationService })
             .get('/', async (ctx, { auth }) => ({
               sub: (await auth.authenticate(ctx, 'APIKey')).ticket?.principal.findFirst('sub')?.value,
@@ -254,7 +254,7 @@ describe('a forwarding scheme told to forward to itself', () => {
         .with(authentication())
         .mount(
           newRouter('/default')
-            .authorize({})
+            .authorize()
             .get('/', () => ({ ok: true })),
         ),
     )

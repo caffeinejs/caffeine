@@ -35,7 +35,7 @@ function resourceServer(j: JWTAuthenticationOptionsBuilder, issuer = OAUTH_SERVE
 function routes() {
   return newRouter().mount(
     newRouter('/whoami')
-      .authorize({})
+      .authorize()
       .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, scope: ctx.user.findFirst('scope')?.value })),
     newRouter('/service')
       .authorize({ roles: ['service'] })
@@ -211,7 +211,7 @@ describe('JWT bearer, whoever issued the token', () => {
         .with(authentication())
         .mount(
           newRouter('/whoami')
-            .authorize({})
+            .authorize()
             .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
         )
         .mount(
@@ -256,7 +256,7 @@ describe('JWT bearer, whoever issued the token', () => {
         .with(authentication())
         .mount(
           newRouter('/whoami')
-            .authorize({})
+            .authorize()
             .get('/', () => ({ ok: true })),
         ),
     )

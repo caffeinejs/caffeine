@@ -94,7 +94,7 @@ function routes() {
   return newRouter().mount(
     session,
     newRouter('/private')
-      .authorize({})
+      .authorize()
       .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
     newRouter('/admin')
       .authorize({ roles: ['admin'] })

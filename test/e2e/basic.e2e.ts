@@ -42,7 +42,7 @@ describe('HTTP Basic authentication', () => {
         .with(authentication())
         .mount(
           newRouter('/docs')
-            .authorize({})
+            .authorize()
             .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
         ),
     )
@@ -109,7 +109,7 @@ describe('HTTP Basic authentication with a realm that needs quoting', () => {
         .with(authentication())
         .mount(
           newRouter('/docs')
-            .authorize({})
+            .authorize()
             .get('/', () => ({ ok: true })),
         ),
     )

@@ -252,7 +252,7 @@ describe('response inference', () => {
 
   it('infers nothing when inference is off', () => {
     const router = fixtureRouter('/pets', r =>
-      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize({})]),
+      r.routes([fixtureRoute('POST', '/', 'create').schema({ body: petSchema }).authorize()]),
     )
 
     const document = generateDocument({

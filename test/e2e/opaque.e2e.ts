@@ -29,7 +29,7 @@ describe.skipIf(!up)('opaque bearer tokens held in Redis', () => {
   function routes() {
     return newRouter().mount(
       newRouter('/whoami')
-        .authorize({})
+        .authorize()
         .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value })),
       newRouter('/admin')
         .authorize({ roles: ['admin'] })

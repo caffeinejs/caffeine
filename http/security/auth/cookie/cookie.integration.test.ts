@@ -490,7 +490,7 @@ describe('cookie sign-in under a base path', () => {
           .get('/', () => ({ audited: true })),
         // A catch-all, as a single-page application's shell is: it is what `/api//evil.example` reaches.
         newRouter()
-          .authorize({})
+          .authorize()
           .get('/*', () => ({ shell: true })),
       )
     await app.bootstrap()

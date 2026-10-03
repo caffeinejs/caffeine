@@ -90,7 +90,7 @@ export class RouteGroupBuilder {
   }
 
   /** Adds a declaration to the group's. Calling it again adds another; nothing is replaced. */
-  authorize(opts: RouteAuthzOptions) {
+  authorize(opts: RouteAuthzOptions = {}) {
     this.#authorize = foldAuthz(this.#authorize, opts)
     return this
   }
@@ -260,7 +260,7 @@ export class RouteBuilder {
   }
 
   /** Adds a declaration to the route's. Calling it again adds another; nothing is replaced. */
-  authorize(opts: RouteAuthzOptions): this {
+  authorize(opts: RouteAuthzOptions = {}): this {
     this.#authorize = foldAuthz(this.#authorize, opts)
     return this
   }

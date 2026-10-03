@@ -90,7 +90,7 @@ const publicPages = newRouter()
   .get('/login', shellDocument)
   .get('/*', clientRoute)
 
-const memberPages = newRouter().authorize({}).get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
+const memberPages = newRouter().authorize().get('/dashboard', shellDocument).get('/dashboard/*', clientRoute)
 
 const adminPages = newRouter()
   .authorize({ roles: ['admin'] })

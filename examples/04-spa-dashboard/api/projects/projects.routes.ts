@@ -22,7 +22,7 @@ const projects = newRouter('/api/projects')
   .name('Projects')
   .with(apiGroup({ name: 'Projects', description: 'The signed-in user’s projects.' }))
   // Bare, so it asks for the application's default policy — an authenticated caller.
-  .authorize({})
+  .authorize()
 
 export const projectsRouter = projects
   .get('/')

@@ -71,7 +71,7 @@ function routes() {
         return { ok: true }
       }),
     newRouter('/private')
-      .authorize({})
+      .authorize()
       .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, remembered: ctx.user.hasClaim(REMEMBERED_CLAIM) })),
   )
 }

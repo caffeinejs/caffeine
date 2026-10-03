@@ -32,7 +32,7 @@ function publicSPA(): WebApplication {
     .with(staticFiles(s => s.serve(dist, { ...spaMount(), setHeaders: immutableAssets(dist) }, { anonymous: true })))
     .mount(
       newRouter('/api')
-        .authorize({})
+        .authorize()
         .get('/me', ctx => ({ sub: ctx.user.findFirst('sub')?.value }))
         .mount(
           newRouter('/admin')

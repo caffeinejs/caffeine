@@ -36,7 +36,7 @@ function spring(o: OAuth2AuthenticationOptionsBuilder): OAuth2AuthenticationOpti
 function routes() {
   return newRouter().mount(
     newRouter('/me')
-      .authorize({})
+      .authorize()
       .get('/', ctx => Object.fromEntries(ctx.user.claims().map(claim => [claim.type, claim.value]))),
     newRouter('/admin')
       .authorize({ roles: ['admin'] })

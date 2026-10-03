@@ -74,7 +74,7 @@ function routes() {
     })
 
   const account = newRouter('/account')
-    .authorize({})
+    .authorize()
     .inject({ refresh: RefreshTokenService })
     .get('/', ctx => ({ sub: ctx.user.findFirst('sub')?.value, roles: ctx.user.findFirst('roles')?.value }))
     .post('/sign-out-everywhere', async (ctx, { refresh }) => {

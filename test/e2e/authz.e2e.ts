@@ -252,7 +252,7 @@ function programmatic() {
           .get('/', ok)
           // ...and a route below it that asks for protection again gets all of it, the outer roles included.
           .get('/detail')
-          .authorize({})
+          .authorize()
           .handler(ok),
       ),
     newRouter('/open-group')

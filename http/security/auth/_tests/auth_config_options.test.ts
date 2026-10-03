@@ -142,7 +142,7 @@ describe('authentication options set from the tree', () => {
 
   describe('the sign-in path of an OAuth-family scheme', () => {
     const protectedRoute = newRouter('/reports')
-      .authorize({})
+      .authorize()
       .get('/', () => ({ ok: true }))
 
     // The 401 names it and the route answers there. Were the key applied to nothing, a client would be sent to a
@@ -241,7 +241,7 @@ describe('authentication options set from the tree', () => {
     const asNavigation = { headers: { 'sec-fetch-mode': 'navigate' }, redirect: 'manual' as const }
 
     const protectedRoute = newRouter('/reports')
-      .authorize({})
+      .authorize()
       .get('/', () => ({ ok: true }))
 
     function discovered() {
@@ -425,7 +425,7 @@ describe('authentication options set from the tree', () => {
       .with(authentication())
       .mount(
         newRouter('/reports')
-          .authorize({})
+          .authorize()
           .get('/', () => ({ ok: true })),
       )
     await app.bootstrap()
@@ -560,7 +560,7 @@ describe('authentication options set from the tree', () => {
       .with(authentication())
       .mount(
         newRouter('/reports')
-          .authorize({})
+          .authorize()
           .get('/', () => ({ ok: true })),
       )
     await app.bootstrap()

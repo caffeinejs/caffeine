@@ -44,7 +44,7 @@ export const publicPages = newRouter()
  */
 export const memberPages = newRouter()
   .detail('http', { internal: true })
-  .authorize({})
+  .authorize()
   .get('/dashboard', shellDocument)
   .get('/dashboard/*', clientRoute)
   .get('/projects', shellDocument)

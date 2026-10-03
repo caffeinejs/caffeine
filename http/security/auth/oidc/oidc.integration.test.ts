@@ -260,7 +260,7 @@ describe('OIDC integration', () => {
       it('challenges with the base callback URL, and a sign-in URL coming back under the base', async () => {
         const app = basedApp().mount(
           newRouter('/based-private')
-            .authorize({})
+            .authorize()
             .get('/', () => ({ ok: true })),
         )
         await app.bootstrap()

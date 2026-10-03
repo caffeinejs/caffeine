@@ -55,7 +55,7 @@ function site(gated: boolean) {
 function assets() {
   return newRouter()
     .detail('http', { internal: true })
-    .authorize({})
+    .authorize()
     .get('/assets/*', ctx => sendFile(ctx, ctx.req.url.split('?', 1)[0]!, dist))
 }
 
