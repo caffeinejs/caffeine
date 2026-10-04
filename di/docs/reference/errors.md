@@ -170,9 +170,10 @@ The second names the injection that needed the values. The same holds for `di.bi
 the `scopedConfig` getter, and a `$i.liveConfig()` injection, throw it when no provider was bound,
 and the message names `bindScopedConfig()`.
 
-**Fix:** Call `di.bindConfig(values)` (or `di.bindScopedConfig(provider)`) before `init()`, give the
+**Fix:** Before `init()`, call `di.bindConfig(values)` for `$i.config()` and `di.values`, or
+`di.bindScopedConfig(provider)` for `$i.liveConfig()` and `di.scopedConfig`. Otherwise give the
 injection a default (`$i.config('database.port', 5432)`), or check `di.hasValues` before reading
-`di.values`.
+`di.values`, and `di.hasScopedConfig` before reading `di.scopedConfig`.
 
 ---
 

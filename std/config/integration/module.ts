@@ -15,7 +15,7 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
  *   framework finds it.
  * - The same snapshot as the values, so `$i.config(c => c.database.host)` reads configuration as it was at
  *   start-up, and the same provider as the scoped config, so `$i.liveConfig(c => c.database.host)` reads it as it is
- *   now. Either is left alone when the application bound its own.
+ *   now. Either is left alone when the application bound its own, and the tokens answer the store's all the same.
  * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
  *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *

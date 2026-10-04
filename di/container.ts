@@ -898,9 +898,9 @@ export class CaffeineIoC implements Container {
 
   /**
    * Captures what the container was told to hold: the bindings declared with {@link bind}, {@link rebind} and
-   * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, and the values bound with
-   * {@link bindConfig}. The container's own bindings (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out:
-   * every container binds its own.
+   * {@link aspect}, its modules, its profiles, whether it registers decorated bindings, the values bound with
+   * {@link bindConfig} and the provider bound with {@link bindScopedConfig}. The container's own bindings
+   * (`Keys.kRefresher`, `Keys.kRequestScopeManager`) are left out: every container binds its own.
    *
    * Restored with {@link restore}, it gives the same bindings whether it was taken before or after {@link init}.
    * For testing purposes.
@@ -923,8 +923,8 @@ export class CaffeineIoC implements Container {
 
   /**
    * Adds what the snapshot holds to the container: its declarations, after the ones already made, its modules, its
-   * profiles, and its values when it carries any. The container registers decorated bindings when the snapshot's
-   * container did.
+   * profiles, and its values and its scoped config when it carries them. The container registers decorated bindings
+   * when the snapshot's container did.
    *
    * @throws {@link ErrInvalidContainerState} if the container has started compiling
    */
