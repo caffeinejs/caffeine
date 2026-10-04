@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { MethodSpec } from '../decorators/registrar/index.js'
+import { ErrFetchyMissingPathArgument } from '../errors.js'
 import { RequestBuilder } from '../request_builder.js'
 
 function methodMeta(overrides: Partial<MethodSpec> = {}): MethodSpec {
@@ -50,6 +51,20 @@ describe('RequestBuilder', () => {
     const request = new RequestBuilder('http://example.test', meta).toRequest(['1'])
 
     expect(request.url).toBe('http://example.test/users/1/friends/1')
+  })
+
+  // `String(undefined)` is "undefined", and `/users/undefined` is a route like any other: a DELETE sent there acts on
+  // whatever it names. A missing path argument has to stop the request instead.
+  it('refuses to fill a path placeholder from an undefined or null argument', () => {
+    const builder = new RequestBuilder(
+      'http://example.test',
+      methodMeta({ httpMethod: 'DELETE', path: '/users/{id}', params: [{ kind: 'path', key: 'id', index: 0 }] }),
+    )
+
+    expect(() => builder.toRequest([undefined])).toThrow(ErrFetchyMissingPathArgument)
+    expect(() => builder.toRequest([null])).toThrow(
+      'Cannot build request "DELETE /users/{id}": the argument for "{id}" is null',
+    )
   })
 
   // undici's pool is bound to an origin and sends `path` as is, so a versioned base URL's own path has to be in the

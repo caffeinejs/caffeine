@@ -8,8 +8,8 @@ import { configureMethod } from './registrar/registrar.js'
  */
 export function Callback() {
   return function (_value: unknown, context: ClassMethodDecoratorContext | ClassFieldDecoratorContext): void {
-    if (context.kind !== 'method' && context.kind !== 'field') {
-      throw new ErrFetchyInvalidDecoratorTarget('Callback', 'a method or field')
+    if ((context.kind !== 'method' && context.kind !== 'field') || context.static) {
+      throw new ErrFetchyInvalidDecoratorTarget('Callback', 'an instance method or field')
     }
 
     configureMethod(context, spec => spec.callback(true))

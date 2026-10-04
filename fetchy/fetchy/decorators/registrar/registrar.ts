@@ -1,11 +1,11 @@
-import type { ClassSpec } from './builders.definition.js'
+import '../../polyfill.js'
 import { ClassBuilder, MethodBuilder } from './builders.js'
 
 const MethodRegistry = new WeakMap<object, Map<string | symbol, MethodBuilder>>()
 const ClassRegistry = new WeakMap<object, ClassBuilder>()
 
 interface APIEntry {
-  classSpec: ClassSpec
+  classBuilder: ClassBuilder
   methods: ReadonlyMap<string | symbol, MethodBuilder>
 }
 
@@ -59,6 +59,9 @@ export function getClassBuilder(metadata: object): ClassBuilder | undefined {
  * constructor. Must be called from a class decorator (`@API()`) — method/field decorators always
  * run before any class decorator, so every method already registered under `ctx.metadata` (the
  * same object `@GET`/`@POST`/etc. saw) is complete by the time this runs.
+ *
+ * The class builder is kept rather than snapshotted: a class decorator listed above `@API()` runs
+ * after it and still configures the client.
  */
 export function configureAPIAndRegisterMethods(
   ctx: ClassDecoratorContext,
@@ -76,7 +79,7 @@ export function configureAPIAndRegisterMethods(
 
   const methods = MethodRegistry.get(ctx.metadata) ?? new Map<string | symbol, MethodBuilder>()
 
-  APIRegistry.set(target, { classSpec: classBuilder.toClassSpec(), methods })
+  APIRegistry.set(target, { classBuilder, methods })
 }
 
 export function getAPI(target: Function): APIEntry | undefined {

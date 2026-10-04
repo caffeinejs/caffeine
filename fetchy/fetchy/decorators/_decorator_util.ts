@@ -27,11 +27,11 @@ export function classOrMember(
       return
     }
 
-    if (context.kind === 'method' || context.kind === 'field') {
+    if ((context.kind === 'method' || context.kind === 'field') && !context.static) {
       memberFn(context)
       return
     }
 
-    throw new ErrFetchyInvalidDecoratorTarget(decoratorName, 'a class, method, or field')
+    throw new ErrFetchyInvalidDecoratorTarget(decoratorName, 'a class, an instance method, or an instance field')
   }
 }

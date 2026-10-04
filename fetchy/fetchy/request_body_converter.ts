@@ -66,9 +66,17 @@ export const RawRequestBodyConverter: RequestBodyConverter = {
   },
 }
 
+function appendFormValue(params: URLSearchParams, key: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    params.append(key, String(value))
+  }
+}
+
 /**
  * Converts a plain object, a `URLSearchParams` instance, or a 2D array of `[key, value]` pairs
- * into an `application/x-www-form-urlencoded` string.
+ * into an `application/x-www-form-urlencoded` string, leaving out `undefined` and `null` values,
+ * as `@Field()` does. A string, a `Blob` or a typed array is already encoded and passes through
+ * untouched.
  */
 export const FormRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -80,22 +88,30 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
       return value.toString()
     }
 
+    if (isNativeBody(value)) {
+      return value as RequestBody
+    }
+
+    const params = new URLSearchParams()
+
     if (Array.isArray(value)) {
       if (value.length > 0 && !Array.isArray(value[0])) {
         throw new ErrFetchyInvalidFormBody()
       }
 
-      const params = new URLSearchParams()
-
-      for (const [key, val] of value as [string, string][]) {
-        params.append(key, val)
+      for (const [key, val] of value as [string, unknown][]) {
+        appendFormValue(params, key, val)
       }
 
       return params.toString()
     }
 
     if (typeof value === 'object') {
-      return new URLSearchParams(value as Record<string, string>).toString()
+      for (const [key, val] of Object.entries(value)) {
+        appendFormValue(params, key, val)
+      }
+
+      return params.toString()
     }
 
     return value as RequestBody

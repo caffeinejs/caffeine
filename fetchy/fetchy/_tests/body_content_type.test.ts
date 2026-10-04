@@ -181,3 +181,77 @@ describe('an operation declared as a field', () => {
     expect(request.headers.get('content-type')).toBe('application/vnd.acme+json')
   })
 })
+
+/**
+ * `@FormURLEncoded()` labels the body `application/x-www-form-urlencoded`, so a `@Body()` value has to be form-encoded
+ * too. An object used to go out as JSON under the form label, which the server then reads as one garbled field.
+ */
+const MarkedConverter: RequestBodyConverter = {
+  convert() {
+    return 'marked'
+  },
+}
+
+@API()
+@Path('/token')
+class FormBodyAPI {
+  @POST('/')
+  @FormURLEncoded()
+  @Params([Body()])
+  token(_body: unknown): Promise<unknown> {
+    return noop()
+  }
+
+  // Listed above @FormURLEncoded(), the explicit converter is applied last and wins, as a second header would.
+  @POST('/marked')
+  @UseRequestBodyConverter(MarkedConverter)
+  @FormURLEncoded()
+  @Params([Body()])
+  tokenMarked(_body: unknown): Promise<unknown> {
+    return noop()
+  }
+}
+
+@API()
+@Path('/token')
+@FormURLEncoded()
+class ClassFormBodyAPI {
+  @POST('/')
+  @Params([Body()])
+  token(_body: unknown): Promise<unknown> {
+    return noop()
+  }
+}
+
+describe('a @Body() under @FormURLEncoded()', () => {
+  async function send(TargetAPI: new () => object, call: (api: any) => Promise<unknown>): Promise<FetchyRequest> {
+    const callFactory = new TestCallFactory()
+    const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(TargetAPI)
+    callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+
+    await call(api)
+
+    return callFactory.calls[0].lastRequest!
+  }
+
+  // An OAuth token request is the common case, and an unset optional `scope` must not reach the server as text.
+  it('is form-encoded under the form label at method level', async () => {
+    const request = await send(FormBodyAPI, api => api.token({ grant_type: 'client_credentials', scope: undefined }))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials')
+  })
+
+  it('is form-encoded under the form label at class level', async () => {
+    const request = await send(ClassFormBodyAPI, api => api.token({ grant_type: 'client_credentials' }))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials')
+  })
+
+  it('leaves an explicit converter in charge when it is listed above', async () => {
+    const request = await send(FormBodyAPI, api => api.tokenMarked({ grant_type: 'client_credentials' }))
+
+    expect(request.body).toBe('marked')
+  })
+})

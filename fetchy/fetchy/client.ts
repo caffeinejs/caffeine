@@ -106,6 +106,16 @@ export class FetchyClient {
     this.call = options.callFactory.provide(options.baseURL)
   }
 
+  /**
+   * Builds a client from a class decorated with `@API()`.
+   *
+   * Every operation is validated before the class is constructed, so a class that fails validation never runs its
+   * constructor.
+   *
+   * @throws {@link ErrFetchyMissingAPIDecorator} when the class has no `@API()`.
+   * @throws {@link ErrFetchyEmptyClient} when the class declares no operation.
+   * @throws {@link ErrFetchyInvalidRoute} when an operation's configuration is invalid.
+   */
   create<T extends AnyCtor>(TargetAPI: T, ...args: ConstructorParameters<T>): InstanceType<T> {
     const entry = getAPI(TargetAPI)
 
@@ -113,13 +123,14 @@ export class FetchyClient {
       throw new ErrFetchyMissingAPIDecorator(TargetAPI.name)
     }
 
-    const { classSpec, methods } = entry
+    const { classBuilder, methods } = entry
 
     if (methods.size === 0) {
       throw new ErrFetchyEmptyClient(TargetAPI.name)
     }
 
-    const instance = new TargetAPI(...args) as InstanceType<T>
+    const classSpec = classBuilder.toClassSpec()
+    const operations: PropertyDescriptorMap = {}
 
     for (const [name, builder] of methods) {
       const spec = mergeClassIntoMethod(classSpec, builder.toMethodSpec())
@@ -127,7 +138,7 @@ export class FetchyClient {
 
       const responseConverter = spec.responseConverter ?? this.options.responseConverter ?? JSONResponseConverter
 
-      Object.defineProperty(instance, name, {
+      operations[name] = {
         value: buildInvoker(
           {
             baseURL: this.options.baseURL,
@@ -142,8 +153,11 @@ export class FetchyClient {
         writable: true,
         configurable: true,
         enumerable: spec.kind === 'field',
-      })
+      }
     }
+
+    const instance = new TargetAPI(...args) as InstanceType<T>
+    Object.defineProperties(instance, operations)
 
     return instance
   }

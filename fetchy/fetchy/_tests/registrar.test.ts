@@ -108,7 +108,7 @@ describe('registrar', () => {
 
     const entry = getAPI(TargetAPI)
 
-    expect(entry?.classSpec.path).toBe('/users')
+    expect(entry?.classBuilder.toClassSpec().path).toBe('/users')
     expect(entry?.methods.get('get')?.toMethodSpec().httpMethod).toBe('GET')
   })
 

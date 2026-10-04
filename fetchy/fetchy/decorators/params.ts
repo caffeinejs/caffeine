@@ -9,8 +9,8 @@ import { configureMethod } from './registrar/registrar.js'
  */
 export function Params(specs: APIParameterSpec[]) {
   return function (_value: unknown, context: ClassMethodDecoratorContext | ClassFieldDecoratorContext): void {
-    if (context.kind !== 'method' && context.kind !== 'field') {
-      throw new ErrFetchyInvalidDecoratorTarget('Params', 'a method or field')
+    if ((context.kind !== 'method' && context.kind !== 'field') || context.static) {
+      throw new ErrFetchyInvalidDecoratorTarget('Params', 'an instance method or field')
     }
 
     configureMethod(context, spec => {

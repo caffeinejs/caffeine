@@ -6,6 +6,7 @@ import {
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
+  ErrFetchyMissingPathArgument,
   ErrFetchyNoParameterHandler,
 } from '../errors.js'
 import { FetchyRequest } from '../request.js'
@@ -29,6 +30,11 @@ describe('errors', () => {
       'ERR_FETCHY_NO_PARAMETER_HANDLER',
     ],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
+    [
+      'ErrFetchyMissingPathArgument',
+      () => new ErrFetchyMissingPathArgument('GET', '/users/{id}', 'id', undefined),
+      'ERR_FETCHY_MISSING_PATH_ARGUMENT',
+    ],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
 

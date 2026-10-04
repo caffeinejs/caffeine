@@ -1,4 +1,4 @@
-import { ErrFetchyClientNotBuilt, ErrFetchyInvalidDecoratorTarget } from '../errors.js'
+import { ErrFetchyClientNotBuilt, ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
 import { configureMethod } from './registrar/registrar.js'
 
 function decorateVerb(httpMethod: string, path: string) {
@@ -6,12 +6,20 @@ function decorateVerb(httpMethod: string, path: string) {
   // (`void | Method`) and the field decorator return type (`void | Initializer`) at each use
   // site, and no single concrete type (including `unknown`) is assignable to both at once.
   return function (_value: unknown, context: ClassMethodDecoratorContext | ClassFieldDecoratorContext): any {
-    if (context.kind !== 'method' && context.kind !== 'field') {
-      throw new ErrFetchyInvalidDecoratorTarget(httpMethod, 'a method or field')
+    if ((context.kind !== 'method' && context.kind !== 'field') || context.static) {
+      throw new ErrFetchyInvalidDecoratorTarget(httpMethod, 'an instance method or field')
     }
 
     const name = String(context.name)
-    configureMethod(context, spec => spec.httpMethod(httpMethod).path(path))
+    configureMethod(context, spec => {
+      const declared = spec.toMethodSpec().httpMethod
+
+      if (declared) {
+        throw new ErrFetchyInvalidRoute(name, `more than one HTTP verb decorator ("${declared}" and "${httpMethod}")`)
+      }
+
+      spec.httpMethod(httpMethod).path(path)
+    })
 
     const stub = (): never => {
       throw new ErrFetchyClientNotBuilt(name)

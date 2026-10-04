@@ -4,7 +4,8 @@ import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**
  * Overrides the request body converter used for a method's `@Body()` value (or every method, at
- * class level) — the default is `JSONRequestBodyConverter` when unset.
+ * class level). Without one, the body is converted with `JSONRequestBodyConverter`, or with
+ * `FormRequestBodyConverter` under `@FormURLEncoded()`.
  */
 export function UseRequestBodyConverter(converter: RequestBodyConverter) {
   return classOrMember(

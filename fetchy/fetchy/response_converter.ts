@@ -5,8 +5,8 @@ export interface ResponseConverter<T = unknown> {
 }
 
 /**
- * Default response converter: parses the body as JSON, treating an empty (204) response as
- * `undefined`.
+ * Default response converter: parses the body as JSON. An empty body, as on a 204, a `HEAD`
+ * response or a 2xx with no content, converts to `undefined`.
  */
 export const JSONResponseConverter: ResponseConverter = {
   async convert(response: FetchyResponse): Promise<unknown> {
@@ -14,7 +14,9 @@ export const JSONResponseConverter: ResponseConverter = {
       return undefined
     }
 
-    return response.json()
+    const text = await response.text()
+
+    return text === '' ? undefined : JSON.parse(text)
   },
 }
 

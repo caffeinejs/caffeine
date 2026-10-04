@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
+import { HeaderMap } from '../decorators/header_map.js'
+import { Params } from '../decorators/params.js'
+import { Param } from '../decorators/params/param.js'
 import { Path } from '../decorators/path.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
+import { ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
 import { noop } from '../noop.js'
 import { captureMetadata } from './capture_metadata.js'
 
@@ -105,6 +109,67 @@ describe('verb decorators', () => {
     }
 
     expect(() => new UsersAPI().list()).toThrow(/never passed to FetchyClient.create/)
+  })
+
+  // Two verbs on one member describe two different requests. The verb applied last used to win in silence, so the
+  // other request the author wrote never happened.
+  it('rejects a second HTTP verb on the same member when the class is defined', () => {
+    expect(
+      () =>
+        class {
+          @GET('/a')
+          @POST('/b')
+          both(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidRoute)
+
+    expect(
+      () =>
+        class {
+          @HTTP('GET', '/a')
+          @GET('/b')
+          twice(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow('more than one HTTP verb decorator ("GET" and "GET")')
+  })
+
+  // Static and instance members share one registry, keyed by name. A static operation was served on the instance by
+  // create() and threw on the class, and a static member's configuration leaked into the instance member of the same
+  // name.
+  it('rejects a static member, for verbs and for every other member decorator', () => {
+    expect(
+      () =>
+        class {
+          @GET('/users')
+          static list(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+
+    expect(
+      () =>
+        class {
+          @HeaderMap({ 'x-trace': '1' })
+          static list(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+
+    expect(
+      () =>
+        class {
+          @Params([Param('id')])
+          static list(_id: string): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
   })
 
   it('@Path sets the class-level base path', () => {

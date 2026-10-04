@@ -1,4 +1,5 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
+import { ErrFetchyMissingPathArgument } from './errors.js'
 import { FetchyHeaders } from './headers.js'
 import type { ParamDescriptor } from './internal/param_descriptor.js'
 import { FetchyRequest } from './request.js'
@@ -53,10 +54,12 @@ function appendQueryEntry(query: string, key: string, value: unknown): string {
  * @throws TypeError when `baseURL` is not empty and is not an absolute URL.
  */
 export class RequestBuilder {
-  // The path split around its placeholders: `segments[i]` precedes the argument at `slots[i]`, and the last segment
-  // closes the path. A placeholder with no `@Param` stays in its segment as written.
+  // The path split around its placeholders: `segments[i]` precedes the argument at `slots[i]`, whose placeholder is
+  // `slotKeys[i]`, and the last segment closes the path. A placeholder with no `@Param` stays in its segment as
+  // written.
   private readonly segments: string[] = []
   private readonly slots: number[] = []
+  private readonly slotKeys: string[] = []
   private readonly params: CompiledParam[] = []
   private readonly headers: Record<string, string> = {}
   private readonly bodyConverter: RequestBodyConverter
@@ -85,6 +88,7 @@ export class RequestBuilder {
       if (param) {
         this.segments.push(segment)
         this.slots.push(param.index)
+        this.slotKeys.push(match[1])
         segment = ''
       } else {
         segment += match[0]
@@ -106,11 +110,20 @@ export class RequestBuilder {
     this.bodyConverter = meta.requestBodyConverter ?? JSONRequestBodyConverter
   }
 
+  /**
+   * @throws {@link ErrFetchyMissingPathArgument} when a path parameter's argument is `undefined` or `null`.
+   */
   toRequest(args: readonly unknown[]): FetchyRequest {
     let path = this.segments[0]
 
     for (let i = 0; i < this.slots.length; i++) {
-      path += encodeURIComponent(String(args[this.slots[i]])) + this.segments[i + 1]
+      const value = args[this.slots[i]]
+
+      if (value === undefined || value === null) {
+        throw new ErrFetchyMissingPathArgument(this.meta.httpMethod, this.meta.path, this.slotKeys[i], value)
+      }
+
+      path += encodeURIComponent(String(value)) + this.segments[i + 1]
     }
 
     let query = ''

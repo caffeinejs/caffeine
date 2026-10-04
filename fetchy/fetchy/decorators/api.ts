@@ -4,11 +4,11 @@ import { configureAPIAndRegisterMethods } from './registrar/registrar.js'
 /**
  * Marks a class as a fetchy API client. Mandatory on every class passed to
  * `FetchyClient.create()` — drains that class's decorated methods into the registry `create()`
- * reads. Must be the outermost (topmost-listed) class decorator so it runs after
- * `@Path`/`@HeaderMap`/`@FormUrlEncoded`, since TC39 applies stacked class decorators bottom-up.
+ * reads. The other class decorators may be listed above or below it.
  *
  * `path` is optional and only overwrites the class-level path when given, so `@API()` can be
- * stacked on top of a separate `@Path(...)` without clobbering it.
+ * stacked with a separate `@Path(...)` without clobbering it. When both set a path, the one listed
+ * higher wins.
  */
 export function API(path?: string) {
   return function (target: Function, context: ClassDecoratorContext): void {

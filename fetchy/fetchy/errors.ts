@@ -22,9 +22,10 @@ export class ErrFetchyInvalidDecoratorTarget extends FetchyError {
 }
 
 /**
- * Thrown at client build time when a decorated method's configuration is structurally invalid
- * (missing HTTP method, a body on GET/HEAD/OPTIONS, a path parameter with no matching `{key}`
- * placeholder, a form field without `@FormURLEncoded`, more than one `@Body()`, and so on).
+ * Thrown when a decorated method's configuration is structurally invalid. A second HTTP verb on
+ * one member is rejected when the class is defined; the rest when the client is built (missing
+ * HTTP method, a body on GET/HEAD/OPTIONS, a path parameter with no matching `{key}` placeholder,
+ * a form field without `@FormURLEncoded`, more than one `@Body()`, and so on).
  */
 export class ErrFetchyInvalidRoute extends FetchyError {
   constructor(method: string, reason: string) {
@@ -113,6 +114,20 @@ export class ErrFetchyMissingCallbackArgument extends FetchyError {
       'ERR_FETCHY_MISSING_CALLBACK_ARGUMENT',
     )
     this.name = 'ErrFetchyMissingCallbackArgument'
+  }
+}
+
+/**
+ * Thrown when an operation is called with `undefined` or `null` for a path parameter. Nothing is
+ * sent: `/users/undefined` would name a resource of its own.
+ */
+export class ErrFetchyMissingPathArgument extends FetchyError {
+  constructor(method: string, path: string, key: string, value: null | undefined) {
+    super(
+      `Cannot build request "${method} ${path}": the argument for "{${key}}" is ${value}`,
+      'ERR_FETCHY_MISSING_PATH_ARGUMENT',
+    )
+    this.name = 'ErrFetchyMissingPathArgument'
   }
 }
 
