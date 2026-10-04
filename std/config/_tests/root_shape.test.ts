@@ -5,10 +5,11 @@ import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
 import { kMergedTree } from '../store.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigSchema } from '../types.js'
 
 function definition<T>(data: Record<string, unknown>, schema: ConfigSchema<T>) {
-  return { schema, key: undefined, storeKey: undefined, sources: [new InlineConfigSource(data)], loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources: [new InlineConfigSource(data)], loadTimeoutMs: 30_000 }
 }
 
 /**

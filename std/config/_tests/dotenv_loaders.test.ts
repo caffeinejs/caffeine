@@ -9,6 +9,7 @@ import type { DotenvLoader, DotenvOptions } from '../dotenv.js'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { EnvConfigSource } from '../sources/env/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigDefinition } from '../types.js'
 
 // Every variable these files set, and the one that names profiles. Unset before each test, so the machine running it
@@ -47,8 +48,7 @@ async function write(name: string, ...lines: string[]): Promise<void> {
 function definition(dotenv: Omit<DotenvOptions, 'path'>): ConfigDefinition {
   return {
     schema: passthroughConfigSchema,
-    key: undefined,
-    storeKey: undefined,
+    ...testTokens(),
     sources: [new EnvConfigSource({ prefix: 'LOADERS_' })],
     loadTimeoutMs: 30_000,
     dotenv: { ...dotenv, path: dir },

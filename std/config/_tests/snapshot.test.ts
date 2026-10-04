@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigSchema, ConfigSource } from '../types.js'
 
 interface App {
@@ -35,7 +36,7 @@ function changing(data: Record<string, unknown>) {
 async function setup() {
   const { source, state } = changing({ server: { port: 3000 } })
   const store = await loadConfig<App>(
-    { schema, key: undefined, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
+    { schema, ...testTokens(), sources: [source], loadTimeoutMs: 30_000 },
     { start: false },
   )
   return { store, state }
@@ -49,22 +50,31 @@ describe('reading configuration', () => {
   it('reads through ordinary objects, never a Proxy', async () => {
     const { store } = await setup()
 
-    for (const object of [store.live, store.live.server, store.current, store.current.server]) {
+    for (const object of [store.current, store.current.server]) {
       expect(types.isProxy(object)).toBe(false)
     }
   })
 
-  it('keeps one identity for the live object and its nodes while their fields follow a reload', async () => {
+  // A snapshot is built only when a change happened, so a reader that compares identities, or a live provider asked
+  // on every request, never pays for a reload that changed nothing.
+  it('keeps the snapshot, identity included, until a reload changes something, then replaces it once', async () => {
     const { store, state } = await setup()
-    const live = store.live
-    const server = store.live.server
+    const first = store.current
+
+    expect(store.current).toBe(first)
+    expect((await store.reload()).status).toBe('unchanged')
+    expect(store.current).toBe(first)
+
+    state.data = { server: { port: 'not-a-number' } }
+    expect((await store.reload()).status).toBe('rejected')
+    expect(store.current).toBe(first)
 
     state.data = { server: { port: 8080 } }
-    await store.reload()
+    expect((await store.reload()).status).toBe('applied')
+    const second = store.current
 
-    expect(store.live).toBe(live)
-    expect(store.live.server).toBe(server)
-    expect(server.port).toBe(8080)
+    expect(second).not.toBe(first)
+    expect(store.current).toBe(second)
   })
 
   // A snapshot is what a request latches: a reload landing mid-request cannot change the answers it started with.
@@ -94,7 +104,8 @@ describe('reading configuration', () => {
   it('freezes all of a snapshot, even where a validator returned an object frozen only at its top', async () => {
     const first = Object.freeze({ backoff: { ms: 100 } })
     const later = Object.freeze({ backoff: { ms: 200 } })
-    const validating: ConfigSchema<{ first: typeof first; later?: typeof later }> = {
+    type Validated = { first: typeof first; later?: typeof later }
+    const validating: ConfigSchema<Validated> = {
       '~standard': {
         version: 1,
         vendor: 'test',
@@ -102,8 +113,8 @@ describe('reading configuration', () => {
       },
     }
     const { source, state } = changing({})
-    const store = await loadConfig(
-      { schema: validating, key: undefined, storeKey: undefined, sources: [source], loadTimeoutMs: 30_000 },
+    const store = await loadConfig<Validated>(
+      { schema: validating, ...testTokens(), sources: [source], loadTimeoutMs: 30_000 },
       { start: false },
     )
 
@@ -135,13 +146,12 @@ describe('reading configuration', () => {
     const source = new InlineConfigSource({ current: 'c', live: 'l', snapshot: 's' })
     const store = await loadConfig<{ current: string; live: string; snapshot: string }>({
       schema: $t.Object({ current: $t.String(), live: $t.String(), snapshot: $t.String() }),
-      key: undefined,
-      storeKey: undefined,
+      ...testTokens(),
       sources: [source],
       loadTimeoutMs: 30_000,
     })
 
-    expect(store.live).toEqual({ current: 'c', live: 'l', snapshot: 's' })
+    expect(store.current).toEqual({ current: 'c', live: 'l', snapshot: 's' })
     expect(store.current.snapshot).toBe('s')
   })
 })

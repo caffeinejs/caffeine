@@ -26,7 +26,6 @@ describe('HTTPCachingOptionsBuilder.config', () => {
 
 describe('HTTPCaching configured from the tree', () => {
   const schema = $t.Object({ cache: $t.Object({ statusHeader: $t.Optional($t.String()) }, { default: {} }) })
-  const kConfig = token<InferConfig<typeof schema>>(Symbol('caching.config.test'))
 
   let close: (() => Promise<unknown>) | undefined
 
@@ -46,9 +45,9 @@ describe('HTTPCaching configured from the tree', () => {
     }
     void [ConfiguredController]
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new EnvConfigSource({ env: { CACHE__STATUS_HEADER: 'X-From-Env' } }))
-      .build()
+      .build().config
     const app = createWebApplication({ config: conf }).with(
       HTTPCaching<InferConfig<typeof schema>>((b, { config }) =>
         b.config(config.cache).store(new MemoryHTTPCacheStore()),

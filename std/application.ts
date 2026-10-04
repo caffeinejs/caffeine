@@ -2,16 +2,16 @@ import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type O
 
 import {
   ConfigModule,
-  DEFAULT_LOAD_TIMEOUT_MS,
   loadConfig,
   logConfigLoaded,
   type ConfigDefinition,
+  type ConfigSnapshot,
   type ConfigStore,
-  type LiveConfig,
 } from './config/index.js'
 import { passthroughConfigSchema, validateConfig } from './config/schema.js'
 import { kMergedTree } from './config/store.js'
 import { readPath } from './config/tree.js'
+import { newConfiguration } from './configuration.js'
 import { ErrCaffeine } from './error.js'
 import {
   ErrFeatureAlreadyInstalled,
@@ -139,7 +139,7 @@ export class ErrConfigNotReady extends ErrCaffeine {
  * Configures fluently, and is itself the running instance — there is no separate builder:
  *
  * ```ts
- * createApplication({ config: conf })
+ * createApplication({ config: conf.config })
  *   .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
  *   .shutdown(s => s.drainDelay('5s'))
  * ```
@@ -194,13 +194,9 @@ export class Application<TConfig = unknown> {
 
     // Loaded in `bootstrap()`, once the profiles are known. An application that declared nothing still loads: no
     // source, and a schema that keeps every key, so the framework's own block is read the same way.
-    this.#definition = (options.config as ConfigDefinition<unknown> | undefined) ?? {
-      schema: passthroughConfigSchema,
-      key: undefined,
-      storeKey: undefined,
-      sources: [],
-      loadTimeoutMs: DEFAULT_LOAD_TIMEOUT_MS,
-    }
+    this.#definition =
+      (options.config as ConfigDefinition<unknown> | undefined) ??
+      newConfiguration(passthroughConfigSchema).build().config
 
     // Pushed directly, not through `install`: a subclass's private fields do not exist yet while this
     // constructor runs, so an overridable method cannot be called from here.
@@ -257,19 +253,18 @@ export class Application<TConfig = unknown> {
   }
 
   /**
-   * The live configuration features are configured and bootstrapped with. One identity for the life of the
-   * application, and a node read from it follows every reload. Available once configuration has loaded, which
-   * is before {@link bootstrap} resolves.
+   * The configuration as it is now: the snapshot of the current revision, which a reload replaces rather than
+   * mutates. Available once configuration has loaded, which is before {@link bootstrap} resolves.
    *
    * @throws ErrConfigNotReady until configuration has loaded.
    */
-  get config(): LiveConfig<TConfig> {
+  get config(): ConfigSnapshot<TConfig> {
     if (this.#store === undefined) {
       throw new ErrConfigNotReady()
     }
 
     // The store erases `TConfig`; this is the application's own configuration.
-    return this.liveConfig as LiveConfig<TConfig>
+    return this.configSnapshot as ConfigSnapshot<TConfig>
   }
 
   /**
@@ -306,9 +301,9 @@ export class Application<TConfig = unknown> {
    * typed against the schema the `config` constructor option declared.
    *
    * ```ts
-   * const conf = newConfiguration(schema, kConfig).build()
+   * const conf = newConfiguration(schema).build()
    *
-   * createApplication({ config: conf })
+   * createApplication({ config: conf.config })
    *   .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
    * ```
    *
@@ -410,8 +405,8 @@ export class Application<TConfig = unknown> {
    * @throws ErrApplicationClosed once {@link close} has been called: a closed application is not started again.
    */
   bootstrap(): Promise<void>
-  bootstrap(configure: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void>
-  bootstrap(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
+  bootstrap(configure: (config: ConfigSnapshot<TConfig>, app: this) => void | Promise<void>): Promise<void>
+  bootstrap(configure?: (config: ConfigSnapshot<TConfig>, app: this) => void | Promise<void>): Promise<void> {
     if (this.#closing !== undefined) {
       return Promise.reject(new ErrApplicationClosed())
     }
@@ -420,7 +415,9 @@ export class Application<TConfig = unknown> {
     return this.#boot
   }
 
-  async #bootstrapOnce(configure?: (config: LiveConfig<TConfig>, app: this) => void | Promise<void>): Promise<void> {
+  async #bootstrapOnce(
+    configure?: (config: ConfigSnapshot<TConfig>, app: this) => void | Promise<void>,
+  ): Promise<void> {
     this.#booting = true
 
     // The configuration settles the profiles as it loads, before any source: the ones named in code, then the host's,
@@ -462,7 +459,7 @@ export class Application<TConfig = unknown> {
       this.#configuring = true
       try {
         if (configure !== undefined) {
-          await configure(this.liveConfig as LiveConfig<TConfig>, this)
+          await configure(this.configSnapshot as ConfigSnapshot<TConfig>, this)
         }
         this.beforeConfigure()
       } finally {
@@ -776,9 +773,9 @@ export class Application<TConfig = unknown> {
     return { name: this.name, profiles: this.profiles }
   }
 
-  /** The live config object. Readable from {@link setup} onward. */
-  protected get liveConfig(): LiveConfig<unknown> {
-    return this.configStore.live
+  /** The snapshot of the current revision. Readable from {@link setup} onward. */
+  protected get configSnapshot(): ConfigSnapshot<unknown> {
+    return this.configStore.current
   }
 
   /**
@@ -809,7 +806,7 @@ export class Application<TConfig = unknown> {
   protected configureKit(): FeatureConfigureKit {
     return {
       container: this.#container,
-      config: this.configStore.live,
+      config: this.configSnapshot,
       store: this.configStore,
     }
   }
@@ -820,7 +817,7 @@ export class Application<TConfig = unknown> {
   protected bootstrapKit(): BootstrapKit {
     return {
       container: this.#container,
-      config: this.configStore.live,
+      config: this.configSnapshot,
       store: this.configStore,
       // Refreshed once every feature configured, so this is the logger `.logger(...)` asked for.
       logger: this.#logger,

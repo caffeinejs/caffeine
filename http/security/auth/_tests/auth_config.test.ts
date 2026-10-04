@@ -45,7 +45,6 @@ const rootSchema = $t.Object({
     { default: {} },
   ),
 })
-const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 const CODE_SECRET = 'code-secret-key-must-be-at-least-32-chars!'
 const ENV_SECRET = 'env-secret-key-must-be-at-least-32-chars!!'
@@ -85,9 +84,9 @@ describe('authentication configuration', () => {
   // The scheme is named `jwt` rather than left as the default `Bearer` because `EnvConfigSource` lowercases
   // each path segment — `AUTH__SCHEMES__BEARER__SECRET` addresses `auth.schemes.bearer`, which is not where a
   it('takes a JWT secret from the environment, over the one set in code', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(env({ AUTH__SCHEMES__JWT__SECRET: ENV_SECRET }))
-      .build()
+      .build().config
     const app = createWebApplication({
       config: conf,
     })
@@ -131,9 +130,9 @@ describe('authentication configuration', () => {
 
   // Building last is what puts each scheme's own validation on the merged options.
   it('validates the merged options, not the code half', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ auth: { schemes: { Cookie: { sessionSecret: 'too-short' } } } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       config: conf,
     })
@@ -148,7 +147,7 @@ describe('authentication configuration', () => {
   })
 
   it('configures a basic realm and a cookie name from the tree', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(
         new InlineConfigSource({
           auth: {
@@ -159,7 +158,7 @@ describe('authentication configuration', () => {
           },
         }),
       )
-      .build()
+      .build().config
     // A cookie scheme is registered, so the cookie plugin has to be there first or the application refuses to start.
 
     const app = createWebApplication({
@@ -193,9 +192,9 @@ describe('authentication configuration', () => {
   })
 
   it('takes the default scheme from the tree', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(env({ AUTH__DEFAULT_AUTHENTICATE_SCHEME: 'Bearer' }))
-      .build()
+      .build().config
     const app = createWebApplication({
       config: conf,
     })
@@ -220,9 +219,9 @@ describe('authentication configuration', () => {
   it('keeps a code-only callback on a configured scheme', async () => {
     let validated = 0
 
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ auth: { schemes: { Basic: { realm: 'Configured' } } } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       config: conf,
     })
@@ -257,11 +256,10 @@ describe('authentication configuration', () => {
         }),
       }),
     })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ app: { auth: { schemes: { Bearer: { secret: ENV_SECRET } } } } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       config: conf,
     })
@@ -303,10 +301,9 @@ describe('authentication configuration', () => {
         { default: {} },
       ),
     })
-    const kOpenConfig = token<InferConfig<typeof openSchema>>(Symbol('app.config.open'))
 
     function appFrom(values: Record<string, string>) {
-      const conf = newConfiguration(openSchema, kOpenConfig).source(env(values)).build()
+      const conf = newConfiguration(openSchema).source(env(values)).build().config
 
       return createWebApplication({ config: conf })
         .install(
@@ -349,7 +346,7 @@ describe('authentication configuration', () => {
     // A client id and a callback URL are what a deployment most often sets from its environment, and `CLIENT_ID`
     // folds to `clientId`. An option spelled any other way is one the variable never reaches.
     it('reaches an OAuth 2.0 scheme through the variables a deployment would write', async () => {
-      const conf = newConfiguration(openSchema, kOpenConfig)
+      const conf = newConfiguration(openSchema)
         .source(
           env({
             AUTH__SCHEMES__OAUTH__CLIENT_ID: 'env-client',
@@ -357,7 +354,7 @@ describe('authentication configuration', () => {
             AUTH__SCHEMES__OAUTH__USE_PKCE: 'false',
           }),
         )
-        .build()
+        .build().config
 
       const app = createWebApplication({ config: conf })
         .install(

@@ -5,10 +5,12 @@ import {
   token,
   type InjectionToken,
   type Module,
+  type Provider,
   type SelfRefreshable,
 } from '@caffeinejs/di'
 
 import { ConfigStore } from '../store.js'
+import type { ConfigSnapshot } from '../types.js'
 
 /** The label `refresher.refresh(CONFIG_REFRESH_LABEL)` takes to reload every live configuration source. */
 export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:refresh-label')
@@ -16,10 +18,13 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
 /**
  * Binds a loaded configuration into a container.
  *
- * - The live config object under the definition's key, and the store under its store key, when it names them.
- * - The store under the {@link ConfigStore} class, which is how the framework finds it.
- * - The live config object as the values, so `$i.config(c => c.database.host)` reads configuration. The value is read
- *   when the consumer is built.
+ * - The snapshot current when the module runs under the definition's `configToken`. A reload never reaches it.
+ * - A provider under the definition's `liveConfigToken`, whose `get()` answers the snapshot of the current revision.
+ * - The store under the definition's `storeToken`, typed, and under the {@link ConfigStore} class, which is how the
+ *   framework finds it.
+ * - The same snapshot as the values, so `$i.config(c => c.database.host)` reads configuration as it was at
+ *   start-up, and the same provider as the scoped config, so `$i.liveConfig(c => c.database.host)` reads it as it is
+ *   now. Either is left alone when the application bound its own.
  * - A binding under `CONFIG_REFRESH_LABEL`, so `container.refresher.refresh(CONFIG_REFRESH_LABEL)` reloads the live
  *   sources. It rejects when the reload was rejected or a source that is not `optional` failed.
  *
@@ -27,25 +32,22 @@ export const CONFIG_REFRESH_LABEL: unique symbol = Symbol('@caffeinejs/config:re
  */
 export function ConfigModule<T>(store: ConfigStore<T>): Module {
   return mod('ConfigModule', container => {
-    const { key, storeKey } = store.definition
+    const { configToken, liveConfigToken, storeToken } = store.definition
+    const snapshot: ConfigSnapshot<T> = store.current
+    const live: Provider<ConfigSnapshot<T>> = { get: () => store.current }
 
-    if (key !== undefined) {
-      // `T` is the application's own read-only type, so the live object is exactly what the key names.
-      container.bind(key, t => t.toValue(store.live as T))
-    }
-    if (storeKey !== undefined) {
-      container.bind(storeKey, t => t.toValue(store))
-    }
-    // The application's module is added last, at bootstrap, so the store it rebinds is the one this key resolves to.
-    container.rebind(ConfigStore as InjectionToken<ConfigStore<unknown>>, t =>
-      t.toValue(store as ConfigStore<unknown>).internal(),
-    )
+    // `T` is the application's own read-only type, so a snapshot is exactly what the tokens name.
+    container.bind(configToken, t => t.toValue(snapshot as T))
+    container.bind(liveConfigToken, t => t.toValue(live as Provider<T>))
+    container.bind(storeToken, t => t.toValue(store))
+    container.bind(ConfigStore, t => t.toValue(store).internal())
 
-    // An application that bound its own values meant it.
+    // An application that bound its own values, or its own scoped config, meant it.
     if (!container.hasValues) {
-      // The live object rather than the current snapshot: it keeps one identity while every field follows every
-      // reload, so every injection reads the configuration that is current then.
-      container.bindConfig(store.live)
+      container.bindConfig(snapshot)
+    }
+    if (!container.hasScopedConfig) {
+      container.bindScopedConfig(live)
     }
 
     const refresher: SelfRefreshable = {

@@ -195,6 +195,7 @@ export function isTerminalStage(name: symbol): boolean {
  */
 export const BuiltInStages = {
   CONFIG: Symbol('@caffeinejs/di:stage.config'),
+  LIVE_CONFIG: Symbol('@caffeinejs/di:stage.live-config'),
   MANY: Symbol('@caffeinejs/di:stage.many'),
   MAP: Symbol('@caffeinejs/di:stage.map'),
   OBJECT: Symbol('@caffeinejs/di:stage.object'),

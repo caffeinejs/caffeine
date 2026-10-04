@@ -21,8 +21,6 @@ import { HTML, html, type HTMLDefaults } from './index.js'
 
 const schema = $t.Object({ html: $t.Object({ autoDoctype: $t.Boolean() }) })
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-
 function Document({ title }: { title: string }) {
   return (
     <html>
@@ -203,9 +201,9 @@ describe('HTML', () => {
   // What reading the node buys: the plugin is handed a live slice of the tree, so a deployment turns the
   // doctype off without a rebuild.
   it('reads the doctype default from the configuration the callback handed it', async () => {
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ html: { autoDoctype: false } }))
-      .build()
+      .build().config
     const app = createWebApplication({ config: conf }).with(({ config }) => html(config.html))
 
     await app.bootstrap()

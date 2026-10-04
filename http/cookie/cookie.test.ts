@@ -14,8 +14,6 @@ const schema = $t.Object({
   app: $t.Object({ cookie: $t.Object({ enabled: $t.Boolean({ default: true }), secret: $t.Optional($t.String()) }) }),
 })
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('cookie.app.config'))
-
 interface LogEntry {
   msg?: string
 }
@@ -113,9 +111,9 @@ describe('ctx.req.cookie()', () => {
   it('signs with the secret the configuration carries', async () => {
     const secret = 'a-secret-that-came-from-the-configuration'
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ app: { cookie: { secret } } }))
-      .build()
+      .build().config
 
     const app = await ready(
       createWebApplication({ config: conf })
@@ -133,9 +131,9 @@ describe('ctx.req.cookie()', () => {
     const fromConfig = 'a-secret-that-came-from-the-configuration'
     const fromCode = 'a-secret-that-was-written-in-the-code'
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ app: { cookie: { secret: fromConfig } } }))
-      .build()
+      .build().config
 
     const app = await ready(
       createWebApplication({ config: conf })

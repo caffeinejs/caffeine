@@ -292,6 +292,7 @@ export class TestContainer {
             profiles: this.#profiles,
             decorators: this.#snap.decorators,
             values: this.#snap.values,
+            scopedConfig: this.#snap.scopedConfig,
           })
 
     const di = new CaffeineIoC({ lazy: this.#lazy })
@@ -406,7 +407,7 @@ export function newTestContainer(): TestContainer
 /**
  * Creates a new test container using the given {@link Container} as the base.
  * The new container holds what the base was told: its bindings made by hand, its modules, its profiles, its decorated
- * bindings, and the values bound with `bindConfig()`.
+ * bindings, the values bound with `bindConfig()` and the provider bound with `bindScopedConfig()`.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param container - The base container to use as the foundation for the test container.
@@ -414,8 +415,8 @@ export function newTestContainer(): TestContainer
 export function newTestContainer(container: Container): TestContainer
 /**
  * Creates a new test container using the given {@link Snapshot} as the base.
- * The new container holds what the snapshot carries: bindings made by hand, modules, profiles, decorated bindings and
- * values.
+ * The new container holds what the snapshot carries: bindings made by hand, modules, profiles, decorated bindings,
+ * values and the scoped config.
  * You can use the test container to override, filter, isolate, and focus on specific bindings.
  *
  * @param snap - The snapshot to use as the foundation for the test container.

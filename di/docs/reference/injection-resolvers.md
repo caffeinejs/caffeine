@@ -139,6 +139,7 @@ const providerStage: InjectionMiddleware = (ctx, next) => {
 ```ts
 const BuiltInStages = {
   CONFIG: Symbol('@caffeinejs/di:stage.config'),
+  LIVE_CONFIG: Symbol('@caffeinejs/di:stage.live-config'),
   MANY: Symbol('@caffeinejs/di:stage.many'),
   MAP: Symbol('@caffeinejs/di:stage.map'),
   OBJECT: Symbol('@caffeinejs/di:stage.object'),
@@ -151,15 +152,16 @@ const BuiltInStages = {
 The stages every container starts with, named by the injection helpers in the
 [Injection reference](./injection.md):
 
-| Symbol     | Terminal | Named by                   |
-| ---------- | -------- | -------------------------- |
-| `SORT`     | no       | `ordered()`                |
-| `PROVIDER` | no       | `provide()`                |
-| `MANY`     | yes      | `allOf()`, and `ordered()` |
-| `MAP`      | yes      | `mapped()`                 |
-| `OBJECT`   | yes      | `object()`                 |
-| `VALUE`    | yes      | `just()`                   |
-| `CONFIG`   | yes      | `config()`                 |
+| Symbol        | Terminal | Named by                   |
+| ------------- | -------- | -------------------------- |
+| `SORT`        | no       | `ordered()`                |
+| `PROVIDER`    | no       | `provide()`                |
+| `MANY`        | yes      | `allOf()`, and `ordered()` |
+| `MAP`         | yes      | `mapped()`                 |
+| `OBJECT`      | yes      | `object()`                 |
+| `VALUE`       | yes      | `just()`                   |
+| `CONFIG`      | yes      | `config()`                 |
+| `LIVE_CONFIG` | yes      | `liveConfig()`             |
 
 A chain that names no terminal resolves the single binding for its key. `defer()` names no stage at all:
 it makes the key a `DeferredCtor`, which the chain unwraps when it selects bindings.

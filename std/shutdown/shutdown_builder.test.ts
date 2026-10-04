@@ -24,7 +24,6 @@ const appSchema = $t.Object({
   }),
 })
 type AppConfig = InferConfig<typeof appSchema>
-const kAppConfig = token<AppConfig>(Symbol('app.config'))
 
 const headless = (config?: ConfigDefinition<AppConfig>) =>
   createApplication({ container: new CaffeineIoC({ decorators: false }), config })
@@ -47,9 +46,9 @@ describe('ShutdownBuilder', () => {
 
   // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
   it('leaves the drain on its defaults when nothing pointed it at the block', async () => {
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new EnvConfigSource({ env: { SHUTDOWN__DRAIN_DELAY: '40ms' } }))
-      .build()
+      .build().config
     const app = headless(conf)
     await app.bootstrap()
 
@@ -60,9 +59,9 @@ describe('ShutdownBuilder', () => {
   // A fluent method is the last word: the callback wired the block, but `drainDelay` was also set in code,
   // so the code value is what the drain runs on.
   it('takes a fluent value over the configured one', async () => {
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ shutdown: { drainDelay: '90ms' } }))
-      .build()
+      .build().config
     const app = headless(conf).shutdown((s, { config }) => s.drainDelay('10s').config(config.shutdown))
     await app.bootstrap()
 
@@ -70,13 +69,13 @@ describe('ShutdownBuilder', () => {
   })
 
   it('reads durations and the signal list from the environment', async () => {
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(
         new EnvConfigSource({
           env: { SHUTDOWN__DRAIN_DELAY: '40ms', SHUTDOWN__SIGNALS: 'SIGTERM,SIGINT' },
         }),
       )
-      .build()
+      .build().config
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
     await app.bootstrap()
 
@@ -89,9 +88,9 @@ describe('ShutdownBuilder', () => {
   // A bare number names no unit. Read as duration text it was 0, and a timeout of 0 waits indefinitely, so the
   // orchestrator's SIGKILL was all that ended a stuck shutdown.
   it('refuses a duration the environment gives as a bare number', async () => {
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new EnvConfigSource({ env: { SHUTDOWN__SHUTDOWN_TIMEOUT: '10000' } }))
-      .build()
+      .build().config
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
     const booting = app.bootstrap()
 
@@ -100,9 +99,9 @@ describe('ShutdownBuilder', () => {
   })
 
   it('keeps the dispatcher on the builder — a function cannot travel the config tree', async () => {
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ shutdown: { drainDelay: '30ms' } }))
-      .build()
+      .build().config
     const app = headless(conf).shutdown((s, { config }) => s.dispatcher(noopSignalDispatcher).config(config.shutdown))
     await app.bootstrap()
 
@@ -119,7 +118,7 @@ describe('ShutdownBuilder', () => {
       load: () => [{ name: 'shutdown-test', data: { shutdown: { shutdownTimeout } } }],
     }
 
-    const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
+    const conf = newConfiguration(appSchema).source(changing).build().config
     const app = headless(conf).shutdown((s, { config }) => s.config(config.shutdown))
     await app.bootstrap()
 
@@ -180,9 +179,9 @@ describe('the zero-drain warning under Kubernetes', () => {
   }
 
   const configured = (drainDelay: string) =>
-    newConfiguration(appSchema, kAppConfig)
+    newConfiguration(appSchema)
       .source(new EnvConfigSource({ env: { SHUTDOWN__DRAIN_DELAY: drainDelay } }))
-      .build()
+      .build().config
 
   it('says nothing about a 0 set in code', async () => {
     const { dispatcher, warnings } = recording()

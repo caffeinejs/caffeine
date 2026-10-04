@@ -11,10 +11,9 @@ import {
  * The callback an application writes to configure a feature, handed the builder and one context argument, as a
  * plugin factory is: the configuration, the store it came from, and a container still open to binding.
  *
- * What the callback does with `config` decides what follows a reload: `b.port(config.app.server.port)` reads a
- * number once, while `b.config(config.app.server)` hands over a node whose fields follow every reload. A feature
- * that has to act on a change takes a view in its `config(...)` instead:
- * `(b, { store }) => b.config(store.view(t => t.app.thing))`.
+ * `config` is a snapshot: `b.port(config.app.server.port)` and `b.config(config.app.server)` both hand over the
+ * values the application started with, and a reload reaches neither. A feature that has to act on a change
+ * subscribes with `store.onChange(...)`.
  *
  * It runs before the container initializes, so `container.bind(...)` is legal here and `container.get(...)` does
  * not exist yet.

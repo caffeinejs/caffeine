@@ -1,4 +1,4 @@
-import type { NamedToken } from '@caffeinejs/di'
+import type { NamedToken, Provider } from '@caffeinejs/di'
 import type { TSchema } from '@sinclair/typebox'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
@@ -115,28 +115,18 @@ export type SchemaSatisfies<
   Config extends Partial<Options> & { readonly [K in Exclude<keyof Config, KeyOfAny<Options>>]: never },
 > = Config
 
-/**
- * The config object an application injects. One identity for the life of the store, and every field follows
- * every reload.
- *
- * Reads separated by an `await` can come from two revisions. Code that needs one revision takes a
- * {@link ConfigSnapshot} first.
- */
-export type LiveConfig<T> = ReadonlyConfig<T>
-
 /** The validated tree at one revision. Frozen. A reload replaces it and never mutates it. */
 export type ConfigSnapshot<T> = ReadonlyConfig<T>
 
-/** What `newConfiguration(...).build()` returns and `loadConfig()` takes. Data only. */
+/** What `newConfiguration(...).build().config` holds and `loadConfig()` takes. Data only. */
 export interface ConfigDefinition<T = unknown> {
   readonly schema: ConfigSchema<T>
-  /**
-   * The key the live config object is bound under. `T` is the application's own type, already read-only
-   * (`InferConfig<typeof schema>`), so `token<AppConfig>()` is what an application writes.
-   */
-  readonly key: NamedToken<T> | undefined
-  /** The key the typed store is bound under, for an application that wants one. */
-  readonly storeKey: NamedToken<ConfigStore<T>> | undefined
+  /** Resolves to the snapshot the application started with. A reload never reaches it. */
+  readonly configToken: NamedToken<T>
+  /** Resolves to a provider whose `get()` answers the snapshot of the current revision. */
+  readonly liveConfigToken: NamedToken<Provider<T>>
+  /** Resolves to the store, typed after the schema. */
+  readonly storeToken: NamedToken<ConfigStore<T>>
   /** Lowest precedence first: a later source wins a conflicting value. */
   readonly sources: readonly ConfigSource[]
   /** Bounds each load of each source. */
@@ -148,19 +138,9 @@ export interface ConfigDefinition<T = unknown> {
 /** Which trigger reloads a source. A `static` source is never reloaded. */
 export type ConfigTrigger = 'static' | 'manual' | 'poll' | 'watch'
 
-/** A value derived from the configuration that the store keeps current. */
-export interface ConfigView<V> {
-  /** Assigned by the store on swap. Reading it runs no selector. */
-  readonly value: V
-  /** Called when `value` changes. Returns the call that unsubscribes. */
-  onChange(listener: ConfigChangeListener<V>): () => void
-  /** Stops the updates and the listeners. The last value stays readable. */
-  close(): void
-}
-
 /**
- * Notified when a value changes. May be async: a reload never waits for it, it never runs concurrently with
- * itself, and a burst of changes reaches it as the newest value only.
+ * Notified, synchronously, right after a reload swapped in a new snapshot. A reload does not wait for a promise it
+ * returns.
  */
 export type ConfigChangeListener<V> = (value: V, previous: V, change: ConfigChange) => void | Promise<void>
 
@@ -204,8 +184,6 @@ export interface ConfigExplanationLayer {
 
 export interface ConfigInspection {
   readonly revision: number
-  /** When the current snapshot was swapped in, in milliseconds since the epoch. */
-  readonly swappedAt: number
   readonly profiles: readonly string[]
   readonly sources: readonly ConfigSourceStatus[]
   /** The current snapshot, every value as it is. */

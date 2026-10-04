@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
@@ -35,23 +34,21 @@ export const ConfigSchema = $t.Object({
 
 export type Config = InferConfig<typeof ConfigSchema>
 
-/** The key the resolved configuration is bound under, declared beside the schema it is typed from. */
-export const kConfig = token<Config>(Symbol('spa-dashboard.config'))
+const conf = newConfiguration(ConfigSchema)
+  .source(new EnvConfigSource({ prefix: 'SPA_' }))
+  .build()
+
+/**
+ * The configuration the application resolves at `bootstrap()`. Data only: importing this module reads no
+ * environment, the source reads it when the application loads.
+ */
+export const configuration = conf.config
+
+/** The key the configuration the application started with is bound under, typed from the schema. */
+export const kConfig = conf.configToken
 
 /** The session cookie's name. Fixed here so the tests can read it off `Set-Cookie`. */
 export const SESSION_COOKIE = 'spa.session'
 
 /** The CSRF plugin's secret cookie. Logout clears it, so the name is needed in two places. */
 export const CSRF_COOKIE = '_csrf'
-
-/**
- * Builds the configuration the application resolves at `bootstrap()`.
- *
- * A function rather than a built value, so importing this module reads no environment and each test builds a
- * fresh one.
- */
-export function configuration() {
-  return newConfiguration(ConfigSchema, kConfig)
-    .source(new EnvConfigSource({ prefix: 'SPA_' }))
-    .build()
-}

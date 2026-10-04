@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { $i, CaffeineIoC, type Provider } from '@caffeinejs/di'
 import { Controller, Get, Router, createWebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import { ConfigStore, type ConfigSource, type InferConfig } from '@caffeinejs/std/config'
@@ -37,8 +37,6 @@ const schema = $t.Object({
 
 type AppConfig = InferConfig<typeof schema>
 
-const kConfig = token<AppConfig>(Symbol('e2e.config'))
-
 // The lowest source sets every key, so each source above it shows the one step of precedence it wins.
 const defaults = {
   banner: 'caffeine',
@@ -69,16 +67,17 @@ const serverDev = 'greeting: hello from the dev overlay\n'
 
 let built = 0
 
-// A singleton, built once: it reads the configuration through the object it was injected with.
-@Controller('/greeting', [kConfig])
+// A singleton, built once: it reads the configuration through the provider it was injected with.
+@Controller('/greeting', [$i.liveConfig<AppConfig, AppConfig>(c => c)])
 class GreetingController {
   readonly #instance = ++built
 
-  constructor(private readonly config: AppConfig) {}
+  constructor(private readonly config: Provider<AppConfig>) {}
 
   @Get('/')
   greet() {
-    return { greeting: this.config.greeting, rps: this.config.limits.rps, instance: this.#instance }
+    const config = this.config.get()
+    return { greeting: config.greeting, rps: config.limits.rps, instance: this.#instance }
   }
 }
 
@@ -99,7 +98,7 @@ const routes = new Router('/config').configType<AppConfig>().get('/', ctx => {
 })
 
 function buildApp(fileDir: string, overrides: ConfigSource) {
-  const conf = newConfiguration(schema, kConfig)
+  const conf = newConfiguration(schema)
     .sources(
       new InlineConfigSource(defaults, 'defaults'),
       new JSONConfigSource(join(fileDir, 'config.json')),
@@ -115,7 +114,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
     )
     .argv({ argv: ['--features.beta=true'] })
     .source(overrides)
-    .build()
+    .build().config
 
   return createWebApplication({
     container: new CaffeineIoC({ profiles: ['dev'] }),

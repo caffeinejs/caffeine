@@ -10,6 +10,7 @@ import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { EnvConfigSource } from '../sources/env/index.js'
 import { JSONConfigSource } from '../sources/json/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigDefinition, ConfigSource } from '../types.js'
 
 // Every variable these tests set. Unset before each test, so the machine running it decides nothing, and restored
@@ -62,8 +63,7 @@ function definition(
 ): ConfigDefinition {
   return {
     schema: passthroughConfigSchema,
-    key: undefined,
-    storeKey: undefined,
+    ...testTokens(),
     sources,
     loadTimeoutMs: 30_000,
     dotenv,

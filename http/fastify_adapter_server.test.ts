@@ -18,8 +18,6 @@ const schema = $t.Object({
   db: $t.Object({ url: $t.String({ default: 'x' }) }, { default: {} }),
 })
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-
 @Controller('/adapter-server')
 class AdapterServerController {
   @Get('/ping')
@@ -84,9 +82,9 @@ describe('the server .server(...) configures', () => {
   })
 
   it('drives the listener from a node of the application configuration', async () => {
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ server: { host: '127.0.0.1', port: 0 } }))
-      .build()
+      .build().config
     app = createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
 
     await app.run()
@@ -95,9 +93,9 @@ describe('the server .server(...) configures', () => {
   })
 
   it('reads the listener from the environment when the node is fed from it', async () => {
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new EnvConfigSource({ env: { SERVER__HOST: '127.0.0.1', SERVER__PORT: '0' } }))
-      .build()
+      .build().config
     app = createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
 
     await app.run()
@@ -135,7 +133,7 @@ describe('the server .server(...) configures', () => {
   })
 
   it('hands a server callback the context a plugin factory gets, typed by the configuration, then the bare server', async () => {
-    const conf = newConfiguration(schema, kConfig).build()
+    const conf = newConfiguration(schema).build().config
     let factoryContext: unknown
     let callbackContext: unknown
     let dbURL: string | undefined
@@ -177,7 +175,7 @@ describe('the server .server(...) configures', () => {
       load: () => new InlineConfigSource(data, 'mutable').load(),
     }
 
-    const conf = newConfiguration(schema, kConfig).source(mutable).build()
+    const conf = newConfiguration(schema).source(mutable).build().config
     app = createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
 
     await app.run()
@@ -189,7 +187,7 @@ describe('the server .server(...) configures', () => {
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The tree keeps refreshing; the socket was bound off a copy and does not move.
-    expect(app.container.get(kConfig).server.port).toBe(1234)
+    expect(app.container.get(conf.liveConfigToken).get().server.port).toBe(1234)
     expect(app.address!.port).toBe(bound)
   })
 
@@ -206,7 +204,7 @@ describe('the server .server(...) configures', () => {
   })
 
   it('rejects a node that is not listen options (compile-time)', () => {
-    const conf = newConfiguration(schema, kConfig).build()
+    const conf = newConfiguration(schema).build().config
 
     void createWebApplication({ config: conf })
       // @ts-expect-error the `db` node ({ url }) is not assignable to FastifyListenOptions

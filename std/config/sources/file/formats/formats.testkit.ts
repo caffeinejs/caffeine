@@ -7,6 +7,7 @@ import JSON5 from 'json5'
 
 import { mergeInterpolated } from '../../../interpolation.js'
 import { passthroughConfigSchema } from '../../../schema.js'
+import { testTokens } from '../../../tokens.testkit.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../../types.js'
 import { JSONConfigSource } from '../../json/index.js'
 import { YAMLConfigSource } from '../../yaml/index.js'
@@ -58,7 +59,7 @@ export function definition<T = Record<string, unknown>>(
   sources: ConfigSource[],
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
 ): ConfigDefinition<T> {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 /** Reads a fixture as a file source does, under `profiles`, then interpolates it against `env` alone. */

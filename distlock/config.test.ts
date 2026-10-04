@@ -60,17 +60,15 @@ interface DistLockTree {
   retryJitter?: number
 }
 
-const kConfig = token<InferConfig<typeof appConfigSchema>>(Symbol('distlock.test.config'))
-
 /** Boots an application whose configuration tree carries the given distlock slice. */
 async function newLock(
   backend: Backend,
   tree: DistLockTree,
   fluent?: (d: DistLockBuilder<AppConfig>) => void,
 ): Promise<DistLock> {
-  const conf = newConfiguration(appConfigSchema, kConfig)
+  const conf = newConfiguration(appConfigSchema)
     .source(new InlineConfigSource({ app: { distlock: tree } }))
-    .build()
+    .build().config
 
   const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
     DistributedLock<AppConfig>((d, { config }) => {
@@ -164,7 +162,7 @@ describe('distlock configuration', () => {
   // The schema bounds the tree. Nothing bounded the setter, and a jitter above 1 silently stretches every
   // pause past the budget it was supposed to fit inside.
   it('refuses to start when the retry jitter is outside 0..1', async () => {
-    const conf = newConfiguration(appConfigSchema, kConfig).source(new InlineConfigSource({})).build()
+    const conf = newConfiguration(appConfigSchema).source(new InlineConfigSource({})).build().config
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
       DistributedLock<AppConfig>(d => d.backend(new MemoryLockBackend()).retryJitter(2)),
@@ -175,9 +173,9 @@ describe('distlock configuration', () => {
 
   // A bare number names no unit. Read as duration text it was a lease of 0, which lapses as it is granted.
   it('refuses a duration the tree gives as a bare number', async () => {
-    const conf = newConfiguration(appConfigSchema, kConfig)
+    const conf = newConfiguration(appConfigSchema)
       .source(new InlineConfigSource({ app: { distlock: { ttl: '30000' } } }))
-      .build()
+      .build().config
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
       DistributedLock<AppConfig>((d, { config }) => d.backend(new MemoryLockBackend()).config(config.app.distlock)),

@@ -98,10 +98,9 @@ describe('TypeORM() config', function () {
 
   it('should read the settings the environment carries under TypeORMConfigSchema', async function () {
     const schema = $t.Object({ db: $t.Object(TypeORMConfigSchema.properties, { default: {} }) })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('typeorm.config.test'))
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new EnvConfigSource({ env: { DB__SYNCHRONIZE: 'true' } }))
-      .build()
+      .build().config
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(
       TypeORM<InferConfig<typeof schema>>((t, { config }) =>

@@ -2,9 +2,8 @@ import { Injectable, type NamedToken, token } from '@caffeinejs/di'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { $t } from '../../schema/t.js'
-import { createLive } from '../live.js'
 import { freezeDeep } from '../tree.js'
-import type { ConfigSnapshot, InferConfig, LiveConfig, ReadonlyConfig } from '../types.js'
+import type { ConfigSnapshot, InferConfig, ReadonlyConfig } from '../types.js'
 
 const appConfigSchema = $t.Object({
   pricing: $t.Object({ margin: $t.Number({ default: 0.2 }), tiers: $t.Array($t.String()) }, { default: {} }),
@@ -20,17 +19,16 @@ describe('the application config type', () => {
       readonly pricing: { readonly margin: number; readonly tiers: readonly string[] }
     }>()
     expectTypeOf<ReadonlyConfig<AppConfig>>().toEqualTypeOf<AppConfig>()
-    expectTypeOf<LiveConfig<AppConfig>>().toEqualTypeOf<AppConfig>()
     expectTypeOf<ConfigSnapshot<AppConfig>>().toEqualTypeOf<AppConfig>()
   })
 
-  // Tokens are invariant in the type they carry, so the store's `LiveConfig<AppConfig>` and the application's
+  // Tokens are invariant in the type they carry, so the store's `ConfigSnapshot<AppConfig>` and the application's
   // `token<AppConfig>` must be the very same type for a binding to type-check.
   it('round-trips through a token', () => {
     const kConfig = token<AppConfig>(Symbol('app.config'))
 
     expectTypeOf(kConfig).toEqualTypeOf<symbol & NamedToken<AppConfig>>()
-    expectTypeOf<NamedToken<LiveConfig<AppConfig>>>().toEqualTypeOf<NamedToken<AppConfig>>()
+    expectTypeOf<NamedToken<ConfigSnapshot<AppConfig>>>().toEqualTypeOf<NamedToken<AppConfig>>()
   })
 
   it('types a constructor parameter the key injects', () => {
@@ -62,15 +60,13 @@ describe('ReadonlyConfig array typing', () => {
   }
 
   it('keeps every array shape read-only', () => {
-    const config = createLive<Shape>(
-      freezeDeep({
-        mutable: ['a'],
-        already: ['b'],
-        optional: ['c'],
-        servers: [{ host: 'h' }],
-        nested: { ports: [1] },
-      }),
-    )
+    const config: ConfigSnapshot<Shape> = freezeDeep({
+      mutable: ['a'],
+      already: ['b'],
+      optional: ['c'],
+      servers: [{ host: 'h' }],
+      nested: { ports: [1] },
+    })
 
     const mutable: readonly string[] = config.mutable
     const already: readonly string[] = config.already

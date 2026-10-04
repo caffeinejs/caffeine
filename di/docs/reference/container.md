@@ -12,6 +12,7 @@
   - [bind](#bind)
   - [rebind](#rebind)
   - [bindConfig](#bindconfig)
+  - [bindScopedConfig](#bindscopedconfig)
   - [addProfiles](#addprofiles)
   - [overrides](#overrides)
 - [Inspection](#inspection)
@@ -219,6 +220,25 @@ Calling it again replaces the values, and a module may call it too. Once the con
 compiled, it throws `ErrInvalidContainerState`: the `$i.config` injections compiled by then
 already hold the values. Read them back with `values`, which throws `ErrNoValuesProvider` when
 none were bound, and ask `hasValues` first when that is a possibility.
+
+### bindScopedConfig
+
+```ts
+bindScopedConfig<T = unknown>(provider: Provider<T>): this
+```
+
+Sets the provider that [`$i.liveConfig`](./injection.md#liveconfig) injections read through. Where
+`$i.config` reads the values once, when its consumer is built, `$i.liveConfig` injects a `Provider`
+that asks this one on every `get()`, so a consumer built once reads what the provider answers now.
+Like `bindConfig`, it is not a binding.
+
+```ts
+di.bindScopedConfig<AppConfig>({ get: () => store.current })
+```
+
+Calling it again replaces the provider. Once the container has compiled, it throws
+`ErrInvalidContainerState`. Read it back with `scopedConfig`, which throws `ErrNoValuesProvider` when
+none was bound, and ask `hasScopedConfig` first when that is a possibility.
 
 ### addProfiles
 
@@ -478,8 +498,8 @@ snapshot(): Snapshot
 
 Captures what the container was told to hold, as a `Snapshot`: the bindings
 declared with `bind()`, `rebind()` and `aspect()`, its modules, its profiles,
-whether it registers decorated bindings, and the values bound with
-`bindConfig()`. The container's own bindings (`Keys.kRefresher`,
+whether it registers decorated bindings, the values bound with
+`bindConfig()` and the provider bound with `bindScopedConfig()`. The container's own bindings (`Keys.kRefresher`,
 `Keys.kRequestScopeManager`) are left out: every container binds its own. Does
 not include instance state.
 
@@ -496,8 +516,8 @@ restore(snap: Snapshot): void
 
 Adds what `snap` holds to the container: its declarations, after the ones
 already made, its modules and its profiles. The container registers decorated
-bindings when the snapshot's container did. When `snap` carries values, they
-replace the container's values too. Throws `ErrInvalidContainerState` once the
+bindings when the snapshot's container did. When `snap` carries values, or a
+scoped config, they replace the container's own too. Throws `ErrInvalidContainerState` once the
 container has started compiling.
 
 ---
@@ -515,3 +535,5 @@ container has started compiling.
 | `requestScopeManager` | `RequestScopeManager` | Controls `REQUEST` scope contexts.                          |
 | `values`              | `unknown`             | The values from `bindConfig()`. Throws if unset.            |
 | `hasValues`           | `boolean`             | Whether `bindConfig()` was called.                          |
+| `scopedConfig`        | `Provider<unknown>`   | The provider from `bindScopedConfig()`. Throws if unset.    |
+| `hasScopedConfig`     | `boolean`             | Whether `bindScopedConfig()` was called.                    |

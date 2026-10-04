@@ -34,8 +34,6 @@ const schema = $t.Object({
   app: $t.Object({ basePath: $t.String({ default: '/gateway' }) }, { default: {} }),
 })
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('base-path.config'))
-
 // Module-level: `@Controller` registers into a registry every application in this file then picks up, so it
 // declares a path nothing else here uses.
 @Controller('/base-path-controller')
@@ -120,7 +118,7 @@ describe('an application under a base path', () => {
     })
 
     it('hands a callback the context a plugin factory gets, typed by the configuration', async () => {
-      const conf = newConfiguration(schema, kConfig).build()
+      const conf = newConfiguration(schema).build().config
       let factoryContext: unknown
       let basePathContext: unknown
 

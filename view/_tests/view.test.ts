@@ -424,10 +424,9 @@ describe('ViewEngineBuilder', () => {
     const schema = $t.Object({
       view: $t.Object({ root: $t.Optional($t.String()), viewExt: $t.Optional($t.String()) }, { default: {} }),
     })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('view.config.test'))
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ view: { root: templatesRoot, viewExt: 'hbs' } }))
-      .build()
+      .build().config
     const app = createWebApplication({ config: conf }).with(
       view<InferConfig<typeof schema>>((v, { config }) => v.add(e => e.config(config.view).engine({ handlebars }))),
     )

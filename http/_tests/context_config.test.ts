@@ -13,8 +13,6 @@ const schema = $t.Object({
 
 type AppConfig = InferSchema<typeof schema>
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-
 /** A live source the test can re-point, so a refresh actually reloads it. */
 function liveSource(read: () => AppConfig): ConfigSource {
   return {
@@ -30,9 +28,9 @@ describe('ctx.config', () => {
       .configType<AppConfig>()
       .get('/page-size', ctx => ({ pageSize: ctx.config.catalog.pageSize }))
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
@@ -63,9 +61,9 @@ describe('ctx.config', () => {
       return { pageSize: ctx.config.catalog.pageSize }
     })
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(liveSource(() => current))
-      .build()
+      .build().config
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
@@ -80,7 +78,7 @@ describe('ctx.config', () => {
     expect(seen[0]).toBe(seen[1])
 
     // The refresh was real: the next request is configured by what it resolved.
-    expect(app.container.get(kConfig).catalog.pageSize).toBe(100)
+    expect(app.container.get(conf.liveConfigToken).get().catalog.pageSize).toBe(100)
     expect(await (await app.fetch('/catalog/page-size')).json()).toEqual({ pageSize: 100 })
 
     await app.close()
@@ -111,9 +109,9 @@ describe('ctx.config', () => {
       }
     })
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
@@ -189,16 +187,14 @@ describe('ctx.config with an application schema', () => {
 
   type FullConfig = InferSchema<typeof ownSchema>
 
-  const kFull = token<InferConfig<typeof ownSchema>>(Symbol('app.full'))
-
   it('reads a feature block the application declared and pointed the feature at', async () => {
     const routes = new Router('/catalog')
       .configType<FullConfig>()
       .get('/', ctx => ({ pageSize: ctx.config.catalog.pageSize, host: ctx.config.server.host }))
 
-    const conf = newConfiguration(ownSchema, kFull)
+    const conf = newConfiguration(ownSchema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
-      .build()
+      .build().config
     const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
       .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
@@ -217,9 +213,9 @@ describe('ctx.config with an application schema', () => {
       .inject($i => ({ host: $i.config(c => c.server.host) }))
       .get('/', (_ctx, deps) => ({ host: deps.host }))
 
-    const conf = newConfiguration(ownSchema, kFull)
+    const conf = newConfiguration(ownSchema)
       .source(new InlineConfigSource({ catalog: { pageSize: 25 } }))
-      .build()
+      .build().config
     const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
       .server(({ config }) => ({ listener: config.server }))
       .mount(routes)
@@ -236,9 +232,9 @@ describe('ctx.config with an application schema', () => {
   it('leaves out a feature block the application declared nothing for', async () => {
     const routes = new Router('/plain').configType<FullConfig>().get('/', ctx => ({ keys: Object.keys(ctx.config) }))
 
-    const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }), kFull)
+    const conf = newConfiguration($t.Object({ catalog: $t.Object({ pageSize: $t.Number() }) }))
       .source(new InlineConfigSource({ catalog: { pageSize: 25 }, server: { host: '127.0.0.1' } }))
-      .build()
+      .build().config
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,
@@ -258,9 +254,8 @@ describe('ctx.config with an application schema', () => {
         { default: {} },
       ),
     })
-    const kServer = token<InferConfig<typeof withServer>>(Symbol('app.server'))
 
-    const conf = newConfiguration(withServer, kServer).build()
+    const conf = newConfiguration(withServer).build().config
     const app = createWebApplication({
       container: new CaffeineIoC(),
       config: conf,

@@ -33,10 +33,9 @@ const schema = $t.Object({
     { default: {} },
   ),
 })
-const kConfig = token<InferConfig<typeof schema>>(Symbol('e2e.auth.config'))
 
 function configuredFrom(env: Record<string, string>) {
-  return newConfiguration(schema, kConfig).source(new EnvConfigSource({ env })).build()
+  return newConfiguration(schema).source(new EnvConfigSource({ env })).build().config
 }
 
 function start(env: Record<string, string>) {

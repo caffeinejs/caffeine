@@ -1,12 +1,10 @@
 import { toMillis } from '../duration/index.js'
 import type { Logger } from '../logger/logger.js'
-import { ChangeNotifier } from './change_notifier.js'
 import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'
 import { mergeInterpolated } from './interpolation.js'
-import { createLive, syncLive } from './live.js'
 import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
-import { deepEquals, reconcile } from './reconcile.js'
+import { changedPaths, deepEquals } from './reconcile.js'
 import { validateConfig } from './schema.js'
 import { countLeaves, freezeCopy, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
 import { TriggerScheduler, pollBackoff } from './triggers.js'
@@ -24,14 +22,15 @@ import type {
   ConfigSource,
   ConfigSourceFailure,
   ConfigTrigger,
-  ConfigView,
-  LiveConfig,
 } from './types.js'
 
 /** Runs the first load. {@link loadConfig} calls it; nothing else should. */
 export const kFirstLoad: unique symbol = Symbol('@caffeinejs/config:first-load')
 
-/** The merged tree, interpolated, before validation. The application reads its own `caffeine` block from it. */
+/**
+ * The first load's merged tree, interpolated, before validation. The application reads its own `caffeine` block
+ * from it, once, at start-up.
+ */
 export const kMergedTree: unique symbol = Symbol('@caffeinejs/config:merged-tree')
 
 type ReloadTrigger = Exclude<ConfigTrigger, 'static'>
@@ -53,16 +52,6 @@ export interface SourceState {
   loading: boolean
 }
 
-interface ViewState<T> {
-  // A method rather than a function-typed property, so `T` stays covariant as `ConfigStore<out T>` declares.
-  select(config: ConfigSnapshot<T>): unknown
-  readonly derive: ((selected: unknown) => unknown) | undefined
-  readonly notifier: ChangeNotifier<unknown>
-  /** A plain object whose `value` the store assigns, so a read is a property load. */
-  readonly view: { -readonly [K in keyof ConfigView<unknown>]: ConfigView<unknown>[K] }
-  selected: unknown
-}
-
 interface PendingReload {
   readonly states: Set<SourceState>
   readonly trigger: ReloadTrigger
@@ -71,8 +60,8 @@ interface PendingReload {
 }
 
 /**
- * The runtime of an application's configuration: it loads the sources, validates the result, keeps it current as
- * live sources change, and says why every value is what it is.
+ * The runtime of an application's configuration: it loads the sources, validates the result, swaps in a new frozen
+ * snapshot when a live source changes it, and says why every value is what it is.
  *
  * Instances come from {@link loadConfig}.
  */
@@ -84,14 +73,12 @@ export class ConfigStore<out T> {
   readonly #events: ConfigEvents
   readonly #states: readonly SourceState[]
   readonly #closing = new AbortController()
-  readonly #views = new Set<ViewState<T>>()
   readonly #scheduler: TriggerScheduler
-  #notifier!: ChangeNotifier<ConfigSnapshot<T>>
+  // Methods of an object rather than bare functions, so `T` stays covariant as `ConfigStore<out T>` declares.
+  readonly #listeners = new Set<{ listener(...args: Parameters<ConfigChangeListener<ConfigSnapshot<T>>>): unknown }>()
   #current!: ConfigSnapshot<T>
-  #live!: LiveConfig<T>
   #merged!: ConfigObject
   #revision = 0
-  #swappedAt = 0
   #firstLoadMs = 0
   #running: Promise<ConfigReloadOutcome> | undefined
   #pending: PendingReload | undefined
@@ -114,12 +101,10 @@ export class ConfigStore<out T> {
     )
   }
 
-  /** The object bound under the application key: one identity, and every field follows every reload. */
-  get live(): LiveConfig<T> {
-    return this.#live
-  }
-
-  /** The newest snapshot. Frozen: a reload replaces it and never mutates it. */
+  /**
+   * The snapshot of the current revision. Frozen: a reload that changes something replaces it and never mutates it,
+   * and one that changes nothing keeps it, identity included.
+   */
   get current(): ConfigSnapshot<T> {
     return this.#current
   }
@@ -135,7 +120,6 @@ export class ConfigStore<out T> {
   }
 
   get [kMergedTree](): ConfigObject {
-    // Frozen when asked for rather than on every reload: the application reads it once, at start-up.
     return freezeDeep(this.#merged)
   }
 
@@ -175,53 +159,22 @@ export class ConfigStore<out T> {
     // Validation deletes the keys a schema does not declare, and V8 keeps an object it deleted from in dictionary
     // mode. A fresh copy of each new node is back in fast mode, where a read is a field load.
     this.#current = freezeCopy(validated) as ConfigSnapshot<T>
-    this.#live = createLive(this.#current)
-    this.#notifier = new ChangeNotifier<ConfigSnapshot<T>>(this.#current, error => this.#events.listenerFailed(error))
-    this.#swappedAt = Date.now()
     this.#firstLoadMs = performance.now() - started
   }
 
   /**
-   * A value derived from the configuration that the store keeps current.
+   * Called after every reload that swapped in a new snapshot, synchronously, before the reload resolves. Never for
+   * a reload that changed nothing or was rejected. Returns the call that unsubscribes.
    *
-   * `select` runs now and once per swap, never on a read. A selection deep-equal to the previous one keeps its
-   * identity, and then nothing else happens. `derive` runs only when the selection changed, and its result is
-   * compared by identity alone, so anything that is not plain data belongs there.
-   *
-   * The store holds the view until it is closed: create views while wiring, never per request.
+   * A reload does not wait for a promise the listener returns. A throw or a rejection is logged, and the other
+   * listeners still run.
    */
-  view<S>(select: (config: ConfigSnapshot<T>) => S): ConfigView<S>
-  view<S, V>(select: (config: ConfigSnapshot<T>) => S, derive: (selected: S) => V): ConfigView<V>
-  view(select: (config: ConfigSnapshot<T>) => unknown, derive?: (selected: unknown) => unknown): ConfigView<unknown> {
-    const selected = freezeSelection(select(this.#current))
-    const value = derive === undefined ? selected : derive(selected)
-    const notifier = new ChangeNotifier<unknown>(value, error => this.#events.listenerFailed(error))
-
-    const state: ViewState<T> = {
-      select,
-      derive,
-      notifier,
-      selected,
-      view: {
-        value,
-        onChange: listener => notifier.add(listener),
-        close: () => {
-          this.#views.delete(state)
-          notifier.clear()
-        },
-      },
-    }
-
-    if (!this.#closed) {
-      this.#views.add(state)
-    }
-
-    return state.view
-  }
-
-  /** Notified after every swap. Returns the call that unsubscribes. */
   onChange(listener: ConfigChangeListener<ConfigSnapshot<T>>): () => void {
-    return this.#notifier.add(listener)
+    const entry = { listener }
+    this.#listeners.add(entry)
+    return () => {
+      this.#listeners.delete(entry)
+    }
   }
 
   /**
@@ -268,27 +221,23 @@ export class ConfigStore<out T> {
   inspect(): ConfigInspection {
     return {
       revision: this.#revision,
-      swappedAt: this.#swappedAt,
       profiles: this.#profiles,
       sources: this.#states.map(describeSource),
       snapshot: this.#current,
     }
   }
 
-  /** Resolves once no reload is running or queued and no change delivery is running or pending. For tests. */
+  /** Resolves once no reload is running or queued. For tests. */
   async settled(): Promise<void> {
-    if (this.#running !== undefined) {
-      // A run that ends starts the one queued behind it, if any: settle again once this one has.
+    // A run that ends starts the one queued behind it, if any: settle again once this one has.
+    while (this.#running !== undefined) {
       await this.#running
-      return this.settled()
     }
-
-    await Promise.all([this.#notifier.settled(), ...[...this.#views].map(state => state.notifier.settled())])
   }
 
   /**
-   * Aborts loads in flight, disarms every trigger, closes every view and closes every source. The last snapshot
-   * and the live config object stay readable, because shutdown code reads configuration.
+   * Aborts loads in flight, disarms every trigger, drops every change listener and closes every source. The last
+   * snapshot stays readable, because shutdown code reads configuration.
    */
   async close(): Promise<void> {
     if (this.#closed) {
@@ -299,10 +248,7 @@ export class ConfigStore<out T> {
     this.#closing.abort()
     this.#scheduler.stop()
 
-    for (const state of [...this.#views]) {
-      state.view.close()
-    }
-    this.#notifier?.clear()
+    this.#listeners.clear()
 
     await Promise.all(
       this.#states.map(async state => {
@@ -432,11 +378,12 @@ export class ConfigStore<out T> {
       return this.#outcome('rejected', [], failures, [...candidates.keys()][0].rejected!.error)
     }
 
-    let merged: ConfigObject
     let validated: Record<string, unknown>
     try {
-      merged = mergeInterpolated(this.#states.flatMap(state => candidates.get(state) ?? state.layers))
-      validated = validateRoot(this.definition, merged)
+      validated = validateRoot(
+        this.definition,
+        mergeInterpolated(this.#states.flatMap(state => candidates.get(state) ?? state.layers)),
+      )
     } catch (thrown) {
       const error =
         thrown instanceof ErrConfigValidation
@@ -455,9 +402,6 @@ export class ConfigStore<out T> {
       return this.#outcome('rejected', [], failures, error)
     }
 
-    const changed: string[] = []
-    const next = freezeCopy(reconcile(this.#current, validated, changed), this.#current) as ConfigSnapshot<T>
-
     for (const [state, layers] of candidates) {
       commit(state, layers)
     }
@@ -466,59 +410,39 @@ export class ConfigStore<out T> {
     for (const state of this.#states) {
       state.rejected = undefined
     }
-    this.#merged = merged
 
-    if (next === this.#current) {
+    const changed = changedPaths(this.#current, validated)
+    if (changed.length === 0) {
       // Only keys the schema drops differed.
       this.#events.unchanged({ trigger, sources, ms: performance.now() - started })
       return this.#outcome('unchanged', [], failures)
     }
 
     // The swap: one synchronous block, so a reader sees the old revision or the new one, never a mix.
+    const previous = this.#current
+    const next = freezeCopy(validated) as ConfigSnapshot<T>
     this.#current = next
     this.#revision++
-    this.#swappedAt = Date.now()
-    syncLive(this.#live, next)
-    const changedViews = this.#recomputeViews(next)
 
     const change: ConfigChange = { revision: this.#revision, changed }
     this.#events.reloaded({ revision: this.#revision, trigger, sources, changed, ms: performance.now() - started })
     publishChange(() => ({ store: this as ConfigStore<unknown>, revision: change.revision, changed }))
-
-    // Listeners run after everything is at the new revision, and a reload never waits for them.
-    this.#notifier.record(next, change)
-    for (const state of changedViews) {
-      state.notifier.record(state.view.value, change)
-    }
-    this.#notifier.flush()
-    for (const state of changedViews) {
-      state.notifier.flush()
-    }
+    this.#notify(next, previous, change)
 
     return this.#outcome('applied', changed, failures)
   }
 
-  #recomputeViews(next: ConfigSnapshot<T>): ViewState<T>[] {
-    const changed: ViewState<T>[] = []
-
-    for (const state of this.#views) {
+  #notify(next: ConfigSnapshot<T>, previous: ConfigSnapshot<T>, change: ConfigChange): void {
+    for (const entry of [...this.#listeners]) {
       try {
-        const selected = reconcile(state.selected, state.select(next))
-        if (selected === state.selected) {
-          continue
+        const result = entry.listener(next, previous, change)
+        if (isThenable(result)) {
+          result.then(undefined, (error: unknown) => this.#events.listenerFailed(error))
         }
-
-        freezeSelection(selected)
-        const value = state.derive === undefined ? selected : state.derive(selected)
-        state.selected = selected
-        state.view.value = value
-        changed.push(state)
       } catch (error) {
-        this.#events.viewFailed(error)
+        this.#events.listenerFailed(error)
       }
     }
-
-    return changed
   }
 
   #outcome(
@@ -724,9 +648,8 @@ function sameLayers(a: readonly ConfigLayer[], b: readonly ConfigLayer[]): boole
   )
 }
 
-/** Selected plain data is frozen. Anything else is the caller's own object and is left alone. */
-function freezeSelection<S>(selected: S): S {
-  return isPlainObject(selected) || Array.isArray(selected) ? freezeDeep(selected) : selected
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return typeof (value as { then?: unknown } | null)?.then === 'function'
 }
 
 function isLayer(value: unknown): value is ConfigLayer {

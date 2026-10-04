@@ -13,6 +13,7 @@ import { EnvConfigSource } from '../sources/env/index.js'
 import { FileConfigSource } from '../sources/file/index.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
 import { JSONConfigSource } from '../sources/json/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigSchema, ConfigSource } from '../types.js'
 
 let dir: string
@@ -32,7 +33,7 @@ async function write(name: string, content: string): Promise<string> {
 }
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>) {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 // `server` is set in every scenario. `db` and `app` may be absent from every source, so they carry a default.
@@ -119,10 +120,9 @@ describe('arrays across sources', () => {
 
     expect(store.current.tags).toEqual(['a', 'b'])
     expect(store.current.items).toEqual([{ id: 1 }])
-    expect(Object.isFrozen(store.live.tags)).toBe(true)
-    expect(store.live.tags).toBe(store.current.tags)
+    expect(Object.isFrozen(store.current.tags)).toBe(true)
 
-    const tags: readonly string[] = store.live.tags
+    const tags: readonly string[] = store.current.tags
     expect(tags[0]).toBe('a')
   })
 

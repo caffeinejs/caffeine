@@ -16,8 +16,7 @@ const schema = $t.Object({
   app: $t.Object({ basePath: $t.String({ default: '/api' }), port: $t.Number({ default: 0 }) }, { default: {} }),
 })
 
-const kConfig = token<InferConfig<typeof schema>>(Symbol('base-path.types'))
-const app = createWebApplication({ config: newConfiguration(schema, kConfig).build() })
+const app = createWebApplication({ config: newConfiguration(schema).build().config })
 
 // The callback reads the application's own configuration, typed, and may take its time.
 app.basePath(({ config }) => config.app.basePath)

@@ -117,6 +117,7 @@ export class CaffeineIoC implements Container {
   private _hasRequestScope = false
   private _hasAsync = false
   private _values: unknown
+  private _scopedConfig: Provider<unknown> | undefined
 
   /**
    * Creates a new container instance.
@@ -211,6 +212,26 @@ export class CaffeineIoC implements Container {
    */
   get hasValues(): boolean {
     return this._values !== undefined
+  }
+
+  /**
+   * The provider bound with {@link bindScopedConfig}, which `$i.liveConfig` injections read through.
+   *
+   * @throws {@link ErrNoValuesProvider} if {@link bindScopedConfig} was never called
+   */
+  get scopedConfig(): Provider<unknown> {
+    if (this._scopedConfig === undefined) {
+      throw new ErrNoValuesProvider(undefined, 'bindScopedConfig')
+    }
+
+    return this._scopedConfig
+  }
+
+  /**
+   * Whether {@link bindScopedConfig} was called, so that reading {@link scopedConfig} does not throw.
+   */
+  get hasScopedConfig(): boolean {
+    return this._scopedConfig !== undefined
   }
 
   /**
@@ -731,6 +752,28 @@ export class CaffeineIoC implements Container {
   }
 
   /**
+   * Binds the provider `$i.liveConfig` injections read through. Unlike {@link bindConfig}, whose values a consumer
+   * reads once when it is built, the provider is asked on every `get()` of the injected {@link Provider}, so a
+   * consumer built once still reads what the provider answers now.
+   *
+   * @example
+   * ```ts
+   * di.bindScopedConfig<AppConfig>({ get: () => store.current })
+   * ```
+   */
+  bindScopedConfig<T = unknown>(provider: Provider<T>): this {
+    notNil(provider, 'Parameter provider must not be null or undefined')
+
+    if (this._ready || this._compiled) {
+      throw new ErrInvalidContainerState('Cannot bind the scoped config: container has already been compiled')
+    }
+
+    this._scopedConfig = provider
+
+    return this
+  }
+
+  /**
    * Replaces whatever answers to the given key with a new binding: the binding registered under it, however it was
    * made, and the bindings answering to it through a name or a base, which stay registered under their own keys.
    *
@@ -874,6 +917,7 @@ export class CaffeineIoC implements Container {
       profiles: [...this._profiles],
       decorators: this._decorators,
       values: this._values,
+      scopedConfig: this._scopedConfig,
     })
   }
 
@@ -901,6 +945,10 @@ export class CaffeineIoC implements Container {
 
     if (snap.values !== undefined) {
       this._values = snap.values
+    }
+
+    if (snap.scopedConfig !== undefined) {
+      this._scopedConfig = snap.scopedConfig
     }
   }
 

@@ -74,7 +74,6 @@ describe('static feature configured from the tree', () => {
   // Only `root` is declared: every other key is a `@fastify/static` option, kept as written.
   const mount = $t.Object({ root: $t.String() }, { additionalProperties: $t.Unknown() })
   const schema = $t.Object({ static: $t.Object({ mounts: $t.Optional($t.Array(mount)) }, { default: {} }) })
-  const kConfig = token<InferConfig<typeof schema>>(Symbol('static.config.test'))
   type AppConfig = InferConfig<typeof schema>
 
   let app: WebApplication | undefined
@@ -85,9 +84,9 @@ describe('static feature configured from the tree', () => {
   })
 
   function configured(mounts: unknown[]) {
-    return newConfiguration(schema, kConfig)
+    return newConfiguration(schema)
       .source(new InlineConfigSource({ static: { mounts } }))
-      .build()
+      .build().config
   }
 
   // `prefix` is not declared by the schema: it has to survive the configuration loading to reach the plugin.

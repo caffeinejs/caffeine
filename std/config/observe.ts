@@ -186,10 +186,6 @@ export class ConfigEvents {
     this.#current().error({ err }, 'config change listener failed')
   }
 
-  viewFailed(err: unknown): void {
-    this.#current().error({ err }, 'config view failed')
-  }
-
   keyIgnored(source: string, layer: string, path: string): void {
     this.#current().warn({ source, layer, path }, 'config key ignored')
   }
