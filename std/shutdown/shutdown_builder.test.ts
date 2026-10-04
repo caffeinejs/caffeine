@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {

@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { createWebApplication, type WebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'

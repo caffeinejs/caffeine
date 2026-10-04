@@ -1,6 +1,5 @@
 import type { IncomingMessage } from 'node:http'
 
-import { token } from '@caffeinejs/di'
 import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'

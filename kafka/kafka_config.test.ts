@@ -1,4 +1,4 @@
-import { token, type Container } from '@caffeinejs/di'
+import type { Container } from '@caffeinejs/di'
 import { newConfiguration, createApplication } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
 
-import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'

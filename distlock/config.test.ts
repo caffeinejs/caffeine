@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication, newConfiguration } from '@caffeinejs/std'
 import { ErrConfigValidation, type InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'

@@ -1,6 +1,4 @@
-import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 import { expectTypeOf } from 'vitest'
 

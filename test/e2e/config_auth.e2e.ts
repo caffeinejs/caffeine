@@ -1,7 +1,5 @@
-import { token } from '@caffeinejs/di'
 import { newRouter, Authentication, authentication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'

@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import { CONFIG_REFRESH_LABEL, ErrConfigValidation, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'

@@ -1,13 +1,4 @@
-import {
-  kSelfRefresh,
-  mod,
-  Scopes,
-  token,
-  type InjectionToken,
-  type Module,
-  type Provider,
-  type SelfRefreshable,
-} from '@caffeinejs/di'
+import { kSelfRefresh, mod, Scopes, token, type Module, type Provider, type SelfRefreshable } from '@caffeinejs/di'
 
 import { ConfigStore } from '../store.js'
 import type { ConfigSnapshot } from '../types.js'
