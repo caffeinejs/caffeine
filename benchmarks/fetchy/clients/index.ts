@@ -1,7 +1,7 @@
 import { axiosClient } from './axios.js'
 import type { BenchClient } from './bench_client.js'
 import { fetchClient } from './fetch.js'
-import { fetchyClient } from './fetchy.js'
+import { fetchyClient, fetchyMethodClient } from './fetchy.js'
 import { fetchyUndiciClient } from './fetchy_undici.js'
 import { gotClient } from './got.js'
 import { heyapiClient } from './heyapi.js'
@@ -14,6 +14,7 @@ import { undiciClient } from './undici.js'
  */
 export const clients: BenchClient[] = [
   fetchyClient,
+  fetchyMethodClient,
   fetchClient,
   axiosClient,
   gotClient,

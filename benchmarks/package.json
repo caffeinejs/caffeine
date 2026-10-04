@@ -20,6 +20,7 @@
     "bench:fastify:compile": "esbuild fastify/bare.ts fastify/fetch.ts --bundle --platform=node --target=node24 --format=esm --packages=external --outbase=. --outdir=dist --tsconfig=tsconfig.json",
     "bench:fastify": "node --import=tsx fastify/bench.ts",
     "bench:fetchy": "node --expose-gc --import=tsx fetchy/bench.ts",
+    "bench:fetchy:overhead": "node --expose-gc --import=tsx fetchy/overhead.ts",
     "bench:fetchy:generate": "node ../node_modules/@hey-api/openapi-ts/dist/run.mjs -f fetchy/heyapi.config.mjs && node ../node_modules/orval/dist/bin/orval.mjs --config fetchy/orval.config.mjs",
     "bench:mixedscopes": "node --import=tsx mixedscopes/bench.ts",
     "bench:authn": "node --import=tsx authn/bench.ts",

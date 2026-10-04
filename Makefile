@@ -95,7 +95,7 @@ $(foreach parent,$(NESTED_WORKSPACE_PARENTS),$(eval $(call lint_nested,$(parent)
 
 .PHONY: bench
 bench: ## list available benchmarks
-	@echo "Available benchmarks: helloworld startup memory request request:bun mixedscopes authn caching di di-compare di-compile di-perf fastify fetchy testing resilience aspect config-read config-reload"
+	@echo "Available benchmarks: helloworld startup memory request request:bun mixedscopes authn caching di di-compare di-compile di-perf fastify fetchy fetchy:overhead testing resilience aspect config-read config-reload"
 	@echo "Usage: make bench:<type> (e.g. make bench:helloworld)"
 
 bench\:%: ## build and run a benchmark (e.g. bench:helloworld)

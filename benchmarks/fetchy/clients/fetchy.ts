@@ -10,3 +10,8 @@ export const fetchyClient: BenchClient = {
   name: 'fetchy',
   request: () => api.post(benchId, benchFilter, benchBody),
 }
+
+export const fetchyMethodClient: BenchClient = {
+  name: 'fetchy-method',
+  request: () => api.postMethod(benchId, benchFilter, benchBody),
+}

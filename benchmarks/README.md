@@ -26,6 +26,7 @@ Close everything else on the machine before a timing run, and do not run two ben
 | `caching`                      | A 16 KB JSON `GET` served from each framework's response cache, and uncached |
 | `fastify`                      | The server alone against its fetch-style routing plugin                      |
 | `fetchy`                       | One JSON `POST` through fetchy and through other HTTP clients                |
+| `fetchy:overhead`              | fetchy's own cost per call, over a transport that answers from memory        |
 | `startup`                      | Process start to listening, and bootstrap alone, for one six-module app      |
 | `memory`                       | Heap held by that app once built, over an empty process                      |
 | `testing`                      | Building an app, serving one request in-process, and closing it              |
@@ -110,6 +111,10 @@ than it is.
 
 To add a client, write `fetchy/clients/<name>.ts` exporting a `BenchClient` that sends the same request, and add it
 to `fetchy/clients/index.ts`.
+
+`fetchy:overhead` sends the same call through a transport that answers one prepared response from memory, so no
+socket and no server take part. `control` awaits that transport and parses the body without fetchy. Each fetchy row
+minus `control` is what fetchy itself costs per call, which the network hides in `fetchy`.
 
 The Hey API and Orval clients are generated from `fetchy/openapi.yaml` and committed. After changing the spec,
 regenerate them with `npm run bench:fetchy:generate -w @caffeinejs/benchmarks`. Orval runs in `fetch` mode through

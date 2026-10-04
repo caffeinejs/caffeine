@@ -18,6 +18,7 @@ on:
           - di-perf
           - fastify
           - fetchy
+          - fetchy:overhead
           - helloworld
           - memory
           - mixedscopes
