@@ -153,6 +153,33 @@ describe('KeyValueHTTPCacheStore', () => {
     expect(kv.gets).toEqual([])
   })
 
+  // What the cache does on a miss: its read already has every marker, so the write that follows is one call
+  // instead of a read and a write.
+  it('writes without reading under the snapshot its read filled', async () => {
+    const kv = fakeKV()
+    const store = new KeyValueHTTPCacheStore(kv)
+    const snapshot = new Map<string, unknown>()
+    await store.get('k', { tags: ['a', 'b'], snapshot })
+    kv.gets.length = 0
+
+    await store.put('k', entry('v'), { ttl: 60, tags: ['a', 'b'], snapshot })
+
+    expect(kv.gets).toEqual([])
+    expect(kv.sets.map(set => set.key)).toEqual(['caffeine:cache:e:k'])
+  })
+
+  it('reads only the markers the snapshot does not hold', async () => {
+    const kv = fakeKV()
+    const store = new KeyValueHTTPCacheStore(kv)
+    const snapshot = new Map<string, unknown>()
+    await store.get('k', { tags: ['a'], snapshot })
+    kv.gets.length = 0
+
+    await store.put('k', entry('v'), { ttl: 60, tags: ['a', 'b', 'c'], snapshot })
+
+    expect(kv.gets).toEqual(['caffeine:cache:t:b', 'caffeine:cache:t:c'])
+  })
+
   it('never expires a tag marker by default, and honours a tagTtl that is set', async () => {
     const kv = fakeKV()
     await new KeyValueHTTPCacheStore(kv).evictByTag('pets')

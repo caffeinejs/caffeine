@@ -231,6 +231,10 @@ export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
       instance.decorateRequest('cacheKey', null)
     }
 
+    if (!instance.hasRequestDecorator('cacheSnapshot')) {
+      instance.decorateRequest('cacheSnapshot', null)
+    }
+
     if (!instance.hasRequestDecorator('cacheFlight')) {
       instance.decorateRequest('cacheFlight', null)
     }

@@ -20,12 +20,25 @@ export interface HTTPCacheCallOptions {
   signal?: AbortSignal
 }
 
+/**
+ * What a store read of an entry's tags during a `get`, for the `put` that follows it.
+ *
+ * The caller creates it empty and hands the same one to both calls, of the same store. What a tag maps to is
+ * the store's own.
+ */
+export type HTTPCacheTagSnapshot = Map<string, unknown>
+
 export interface HTTPCacheGetOptions extends HTTPCacheCallOptions {
   /**
    * The tags the entry is expected to carry: a hint, so a store that keeps tags apart from entries can read
    * both in one go. The answer is the same with or without it.
    */
   tags?: readonly string[]
+  /**
+   * Filled with what each of `tags` read as during the call, whether or not an entry was found. Hand it to the
+   * `put` that stores the response this read did not find.
+   */
+  snapshot?: HTTPCacheTagSnapshot
 }
 
 export interface HTTPCachePutOptions extends HTTPCacheCallOptions {
@@ -33,6 +46,12 @@ export interface HTTPCachePutOptions extends HTTPCacheCallOptions {
   ttl: Duration
   /** The tags {@link HTTPCacheStore.evictByTag} reaches the entry by. */
   tags?: readonly string[]
+  /**
+   * What a `get` filled before the response was produced. The entry is stored as of that read: it reads as
+   * absent once one of its tags was evicted after it, and the store does not read those tags again. A tag the
+   * snapshot does not hold is read during the `put`.
+   */
+  snapshot?: HTTPCacheTagSnapshot
 }
 
 /**

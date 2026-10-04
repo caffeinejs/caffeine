@@ -190,6 +190,103 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 })
 
 /**
+ * A handler already running when an eviction lands answers from what it read before it. The entry is stored as
+ * of the read that did not find it, so the eviction hides it: stored as of the write, that older response would
+ * be served until its `ttl`.
+ */
+describe('an eviction that lands while a handler runs', () => {
+  let close: (() => Promise<unknown>) | undefined
+
+  afterEach(async () => {
+    await close?.()
+    close = undefined
+  })
+
+  it('hides the response that handler produces, and keeps the next one', async () => {
+    let count = 0
+    let entered!: () => void
+    let release!: () => void
+    const running = new Promise<void>(resolve => (entered = resolve))
+    const released = new Promise<void>(resolve => (release = resolve))
+
+    const router = new Router('/inv-running')
+    router
+      .get('/report')
+      .with(cacheControl({ ttl: 60, tags: ['reports'] }))
+      .handler(async () => {
+        const n = ++count
+        if (n === 1) {
+          entered()
+          await released
+        }
+
+        return { count: n }
+      })
+
+    const store = new MemoryHTTPCacheStore()
+    const app = createWebApplication()
+      .with(HTTPCaching(b => b.store(store)))
+      .mount(router)
+    close = () => app.close()
+    await app.bootstrap()
+
+    const first = app.fetch('/inv-running/report')
+    await running
+    await store.evictByTag('reports')
+    release()
+    expect(await (await first).json()).toEqual({ count: 1 })
+
+    const next = await app.fetch('/inv-running/report')
+    expect(next.headers.get('x-cache')).toBe('MISS')
+    expect(await next.json()).toEqual({ count: 2 })
+    expect((await app.fetch('/inv-running/report')).headers.get('x-cache')).toBe('HIT')
+  })
+
+  // The store is handed on the write what it filled on the read, which is what spares it reading the tags a
+  // second time. A route without tags has nothing to carry.
+  it('hands the write the snapshot its read filled, and none on a route without tags', async () => {
+    const calls: { verb: string; snapshot: unknown }[] = []
+    const memory = new MemoryHTTPCacheStore()
+    const store: HTTPCacheStore = {
+      get(key, options) {
+        calls.push({ verb: 'get', snapshot: options?.snapshot })
+        return memory.get(key, options)
+      },
+      put(key, entry, options) {
+        calls.push({ verb: 'put', snapshot: options.snapshot })
+        return memory.put(key, entry, options)
+      },
+      evictByTag: (tags, options) => memory.evictByTag(tags, options),
+    }
+
+    const router = new Router('/inv-snapshot')
+    router
+      .get('/tagged')
+      .with(cacheControl({ ttl: 60, tags: ['reports'] }))
+      .handler(() => ({ ok: true }))
+    router
+      .get('/plain')
+      .with(cacheControl({ ttl: 60 }))
+      .handler(() => ({ ok: true }))
+
+    const app = createWebApplication()
+      .with(HTTPCaching(b => b.store(store)))
+      .mount(router)
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.fetch('/inv-snapshot/tagged')
+    await app.fetch('/inv-snapshot/plain')
+
+    expect(calls.map(call => call.verb)).toEqual(['get', 'put', 'get', 'put'])
+    expect(calls[0].snapshot).toBeInstanceOf(Map)
+    expect(calls[1].snapshot).toBe(calls[0].snapshot)
+    expect(calls[2].snapshot).toBeUndefined()
+    expect(calls[3].snapshot).toBeUndefined()
+  })
+})
+
+/**
  * RFC 9111 §4.4: a non-error response to an unsafe request invalidates, and that is a 2xx **or a 3xx**. A form
  * post answered with a redirect is the commonest mutation there is.
  */

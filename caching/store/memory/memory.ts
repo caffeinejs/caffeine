@@ -72,9 +72,16 @@ export class MemoryHTTPCacheStore implements HTTPCacheStore {
         : new LRUCache({ max: options?.max ?? 500 })
   }
 
-  // The tags hint is not needed: the generations are right here.
+  // The tags hint is read for the snapshot alone: the generations are right here.
   async get(key: string, options?: HTTPCacheGetOptions): Promise<HTTPCacheEntry | undefined> {
     options?.signal?.throwIfAborted()
+
+    const snapshot = options?.snapshot
+    if (snapshot !== undefined) {
+      for (const tag of options?.tags ?? []) {
+        snapshot.set(tag, this.#generation(tag))
+      }
+    }
 
     const record = this.#cache.get(key)
     if (record === undefined) {
@@ -100,9 +107,12 @@ export class MemoryHTTPCacheStore implements HTTPCacheStore {
       return
     }
 
+    // A generation the snapshot holds is the one the response was produced under: an eviction since then leaves
+    // the entry behind it, which reads as absent.
     const tags: Record<string, number> = {}
     for (const tag of options.tags ?? []) {
-      tags[tag] = this.#generation(tag)
+      const seen = options.snapshot?.get(tag)
+      tags[tag] = typeof seen === 'number' ? seen : this.#generation(tag)
     }
 
     this.#cache.set(key, { entry, tags }, { ttl: ms })

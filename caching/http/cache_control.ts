@@ -29,7 +29,7 @@ import {
 } from './_util.js'
 import { Flight, type FlightTable } from './flight.js'
 import type { CacheBypassReason, CacheMissReason, CacheObserver } from './observer.js'
-import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
+import type { HTTPCacheEntry, HTTPCacheStore, HTTPCacheTagSnapshot } from './store.js'
 import { withStoreSignal } from './store_signal.js'
 
 /** What a hook that finishes synchronously calls, with the payload as Fastify hands it on. */
@@ -262,6 +262,9 @@ export function attachCacheHooks(
   assertConstraintsKeyed(routeDef, read)
 
   const tags: readonly string[] | undefined = read.tags?.length ? Object.freeze([...read.tags]) : undefined
+
+  // Only a route that stores under tags has anything to carry from its read to its write.
+  const snapshots = tags !== undefined && ttlSeconds !== undefined && !read.noStore
   const varyByQuery = read.varyByQuery ?? deps.varyByQuery
   const queryNames = varyByQuery === undefined ? undefined : new Set(varyByQuery)
 
@@ -346,10 +349,19 @@ export function attachCacheHooks(
     const key = keyOf(request)
     request.cacheKey = key
 
+    // What this read sees of the tags is what the store hook writes the entry under: an eviction landing while the
+    // handler runs then hides the entry, and the store has no tag to read again before it writes.
+    const snapshot: HTTPCacheTagSnapshot | undefined = snapshots ? new Map() : undefined
+    if (snapshot !== undefined) {
+      request.cacheSnapshot = snapshot
+    }
+
     let cached: HTTPCacheEntry | undefined
     let readFailed = false
     try {
-      cached = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
+      cached = await withStoreSignal('get', request.signal, storeTimeoutMs, signal =>
+        store.get(key, { tags, signal, snapshot }),
+      )
     } catch (error) {
       // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
       // nothing to report.
@@ -716,7 +728,7 @@ export function attachCacheHooks(
                 storedAt: Date.now(),
                 headers: storedHeadersOf(reply, statusHeaderName),
               },
-              { ttl: retentionSeconds!, tags, signal },
+              { ttl: retentionSeconds!, tags, signal, snapshot: request.cacheSnapshot ?? undefined },
             ),
           )
 

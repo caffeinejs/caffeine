@@ -73,6 +73,9 @@ interface HTTPEnvelope {
  * any of them has changed. `evictByTag` writes a fresh marker per tag and touches no entry; the entry goes when
  * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again.
  *
+ * A `put` handed the snapshot a `get` filled writes without reading. Without it, or for a tag it does not hold,
+ * the markers are read first.
+ *
  * Neither cache-manager nor Keyv takes an `AbortSignal`. A call whose signal is already aborted is refused, but
  * one already issued runs to completion even after the cache has given up waiting for it.
  *
@@ -102,6 +105,12 @@ export class KeyValueHTTPCacheStore implements HTTPCacheStore {
       this.#client.get(this.#entryKey(key)),
       ...hintedKeys.map(tagKey => this.#client.get(tagKey)),
     ])
+
+    // Before the entry is looked at: a read that finds nothing is the one a `put` follows.
+    const snapshot = options?.snapshot
+    if (snapshot !== undefined) {
+      hinted.forEach((tag, i) => snapshot.set(tag, marker(markers[i])))
+    }
 
     if (raw === null || raw === undefined) {
       return undefined
@@ -141,13 +150,28 @@ export class KeyValueHTTPCacheStore implements HTTPCacheStore {
 
     const tags = options.tags ?? []
 
-    // Read together, once for the call. An eviction landing between this and the write leaves an entry under the
-    // earlier marker, which reads as absent.
+    // A marker the snapshot holds was read before the response was produced, and is not read again: with every
+    // tag in it the write is the only call. The rest are read together, once for the call. An eviction landing
+    // between either read and the write leaves an entry under the earlier marker, which reads as absent.
     let markers: Record<string, string> | undefined
     if (tags.length > 0) {
-      const current = await Promise.all(tags.map(tag => this.#client.get(this.#tagKey(tag))))
-      markers = {}
-      tags.forEach((tag, i) => (markers![tag] = marker(current[i])))
+      const recorded: Record<string, string> = {}
+      const unread: string[] = []
+      for (const tag of tags) {
+        const seen = options.snapshot?.get(tag)
+        if (seen === undefined) {
+          unread.push(tag)
+        } else {
+          recorded[tag] = String(seen)
+        }
+      }
+
+      if (unread.length > 0) {
+        const current = await Promise.all(unread.map(tag => this.#client.get(this.#tagKey(tag))))
+        unread.forEach((tag, i) => (recorded[tag] = marker(current[i])))
+      }
+
+      markers = recorded
     }
 
     await this.#client.set(this.#entryKey(key), JSON.stringify(envelopeOf(entry, markers)), ms)

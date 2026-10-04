@@ -35,6 +35,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Every store call goes through `withStoreSignal` (`store_signal.ts`). Keep the timer cleared on settle.
 - `HTTPCacheStore` has three verbs, `get`, `put` and `evictByTag`. Do not add a delete, a batch, a lock or a
   wait verb.
+- The read hook's `snapshot` goes to the store hook's `put` on `request.cacheSnapshot`. Only a route that stores
+  under tags creates one. The follower re-read passes none.
 
 ## Flights and stale entries
 
@@ -57,6 +59,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A new store runs `describeHTTPCacheStoreContract` (`http/store.testkit.ts`) before anything else.
 - Leave the generic `Cache` in `cache.ts` as it is, unimplemented; the HTTP cache does not run on it.
 - A tag is a generation marker recorded with the entry. Do not add a tag-to-keys index.
+- `get` fills the `snapshot` with the hinted tags before it looks at the entry, since a miss is what a `put`
+  follows. `put` never reads a tag the snapshot holds, and never takes a newer generation over the one in it:
+  an older one costs a hit, a newer one serves a response an eviction should have hidden.
 
 ### Redis (`store/redis`)
 
@@ -80,4 +85,5 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - Entry and marker lookups are separate calls; an eviction landing between them is missed by that read.
 - `buildCacheKey` does not escape the `vary` values it joins; escaping would change every key.
-- A `GET` in flight during an eviction can store the older response after it.
+- A `GET` in flight during an eviction can store the older response after it only when its read was skipped
+  (`no-cache`, `max-age=0`, `Pragma: no-cache`) or failed: that `put` has no snapshot and reads the tags itself.

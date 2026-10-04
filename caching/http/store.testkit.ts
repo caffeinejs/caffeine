@@ -176,6 +176,59 @@ export function describeHTTPCacheStoreContract(
       expect(await store.get('k')).toBeUndefined()
     })
 
+    // A response is produced between the read that did not find it and the put that stores it. The snapshot
+    // carries what that read saw of the tags, so the put does not have to look again.
+    it('reads back an entry put under the snapshot its read filled', async () => {
+      const store = await factory()
+      const snapshot = new Map<string, unknown>()
+
+      expect(await store.get('k', { tags: ['pets', 'all'], snapshot })).toBeUndefined()
+      await store.put('k', entry('v'), { ttl: 60, tags: ['pets', 'all'], snapshot })
+
+      expect((await store.get('k'))?.payload).toBe('v')
+      expect((await store.get('k', { tags: ['pets', 'all'] }))?.payload).toBe('v')
+
+      await store.evictByTag('all')
+      expect(await store.get('k')).toBeUndefined()
+    })
+
+    // The eviction says that what the response was produced from has changed. Stored as of the put, the older
+    // response would be served until its ttl.
+    it('hides an entry put under a snapshot taken before an eviction', async () => {
+      const store = await factory()
+      const missed = new Map<string, unknown>()
+      const found = new Map<string, unknown>()
+      await store.put('replaced', entry('first'), { ttl: 60, tags: ['pets'] })
+      await store.get('absent', { tags: ['pets'], snapshot: missed })
+      await store.get('replaced', { tags: ['pets'], snapshot: found })
+
+      await store.evictByTag('pets')
+      await store.put('absent', entry('older'), { ttl: 60, tags: ['pets'], snapshot: missed })
+      await store.put('replaced', entry('older'), { ttl: 60, tags: ['pets'], snapshot: found })
+
+      expect(await store.get('absent')).toBeUndefined()
+      expect(await store.get('absent', { tags: ['pets'] })).toBeUndefined()
+      expect(await store.get('replaced')).toBeUndefined()
+    })
+
+    // A snapshot is only as complete as the hint of the read that filled it, and empty when that read failed.
+    it('reads a tag the snapshot does not hold when the entry is put', async () => {
+      const store = await factory()
+      const partial = new Map<string, unknown>()
+      await store.get('k', { tags: ['pets'], snapshot: partial })
+      await store.evictByTag('all')
+
+      await store.put('k', entry('v'), { ttl: 60, tags: ['pets', 'all'], snapshot: partial })
+      await store.put('other', entry('o'), { ttl: 60, tags: ['all'], snapshot: new Map() })
+
+      expect((await store.get('k'))?.payload).toBe('v')
+      expect((await store.get('other'))?.payload).toBe('o')
+
+      await store.evictByTag('all')
+      expect(await store.get('k')).toBeUndefined()
+      expect(await store.get('other')).toBeUndefined()
+    })
+
     it('rejects a call whose signal is already aborted, and does nothing for it', async () => {
       const store = await factory()
       await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
