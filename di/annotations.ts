@@ -1,48 +1,8 @@
-import { Keys } from './symbols.js'
+import { type Annotation, reflect } from './reflect.js'
 
-interface AnnotationEntry {
-  class?: unknown
-  members?: Map<string | symbol, unknown>
-}
+type Decorator = (target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => void
 
-// Phantom properties on the return type — never present at runtime.
-// reflect.ts matches these structurally to infer C and M without importing a named type.
-type Annotator<C, M> = ((value: C | M) => (target: unknown, context: DecoratorContext) => void) & {
-  readonly _c?: C
-  readonly _m?: M
-}
-
-/**
- * Low-level primitive for writing an annotation into decorator metadata.
- * Intended for use inside decorator factories.
- *
- * When `memberName` is provided the value is written to the member slot for that name,
- * regardless of context kind. Otherwise the slot is derived from context: class decorators
- * write to the class slot; member decorators write to the member slot keyed by the
- * decorated member's name.
- */
-export function annotate(
-  context: ClassDecoratorContext | ClassMemberDecoratorContext,
-  key: Function,
-  value: unknown,
-  memberName?: string | symbol,
-): void {
-  const map: Map<Function, AnnotationEntry> = ((context.metadata as any)[Keys.kAnnotations] ??= new Map())
-
-  let entry = map.get(key)
-  if (!entry) {
-    entry = {}
-    map.set(key, entry)
-  }
-
-  if (memberName !== undefined) {
-    ;(entry.members ??= new Map()).set(memberName, value)
-  } else if (context.kind === 'class') {
-    entry.class = value
-  } else {
-    ;(entry.members ??= new Map()).set((context as ClassMemberDecoratorContext).name, value)
-  }
-}
+type Annotator<C, M> = ((value: C | M) => Decorator) & Annotation<C, M>
 
 /**
  * Creates a decorator factory applicable to both classes and class members.
@@ -80,15 +40,14 @@ export function annotate(
 export function createAnnotation<C, M = C>(): Annotator<C, M>
 export function createAnnotation<Args extends unknown[], T>(
   transform: (...args: Args) => T,
-): ((...args: Args) => (target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => void) & {
-  readonly _c?: T
-  readonly _m?: T
-}
+): ((...args: Args) => Decorator) & Annotation<T, T>
 export function createAnnotation(transform?: (...args: unknown[]) => unknown): unknown {
-  return function factory(...args: unknown[]) {
+  const factory: ((...args: unknown[]) => Decorator) & Annotation = (...args: unknown[]) => {
     const value = transform ? transform(...args) : args[0]
     return (_: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
-      annotate(context, factory, value)
+      reflect.annotate(context, factory, value)
     }
   }
+
+  return factory
 }

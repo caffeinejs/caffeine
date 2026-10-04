@@ -1,157 +1,169 @@
 import { Keys } from './symbols.js'
-import { AnyClass, ClassMember } from './types.js'
+import type { AnyClass, ClassMember } from './types.js'
 
-interface AnnotationEntry {
+/**
+ * Key shape of a `createAnnotation` factory.
+ *
+ * `_c` and `_m` are phantom: never present at runtime, they only carry the class-level and
+ * member-level value types for {@link reflect} to infer.
+ */
+export interface Annotation<C = unknown, M = C> {
+  readonly _c?: C
+  readonly _m?: M
+}
+
+type MetadataKey = symbol | Annotation
+
+interface Entry {
   class?: unknown
   members?: Map<string | symbol, unknown>
 }
 
-interface MetadataEntry {
-  class?: unknown
-  members?: Map<string | symbol, unknown>
-}
+type Store = Map<MetadataKey, Entry>
 
-interface Reflect {
-  /** Returns the class-level annotation value, or `undefined` if absent. */
-  get<TClass extends AnyClass, C>(cls: TClass, annotation: { readonly _c?: C }): C | undefined
-
-  /**
-   * Returns the member-level annotation value, or `undefined` if absent.
-   * `member` autocompletes to the declared members of `cls`.
-   */
-  get<TClass extends AnyClass, M>(
-    cls: TClass,
-    annotation: { readonly _m?: M },
-    member: ClassMember<TClass>,
-  ): M | undefined
-
-  /**
-   * Returns the member-level annotation value if present, falling back to the class-level value.
-   *
-   * @example
-   * ```ts
-   * reflect.getOverride(AdminCtrl, Roles, 'delete') // ['superadmin']
-   * reflect.getOverride(AdminCtrl, Roles, 'list')   // ['admin']  — falls back to class
-   * ```
-   */
-  getOverride<TClass extends AnyClass, C, M>(
-    cls: TClass,
-    annotation: { readonly _c?: C; readonly _m?: M },
-    member: ClassMember<TClass>,
-  ): C | M | undefined
-
-  /**
-   * Concatenates class-level and member-level annotation arrays — class values first.
-   *
-   * @example
-   * ```ts
-   * reflect.merge(Ctrl, Roles, 'delete') // ['user', 'admin']
-   * ```
-   */
-  merge<TClass extends AnyClass, T>(
-    cls: TClass,
-    annotation: { readonly _c?: T[]; readonly _m?: T[] },
-    member: ClassMember<TClass>,
-  ): T[]
-
-  annotate(metadata: DecoratorMetadata, key: symbol, value: unknown): void
-
-  defineMetadata: typeof defineMetadata
-  getMetadata: typeof getMetadata
-  getMetadataOverride: typeof getMetadataOverride
-}
-
-/**
- * Binds `value` to `key` on the class's {@link Symbol.metadata}.
- *
- * A class decorator writes the class slot; a member decorator writes the member slot keyed by the
- * decorated member's name. The two do not overwrite each other.
- */
-export function defineMetadata(
-  context: ClassDecoratorContext | ClassMemberDecoratorContext,
-  key: symbol,
-  value: unknown,
-): void {
-  const map: Map<symbol, MetadataEntry> = ((context.metadata as any)[Keys.kMetadata] ??= new Map())
-
-  let slot = map.get(key)
-  if (!slot) {
-    slot = {}
-    map.set(key, slot)
+function ownEntry(cls: AnyClass, key: MetadataKey): Entry | undefined {
+  if (!Object.hasOwn(cls, Symbol.metadata)) {
+    return undefined
   }
 
-  if (context.kind === 'class') {
-    slot.class = value
-  } else {
-    ;(slot.members ??= new Map()).set((context as ClassMemberDecoratorContext).name, value)
-  }
-}
-
-/**
- * Returns the value stored under `key` on `cls`.
- *
- * With no `member`, this is the class slot. With a `member`, this is that member's slot only — it does
- * not fall back to the class. Use {@link getMetadataOverride} for member-then-class.
- */
-export function getMetadata<T>(cls: Function, key: symbol): T | undefined
-export function getMetadata<T>(cls: Function, key: symbol, member: PropertyKey): T | undefined
-export function getMetadata<T>(cls: Function, key: symbol, member?: PropertyKey): T | undefined {
-  const slot = metadataEntry(cls, key)
-  if (member === undefined) {
-    return slot?.class as T | undefined
+  const metadata = cls[Symbol.metadata]
+  if (metadata == null || !Object.hasOwn(metadata, Keys.kMetadata)) {
+    return undefined
   }
 
-  return slot?.members?.get(member as string | symbol) as T | undefined
+  return (metadata[Keys.kMetadata] as Store).get(key)
 }
 
-/**
- * Returns the member slot for `key` if present, otherwise the class slot.
- */
-export function getMetadataOverride<T>(cls: Function, key: symbol, member: PropertyKey): T | undefined {
-  const slot = metadataEntry(cls, key)
-  return (slot?.members?.get(member as string | symbol) ?? slot?.class) as T | undefined
-}
-
-export const reflect: Reflect = {
-  get(cls: any, annotation: any, member?: PropertyKey): any {
-    const e = entry(cls, annotation)
-    if (member === undefined) {
-      return e?.class
+function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined): unknown {
+  let c: AnyClass | null = cls
+  while (c !== null && c !== Function.prototype) {
+    const entry = ownEntry(c, key)
+    const value = member === undefined ? entry?.class : entry?.members?.get(member as string | symbol)
+    if (value !== undefined) {
+      return value
     }
 
-    return e?.members?.get(member as string | symbol)
-  },
+    c = Object.getPrototypeOf(c) as AnyClass | null
+  }
 
-  getOverride(cls: any, annotation: any, member: PropertyKey): any {
-    const e = entry(cls, annotation)
-    return e?.members?.get(member as string | symbol) ?? e?.class
-  },
-
-  merge(cls: any, annotation: any, member: PropertyKey): any[] {
-    const e = entry(cls, annotation)
-    const classVal = e?.class as unknown[] | undefined
-    const memberVal = e?.members?.get(member as string | symbol) as unknown[] | undefined
-
-    return [...(classVal ?? []), ...(memberVal ?? [])]
-  },
-
-  annotate(metadata: DecoratorMetadata, key: symbol, value: unknown): void {
-    metadata[key] = value
-  },
-
-  defineMetadata,
-  getMetadata,
-  getMetadataOverride,
+  return undefined
 }
 
-function entry(cls: unknown, annotation: unknown): AnnotationEntry | undefined {
-  const map = (cls as any)[Symbol.metadata]?.[Keys.kAnnotations] as Map<Function, AnnotationEntry> | undefined
-  return map?.get(annotation as Function)
+/**
+ * Writes `value` under `key` into the metadata of the class being decorated.
+ *
+ * A class decorator writes the class slot; a member decorator writes the slot of the decorated
+ * member. The write lands on the decorated class alone: a subclass's decorator never reaches the
+ * metadata of its base class.
+ * @param memberName - Writes that member's slot regardless of the decorator kind
+ */
+function annotate(
+  context: ClassDecoratorContext | ClassMemberDecoratorContext,
+  key: MetadataKey,
+  value: unknown,
+  memberName?: string | symbol,
+): void {
+  const metadata = context.metadata
+  if (!Object.hasOwn(metadata, Keys.kMetadata)) {
+    metadata[Keys.kMetadata] = new Map()
+  }
+
+  const store = metadata[Keys.kMetadata] as Store
+  let entry = store.get(key)
+  if (!entry) {
+    entry = {}
+    store.set(key, entry)
+  }
+
+  if (memberName !== undefined) {
+    ;(entry.members ??= new Map()).set(memberName, value)
+  } else if (context.kind === 'class') {
+    entry.class = value
+  } else {
+    ;(entry.members ??= new Map()).set(context.name, value)
+  }
 }
 
-function metadataEntry(cls: Function, key: symbol): MetadataEntry | undefined {
-  const map = (cls as unknown as { [Symbol.metadata]?: Record<symbol, unknown> })[Symbol.metadata]?.[Keys.kMetadata] as
-    | Map<symbol, MetadataEntry>
-    | undefined
-  return map?.get(key)
+/**
+ * Returns the class slot stored under a symbol key, or `undefined` if absent.
+ *
+ * With `member`, returns that member's slot only; it does not fall back to the class slot. Use
+ * {@link effective} for member-then-class.
+ */
+function get<T>(cls: AnyClass, key: symbol): T | undefined
+function get<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
+/**
+ * Returns the class-level annotation value, or `undefined` if absent.
+ *
+ * With `member`, returns that member's value only; it does not fall back to the class value. Use
+ * {@link effective} for member-then-class. `member` autocompletes to the declared members of `cls`.
+ */
+function get<TClass extends AnyClass, C>(cls: TClass, key: Annotation<C, unknown>): C | undefined
+function get<TClass extends AnyClass, M>(
+  cls: TClass,
+  key: Annotation<unknown, M>,
+  member: ClassMember<TClass>,
+): M | undefined
+function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey): unknown {
+  return nearest(cls, key, member)
+}
+
+/**
+ * Returns the value in effect for `member`: its member slot if any class in the chain declares
+ * one, otherwise the nearest class slot.
+ *
+ * A member slot declared on a base class beats the class slot of the subclass.
+ *
+ * @example
+ * ```ts
+ * reflect.effective(AdminCtrl, Roles, 'delete') // ['superadmin']
+ * reflect.effective(AdminCtrl, Roles, 'list')   // ['admin']  — falls back to class
+ * ```
+ */
+function effective<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
+function effective<TClass extends AnyClass, C, M>(
+  cls: TClass,
+  key: Annotation<C, M>,
+  member: ClassMember<TClass>,
+): C | M | undefined
+function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown {
+  const own = nearest(cls, key, member)
+  return own !== undefined ? own : nearest(cls, key, undefined)
+}
+
+/**
+ * Concatenates the nearest class-level array and the nearest member-level array, class values
+ * first.
+ *
+ * Arrays declared further up the chain are not accumulated: a subclass's class-level array replaces
+ * its base's.
+ *
+ * @example
+ * ```ts
+ * reflect.merge(Ctrl, Roles, 'delete') // ['user', 'admin']
+ * ```
+ */
+function merge<T>(cls: AnyClass, key: symbol, member: PropertyKey): T[]
+function merge<TClass extends AnyClass, T>(cls: TClass, key: Annotation<T[], T[]>, member: ClassMember<TClass>): T[]
+function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown[] {
+  const classValue = nearest(cls, key, undefined) as unknown[] | undefined
+  const memberValue = nearest(cls, key, member) as unknown[] | undefined
+
+  return [...(classValue ?? []), ...(memberValue ?? [])]
+}
+
+/**
+ * Reads and writes decorator metadata by key.
+ *
+ * A key is a symbol or a `createAnnotation` factory. Every class owns its store: a decorator on a
+ * subclass never writes into its base class's metadata. Reads walk the constructor chain from
+ * `cls` upwards and the nearest class declaring the slot wins, so an undecorated subclass reads its
+ * base's values, a decorated subclass shadows them, and a method override without its own
+ * annotation still carries the base method's value. A slot holding `undefined` counts as absent.
+ */
+export const reflect = {
+  annotate,
+  get,
+  effective,
+  merge,
 }

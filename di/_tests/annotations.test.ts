@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 
-import { annotate, createAnnotation } from '../annotations.js'
+import { createAnnotation } from '../annotations.js'
 import { $aop } from '../aop.js'
 import type { JoinPoint, MethodAspect } from '../aop.js'
 import { CaffeineIoC } from '../container.js'
@@ -366,9 +366,9 @@ describe('AOP integration', function () {
   })
 })
 
-// ─── reflect.getOverride ─────────────────────────────────────────────────────
+// ─── reflect.effective ─────────────────────────────────────────────────────
 
-describe('reflect.getOverride', function () {
+describe('reflect.effective', function () {
   const Roles = createAnnotation<string[]>()
 
   @Roles(['admin'])
@@ -384,15 +384,15 @@ describe('reflect.getOverride', function () {
   }
 
   it('returns member value when present', function () {
-    expect(reflect.getOverride(AdminCtrl, Roles, 'delete')).toEqual(['superadmin'])
+    expect(reflect.effective(AdminCtrl, Roles, 'delete')).toEqual(['superadmin'])
   })
 
   it('falls back to class value when member has no annotation', function () {
-    expect(reflect.getOverride(AdminCtrl, Roles, 'list')).toEqual(['admin'])
+    expect(reflect.effective(AdminCtrl, Roles, 'list')).toEqual(['admin'])
   })
 
   it('returns undefined when neither class nor member is annotated', function () {
-    expect(reflect.getOverride(Unannotated, Roles, 'run')).toBeUndefined()
+    expect(reflect.effective(Unannotated, Roles, 'run')).toBeUndefined()
   })
 
   it('returns class value when only class is annotated', function () {
@@ -403,7 +403,7 @@ describe('reflect.getOverride', function () {
       method() {}
     }
 
-    expect(reflect.getOverride(T, ClassOnly, 'method')).toBe('cls')
+    expect(reflect.effective(T, ClassOnly, 'method')).toBe('cls')
   })
 
   it('returns member value when only member is annotated', function () {
@@ -414,7 +414,7 @@ describe('reflect.getOverride', function () {
       go() {}
     }
 
-    expect(reflect.getOverride(T, MemberOnly, 'go')).toBe(42)
+    expect(reflect.effective(T, MemberOnly, 'go')).toBe(42)
   })
 })
 
@@ -452,14 +452,14 @@ describe('createAnnotation with transform', function () {
   })
 })
 
-// ─── annotate() primitive ─────────────────────────────────────────────────────
+// ─── reflect.annotate() primitive ─────────────────────────────────────────────────────
 
-describe('annotate()', function () {
+describe('reflect.annotate()', function () {
   it('can be used inside a decorator factory to write class-level annotations', function () {
     const Key = createAnnotation<string>()
     function Tag(value: string) {
       return (_: unknown, ctx: ClassDecoratorContext) => {
-        annotate(ctx, Key, value)
+        reflect.annotate(ctx, Key, value)
       }
     }
     @Tag('service')
@@ -471,7 +471,7 @@ describe('annotate()', function () {
     const Key = createAnnotation<number>()
     function Weight(n: number) {
       return (_: unknown, ctx: ClassMemberDecoratorContext) => {
-        annotate(ctx, Key, n)
+        reflect.annotate(ctx, Key, n)
       }
     }
     class T {
@@ -485,7 +485,7 @@ describe('annotate()', function () {
     const Key = createAnnotation<string>()
     function TagWithSlot(value: string, member: string) {
       return (_: unknown, ctx: ClassDecoratorContext) => {
-        annotate(ctx, Key, value, member)
+        reflect.annotate(ctx, Key, value, member)
       }
     }
     @TagWithSlot('hello', 'synthetic')
