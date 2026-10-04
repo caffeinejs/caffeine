@@ -140,7 +140,8 @@ export type ConfigTrigger = 'static' | 'manual' | 'poll' | 'watch'
 
 /**
  * Notified, synchronously, right after a reload swapped in a new snapshot. A reload does not wait for a promise it
- * returns.
+ * returns, and it never runs concurrently with itself: a swap that lands before that promise settles reaches it once
+ * it has, the newest only.
  */
 export type ConfigChangeListener<V> = (value: V, previous: V, change: ConfigChange) => void | Promise<void>
 

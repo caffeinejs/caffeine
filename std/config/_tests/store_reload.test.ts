@@ -6,7 +6,14 @@ import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { kMergedTree } from '../store.js'
 import { testTokens } from '../tokens.testkit.js'
-import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
+import type {
+  ConfigChange,
+  ConfigDefinition,
+  ConfigLayer,
+  ConfigSchema,
+  ConfigSnapshot,
+  ConfigSource,
+} from '../types.js'
 import { hasFastProperties } from './v8.testkit.js'
 
 function definition<T = unknown>(
@@ -96,6 +103,20 @@ describe('reload', () => {
     expect(store.current.server.port).toBe(2)
     expect(before.server.port).toBe(1)
     expect(Object.isFrozen(store.current.server)).toBe(true)
+  })
+
+  // A listener handed both snapshots tells by identity which blocks a reload left alone, and a reload that changed one
+  // value does not copy the whole tree.
+  it('keeps every subtree a reload did not change, identity included', async () => {
+    const { source, state } = liveSource('remote', initial)
+    const store = await loadConfig<App>(definition([source], schema))
+    const before = store.current
+
+    state.data = { ...initial, server: { host: 'h', port: 2 } }
+    await store.reload()
+
+    expect(store.current.server).not.toBe(before.server)
+    expect(store.current.db).toBe(before.db)
   })
 
   it('changes nothing, and does not validate, when no source changed', async () => {
@@ -321,8 +342,10 @@ describe('reload', () => {
   })
 
   describe('onChange', () => {
-    // Synchronous on purpose: by the time the reload resolves, every listener has seen the new revision, so whoever
-    // awaited the reload can rely on what the listeners did.
+    const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve))
+
+    // Synchronous on purpose: by the time the reload resolves, every listener not still busy with a promise it
+    // returned has seen the new revision, so whoever awaited the reload can rely on what the listeners did.
     it('calls a listener once per swap, before the reload resolves, with the previous snapshot and the change', async () => {
       const { source, state } = liveSource('remote', initial)
       const store = await loadConfig<App>(definition([source], schema))
@@ -384,6 +407,112 @@ describe('reload', () => {
       await store.reload()
 
       expect(kept).toHaveBeenCalledTimes(1)
+    })
+
+    // A listener that applies a change asynchronously, resizing a pool say, must never have a call for an older
+    // revision finish after one for a newer revision and leave the older values applied.
+    it('never runs a listener concurrently with itself, and hands it the newest swap once its promise settles', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const first = store.current
+      const calls: { value: ConfigSnapshot<App>; previous: ConfigSnapshot<App>; change: ConfigChange }[] = []
+      const gates: (() => void)[] = []
+      store.onChange((value, previous, change) => {
+        calls.push({ value, previous, change })
+        return new Promise<void>(resolve => gates.push(resolve))
+      })
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      const second = store.current
+      state.data = { server: { host: 'h', port: 2 }, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { server: { host: 'h', port: 2 }, db: { url: 'v3' } }
+      await store.reload()
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0].value).toBe(second)
+      expect(calls[0].previous).toBe(first)
+      expect(calls[0].change).toEqual({ revision: 1, changed: ['db.url'] })
+
+      gates[0]()
+      await vi.waitFor(() => expect(calls).toHaveLength(2))
+
+      expect(calls[1].value).toBe(store.current)
+      expect(calls[1].previous).toBe(second)
+      expect(calls[1].change).toEqual({ revision: 3, changed: ['server.port', 'db.url'] })
+
+      gates[1]()
+      await flush()
+
+      expect(calls).toHaveLength(2)
+    })
+
+    it('hands a listener the swap that waited on its promise when that promise rejects, and logs', async () => {
+      const logger = new RecordingLogger()
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema), { logger })
+      const seen: string[] = []
+      let fail!: (error: Error) => void
+      store.onChange(async value => {
+        seen.push(value.db.url)
+        if (seen.length === 1) {
+          await new Promise<void>((_, reject) => {
+            fail = reject
+          })
+        }
+      })
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { ...initial, db: { url: 'v2' } }
+      await store.reload()
+      fail(new Error('later'))
+
+      await vi.waitFor(() => expect(seen).toEqual(['v1', 'v2']))
+      expect(logger.at('error').map(r => r.msg)).toEqual(['config change listener failed'])
+    })
+
+    it('skips a listener that an earlier listener unsubscribed during the same swap', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const gone = vi.fn()
+      let unsubscribeGone: (() => void) | undefined
+      store.onChange(() => unsubscribeGone?.())
+      unsubscribeGone = store.onChange(gone)
+
+      state.data = { ...initial, db: { url: 'v' } }
+      await store.reload()
+
+      expect(gone).not.toHaveBeenCalled()
+    })
+
+    it('drops the swap waiting for a busy listener once it unsubscribed, and for every one once the store closed', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const gates: (() => void)[] = []
+      const busy = (): Promise<void> => new Promise<void>(resolve => gates.push(resolve))
+      const unsubscribed = vi.fn(busy)
+      const closed = vi.fn(busy)
+      const unsubscribe = store.onChange(unsubscribed)
+      store.onChange(closed)
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { ...initial, db: { url: 'v2' } }
+      await store.reload()
+
+      unsubscribe()
+      gates[0]()
+      await flush()
+
+      expect(unsubscribed).toHaveBeenCalledTimes(1)
+
+      await store.close()
+      gates[1]()
+      await flush()
+
+      expect(closed).toHaveBeenCalledTimes(1)
     })
   })
 

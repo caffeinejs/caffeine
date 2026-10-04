@@ -4,7 +4,7 @@ import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'
 import { mergeInterpolated } from './interpolation.js'
 import { ConfigEvents, kFirstLoadMs, loadChannel, publishChange, reloadChannel, traced } from './observe.js'
-import { changedPaths, deepEquals } from './reconcile.js'
+import { deepEquals, reconcile } from './reconcile.js'
 import { validateConfig } from './schema.js'
 import { countLeaves, freezeCopy, freezeDeep, isForbiddenKey, isPlainObject, toParts } from './tree.js'
 import { TriggerScheduler, pollBackoff } from './triggers.js'
@@ -59,6 +59,18 @@ interface PendingReload {
   readonly resolve: (outcome: ConfigReloadOutcome) => void
 }
 
+/** One `onChange` listener, and what it has been handed. */
+interface Subscription<T> {
+  // A method rather than a function-typed property, so `T` stays covariant as `ConfigStore<out T>` declares.
+  listener(...args: Parameters<ConfigChangeListener<ConfigSnapshot<T>>>): unknown
+  /** The snapshot it was last called with: the `previous` of its next call. */
+  seen: ConfigSnapshot<T>
+  /** The promise its last call returned has not settled yet. */
+  busy: boolean
+  /** The newest swap that landed while it was busy, with every path changed since it was last called. */
+  queued: { readonly next: ConfigSnapshot<T>; readonly change: ConfigChange } | undefined
+}
+
 /**
  * The runtime of an application's configuration: it loads the sources, validates the result, swaps in a new frozen
  * snapshot when a live source changes it, and says why every value is what it is.
@@ -74,8 +86,7 @@ export class ConfigStore<out T> {
   readonly #states: readonly SourceState[]
   readonly #closing = new AbortController()
   readonly #scheduler: TriggerScheduler
-  // Methods of an object rather than bare functions, so `T` stays covariant as `ConfigStore<out T>` declares.
-  readonly #listeners = new Set<{ listener(...args: Parameters<ConfigChangeListener<ConfigSnapshot<T>>>): unknown }>()
+  readonly #listeners = new Set<Subscription<T>>()
   #current!: ConfigSnapshot<T>
   #merged!: ConfigObject
   #revision = 0
@@ -103,7 +114,8 @@ export class ConfigStore<out T> {
 
   /**
    * The snapshot of the current revision. Frozen: a reload that changes something replaces it and never mutates it,
-   * and one that changes nothing keeps it, identity included.
+   * and one that changes nothing keeps it, identity included. A new snapshot shares with the one before it every
+   * subtree the reload did not change, so comparing a block's identity tells whether it changed.
    */
   get current(): ConfigSnapshot<T> {
     return this.#current
@@ -166,14 +178,16 @@ export class ConfigStore<out T> {
    * Called after every reload that swapped in a new snapshot, synchronously, before the reload resolves. Never for
    * a reload that changed nothing or was rejected. Returns the call that unsubscribes.
    *
-   * A reload does not wait for a promise the listener returns. A throw or a rejection is logged, and the other
-   * listeners still run.
+   * A reload does not wait for a promise the listener returns, and the listener never runs concurrently with itself:
+   * a swap that lands before that promise settles reaches it once it has, and of several such swaps only the newest,
+   * with `previous` the snapshot it was last called with and every path changed since. A throw or a rejection is
+   * logged, and the other listeners still run.
    */
   onChange(listener: ConfigChangeListener<ConfigSnapshot<T>>): () => void {
-    const entry = { listener }
-    this.#listeners.add(entry)
+    const subscription: Subscription<T> = { listener, seen: this.#current, busy: false, queued: undefined }
+    this.#listeners.add(subscription)
     return () => {
-      this.#listeners.delete(entry)
+      this.#listeners.delete(subscription)
     }
   }
 
@@ -411,7 +425,8 @@ export class ConfigStore<out T> {
       state.rejected = undefined
     }
 
-    const changed = changedPaths(this.#current, validated)
+    const changed: string[] = []
+    const next = reconcile(this.#current, validated, changed)
     if (changed.length === 0) {
       // Only keys the schema drops differed.
       this.#events.unchanged({ trigger, sources, ms: performance.now() - started })
@@ -419,30 +434,70 @@ export class ConfigStore<out T> {
     }
 
     // The swap: one synchronous block, so a reader sees the old revision or the new one, never a mix.
-    const previous = this.#current
-    const next = freezeCopy(validated) as ConfigSnapshot<T>
     this.#current = next
     this.#revision++
 
     const change: ConfigChange = { revision: this.#revision, changed }
     this.#events.reloaded({ revision: this.#revision, trigger, sources, changed, ms: performance.now() - started })
     publishChange(() => ({ store: this as ConfigStore<unknown>, revision: change.revision, changed }))
-    this.#notify(next, previous, change)
+    this.#notify(next, change)
 
     return this.#outcome('applied', changed, failures)
   }
 
-  #notify(next: ConfigSnapshot<T>, previous: ConfigSnapshot<T>, change: ConfigChange): void {
-    for (const entry of [...this.#listeners]) {
-      try {
-        const result = entry.listener(next, previous, change)
-        if (isThenable(result)) {
-          result.then(undefined, (error: unknown) => this.#events.listenerFailed(error))
-        }
-      } catch (error) {
-        this.#events.listenerFailed(error)
+  #notify(next: ConfigSnapshot<T>, change: ConfigChange): void {
+    for (const subscription of [...this.#listeners]) {
+      // A listener unsubscribed by an earlier one, or by `close()`, hears nothing more.
+      if (!this.#listeners.has(subscription)) {
+        continue
+      }
+
+      if (!subscription.busy) {
+        this.#deliver(subscription, next, change)
+        continue
+      }
+
+      const queued = subscription.queued
+      subscription.queued = {
+        next,
+        change:
+          queued === undefined
+            ? change
+            : { revision: change.revision, changed: [...new Set([...queued.change.changed, ...change.changed])] },
       }
     }
+  }
+
+  #deliver(subscription: Subscription<T>, next: ConfigSnapshot<T>, change: ConfigChange): void {
+    const previous = subscription.seen
+    subscription.seen = next
+
+    let result: unknown
+    try {
+      result = subscription.listener(next, previous, change)
+    } catch (error) {
+      this.#events.listenerFailed(error)
+      return
+    }
+
+    if (!isThenable(result)) {
+      return
+    }
+
+    // Until the promise settles, a swap waits in `queued`, so a slow call can never finish after a newer one.
+    subscription.busy = true
+    const settle = (): void => {
+      subscription.busy = false
+      const queued = subscription.queued
+      subscription.queued = undefined
+      if (queued !== undefined && this.#listeners.has(subscription)) {
+        this.#deliver(subscription, queued.next, queued.change)
+      }
+    }
+    Promise.resolve(result).then(settle, (error: unknown) => {
+      this.#events.listenerFailed(error)
+      settle()
+    })
   }
 
   #outcome(

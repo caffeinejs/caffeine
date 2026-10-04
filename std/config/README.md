@@ -360,11 +360,14 @@ A reload is all or nothing. When the new tree fails validation the reload is rej
 source's layers stay as they were, and nobody is notified. A source that fails to load keeps its last good layers.
 Either way the reason is logged, and `reload()` resolves with an outcome rather than rejecting. A reload whose tree
 equals the current snapshot, including one where only keys the schema drops changed, builds nothing and keeps the
-revision.
+revision. One that changes something swaps in a snapshot that is new only along the paths that changed: every other
+subtree is the old one's, so `next.db === previous.db` says the `db` block did not change.
 
 `onChange` listeners run synchronously after the swap, with the new snapshot, the previous one and the paths that
 changed, before `reload()` resolves. A reload does not wait for a promise a listener returns; a throw or a rejection
-is logged, and the other listeners still run.
+is logged, and the other listeners still run. A listener never runs concurrently with itself: a swap that lands while
+its promise is pending reaches it once that settles, and a burst reaches it as the newest snapshot, with every path
+changed since its last call.
 
 ---
 

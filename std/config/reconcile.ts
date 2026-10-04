@@ -1,29 +1,27 @@
-import { isForbiddenKey, isPlainObject } from './tree.js'
+import { freezeCopy, isForbiddenKey, isPlainObject } from './tree.js'
 
 /**
- * The dotted path of every value that differs between `previous` and `next`. Empty exactly when the two are
- * deep-equal.
+ * Returns `next` frozen as {@link freezeCopy} would, except that a subtree deep-equal to its counterpart in the
+ * frozen tree `previous` is that counterpart, and appends to `changed` the dotted path of every value that differs.
  *
- * Arrays are values: one that differs is reported once, at its own path. A key only one side holds is reported at
- * its own path. Anything that is neither a plain object nor an array is compared by identity alone.
+ * `previous` itself comes back exactly when nothing differs. Otherwise only the objects along a changed path are new,
+ * so a subtree that did not change keeps its identity, and the result holds no copy of it.
+ *
+ * Arrays are values: one that differs is reported once, at its own path, and copied whole. A key only one side holds
+ * is reported at its own path. Anything that is neither a plain object nor an array is compared by identity alone.
  */
-export function changedPaths(previous: unknown, next: unknown): string[] {
-  const changed: string[] = []
-  collect(previous, next, '', changed)
-  return changed
-}
-
-function collect(previous: unknown, next: unknown, path: string, changed: string[]): void {
-  if (Object.is(previous, next)) {
-    return
-  }
-
+export function reconcile<T>(previous: T, next: unknown, changed: string[], path = ''): T {
   if (!isPlainObject(previous) || !isPlainObject(next)) {
-    if (!deepEquals(previous, next)) {
-      changed.push(path)
+    if (deepEquals(previous, next)) {
+      return previous
     }
-    return
+
+    changed.push(path)
+    return freezeCopy(next) as T
   }
+
+  const reported = changed.length
+  const out: Record<string, unknown> = {}
 
   for (const key of Object.keys(next)) {
     if (isForbiddenKey(key)) {
@@ -32,9 +30,10 @@ function collect(previous: unknown, next: unknown, path: string, changed: string
 
     const childPath = path === '' ? key : `${path}.${key}`
     if (Object.hasOwn(previous, key)) {
-      collect(previous[key], next[key], childPath, changed)
+      out[key] = reconcile(previous[key], next[key], changed, childPath)
     } else {
       changed.push(childPath)
+      out[key] = freezeCopy(next[key])
     }
   }
 
@@ -43,6 +42,9 @@ function collect(previous: unknown, next: unknown, path: string, changed: string
       changed.push(path === '' ? key : `${path}.${key}`)
     }
   }
+
+  // Nothing reported beneath means every key came back as `previous` holds it, and none was added or removed.
+  return changed.length === reported ? previous : (Object.freeze(out) as T)
 }
 
 /** Whether two trees hold the same data, stopping at the first difference. */
