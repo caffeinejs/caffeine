@@ -4,9 +4,10 @@ import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**
  * Opts a class (default for all its methods) or a method/field into retry via `RetryInterceptor`
- * (`builtin/retry`) — retried requests are gated by response status code and HTTP method, per
- * `options` (unset fields fall back to `DEFAULT_RETRY_OPTIONS`). A method-level `@Retry()`
- * completely replaces an inherited class-level one — options are not merged across levels.
+ * (`builtin/retry`) — a request is retried on a response status in `statusCodes`, or on a transport
+ * failure whose code is in `errorCodes`, when its HTTP method is in `methods`, per `options` (unset
+ * fields fall back to `DEFAULT_RETRY_OPTIONS`). A method-level `@Retry()` completely replaces an
+ * inherited class-level one — options are not merged across levels.
  */
 export function Retry(options: Partial<RetryOptions> = {}) {
   const resolved: RetryOptions = { ...DEFAULT_RETRY_OPTIONS, ...options }

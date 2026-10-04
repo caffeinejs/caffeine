@@ -57,7 +57,7 @@ describe('header/form decorators', () => {
     expect(methods.get('two')?.toMethodSpec().headers.has('x-trace')).toBe(false)
   })
 
-  it('@FormURLEncoded sets formURLEncoded/requestType and the content-type header at method level', () => {
+  it('@FormURLEncoded sets formURLEncoded and the content-type header at method level', () => {
     const { capture, metadata } = captureMetadata()
 
     @capture
@@ -72,11 +72,10 @@ describe('header/form decorators', () => {
     const spec = getMethodBuilders(metadata()).get('submit')?.toMethodSpec()
 
     expect(spec?.formURLEncoded).toBe(true)
-    expect(spec?.requestType).toBe('form')
     expect(spec?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
   })
 
-  it('@FormURLEncoded at class level sets requestType without the per-method flag', () => {
+  it('@FormURLEncoded at class level sets formURLEncoded and the content-type header on the class', () => {
     const { capture, metadata } = captureMetadata()
 
     @capture
@@ -90,7 +89,7 @@ describe('header/form decorators', () => {
 
     const spec = getClassBuilder(metadata())?.toClassSpec()
 
-    expect(spec?.requestType).toBe('form')
+    expect(spec?.formURLEncoded).toBe(true)
     expect(spec?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
   })
 

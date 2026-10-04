@@ -1,3 +1,5 @@
+import { CallbackCallAdapter } from '../builtin/callback/index.js'
+import type { CallAdapter } from '../call_adapter.js'
 import { Accept } from '../decorators/accept.js'
 import { API } from '../decorators/api.js'
 import { ContentType } from '../decorators/content_type.js'
@@ -5,7 +7,6 @@ import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
 import { Params } from '../decorators/params.js'
 import { Field } from '../decorators/params/field.js'
-import { Path } from '../decorators/path.js'
 import { RawResponse } from '../decorators/raw_response.js'
 import { Retry } from '../decorators/retry.js'
 import { POST } from '../decorators/verbs.js'
@@ -17,8 +18,7 @@ import { POST } from '../decorators/verbs.js'
  * nothing at run time can catch, since the call never happens. `npm run test:typecheck` is the test.
  */
 
-@API()
-@Path('/token')
+@API('/token')
 class FieldDeclaredAPI {
   @POST('/')
   @FormURLEncoded()
@@ -52,8 +52,7 @@ class FieldDeclaredAPI {
 }
 
 // The same decorators on a method, which already worked, so the fix does not trade one position for the other.
-@API()
-@Path('/token')
+@API('/token')
 class MethodDeclaredAPI {
   @POST('/')
   @FormURLEncoded()
@@ -78,3 +77,10 @@ class MethodDeclaredAPI {
 class ClassDeclaredAPI {}
 
 void [FieldDeclaredAPI, MethodDeclaredAPI, ClassDeclaredAPI]
+
+// A call adapter's result is what a call to the operation runs, so it has to be a function.
+const callbackAdapter: CallAdapter = CallbackCallAdapter.INSTANCE
+// @ts-expect-error a number is not a call shape
+const numberAdapter: CallAdapter<number> = { adapt: () => 42 }
+
+void [callbackAdapter, numberAdapter]

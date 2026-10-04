@@ -2,6 +2,7 @@ import type { Call } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { ChainExecutor } from './chain.js'
 import type { MethodSpec } from './decorators/registrar/index.js'
+import { ErrFetchyInvalidRoute } from './errors.js'
 import type { Interceptor } from './interceptor.js'
 import type { FetchyRequest } from './request.js'
 import { RequestBuilder } from './request_builder.js'
@@ -14,7 +15,6 @@ export interface InvokerContext {
   call: Call
   interceptors: readonly Interceptor[]
   responseConverter: ResponseConverter
-  errorResponseConverter: ResponseConverter
   callAdapterFactories: readonly CallAdapterFactory[]
 }
 
@@ -27,30 +27,48 @@ function terminalInterceptor(call: Call): Interceptor {
 }
 
 /**
- * Wires a single decorated method's request builder, interceptor chain, response handler and
- * response converter into the function `FetchyClient.create()` assigns onto the created instance.
+ * Performs one operation for one client: it takes the call's arguments as a single array.
  */
-export function buildInvoker(context: InvokerContext, meta: MethodSpec): (...args: unknown[]) => unknown {
+export type Invoker = (args: readonly unknown[]) => unknown
+
+/**
+ * Wires one operation's request builder, interceptor chain, response handler and response
+ * converter, and the call adapter that applies to it, into one {@link Invoker}.
+ *
+ * @param label - Names the operation in an error, e.g. `UsersAPI.getUser`
+ * @throws {@link ErrFetchyInvalidRoute} when the operation's call adapter does not return a function.
+ */
+export function buildInvoker(context: InvokerContext, meta: MethodSpec, label = meta.name): Invoker {
   const requestBuilder = new RequestBuilder(context.baseURL, meta)
-  const responseHandler = meta.responseHandler ?? new DefaultResponseHandler(context.errorResponseConverter)
+  const responseHandler = meta.responseHandler ?? new DefaultResponseHandler(context.responseConverter)
+  // The default handler passes an ok response through untouched, so awaiting it would only cost a promise and a tick.
+  const handlesOk = meta.responseHandler !== undefined
   const interceptors = [...context.interceptors, terminalInterceptor(context.call)]
   const execute: (request: FetchyRequest) => Promise<FetchyResponse> =
     context.interceptors.length === 0
       ? request => context.call.execute(request)
       : request => ChainExecutor.first(interceptors, request, meta).proceed(request)
 
-  const invoke = async (...args: unknown[]): Promise<unknown> => {
+  const invoke = async (args: readonly unknown[]): Promise<unknown> => {
     const request = requestBuilder.toRequest(args)
     const response = await execute(request)
-    const handled = await responseHandler.handle(request, response)
-    return context.responseConverter.convert(handled)
+    const handled = handlesOk || !response.ok ? await responseHandler.handle(request, response) : response
+    // Awaited, not returned: an async function resolving its promise with another promise costs an extra job.
+    const value = await context.responseConverter.convert(handled)
+    return value
   }
 
   for (const factory of context.callAdapterFactories) {
     const adapter = factory.provide(meta)
 
     if (adapter) {
-      return adapter.adapt(invoke) as (...args: unknown[]) => unknown
+      const adapted: unknown = adapter.adapt((...args: unknown[]) => invoke(args))
+
+      if (typeof adapted !== 'function') {
+        throw new ErrFetchyInvalidRoute(label, 'its call adapter did not return a function')
+      }
+
+      return args => (adapted as (...args: unknown[]) => unknown)(...args)
     }
   }
 

@@ -4,26 +4,33 @@ import type { FetchyResponse } from '../response.js'
 
 /**
  * Fake {@link Call} that records the last request it received and returns pre-programmed
- * responses, so tests can exercise the full pipeline without a real network.
+ * responses or failures, so tests can exercise the full pipeline without a real network.
  */
 export class TestCall implements Call {
   lastRequest: FetchyRequest | null = null
-  private readonly responses: Response[] = []
+  executions = 0
+  private readonly outcomes: (Response | Error)[] = []
 
   willRespond(response: Response): this {
-    this.responses.push(response)
+    this.outcomes.push(response)
+    return this
+  }
+
+  willFail(error: Error): this {
+    this.outcomes.push(error)
     return this
   }
 
   execute(request: FetchyRequest): Promise<FetchyResponse> {
     this.lastRequest = request
-    const response = this.responses.shift()
+    this.executions++
+    const outcome = this.outcomes.shift()
 
-    if (!response) {
+    if (!outcome) {
       throw new Error('TestCall has no more programmed responses')
     }
 
-    return Promise.resolve(response)
+    return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome)
   }
 }
 

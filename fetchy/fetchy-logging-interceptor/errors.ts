@@ -1,9 +1,9 @@
-import { FetchyError } from '@caffeinejs/fetchy'
+import { ErrFetchy } from '@caffeinejs/fetchy'
 
 /**
  * Thrown when `redactHeader()` is called with no header names to redact.
  */
-export class ErrFetchyLoggingInvalidRedactHeaderArgs extends FetchyError {
+export class ErrFetchyLoggingInvalidRedactHeaderArgs extends ErrFetchy {
   constructor() {
     super(
       'Cannot redact headers: at least one header name is required',

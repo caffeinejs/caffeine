@@ -5,7 +5,6 @@ import { API } from '../decorators/api.js'
 import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
-import { Path } from '../decorators/path.js'
 import { RawResponse } from '../decorators/raw_response.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
@@ -18,8 +17,7 @@ import { JSONResponseConverter, TextResponseConverter } from '../response_conver
 import { NoopResponseHandler } from '../response_handler.js'
 import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
 
-@API()
-@Path('/users')
+@API('/users')
 class ConverterAPI {
   @POST('/')
   @UseRequestBodyConverter(FormRequestBodyConverter)
@@ -62,8 +60,7 @@ class ConverterAPI {
   }
 }
 
-@API()
-@Path('/users')
+@API('/users')
 @UseRequestBodyConverter(FormRequestBodyConverter)
 class ClassDefaultConverterAPI {
   @POST('/')

@@ -1,7 +1,9 @@
-import { FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import { type Call, FetchyHeaders, FetchyRequest, newClient } from '@caffeinejs/fetchy'
+import { errors, Pool } from 'undici'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PoolOptionsBuilder } from '../pool_options_builder.js'
+import { UndiciCall } from '../undici_call.js'
 import { UndiciCallFactory } from '../undici_call_factory.js'
 import { startTestServer, type TestServer } from './test_server.js'
 
@@ -24,6 +26,7 @@ describe('UndiciCallFactory', () => {
     expect(response.status).toBe(200)
     expect(body.method).toBe('GET')
     expect(body.url).toBe('/ping?x=1')
+    await call.close?.()
   })
 
   it('forwards a request body to the server', async () => {
@@ -43,22 +46,63 @@ describe('UndiciCallFactory', () => {
 
     expect(body.method).toBe('POST')
     expect(body.body).toBe(JSON.stringify({ name: 'Ada' }))
-    await factory.pool()?.close()
+    await call.close?.()
   })
 
-  it('exposes the underlying Pool via pool(), which can be closed', async () => {
+  // The pool is the call's own: nothing else can reach it to close it, so the call has to.
+  it('closes the pool it created when the call is closed', async () => {
+    const call = new UndiciCallFactory().provide(server.baseURL)
+    await (await call.execute(new FetchyRequest('GET', server.baseURL, '/ping'))).text()
+
+    await call.close?.()
+
+    await expect(call.execute(new FetchyRequest('GET', server.baseURL, '/ping'))).rejects.toBeInstanceOf(
+      errors.UndiciError,
+    )
+  })
+
+  // A factory used to keep only the last pool it made, so sharing it between two clients leaked the first one.
+  it('gives each provide() its own pool, so closing one client leaves another working', async () => {
     const factory = new UndiciCallFactory()
-    expect(factory.pool()).toBeUndefined()
+    const first = factory.provide(server.baseURL)
+    const second = factory.provide(server.baseURL)
 
-    factory.provide(server.baseURL)
-    const pool = factory.pool()
+    await first.close?.()
+    const response = await second.execute(new FetchyRequest('GET', server.baseURL, '/ping'))
 
-    expect(pool).toBeDefined()
-    expect(pool?.closed).toBe(false)
+    expect(response.status).toBe(200)
+    await response.text()
+    await second.close?.()
+  })
 
-    await pool?.close()
+  // Whoever created a dispatcher closes it. One a caller hands to `UndiciCall` may be shared with other code.
+  it("leaves a caller's own dispatcher open when the client closes", async () => {
+    const pool = new Pool(server.baseURL)
+    const client = newClient()
+      .baseURL(server.baseURL)
+      .callFactory({ provide: () => new UndiciCall(pool) })
+      .build()
 
-    expect(pool?.closed).toBe(true)
+    await client.close()
+
+    expect(pool.closed).toBe(false)
+    await pool.close()
+  })
+
+  it('closes its pool when the client built with it closes', async () => {
+    const factory = new UndiciCallFactory()
+    let provided: Call | undefined
+    const client = newClient()
+      .baseURL(server.baseURL)
+      .callFactory({ provide: baseURL => (provided = factory.provide(baseURL)) })
+      .build()
+
+    await (await provided!.execute(new FetchyRequest('GET', server.baseURL, '/ping'))).text()
+    await client.close()
+
+    await expect(provided!.execute(new FetchyRequest('GET', server.baseURL, '/ping'))).rejects.toBeInstanceOf(
+      errors.UndiciError,
+    )
   })
 
   it('honors PoolOptionsBuilder-built options', async () => {
@@ -69,6 +113,7 @@ describe('UndiciCallFactory', () => {
     const response = await call.execute(new FetchyRequest('GET', server.baseURL, '/ping'))
 
     expect(response.status).toBe(200)
-    await factory.pool()?.close()
+    await response.text()
+    await call.close?.()
   })
 })

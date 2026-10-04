@@ -1,16 +1,15 @@
 import type { Chain, FetchyRequest, FetchyResponse, MethodSpec } from '@caffeinejs/fetchy'
 
 const DEFAULT_META: MethodSpec = {
+  name: '',
   httpMethod: '',
   path: '',
   headers: new Headers(),
   params: [],
   formURLEncoded: false,
-  requestType: undefined,
   responseConverter: undefined,
   requestBodyConverter: undefined,
   responseHandler: undefined,
-  kind: 'method',
   callback: false,
   retry: undefined,
   noRetry: false,

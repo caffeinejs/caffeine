@@ -114,7 +114,9 @@ to `fetchy/clients/index.ts`.
 
 `fetchy:overhead` sends the same call through a transport that answers one prepared response from memory, so no
 socket and no server take part. `control` awaits that transport and parses the body without fetchy. Each fetchy row
-minus `control` is what fetchy itself costs per call, which the network hides in `fetchy`.
+minus `control` is what fetchy itself costs per call, which the network hides in `fetchy`. Its `dispatch` groups
+measure only how a call reaches a client's invoker, against the own property `create()` defined before symbol
+dispatch; they read fetchy's internal keys off a client, which application code must not do.
 
 The Hey API and Orval clients are generated from `fetchy/openapi.yaml` and committed. After changing the spec,
 regenerate them with `npm run bench:fetchy:generate -w @caffeinejs/benchmarks`. Orval runs in `fetch` mode through
