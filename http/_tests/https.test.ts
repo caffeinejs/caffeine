@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
 
-import { CaffeineIoC, Scopes, token } from '@caffeinejs/di'
+import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
@@ -133,9 +133,9 @@ describe('a server serving TLS or HTTP/2', () => {
       const schema = $t.Object({
         tls: $t.Object({ key: $t.String(), cert: $t.String() }),
       })
-      const conf = newConfiguration(schema, token<InferConfig<typeof schema>>(Symbol('https.config')))
+      const conf = newConfiguration(schema)
         .source(new InlineConfigSource({ tls: { key: key.toString(), cert: cert.toString() } }))
-        .build()
+        .build().config
 
       app = createWebApplication({ config: conf })
         .server(({ config }) => ({ factory: { https: { key: config.tls.key, cert: config.tls.cert } }, listener }))

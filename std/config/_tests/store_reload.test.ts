@@ -5,14 +5,22 @@ import { loadConfig } from '../load.js'
 import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { kMergedTree } from '../store.js'
-import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
+import { testTokens } from '../tokens.testkit.js'
+import type {
+  ConfigChange,
+  ConfigDefinition,
+  ConfigLayer,
+  ConfigSchema,
+  ConfigSnapshot,
+  ConfigSource,
+} from '../types.js'
 import { hasFastProperties } from './v8.testkit.js'
 
 function definition<T = unknown>(
   sources: ConfigSource[],
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
 ): ConfigDefinition<T> {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 /** A live source over data the test changes, counting its loads. It cannot be reached while `fail` is set. */
@@ -83,20 +91,7 @@ describe('reload', () => {
     expect(hasFastProperties(store.current.db as object)).toBe(true)
   })
 
-  // The whole point: a singleton that kept the injected object reads the newest values with no refresh of its own.
-  it('reaches a holder of the live object and of any node of it', async () => {
-    const { source, state } = liveSource('remote', initial)
-    const store = await loadConfig<App>(definition([source], schema))
-    const holder = { config: store.live, server: store.live.server }
-
-    state.data = { ...initial, server: { host: 'h', port: 9 } }
-    await store.reload()
-
-    expect(holder.config.server.port).toBe(9)
-    expect(holder.server.port).toBe(9)
-  })
-
-  it('keeps the identity of every subtree that did not change', async () => {
+  it('swaps in a new frozen snapshot, and leaves the one a reader took before alone', async () => {
     const { source, state } = liveSource('remote', initial)
     const store = await loadConfig<App>(definition([source], schema))
     const before = store.current
@@ -105,8 +100,23 @@ describe('reload', () => {
     await store.reload()
 
     expect(store.current).not.toBe(before)
-    expect(store.current.db).toBe(before.db)
+    expect(store.current.server.port).toBe(2)
+    expect(before.server.port).toBe(1)
     expect(Object.isFrozen(store.current.server)).toBe(true)
+  })
+
+  // A listener handed both snapshots tells by identity which blocks a reload left alone, and a reload that changed one
+  // value does not copy the whole tree.
+  it('keeps every subtree a reload did not change, identity included', async () => {
+    const { source, state } = liveSource('remote', initial)
+    const store = await loadConfig<App>(definition([source], schema))
+    const before = store.current
+
+    state.data = { ...initial, server: { host: 'h', port: 2 } }
+    await store.reload()
+
+    expect(store.current.server).not.toBe(before.server)
+    expect(store.current.db).toBe(before.db)
   })
 
   it('changes nothing, and does not validate, when no source changed', async () => {
@@ -190,14 +200,11 @@ describe('reload', () => {
     const { source, state } = liveSource('remote', initial)
     const store = await loadConfig<App>(definition([source], schema), { logger })
     const before = store.current
-    const view = store.view(c => c.server)
     const listener = vi.fn()
     store.onChange(listener)
-    view.onChange(listener)
 
     state.data = { server: { host: 'h', port: 'nope' }, db: { url: 'changed' } }
     const outcome = await store.reload()
-    await store.settled()
 
     expect(outcome.status).toBe('rejected')
     expect(outcome.error).toMatchObject({
@@ -205,8 +212,7 @@ describe('reload', () => {
       issues: [expect.objectContaining({ path: 'server.port' })],
     })
     expect(store.current).toBe(before)
-    expect(store.live.db.url).toBe('u')
-    expect(view.value).toBe(before.server)
+    expect(store.current.db.url).toBe('u')
     expect(store.revision).toBe(0)
     expect(store.explain('db.url').layers[0].value).toBe('u')
     expect(listener).not.toHaveBeenCalled()
@@ -330,24 +336,184 @@ describe('reload', () => {
 
     expect(outcome.status).toBe('unchanged')
     expect(store.current).toBe(before)
-    expect((store[kMergedTree] as { unrelated: number }).unrelated).toBe(2)
     expect(store.explain('unrelated').layers[0].value).toBe(2)
+    // The application reads the merged tree once, at start-up: a reload never moves it.
+    expect((store[kMergedTree] as { unrelated: number }).unrelated).toBe(1)
   })
 
-  it('notifies the store listeners once per swap, with the previous snapshot and the change', async () => {
-    const { source, state } = liveSource('remote', initial)
-    const store = await loadConfig<App>(definition([source], schema))
-    const before = store.current
-    const listener = vi.fn()
-    store.onChange(listener)
+  describe('onChange', () => {
+    const flush = (): Promise<void> => new Promise(resolve => setImmediate(resolve))
 
-    state.data = { ...initial, db: { url: 'v' } }
-    await store.reload()
-    await store.reload()
-    await store.settled()
+    // Synchronous on purpose: by the time the reload resolves, every listener not still busy with a promise it
+    // returned has seen the new revision, so whoever awaited the reload can rely on what the listeners did.
+    it('calls a listener once per swap, before the reload resolves, with the previous snapshot and the change', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const before = store.current
+      const listener = vi.fn()
+      store.onChange(listener)
 
-    expect(listener).toHaveBeenCalledTimes(1)
-    expect(listener).toHaveBeenCalledWith(store.current, before, { revision: 1, changed: ['db.url'] })
+      state.data = { ...initial, db: { url: 'v' } }
+      await store.reload()
+
+      expect(listener).toHaveBeenCalledTimes(1)
+      expect(listener).toHaveBeenCalledWith(store.current, before, { revision: 1, changed: ['db.url'] })
+
+      await store.reload()
+
+      expect(listener).toHaveBeenCalledTimes(1)
+    })
+
+    it('runs the other listeners, and logs, when one throws or rejects', async () => {
+      const logger = new RecordingLogger()
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema), { logger })
+      const last = vi.fn()
+      store.onChange(() => {
+        throw new Error('boom')
+      })
+      store.onChange(() => Promise.reject(new Error('later')))
+      store.onChange(last)
+
+      state.data = { ...initial, db: { url: 'v' } }
+      expect((await store.reload()).status).toBe('applied')
+
+      expect(last).toHaveBeenCalledTimes(1)
+      await vi.waitFor(() =>
+        expect(logger.at('error').map(r => r.msg)).toEqual([
+          'config change listener failed',
+          'config change listener failed',
+        ]),
+      )
+    })
+
+    it('stops calling a listener once it unsubscribed, and every listener once the store closed', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const gone = vi.fn()
+      const kept = vi.fn()
+      const unsubscribe = store.onChange(gone)
+      store.onChange(kept)
+
+      unsubscribe()
+      state.data = { ...initial, db: { url: 'v' } }
+      await store.reload()
+
+      expect(gone).not.toHaveBeenCalled()
+      expect(kept).toHaveBeenCalledTimes(1)
+
+      await store.close()
+      state.data = { ...initial, db: { url: 'w' } }
+      await store.reload()
+
+      expect(kept).toHaveBeenCalledTimes(1)
+    })
+
+    // A listener that applies a change asynchronously, resizing a pool say, must never have a call for an older
+    // revision finish after one for a newer revision and leave the older values applied.
+    it('never runs a listener concurrently with itself, and hands it the newest swap once its promise settles', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const first = store.current
+      const calls: { value: ConfigSnapshot<App>; previous: ConfigSnapshot<App>; change: ConfigChange }[] = []
+      const gates: (() => void)[] = []
+      store.onChange((value, previous, change) => {
+        calls.push({ value, previous, change })
+        return new Promise<void>(resolve => gates.push(resolve))
+      })
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      const second = store.current
+      state.data = { server: { host: 'h', port: 2 }, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { server: { host: 'h', port: 2 }, db: { url: 'v3' } }
+      await store.reload()
+
+      expect(calls).toHaveLength(1)
+      expect(calls[0].value).toBe(second)
+      expect(calls[0].previous).toBe(first)
+      expect(calls[0].change).toEqual({ revision: 1, changed: ['db.url'] })
+
+      gates[0]()
+      await vi.waitFor(() => expect(calls).toHaveLength(2))
+
+      expect(calls[1].value).toBe(store.current)
+      expect(calls[1].previous).toBe(second)
+      expect(calls[1].change).toEqual({ revision: 3, changed: ['server.port', 'db.url'] })
+
+      gates[1]()
+      await flush()
+
+      expect(calls).toHaveLength(2)
+    })
+
+    it('hands a listener the swap that waited on its promise when that promise rejects, and logs', async () => {
+      const logger = new RecordingLogger()
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema), { logger })
+      const seen: string[] = []
+      let fail!: (error: Error) => void
+      store.onChange(async value => {
+        seen.push(value.db.url)
+        if (seen.length === 1) {
+          await new Promise<void>((_, reject) => {
+            fail = reject
+          })
+        }
+      })
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { ...initial, db: { url: 'v2' } }
+      await store.reload()
+      fail(new Error('later'))
+
+      await vi.waitFor(() => expect(seen).toEqual(['v1', 'v2']))
+      expect(logger.at('error').map(r => r.msg)).toEqual(['config change listener failed'])
+    })
+
+    it('skips a listener that an earlier listener unsubscribed during the same swap', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const gone = vi.fn()
+      let unsubscribeGone: (() => void) | undefined
+      store.onChange(() => unsubscribeGone?.())
+      unsubscribeGone = store.onChange(gone)
+
+      state.data = { ...initial, db: { url: 'v' } }
+      await store.reload()
+
+      expect(gone).not.toHaveBeenCalled()
+    })
+
+    it('drops the swap waiting for a busy listener once it unsubscribed, and for every one once the store closed', async () => {
+      const { source, state } = liveSource('remote', initial)
+      const store = await loadConfig<App>(definition([source], schema))
+      const gates: (() => void)[] = []
+      const busy = (): Promise<void> => new Promise<void>(resolve => gates.push(resolve))
+      const unsubscribed = vi.fn(busy)
+      const closed = vi.fn(busy)
+      const unsubscribe = store.onChange(unsubscribed)
+      store.onChange(closed)
+
+      state.data = { ...initial, db: { url: 'v1' } }
+      await store.reload()
+      state.data = { ...initial, db: { url: 'v2' } }
+      await store.reload()
+
+      unsubscribe()
+      gates[0]()
+      await flush()
+
+      expect(unsubscribed).toHaveBeenCalledTimes(1)
+
+      await store.close()
+      gates[1]()
+      await flush()
+
+      expect(closed).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('discards a reload that was in flight when the store closed', async () => {
@@ -388,7 +554,6 @@ describe('reload', () => {
     expect(await store.reload()).toMatchObject({ status: 'unchanged' })
     expect(state.loads).toBe(1)
     expect(store.current.server.port).toBe(1)
-    expect(store.live.server.port).toBe(1)
   })
 
   it('lets settled wait for a reload in flight', async () => {

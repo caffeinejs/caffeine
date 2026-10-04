@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
@@ -38,13 +38,12 @@ import type { AuthConfig } from '../config.js'
 
 // What the builder does with a value, not whether the value validates: the block is carried through as written.
 const schema = $t.Object({ auth: $t.Unsafe<AuthConfig>($t.Record($t.String(), $t.Unknown(), { default: {} })) })
-const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config.options'))
 
 const SESSION_SECRET = 'a-perfectly-long-session-secret-value!!'
 const JWT_SECRET = 'a-jwt-secret-that-is-at-least-32-bytes!!'
 
 const configured = (auth: Record<string, unknown>) =>
-  newConfiguration(schema, kConfig).source(new InlineConfigSource({ auth })).build()
+  newConfiguration(schema).source(new InlineConfigSource({ auth })).build().config
 
 const ada = () => new Principal(true, new Identity('test', true, [new Claim('sub', 'ada', '')]))
 

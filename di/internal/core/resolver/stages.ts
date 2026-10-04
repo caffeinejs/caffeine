@@ -102,6 +102,17 @@ type ConfigArgs = {
   defaultValue?: unknown
 }
 
+function selectorOf(access: ConfigArgs['access']): (provider: unknown) => unknown {
+  if (typeof access !== 'string') {
+    return access
+  }
+
+  const keys = access.split('.')
+
+  return (provider: unknown) =>
+    keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), provider)
+}
+
 /**
  * Resolves a value out of the values bound with `bindConfig()`.
  *
@@ -126,21 +137,49 @@ export const configStage: InjectionMiddleware = (ctx, _next, args) => {
 
   // The object itself, not a copy: a change made to it in place reaches the consumers built afterwards.
   const values = ctx.container.values
-  const select: (provider: unknown) => unknown =
-    typeof access === 'string'
-      ? (() => {
-          const keys = access.split('.')
-
-          return (provider: unknown) =>
-            keys.reduce((acc: unknown, k) => (acc == null ? undefined : (acc as Record<string, unknown>)[k]), provider)
-        })()
-      : (access as (provider: unknown) => unknown)
+  const select = selectorOf(access)
 
   return () => {
     const v = select(values)
 
     return v === undefined && hasDefault ? defaultValue : v
   }
+}
+
+/**
+ * Resolves a {@link Provider} that selects out of what the provider bound with `bindScopedConfig()` answers, on
+ * every `get()`.
+ *
+ * A provider is always delivered: with nothing bound, an optional injection's provider answers `undefined` and one
+ * with a default answers the default.
+ *
+ * @throws {@link ErrNoValuesProvider} when no provider is bound, and the injection is neither optional nor has a
+ * default.
+ */
+export const liveConfigStage: InjectionMiddleware = (ctx, _next, args) => {
+  const { access, defaultValue } = args as ConfigArgs
+  const hasDefault = defaultValue !== undefined
+
+  if (!ctx.container.hasScopedConfig) {
+    if (!hasDefault && !ctx.descriptor.optional) {
+      throw new ErrNoValuesProvider(describeContext(ctx), 'bindScopedConfig')
+    }
+
+    const fallback: Provider = { get: () => defaultValue }
+    return () => fallback
+  }
+
+  const scoped = ctx.container.scopedConfig
+  const select = selectorOf(access)
+  const provider: Provider = {
+    get: () => {
+      const v = select(scoped.get())
+
+      return v === undefined && hasDefault ? defaultValue : v
+    },
+  }
+
+  return () => provider
 }
 
 /**

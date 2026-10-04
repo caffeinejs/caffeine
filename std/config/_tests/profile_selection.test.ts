@@ -8,6 +8,7 @@ import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
 import { JSONConfigSource } from '../sources/json/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigLoadContext, ConfigSource } from '../types.js'
 
 let dir: string
@@ -28,7 +29,7 @@ async function write(name: string, content: unknown): Promise<string> {
 }
 
 function definition(sources: ConfigSource[]) {
-  return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 describe('profile selection', () => {

@@ -2,7 +2,6 @@ import { fc, it } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
 import { mergeLayers } from '../merge.js'
-import { reconcile } from '../reconcile.js'
 import { freezeDeep, isPlainObject, readPath } from '../tree.js'
 import type { ConfigLayer, ConfigObject } from '../types.js'
 
@@ -73,22 +72,5 @@ describe('mergeLayers (property)', () => {
 
   it.prop([tree])('is the identity for one layer', a => {
     expect(merge(a)).toEqual(a)
-  })
-})
-
-describe('reconcile (property)', () => {
-  it.prop([tree, tree])('returns a value deep-equal to next', (a, b) => {
-    expect(reconcile(a, b)).toEqual(b)
-  })
-
-  it.prop([tree])('returns previous itself when previous deep-equals next', a => {
-    expect(reconcile(a, structuredClone(a))).toBe(a)
-  })
-
-  it.prop([tree, tree])('reports a change exactly when the trees differ', (a, b) => {
-    const changed: string[] = []
-    const result = reconcile(a, b, changed)
-
-    expect(changed.length === 0).toBe(result === a)
   })
 })

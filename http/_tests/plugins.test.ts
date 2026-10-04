@@ -566,10 +566,9 @@ describe('a plugin registered with its options', () => {
       security: $t.Object({ header: $t.String() }),
       health: $t.Object({ enabled: $t.Optional($t.Boolean()) }),
     })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ security: { header: 'x-from-config' } }))
-      .build()
+      .build().config
 
     const pets = newRouter('/pair-typed').get('/', () => ({ ok: true }))
 

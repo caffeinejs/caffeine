@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { loadConfig } from '../load.js'
 import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
+import { testTokens } from '../tokens.testkit.js'
 import { WATCH_DEBOUNCE_MS, WATCH_RETRY_MS, pollDelay } from '../triggers.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSource } from '../types.js'
 
 function definition(sources: ConfigSource[]): ConfigDefinition {
-  return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 beforeEach(() => {
@@ -197,14 +198,13 @@ describe('watching', () => {
     }
     const { source, state } = watched()
     const store = await loadConfig(definition([fixed, source]))
-    const live = store.live as { host: string; value: number }
-
     state.value = 9
     state.changed?.()
     await vi.advanceTimersByTimeAsync(WATCH_DEBOUNCE_MS)
 
-    expect(live.value).toBe(9)
-    expect(live.host).toBe('h')
+    const current = store.current as { host: string; value: number }
+    expect(current.value).toBe(9)
+    expect(current.host).toBe('h')
     expect(neighbour.loads).toBe(1)
     await store.close()
   })

@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
 import { Application } from '../application.js'
@@ -14,10 +14,9 @@ import { noopLogger } from './noop.js'
 
 const schema = $t.Object({ logEnabled: $t.Boolean() })
 type AppConfig = { logEnabled: boolean }
-const kConfig = token<AppConfig>(Symbol('logger_builder.test.config'))
 
 function appWithConfig(logEnabled: boolean) {
-  const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({ logEnabled })).build()
+  const conf = newConfiguration(schema).source(new InlineConfigSource({ logEnabled })).build().config
 
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }
@@ -26,10 +25,9 @@ const sliceSchema = $t.Object({
   log: $t.Object({ level: $t.Optional($t.String()), enabled: $t.Optional($t.Boolean()) }),
 })
 type SliceConfig = { log: LoggerConfig }
-const kSlice = token<SliceConfig>(Symbol('logger_builder.test.slice'))
 
 function appWithSlice(log: LoggerConfig) {
-  const conf = newConfiguration(sliceSchema, kSlice).source(new InlineConfigSource({ log })).build()
+  const conf = newConfiguration(sliceSchema).source(new InlineConfigSource({ log })).build().config
 
   return new Application({ container: new CaffeineIoC({ decorators: false }), config: conf })
 }

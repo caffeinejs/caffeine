@@ -1,6 +1,6 @@
 import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 
-import type { ConfigStore, LiveConfig } from './config/index.js'
+import type { ConfigSnapshot, ConfigStore } from './config/index.js'
 import { ErrCaffeine } from './error.js'
 import type { Logger } from './logger/logger.js'
 
@@ -12,9 +12,12 @@ import type { Logger } from './logger/logger.js'
 export interface FeatureConfigureKit<C = unknown> {
   /** IoC container exposing binding operations. Lookup is not available until the container initializes. */
   container: ContainerBindingOps
-  /** The live config object: a node read from it follows every reload. */
-  config: LiveConfig<C>
-  /** The loaded configuration: snapshots, views, and what explains a value. */
+  /**
+   * The configuration the application is being configured with. A snapshot: a node handed from it to a builder keeps
+   * these values, and a reload never reaches it.
+   */
+  config: ConfigSnapshot<C>
+  /** The loaded configuration: the current snapshot, change notification, and what explains a value. */
   store: ConfigStore<C>
 }
 
@@ -29,14 +32,14 @@ export interface BootstrapKit<C = unknown> {
   container: ContainerOps
 
   /**
-   * The live config object: a value taken from a node rather than copied out of it follows a reload.
+   * The configuration as it is when the feature bootstraps. A snapshot: a reload never reaches it.
    *
    * A feature sees `C` as `unknown` here and cannot usefully navigate it. The typed path is the `config` on
-   * the kit the application's configure callback was handed, which is this same object.
+   * the kit the application's configure callback was handed.
    */
-  config: LiveConfig<C>
+  config: ConfigSnapshot<C>
 
-  /** The loaded configuration: snapshots, views, and what explains a value. */
+  /** The loaded configuration: the current snapshot, change notification, and what explains a value. */
   store: ConfigStore<C>
 
   /** The application's logger, as the logger feature configured it. */

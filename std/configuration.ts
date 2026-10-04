@@ -1,4 +1,4 @@
-import type { NamedToken } from '@caffeinejs/di'
+import { token, type NamedToken, type Provider } from '@caffeinejs/di'
 
 import {
   DEFAULT_LOAD_TIMEOUT_MS,
@@ -12,6 +12,24 @@ import {
 import { ArgvConfigSource, type ArgvConfigSourceOptions } from './config/sources/argv/index.js'
 import { type Duration, toMillis } from './duration/index.js'
 
+/** What {@link ConfigurationBuilder.build} returns: the definition the application loads, and its tokens. */
+export interface Configuration<T> {
+  /** Handed to the application: `createApplication({ config: conf.config })`. */
+  readonly config: ConfigDefinition<T>
+  /**
+   * Resolves to the configuration the application started with. A reload never reaches it, so a singleton and a
+   * transient built after a reload read the same values.
+   */
+  readonly configToken: NamedToken<T>
+  /**
+   * Resolves to a provider whose `get()` answers the configuration as it is now. What a component built once
+   * injects to follow reloads.
+   */
+  readonly liveConfigToken: NamedToken<Provider<T>>
+  /** Resolves to the store the configuration was loaded into, typed after the schema. */
+  readonly storeToken: NamedToken<ConfigStore<T>>
+}
+
 /**
  * Fluent definition of an application's configuration, started with {@link newConfiguration}.
  *
@@ -20,16 +38,12 @@ import { type Duration, toMillis } from './duration/index.js'
  */
 export class ConfigurationBuilder<T = unknown> {
   readonly #schema: ConfigSchema<T>
-  readonly #key: NamedToken<T>
-  readonly #storeKey: NamedToken<ConfigStore<T>> | undefined
   readonly #sources: ConfigSource[] = []
   #loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS
   #dotenv: DotenvOptions | undefined
 
-  constructor(schema: ConfigSchema<T>, key: NamedToken<T>, storeKey?: NamedToken<ConfigStore<T>>) {
+  constructor(schema: ConfigSchema<T>) {
     this.#schema = schema
-    this.#key = key
-    this.#storeKey = storeKey
   }
 
   /** Adds a source. It wins a conflicting value over every source added before it. */
@@ -71,38 +85,44 @@ export class ConfigurationBuilder<T = unknown> {
     return this
   }
 
-  /** Finishes the configuration. What it returns is data, fixed from here on. */
-  build(): ConfigDefinition<T> {
+  /** Finishes the configuration. What it returns is data, fixed from here on, and its tokens are new each call. */
+  build(): Configuration<T> {
+    // `token<T>()` refuses a `T` it cannot see is named; the schema names it, so the symbol is branded directly.
+    const configToken = Symbol('caffeine.config') as NamedToken<T>
+    const liveConfigToken = token<Provider<T>>(Symbol('caffeine.config.live'))
+    const storeToken = token<ConfigStore<T>>(Symbol('caffeine.config.store'))
+
     return Object.freeze({
-      schema: this.#schema,
-      key: this.#key,
-      storeKey: this.#storeKey,
-      sources: Object.freeze([...this.#sources]),
-      loadTimeoutMs: this.#loadTimeoutMs,
-      dotenv: this.#dotenv === undefined ? undefined : Object.freeze({ ...this.#dotenv }),
+      config: Object.freeze({
+        schema: this.#schema,
+        configToken,
+        liveConfigToken,
+        storeToken,
+        sources: Object.freeze([...this.#sources]),
+        loadTimeoutMs: this.#loadTimeoutMs,
+        dotenv: this.#dotenv === undefined ? undefined : Object.freeze({ ...this.#dotenv }),
+      }),
+      configToken,
+      liveConfigToken,
+      storeToken,
     })
   }
 }
 
 /**
- * Starts a configuration: the schema it is validated against, the key the live config object is bound under, and
- * optionally a key for the typed store.
- *
- * The key names the application's own type, so the schema and the key must agree:
+ * Starts a configuration, validated against `schema`. What `build()` returns carries the tokens, typed after the
+ * schema:
  *
  * ```ts
- * export type AppConfig = InferConfig<typeof appConfigSchema>
- * export const kConfig = token<AppConfig>(Symbol('app.config'))
+ * const conf = newConfiguration(appConfigSchema).source(new EnvConfigSource({ prefix: 'APP_' })).build()
  *
- * const conf = newConfiguration(appConfigSchema, kConfig).source(new EnvConfigSource({ prefix: 'APP_' })).build()
+ * export const kConfig = conf.configToken          // the configuration the application started with
+ * export const kLiveConfig = conf.liveConfigToken  // a Provider: `get()` answers the configuration now
+ * export const kConfigStore = conf.storeToken      // the store: `explain()`, `reload()`, `onChange()`
  *
- * createApplication({ config: conf })
+ * createApplication({ config: conf.config })
  * ```
  */
-export function newConfiguration<S extends ConfigSchema, T extends InferConfig<NoInfer<S>> = InferConfig<NoInfer<S>>>(
-  schema: S,
-  key: NamedToken<T>,
-  storeKey?: NamedToken<ConfigStore<T>>,
-): ConfigurationBuilder<T> {
-  return new ConfigurationBuilder<T>(schema as ConfigSchema<T>, key, storeKey)
+export function newConfiguration<S extends ConfigSchema>(schema: S): ConfigurationBuilder<InferConfig<S>> {
+  return new ConfigurationBuilder<InferConfig<S>>(schema as ConfigSchema<InferConfig<S>>)
 }

@@ -85,15 +85,6 @@ describe('freezeCopy', () => {
     expect(Object.isFrozen(shared.inner)).toBe(false)
   })
 
-  // A reconciled tree shares the subtrees of the previous snapshot. Copying them would cost the whole tree on every
-  // reload and would break the identity that tells a reader nothing changed there.
-  it('returns a subtree of previous, at the same path, as it is', () => {
-    const previous = freezeCopy({ kept: { n: 1 } })
-
-    expect(freezeCopy({ kept: previous.kept }, previous).kept).toBe(previous.kept)
-    expect(freezeCopy(previous, previous)).toBe(previous)
-  })
-
   it('freezes any other object in place', () => {
     const date = new Date(0)
 

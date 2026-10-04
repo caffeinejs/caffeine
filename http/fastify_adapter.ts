@@ -255,8 +255,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       sockets = open
     }
 
-    // Copied and read once: `listen()` writes into what it is handed, a live configuration node refuses that, and
-    // the address has to stop moving once the socket is bound.
+    // Copied and read once: `listen()` writes into what it is handed, and a frozen configuration node refuses that.
     const server = new FastifyAdapterServer(fastify, listener === undefined ? undefined : { ...listener }, sockets)
 
     try {

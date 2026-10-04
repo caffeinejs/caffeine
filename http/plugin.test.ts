@@ -59,8 +59,7 @@ describe('WebApplication.install()', () => {
   it('flows the config type to features configured after construction', async () => {
     const container = new CaffeineIoC()
     const schema = $t.Object({ nothing: $t.String({ default: '' }) })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-    const conf = newConfiguration(schema, kConfig).source(new EnvConfigSource()).build()
+    const conf = newConfiguration(schema).source(new EnvConfigSource()).build().config
 
     const app = createWebApplication({ container, config: conf }).install(probe(t => t.capture('after-config:9092')))
 
@@ -71,8 +70,7 @@ describe('WebApplication.install()', () => {
 
   it('types a feature configured after construction against the constructor-supplied config', () => {
     const schema = $t.Object({ app: $t.Object({ server: $t.Object({ host: $t.String(), port: $t.Number() }) }) })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
-    const conf = newConfiguration(schema, kConfig).source(new EnvConfigSource()).build()
+    const conf = newConfiguration(schema).source(new EnvConfigSource()).build().config
 
     const app = createWebApplication({ config: conf })
       .install(probe())

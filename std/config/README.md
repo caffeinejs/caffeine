@@ -1,8 +1,8 @@
 # `@caffeinejs/std/config`
 
 The configuration of a Caffeine application: a tree built from ordered sources, validated against the
-application's own schema, and read as a plain object. A live source can change part of the tree while the process
-runs, and every reader of the configuration sees the new values without asking.
+application's own schema, and read as a plain, frozen object. A live source can change part of the tree while the
+process runs: the store then builds a new snapshot, and code that asked to follow reloads reads it.
 
 ```ts
 import type { InferConfig } from '@caffeinejs/std/config'
@@ -18,19 +18,18 @@ exceptions (see `CONVENTIONS.md`).
 
 ## The pieces
 
-| Name                  | What it is                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------ |
-| `ConfigSource`        | Where configuration comes from: an object with `load()`, and maybe a way to change         |
-| `ConfigLayer`         | What a source contributed: a named, sparse tree                                            |
-| `ConfigDefinition<T>` | What `newConfiguration(...).build()` returns: schema, keys, sources. Data only             |
-| `ConfigStore<T>`      | The runtime: it loads, validates, reloads, and explains every value                        |
-| `LiveConfig<T>`       | The object an application injects. One identity, and its fields follow every reload        |
-| `ConfigSnapshot<T>`   | The validated tree at one revision. Frozen, and replaced rather than changed by a reload   |
-| `ConfigView<V>`       | A value derived from the configuration that the store keeps current, with its own listener |
+| Name                  | What it is                                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `ConfigSource`        | Where configuration comes from: an object with `load()`, and maybe a way to change       |
+| `ConfigLayer`         | What a source contributed: a named, sparse tree                                          |
+| `ConfigDefinition<T>` | What `newConfiguration(...).build().config` holds: schema, tokens, sources. Data only    |
+| `ConfigStore<T>`      | The runtime: it loads, validates, reloads, and explains every value                      |
+| `ConfigSnapshot<T>`   | The validated tree at one revision. Frozen, and replaced rather than changed by a reload |
 
 A source **loads** layers. Layers **merge** into one tree, later wins, and the placeholders in file values are
-**interpolated**. The schema **validates** it into a snapshot. The store **swaps** the snapshot in and keeps the live
-object in step. After the first load, the whole pipeline is a **reload**.
+**interpolated**. The schema **validates** it. When the result differs from the current snapshot, the store
+**swaps** in a new frozen one; when it does not, nothing is built. After the first load, the whole pipeline is a
+**reload**.
 
 ```mermaid
 flowchart TB
@@ -42,7 +41,7 @@ flowchart TB
   C --> M["merge: objects merge key by key, arrays and scalars replace"]
   M --> I["interpolate: file placeholders filled in from the environment and the merged tree"]
   I --> V["validate against the schema: defaults, conversion, codecs, unknown keys dropped"]
-  V --> W["swap: new snapshot, live object synced, views updated"]
+  V --> W["swap, only when something changed: one new frozen snapshot, revision + 1"]
   W --> N["listeners, logs, diagnostics channels"]
 ```
 
@@ -50,30 +49,34 @@ flowchart TB
 
 ## Declaring the configuration
 
-`newConfiguration(schema, key)` names the schema the tree is validated against and the key the live config object
-is bound under. The key names the application's own type, so the two must agree:
+`newConfiguration(schema)` names the schema the tree is validated against. `build()` returns the definition the
+application loads and three tokens, all typed from the schema:
 
 ```ts
 // config.ts
 export const appConfigSchema = $t.Object({
   server: $t.Object({ host: $t.String({ default: '0.0.0.0' }), port: $t.Number({ default: 9999 }) }, { default: {} }),
 })
-export type AppConfig = InferConfig<typeof appConfigSchema>
-export const kAppConfig = token<AppConfig>(Symbol('petstore.config'))
 
-// app.ts
-const conf = newConfiguration(appConfigSchema, kAppConfig)
+const conf = newConfiguration(appConfigSchema)
   .source(new JSONConfigSource('./config/app.json'))
   .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
   .argv()
   .build()
 
-createWebApplication({ config: conf }).server(({ config }) => ({ listener: config.server }))
+export const kConfig = conf.configToken // the configuration the application started with
+export const kLiveConfig = conf.liveConfigToken // a Provider: get() answers the configuration as it is now
+export const kConfigStore = conf.storeToken // the store, typed after the schema
+export const config = conf.config
+
+// app.ts
+createWebApplication({ config }).server(({ config }) => ({ listener: config.server }))
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
 overrides the file and the command line overrides both. `.loadTimeout('10s')` bounds each load of each source; the
-default is 30 seconds. A third argument, `newConfiguration(schema, key, storeKey)`, binds the typed store as well.
+default is 30 seconds. Every `build()` mints new tokens, so two configurations in one container never answer to each
+other's.
 
 The schema is the `$t` dialect (TypeBox), or any [Standard Schema](https://standardschema.dev) such as zod v4,
 valibot or arktype, validated by its own library. An application that declares nothing still loads: no source, and
@@ -83,20 +86,20 @@ a schema that keeps every key.
 
 ## Reading configuration
 
-| Need                                                     | Use                                           | Follows a reload                             |
-| -------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| Read settings in a service                               | Inject the application key: the live object   | Yes, always                                  |
-| One revision across several `await`s, or for one request | `store.current`, or `ctx.config` in a request | No, by design                                |
-| A value built from settings, or a reaction to a change   | `store.view(...)`                             | Yes: `value` is reassigned, `onChange` fires |
-| One value, fixed when the consumer is built              | `$i.config(c => c.database.host)`             | Only when the consumer is rebuilt            |
+| Need                                                | Use                                                  | Follows a reload              |
+| --------------------------------------------------- | ---------------------------------------------------- | ----------------------------- |
+| Read settings in a service                          | Inject `kConfig`                                     | No: start-up values           |
+| One value, injected                                 | `$i.config(c => c.database.host)`                    | No: start-up values           |
+| Read settings in a service that must follow reloads | Inject `kLiveConfig`, a `Provider`, and call `get()` | Yes, on every `get()`         |
+| One value that must follow reloads                  | `$i.liveConfig(c => c.database.host)`, a `Provider`  | Yes, on every `get()`         |
+| One revision for one request                        | `ctx.config`                                         | No: one request, one revision |
+| The configuration now, outside the container        | `store.current`, `app.config`                        | Yes, on every read            |
+| A reaction to a change                              | `store.onChange(listener)`                           | Yes                           |
 
-`$i.config` reads the live object: a leaf it selects is fixed when the consumer is built, and a node it selects is the
-live node, which follows every reload.
-
-The ordinary way has no wrapper:
+The ordinary way has no wrapper, and reads what the application started with:
 
 ```ts
-@Injectable([kAppConfig])
+@Injectable([kConfig])
 class Pricing {
   constructor(private readonly config: AppConfig) {}
 
@@ -106,42 +109,26 @@ class Pricing {
 }
 ```
 
-A singleton built once still reads the margin of the newest reload, and so does a node kept on a field. The live
-object is an ordinary object whose properties are read-only data properties, not a `Proxy`: a read costs what a
-plain object costs, and a write throws. `Object.keys`, `in`, spread, `JSON.stringify` and `console.log` behave as they
-would on a plain object.
-
-Three limits follow from what a live object is:
-
-- Reads separated by an `await` can come from two revisions. Code that needs one takes `store.current` first.
-- An array is a value. A kept array, or an element of one, is a snapshot; read it from a live node each time.
-- A node's identity never changes, so it cannot tell you whether anything changed. Use a view, or `onChange`.
-
-The store itself is bound under the `ConfigStore` class. It carries `current`, `revision`, `view()`, `onChange()`,
-`reload()`, `explain()` and `inspect()`.
-
----
-
-## Views
-
-A view is a value the store keeps current. `select` runs once when the view is made and once per swap, never on a
-read. An optional `derive` turns the selection into something that is not plain data, and runs only when the
-selection changed.
+A service that must see a reload takes the live token instead. The provider costs one call per read, and hands
+back the frozen snapshot of the current revision:
 
 ```ts
-const pool = store.view(c => c.database.pool)
-pool.onChange(async next => db.resize(next.max)) // silent unless the pool settings changed
+@Injectable([kLiveConfig])
+class Pricing {
+  constructor(private readonly config: Provider<AppConfig>) {}
 
-const allowed = store.view(
-  c => c.security.allowedOrigins,
-  origins => new Set(origins),
-)
-allowed.value.has(origin) // a property read on the request path; the Set is rebuilt only when the list changes
+  quote(): number {
+    return this.config.get().pricing.margin
+  }
+}
 ```
 
-A selection deep-equal to the previous one keeps its identity, so a view is a safe memo key and a listener hears
-only about its own part of the tree. The store holds a view until `close()`: make views while wiring, never per
-request. A selector that throws during a swap is logged and leaves the view as it was.
+A snapshot is an ordinary frozen object, not a `Proxy`: a read costs what a plain object costs, and a write throws.
+It never changes, so reads from one snapshot always agree with each other. Code that reads several values across an
+`await` and needs them from one revision calls `get()` once and keeps the snapshot.
+
+The store itself is bound under the `storeToken`, typed, and under the `ConfigStore` class. It carries `current`, `revision`, `onChange()`, `reload()`,
+`explain()` and `inspect()`.
 
 ---
 
@@ -151,12 +138,12 @@ A feature registers nothing here. The application hands it what it wants, in the
 
 ```ts
 .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
-.with(thing((b, { store }) => b.config(store.view(t => t.app.thing))))
 .logger((b, { config }) => b.config(config.app.log))
 ```
 
-- **Liveness is the author's choice.** A node handed over follows every reload; a scalar copied out of one does
-  not. A feature's own resolved options are a plain object read once, when the feature configures.
+- **A feature is built from the start-up snapshot.** `config` in the callback is the snapshot the application was
+  configured with, and a node handed over keeps those values. A feature that must act on a reload subscribes with
+  `store.onChange(...)` from the same kit.
 - **The application's schema is the only schema.** A feature seeds nothing, so a block declared with required,
   undefaulted fields and no source to fill them fails validation.
 
@@ -297,7 +284,7 @@ import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { loadEnvFiles } from '@caffeinejs/std/config/nodejs'
 
-newConfiguration(ConfigSchema, kConfig)
+newConfiguration(ConfigSchema)
   .dotEnv({ loader: loadEnvFiles, path: './config' })
   .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
   .build()
@@ -369,14 +356,18 @@ the source is not asked again, and each attempt fails at once with `ERR_CONFIG_S
 layers changed, nothing is merged or validated. Every merge interpolates afresh, so a value built from a live source
 follows it; the environment is read then, and a change to it alone reloads nothing.
 
-A reload is all or nothing. When the new tree fails validation the reload is rejected: the snapshot, the live
-object, the views and every source's layers stay as they were, and nobody is notified. A source that fails to load
-keeps its last good layers. Either way the reason is logged, and `reload()` resolves with an outcome rather than
-rejecting.
+A reload is all or nothing. When the new tree fails validation the reload is rejected: the snapshot and every
+source's layers stay as they were, and nobody is notified. A source that fails to load keeps its last good layers.
+Either way the reason is logged, and `reload()` resolves with an outcome rather than rejecting. A reload whose tree
+equals the current snapshot, including one where only keys the schema drops changed, builds nothing and keeps the
+revision. One that changes something swaps in a snapshot that is new only along the paths that changed: every other
+subtree is the old one's, so `next.db === previous.db` says the `db` block did not change.
 
-`onChange` listeners, on the store and on views, run after everything is at the new revision. A reload never waits
-for them; a listener never runs concurrently with itself, a burst reaches it as the newest value, and a throw is
-logged.
+`onChange` listeners run synchronously after the swap, with the new snapshot, the previous one and the paths that
+changed, before `reload()` resolves. A reload does not wait for a promise a listener returns; a throw or a rejection
+is logged, and the other listeners still run. A listener never runs concurrently with itself: a swap that lands while
+its promise is pending reaches it once that settles, and a burst reaches it as the newest snapshot, with every path
+changed since its last call.
 
 ---
 
@@ -413,7 +404,7 @@ sequenceDiagram
   App->>Store: loadConfig(definition, profiles named in code), not started yet
   Store->>Store: the base dotenv file, the active profiles, their dotenv files, then every source
   App->>App: read caffeine.name, and apply the store's profiles to the container
-  App->>Feat: configure: the callback gets the live object and the store
+  App->>Feat: configure: the callback gets the start-up snapshot and the store
   App->>App: logConfigLoaded, once the logger is final
   App->>App: container.init(), features bootstrap, platform set up
   App->>Store: start(): poll timers and watchers armed
@@ -441,16 +432,16 @@ A tree that cannot validate fails `bootstrap()`, which is more legible than fail
 
 ## Package layout
 
-| Area                  | Files                                                      |
-| --------------------- | ---------------------------------------------------------- |
-| Vocabulary            | `types.ts`                                                 |
-| Trees                 | `tree.ts`, `merge.ts`, `reconcile.ts`, `live.ts`           |
-| Interpolation         | `interpolation.ts`                                         |
-| Runtime               | `store.ts`, `load.ts`, `triggers.ts`, `change_notifier.ts` |
-| Schema                | `schema.ts`, `errors.ts`                                   |
-| Diagnostics           | `explain.ts`, `observe.ts`                                 |
-| Profiles              | `profiles.ts`                                              |
-| Dotenv files          | `dotenv.ts`                                                |
-| Container integration | `integration/module.ts`                                    |
-| Sources               | `sources/`                                                 |
-| Node.js dotenv loader | `nodejs/`                                                  |
+| Area                  | Files                                 |
+| --------------------- | ------------------------------------- |
+| Vocabulary            | `types.ts`                            |
+| Trees                 | `tree.ts`, `merge.ts`, `reconcile.ts` |
+| Interpolation         | `interpolation.ts`                    |
+| Runtime               | `store.ts`, `load.ts`, `triggers.ts`  |
+| Schema                | `schema.ts`, `errors.ts`              |
+| Diagnostics           | `explain.ts`, `observe.ts`            |
+| Profiles              | `profiles.ts`                         |
+| Dotenv files          | `dotenv.ts`                           |
+| Container integration | `integration/module.ts`               |
+| Sources               | `sources/`                            |
+| Node.js dotenv loader | `nodejs/`                             |

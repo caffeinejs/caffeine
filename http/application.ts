@@ -512,7 +512,7 @@ export class WebApplication<
     // One context for everything built from here on. `log` is the configured logger by now.
     const context: HTTPSetupContext = {
       container: this.container,
-      config: this.liveConfig,
+      config: this.configSnapshot,
       store: this.configStore,
       logger: this.log,
       hasFeature: name => this.hasFeature(name),

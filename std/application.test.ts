@@ -44,7 +44,6 @@ import { ErrShutdownTimeout, type ShutdownSignal, type SignalDispatcher } from '
 const caffeineSchema = $t.Object({
   caffeine: $t.Object({ name: $t.Optional($t.String()), profiles: $t.Optional($t.List($t.String())) }, { default: {} }),
 })
-const kConfig = token<InferConfig<typeof caffeineSchema>>(Symbol('app.config'))
 
 // Builds a headless app over an isolated container (no global autowire) with only the explicit binds —
 // exercises the singleton-scan discovery path deterministically.
@@ -121,9 +120,9 @@ describe('Application lifecycle', () => {
   // fails before then must close it, or the sources it loaded stay open with nobody left to close them.
   it('closes the configuration when bootstrap() fails before the container initializes', async () => {
     const close = vi.fn()
-    const conf = newConfiguration(caffeineSchema, kConfig)
+    const conf = newConfiguration(caffeineSchema)
       .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
-      .build()
+      .build().config
     const misconfigured: Feature = {
       [kFeatureName]: 'misconfigured',
       [kFeatureConfigure]() {
@@ -251,7 +250,6 @@ describe('Application.install', () => {
 
 const widgetSchema = $t.Object({ widget: $t.Object({ size: $t.Number() }) })
 type WidgetConfig = { widget: { size: number } }
-const kWidgetConfig = token<WidgetConfig>(Symbol('app.config'))
 
 /** A minimal feature: reads the resolved configuration, then binds what it found. */
 class WidgetFeature implements Feature<WidgetConfig> {
@@ -273,9 +271,9 @@ class WidgetFeature implements Feature<WidgetConfig> {
 }
 
 function widgetApp(feature: Feature<never>, size: number) {
-  const conf = newConfiguration(widgetSchema, kWidgetConfig)
+  const conf = newConfiguration(widgetSchema)
     .source(new InlineConfigSource({ widget: { size } }))
-    .build()
+    .build().config
   return createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(feature)
 }
 
@@ -350,9 +348,9 @@ describe('feature lifecycle', () => {
     let configured = false
 
     // The tree carries a string where the schema declares a number.
-    const conf = newConfiguration(widgetSchema, kWidgetConfig)
+    const conf = newConfiguration(widgetSchema)
       .source(new InlineConfigSource({ widget: { size: 'not-a-number' } }))
-      .build()
+      .build().config
 
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install({
       get [kFeatureName](): string {
@@ -443,9 +441,9 @@ describe('bootstrap() callback', () => {
   // The callback is the place that can still install a feature after the config exists and before the list
   // of features is read. A feature added there has to configure and bootstrap, or the call only looks like it worked.
   it('configures and bootstraps a feature installed from the callback, against the loaded config', async () => {
-    const conf = newConfiguration(widgetSchema, kWidgetConfig)
+    const conf = newConfiguration(widgetSchema)
       .source(new InlineConfigSource({ widget: { size: 7 }, caffeine: { name: 'petstore' } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
     let seenSize: number | undefined
@@ -519,9 +517,9 @@ describe('bootstrap() callback', () => {
   // A callback that throws is a boot that never initialized the container, so the store has to be closed here.
   it('closes the configuration when the callback throws, before the container initializes', async () => {
     const close = vi.fn()
-    const conf = newConfiguration(caffeineSchema, kConfig)
+    const conf = newConfiguration(caffeineSchema)
       .source({ name: 'watched', load: () => [{ name: 'watched', data: {} }], close })
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
     await expect(
@@ -599,9 +597,9 @@ describe('application name and profiles', () => {
   })
 
   it('reads caffeine.name from a config source', async () => {
-    const conf = newConfiguration(caffeineSchema, kConfig)
+    const conf = newConfiguration(caffeineSchema)
       .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.bootstrap()
 
@@ -663,7 +661,7 @@ describe('application name and profiles', () => {
 
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf().profiles('eu'))
-    const conf = newConfiguration(caffeineSchema, kConfig).dotEnv({ loader, path: 'config' }).build()
+    const conf = newConfiguration(caffeineSchema).dotEnv({ loader, path: 'config' }).build().config
     const app = createApplication({ container, config: conf })
     await app.bootstrap()
 
@@ -711,9 +709,9 @@ describe('application name and profiles', () => {
   it('run() resolves to the application name and active profiles', async () => {
     vi.stubEnv('CAFFEINE_PROFILES', 'eu')
 
-    const conf = newConfiguration(caffeineSchema, kConfig)
+    const conf = newConfiguration(caffeineSchema)
       .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
 
     // The point: a caller reads post-start identity straight off run(), without keeping the app handle to
@@ -738,9 +736,9 @@ describe('application name and profiles', () => {
   it('activates no profile a source carries', async () => {
     const container = new CaffeineIoC({ decorators: false })
     container.bind(EuOnly, t => t.toSelf().profiles('eu'))
-    const conf = newConfiguration(caffeineSchema, kConfig)
+    const conf = newConfiguration(caffeineSchema)
       .source(new InlineConfigSource({ caffeine: { profiles: ['eu'] } }))
-      .build()
+      .build().config
     const app = createApplication({ container, config: conf })
     await app.bootstrap()
 
@@ -771,7 +769,7 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-e2e.json', JSON.stringify({ caffeine: { name: 'base', profiles: ['eu'] } }))
     await writeTmp('app-e2e-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
-    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
+    const conf = newConfiguration(caffeineSchema).source(new JSONConfigSource(base)).build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     await app.bootstrap()
 
@@ -783,7 +781,7 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-opt.json', JSON.stringify({ caffeine: { name: 'base' } }))
     await writeTmp('app-opt-eu.json', JSON.stringify({ caffeine: { name: 'eu-app' } }))
 
-    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
+    const conf = newConfiguration(caffeineSchema).source(new JSONConfigSource(base)).build().config
     const app = createApplication({
       container: new CaffeineIoC({ decorators: false }),
       config: conf,
@@ -799,7 +797,7 @@ describe('profile-segregated config files', () => {
     const base = await writeTmp('app-ctr.json', JSON.stringify({ caffeine: { name: 'base' } }))
     await writeTmp('app-ctr-test.json', JSON.stringify({ caffeine: { name: 'test-app' } }))
 
-    const conf = newConfiguration(caffeineSchema, kConfig).source(new JSONConfigSource(base)).build()
+    const conf = newConfiguration(caffeineSchema).source(new JSONConfigSource(base)).build().config
     const app = createApplication({
       container: new CaffeineIoC({ decorators: false, profiles: ['test'] }),
       config: conf,

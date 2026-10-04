@@ -1,4 +1,4 @@
-import { token, type Container } from '@caffeinejs/di'
+import type { Container } from '@caffeinejs/di'
 import { newConfiguration, createApplication } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
@@ -31,7 +31,6 @@ const instanceSchema = $t.Object(MessagingConfigSchema.properties, { default: {}
 const rootSchema = $t.Object({
   messaging: $t.Object({ default: instanceSchema, audit: instanceSchema }, { default: {} }),
 })
-const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
 const env = (values: Record<string, string>) => new EnvConfigSource({ env: values })
 
@@ -44,9 +43,9 @@ describe('messaging configuration', () => {
   // environment exactly the way a broker list does. Named exception: messaging is config-wins once
   // `config(...)` is wired.
   it('lets the environment override a builder-set destination', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(env({ MESSAGING__DEFAULT__IN__ORDERS__DESTINATION: 'orders.v2' }))
-      .build()
+      .build().config
     const app = createApplication({ config: conf }).install(
       Messaging((m, { config }) =>
         m
@@ -69,9 +68,9 @@ describe('messaging configuration', () => {
   })
 
   it('reads a consumer group from the configuration tree', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { group: 'from-config' } } } } }))
-      .build()
+      .build().config
     const app = createApplication({ config: conf }).install(
       Messaging((m, { config }) =>
         m
@@ -90,9 +89,9 @@ describe('messaging configuration', () => {
   })
 
   it('keeps named instances apart, the unnamed one at messaging.default', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ messaging: { audit: { out: { log: { destination: 'audit.v2' } } } } }))
-      .build()
+      .build().config
     const app = createApplication({ config: conf })
       .install(
         Messaging((m, { config }) =>
@@ -123,11 +122,10 @@ describe('messaging configuration', () => {
   // The code-only members ride through untouched.
   it('keeps a code-only schema on a configured binding', async () => {
     const schema = $t.Object({ id: $t.Number() })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new InlineConfigSource({ messaging: { default: { in: { orders: { destination: 'orders.v2' } } } } }))
-      .build()
+      .build().config
     const app = createApplication({ config: conf }).install(
       Messaging((m, { config }) =>
         m
@@ -155,11 +153,10 @@ describe('messaging configuration', () => {
         }),
       }),
     })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
 
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ app: { events: { in: { orders: { destination: 'moved.orders' } } } } }))
-      .build()
+      .build().config
     const app = createApplication({ config: conf })
       // No annotation on the selector: the config type is recovered from the builder.
       .install(
@@ -181,13 +178,13 @@ describe('messaging configuration', () => {
 
   // Activation is the builder call, never the tree.
   it('creates no binding the application never declared', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(
         new InlineConfigSource({
           messaging: { default: { in: { ghost: { destination: 'ghost', via: 'primary' } } } },
         }),
       )
-      .build()
+      .build().config
     const app = createApplication({ config: conf }).install(
       Messaging((m, { config }) =>
         m

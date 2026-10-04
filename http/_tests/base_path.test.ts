@@ -1,6 +1,5 @@
 import type { IncomingMessage } from 'node:http'
 
-import { token } from '@caffeinejs/di'
 import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
@@ -33,8 +32,6 @@ import {
 const schema = $t.Object({
   app: $t.Object({ basePath: $t.String({ default: '/gateway' }) }, { default: {} }),
 })
-
-const kConfig = token<InferConfig<typeof schema>>(Symbol('base-path.config'))
 
 // Module-level: `@Controller` registers into a registry every application in this file then picks up, so it
 // declares a path nothing else here uses.
@@ -120,7 +117,7 @@ describe('an application under a base path', () => {
     })
 
     it('hands a callback the context a plugin factory gets, typed by the configuration', async () => {
-      const conf = newConfiguration(schema, kConfig).build()
+      const conf = newConfiguration(schema).build().config
       let factoryContext: unknown
       let basePathContext: unknown
 

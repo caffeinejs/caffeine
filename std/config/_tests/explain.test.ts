@@ -4,10 +4,11 @@ import { $t } from '../../schema/t.js'
 import { loadConfig } from '../load.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { ArgvConfigSource } from '../sources/argv/index.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): ConfigDefinition<T> {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 function source(name: string, ...layers: ConfigLayer[]): ConfigSource {
@@ -129,7 +130,6 @@ describe('ConfigStore.inspect', () => {
     const inspection = store.inspect()
 
     expect(inspection).toMatchObject({ revision: 0, profiles: [] })
-    expect(inspection.swappedAt).toBeGreaterThan(0)
     expect(inspection.sources).toEqual([
       expect.objectContaining({
         name: 'file',

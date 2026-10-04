@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import { CONFIG_REFRESH_LABEL, ErrConfigValidation, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
@@ -69,7 +68,6 @@ describe('healthProbes() and Health()', () => {
       cacheTtl: $t.Optional($t.Duration()),
     }),
   })
-  const kRootConfig = token<InferConfig<typeof rootSchema>>(Symbol('app.config'))
 
   const schema = $t.Object({
     health: $t.Object({
@@ -78,7 +76,6 @@ describe('healthProbes() and Health()', () => {
       verbose: $t.Boolean(),
     }),
   })
-  const kConfig = token<InferConfig<typeof schema>>(Symbol('app.config'))
   type AppConfig = InferSchema<typeof schema>
 
   const source = (health: AppConfig['health']): InlineConfigSource => new InlineConfigSource({ health })
@@ -109,9 +106,9 @@ describe('healthProbes() and Health()', () => {
   })
 
   it('lets the environment switch the probes off even though installing opted in', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
-      .build()
+      .build().config
 
     app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
 
@@ -123,9 +120,9 @@ describe('healthProbes() and Health()', () => {
   // The key has to be the one its variable folds to: spelled `cacheTTL`, no variable could reach it, and the
   // value was dropped at bootstrap() without a word.
   it('takes the cache budget from HEALTH__CACHE_TTL', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__CACHE_TTL: '5s' } }))
-      .build()
+      .build().config
 
     app = createWebApplication({ config: conf }).install(Health((h, { config }) => h.config(config.health)))
 
@@ -164,9 +161,9 @@ describe('healthProbes() and Health()', () => {
   // A bare number names no unit. Read as duration text it was 0: every indicator that awaits was cancelled on the
   // next turn, and readiness failed for the life of the process with nothing said at bootstrap().
   it('refuses a budget the environment gives as a bare number', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__INDICATOR_TIMEOUT: '5000' } }))
-      .build()
+      .build().config
     const booting = createWebApplication({ config: conf })
       .with(healthProbes((h, { config }) => h.config(config.health)))
       .bootstrap()
@@ -177,9 +174,9 @@ describe('healthProbes() and Health()', () => {
 
   // Written as a duration, a 0 fails the same way, whether it comes from code or from the configuration.
   it('refuses a budget of 0', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__PROBE_DEADLINE: '0s' } }))
-      .build()
+      .build().config
     const fromCode = createWebApplication()
       .install(Health(h => h.indicatorTimeout(0)))
       .bootstrap()
@@ -195,9 +192,9 @@ describe('healthProbes() and Health()', () => {
 
   // Declaring `health` in the schema is not on its own an instruction to configure the probes from it.
   it('ignores the configured block unless config(...) pointed at it', async () => {
-    const conf = newConfiguration(rootSchema, kRootConfig)
+    const conf = newConfiguration(rootSchema)
       .source(new EnvConfigSource({ env: { HEALTH__ENABLED: 'false' } }))
-      .build()
+      .build().config
     app = createWebApplication({ config: conf }).with(healthProbes())
 
     await app.run()
@@ -209,7 +206,7 @@ describe('healthProbes() and Health()', () => {
     let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: false }
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
-    const conf = newConfiguration(schema, kConfig).source(mutable).build()
+    const conf = newConfiguration(schema).source(mutable).build().config
     app = createWebApplication({ config: conf }).with(healthProbes((h, { config }) => h.config(config.health)))
 
     await app.run()

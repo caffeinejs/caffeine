@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { $t } from '../../../schema/t.js'
 import { loadConfig } from '../../load.js'
 import { RecordingLogger } from '../../log.testkit.js'
+import { testTokens } from '../../tokens.testkit.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigSchema, ConfigSource } from '../../types.js'
 import { ArgvConfigSource } from '../argv/index.js'
 import { EnvConfigSource } from './env.js'
@@ -16,7 +17,7 @@ function load(options: ConstructorParameters<typeof EnvConfigSource>[0], logger?
 }
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>) {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 describe('EnvConfigSource', () => {

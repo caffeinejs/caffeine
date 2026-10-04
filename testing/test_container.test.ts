@@ -11,6 +11,7 @@ import {
   Provides,
   ProvidesAsync,
   token,
+  type Provider,
 } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
@@ -384,6 +385,26 @@ describe('TestContainer', function () {
       await di.init()
 
       expect(di.get(Settings).host).toBe('test.local')
+    })
+
+    // Narrowing the profiles rebuilds the snapshot, which must still carry what $i.liveConfig reads through.
+    it('keeps the scoped config of the source container, with profiles narrowed, so $i.liveConfig resolves', async function () {
+      class LiveSettings {
+        constructor(readonly host: Provider<string>) {}
+      }
+
+      let host = 'db.local'
+      const source = new CaffeineIoC({ decorators: false })
+      source.bindScopedConfig({ get: () => ({ host }) })
+      source.bind(LiveSettings, t => t.toClass(LiveSettings, [$i.liveConfig<{ host: string }>(c => c.host)]))
+
+      const di = newTestContainer(source).profiles('test').build()
+      await di.init()
+
+      const settings = di.get(LiveSettings)
+      host = 'moved.local'
+
+      expect(settings.host.get()).toBe('moved.local')
     })
   })
 

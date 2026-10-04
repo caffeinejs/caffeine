@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { loadConfig } from '../../load.js'
 import { passthroughConfigSchema } from '../../schema.js'
+import { testTokens } from '../../tokens.testkit.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSource } from '../../types.js'
 import { YAMLConfigSource } from './yaml.js'
 
@@ -31,7 +32,7 @@ function context(profiles: string[] = []): ConfigLoadContext {
 }
 
 function definition(...sources: ConfigSource[]): ConfigDefinition {
-  return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 async function names(path: string): Promise<string[]> {

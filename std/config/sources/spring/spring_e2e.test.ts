@@ -1,8 +1,9 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { CaffeineIoC } from '@caffeinejs/di'
 import { beforeAll, describe, expect, it } from 'vitest'
 
 import { CONFIG_REFRESH_LABEL, ConfigModule } from '../../integration/module.js'
 import { loadConfig } from '../../load.js'
+import { testTokens } from '../../tokens.testkit.js'
 import type { ConfigSchema, ConfigSource } from '../../types.js'
 import { SpringCloudConfigSource, type SpringCloudConfigSourceOptions } from './spring.js'
 
@@ -54,7 +55,7 @@ function server(overrides: Partial<SpringCloudConfigSourceOptions> = {}): Spring
 
 function load(sources: ConfigSource[], profiles: string[]) {
   return loadConfig<CaffeineConfig>(
-    { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 },
+    { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 },
     { profiles, start: false },
   )
 }
@@ -108,7 +109,7 @@ describe('SpringCloudConfigSource against a config server', () => {
 })
 
 describe('a config server behind a container refresh', () => {
-  it('reads new values through the live object after a refresh', async context => {
+  it('reads new values through the live token after a refresh', async context => {
     context.skip(!serverAvailable, `no config server at ${CONFIGSERVER_URL}`)
 
     let overridden: Record<string, unknown> = {}
@@ -117,21 +118,21 @@ describe('a config server behind a container refresh', () => {
       live: true,
       load: () => [{ name: 'overrides', data: overridden as never }],
     }
-    const kConfig = token<CaffeineConfig>(Symbol('caffeine.config'))
+    const tokens = testTokens<CaffeineConfig>()
     const store = await loadConfig<CaffeineConfig>(
-      { schema, key: kConfig, storeKey: undefined, sources: [server(), overrides], loadTimeoutMs: 30_000 },
+      { schema, ...tokens, sources: [server(), overrides], loadTimeoutMs: 30_000 },
       { profiles: ['default'], start: false },
     )
     const container = new CaffeineIoC({ decorators: false })
     container.addModules(ConfigModule(store))
     await container.init()
 
-    const config = container.get(kConfig)
-    expect(config.caffeine.version).toBe('1.0.0')
+    const config = container.get(tokens.liveConfigToken)
+    expect(config.get().caffeine.version).toBe('1.0.0')
 
     overridden = { caffeine: { version: '99.0.0' } }
     await container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
-    expect(config.caffeine.version).toBe('99.0.0')
+    expect(config.get().caffeine.version).toBe('99.0.0')
   })
 })

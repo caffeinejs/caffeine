@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { loadConfig } from '../../load.js'
 import { mergeLayers, expandKeys } from '../../merge.js'
 import { passthroughConfigSchema } from '../../schema.js'
+import { testTokens } from '../../tokens.testkit.js'
 import type { ConfigLayer, ConfigLoadContext } from '../../types.js'
 import { JSONConfigSource } from '../json/index.js'
 import { FileConfigSource, concernsFile, type ConfigFileParser } from './file.js'
@@ -145,8 +146,7 @@ describe('FileConfigSource profile files', () => {
     const named = await write('app/named.json', { region: 'base' })
     const definition = {
       schema: passthroughConfigSchema,
-      key: undefined,
-      storeKey: undefined,
+      ...testTokens(),
       sources: [new JSONConfigSource(named)],
       loadTimeoutMs: 30_000,
     }
