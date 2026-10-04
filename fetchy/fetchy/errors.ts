@@ -14,7 +14,7 @@ export class ErrFetchy extends Error {
 
 /**
  * Thrown when a decorator is applied to a class/method/field it does not support
- * (e.g. `@Path` applied to a method, `@GET` applied to a class).
+ * (e.g. `@API` applied to a method, `@GET` applied to a class).
  */
 export class ErrFetchyInvalidDecoratorTarget extends ErrFetchy {
   constructor(decoratorName: string, expected: string) {

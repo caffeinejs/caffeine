@@ -209,6 +209,9 @@ export class FetchyClient {
    * set something, the subclass wins, and headers merge by name. Every operation is validated before
    * the class is constructed, so a class that fails validation never runs its constructor.
    *
+   * A subclass method that overrides an operation without declaring one itself is an ordinary
+   * override: it runs in place of the operation, and reaches it through `super`.
+   *
    * A method operation lives on the class's prototype and finds its client through `this`, so it
    * composes with other method decorators and works through `super`. Called detached from its
    * client, it throws `ErrFetchyClientNotBuilt`. A field operation is bound to its client.

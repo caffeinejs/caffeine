@@ -186,6 +186,31 @@ describe('subclassing through create()', () => {
     expect(sent()?.url).toBe('http://example.test/users/1')
   })
 
+  // An override that declares no operation is an ordinary override. It runs in place of the inherited operation and
+  // still reaches it through `super`, which is how a subclass works on what the operation returns.
+  it('runs an undecorated override in place of the inherited operation, which it reaches through super', async () => {
+    @API('/users')
+    class Base {
+      @GET('/{id}')
+      @Params([Param('id')])
+      get(_id: string): Promise<User> {
+        return noop()
+      }
+    }
+
+    class Child extends Base {
+      override async get(id: string): Promise<User & { viaChild: boolean }> {
+        return { ...(await super.get(id)), viaChild: true }
+      }
+    }
+
+    const { api, sent, metas } = clientOf(Child)
+
+    await expect(api.get('1')).resolves.toEqual({ id: '0', viaChild: true })
+    expect(metas).toHaveLength(1)
+    expect(sent()?.url).toBe('http://example.test/users/1')
+  })
+
   it('builds a subclass that declares no operation of its own', async () => {
     @API('/users')
     class Base {

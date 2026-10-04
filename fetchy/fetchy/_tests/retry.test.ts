@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 import { describe, expect, it } from 'vitest'
 
 import { RetryInterceptor } from '../builtin/retry/index.js'
@@ -8,10 +10,12 @@ import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
+import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { Retry } from '../decorators/retry.js'
 import { GET, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyHTTP } from '../errors.js'
 import { noop } from '../noop.js'
+import { RawRequestBodyConverter } from '../request_body_converter.js'
 import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
 
 interface User {
@@ -306,5 +310,74 @@ describe('RetryInterceptor on network failures', () => {
 
     await expect(api.getUser('1')).rejects.toBe(bug)
     expect(call.executions).toBe(1)
+  })
+})
+
+@API('/files')
+class UploadAPI {
+  @PUT('/{id}')
+  @Retry({ delay: 1 })
+  @UseRequestBodyConverter(RawRequestBodyConverter)
+  @Params([Param('id'), Body()])
+  upload(_id: string, _content: unknown): Promise<unknown> {
+    return noop()
+  }
+}
+
+const content = new TextEncoder().encode('content')
+
+function webStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(content)
+      controller.close()
+    },
+  })
+}
+
+describe('RetryInterceptor on a body that can be read only once', () => {
+  // Every attempt shares the one body, and the first may have read it. undici then sends what is left, which is
+  // nothing, and a server answers 200 to the empty PUT: the retry would empty the resource and report success.
+  it.each([
+    ['a web ReadableStream', webStream],
+    ['a Node Readable', (): unknown => Readable.from([content])],
+    [
+      'an async generator',
+      (): unknown =>
+        (async function* () {
+          yield content
+        })(),
+    ],
+  ])('does not retry a network failure when the body is %s', async (_kind, body) => {
+    const callFactory = new TestCallFactory()
+    const api = buildClient(UploadAPI, callFactory)
+    const call = callFactory.calls[0]
+    const failure = undiciFailure('UND_ERR_SOCKET')
+    call.willFail(failure).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', body())).rejects.toBe(failure)
+    expect(call.executions).toBe(1)
+  })
+
+  it('does not retry a failing response when the body is a stream', async () => {
+    const callFactory = new TestCallFactory()
+    const api = buildClient(UploadAPI, callFactory)
+    const call = callFactory.calls[0]
+    call.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', webStream())).rejects.toBeInstanceOf(ErrFetchyHTTP)
+    expect(call.executions).toBe(1)
+  })
+
+  // Bytes held in memory are sent whole on every attempt, so they stay as retryable as a string.
+  it('still retries a body held in memory', async () => {
+    const callFactory = new TestCallFactory()
+    const api = buildClient(UploadAPI, callFactory)
+    const call = callFactory.calls[0]
+    call.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.upload('1', content)).resolves.toEqual({ id: '1' })
+    expect(call.executions).toBe(2)
+    expect(call.lastRequest?.body).toBe(content)
   })
 })
