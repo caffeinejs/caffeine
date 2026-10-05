@@ -1023,6 +1023,117 @@ describe('usage: repeated application', function () {
   })
 })
 
+// ─── usage: inheritance and merge rules ──────────────────────────────────────
+
+interface Timeouts {
+  connect: number
+  read: number
+}
+
+const Owned = createAnnotation.on('class', 'method')<string>({ inherit: 'own' })
+
+const Permissions = createAnnotation.on(
+  'class',
+  'method',
+)<string[]>({
+  inherit: 'accumulate',
+  combine: (outer, inner) => [...outer, ...inner],
+})
+
+const Timeout = createAnnotation.on(
+  'class',
+  'method',
+)<Partial<Timeouts>>({
+  combine: (outer, inner) => ({ ...outer, ...inner }),
+})
+
+const Lazy = createAnnotation.on('class', 'method')<boolean>({ combine: outer => outer })
+
+const RoleGroups = createAnnotation.on('class', 'method')((...roles: string[]) => roles, {
+  repeatable: true,
+  combine: (outer, inner) => [...outer, ...inner],
+})
+
+describe('usage: inheritance and merge rules', function () {
+  it("inherit 'own': a subclass sees neither its base's class value nor its base's members", function () {
+    @Owned('base')
+    class Base {
+      @Owned('base:list')
+      list() {}
+    }
+
+    class Plain extends Base {}
+
+    @Owned('sub')
+    class Sub extends Base {}
+
+    expect(reflect.get(Base, Owned)).toBe('base')
+    expect(reflect.get(Base, Owned, 'list')).toBe('base:list')
+    expect(reflect.get(Plain, Owned)).toBeUndefined()
+    expect(reflect.get(Plain, Owned, 'list')).toBeUndefined()
+    expect(reflect.members(Plain, Owned).size).toBe(0)
+    expect(reflect.get(Sub, Owned)).toBe('sub')
+  })
+
+  it("inherit 'accumulate': values add up from the base class to the subclass", function () {
+    @Permissions(['read'])
+    class Resource {
+      @Permissions(['delete'])
+      remove() {}
+    }
+
+    @Permissions(['write'])
+    class Documents extends Resource {
+      @Permissions(['purge'])
+      override remove() {}
+    }
+
+    expect(reflect.get(Resource, Permissions)).toEqual(['read'])
+    expect(reflect.get(Documents, Permissions)).toEqual(['read', 'write'])
+    expect(reflect.get(Documents, Permissions, 'remove')).toEqual(['delete', 'purge'])
+    expect(Object.fromEntries(reflect.members(Documents, Permissions))).toEqual({ remove: ['delete', 'purge'] })
+  })
+
+  it('combine merges class defaults into a member value', function () {
+    @Timeout({ connect: 1000, read: 5000 })
+    class Client {
+      @Timeout({ read: 30000 })
+      download() {}
+
+      ping() {}
+    }
+
+    expect(reflect.effective(Client, Timeout, 'download')).toEqual({ connect: 1000, read: 30000 })
+    expect(reflect.effective(Client, Timeout, 'ping')).toEqual({ connect: 1000, read: 5000 })
+  })
+
+  it('combine can keep the class value over the member value', function () {
+    @Lazy(true)
+    class Config {
+      @Lazy(false)
+      cache() {}
+    }
+
+    expect(reflect.effective(Config, Lazy, 'cache')).toBe(true)
+    expect(reflect.get(Config, Lazy, 'cache')).toBe(false)
+  })
+
+  it('repeatable groups combine into class groups, then method groups', function () {
+    @RoleGroups('admin', 'manager')
+    class Payroll {
+      @RoleGroups('finance')
+      @RoleGroups('approver')
+      approve() {}
+    }
+
+    expect(reflect.effective(Payroll, RoleGroups, 'approve')).toEqual([['admin', 'manager'], ['finance'], ['approver']])
+  })
+
+  it('an accumulating annotation without combine is refused when created', function () {
+    expect(() => createAnnotation({ inherit: 'accumulate' } as never)).toThrow(ErrInvalidDecorator)
+  })
+})
+
 // ─── usage: what does not compile ────────────────────────────────────────────
 
 /**
@@ -1145,6 +1256,12 @@ function annotationUsageTypeChecks(): void {
   // @ts-expect-error a repeatable annotation still takes one value per application
   @Tags(['a'])
   class RepeatableWithArray {}
+
+  // @ts-expect-error an accumulating annotation needs a combine rule
+  createAnnotation.on('class')<string[]>({ inherit: 'accumulate' })
+
+  // @ts-expect-error combine returns the stored type
+  createAnnotation.on('method')<number>({ combine: (outer, inner) => String(outer + inner) })
 
   const wrongWrites = (_target: Function, context: ClassMethodDecoratorContext): void => {
     // @ts-expect-error the value must match the annotation's type

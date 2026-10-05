@@ -38,17 +38,24 @@ interface Single {
   readonly repeatable?: false
 }
 
+// An accumulating annotation must say how two values combine.
+type Policy<S> =
+  | { readonly inherit?: 'nearest' | 'own'; readonly combine?: (outer: S, inner: S) => S }
+  | { readonly inherit: 'accumulate'; readonly combine: (outer: S, inner: S) => S }
+
 interface AnnotationFactory<K extends AnnotationTarget> {
-  <V = void>(options: Repeatable): Annotator<Args<V>, Stored<V>[], K>
-  <V = void>(options?: Single): Annotator<Args<V>, Stored<V>, K>
-  <A extends unknown[], V>(transform: (...args: A) => V, options: Repeatable): Annotator<A, V[], K>
-  <A extends unknown[], V>(transform: (...args: A) => V, options?: Single): Annotator<A, V, K>
+  <V = void>(options: Repeatable & Policy<Stored<V>[]>): Annotator<Args<V>, Stored<V>[], K>
+  <V = void>(options?: Single & Policy<Stored<V>>): Annotator<Args<V>, Stored<V>, K>
+  <A extends unknown[], V>(transform: (...args: A) => V, options: Repeatable & Policy<V[]>): Annotator<A, V[], K>
+  <A extends unknown[], V>(transform: (...args: A) => V, options?: Single & Policy<V>): Annotator<A, V, K>
 }
 
 type Transform = (...args: unknown[]) => unknown
 
 interface FactoryOptions {
   readonly repeatable?: boolean
+  readonly inherit?: 'nearest' | 'own' | 'accumulate'
+  readonly combine?: (outer: unknown, inner: unknown) => unknown
 }
 
 function build(
@@ -57,7 +64,15 @@ function build(
   second?: FactoryOptions,
 ): unknown {
   const transform = typeof first === 'function' ? first : undefined
-  const repeatable = (typeof first === 'function' ? second : first)?.repeatable === true
+  const settings = (typeof first === 'function' ? second : first) ?? {}
+  const repeatable = settings.repeatable === true
+
+  if (settings.inherit === 'accumulate' && typeof settings.combine !== 'function') {
+    throw new ErrInvalidDecorator(
+      'Cannot create an annotation that accumulates: it has no combine rule' +
+        solutions('Pass combine(outer, inner) together with inherit: "accumulate"'),
+    )
+  }
 
   const factory: ((...args: unknown[]) => DecoratorOn<AnnotationTarget>) & Annotation<unknown, AnnotationTarget> = (
     ...args
@@ -87,7 +102,7 @@ function build(
     }
   }
 
-  const options: AnnotationOptions = { targets }
+  const options: AnnotationOptions = { targets, inherit: settings.inherit, combine: settings.combine }
   Object.defineProperty(factory, kAnnotationOptions, { value: Object.freeze(options) })
 
   return factory
@@ -117,6 +132,11 @@ function on<const T extends readonly [AnnotationTarget, ...AnnotationTarget[]]>(
  * created with `{ repeatable: true }`, it collects every application's value in source order
  * instead. For a rule the targets cannot express, such as async methods only, write the decorator
  * by hand: see {@link Annotation}.
+ *
+ * `inherit` decides how reads treat base classes: `'nearest'`, the default, takes the closest
+ * declaration; `'own'` ignores base classes; `'accumulate'` folds every declaration, from the
+ * farthest base to the class, with `combine`. `combine(outer, inner)` also joins a class value with
+ * a member value in `reflect.effective`; without it the member value wins.
  *
  * @example
  * ```ts

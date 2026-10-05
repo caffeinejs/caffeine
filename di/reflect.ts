@@ -34,6 +34,8 @@ export interface Annotation<V = unknown, K extends AnnotationTarget = Annotation
 // What `createAnnotation` stores on an annotation for `reflect` to enforce.
 export interface AnnotationOptions {
   readonly targets?: readonly AnnotationTarget[]
+  readonly inherit?: 'nearest' | 'own' | 'accumulate'
+  readonly combine?: (outer: unknown, inner: unknown) => unknown
 }
 
 // Registered, so a second copy of this module reads what a first copy stored.
@@ -164,7 +166,43 @@ function read(target: AnyClass | AnyContext, key: MetadataKey, member: PropertyK
     return slotOf(entryIn(target.metadata, key), member, isStatic)
   }
 
-  return nearest(target, key, member, isStatic)
+  return resolve(target, key, member, isStatic)
+}
+
+// Reads a class slot or a member slot through the annotation's `inherit` rule.
+function resolve(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean): unknown {
+  const options = optionsOf(key)
+
+  switch (options?.inherit) {
+    case 'own':
+      return slotOf(ownEntry(cls, key), member, isStatic)
+    case 'accumulate': {
+      const values: unknown[] = []
+      for (const c of chainOf(cls)) {
+        const value = slotOf(ownEntry(c, key), member, isStatic)
+        if (value !== undefined) {
+          values.push(value)
+        }
+      }
+
+      return fold(values, options.combine)
+    }
+    default:
+      return nearest(cls, key, member, isStatic)
+  }
+}
+
+// `values` runs from the class to its farthest base; folding starts at the base.
+function fold(values: unknown[], combine: ((outer: unknown, inner: unknown) => unknown) | undefined): unknown {
+  if (values.length === 0 || combine === undefined) {
+    return values[0]
+  }
+
+  return values.reduceRight((outer, inner) => combine(outer, inner))
+}
+
+function slotsOf(entry: Entry | undefined, isStatic: boolean): Iterable<[string | symbol, unknown]> {
+  return (isStatic ? entry?.statics : entry?.members) ?? []
 }
 
 function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined, isStatic = false): unknown {
@@ -261,8 +299,8 @@ function get(target: AnyClass | AnyContext, key: MetadataKey, member?: PropertyK
  * Lists the members that carry `key`, by member name.
  *
  * On a class, members declared on base classes are included and the nearest declaration of a name
- * wins. On the context a decorator receives, only what the decorators of the class being defined
- * have written so far is listed. Members whose value is `undefined` are left out, and no order is
+ * wins, unless the annotation's `inherit` rule says otherwise. On the context a decorator receives,
+ * only what the decorators of the class being defined have written so far is listed. Members whose value is `undefined` are left out, and no order is
  * promised. `{ static: true }` lists static members instead of instance members.
  */
 function members<T>(target: AnyClass | AnyContext, key: symbol, options?: MemberOptions): Map<string | symbol, T>
@@ -273,15 +311,31 @@ function members(
   options?: MemberOptions,
 ): Map<string | symbol, unknown> {
   const isStatic = options?.static === true
-  const entries = isContext(target) ? [entryIn(target.metadata, key)] : chainOf(target).map(c => ownEntry(c, key))
-  const result = new Map<string | symbol, unknown>()
+  const policy = isContext(target) ? undefined : optionsOf(key)
+  const lineage = isContext(target) ? [] : policy?.inherit === 'own' ? [target] : chainOf(target)
+  const entries = isContext(target) ? [entryIn(target.metadata, key)] : lineage.map(c => ownEntry(c, key))
 
+  // Every value of a name, from the nearest declaration to the farthest.
+  const valuesByName = new Map<string | symbol, unknown[]>()
   for (const entry of entries) {
-    for (const [name, value] of (isStatic ? entry?.statics : entry?.members) ?? []) {
-      if (value !== undefined && !result.has(name)) {
-        result.set(name, value)
+    for (const [name, value] of slotsOf(entry, isStatic)) {
+      if (value === undefined) {
+        continue
+      }
+
+      const values = valuesByName.get(name)
+      if (values === undefined) {
+        valuesByName.set(name, [value])
+      } else {
+        values.push(value)
       }
     }
+  }
+
+  const accumulate = policy?.inherit === 'accumulate'
+  const result = new Map<string | symbol, unknown>()
+  for (const [name, values] of valuesByName) {
+    result.set(name, accumulate ? fold(values, policy?.combine) : values[0])
   }
 
   return result
@@ -293,6 +347,8 @@ function members(
  *
  * A member slot declared on a base class beats the class slot of the subclass. The class slot
  * applies to static members too: `{ static: true }` reads the static member of that name first.
+ * When both slots hold a value and the annotation was created with a `combine` rule, the result is
+ * `combine(classValue, memberValue)`.
  *
  * @example
  * ```ts
@@ -308,8 +364,15 @@ function effective<TClass extends AnyClass, V>(
   options?: MemberOptions,
 ): V | undefined
 function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown {
-  const own = nearest(cls, key, member, options?.static === true)
-  return own !== undefined ? own : nearest(cls, key, undefined)
+  const inner = resolve(cls, key, member, options?.static === true)
+  const outer = resolve(cls, key, undefined, false)
+  const combine = optionsOf(key)?.combine
+
+  if (inner !== undefined && outer !== undefined && combine !== undefined) {
+    return combine(outer, inner)
+  }
+
+  return inner !== undefined ? inner : outer
 }
 
 /**
@@ -332,8 +395,8 @@ function merge<TClass extends AnyClass, T>(
   options?: MemberOptions,
 ): T[]
 function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown[] {
-  const classValue = nearest(cls, key, undefined) as unknown[] | undefined
-  const memberValue = nearest(cls, key, member, options?.static === true) as unknown[] | undefined
+  const classValue = resolve(cls, key, undefined, false) as unknown[] | undefined
+  const memberValue = resolve(cls, key, member, options?.static === true) as unknown[] | undefined
 
   return [...(classValue ?? []), ...(memberValue ?? [])]
 }
@@ -345,7 +408,9 @@ function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: M
  * never writes into its base class's metadata. Reads walk the constructor chain from `cls` upwards
  * and the nearest class declaring the slot wins, so an undecorated subclass reads its base's values,
  * a decorated subclass shadows them, and a method override without its own annotation still carries
- * the base method's value. A slot holding `undefined` counts as absent. A static member and an
+ * the base method's value. An annotation created with an `inherit` rule reads its own class only
+ * (`own`) or folds every declaration along the chain (`accumulate`) instead. A slot holding
+ * `undefined` counts as absent. A static member and an
  * instance member with the same name keep separate slots; `{ static: true }` addresses the static
  * one. Inside a decorator, `get` and `members` also take its context, to read what the class being
  * defined carries so far.
