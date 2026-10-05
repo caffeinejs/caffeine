@@ -109,6 +109,9 @@ class Invoices {}
 reflect.get(Invoices, Tags) // ['billing', 'v2']
 ```
 
+A getter and a setter of the same name are one member, so an annotation goes on one of them. Applying it
+to both throws `ErrInvalidDecorator`, even when it is repeatable.
+
 ## Inheritance and merge rules
 
 A subclass reads its base class's annotations, and the nearest declaration wins. `inherit` changes that

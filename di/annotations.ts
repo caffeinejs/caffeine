@@ -68,6 +68,21 @@ function valueFrom(transform: Transform | undefined, args: unknown[]): unknown {
   return args.length === 0 ? true : args[0]
 }
 
+// A getter and a setter of one name are one member, so an annotation goes on one of them. `kHalf`
+// records, per member, the half that carries it.
+function claimHalf(context: ClassGetterDecoratorContext | ClassSetterDecoratorContext, kHalf: symbol): void {
+  const owner = reflect.get<string>(context, kHalf, context.name, { static: context.static })
+  if (owner !== undefined && owner !== context.kind) {
+    const name = String(context.name)
+    throw new ErrInvalidDecorator(
+      `Cannot apply an annotation to ${context.kind} "${name}": ${owner} "${name}" already carries it` +
+        solutions('Apply it to either the getter or the setter: the two are one member'),
+    )
+  }
+
+  reflect.annotate(context, kHalf, context.kind)
+}
+
 function build(
   targets: readonly AnnotationTarget[] | undefined,
   first?: Transform | FactoryOptions,
@@ -84,12 +99,18 @@ function build(
     )
   }
 
+  const kHalf = Symbol('half')
+
   const factory: ((...args: unknown[]) => DecoratorOn<AnnotationTarget>) & Annotation<unknown, AnnotationTarget> = (
     ...args
   ) => {
     const value = valueFrom(transform, args)
 
     return (_target, context) => {
+      if (context.kind === 'getter' || context.kind === 'setter') {
+        claimHalf(context, kHalf)
+      }
+
       if (repeatable) {
         const previous =
           context.kind === 'class'
@@ -145,8 +166,9 @@ interface CreateAnnotation extends AnnotationFactory<AnnotationTarget> {
  * `@Deprecated()` takes no argument and stores `true`. A transform turns the decorator's arguments
  * into the stored value. Applying an annotation twice to one target throws `ErrInvalidDecorator`;
  * created with `{ repeatable: true }`, it collects every application's value in source order
- * instead. For a rule the targets cannot express, such as async methods only, write the decorator
- * by hand: see {@link Annotation}.
+ * instead. A getter and a setter of the same name are one member, so an annotation goes on one of
+ * them, repeatable or not. For a rule the targets cannot express, such as async methods only, write
+ * the decorator by hand: see {@link Annotation}.
  *
  * `inherit` decides how reads treat base classes: `'nearest'`, the default, takes the closest
  * declaration; `'own'` ignores base classes; `'accumulate'` folds every declaration, from the

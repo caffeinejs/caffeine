@@ -1075,6 +1075,99 @@ describe('usage: repeated application', function () {
   })
 })
 
+// ─── usage: a getter and a setter of one name ────────────────────────────────
+
+const Notes = createAnnotation<string>({ repeatable: true })
+
+describe('usage: a getter and a setter of one name', function () {
+  it('an annotation on both halves throws and names the half that carries it', function () {
+    expect(() => {
+      class Price {
+        @Deprecated()
+        get total() {
+          return 0
+        }
+
+        @Deprecated()
+        set total(_value: number) {}
+      }
+      void Price
+    }).toThrow('Cannot apply an annotation to setter "total": getter "total" already carries it')
+
+    expect(() => {
+      class Price {
+        @Deprecated()
+        set total(_value: number) {}
+
+        @Deprecated()
+        get total() {
+          return 0
+        }
+      }
+      void Price
+    }).toThrow('Cannot apply an annotation to getter "total": setter "total" already carries it')
+  })
+
+  it('a repeatable annotation on both halves throws too, instead of splitting its values', function () {
+    expect(() => {
+      class Price {
+        @Notes('read')
+        get total() {
+          return 0
+        }
+
+        @Notes('write')
+        set total(_value: number) {}
+      }
+      void Price
+    }).toThrow('Cannot apply an annotation to setter "total": getter "total" already carries it')
+  })
+
+  it('a static pair is one member too', function () {
+    expect(() => {
+      class Prices {
+        @Deprecated()
+        static get total() {
+          return 0
+        }
+
+        @Deprecated()
+        static set total(_value: number) {}
+      }
+      void Prices
+    }).toThrow('Cannot apply an annotation to setter "total": getter "total" already carries it')
+  })
+
+  it('values stacked on one half read by member name', function () {
+    class Price {
+      @Notes('read')
+      @Notes('write')
+      get total() {
+        return 0
+      }
+
+      set total(_value: number) {}
+    }
+
+    expect(reflect.get(Price, Notes, 'total')).toEqual(['read', 'write'])
+  })
+
+  it('a static getter and an instance setter of one name are different members', function () {
+    class Price {
+      @Deprecated()
+      static get total() {
+        return 0
+      }
+
+      @Deprecated()
+      set total(_value: number) {}
+    }
+
+    expect(reflect.get(Price, Deprecated, 'total', { static: true })).toBe(true)
+    expect(reflect.get(Price, Deprecated, 'total')).toBe(true)
+  })
+})
+
 // ─── usage: inheritance and merge rules ──────────────────────────────────────
 
 interface Timeouts {

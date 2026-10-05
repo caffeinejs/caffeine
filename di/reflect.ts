@@ -506,9 +506,10 @@ export function isWritten(context: AnyContext, key: symbol | Annotation<unknown,
  * the base method's value. An annotation created with an `inherit` rule reads its own class only
  * (`own`) or folds every declaration along the chain (`accumulate`) instead. A slot holding
  * `undefined` counts as absent. A static member and an instance member with the same name keep
- * separate slots; `{ static: true }` addresses the static one. Inside a decorator, `get` and
- * `members` also take its context, to read what the class being defined carries so far, and
- * {@link set} writes outside a decorator, on a class or any other object.
+ * separate slots; `{ static: true }` addresses the static one. A getter and a setter of the same
+ * name share one slot. Inside a decorator, `get` and `members` also take its context, to read what
+ * the class being defined carries so far, and {@link set} writes outside a decorator, on a class or
+ * any other object.
  */
 export const reflect = {
   annotate,
