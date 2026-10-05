@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 import { createAnnotation } from '../annotations.js'
 import { reflect } from '../reflect.js'
@@ -300,5 +300,22 @@ describe('reflect.merge across the chain', function () {
 
   it('returns an empty array for a symbol key nothing declares', function () {
     expect(reflect.merge<string>(B, kRoles, 'run')).toEqual([])
+  })
+})
+
+describe('module copies', function () {
+  it('a second copy of di reads what the first one wrote', async function () {
+    const Tag = createAnnotation<string>()
+
+    @Tag('cls')
+    @Roles('admin')
+    class Owner {}
+
+    vi.resetModules()
+    const second = await import('../reflect.js')
+
+    expect(second.reflect).not.toBe(reflect)
+    expect(second.reflect.get<string[]>(Owner, kRoles)).toEqual(['admin'])
+    expect(second.reflect.get(Owner, Tag)).toBe('cls')
   })
 })
