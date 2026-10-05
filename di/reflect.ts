@@ -69,9 +69,32 @@ type OnMember<V> =
 interface Entry {
   class?: unknown
   members?: Map<string | symbol, unknown>
+  statics?: Map<string | symbol, unknown>
 }
 
 type Store = Map<MetadataKey, Entry>
+
+interface MemberOptions {
+  /** Addresses the static member of that name instead of the instance member. */
+  readonly static?: boolean
+}
+
+function slotOf(entry: Entry | undefined, member: PropertyKey | undefined, isStatic: boolean): unknown {
+  if (entry === undefined) {
+    return undefined
+  }
+
+  if (member === undefined) {
+    return entry.class
+  }
+
+  return (isStatic ? entry.statics : entry.members)?.get(member as string | symbol)
+}
+
+function writeMember(entry: Entry, member: string | symbol, isStatic: boolean, value: unknown): void {
+  const slots = isStatic ? (entry.statics ??= new Map()) : (entry.members ??= new Map())
+  slots.set(member, value)
+}
 
 function optionsOf(key: MetadataKey): AnnotationOptions | undefined {
   if (typeof key === 'symbol') {
@@ -117,11 +140,10 @@ function ownEntry(cls: AnyClass, key: MetadataKey): Entry | undefined {
   return (metadata[Keys.kMetadata] as Store).get(key)
 }
 
-function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined): unknown {
+function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined, isStatic = false): unknown {
   let c: AnyClass | null = cls
   while (c !== null && c !== Function.prototype) {
-    const entry = ownEntry(c, key)
-    const value = member === undefined ? entry?.class : entry?.members?.get(member as string | symbol)
+    const value = slotOf(ownEntry(c, key), member, isStatic)
     if (value !== undefined) {
       return value
     }
@@ -137,15 +159,18 @@ function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefine
  *
  * A class decorator writes the class slot; a member decorator writes the slot of the decorated
  * member. The write lands on the decorated class alone: a subclass's decorator never reaches the
- * metadata of its base class. The value is checked against the annotation's value type, and a key
- * created with `createAnnotation.on(...)` is refused outside its targets with `ErrInvalidDecorator`.
+ * metadata of its base class. A static member's value is kept apart from an instance member's of
+ * the same name. The value is checked against the annotation's value type, and a key created with
+ * `createAnnotation.on(...)` is refused outside its targets with `ErrInvalidDecorator`.
  * @param memberName - Writes that member's slot regardless of the decorator kind
+ * @param options - With `memberName`, `{ static: true }` writes the static member's slot
  */
 function annotate<X extends AnyContext, V = unknown, N extends string | symbol | undefined = undefined>(
   context: X,
   key: symbol | ([N] extends [undefined] ? Annotation<V, TargetOf<X>> : OnMember<V>),
   value: NoInfer<V>,
   memberName?: N,
+  options?: MemberOptions,
 ): void {
   const k = key as MetadataKey
   checkTarget(context, k, memberName)
@@ -163,11 +188,11 @@ function annotate<X extends AnyContext, V = unknown, N extends string | symbol |
   }
 
   if (memberName !== undefined) {
-    ;(entry.members ??= new Map()).set(memberName, value)
+    writeMember(entry, memberName, options?.static === true, value)
   } else if (context.kind === 'class') {
     entry.class = value
   } else {
-    ;(entry.members ??= new Map()).set(context.name, value)
+    writeMember(entry, context.name, context.static, value)
   }
 }
 
@@ -175,28 +200,35 @@ function annotate<X extends AnyContext, V = unknown, N extends string | symbol |
  * Returns the class slot stored under a symbol key, or `undefined` if absent.
  *
  * With `member`, returns that member's slot only; it does not fall back to the class slot. Use
- * {@link effective} for member-then-class.
+ * {@link effective} for member-then-class. `{ static: true }` reads the static member of that name.
  */
 function get<T>(cls: AnyClass, key: symbol): T | undefined
-function get<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
+function get<T>(cls: AnyClass, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
 /**
  * Returns the class-level value of an annotation that applies to classes, or `undefined` if absent.
  *
  * With `member`, returns that member's value only, for an annotation that applies to members; it
  * does not fall back to the class value. Use {@link effective} for member-then-class. `member`
- * autocompletes to the declared members of `cls`.
+ * autocompletes to the declared members of `cls`, and `{ static: true }` reads the static member
+ * of that name.
  */
 function get<V>(cls: AnyClass, key: OnClass<V>): V | undefined
-function get<TClass extends AnyClass, V>(cls: TClass, key: OnMember<V>, member: ClassMember<TClass>): V | undefined
-function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey): unknown {
-  return nearest(cls, key, member)
+function get<TClass extends AnyClass, V>(
+  cls: TClass,
+  key: OnMember<V>,
+  member: ClassMember<TClass>,
+  options?: MemberOptions,
+): V | undefined
+function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey, options?: MemberOptions): unknown {
+  return nearest(cls, key, member, options?.static === true)
 }
 
 /**
  * Returns the value in effect for `member`: its member slot if any class in the chain declares
  * one, otherwise the nearest class slot.
  *
- * A member slot declared on a base class beats the class slot of the subclass.
+ * A member slot declared on a base class beats the class slot of the subclass. The class slot
+ * applies to static members too: `{ static: true }` reads the static member of that name first.
  *
  * @example
  * ```ts
@@ -204,14 +236,15 @@ function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey): unknown {
  * reflect.effective(AdminCtrl, Roles, 'list')   // ['admin']  — falls back to class
  * ```
  */
-function effective<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
+function effective<T>(cls: AnyClass, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
 function effective<TClass extends AnyClass, V>(
   cls: TClass,
   key: Annotation<V, never>,
   member: ClassMember<TClass>,
+  options?: MemberOptions,
 ): V | undefined
-function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown {
-  const own = nearest(cls, key, member)
+function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown {
+  const own = nearest(cls, key, member, options?.static === true)
   return own !== undefined ? own : nearest(cls, key, undefined)
 }
 
@@ -227,11 +260,16 @@ function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknow
  * reflect.merge(Ctrl, Roles, 'delete') // ['user', 'admin']
  * ```
  */
-function merge<T>(cls: AnyClass, key: symbol, member: PropertyKey): T[]
-function merge<TClass extends AnyClass, T>(cls: TClass, key: Annotation<T[], never>, member: ClassMember<TClass>): T[]
-function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown[] {
+function merge<T>(cls: AnyClass, key: symbol, member: PropertyKey, options?: MemberOptions): T[]
+function merge<TClass extends AnyClass, T>(
+  cls: TClass,
+  key: Annotation<T[], never>,
+  member: ClassMember<TClass>,
+  options?: MemberOptions,
+): T[]
+function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown[] {
   const classValue = nearest(cls, key, undefined) as unknown[] | undefined
-  const memberValue = nearest(cls, key, member) as unknown[] | undefined
+  const memberValue = nearest(cls, key, member, options?.static === true) as unknown[] | undefined
 
   return [...(classValue ?? []), ...(memberValue ?? [])]
 }
@@ -243,7 +281,9 @@ function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown[] 
  * never writes into its base class's metadata. Reads walk the constructor chain from `cls` upwards
  * and the nearest class declaring the slot wins, so an undecorated subclass reads its base's values,
  * a decorated subclass shadows them, and a method override without its own annotation still carries
- * the base method's value. A slot holding `undefined` counts as absent.
+ * the base method's value. A slot holding `undefined` counts as absent. A static member and an
+ * instance member with the same name keep separate slots; `{ static: true }` addresses the static
+ * one.
  */
 export const reflect = {
   annotate,

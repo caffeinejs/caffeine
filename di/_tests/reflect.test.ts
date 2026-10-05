@@ -320,3 +320,60 @@ describe('module copies', function () {
     expect(second.reflect.get(Owner, Tag)).toBe('cls')
   })
 })
+
+describe('static members', function () {
+  const Tag = createAnnotation<string>()
+
+  @Tag('cls')
+  class Jobs {
+    @Tag('static')
+    static run() {}
+
+    @Tag('instance')
+    run() {}
+
+    other() {}
+  }
+
+  it('a static and an instance member with the same name keep separate values', function () {
+    expect(reflect.get(Jobs, Tag, 'run')).toBe('instance')
+    expect(reflect.get(Jobs, Tag, 'run', { static: true })).toBe('static')
+  })
+
+  it('effective falls back to the class value for static and instance members alike', function () {
+    expect(reflect.effective(Jobs, Tag, 'run', { static: true })).toBe('static')
+    expect(reflect.effective(Jobs, Tag, 'other')).toBe('cls')
+    expect(reflect.effective(Jobs, Tag, 'other', { static: true })).toBe('cls')
+  })
+
+  it('a subclass inherits a static member value', function () {
+    class MoreJobs extends Jobs {}
+    expect(reflect.get(MoreJobs, Tag, 'run', { static: true })).toBe('static')
+  })
+
+  it('a class decorator writes a static member slot with the static option', function () {
+    const Label = createAnnotation<string>()
+    const LabelStatic = (member: string, value: string) => (_target: AnyClass, context: ClassDecoratorContext) => {
+      reflect.annotate(context, Label, value, member, { static: true })
+    }
+
+    @LabelStatic('create', 'factory')
+    class Repo {}
+
+    expect(reflect.get(Repo, Label, 'create', { static: true })).toBe('factory')
+    expect(reflect.get(Repo, Label, 'create')).toBeUndefined()
+  })
+
+  it('merge reads the static member slot with the static option', function () {
+    const Perms = createAnnotation<string[]>()
+
+    @Perms(['read'])
+    class Api {
+      @Perms(['admin'])
+      static reset() {}
+    }
+
+    expect(reflect.merge(Api, Perms, 'reset', { static: true })).toEqual(['read', 'admin'])
+    expect(reflect.merge(Api, Perms, 'reset')).toEqual(['read'])
+  })
+})

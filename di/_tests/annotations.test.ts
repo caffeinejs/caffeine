@@ -600,7 +600,7 @@ describe('usage: createAnnotation.on restricts where an annotation goes', functi
 
   it('a method-only annotation stores instance and static method slots', function () {
     expect(reflect.get(Users, Route, 'list')).toBe('/users')
-    expect(reflect.get(Users, Route, 'create')).toBe('/users/new')
+    expect(reflect.get(Users, Route, 'create', { static: true })).toBe('/users/new')
   })
 
   it('a field-only annotation stores the field slot', function () {
@@ -736,7 +736,7 @@ describe('usage: hand-written annotations', function () {
     expect(reflect.get(UsersRepository, On, 'created')).toBe('user.created')
     expect(reflect.get(UsersRepository, Exposed, 'onSave')).toBe(true)
     expect(reflect.get(UsersRepository, Listener, 'onSave')).toBe(true)
-    expect(reflect.get(UsersRepository, Factory, 'create')).toBe(true)
+    expect(reflect.get(UsersRepository, Factory, 'create', { static: true })).toBe(true)
   })
 
   it('a decorator can validate its arguments when the class is defined', function () {
