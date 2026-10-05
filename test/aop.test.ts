@@ -38,7 +38,7 @@ const guardClassPred: PointcutClassPredicate = (_desc, cls) => {
 }
 
 const guardMethodPred: PointcutMethodPredicate = (name, _desc, cls) =>
-  reflect.getOverride(cls, UseGuard, name) !== undefined
+  reflect.effective(cls, UseGuard, name) !== undefined
 
 // ─── GuardAspect ─────────────────────────────────────────────────────────────
 
@@ -48,7 +48,7 @@ class GuardAspect implements MethodAspect {
   constructor(private readonly container: CaffeineIoC) {}
 
   before(jp: JoinPoint): void | Promise<void> {
-    const key = reflect.getOverride(jp.ctor, UseGuard, jp.methodName)
+    const key = reflect.effective(jp.ctor, UseGuard, jp.methodName)
     if (key === undefined) {
       return
     }
@@ -450,5 +450,51 @@ describe('AOP guard — multiple guard implementations', function () {
 
     // Singleton: constructed once regardless of call count
     expect(instanceCount).toBe(1)
+  })
+})
+
+describe('AOP guard — inherited method-level annotation', function () {
+  class BaseService {
+    @UseGuard(DenyGuard)
+    sensitive(): string {
+      return 'secret'
+    }
+
+    open(): string {
+      return 'public'
+    }
+  }
+
+  it('guards a method inherited by a subclass with its own annotations', async function () {
+    class SubService extends BaseService {
+      @UseGuard(AllowGuard)
+      extra(): string {
+        return 'extra'
+      }
+    }
+
+    const di = makeContainer(d => {
+      d.bind(SubService, t => t.toSelf())
+      d.bind(DenyGuard, t => t.toSelf())
+      d.bind(AllowGuard, t => t.toSelf())
+    })
+    await di.init()
+
+    const svc = di.get(SubService)
+    expect(() => svc.sensitive()).toThrow(/Forbidden/)
+    expect(svc.extra()).toBe('extra')
+    expect(svc.open()).toBe('public')
+  })
+
+  it('guards a method inherited by an undecorated subclass', async function () {
+    class PlainSub extends BaseService {}
+
+    const di = makeContainer(d => {
+      d.bind(PlainSub, t => t.toSelf())
+      d.bind(DenyGuard, t => t.toSelf())
+    })
+    await di.init()
+
+    expect(() => di.get(PlainSub).sensitive()).toThrow(/Forbidden/)
   })
 })

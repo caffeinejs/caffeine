@@ -1,4 +1,4 @@
-import { configureConsume } from './registrar.js'
+import { ConsumeBinding } from './registrar.js'
 
 /**
  * Marks a method as the handler for one inbound binding — invoked once per message delivered to that binding.
@@ -14,9 +14,7 @@ import { configureConsume } from './registrar.js'
  * own superset decorator (`@KafkaListener`) — it registers into the same engine.
  */
 export function Consume(binding: string) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureConsume(context, builder => {
-      builder.binding = binding
-    })
+  return function (target: Function, context: ClassMethodDecoratorContext): void {
+    ConsumeBinding(binding)(target, context)
   }
 }

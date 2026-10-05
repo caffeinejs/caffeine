@@ -17,7 +17,7 @@ export function defineProvides(
   nameOrDependencies?: Injection[] | NamedToken<any>,
   dependencies?: Injection[],
 ) {
-  return function (target: Function, context: DecoratorContext): void {
+  return function (_target: Function, context: DecoratorContext): void {
     if (context.kind === 'class') {
       throw new ErrInvalidDecorator(
         `Cannot use @${decoratorName} on a class "${context.name}": use it on a method inside a @${Configuration.name} class`,
@@ -33,7 +33,7 @@ export function defineProvides(
 
     if (isNil(key)) {
       throw new ErrInvalidDecorator(
-        `@${decoratorName} on a @${Configuration.name} method must receive a valid key: received "${String(key)}" on method "${String(context.name)}" of class "${target.constructor.name}"`,
+        `@${decoratorName} on a @${Configuration.name} method must receive a valid key: received "${String(key)}" on method "${String(context.name)}"`,
       )
     }
 

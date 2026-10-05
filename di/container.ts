@@ -40,6 +40,7 @@ import type { OnBootstrap, OnDestroy } from './lifecycle.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
+import { type Annotation, isAnnotated } from './reflect.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
 import { Scopes, scopeEntries, Scope, ScopedInstance } from './scope.js'
@@ -504,6 +505,16 @@ export class CaffeineIoC implements Container {
    */
   getBindingsByLabel(label: symbol): BindingDescriptor[] {
     return (this.bindingsByLabel.get(label) ?? []).map(([key, binding]) => ({ key, binding }))
+  }
+
+  /**
+   * Get all bindings whose class carries the given annotation, on the class or on any member.
+   *
+   * The annotation's `inherit` rule decides whether a declaration on a base class counts. Like every
+   * lookup, this finds nothing before the container compiles.
+   */
+  getBindingsByAnnotation(annotation: symbol | Annotation<unknown, never>): BindingDescriptor[] {
+    return this.getBindingsBy(({ binding }) => binding.type !== undefined && isAnnotated(binding.type, annotation))
   }
 
   /**

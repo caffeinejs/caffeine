@@ -20,6 +20,9 @@ Task-oriented documentation for common CaffeineIoC workflows. Start with
   `@Configuration`, `@Provides`, and all related decorators to declare
   dependencies without writing module functions.
 
+- [Annotations](./annotations.md) — attach typed metadata to classes and members, choose
+  where it applies, and read it back for routes, schedulers, guards and aspects.
+
 - [Class Injection](./class.md) — configure constructor, property, and method
   injection; run post-construct setup and pre-destroy teardown.
 

@@ -90,8 +90,10 @@ export function extendMemberInjectableAttributes(
   try {
     configure(metadata.memberFor(name))
   } catch (error: unknown) {
+    // A member decorator identifies its class by the decorator metadata object, which has no name.
+    const owner = typeof metaID === 'function' ? ` on class "${metaID.name}"` : ''
     throw new ErrInvalidDecorator(
-      `Invalid decorator configuration for member "${String(name)}" on class "${String(metaID)}":\n${(error as Error).message}`,
+      `Invalid decorator configuration for member "${String(name)}"${owner}:\n${(error as Error).message}`,
     )
   }
 }

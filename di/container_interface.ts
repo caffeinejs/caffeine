@@ -8,6 +8,7 @@ import { InjectionToken, NamedToken, TokenValue } from './key.js'
 import type { Module, ModuleFn } from './module.js'
 import { PostProcessor } from './post_processor.js'
 import { Provider } from './provider.js'
+import type { Annotation } from './reflect.js'
 import { Refresher } from './refresher.js'
 import { RequestScopeManager } from './request_scope_manager.js'
 import type { Scope } from './scope.js'
@@ -138,6 +139,8 @@ export interface Container extends AsyncDisposable {
 
   getBindingsByLabel(label: symbol): BindingDescriptor[]
 
+  getBindingsByAnnotation(annotation: symbol | Annotation<unknown, never>): BindingDescriptor[]
+
   has<T>(key: InjectionToken<T>): boolean
 
   hasScopeInGraph(key: InjectionToken, scopeID: NamedToken<Scope>): boolean
@@ -201,6 +204,7 @@ export type ContainerOps = Pick<
   | 'getBindings'
   | 'getBindingsBy'
   | 'getBindingsByLabel'
+  | 'getBindingsByAnnotation'
   | 'has'
   | 'values'
   | 'hasValues'
@@ -232,6 +236,7 @@ export type ContainerBindingOps = Pick<
   | 'getBindings'
   | 'getBindingsBy'
   | 'getBindingsByLabel'
+  | 'getBindingsByAnnotation'
 >
 
 /**

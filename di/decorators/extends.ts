@@ -1,5 +1,4 @@
 import { ErrInvalidDecorator } from '../errors.js'
-import { check } from '../internal/util/assert/index.js'
 import { AbstractCtor, Ctor } from '../types.js'
 import { defineInjectable, getBindingConfiguration } from './registrar/index.js'
 
@@ -24,11 +23,8 @@ export function Extends<T>(
 ): <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) => void
 export function Extends(): <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) => void
 export function Extends<T>(base?: Ctor<T> | AbstractCtor<T>) {
-  if (base !== undefined) {
-    check(
-      typeof base === 'function',
-      `@${Extends.name}(): parameter base must be a class reference (typeof 'function')`,
-    )
+  if (base !== undefined && typeof base !== 'function') {
+    throw new ErrInvalidDecorator(`@${Extends.name}(): parameter base must be a class reference (typeof 'function')`)
   }
 
   return function <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) {

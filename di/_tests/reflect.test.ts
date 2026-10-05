@@ -1,0 +1,524 @@
+import { describe, it, expect, vi } from 'vitest'
+
+import { createAnnotation } from '../annotations.js'
+import { reflect } from '../reflect.js'
+import { Keys } from '../symbols.js'
+import type { AnyClass } from '../types.js'
+
+const kRoles = Symbol('roles')
+const kTitle = Symbol('title')
+
+function Roles(...roles: string[]) {
+  return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
+    reflect.annotate(context, kRoles, roles)
+  }
+}
+
+function Title(title: string) {
+  return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
+    reflect.annotate(context, kTitle, title)
+  }
+}
+
+function storeOf(cls: AnyClass): unknown {
+  return cls[Symbol.metadata]?.[Keys.kMetadata]
+}
+
+describe('reflect.get', function () {
+  @Roles('admin')
+  @Title('users')
+  class Users {
+    @Roles('editor')
+    edit() {}
+
+    list() {}
+  }
+
+  it('returns the class slot', function () {
+    expect(reflect.get<string[]>(Users, kRoles)).toEqual(['admin'])
+    expect(reflect.get<string>(Users, kTitle)).toBe('users')
+  })
+
+  it('returns the member slot without falling back to the class', function () {
+    expect(reflect.get<string[]>(Users, kRoles, 'edit')).toEqual(['editor'])
+    expect(reflect.get<string[]>(Users, kRoles, 'list')).toBeUndefined()
+  })
+
+  it('returns undefined when the key is absent', function () {
+    const kMissing = Symbol('missing')
+    expect(reflect.get(Users, kMissing)).toBeUndefined()
+    expect(reflect.get(Users, kMissing, 'edit')).toBeUndefined()
+  })
+
+  it('returns undefined for a class with no Symbol.metadata', function () {
+    class Bare {
+      run() {}
+    }
+    expect(reflect.get(Bare, kRoles)).toBeUndefined()
+    expect(reflect.get(Bare, kRoles, 'run')).toBeUndefined()
+  })
+
+  it('two symbol keys on the same class do not collide', function () {
+    expect(reflect.get<string[]>(Users, kRoles)).toEqual(['admin'])
+    expect(reflect.get<string>(Users, kTitle)).toBe('users')
+  })
+
+  it('round-trips a symbol-named member', function () {
+    const run = Symbol('run')
+    class Jobs {
+      @Roles('worker')
+      [run]() {}
+    }
+    expect(reflect.get<string[]>(Jobs, kRoles, run)).toEqual(['worker'])
+  })
+
+  it('infers the value type from an annotation key and takes an explicit one for a symbol key', function () {
+    const Label = createAnnotation.on('class')<string>()
+    const Weight = createAnnotation.on('method')<number>()
+
+    @Label('cls')
+    class T {
+      @Weight(1)
+      go() {}
+    }
+
+    const c: string | undefined = reflect.get(T, Label)
+    const m: number | undefined = reflect.get(T, Weight, 'go')
+    const s: string[] | undefined = reflect.get<string[]>(Users, kRoles)
+    const u: unknown = reflect.get(Users, kRoles)
+
+    expect([c, m, s, u]).toEqual(['cls', 1, ['admin'], ['admin']])
+  })
+})
+
+describe('reflect.effective', function () {
+  @Roles('admin')
+  class AdminCtrl {
+    @Roles('superadmin')
+    delete() {}
+
+    list() {}
+  }
+
+  it('prefers the member slot', function () {
+    expect(reflect.effective<string[]>(AdminCtrl, kRoles, 'delete')).toEqual(['superadmin'])
+  })
+
+  it('falls back to the class slot', function () {
+    expect(reflect.effective<string[]>(AdminCtrl, kRoles, 'list')).toEqual(['admin'])
+  })
+
+  it('returns undefined when neither slot is set', function () {
+    class Plain {
+      run() {}
+    }
+    expect(reflect.effective(Plain, kRoles, 'run')).toBeUndefined()
+  })
+})
+
+describe('reflect.annotate', function () {
+  it('memberName writes that member slot regardless of the decorator kind', function () {
+    function TitleOf(title: string, member: string) {
+      return (_target: unknown, context: ClassDecoratorContext) => {
+        reflect.annotate(context, kTitle, title, member)
+      }
+    }
+
+    @TitleOf('synthetic title', 'synthetic')
+    class T {}
+
+    expect(reflect.get<string>(T, kTitle, 'synthetic')).toBe('synthetic title')
+    expect(reflect.get(T, kTitle)).toBeUndefined()
+  })
+
+  it('memberName lets a class decorator annotate its members with a member annotation', function () {
+    const Route = createAnnotation.on('method')<string>()
+
+    function Routes(paths: Record<string, string>) {
+      return (_target: unknown, context: ClassDecoratorContext) => {
+        for (const [method, path] of Object.entries(paths)) {
+          reflect.annotate(context, Route, path, method)
+        }
+      }
+    }
+
+    @Routes({ list: '/users', find: '/users/:id' })
+    class Users {
+      list() {}
+
+      find() {}
+    }
+
+    expect(reflect.get(Users, Route, 'list')).toBe('/users')
+    expect(reflect.get(Users, Route, 'find')).toBe('/users/:id')
+  })
+
+  it('memberName refuses a class-only annotation, naming the member', function () {
+    const Entity = createAnnotation.on('class')<string>()
+
+    function Misplaced(_target: unknown, context: ClassDecoratorContext) {
+      // The types refuse a class-only key in a member slot; only a cast or plain JavaScript gets here.
+      reflect.annotate(context, Entity as never, 'users', 'list')
+    }
+
+    expect(() => {
+      @Misplaced
+      class Users {
+        list() {}
+      }
+      void Users
+    }).toThrow('Cannot apply an annotation to member "list": it only applies to class')
+  })
+
+  it('a subclass never writes into its base class (issue #93)', function () {
+    const Tag = createAnnotation<string>()
+
+    @Tag('base')
+    class Base {
+      @Tag('base:run')
+      run() {}
+    }
+
+    @Tag('sub')
+    class Sub extends Base {
+      @Tag('sub:go')
+      go() {}
+    }
+
+    expect(reflect.get(Base, Tag)).toBe('base')
+    expect(reflect.get(Base, Tag, 'go')).toBeUndefined()
+    expect(reflect.get(Sub, Tag)).toBe('sub')
+    expect(reflect.get(Sub, Tag, 'go')).toBe('sub:go')
+    expect(reflect.get(Sub, Tag, 'run')).toBe('base:run')
+
+    expect(Object.hasOwn(Sub[Symbol.metadata]!, Keys.kMetadata)).toBe(true)
+    expect(storeOf(Sub)).not.toBe(storeOf(Base))
+  })
+
+  it('a subclass whose metadata the compiler linked to its base still gets its own store', function () {
+    // tsc links every subclass's metadata object to its base's with Object.create; SWC only when
+    // the subclass has a class decorator. Built by hand so the test depends on neither.
+    const key = Symbol('k')
+    class P {}
+    class S extends P {}
+    const parentMeta: DecoratorMetadata = Object.create(null)
+    const childMeta: DecoratorMetadata = Object.create(parentMeta)
+    Object.defineProperty(P, Symbol.metadata, { value: parentMeta, configurable: true })
+    Object.defineProperty(S, Symbol.metadata, { value: childMeta, configurable: true })
+
+    reflect.annotate({ kind: 'class', name: 'P', metadata: parentMeta } as ClassDecoratorContext, key, 'base')
+    reflect.annotate({ kind: 'method', name: 'x', metadata: childMeta } as ClassMethodDecoratorContext, key, 'child')
+
+    expect(Object.hasOwn(childMeta, Keys.kMetadata)).toBe(true)
+    expect(childMeta[Keys.kMetadata]).not.toBe(parentMeta[Keys.kMetadata])
+    expect((parentMeta[Keys.kMetadata] as Map<symbol, { members?: unknown }>).get(key)?.members).toBeUndefined()
+    expect(reflect.get(P, key, 'x')).toBeUndefined()
+    expect(reflect.get(S, key, 'x')).toBe('child')
+    expect(reflect.get(S, key)).toBe('base')
+  })
+})
+
+describe('inheritance', function () {
+  const Tag = createAnnotation<string | undefined>()
+
+  @Tag('base')
+  class Base {
+    @Tag('base:run')
+    run() {}
+  }
+
+  it('an undecorated subclass reads its base through the constructor chain', function () {
+    class Plain extends Base {}
+
+    expect(Object.hasOwn(Plain, Symbol.metadata)).toBe(false)
+    expect(reflect.get(Plain, Tag)).toBe('base')
+    expect(reflect.get(Plain, Tag, 'run')).toBe('base:run')
+  })
+
+  it('a subclass decorated only on a member reads its base class slot', function () {
+    // SWC leaves this subclass's metadata unlinked from its base's; the chain walk does not care.
+    class Sub extends Base {
+      @Tag('sub:other')
+      other() {}
+    }
+
+    expect(reflect.get(Sub, Tag)).toBe('base')
+    expect(reflect.get(Sub, Tag, 'other')).toBe('sub:other')
+    expect(reflect.get(Sub, Tag, 'run')).toBe('base:run')
+  })
+
+  it('a decorated subclass shadows its base', function () {
+    @Tag('sub')
+    class Sub extends Base {
+      @Tag('sub:run')
+      override run() {}
+    }
+
+    expect(reflect.get(Sub, Tag)).toBe('sub')
+    expect(reflect.get(Sub, Tag, 'run')).toBe('sub:run')
+    expect(reflect.get(Base, Tag)).toBe('base')
+    expect(reflect.get(Base, Tag, 'run')).toBe('base:run')
+  })
+
+  it('a method override without its own annotation carries the base method value', function () {
+    class Sub extends Base {
+      override run() {}
+    }
+
+    expect(reflect.get(Sub, Tag, 'run')).toBe('base:run')
+  })
+
+  it('a stored undefined counts as absent', function () {
+    @Tag(undefined)
+    class Sub extends Base {}
+
+    expect(reflect.get(Sub, Tag)).toBe('base')
+  })
+
+  it('members leaves out a stored undefined, so the base value shows through as with get', function () {
+    class Sub extends Base {
+      @Tag(undefined)
+      override run() {}
+
+      @Tag(undefined)
+      draft() {}
+
+      @Tag('sub:publish')
+      publish() {}
+    }
+
+    expect(reflect.get(Sub, Tag, 'run')).toBe('base:run')
+    expect(Object.fromEntries(reflect.members(Sub, Tag))).toStrictEqual({ run: 'base:run', publish: 'sub:publish' })
+  })
+
+  it('walks more than one level', function () {
+    class Mid extends Base {}
+
+    @Tag('leaf')
+    class Leaf extends Mid {}
+
+    expect(reflect.get(Leaf, Tag)).toBe('leaf')
+    expect(reflect.get(Leaf, Tag, 'run')).toBe('base:run')
+    expect(reflect.get(Mid, Tag)).toBe('base')
+  })
+})
+
+describe('reflect.effective across the chain', function () {
+  const RolesAnn = createAnnotation((...roles: string[]) => roles)
+
+  class BaseCtrl {
+    @RolesAnn('user:list')
+    list() {}
+  }
+
+  @RolesAnn('admin')
+  class AdminCtrl extends BaseCtrl {
+    @RolesAnn('root')
+    purge() {}
+
+    other() {}
+  }
+
+  it('a base member slot beats the subclass class slot', function () {
+    expect(reflect.effective(AdminCtrl, RolesAnn, 'list')).toEqual(['user:list'])
+  })
+
+  it('an own member slot wins', function () {
+    expect(reflect.effective(AdminCtrl, RolesAnn, 'purge')).toEqual(['root'])
+  })
+
+  it('falls back to the nearest class slot', function () {
+    expect(reflect.effective(AdminCtrl, RolesAnn, 'other')).toEqual(['admin'])
+  })
+
+  it('leaves the base untouched', function () {
+    expect(reflect.get(BaseCtrl, RolesAnn)).toBeUndefined()
+    expect(reflect.effective(BaseCtrl, RolesAnn, 'list')).toEqual(['user:list'])
+  })
+})
+
+describe('reflect.merge across the chain', function () {
+  const Perms = createAnnotation<string[]>()
+
+  @Perms(['base'])
+  class B {
+    @Perms(['m'])
+    run() {}
+  }
+
+  @Perms(['sub'])
+  class S extends B {}
+
+  it('does not accumulate the base class array', function () {
+    expect(reflect.merge(S, Perms, 'run')).toEqual(['sub', 'm'])
+    expect(reflect.merge(S, Perms, 'other')).toEqual(['sub'])
+  })
+
+  it('returns an empty array for a symbol key nothing declares', function () {
+    expect(reflect.merge<string>(B, kRoles, 'run')).toEqual([])
+  })
+})
+
+describe('module copies', function () {
+  it('a second copy of di reads what the first one wrote', async function () {
+    const Tag = createAnnotation<string>()
+
+    @Tag('cls')
+    @Roles('admin')
+    class Owner {}
+
+    vi.resetModules()
+    const second = await import('../reflect.js')
+
+    expect(second.reflect).not.toBe(reflect)
+    expect(second.reflect.get<string[]>(Owner, kRoles)).toEqual(['admin'])
+    expect(second.reflect.get(Owner, Tag)).toBe('cls')
+  })
+})
+
+describe('static members', function () {
+  const Tag = createAnnotation<string>()
+
+  @Tag('cls')
+  class Jobs {
+    @Tag('static')
+    static run() {}
+
+    @Tag('instance')
+    run() {}
+
+    other() {}
+  }
+
+  it('a static and an instance member with the same name keep separate values', function () {
+    expect(reflect.get(Jobs, Tag, 'run')).toBe('instance')
+    expect(reflect.get(Jobs, Tag, 'run', { static: true })).toBe('static')
+  })
+
+  it('effective falls back to the class value for static and instance members alike', function () {
+    expect(reflect.effective(Jobs, Tag, 'run', { static: true })).toBe('static')
+    expect(reflect.effective(Jobs, Tag, 'other')).toBe('cls')
+    expect(reflect.effective(Jobs, Tag, 'other', { static: true })).toBe('cls')
+  })
+
+  it('a subclass inherits a static member value', function () {
+    class MoreJobs extends Jobs {}
+    expect(reflect.get(MoreJobs, Tag, 'run', { static: true })).toBe('static')
+  })
+
+  it('a class decorator writes a static member slot with the static option', function () {
+    const Label = createAnnotation<string>()
+    const LabelStatic = (member: string, value: string) => (_target: AnyClass, context: ClassDecoratorContext) => {
+      reflect.annotate(context, Label, value, member, { static: true })
+    }
+
+    @LabelStatic('create', 'factory')
+    class Repo {}
+
+    expect(reflect.get(Repo, Label, 'create', { static: true })).toBe('factory')
+    expect(reflect.get(Repo, Label, 'create')).toBeUndefined()
+  })
+
+  it('merge reads the static member slot with the static option', function () {
+    const Perms = createAnnotation<string[]>()
+
+    @Perms(['read'])
+    class Api {
+      @Perms(['admin'])
+      static reset() {}
+    }
+
+    expect(reflect.merge(Api, Perms, 'reset', { static: true })).toEqual(['read', 'admin'])
+    expect(reflect.merge(Api, Perms, 'reset')).toEqual(['read'])
+  })
+})
+
+describe('writing outside a decorator', function () {
+  const Route = createAnnotation.on('method')<string>()
+  const Entity = createAnnotation.on('class')<{ table: string }>()
+
+  it('writes on an undecorated class, which then owns its metadata', function () {
+    class Plain {
+      list() {}
+    }
+
+    reflect.set(Plain, Entity, { table: 'plain' })
+    reflect.set(Plain, Route, '/list', 'list')
+
+    expect(Object.hasOwn(Plain, Symbol.metadata)).toBe(true)
+    expect(reflect.get(Plain, Entity)).toEqual({ table: 'plain' })
+    expect(reflect.get(Plain, Route, 'list')).toBe('/list')
+  })
+
+  it('writes on a plain object and on a function', function () {
+    const router = { name: 'programmatic' }
+    const handler = function health() {}
+
+    reflect.set(router, Route, '/health', 'health')
+    reflect.set(handler, Entity, { table: 'probes' })
+
+    expect(reflect.get(router, Route, 'health')).toBe('/health')
+    expect([...reflect.members(router, Route)]).toEqual([['health', '/health']])
+    expect(reflect.get(handler, Entity)).toEqual({ table: 'probes' })
+  })
+
+  it('an object reads what its prototype carries', function () {
+    const defaults = {}
+    reflect.set(defaults, Route, '/default', 'handle')
+    const router = Object.create(defaults) as object
+
+    expect(reflect.get(router, Route, 'handle')).toBe('/default')
+  })
+
+  it('writes a static member slot', function () {
+    class Api {}
+
+    reflect.set(Api, Route, '/create', 'create', { static: true })
+
+    expect(reflect.get(Api, Route, 'create', { static: true })).toBe('/create')
+    expect(reflect.get(Api, Route, 'create')).toBeUndefined()
+  })
+
+  it('writes on a subclass without touching its base', function () {
+    @Entity({ table: 'base' })
+    class Base {}
+
+    class Sub extends Base {}
+
+    reflect.set(Sub, Entity, { table: 'sub' })
+
+    expect(reflect.get(Sub, Entity)).toEqual({ table: 'sub' })
+    expect(reflect.get(Base, Entity)).toEqual({ table: 'base' })
+  })
+
+  it('an instance does not read its class annotations: its constructor does', function () {
+    @Entity({ table: 'users' })
+    class Users {}
+
+    const user = new Users()
+
+    expect(reflect.get(user, Entity)).toBeUndefined()
+    expect(reflect.get(user.constructor as typeof Users, Entity)).toEqual({ table: 'users' })
+  })
+})
+
+/**
+ * Compile-time contract of writes outside a decorator. Never called: the assertions are the
+ * `@ts-expect-error` comments, which fail the build if the error they mark stops happening.
+ */
+function setTypeChecks(): void {
+  const Route = createAnnotation.on('method')<string>()
+  const Entity = createAnnotation.on('class')<{ table: string }>()
+  const router = {}
+
+  // @ts-expect-error the value must match the annotation's type
+  reflect.set(router, Route, 1, 'health')
+
+  // @ts-expect-error a class-only annotation has no member slot to write
+  reflect.set(router, Entity, { table: 'x' }, 'health')
+
+  // @ts-expect-error a method-only annotation has no target slot to write
+  reflect.set(router, Route, '/x')
+}
+
+void setTypeChecks

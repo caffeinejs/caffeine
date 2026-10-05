@@ -1,5 +1,5 @@
 import { Conditional } from '../conditional.js'
-import { check } from '../internal/util/assert/check.js'
+import { ErrInvalidDecorator } from '../errors.js'
 import { notNil } from '../internal/util/assert/not_nil.js'
 import { extendMemberInjectableAttributes, extendInjectableAttributes } from './registrar/index.js'
 import { defineClassOrMemberDecorator } from './util/index.js'
@@ -19,7 +19,9 @@ import { defineClassOrMemberDecorator } from './util/index.js'
  */
 export function ConditionalOn<T>(conditional: Conditional) {
   notNil(conditional, `@${ConditionalOn.name}(): parameter conditional is required.`)
-  check(typeof conditional === 'function', `@${ConditionalOn.name}(): parameter conditional must be a function`)
+  if (typeof conditional !== 'function') {
+    throw new ErrInvalidDecorator(`@${ConditionalOn.name}(): parameter conditional must be a function`)
+  }
 
   return defineClassOrMemberDecorator(
     (target, ctx) => extendInjectableAttributes<T>(ctx.metadata, target, config => config.conditional(conditional)),

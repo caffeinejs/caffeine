@@ -1907,3 +1907,97 @@ describe('multiple aspects on the same method', function () {
     ])
   })
 })
+
+describe('annotations in aspects', function () {
+  const kRun = Symbol('run')
+  const symbolCalls: string[] = []
+
+  @Injectable()
+  @Profile('aop-symbol-methods')
+  class SymbolWorker {
+    [kRun]() {
+      return 'ran'
+    }
+
+    plain() {
+      return 'plain'
+    }
+  }
+
+  @Aspect([$aop.forClass(SymbolWorker, name => name === kRun)])
+  @Profile('aop-symbol-methods')
+  class SymbolAspect implements MethodAspect<SymbolWorker> {
+    before(jp: JoinPoint<SymbolWorker>) {
+      symbolCalls.push(String(jp.methodName))
+    }
+  }
+  void SymbolAspect
+
+  it('a predicate pointcut reaches a symbol-named method', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-symbol-methods'] })
+    await di.init()
+
+    const worker = di.get(SymbolWorker)
+    expect(worker[kRun]()).toBe('ran')
+    expect(worker.plain()).toBe('plain')
+    expect(symbolCalls).toEqual(['Symbol(run)'])
+  })
+
+  const Guarded = createAnnotation.on('class', 'method')()
+  const guardedCalls: string[] = []
+
+  @Injectable()
+  @Profile('aop-annotated-with')
+  class HalfGuarded {
+    @Guarded()
+    secret() {
+      return 'secret'
+    }
+
+    open() {
+      return 'open'
+    }
+  }
+
+  @Guarded()
+  @Injectable()
+  @Profile('aop-annotated-with')
+  class FullyGuarded {
+    first() {
+      return 'first'
+    }
+
+    second() {
+      return 'second'
+    }
+  }
+
+  @Injectable()
+  @Profile('aop-annotated-with')
+  class Unguarded {
+    run() {
+      return 'run'
+    }
+  }
+
+  @Aspect([$aop.annotatedWith(Guarded)])
+  @Profile('aop-annotated-with')
+  class GuardAspect implements MethodAspect {
+    before(jp: JoinPoint) {
+      guardedCalls.push(`${jp.ctor.name}.${String(jp.methodName)}`)
+    }
+  }
+  void GuardAspect
+
+  it('$aop.annotatedWith weaves annotated methods, and every method of an annotated class', async function () {
+    const di = new CaffeineIoC({ profiles: ['aop-annotated-with'] })
+    await di.init()
+
+    expect(di.get(HalfGuarded).secret()).toBe('secret')
+    expect(di.get(HalfGuarded).open()).toBe('open')
+    expect(di.get(FullyGuarded).first()).toBe('first')
+    expect(di.get(FullyGuarded).second()).toBe('second')
+    expect(di.get(Unguarded).run()).toBe('run')
+    expect(guardedCalls).toEqual(['HalfGuarded.secret', 'FullyGuarded.first', 'FullyGuarded.second'])
+  })
+})

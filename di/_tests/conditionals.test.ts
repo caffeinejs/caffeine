@@ -8,7 +8,7 @@ import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrDuplicateBinding } from '../errors.js'
+import { ErrDuplicateBinding, ErrInvalidDecorator } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
@@ -486,5 +486,11 @@ describe('Conditionals', function () {
         expect(spy2).toHaveBeenCalledTimes(4)
       })
     })
+  })
+})
+
+describe('@ConditionalOn argument errors', function () {
+  it('throws ErrInvalidDecorator, not a string, when the condition is not a function', function () {
+    expect(() => ConditionalOn('x' as never)).toThrow(ErrInvalidDecorator)
   })
 })

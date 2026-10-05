@@ -6,7 +6,7 @@ import { AsyncFactory, Factory } from './factory.js'
 import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from './injection.js'
 import { functionFactory } from './internal/core/factory/function_closure.js'
 import { valueFactory } from './internal/core/factory/value.js'
-import { check, notNil } from './internal/util/assert/index.js'
+import { notNil } from './internal/util/assert/index.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { InjectionToken, Identifier, NamedToken, TypedKey, isNamedKey, keyStr } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
@@ -73,10 +73,11 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   toClass<V extends TValue, A extends unknown[]>(ctor: Ctor<V, A>, injections?: InjectionsFor<A>): this {
-    check(
-      typeof ctor === 'function',
-      `BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`,
-    )
+    if (typeof ctor !== 'function') {
+      throw new ErrInvalidBinding(
+        `BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`,
+      )
+    }
 
     const deps = (injections ?? []) as Injection[]
 
@@ -148,7 +149,9 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   toValue<V extends TValue>(value: V): this {
-    check(value !== undefined, `BindingSpec .toValue() parameter must be defined.`)
+    if (value === undefined) {
+      throw new ErrInvalidBinding(`BindingSpec .toValue() parameter must be defined.`)
+    }
 
     this.binding.factory = valueFactory(value)
     this.binding.injections = []
@@ -168,10 +171,11 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   toFactory<V extends TValue>(factory: Factory<V>): this {
-    check(
-      typeof factory === 'function',
-      `BindingSpec .toFactory() parameter must be a function. Received: '${typeof factory}'`,
-    )
+    if (typeof factory !== 'function') {
+      throw new ErrInvalidBinding(
+        `BindingSpec .toFactory() parameter must be a function. Received: '${typeof factory}'`,
+      )
+    }
 
     this.binding.factory = factory
     this.binding.injections = []
@@ -192,10 +196,11 @@ export class BindingSpec<TValue, K = unknown> {
    * ```
    */
   toAsyncFactory<V extends TValue>(factory: AsyncFactory<V>): this {
-    check(
-      typeof factory === 'function',
-      `BindingSpec .toAsyncFactory() parameter must be a function. Received: '${typeof factory}'`,
-    )
+    if (typeof factory !== 'function') {
+      throw new ErrInvalidBinding(
+        `BindingSpec .toAsyncFactory() parameter must be a function. Received: '${typeof factory}'`,
+      )
+    }
 
     this.binding.async = true
     this.binding.factory = factory
@@ -227,7 +232,9 @@ export class BindingSpec<TValue, K = unknown> {
     fn: (...args: { [P in keyof I]: ResolveInjection<I[P]> }) => V,
     injections?: I,
   ): this {
-    check(typeof fn === 'function', `BindingSpec .toFunction() parameter must be a function. Received: '${typeof fn}'`)
+    if (typeof fn !== 'function') {
+      throw new ErrInvalidBinding(`BindingSpec .toFunction() parameter must be a function. Received: '${typeof fn}'`)
+    }
 
     const normalized = ((injections ?? []) as Injection[]).map(dep =>
       typeof dep === 'object' ? (dep as InjectionDescriptor) : { key: dep },

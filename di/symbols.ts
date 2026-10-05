@@ -11,6 +11,5 @@ export const Keys = {
   kRefresher: token<Refresher>(Symbol.for('@caffeinejs/di:refresher')),
   kRequestScopeManager: token<RequestScopeManager>(Symbol.for('@caffeinejs/di:request-scope-manager')),
   kStandaloneResolver: token<StandaloneResolverConsumer>(Symbol.for('@caffeinejs/di:standalone')),
-  kAnnotations: Symbol('@caffeinejs/di:annotations'),
-  kMetadata: Symbol('@caffeinejs/di:metadata'),
+  kMetadata: Symbol.for('@caffeinejs/di:metadata'),
 }

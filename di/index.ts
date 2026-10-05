@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-export { annotate, createAnnotation } from './annotations.js'
+export { createAnnotation } from './annotations.js'
 export type { JoinPoint, MethodAspect, Pointcut, PointcutClassPredicate, PointcutMethodPredicate } from './aop.js'
 export { $aop } from './aop.js'
 export type { AspectSpec } from './aspect_spec.js'
@@ -47,7 +47,7 @@ export { kModule, mod, type Module, type ModuleFn } from './module.js'
 export type { PostProcessor } from './post_processor.js'
 export type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 export type { Provider } from './provider.js'
-export { defineMetadata, getMetadata, getMetadataOverride, reflect } from './reflect.js'
+export { type Annotation, type AnnotationTarget, reflect } from './reflect.js'
 export type { Refresher, SelfRefreshable } from './refresher.js'
 export { kSelfRefresh } from './refresher.js'
 export type { ResolutionContext } from './resolution_context.js'

@@ -1,94 +1,203 @@
-import { Keys } from './symbols.js'
+import { ErrInvalidDecorator } from './errors.js'
+import { solutions } from './internal/util/errutil/index.js'
+import {
+  type Annotation,
+  type AnnotationOptions,
+  type AnnotationTarget,
+  isWritten,
+  kAnnotationOptions,
+  reflect,
+} from './reflect.js'
+import type { AnyClass } from './types.js'
 
-interface AnnotationEntry {
-  class?: unknown
-  members?: Map<string | symbol, unknown>
+interface Targets {
+  class: [target: AnyClass, context: ClassDecoratorContext]
+  method: [target: Function, context: ClassMethodDecoratorContext]
+  field: [target: undefined, context: ClassFieldDecoratorContext]
+  accessor: [target: ClassAccessorDecoratorTarget<unknown, unknown>, context: ClassAccessorDecoratorContext]
+  getter: [target: Function, context: ClassGetterDecoratorContext]
+  setter: [target: Function, context: ClassSetterDecoratorContext]
 }
 
-// Phantom properties on the return type — never present at runtime.
-// reflect.ts matches these structurally to infer C and M without importing a named type.
-type Annotator<C, M> = ((value: C | M) => (target: unknown, context: DecoratorContext) => void) & {
-  readonly _c?: C
-  readonly _m?: M
+type DecoratorOn<K extends AnnotationTarget> = (target: Targets[K][0], context: Targets[K][1]) => void
+
+// `void` makes a marker; `any` does not.
+type IsMarker<V> = 0 extends 1 & V ? false : [V] extends [void] ? true : false
+
+type Args<V> = IsMarker<V> extends true ? [] : [value: V]
+
+type Stored<V> = IsMarker<V> extends true ? true : V
+
+type Annotator<A extends unknown[], S, K extends AnnotationTarget> = ((...args: A) => DecoratorOn<K>) & Annotation<S, K>
+
+interface Repeatable {
+  /** Collects every application's value, in source order, instead of refusing a second one. */
+  readonly repeatable: true
+}
+
+interface Single {
+  readonly repeatable?: false
+}
+
+// An accumulating annotation must say how two values combine.
+type Policy<S> =
+  | { readonly inherit?: 'nearest' | 'own'; readonly combine?: (outer: S, inner: S) => S }
+  | { readonly inherit: 'accumulate'; readonly combine: (outer: S, inner: S) => S }
+
+interface AnnotationFactory<K extends AnnotationTarget> {
+  <V = void>(options: Repeatable & Policy<Stored<V>[]>): Annotator<Args<V>, Stored<V>[], K>
+  <V = void>(options?: Single & Policy<Stored<V>>): Annotator<Args<V>, Stored<V>, K>
+  <A extends unknown[], V>(transform: (...args: A) => V, options: Repeatable & Policy<V[]>): Annotator<A, V[], K>
+  <A extends unknown[], V>(transform: (...args: A) => V, options?: Single & Policy<V>): Annotator<A, V, K>
+}
+
+type Transform = (...args: unknown[]) => unknown
+
+interface FactoryOptions {
+  readonly repeatable?: boolean
+  readonly inherit?: 'nearest' | 'own' | 'accumulate'
+  readonly combine?: (outer: unknown, inner: unknown) => unknown
+}
+
+// What one application stores: the transform's result, otherwise the argument, or `true` for a marker.
+function valueFrom(transform: Transform | undefined, args: unknown[]): unknown {
+  if (transform !== undefined) {
+    return transform(...args)
+  }
+
+  return args.length === 0 ? true : args[0]
+}
+
+// A getter and a setter of one name are one member, so an annotation goes on one of them. `kHalf`
+// records, per member, the half that carries it.
+function claimHalf(context: ClassGetterDecoratorContext | ClassSetterDecoratorContext, kHalf: symbol): void {
+  const owner = reflect.get<string>(context, kHalf, context.name, { static: context.static })
+  if (owner !== undefined && owner !== context.kind) {
+    const name = String(context.name)
+    throw new ErrInvalidDecorator(
+      `Cannot apply an annotation to ${context.kind} "${name}": ${owner} "${name}" already carries it` +
+        solutions('Apply it to either the getter or the setter: the two are one member'),
+    )
+  }
+
+  reflect.annotate(context, kHalf, context.kind)
+}
+
+function build(
+  targets: readonly AnnotationTarget[] | undefined,
+  first?: Transform | FactoryOptions,
+  second?: FactoryOptions,
+): unknown {
+  const transform = typeof first === 'function' ? first : undefined
+  const settings = (typeof first === 'function' ? second : first) ?? {}
+  const repeatable = settings.repeatable === true
+
+  if (settings.inherit === 'accumulate' && typeof settings.combine !== 'function') {
+    throw new ErrInvalidDecorator(
+      'Cannot create an annotation that accumulates: it has no combine rule' +
+        solutions('Pass combine(outer, inner) together with inherit: "accumulate"'),
+    )
+  }
+
+  const kHalf = Symbol('half')
+
+  const factory: ((...args: unknown[]) => DecoratorOn<AnnotationTarget>) & Annotation<unknown, AnnotationTarget> = (
+    ...args
+  ) => {
+    const value = valueFrom(transform, args)
+
+    return (_target, context) => {
+      if (context.kind === 'getter' || context.kind === 'setter') {
+        claimHalf(context, kHalf)
+      }
+
+      if (repeatable) {
+        const previous =
+          context.kind === 'class'
+            ? reflect.get(context, factory)
+            : reflect.get(context, factory, context.name, { static: context.static })
+
+        // Decorators apply innermost first: prepending keeps the order they are written in.
+        reflect.annotate(context, factory, [value, ...((previous as unknown[] | undefined) ?? [])])
+        return
+      }
+
+      // A first application may have stored `undefined`, which reads as absent.
+      if (isWritten(context, factory)) {
+        throw new ErrInvalidDecorator(
+          `Cannot apply an annotation twice to ${context.kind} "${String(context.name)}"` +
+            solutions('Create the annotation with { repeatable: true } to collect every value'),
+        )
+      }
+
+      reflect.annotate(context, factory, value)
+    }
+  }
+
+  const options: AnnotationOptions = { targets, inherit: settings.inherit, combine: settings.combine }
+  Object.defineProperty(factory, kAnnotationOptions, { value: Object.freeze(options) })
+
+  return factory
 }
 
 /**
- * Low-level primitive for writing an annotation into decorator metadata.
- * Intended for use inside decorator factories.
+ * Creates an annotation that applies only to `targets`.
  *
- * When `memberName` is provided the value is written to the member slot for that name,
- * regardless of context kind. Otherwise the slot is derived from context: class decorators
- * write to the class slot; member decorators write to the member slot keyed by the
- * decorated member's name.
+ * Applying it anywhere else is a type error. From plain JavaScript or through a cast it throws
+ * `ErrInvalidDecorator` when the class is defined.
  */
-export function annotate(
-  context: ClassDecoratorContext | ClassMemberDecoratorContext,
-  key: Function,
-  value: unknown,
-  memberName?: string | symbol,
-): void {
-  const map: Map<Function, AnnotationEntry> = ((context.metadata as any)[Keys.kAnnotations] ??= new Map())
+function on<const T extends readonly [AnnotationTarget, ...AnnotationTarget[]]>(
+  ...targets: T
+): AnnotationFactory<T[number]> {
+  return ((first?: Transform | FactoryOptions, second?: FactoryOptions) =>
+    build(targets, first, second)) as AnnotationFactory<T[number]>
+}
 
-  let entry = map.get(key)
-  if (!entry) {
-    entry = {}
-    map.set(key, entry)
-  }
-
-  if (memberName !== undefined) {
-    ;(entry.members ??= new Map()).set(memberName, value)
-  } else if (context.kind === 'class') {
-    entry.class = value
-  } else {
-    ;(entry.members ??= new Map()).set((context as ClassMemberDecoratorContext).name, value)
-  }
+interface CreateAnnotation extends AnnotationFactory<AnnotationTarget> {
+  readonly on: typeof on
 }
 
 /**
- * Creates a decorator factory applicable to both classes and class members.
- * When applied to a class, stores the value in the class slot; when applied to
- * a method, field, or accessor, stores it in the member slot keyed by name.
+ * Creates an annotation: a decorator factory whose value {@link reflect} reads back, keyed by the
+ * factory itself.
  *
- * Use two type parameters to express different shapes per target:
- * `C` for class-level, `M` for member-level (defaults to `C`).
+ * `createAnnotation<V>()` applies to classes and to every kind of member, and
+ * `createAnnotation.on(...targets)` restricts it. Without a value type the annotation is a marker:
+ * `@Deprecated()` takes no argument and stores `true`. A transform turns the decorator's arguments
+ * into the stored value. Applying an annotation twice to one target throws `ErrInvalidDecorator`;
+ * created with `{ repeatable: true }`, it collects every application's value in source order
+ * instead. A getter and a setter of the same name are one member, so an annotation goes on one of
+ * them, repeatable or not. For a rule the targets cannot express, such as async methods only, write
+ * the decorator by hand: see {@link Annotation}.
+ *
+ * `inherit` decides how reads treat base classes: `'nearest'`, the default, takes the closest
+ * declaration; `'own'` ignores base classes; `'accumulate'` folds every declaration, from the
+ * farthest base to the class, with `combine`. `combine(outer, inner)` also joins a class value with
+ * a member value in `reflect.effective`; without it the member value wins.
  *
  * @example
  * ```ts
- * const Route = createAnnotation<{ prefix: string }, { path: string }>()
+ * const Entity = createAnnotation.on('class')<{ table: string }>()
+ * const Route = createAnnotation.on('method')((path: string) => ({ path }))
+ * const Tags = createAnnotation<string>({ repeatable: true })
+ * const Deprecated = createAnnotation()
  *
- * @Route({ prefix: '/api' })
- * class Controller {
- *   @Route({ path: '/users' })
+ * @Entity({ table: 'users' })
+ * @Tags('public')
+ * @Tags('v2')
+ * class Users {
+ *   @Route('/users')
+ *   @Deprecated()
  *   list() {}
  * }
  *
- * reflect.get(Controller, Route)            // { prefix: '/api' }
- * reflect.get(Controller, Route, 'list')    // { path: '/users' }
- * ```
- *
- * Pass a transform to control the decorator call signature:
- *
- * ```ts
- * const Roles = createAnnotation((...roles: string[]) => roles)
- *
- * @Roles('admin', 'user')
- * class AdminCtrl {}
- *
- * reflect.get(AdminCtrl, Roles)  // ['admin', 'user']
+ * reflect.get(Users, Entity)             // { table: 'users' }
+ * reflect.get(Users, Tags)               // ['public', 'v2']
+ * reflect.get(Users, Route, 'list')      // { path: '/users' }
+ * reflect.get(Users, Deprecated, 'list') // true
  * ```
  */
-export function createAnnotation<C, M = C>(): Annotator<C, M>
-export function createAnnotation<Args extends unknown[], T>(
-  transform: (...args: Args) => T,
-): ((...args: Args) => (target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => void) & {
-  readonly _c?: T
-  readonly _m?: T
-}
-export function createAnnotation(transform?: (...args: unknown[]) => unknown): unknown {
-  return function factory(...args: unknown[]) {
-    const value = transform ? transform(...args) : args[0]
-    return (_: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext): void => {
-      annotate(context, factory, value)
-    }
-  }
-}
+export const createAnnotation = Object.assign(
+  (first?: Transform | FactoryOptions, second?: FactoryOptions) => build(undefined, first, second),
+  { on },
+) as CreateAnnotation

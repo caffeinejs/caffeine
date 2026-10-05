@@ -1,13 +1,4 @@
-import {
-  CaffeineIoC,
-  ErrInvalidDecorator,
-  Injectable,
-  Lifetime,
-  Scopes,
-  defineMetadata,
-  getMetadataOverride,
-  token,
-} from '@caffeinejs/di'
+import { CaffeineIoC, ErrInvalidDecorator, Injectable, Lifetime, Scopes, reflect, token } from '@caffeinejs/di'
 import { ErrGuardConfiguration } from '@caffeinejs/std/framework'
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
@@ -776,7 +767,7 @@ describe('authorization', () => {
 
   function Roles(...roles: Role[]) {
     return (_target: unknown, context: ClassDecoratorContext | ClassMemberDecoratorContext) => {
-      defineMetadata(context, kRoles, roles)
+      reflect.annotate(context, kRoles, roles)
     }
   }
 
@@ -813,7 +804,7 @@ describe('authorization', () => {
         return true
       }
 
-      const required = getMetadataOverride<Role[]>(clazz, kRoles, input.target.handler)
+      const required = reflect.effective<Role[]>(clazz, kRoles, input.target.handler)
 
       if (required === undefined) {
         return true

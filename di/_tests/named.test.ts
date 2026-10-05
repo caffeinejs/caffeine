@@ -12,6 +12,7 @@ import { Provides } from '../decorators/provides.js'
 import {
   ErrDuplicateBinding,
   ErrInvalidContainerState,
+  ErrInvalidDecorator,
   ErrNoResolutionForKey,
   ErrNoUniqueInjectionForKey,
   ErrRepeatedInjectableConfiguration,
@@ -338,4 +339,29 @@ describe('a key bound directly next to a binding named after it', function () {
       expect(() => di.get(kMailer)).toThrow(ErrNoUniqueInjectionForKey)
     })
   }
+})
+
+describe('@Named error messages', function () {
+  it('a repeated name on a member reports a decorator error, not a TypeError', function () {
+    const kValue = token<number>(Symbol('value'))
+    let error: unknown
+    try {
+      @Configuration()
+      class Conf {
+        @Named('dup')
+        @Named('dup')
+        @Provides(kValue)
+        value() {
+          return 1
+        }
+      }
+      void Conf
+    } catch (e) {
+      error = e
+    }
+
+    expect(error).toBeInstanceOf(ErrInvalidDecorator)
+    expect((error as Error).message).toContain('member "value"')
+    expect((error as Error).message).toContain('repeated names')
+  })
 })

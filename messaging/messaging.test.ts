@@ -1,3 +1,4 @@
+import { ErrInvalidDecorator } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
 import { $t } from '@caffeinejs/std/schema'
 import type { SchemaIssue } from '@caffeinejs/std/schema'
@@ -133,6 +134,17 @@ class NonRetryableConsumer {
   on(): void {
     nrState.attempts++
     throw new ErrNonRetryable('permanent')
+  }
+}
+
+const kOnSymbol = Symbol('on-symbol')
+let symbolReceived: ReturnType<typeof deferred<{ id: number }>>
+
+@MessageHandler()
+class SymbolConsumer {
+  @Consume('orders11')
+  [kOnSymbol](payload: { id: number }): void {
+    symbolReceived.resolve(payload)
   }
 }
 
@@ -390,5 +402,46 @@ describe('messaging', () => {
     // attempts:5 would retry, but ErrNonRetryable is classified non-retryable → invoked once, then recovered
     expect(await nrState.recovered.promise).toBe(1)
     await built.close()
+  })
+})
+
+describe('messaging handlers on the annotation API', () => {
+  it('dispatches to a symbol-named @Consume handler', async () => {
+    symbolReceived = deferred()
+    const broker = new InMemoryBroker()
+    const app = createApplication({}).install(
+      Messaging(m =>
+        m.use('primary', inMemoryBinder(broker)).in('orders11', { destination: 'orders11', via: 'primary' }),
+      ),
+    )
+    await app.run()
+
+    broker.publish('orders11', message({ id: 7 }))
+
+    expect(await symbolReceived.promise).toEqual({ id: 7 })
+    await app.close()
+  })
+
+  it('refuses @Consume applied twice to one method', () => {
+    expect(() => {
+      @MessageHandler()
+      class Twice {
+        @Consume('twice-a')
+        @Consume('twice-b')
+        on(): void {}
+      }
+      void Twice
+    }).toThrow(ErrInvalidDecorator)
+  })
+
+  it('refuses @MessageParams on a method without @Consume when the class is defined', () => {
+    expect(() => {
+      @MessageHandler()
+      class Orphan {
+        @MessageParams(m => [m.payload()])
+        on(): void {}
+      }
+      void Orphan
+    }).toThrow(ErrInvalidDecorator)
   })
 })
