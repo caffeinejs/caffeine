@@ -2,7 +2,7 @@ import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { Message } from '../message.js'
 import { $m, type MessagePickers } from '../pickers.js'
-import { configureConsume } from './registrar.js'
+import { ConsumeParams } from './registrar.js'
 
 type Picks = ParameterPickOptions<Message>[]
 
@@ -24,9 +24,7 @@ export function MessageParams(
 export function MessageParams(arg: Picks | ((m: MessagePickers) => Picks)) {
   const params = typeof arg === 'function' ? arg($m) : arg
 
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
-    configureConsume(context, builder => {
-      builder.parameters = params
-    })
+  return function (target: Function, context: ClassMethodDecoratorContext): void {
+    ConsumeParams(params)(target, context)
   }
 }

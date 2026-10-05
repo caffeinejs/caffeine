@@ -5,19 +5,18 @@ import type { ConsumerBinding } from './binding.js'
 import type { MessageBus } from './bus.js'
 import type { MessageContext } from './context.js'
 import { kSignals, MessageContextImpl } from './context.js'
-import { getHandlerConsumes } from './decorators/registrar.js'
+import { getHandlerConsumes, Handler } from './decorators/registrar.js'
 import { buildClassifier, type ErrorClassifier, type RecoverContext } from './error_handling.js'
 import { ErrNoConsumer, ErrUnknownBinder } from './errors.js'
 import type { Message } from './message.js'
 import { compileArgs } from './pick_compiler.js'
 import { blockingRetry, type RetryDelivery } from './retry.js'
 import type { MessagingRuntime } from './runtime.js'
-import { Keys } from './symbols.js'
 
 /** One resolved `@Consume` target: a handler instance, the method to invoke, and its compiled arg extractor. */
 interface Route {
-  instance: Record<string, (...args: unknown[]) => unknown>
-  method: string
+  instance: Record<string | symbol, (...args: unknown[]) => unknown>
+  method: string | symbol
   extract: (message: Message, context: MessageContext) => unknown[] | Promise<unknown[]>
 }
 
@@ -85,9 +84,9 @@ export class MessagingContainer {
   #plan(): Map<string, Route[]> {
     const routes = new Map<string, Route[]>()
 
-    for (const { binding } of this.#runtime.container.getBindingsByLabel(Keys.MESSAGE_HANDLER)) {
+    for (const { binding } of this.#runtime.container.getBindingsByAnnotation(Handler)) {
       const instance = this.#runtime.container
-        .wrapBinding<Record<string, (...args: unknown[]) => unknown>>(binding)
+        .wrapBinding<Record<string | symbol, (...args: unknown[]) => unknown>>(binding)
         .get()
 
       for (const spec of getHandlerConsumes(binding.type as object)) {

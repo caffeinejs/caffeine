@@ -1,3 +1,4 @@
+import { createAnnotation, ErrInvalidDecorator, reflect } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { Message } from '../message.js'
@@ -8,66 +9,34 @@ import type { Message } from '../message.js'
  * which binder delivers to it.
  */
 export interface ConsumeSpec {
-  handlerName: string
+  handlerName: string | symbol
   binding: string
   parameters?: ParameterPickOptions<Message>[]
 }
 
-/** Accumulates one `@Consume` method's config before the class decorator freezes it. */
-class ConsumeBuilder {
-  readonly handlerName: string
-  binding?: string
-  parameters?: ParameterPickOptions<Message>[]
+// A handler sees only the methods it declares itself, as it always has.
+export const ConsumeBinding = createAnnotation.on('method')<string>({ inherit: 'own' })
+export const ConsumeParams = createAnnotation.on('method')<ParameterPickOptions<Message>[]>({ inherit: 'own' })
+export const Handler = createAnnotation.on('class')({ inherit: 'own' })
 
-  constructor(handlerName: string) {
-    this.handlerName = handlerName
-  }
-
-  toSpec(): ConsumeSpec {
-    if (this.binding === undefined) {
-      throw new TypeError(`@Consume on "${this.handlerName}": a binding name is required`)
+/** Called by `@MessageHandler` while the class is decorated: every `@MessageParams` method needs a `@Consume`. */
+export function checkHandler(context: ClassDecoratorContext): void {
+  for (const name of reflect.members(context, ConsumeParams).keys()) {
+    if (reflect.get(context, ConsumeBinding, name) === undefined) {
+      throw new ErrInvalidDecorator(
+        `Cannot apply @MessageParams to method "${String(name)}": the method has no @Consume binding`,
+      )
     }
-    return Object.freeze({
-      handlerName: this.handlerName,
-      binding: this.binding,
-      ...(this.parameters !== undefined ? { parameters: this.parameters } : {}),
-    })
   }
 }
 
-// Method decorators run before the class decorator, so they accumulate per-method builders keyed by the class's
-// decorator metadata object; `@MessageHandler` then harvests them into the constructor-keyed registry.
-const ConsumeRegistry = new WeakMap<object, Map<string, ConsumeBuilder>>()
-const HandlerRegistry = new WeakMap<object, ConsumeSpec[]>()
-
-/** Entry point every `@Consume` method decorator calls to mutate its accumulating builder. */
-export function configureConsume(
-  context: ClassMethodDecoratorContext,
-  mutate: (builder: ConsumeBuilder) => void,
-): void {
-  const metadata = context.metadata
-  let byMethod = ConsumeRegistry.get(metadata)
-  if (byMethod === undefined) {
-    byMethod = new Map()
-    ConsumeRegistry.set(metadata, byMethod)
-  }
-  const name = String(context.name)
-  let builder = byMethod.get(name)
-  if (builder === undefined) {
-    builder = new ConsumeBuilder(name)
-    byMethod.set(name, builder)
-  }
-  mutate(builder)
-}
-
-/** Called by `@MessageHandler`: freezes this class's accumulated `@Consume` builders into the ctor registry. */
-export function registerHandler(metadata: object, target: object): void {
-  const byMethod = ConsumeRegistry.get(metadata)
-  const specs = byMethod === undefined ? [] : [...byMethod.values()].map(builder => builder.toSpec())
-  HandlerRegistry.set(target, specs)
-}
-
-/** Reads the frozen `@Consume` specs for a handler class (by constructor). */
+/** Reads the `@Consume` specs of a handler class (by constructor). */
 export function getHandlerConsumes(target: object): ConsumeSpec[] {
-  return HandlerRegistry.get(target) ?? []
+  const specs: ConsumeSpec[] = []
+  for (const [handlerName, binding] of reflect.members(target, ConsumeBinding)) {
+    const parameters = reflect.get(target, ConsumeParams, handlerName)
+    specs.push(Object.freeze({ handlerName, binding, ...(parameters !== undefined ? { parameters } : {}) }))
+  }
+
+  return specs
 }
