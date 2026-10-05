@@ -1131,3 +1131,16 @@ describe('wrapBindings()', function () {
     expect(results).toContain('bravo')
   })
 })
+
+describe('BindingSpec argument errors', function () {
+  it('throws ErrInvalidBinding, not a string, for an invalid argument', function () {
+    class Svc {}
+    const di = new CaffeineIoC({ decorators: false })
+
+    expect(() => di.bind(Svc, t => t.toValue(undefined as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Svc, t => t.toClass('x' as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Svc, t => t.toFactory('x' as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Svc, t => t.toAsyncFactory('x' as never))).toThrow(ErrInvalidBinding)
+    expect(() => di.bind(Svc, t => t.toFunction('x' as never))).toThrow(ErrInvalidBinding)
+  })
+})

@@ -602,3 +602,9 @@ describe('a base bound directly next to a binding extending it', function () {
     })
   }
 })
+
+describe('@Extends argument errors', function () {
+  it('throws ErrInvalidDecorator, not a string, when the base is not a class', function () {
+    expect(() => Extends('x' as never)).toThrow(ErrInvalidDecorator)
+  })
+})

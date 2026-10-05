@@ -290,3 +290,25 @@ describe('Configuration', function () {
     }).toThrow(ErrInvalidDecorator)
   })
 })
+
+describe('@Provides error messages', function () {
+  it('names the method, and no class it cannot know, when the key is missing', function () {
+    let error: unknown
+    try {
+      @Configuration()
+      class Conf {
+        @Provides(undefined as never)
+        make() {
+          return 1
+        }
+      }
+      void Conf
+    } catch (e) {
+      error = e
+    }
+
+    expect(error).toBeInstanceOf(ErrInvalidDecorator)
+    expect((error as Error).message).toContain('method "make"')
+    expect((error as Error).message).not.toContain('Function')
+  })
+})
