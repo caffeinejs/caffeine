@@ -101,8 +101,13 @@ function slotsOf(entry: Entry | undefined, isStatic: boolean): Iterable<[string 
 }
 
 function writeMember(entry: Entry, member: string | symbol, isStatic: boolean, value: unknown): void {
-  const slots = isStatic ? (entry.statics ??= new Map()) : (entry.members ??= new Map())
-  slots.set(member, value)
+  if (isStatic) {
+    entry.statics ??= new Map()
+    entry.statics.set(member, value)
+  } else {
+    entry.members ??= new Map()
+    entry.members.set(member, value)
+  }
 }
 
 function optionsOf(key: MetadataKey): AnnotationOptions | undefined {
@@ -248,6 +253,37 @@ function read(target: object, key: MetadataKey, member: PropertyKey | undefined,
   return resolve(target, key, member, isStatic)
 }
 
+// The entries `members` reads, nearest first: a context's own, otherwise the chain under the
+// annotation's `inherit` rule.
+function entriesOf(target: object, key: MetadataKey, policy: AnnotationOptions | undefined): (Entry | undefined)[] {
+  if (isContext(target)) {
+    return [entryIn(target.metadata, key)]
+  }
+
+  return (policy?.inherit === 'own' ? [target] : chainOf(target)).map(link => ownEntry(link, key))
+}
+
+// Every value of each member name, from the nearest declaration to the farthest.
+function valuesByName(entries: (Entry | undefined)[], isStatic: boolean): Map<string | symbol, unknown[]> {
+  const byName = new Map<string | symbol, unknown[]>()
+  for (const entry of entries) {
+    for (const [name, value] of slotsOf(entry, isStatic)) {
+      if (value === undefined) {
+        continue
+      }
+
+      const values = byName.get(name)
+      if (values === undefined) {
+        byName.set(name, [value])
+      } else {
+        values.push(value)
+      }
+    }
+  }
+
+  return byName
+}
+
 /**
  * Writes `value` under `key` into the metadata of the class being decorated.
  *
@@ -366,34 +402,10 @@ function get(target: object, key: MetadataKey, member?: PropertyKey, options?: M
 function members<T>(target: object, key: symbol, options?: MemberOptions): Map<string | symbol, T>
 function members<V>(target: object, key: OnMember<V>, options?: MemberOptions): Map<string | symbol, V>
 function members(target: object, key: MetadataKey, options?: MemberOptions): Map<string | symbol, unknown> {
-  const isStatic = options?.static === true
-  const context = isContext(target)
-  const policy = context ? undefined : optionsOf(key)
-  const entries = context
-    ? [entryIn(target.metadata, key)]
-    : (policy?.inherit === 'own' ? [target] : chainOf(target)).map(link => ownEntry(link, key))
-
-  // Every value of a name, from the nearest declaration to the farthest.
-  const valuesByName = new Map<string | symbol, unknown[]>()
-  for (const entry of entries) {
-    for (const [name, value] of slotsOf(entry, isStatic)) {
-      if (value === undefined) {
-        continue
-      }
-
-      const values = valuesByName.get(name)
-      if (values === undefined) {
-        valuesByName.set(name, [value])
-      } else {
-        values.push(value)
-      }
-    }
-  }
-
-  const accumulate = policy?.inherit === 'accumulate'
+  const policy = isContext(target) ? undefined : optionsOf(key)
   const result = new Map<string | symbol, unknown>()
-  for (const [name, values] of valuesByName) {
-    result.set(name, accumulate ? fold(values, policy?.combine) : values[0])
+  for (const [name, values] of valuesByName(entriesOf(target, key, policy), options?.static === true)) {
+    result.set(name, policy?.inherit === 'accumulate' ? fold(values, policy.combine) : values[0])
   }
 
   return result

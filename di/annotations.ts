@@ -58,6 +58,15 @@ interface FactoryOptions {
   readonly combine?: (outer: unknown, inner: unknown) => unknown
 }
 
+// What one application stores: the transform's result, otherwise the argument, or `true` for a marker.
+function valueFrom(transform: Transform | undefined, args: unknown[]): unknown {
+  if (transform !== undefined) {
+    return transform(...args)
+  }
+
+  return args.length === 0 ? true : args[0]
+}
+
 function build(
   targets: readonly AnnotationTarget[] | undefined,
   first?: Transform | FactoryOptions,
@@ -77,7 +86,7 @@ function build(
   const factory: ((...args: unknown[]) => DecoratorOn<AnnotationTarget>) & Annotation<unknown, AnnotationTarget> = (
     ...args
   ) => {
-    const value = transform === undefined ? (args.length === 0 ? true : args[0]) : transform(...args)
+    const value = valueFrom(transform, args)
 
     return (_target, context) => {
       const previous =
@@ -119,6 +128,10 @@ function on<const T extends readonly [AnnotationTarget, ...AnnotationTarget[]]>(
 ): AnnotationFactory<T[number]> {
   return ((first?: Transform | FactoryOptions, second?: FactoryOptions) =>
     build(targets, first, second)) as AnnotationFactory<T[number]>
+}
+
+interface CreateAnnotation extends AnnotationFactory<AnnotationTarget> {
+  readonly on: typeof on
 }
 
 /**
@@ -163,4 +176,4 @@ function on<const T extends readonly [AnnotationTarget, ...AnnotationTarget[]]>(
 export const createAnnotation = Object.assign(
   (first?: Transform | FactoryOptions, second?: FactoryOptions) => build(undefined, first, second),
   { on },
-) as AnnotationFactory<AnnotationTarget> & { readonly on: typeof on }
+) as CreateAnnotation
