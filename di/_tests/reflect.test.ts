@@ -131,6 +131,45 @@ describe('reflect.annotate', function () {
     expect(reflect.get(T, kTitle)).toBeUndefined()
   })
 
+  it('memberName lets a class decorator annotate its members with a member annotation', function () {
+    const Route = createAnnotation.on('method')<string>()
+
+    function Routes(paths: Record<string, string>) {
+      return (_target: unknown, context: ClassDecoratorContext) => {
+        for (const [method, path] of Object.entries(paths)) {
+          reflect.annotate(context, Route, path, method)
+        }
+      }
+    }
+
+    @Routes({ list: '/users', find: '/users/:id' })
+    class Users {
+      list() {}
+
+      find() {}
+    }
+
+    expect(reflect.get(Users, Route, 'list')).toBe('/users')
+    expect(reflect.get(Users, Route, 'find')).toBe('/users/:id')
+  })
+
+  it('memberName refuses a class-only annotation, naming the member', function () {
+    const Entity = createAnnotation.on('class')<string>()
+
+    function Misplaced(_target: unknown, context: ClassDecoratorContext) {
+      // The types refuse a class-only key in a member slot; only a cast or plain JavaScript gets here.
+      reflect.annotate(context, Entity as never, 'users', 'list')
+    }
+
+    expect(() => {
+      @Misplaced
+      class Users {
+        list() {}
+      }
+      void Users
+    }).toThrow('Cannot apply an annotation to member "list": it only applies to class')
+  })
+
   it('a subclass never writes into its base class (issue #93)', function () {
     const Tag = createAnnotation<string>()
 
@@ -234,6 +273,22 @@ describe('inheritance', function () {
     class Sub extends Base {}
 
     expect(reflect.get(Sub, Tag)).toBe('base')
+  })
+
+  it('members leaves out a stored undefined, so the base value shows through as with get', function () {
+    class Sub extends Base {
+      @Tag(undefined)
+      override run() {}
+
+      @Tag(undefined)
+      draft() {}
+
+      @Tag('sub:publish')
+      publish() {}
+    }
+
+    expect(reflect.get(Sub, Tag, 'run')).toBe('base:run')
+    expect(Object.fromEntries(reflect.members(Sub, Tag))).toStrictEqual({ run: 'base:run', publish: 'sub:publish' })
   })
 
   it('walks more than one level', function () {

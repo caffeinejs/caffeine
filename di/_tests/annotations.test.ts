@@ -1239,6 +1239,27 @@ describe('usage: inheritance and merge rules', function () {
     expect(Object.fromEntries(reflect.members(Documents, Permissions))).toEqual({ remove: ['delete', 'purge'] })
   })
 
+  it("inherit 'accumulate': effective joins the class permissions with a method's own, skipping classes that declare none", function () {
+    @Permissions(['read'])
+    class Resource {
+      @Permissions(['delete'])
+      remove() {}
+
+      list() {}
+    }
+
+    class Archive extends Resource {}
+
+    @Permissions(['write'])
+    class Documents extends Archive {}
+
+    expect(reflect.get(Documents, Permissions)).toEqual(['read', 'write'])
+    // No class in the chain declares `list`: its own read is absent, and effective takes the class value.
+    expect(reflect.get(Documents, Permissions, 'list')).toBeUndefined()
+    expect(reflect.effective(Documents, Permissions, 'list')).toEqual(['read', 'write'])
+    expect(reflect.effective(Documents, Permissions, 'remove')).toEqual(['read', 'write', 'delete'])
+  })
+
   it('combine merges class defaults into a member value', function () {
     @Timeout({ connect: 1000, read: 5000 })
     class Client {
