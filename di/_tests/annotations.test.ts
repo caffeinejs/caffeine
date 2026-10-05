@@ -850,6 +850,117 @@ describe('usage: annotation values', function () {
   })
 })
 
+// ─── usage: reading while decorating and listing members ─────────────────────
+
+const AuditTable = createAnnotation.on('class')<string>()
+
+const Controller = () => (_target: AnyClass, context: ClassDecoratorContext) => {
+  if (reflect.members(context, Route).size === 0) {
+    throw new ErrInvalidDecorator(
+      `Cannot apply @Controller to class "${String(context.name)}": it declares no @Route method`,
+    )
+  }
+}
+
+const Audited = () => (_target: AnyClass, context: ClassDecoratorContext) => {
+  const entity = reflect.get(context, Entity)
+  reflect.annotate(context, AuditTable, entity === undefined ? 'audit' : `audit_${entity.table}`)
+}
+
+const Header: ((name: string, value: string) => (target: Function, context: ClassMethodDecoratorContext) => void) &
+  Annotation<Record<string, string>, 'method'> = (name, value) => (_target, context) => {
+  const headers = reflect.get(context, Header, context.name) ?? {}
+  reflect.annotate(context, Header, { ...headers, [name]: value })
+}
+
+describe('usage: reading while decorating and listing members', function () {
+  it('a class decorator sees the routes its members declared', function () {
+    @Controller()
+    class Ok {
+      @Route('/ok')
+      ok() {}
+    }
+    void Ok
+
+    expect(() => {
+      @Controller()
+      class Empty {
+        plain() {}
+      }
+      void Empty
+    }).toThrow(ErrInvalidDecorator)
+  })
+
+  it('a class decorator reads what an inner class decorator wrote', function () {
+    @Audited()
+    @Entity({ table: 'users' })
+    class Users {}
+
+    expect(reflect.get(Users, AuditTable)).toBe('audit_users')
+  })
+
+  it('a context read sees only the class being decorated, not its base', function () {
+    @Entity({ table: 'users' })
+    class Users {}
+
+    @Audited()
+    class Admins extends Users {}
+
+    expect(reflect.get(Admins, Entity)).toEqual({ table: 'users' })
+    expect(reflect.get(Admins, AuditTable)).toBe('audit')
+  })
+
+  it('lists annotated fields, base-class fields included, the nearest declaration winning', function () {
+    class Row {
+      @Column({ type: 'int' })
+      id = 0
+
+      @Column({ type: 'text' })
+      name = ''
+
+      plain = true
+    }
+
+    class Account extends Row {
+      @Column({ type: 'varchar' })
+      override name = ''
+
+      @Column({ type: 'decimal' })
+      balance = 0
+    }
+
+    expect(Object.fromEntries(reflect.members(Row, Column))).toEqual({ id: { type: 'int' }, name: { type: 'text' } })
+    expect(Object.fromEntries(reflect.members(Account, Column))).toEqual({
+      id: { type: 'int' },
+      name: { type: 'varchar' },
+      balance: { type: 'decimal' },
+    })
+  })
+
+  it('lists static members apart from instance members', function () {
+    class Api {
+      @Route('/list')
+      list() {}
+
+      @Route('/create')
+      static create() {}
+    }
+
+    expect([...reflect.members(Api, Route)]).toEqual([['list', '/list']])
+    expect([...reflect.members(Api, Route, { static: true })]).toEqual([['create', '/create']])
+  })
+
+  it('a hand-written annotation merges repeated applications through its own slot', function () {
+    class Client {
+      @Header('accept', 'application/json')
+      @Header('x-trace', 'on')
+      fetch() {}
+    }
+
+    expect(reflect.get(Client, Header, 'fetch')).toEqual({ accept: 'application/json', 'x-trace': 'on' })
+  })
+})
+
 // ─── usage: what does not compile ────────────────────────────────────────────
 
 /**
@@ -923,6 +1034,9 @@ function annotationUsageTypeChecks(): void {
 
   // @ts-expect-error a method-only annotation has no class slot to read
   reflect.get(Placement, Route)
+
+  // @ts-expect-error a class-only annotation has no members to list
+  reflect.members(Placement, Entity)
 
   class HandWritten {
     // @ts-expect-error @Retry only applies to async methods
