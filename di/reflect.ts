@@ -1,18 +1,70 @@
+import { ErrInvalidDecorator } from './errors.js'
 import { Keys } from './symbols.js'
 import type { AnyClass, ClassMember } from './types.js'
 
 /**
- * Key shape of a `createAnnotation` factory.
- *
- * `_c` and `_m` are phantom: never present at runtime, they only carry the class-level and
- * member-level value types for {@link reflect} to infer.
+ * Where an annotation applies: the class itself or one kind of class member.
  */
-export interface Annotation<C = unknown, M = C> {
-  readonly _c?: C
-  readonly _m?: M
+export type AnnotationTarget = 'class' | 'method' | 'field' | 'accessor' | 'getter' | 'setter'
+
+declare const annotationTypes: unique symbol
+
+/**
+ * A typed key for {@link reflect}: `V` is the value it stores and `K` the targets it applies to.
+ *
+ * `createAnnotation` returns one. A decorator written by hand becomes its own key by declaring its
+ * type as an intersection with `Annotation`, so one object both writes and reads:
+ *
+ * @example
+ * ```ts
+ * type AsyncMethod = (...args: any[]) => Promise<unknown>
+ *
+ * const Retry: ((attempts: number) => (target: AsyncMethod, context: ClassMethodDecoratorContext<unknown, AsyncMethod>) => void) &
+ *   Annotation<number, 'method'> = attempts => (_target, context) => {
+ *   reflect.annotate(context, Retry, attempts)
+ * }
+ *
+ * reflect.get(Client, Retry, 'fetch') // number | undefined
+ * ```
+ */
+export interface Annotation<V = unknown, K extends AnnotationTarget = AnnotationTarget> {
+  readonly [annotationTypes]?: { readonly value: V; readonly on: (target: K) => void }
 }
 
-type MetadataKey = symbol | Annotation
+// What `createAnnotation` stores on an annotation for `reflect` to enforce.
+export interface AnnotationOptions {
+  readonly targets?: readonly AnnotationTarget[]
+}
+
+// Registered, so a second copy of this module reads what a first copy stored.
+export const kAnnotationOptions = Symbol.for('@caffeinejs/di:annotation')
+
+type AnyContext = ClassDecoratorContext | ClassMemberDecoratorContext
+
+type MetadataKey = symbol | Annotation<unknown, never>
+
+type TargetOf<X> = X extends ClassDecoratorContext
+  ? 'class'
+  : X extends ClassMethodDecoratorContext
+    ? 'method'
+    : X extends ClassFieldDecoratorContext
+      ? 'field'
+      : X extends ClassAccessorDecoratorContext
+        ? 'accessor'
+        : X extends ClassGetterDecoratorContext
+          ? 'getter'
+          : X extends ClassSetterDecoratorContext
+            ? 'setter'
+            : never
+
+type OnClass<V> = Annotation<V, 'class'>
+
+type OnMember<V> =
+  | Annotation<V, 'method'>
+  | Annotation<V, 'field'>
+  | Annotation<V, 'accessor'>
+  | Annotation<V, 'getter'>
+  | Annotation<V, 'setter'>
 
 interface Entry {
   class?: unknown
@@ -20,6 +72,37 @@ interface Entry {
 }
 
 type Store = Map<MetadataKey, Entry>
+
+function optionsOf(key: MetadataKey): AnnotationOptions | undefined {
+  if (typeof key === 'symbol') {
+    return undefined
+  }
+
+  return (key as Record<symbol, AnnotationOptions | undefined>)[kAnnotationOptions]
+}
+
+function checkTarget(context: AnyContext, key: MetadataKey, memberName: string | symbol | undefined): void {
+  const targets = optionsOf(key)?.targets
+  if (targets === undefined) {
+    return
+  }
+
+  if (memberName === undefined) {
+    if (!targets.includes(context.kind)) {
+      throw new ErrInvalidDecorator(
+        `Cannot apply an annotation to ${context.kind} "${String(context.name)}": it only applies to ${targets.join(', ')}`,
+      )
+    }
+
+    return
+  }
+
+  if (!targets.some(target => target !== 'class')) {
+    throw new ErrInvalidDecorator(
+      `Cannot apply an annotation to member "${String(memberName)}": it only applies to ${targets.join(', ')}`,
+    )
+  }
+}
 
 function ownEntry(cls: AnyClass, key: MetadataKey): Entry | undefined {
   if (!Object.hasOwn(cls, Symbol.metadata)) {
@@ -54,25 +137,29 @@ function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefine
  *
  * A class decorator writes the class slot; a member decorator writes the slot of the decorated
  * member. The write lands on the decorated class alone: a subclass's decorator never reaches the
- * metadata of its base class.
+ * metadata of its base class. The value is checked against the annotation's value type, and a key
+ * created with `createAnnotation.on(...)` is refused outside its targets with `ErrInvalidDecorator`.
  * @param memberName - Writes that member's slot regardless of the decorator kind
  */
-function annotate(
-  context: ClassDecoratorContext | ClassMemberDecoratorContext,
-  key: MetadataKey,
-  value: unknown,
-  memberName?: string | symbol,
+function annotate<X extends AnyContext, V = unknown, N extends string | symbol | undefined = undefined>(
+  context: X,
+  key: symbol | ([N] extends [undefined] ? Annotation<V, TargetOf<X>> : OnMember<V>),
+  value: NoInfer<V>,
+  memberName?: N,
 ): void {
+  const k = key as MetadataKey
+  checkTarget(context, k, memberName)
+
   const metadata = context.metadata
   if (!Object.hasOwn(metadata, Keys.kMetadata)) {
     metadata[Keys.kMetadata] = new Map()
   }
 
   const store = metadata[Keys.kMetadata] as Store
-  let entry = store.get(key)
+  let entry = store.get(k)
   if (!entry) {
     entry = {}
-    store.set(key, entry)
+    store.set(k, entry)
   }
 
   if (memberName !== undefined) {
@@ -93,17 +180,14 @@ function annotate(
 function get<T>(cls: AnyClass, key: symbol): T | undefined
 function get<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
 /**
- * Returns the class-level annotation value, or `undefined` if absent.
+ * Returns the class-level value of an annotation that applies to classes, or `undefined` if absent.
  *
- * With `member`, returns that member's value only; it does not fall back to the class value. Use
- * {@link effective} for member-then-class. `member` autocompletes to the declared members of `cls`.
+ * With `member`, returns that member's value only, for an annotation that applies to members; it
+ * does not fall back to the class value. Use {@link effective} for member-then-class. `member`
+ * autocompletes to the declared members of `cls`.
  */
-function get<TClass extends AnyClass, C>(cls: TClass, key: Annotation<C, unknown>): C | undefined
-function get<TClass extends AnyClass, M>(
-  cls: TClass,
-  key: Annotation<unknown, M>,
-  member: ClassMember<TClass>,
-): M | undefined
+function get<V>(cls: AnyClass, key: OnClass<V>): V | undefined
+function get<TClass extends AnyClass, V>(cls: TClass, key: OnMember<V>, member: ClassMember<TClass>): V | undefined
 function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey): unknown {
   return nearest(cls, key, member)
 }
@@ -121,11 +205,11 @@ function get(cls: AnyClass, key: MetadataKey, member?: PropertyKey): unknown {
  * ```
  */
 function effective<T>(cls: AnyClass, key: symbol, member: PropertyKey): T | undefined
-function effective<TClass extends AnyClass, C, M>(
+function effective<TClass extends AnyClass, V>(
   cls: TClass,
-  key: Annotation<C, M>,
+  key: Annotation<V, never>,
   member: ClassMember<TClass>,
-): C | M | undefined
+): V | undefined
 function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown {
   const own = nearest(cls, key, member)
   return own !== undefined ? own : nearest(cls, key, undefined)
@@ -144,7 +228,7 @@ function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknow
  * ```
  */
 function merge<T>(cls: AnyClass, key: symbol, member: PropertyKey): T[]
-function merge<TClass extends AnyClass, T>(cls: TClass, key: Annotation<T[], T[]>, member: ClassMember<TClass>): T[]
+function merge<TClass extends AnyClass, T>(cls: TClass, key: Annotation<T[], never>, member: ClassMember<TClass>): T[]
 function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown[] {
   const classValue = nearest(cls, key, undefined) as unknown[] | undefined
   const memberValue = nearest(cls, key, member) as unknown[] | undefined
@@ -155,11 +239,11 @@ function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey): unknown[] 
 /**
  * Reads and writes decorator metadata by key.
  *
- * A key is a symbol or a `createAnnotation` factory. Every class owns its store: a decorator on a
- * subclass never writes into its base class's metadata. Reads walk the constructor chain from
- * `cls` upwards and the nearest class declaring the slot wins, so an undecorated subclass reads its
- * base's values, a decorated subclass shadows them, and a method override without its own
- * annotation still carries the base method's value. A slot holding `undefined` counts as absent.
+ * A key is a symbol or an {@link Annotation}. Every class owns its store: a decorator on a subclass
+ * never writes into its base class's metadata. Reads walk the constructor chain from `cls` upwards
+ * and the nearest class declaring the slot wins, so an undecorated subclass reads its base's values,
+ * a decorated subclass shadows them, and a method override without its own annotation still carries
+ * the base method's value. A slot holding `undefined` counts as absent.
  */
 export const reflect = {
   annotate,

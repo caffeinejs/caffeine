@@ -73,16 +73,17 @@ describe('reflect.get', function () {
   })
 
   it('infers the value type from an annotation key and takes an explicit one for a symbol key', function () {
-    const Tag = createAnnotation<string, number>()
+    const Label = createAnnotation.on('class')<string>()
+    const Weight = createAnnotation.on('method')<number>()
 
-    @Tag('cls')
+    @Label('cls')
     class T {
-      @Tag(1)
+      @Weight(1)
       go() {}
     }
 
-    const c: string | undefined = reflect.get(T, Tag)
-    const m: number | undefined = reflect.get(T, Tag, 'go')
+    const c: string | undefined = reflect.get(T, Label)
+    const m: number | undefined = reflect.get(T, Weight, 'go')
     const s: string[] | undefined = reflect.get<string[]>(Users, kRoles)
     const u: unknown = reflect.get(Users, kRoles)
 

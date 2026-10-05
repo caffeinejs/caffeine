@@ -7,7 +7,9 @@ import { CaffeineIoC } from '../container.js'
 import { Aspect } from '../decorators/aspect.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
-import { reflect } from '../reflect.js'
+import { ErrInvalidDecorator } from '../errors.js'
+import { type Annotation, reflect } from '../reflect.js'
+import type { AnyClass } from '../types.js'
 
 // ─── fixtures ───────────────────────────────────────────────────────────────
 
@@ -551,3 +553,442 @@ describe('reflect.merge', function () {
     expect(reflect.merge(T, B, 'method')).toEqual(['b1', 'b2'])
   })
 })
+
+// ─── usage: where an annotation goes ─────────────────────────────────────────
+
+type MethodDecorator = (target: Function, context: ClassMethodDecoratorContext) => void
+
+const Entity = createAnnotation.on('class')<{ table: string }>()
+const Route = createAnnotation.on('method')<string>()
+const Column = createAnnotation.on('field')<{ type: string }>()
+const Observed = createAnnotation.on('accessor')()
+const Computed = createAnnotation.on('getter')()
+const Secured = createAnnotation.on('class', 'method')<string[]>()
+const Path = createAnnotation.on('method')((path: string) => ({ path }))
+
+describe('usage: createAnnotation.on restricts where an annotation goes', function () {
+  @Entity({ table: 'users' })
+  @Secured(['user'])
+  class Users {
+    @Column({ type: 'text' })
+    name = ''
+
+    @Observed()
+    accessor count = 0
+
+    @Route('/users')
+    @Path('/users')
+    @Secured(['admin'])
+    list() {}
+
+    @Route('/users/new')
+    static create() {
+      return new Users()
+    }
+
+    @Computed()
+    get total() {
+      return this.count
+    }
+
+    remove() {}
+  }
+
+  it('a class-only annotation stores the class slot', function () {
+    expect(reflect.get(Users, Entity)).toEqual({ table: 'users' })
+  })
+
+  it('a method-only annotation stores instance and static method slots', function () {
+    expect(reflect.get(Users, Route, 'list')).toBe('/users')
+    expect(reflect.get(Users, Route, 'create')).toBe('/users/new')
+  })
+
+  it('a field-only annotation stores the field slot', function () {
+    expect(reflect.get(Users, Column, 'name')).toEqual({ type: 'text' })
+  })
+
+  it('accessor-only and getter-only markers store true', function () {
+    expect(reflect.get(Users, Observed, 'count')).toBe(true)
+    expect(reflect.get(Users, Computed, 'total')).toBe(true)
+  })
+
+  it('a class-or-method annotation reads with effective and merge', function () {
+    expect(reflect.effective(Users, Secured, 'list')).toEqual(['admin'])
+    expect(reflect.effective(Users, Secured, 'remove')).toEqual(['user'])
+    expect(reflect.merge(Users, Secured, 'list')).toEqual(['user', 'admin'])
+  })
+
+  it('a restricted transform infers its arguments and stores its result', function () {
+    expect(reflect.get(Users, Path, 'list')).toEqual({ path: '/users' })
+  })
+
+  it('applied outside its targets through a cast, it throws when the class is defined', function () {
+    expect(() => {
+      class Misplaced {
+        @(Entity({ table: 'x' }) as unknown as MethodDecorator)
+        list() {}
+      }
+      void Misplaced
+    }).toThrow(ErrInvalidDecorator)
+  })
+})
+
+// ─── usage: hand-written annotations ─────────────────────────────────────────
+
+type AsyncMethod = (...args: any[]) => Promise<unknown>
+
+const Retry: ((
+  attempts: number,
+) => (target: AsyncMethod, context: ClassMethodDecoratorContext<unknown, AsyncMethod>) => void) &
+  Annotation<number, 'method'> = attempts => (_target, context) => {
+  if (attempts < 1) {
+    throw new ErrInvalidDecorator(
+      `Cannot apply @Retry to method "${String(context.name)}": attempts must be at least 1`,
+    )
+  }
+  reflect.annotate(context, Retry, attempts)
+}
+
+interface Events {
+  'user.created': { id: string }
+  'user.deleted': { id: string; reason: string }
+}
+
+const On: (<E extends keyof Events>(
+  event: E,
+) => (target: (payload: Events[E]) => unknown, context: ClassMethodDecoratorContext) => void) &
+  Annotation<keyof Events, 'method'> = event => (_target, context) => {
+  reflect.annotate(context, On, event)
+}
+
+const Min: ((min: number) => (target: undefined, context: ClassFieldDecoratorContext<unknown, number>) => void) &
+  Annotation<number, 'field'> = min => (_target, context) => {
+  reflect.annotate(context, Min, min)
+}
+
+const Factory: (() => (target: Function, context: ClassMethodDecoratorContext & { static: true }) => void) &
+  Annotation<true, 'method'> = () => (_target, context) => {
+  reflect.annotate(context, Factory, true)
+}
+
+const Exposed: (() => (target: Function, context: ClassMethodDecoratorContext & { private: false }) => void) &
+  Annotation<true, 'method'> = () => (_target, context) => {
+  reflect.annotate(context, Exposed, true)
+}
+
+const Listener: (() => (target: Function, context: ClassMethodDecoratorContext & { name: `on${string}` }) => void) &
+  Annotation<true, 'method'> = () => (_target, context) => {
+  reflect.annotate(context, Listener, true)
+}
+
+abstract class Repository {
+  abstract find(id: string): unknown
+}
+
+const RepositoryOf: ((
+  name: string,
+) => (target: abstract new (...args: any[]) => Repository, context: ClassDecoratorContext) => void) &
+  Annotation<string, 'class'> = name => (_target, context) => {
+  reflect.annotate(context, RepositoryOf, name)
+}
+
+const Singleton: (() => (target: new () => unknown, context: ClassDecoratorContext) => void) &
+  Annotation<true, 'class'> = () => (_target, context) => {
+  reflect.annotate(context, Singleton, true)
+}
+
+describe('usage: hand-written annotations', function () {
+  @RepositoryOf('users')
+  @Singleton()
+  class UsersRepository extends Repository {
+    @Min(0)
+    limit = 10
+
+    override find(id: string) {
+      return { id }
+    }
+
+    @Retry(3)
+    async load(id: string) {
+      return this.find(id)
+    }
+
+    @On('user.created')
+    created(event: { id: string }) {
+      return event.id
+    }
+
+    @Exposed()
+    @Listener()
+    onSave() {}
+
+    @Factory()
+    static create() {
+      return new UsersRepository()
+    }
+  }
+
+  it('each decorator stores its value under itself', function () {
+    expect(reflect.get(UsersRepository, RepositoryOf)).toBe('users')
+    expect(reflect.get(UsersRepository, Singleton)).toBe(true)
+    expect(reflect.get(UsersRepository, Min, 'limit')).toBe(0)
+    expect(reflect.get(UsersRepository, Retry, 'load')).toBe(3)
+    expect(reflect.get(UsersRepository, On, 'created')).toBe('user.created')
+    expect(reflect.get(UsersRepository, Exposed, 'onSave')).toBe(true)
+    expect(reflect.get(UsersRepository, Listener, 'onSave')).toBe(true)
+    expect(reflect.get(UsersRepository, Factory, 'create')).toBe(true)
+  })
+
+  it('a decorator can validate its arguments when the class is defined', function () {
+    expect(() => {
+      class Impatient {
+        @Retry(0)
+        async load() {}
+      }
+      void Impatient
+    }).toThrow(ErrInvalidDecorator)
+  })
+})
+
+// ─── usage: annotation values ────────────────────────────────────────────────
+
+interface CacheOptions {
+  ttl: number
+  stale: boolean
+}
+
+const Deprecated = createAnnotation()
+
+const Cache = createAnnotation.on('method')((options: Partial<CacheOptions> = {}): CacheOptions => ({
+  ttl: 30,
+  stale: false,
+  ...options,
+}))
+
+const kVersion = Symbol('version')
+
+const Version = (version: number) => (_target: AnyClass, context: ClassDecoratorContext) => {
+  reflect.annotate(context, kVersion, version)
+}
+
+const ColumnName: ((name?: string) => (target: undefined, context: ClassFieldDecoratorContext) => void) &
+  Annotation<string, 'field'> = name => (_target, context) => {
+  reflect.annotate(context, ColumnName, name ?? String(context.name))
+}
+
+const timedCalls: string[] = []
+
+const Timed: (() => <T extends (...args: any[]) => any>(target: T, context: ClassMethodDecoratorContext) => T) &
+  Annotation<true, 'method'> = () => (target, context) => {
+  reflect.annotate(context, Timed, true)
+  return function (this: unknown, ...args: unknown[]) {
+    timedCalls.push(String(context.name))
+    return target.apply(this, args)
+  } as typeof target
+}
+
+const Prefix = createAnnotation.on('class')<string>()
+
+const Resource =
+  (prefix: string, ...roles: string[]) =>
+  (target: AnyClass, context: ClassDecoratorContext) => {
+    Prefix(prefix)(target, context)
+    Secured(roles)(target, context)
+  }
+
+describe('usage: annotation values', function () {
+  @Deprecated()
+  @Version(2)
+  @Resource('/accounts', 'admin')
+  class Accounts {
+    @ColumnName()
+    owner = ''
+
+    @ColumnName('created_at')
+    createdAt = 0
+
+    @Cache()
+    list() {}
+
+    @Cache({ ttl: 60 })
+    find() {}
+
+    @Timed()
+    total(a: number, b: number) {
+      return a + b
+    }
+  }
+
+  it('a marker takes no argument and stores true', function () {
+    expect(reflect.get(Accounts, Deprecated)).toBe(true)
+  })
+
+  it('a symbol-keyed annotation reads back with an explicit type', function () {
+    const version: number | undefined = reflect.get<number>(Accounts, kVersion)
+    expect(version).toBe(2)
+  })
+
+  it('a transform fills in defaults', function () {
+    expect(reflect.get(Accounts, Cache, 'list')).toEqual({ ttl: 30, stale: false })
+    expect(reflect.get(Accounts, Cache, 'find')).toEqual({ ttl: 60, stale: false })
+  })
+
+  it('a value can derive from the decorated member', function () {
+    expect(reflect.get(Accounts, ColumnName, 'owner')).toBe('owner')
+    expect(reflect.get(Accounts, ColumnName, 'createdAt')).toBe('created_at')
+  })
+
+  it('a decorator can replace the method it annotates', function () {
+    expect(new Accounts().total(1, 2)).toBe(3)
+    expect(timedCalls).toEqual(['total'])
+    expect(reflect.get(Accounts, Timed, 'total')).toBe(true)
+  })
+
+  it('one decorator can apply several annotations', function () {
+    expect(reflect.get(Accounts, Prefix)).toBe('/accounts')
+    expect(reflect.get(Accounts, Secured)).toEqual(['admin'])
+  })
+})
+
+// ─── usage: what does not compile ────────────────────────────────────────────
+
+/**
+ * Compile-time contract of annotation placement and typing. Never called: the assertions are the
+ * `@ts-expect-error` comments, which fail the build if the error they mark stops happening.
+ */
+function annotationUsageTypeChecks(): void {
+  @Entity({ table: 'ok' })
+  class Placement {
+    // @ts-expect-error a class-only annotation does not apply to a method
+    @Entity({ table: 'x' })
+    method() {}
+
+    // @ts-expect-error a class-only annotation does not apply to a field
+    @Entity({ table: 'x' })
+    field = 1
+
+    // @ts-expect-error a method-only annotation does not apply to a field
+    @Route('/x')
+    routeField = 1
+
+    // @ts-expect-error a field-only annotation does not apply to a method
+    @Column({ type: 'text' })
+    columnMethod() {}
+
+    // @ts-expect-error an accessor-only annotation does not apply to a field
+    @Observed()
+    observedField = 1
+
+    // @ts-expect-error an accessor-only annotation does not apply to a method
+    @Observed()
+    observedMethod() {}
+
+    // @ts-expect-error a getter-only annotation does not apply to a setter
+    @Computed()
+    set computedSetter(_value: number) {}
+
+    // @ts-expect-error a getter-only annotation does not apply to a method
+    @Computed()
+    computedMethod() {}
+
+    // @ts-expect-error a class-or-method annotation does not apply to a field
+    @Secured(['x'])
+    securedField = 1
+
+    // @ts-expect-error a class-or-method annotation does not apply to a getter
+    @Secured(['x'])
+    get securedGetter() {
+      return 1
+    }
+
+    // @ts-expect-error a restricted transform does not apply to a field
+    @Path('/x')
+    pathField = 1
+  }
+
+  // @ts-expect-error a method-only annotation does not apply to a class
+  @Route('/x')
+  class RouteOnClass {}
+
+  // @ts-expect-error the value must match the annotation's type
+  @Entity({ table: 1 })
+  class WrongValue {}
+
+  // @ts-expect-error a marker takes no argument
+  @Deprecated('x')
+  class MarkerWithArgument {}
+
+  // @ts-expect-error a class-only annotation has no member slot to read
+  reflect.get(Placement, Entity, 'method')
+
+  // @ts-expect-error a method-only annotation has no class slot to read
+  reflect.get(Placement, Route)
+
+  class HandWritten {
+    // @ts-expect-error @Retry only applies to async methods
+    @Retry(3)
+    sync() {}
+
+    // @ts-expect-error the handler must accept the event's payload
+    @On('user.deleted')
+    deleted(event: { name: number }) {
+      return event
+    }
+
+    // @ts-expect-error @Min only applies to number fields
+    @Min(0)
+    label = ''
+
+    // @ts-expect-error @Factory only applies to static methods
+    @Factory()
+    make() {}
+
+    // @ts-expect-error @Exposed does not apply to private methods
+    @Exposed()
+    #hidden() {}
+
+    callHidden() {
+      this.#hidden()
+    }
+
+    // @ts-expect-error @Listener only applies to methods named on*
+    @Listener()
+    save() {}
+  }
+
+  // @ts-expect-error @RepositoryOf only applies to subclasses of Repository
+  @RepositoryOf('x')
+  class NotARepository {}
+
+  // @ts-expect-error @Singleton needs a constructor without arguments
+  @Singleton()
+  class NeedsArguments {
+    constructor(readonly id: string) {}
+  }
+
+  const wrongWrites = (_target: Function, context: ClassMethodDecoratorContext): void => {
+    // @ts-expect-error the value must match the annotation's type
+    reflect.annotate(context, Retry, '3')
+    // @ts-expect-error a class-only annotation is not written from a method decorator
+    reflect.annotate(context, Entity, { table: 'x' })
+  }
+
+  const wrongMemberWrite = (_target: AnyClass, context: ClassDecoratorContext): void => {
+    // @ts-expect-error a class-only annotation has no member slot to write
+    reflect.annotate(context, Entity, { table: 'x' }, 'method')
+  }
+
+  void [
+    Placement,
+    RouteOnClass,
+    WrongValue,
+    MarkerWithArgument,
+    HandWritten,
+    NotARepository,
+    NeedsArguments,
+    wrongWrites,
+    wrongMemberWrite,
+  ]
+}
+
+void annotationUsageTypeChecks
