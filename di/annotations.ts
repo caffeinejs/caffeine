@@ -4,6 +4,7 @@ import {
   type Annotation,
   type AnnotationOptions,
   type AnnotationTarget,
+  isWritten,
   kAnnotationOptions,
   reflect,
 } from './reflect.js'
@@ -89,18 +90,19 @@ function build(
     const value = valueFrom(transform, args)
 
     return (_target, context) => {
-      const previous =
-        context.kind === 'class'
-          ? reflect.get(context, factory)
-          : reflect.get(context, factory, context.name, { static: context.static })
-
       if (repeatable) {
+        const previous =
+          context.kind === 'class'
+            ? reflect.get(context, factory)
+            : reflect.get(context, factory, context.name, { static: context.static })
+
         // Decorators apply innermost first: prepending keeps the order they are written in.
         reflect.annotate(context, factory, [value, ...((previous as unknown[] | undefined) ?? [])])
         return
       }
 
-      if (previous !== undefined) {
+      // A first application may have stored `undefined`, which reads as absent.
+      if (isWritten(context, factory)) {
         throw new ErrInvalidDecorator(
           `Cannot apply an annotation twice to ${context.kind} "${String(context.name)}"` +
             solutions('Create the annotation with { repeatable: true } to collect every value'),

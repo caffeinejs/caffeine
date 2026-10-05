@@ -481,6 +481,21 @@ export function isAnnotated(target: object, key: symbol | Annotation<unknown, ne
   )
 }
 
+// Whether a decorator of the class being defined already wrote the slot `context` addresses, even
+// with `undefined`. Shared with createAnnotation, which refuses a second application.
+export function isWritten(context: AnyContext, key: symbol | Annotation<unknown, never>): boolean {
+  const entry = entryIn(context.metadata, key)
+  if (entry === undefined) {
+    return false
+  }
+
+  if (context.kind === 'class') {
+    return Object.hasOwn(entry, 'class')
+  }
+
+  return (context.static ? entry.statics : entry.members)?.has(context.name) === true
+}
+
 /**
  * Reads and writes decorator metadata by key.
  *

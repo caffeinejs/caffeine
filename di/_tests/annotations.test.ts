@@ -965,6 +965,8 @@ describe('usage: reading while decorating and listing members', function () {
 
 const Tags = createAnnotation.on('class', 'method')<string>({ repeatable: true })
 
+const MaybeRoute = createAnnotation.on('class', 'method')((path?: string) => path)
+
 describe('usage: repeated application', function () {
   it('applying an annotation twice to one target throws and names the target', function () {
     let error: unknown
@@ -982,6 +984,56 @@ describe('usage: repeated application', function () {
     expect(error).toBeInstanceOf(ErrInvalidDecorator)
     expect((error as Error).message).toContain('Cannot apply an annotation twice to method "list"')
     expect((error as Error).message).toContain('repeatable: true')
+  })
+
+  it('a second application throws even after one that stored undefined', function () {
+    // Decorators apply innermost first: the bare `@MaybeRoute()` writes `undefined` before the other runs.
+    expect(() => {
+      class OnMethod {
+        @MaybeRoute('/x')
+        @MaybeRoute()
+        list() {}
+      }
+      void OnMethod
+    }).toThrow('Cannot apply an annotation twice to method "list"')
+
+    expect(() => {
+      class InReverse {
+        @MaybeRoute()
+        @MaybeRoute('/x')
+        list() {}
+      }
+      void InReverse
+    }).toThrow(ErrInvalidDecorator)
+
+    expect(() => {
+      @MaybeRoute('/x')
+      @MaybeRoute()
+      class OnClass {}
+      void OnClass
+    }).toThrow('Cannot apply an annotation twice to class "OnClass"')
+
+    expect(() => {
+      class OnStatic {
+        @MaybeRoute('/x')
+        @MaybeRoute()
+        static list() {}
+      }
+      void OnStatic
+    }).toThrow('Cannot apply an annotation twice to method "list"')
+  })
+
+  it('one application that stored undefined still reads as absent', function () {
+    class Jobs {
+      @MaybeRoute()
+      static run() {}
+
+      @MaybeRoute()
+      run() {}
+    }
+
+    expect(reflect.get(Jobs, MaybeRoute, 'run')).toBeUndefined()
+    expect(reflect.get(Jobs, MaybeRoute, 'run', { static: true })).toBeUndefined()
   })
 
   it('a repeatable annotation collects its values in source order', function () {
