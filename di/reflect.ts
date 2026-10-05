@@ -459,6 +459,16 @@ function merge(target: object, key: MetadataKey, member: PropertyKey, options?: 
   return [...(classValue ?? []), ...(memberValue ?? [])]
 }
 
+// Whether `target` carries `key` at class level or on any instance or static member, under the
+// annotation's `inherit` rule. Shared with the container.
+export function isAnnotated(target: object, key: symbol | Annotation<unknown, never>): boolean {
+  return (
+    resolve(target, key, undefined, false) !== undefined ||
+    members(target, key as symbol).size > 0 ||
+    members(target, key as symbol, { static: true }).size > 0
+  )
+}
+
 /**
  * Reads and writes decorator metadata by key.
  *

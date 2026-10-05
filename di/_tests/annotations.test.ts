@@ -1134,6 +1134,85 @@ describe('usage: inheritance and merge rules', function () {
   })
 })
 
+// ─── usage: finding annotated bindings ───────────────────────────────────────
+
+const Cron = createAnnotation.on('method')<string>()
+const HealthCheck = createAnnotation.on('class')<string>()
+
+describe('usage: finding annotated bindings', function () {
+  class Reports {
+    @Cron('0 * * * *')
+    hourly() {}
+
+    @Cron('0 0 * * *')
+    daily() {}
+  }
+
+  @HealthCheck('db')
+  class Database {}
+
+  class Plain {}
+
+  class Unbound {
+    @Cron('* * * * *')
+    tick() {}
+  }
+
+  async function containerWith(...classes: (new () => unknown)[]): Promise<CaffeineIoC> {
+    const di = new CaffeineIoC({ decorators: false })
+    for (const cls of classes) {
+      di.bind(cls, t => t.toSelf())
+    }
+    await di.init()
+    return di
+  }
+
+  it('a scheduler finds every bound class with a @Cron method and schedules each method', async function () {
+    const di = await containerWith(Reports, Database, Plain)
+
+    const scheduled: string[] = []
+    for (const { binding } of di.getBindingsByAnnotation(Cron)) {
+      for (const [method, expression] of reflect.members(binding.type!, Cron)) {
+        scheduled.push(`${String(method)} ${expression}`)
+      }
+    }
+
+    expect(scheduled.sort()).toEqual(['daily 0 0 * * *', 'hourly 0 * * * *'])
+    expect(reflect.members(Unbound, Cron).size).toBe(1)
+  })
+
+  it('finds a class-level carrier too', async function () {
+    const di = await containerWith(Reports, Database, Plain)
+
+    expect(di.getBindingsByAnnotation(HealthCheck).map(descriptor => descriptor.key)).toEqual([Database])
+  })
+
+  it('finds nothing before the container compiles', function () {
+    const di = new CaffeineIoC({ decorators: false })
+    di.bind(Reports, t => t.toSelf())
+
+    expect(di.getBindingsByAnnotation(Cron)).toEqual([])
+  })
+
+  it("follows the annotation's inherit rule", async function () {
+    const Scheduled = createAnnotation.on('method')<string>()
+    const OwnScheduled = createAnnotation.on('method')<string>({ inherit: 'own' })
+
+    class Job {
+      @Scheduled('@hourly')
+      @OwnScheduled('@hourly')
+      run() {}
+    }
+
+    class NightlyJob extends Job {}
+
+    const di = await containerWith(NightlyJob)
+
+    expect(di.getBindingsByAnnotation(Scheduled).map(descriptor => descriptor.key)).toEqual([NightlyJob])
+    expect(di.getBindingsByAnnotation(OwnScheduled)).toEqual([])
+  })
+})
+
 // ─── usage: what does not compile ────────────────────────────────────────────
 
 /**
