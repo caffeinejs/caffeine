@@ -101,13 +101,10 @@ function slotsOf(entry: Entry | undefined, isStatic: boolean): Iterable<[string 
 }
 
 function writeMember(entry: Entry, member: string | symbol, isStatic: boolean, value: unknown): void {
-  if (isStatic) {
-    entry.statics ??= new Map()
-    entry.statics.set(member, value)
-  } else {
-    entry.members ??= new Map()
-    entry.members.set(member, value)
-  }
+  const slotsKey = isStatic ? 'statics' : 'members'
+  const slots = entry[slotsKey] ?? new Map<string | symbol, unknown>()
+  entry[slotsKey] = slots
+  slots.set(member, value)
 }
 
 function optionsOf(key: MetadataKey): AnnotationOptions | undefined {
