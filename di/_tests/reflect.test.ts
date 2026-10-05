@@ -377,3 +377,93 @@ describe('static members', function () {
     expect(reflect.merge(Api, Perms, 'reset')).toEqual(['read'])
   })
 })
+
+describe('writing outside a decorator', function () {
+  const Route = createAnnotation.on('method')<string>()
+  const Entity = createAnnotation.on('class')<{ table: string }>()
+
+  it('writes on an undecorated class, which then owns its metadata', function () {
+    class Plain {
+      list() {}
+    }
+
+    reflect.set(Plain, Entity, { table: 'plain' })
+    reflect.set(Plain, Route, '/list', 'list')
+
+    expect(Object.hasOwn(Plain, Symbol.metadata)).toBe(true)
+    expect(reflect.get(Plain, Entity)).toEqual({ table: 'plain' })
+    expect(reflect.get(Plain, Route, 'list')).toBe('/list')
+  })
+
+  it('writes on a plain object and on a function', function () {
+    const router = { name: 'programmatic' }
+    const handler = function health() {}
+
+    reflect.set(router, Route, '/health', 'health')
+    reflect.set(handler, Entity, { table: 'probes' })
+
+    expect(reflect.get(router, Route, 'health')).toBe('/health')
+    expect([...reflect.members(router, Route)]).toEqual([['health', '/health']])
+    expect(reflect.get(handler, Entity)).toEqual({ table: 'probes' })
+  })
+
+  it('an object reads what its prototype carries', function () {
+    const defaults = {}
+    reflect.set(defaults, Route, '/default', 'handle')
+    const router = Object.create(defaults) as object
+
+    expect(reflect.get(router, Route, 'handle')).toBe('/default')
+  })
+
+  it('writes a static member slot', function () {
+    class Api {}
+
+    reflect.set(Api, Route, '/create', 'create', { static: true })
+
+    expect(reflect.get(Api, Route, 'create', { static: true })).toBe('/create')
+    expect(reflect.get(Api, Route, 'create')).toBeUndefined()
+  })
+
+  it('writes on a subclass without touching its base', function () {
+    @Entity({ table: 'base' })
+    class Base {}
+
+    class Sub extends Base {}
+
+    reflect.set(Sub, Entity, { table: 'sub' })
+
+    expect(reflect.get(Sub, Entity)).toEqual({ table: 'sub' })
+    expect(reflect.get(Base, Entity)).toEqual({ table: 'base' })
+  })
+
+  it('an instance does not read its class annotations: its constructor does', function () {
+    @Entity({ table: 'users' })
+    class Users {}
+
+    const user = new Users()
+
+    expect(reflect.get(user, Entity)).toBeUndefined()
+    expect(reflect.get(user.constructor as typeof Users, Entity)).toEqual({ table: 'users' })
+  })
+})
+
+/**
+ * Compile-time contract of writes outside a decorator. Never called: the assertions are the
+ * `@ts-expect-error` comments, which fail the build if the error they mark stops happening.
+ */
+function setTypeChecks(): void {
+  const Route = createAnnotation.on('method')<string>()
+  const Entity = createAnnotation.on('class')<{ table: string }>()
+  const router = {}
+
+  // @ts-expect-error the value must match the annotation's type
+  reflect.set(router, Route, 1, 'health')
+
+  // @ts-expect-error a class-only annotation has no member slot to write
+  reflect.set(router, Entity, { table: 'x' }, 'health')
+
+  // @ts-expect-error a method-only annotation has no target slot to write
+  reflect.set(router, Route, '/x')
+}
+
+void setTypeChecks

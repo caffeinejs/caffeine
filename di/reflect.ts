@@ -68,6 +68,9 @@ type OnMember<V> =
   | Annotation<V, 'getter'>
   | Annotation<V, 'setter'>
 
+// A class autocompletes its member names; any other target takes a name.
+type MemberOf<T> = T extends AnyClass ? ClassMember<T> : string | symbol
+
 interface Entry {
   class?: unknown
   members?: Map<string | symbol, unknown>
@@ -91,6 +94,10 @@ function slotOf(entry: Entry | undefined, member: PropertyKey | undefined, isSta
   }
 
   return (isStatic ? entry.statics : entry.members)?.get(member as string | symbol)
+}
+
+function slotsOf(entry: Entry | undefined, isStatic: boolean): Iterable<[string | symbol, unknown]> {
+  return (isStatic ? entry?.statics : entry?.members) ?? []
 }
 
 function writeMember(entry: Entry, member: string | symbol, isStatic: boolean, value: unknown): void {
@@ -129,18 +136,6 @@ function checkTarget(context: AnyContext, key: MetadataKey, memberName: string |
   }
 }
 
-function entryIn(metadata: DecoratorMetadata | null | undefined, key: MetadataKey): Entry | undefined {
-  if (metadata == null || !Object.hasOwn(metadata, Keys.kMetadata)) {
-    return undefined
-  }
-
-  return (metadata[Keys.kMetadata] as Store).get(key)
-}
-
-function ownEntry(cls: AnyClass, key: MetadataKey): Entry | undefined {
-  return Object.hasOwn(cls, Symbol.metadata) ? entryIn(cls[Symbol.metadata], key) : undefined
-}
-
 // Every decorator context, of every kind and under every emitter in use, carries these three.
 function isContext(target: object): target is AnyContext {
   const candidate = target as { kind?: unknown; addInitializer?: unknown }
@@ -152,47 +147,68 @@ function isContext(target: object): target is AnyContext {
   )
 }
 
-function chainOf(cls: AnyClass): AnyClass[] {
-  const chain: AnyClass[] = []
-  for (let c: AnyClass | null = cls; c !== null && c !== Function.prototype; c = Object.getPrototypeOf(c)) {
-    chain.push(c)
+function metadataOf(target: object): DecoratorMetadata | null | undefined {
+  if (!Object.hasOwn(target, Symbol.metadata)) {
+    return undefined
+  }
+
+  return (target as { [Symbol.metadata]?: DecoratorMetadata | null })[Symbol.metadata]
+}
+
+function entryIn(metadata: DecoratorMetadata | null | undefined, key: MetadataKey): Entry | undefined {
+  if (metadata == null || !Object.hasOwn(metadata, Keys.kMetadata)) {
+    return undefined
+  }
+
+  return (metadata[Keys.kMetadata] as Store).get(key)
+}
+
+function ownEntry(target: object, key: MetadataKey): Entry | undefined {
+  return entryIn(metadataOf(target), key)
+}
+
+// The entry `key` has in `metadata`, created along with the store when missing.
+function entryFor(metadata: DecoratorMetadataObject, key: MetadataKey): Entry {
+  if (!Object.hasOwn(metadata, Keys.kMetadata)) {
+    metadata[Keys.kMetadata] = new Map()
+  }
+
+  const store = metadata[Keys.kMetadata] as Store
+  let entry = store.get(key)
+  if (!entry) {
+    entry = {}
+    store.set(key, entry)
+  }
+
+  return entry
+}
+
+// A class walks its constructors; an object walks its prototypes. Neither reaches the built-ins.
+function isLink(link: object | null): link is object {
+  return link !== null && link !== Function.prototype && link !== Object.prototype
+}
+
+function chainOf(target: object): object[] {
+  const chain: object[] = []
+  for (let link: object | null = target; isLink(link); link = Object.getPrototypeOf(link) as object | null) {
+    chain.push(link)
   }
 
   return chain
 }
 
-function read(target: AnyClass | AnyContext, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean) {
-  if (isContext(target)) {
-    return slotOf(entryIn(target.metadata, key), member, isStatic)
-  }
-
-  return resolve(target, key, member, isStatic)
-}
-
-// Reads a class slot or a member slot through the annotation's `inherit` rule.
-function resolve(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean): unknown {
-  const options = optionsOf(key)
-
-  switch (options?.inherit) {
-    case 'own':
-      return slotOf(ownEntry(cls, key), member, isStatic)
-    case 'accumulate': {
-      const values: unknown[] = []
-      for (const c of chainOf(cls)) {
-        const value = slotOf(ownEntry(c, key), member, isStatic)
-        if (value !== undefined) {
-          values.push(value)
-        }
-      }
-
-      return fold(values, options.combine)
+function nearest(target: object, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean): unknown {
+  for (let link: object | null = target; isLink(link); link = Object.getPrototypeOf(link) as object | null) {
+    const value = slotOf(ownEntry(link, key), member, isStatic)
+    if (value !== undefined) {
+      return value
     }
-    default:
-      return nearest(cls, key, member, isStatic)
   }
+
+  return undefined
 }
 
-// `values` runs from the class to its farthest base; folding starts at the base.
+// `values` runs from the target to its farthest base; folding starts at the base.
 function fold(values: unknown[], combine: ((outer: unknown, inner: unknown) => unknown) | undefined): unknown {
   if (values.length === 0 || combine === undefined) {
     return values[0]
@@ -201,22 +217,35 @@ function fold(values: unknown[], combine: ((outer: unknown, inner: unknown) => u
   return values.reduceRight((outer, inner) => combine(outer, inner))
 }
 
-function slotsOf(entry: Entry | undefined, isStatic: boolean): Iterable<[string | symbol, unknown]> {
-  return (isStatic ? entry?.statics : entry?.members) ?? []
+// Reads a target slot or a member slot through the annotation's `inherit` rule.
+function resolve(target: object, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean): unknown {
+  const options = optionsOf(key)
+
+  switch (options?.inherit) {
+    case 'own':
+      return slotOf(ownEntry(target, key), member, isStatic)
+    case 'accumulate': {
+      const values: unknown[] = []
+      for (const link of chainOf(target)) {
+        const value = slotOf(ownEntry(link, key), member, isStatic)
+        if (value !== undefined) {
+          values.push(value)
+        }
+      }
+
+      return fold(values, options.combine)
+    }
+    default:
+      return nearest(target, key, member, isStatic)
+  }
 }
 
-function nearest(cls: AnyClass, key: MetadataKey, member: PropertyKey | undefined, isStatic = false): unknown {
-  let c: AnyClass | null = cls
-  while (c !== null && c !== Function.prototype) {
-    const value = slotOf(ownEntry(c, key), member, isStatic)
-    if (value !== undefined) {
-      return value
-    }
-
-    c = Object.getPrototypeOf(c) as AnyClass | null
+function read(target: object, key: MetadataKey, member: PropertyKey | undefined, isStatic: boolean): unknown {
+  if (isContext(target)) {
+    return slotOf(entryIn(target.metadata, key), member, isStatic)
   }
 
-  return undefined
+  return resolve(target, key, member, isStatic)
 }
 
 /**
@@ -240,18 +269,7 @@ function annotate<X extends AnyContext, V = unknown, N extends string | symbol |
   const k = key as MetadataKey
   checkTarget(context, k, memberName)
 
-  const metadata = context.metadata
-  if (!Object.hasOwn(metadata, Keys.kMetadata)) {
-    metadata[Keys.kMetadata] = new Map()
-  }
-
-  const store = metadata[Keys.kMetadata] as Store
-  let entry = store.get(k)
-  if (!entry) {
-    entry = {}
-    store.set(k, entry)
-  }
-
+  const entry = entryFor(context.metadata, k)
   if (memberName !== undefined) {
     writeMember(entry, memberName, options?.static === true, value)
   } else if (context.kind === 'class') {
@@ -262,16 +280,55 @@ function annotate<X extends AnyContext, V = unknown, N extends string | symbol |
 }
 
 /**
- * Returns the class slot stored under a symbol key, or `undefined` if absent.
+ * Writes `value` under `key` outside a decorator: on a class, a function or any extensible object.
  *
- * With `member`, returns that member's slot only; it does not fall back to the class slot. Use
+ * Without `member` it writes the target's own slot, which reads back like a class-level value; with
+ * `member` it writes that member's slot, and `{ static: true }` the static member's. A target with
+ * no metadata of its own gets some. The write overwrites what was there and, unlike a decorator, is
+ * not checked against the annotation's targets.
+ */
+function set<T>(target: object, key: symbol, value: T, member?: PropertyKey, options?: MemberOptions): void
+function set<V>(target: object, key: OnClass<V>, value: NoInfer<V>): void
+function set<V>(
+  target: object,
+  key: OnMember<V>,
+  value: NoInfer<V>,
+  member: string | symbol,
+  options?: MemberOptions,
+): void
+function set(target: object, key: MetadataKey, value: unknown, member?: PropertyKey, options?: MemberOptions): void {
+  let metadata = metadataOf(target)
+  if (metadata == null) {
+    metadata = Object.create(null) as DecoratorMetadataObject
+    Object.defineProperty(target, Symbol.metadata, {
+      value: metadata,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+  }
+
+  const entry = entryFor(metadata, key)
+  if (member === undefined) {
+    entry.class = value
+  } else {
+    writeMember(entry, member as string | symbol, options?.static === true, value)
+  }
+}
+
+/**
+ * Returns the target slot stored under a symbol key, or `undefined` if absent.
+ *
+ * With `member`, returns that member's slot only; it does not fall back to the target slot. Use
  * {@link effective} for member-then-class. `{ static: true }` reads the static member of that name.
  *
- * `target` is a class, whose constructor chain is read, or the context a decorator receives, which
- * reads only what the decorators of the class being defined have written so far.
+ * `target` is a class, whose constructor chain is read; the context a decorator receives, which
+ * reads only what the decorators of the class being defined have written so far; or any object
+ * written with {@link set}, whose prototype chain is read. An instance does not read its class's
+ * annotations: pass its constructor.
  */
-function get<T>(target: AnyClass | AnyContext, key: symbol): T | undefined
-function get<T>(target: AnyClass | AnyContext, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
+function get<T>(target: object, key: symbol): T | undefined
+function get<T>(target: object, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
 /**
  * Returns the class-level value of an annotation that applies to classes, or `undefined` if absent.
  *
@@ -280,18 +337,20 @@ function get<T>(target: AnyClass | AnyContext, key: symbol, member: PropertyKey,
  * autocompletes to the declared members of a class, and `{ static: true }` reads the static member
  * of that name.
  *
- * `target` is a class, whose constructor chain is read, or the context a decorator receives, which
- * reads only what the decorators of the class being defined have written so far. Inside a class
- * decorator that includes every member decorator and every class decorator written below it.
+ * `target` is a class, whose constructor chain is read; the context a decorator receives, which
+ * reads only what the decorators of the class being defined have written so far, including, in a
+ * class decorator, every member decorator and every class decorator written below it; or any object
+ * written with {@link set}, whose prototype chain is read. An instance does not read its class's
+ * annotations: pass its constructor.
  */
-function get<V>(target: AnyClass | AnyContext, key: OnClass<V>): V | undefined
-function get<TClass extends AnyClass, V>(
-  target: TClass | AnyContext,
+function get<V>(target: object, key: OnClass<V>): V | undefined
+function get<TTarget extends object, V>(
+  target: TTarget,
   key: OnMember<V>,
-  member: ClassMember<TClass>,
+  member: MemberOf<TTarget>,
   options?: MemberOptions,
 ): V | undefined
-function get(target: AnyClass | AnyContext, key: MetadataKey, member?: PropertyKey, options?: MemberOptions): unknown {
+function get(target: object, key: MetadataKey, member?: PropertyKey, options?: MemberOptions): unknown {
   return read(target, key, member, options?.static === true)
 }
 
@@ -300,20 +359,19 @@ function get(target: AnyClass | AnyContext, key: MetadataKey, member?: PropertyK
  *
  * On a class, members declared on base classes are included and the nearest declaration of a name
  * wins, unless the annotation's `inherit` rule says otherwise. On the context a decorator receives,
- * only what the decorators of the class being defined have written so far is listed. Members whose value is `undefined` are left out, and no order is
- * promised. `{ static: true }` lists static members instead of instance members.
+ * only what the decorators of the class being defined have written so far is listed. Members whose
+ * value is `undefined` are left out, and no order is promised. `{ static: true }` lists static
+ * members instead of instance members.
  */
-function members<T>(target: AnyClass | AnyContext, key: symbol, options?: MemberOptions): Map<string | symbol, T>
-function members<V>(target: AnyClass | AnyContext, key: OnMember<V>, options?: MemberOptions): Map<string | symbol, V>
-function members(
-  target: AnyClass | AnyContext,
-  key: MetadataKey,
-  options?: MemberOptions,
-): Map<string | symbol, unknown> {
+function members<T>(target: object, key: symbol, options?: MemberOptions): Map<string | symbol, T>
+function members<V>(target: object, key: OnMember<V>, options?: MemberOptions): Map<string | symbol, V>
+function members(target: object, key: MetadataKey, options?: MemberOptions): Map<string | symbol, unknown> {
   const isStatic = options?.static === true
-  const policy = isContext(target) ? undefined : optionsOf(key)
-  const lineage = isContext(target) ? [] : policy?.inherit === 'own' ? [target] : chainOf(target)
-  const entries = isContext(target) ? [entryIn(target.metadata, key)] : lineage.map(c => ownEntry(c, key))
+  const context = isContext(target)
+  const policy = context ? undefined : optionsOf(key)
+  const entries = context
+    ? [entryIn(target.metadata, key)]
+    : (policy?.inherit === 'own' ? [target] : chainOf(target)).map(link => ownEntry(link, key))
 
   // Every value of a name, from the nearest declaration to the farthest.
   const valuesByName = new Map<string | symbol, unknown[]>()
@@ -356,16 +414,16 @@ function members(
  * reflect.effective(AdminCtrl, Roles, 'list')   // ['admin']  — falls back to class
  * ```
  */
-function effective<T>(cls: AnyClass, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
-function effective<TClass extends AnyClass, V>(
-  cls: TClass,
+function effective<T>(target: object, key: symbol, member: PropertyKey, options?: MemberOptions): T | undefined
+function effective<TTarget extends object, V>(
+  target: TTarget,
   key: Annotation<V, never>,
-  member: ClassMember<TClass>,
+  member: MemberOf<TTarget>,
   options?: MemberOptions,
 ): V | undefined
-function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown {
-  const inner = resolve(cls, key, member, options?.static === true)
-  const outer = resolve(cls, key, undefined, false)
+function effective(target: object, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown {
+  const inner = resolve(target, key, member, options?.static === true)
+  const outer = resolve(target, key, undefined, false)
   const combine = optionsOf(key)?.combine
 
   if (inner !== undefined && outer !== undefined && combine !== undefined) {
@@ -387,16 +445,16 @@ function effective(cls: AnyClass, key: MetadataKey, member: PropertyKey, options
  * reflect.merge(Ctrl, Roles, 'delete') // ['user', 'admin']
  * ```
  */
-function merge<T>(cls: AnyClass, key: symbol, member: PropertyKey, options?: MemberOptions): T[]
-function merge<TClass extends AnyClass, T>(
-  cls: TClass,
+function merge<T>(target: object, key: symbol, member: PropertyKey, options?: MemberOptions): T[]
+function merge<TTarget extends object, T>(
+  target: TTarget,
   key: Annotation<T[], never>,
-  member: ClassMember<TClass>,
+  member: MemberOf<TTarget>,
   options?: MemberOptions,
 ): T[]
-function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown[] {
-  const classValue = resolve(cls, key, undefined, false) as unknown[] | undefined
-  const memberValue = resolve(cls, key, member, options?.static === true) as unknown[] | undefined
+function merge(target: object, key: MetadataKey, member: PropertyKey, options?: MemberOptions): unknown[] {
+  const classValue = resolve(target, key, undefined, false) as unknown[] | undefined
+  const memberValue = resolve(target, key, member, options?.static === true) as unknown[] | undefined
 
   return [...(classValue ?? []), ...(memberValue ?? [])]
 }
@@ -405,18 +463,19 @@ function merge(cls: AnyClass, key: MetadataKey, member: PropertyKey, options?: M
  * Reads and writes decorator metadata by key.
  *
  * A key is a symbol or an {@link Annotation}. Every class owns its store: a decorator on a subclass
- * never writes into its base class's metadata. Reads walk the constructor chain from `cls` upwards
- * and the nearest class declaring the slot wins, so an undecorated subclass reads its base's values,
- * a decorated subclass shadows them, and a method override without its own annotation still carries
+ * never writes into its base class's metadata. Reads walk the constructor chain upwards and the
+ * nearest class declaring the slot wins, so an undecorated subclass reads its base's values, a
+ * decorated subclass shadows them, and a method override without its own annotation still carries
  * the base method's value. An annotation created with an `inherit` rule reads its own class only
  * (`own`) or folds every declaration along the chain (`accumulate`) instead. A slot holding
- * `undefined` counts as absent. A static member and an
- * instance member with the same name keep separate slots; `{ static: true }` addresses the static
- * one. Inside a decorator, `get` and `members` also take its context, to read what the class being
- * defined carries so far.
+ * `undefined` counts as absent. A static member and an instance member with the same name keep
+ * separate slots; `{ static: true }` addresses the static one. Inside a decorator, `get` and
+ * `members` also take its context, to read what the class being defined carries so far, and
+ * {@link set} writes outside a decorator, on a class or any other object.
  */
 export const reflect = {
   annotate,
+  set,
   get,
   effective,
   merge,
