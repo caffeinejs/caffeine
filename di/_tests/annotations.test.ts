@@ -961,6 +961,68 @@ describe('usage: reading while decorating and listing members', function () {
   })
 })
 
+// ─── usage: repeated application ─────────────────────────────────────────────
+
+const Tags = createAnnotation.on('class', 'method')<string>({ repeatable: true })
+
+describe('usage: repeated application', function () {
+  it('applying an annotation twice to one target throws and names the target', function () {
+    let error: unknown
+    try {
+      class Twice {
+        @Route('/1')
+        @Route('/2')
+        list() {}
+      }
+      void Twice
+    } catch (e) {
+      error = e
+    }
+
+    expect(error).toBeInstanceOf(ErrInvalidDecorator)
+    expect((error as Error).message).toContain('Cannot apply an annotation twice to method "list"')
+    expect((error as Error).message).toContain('repeatable: true')
+  })
+
+  it('a repeatable annotation collects its values in source order', function () {
+    @Tags('a')
+    @Tags('b')
+    class Tagged {
+      @Tags('x')
+      @Tags('y')
+      run() {}
+    }
+
+    expect(reflect.get(Tagged, Tags)).toEqual(['a', 'b'])
+    expect(reflect.get(Tagged, Tags, 'run')).toEqual(['x', 'y'])
+    expect(reflect.merge(Tagged, Tags, 'run')).toEqual(['a', 'b', 'x', 'y'])
+  })
+
+  it('a static and an instance member of one name each take the annotation once', function () {
+    class Jobs {
+      @Route('/static')
+      static run() {}
+
+      @Route('/instance')
+      run() {}
+    }
+
+    expect(reflect.get(Jobs, Route, 'run')).toBe('/instance')
+    expect(reflect.get(Jobs, Route, 'run', { static: true })).toBe('/static')
+  })
+
+  it('a subclass may apply the annotation its base applied', function () {
+    @Entity({ table: 'base' })
+    class Base {}
+
+    @Entity({ table: 'sub' })
+    class Sub extends Base {}
+
+    expect(reflect.get(Base, Entity)).toEqual({ table: 'base' })
+    expect(reflect.get(Sub, Entity)).toEqual({ table: 'sub' })
+  })
+})
+
 // ─── usage: what does not compile ────────────────────────────────────────────
 
 /**
@@ -1080,6 +1142,10 @@ function annotationUsageTypeChecks(): void {
     constructor(readonly id: string) {}
   }
 
+  // @ts-expect-error a repeatable annotation still takes one value per application
+  @Tags(['a'])
+  class RepeatableWithArray {}
+
   const wrongWrites = (_target: Function, context: ClassMethodDecoratorContext): void => {
     // @ts-expect-error the value must match the annotation's type
     reflect.annotate(context, Retry, '3')
@@ -1102,6 +1168,7 @@ function annotationUsageTypeChecks(): void {
     NeedsArguments,
     wrongWrites,
     wrongMemberWrite,
+    RepeatableWithArray,
   ]
 }
 
