@@ -1,6 +1,7 @@
 import type { BindingDescriptor, Container } from './container_interface.js'
 import type { TypedKey } from './key.js'
 import type { PostResolutionInterceptor } from './post_resolution_interceptor.js'
+import { type Annotation, isAnnotated, reflect } from './reflect.js'
 import { type AnyClass } from './types.js'
 
 export const kAspectLabel = Symbol('@caffeinejs/di:aspect')
@@ -235,7 +236,7 @@ function buildMethodMap(
   if (hasNulls || hasPredicates) {
     let proto = Object.getPrototypeOf(instance)
     while (proto && proto !== Object.prototype) {
-      for (const name of Object.getOwnPropertyNames(proto)) {
+      for (const name of Reflect.ownKeys(proto)) {
         if (name !== 'constructor') {
           candidates.add(name)
         }
@@ -449,6 +450,21 @@ function methodHasSuffix(suffix: string): PointcutMethodPredicate {
   return methodName => typeof methodName === 'string' && methodName.endsWith(suffix)
 }
 
+/**
+ * Selects what an annotation covers: every method annotated with it, and every method of a class
+ * annotated with it at class level.
+ *
+ * A method counts when `reflect.effective` finds a value for it, so the annotation's `inherit` rule
+ * decides whether a declaration on a base class counts.
+ */
+function annotatedWith(annotation: symbol | Annotation<unknown, never>): Pointcut {
+  return pointcut(
+    (_descriptor, cls) => isAnnotated(cls, annotation),
+    (member, _descriptor, cls) =>
+      reflect.effective(cls, annotation as Annotation<unknown, never>, member) !== undefined,
+  )
+}
+
 export const $aop = {
   forClass,
   pointcut,
@@ -459,6 +475,7 @@ export const $aop = {
   matchClass,
   matchLabel,
   matchTag,
+  annotatedWith,
 }
 
 export type PointcutBuilders = typeof $aop
