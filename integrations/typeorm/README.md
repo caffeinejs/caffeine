@@ -82,7 +82,7 @@ same way:
 ```ts
 @Configuration()
 class Datasources {
-  @OnLifecycle<DataSource>({ destroy: ds => ds.destroy() })
+  @OnLifecycle({ destroy: ds => ds.destroy() })
   @ProvidesAsync(DataSource)
   main(): Promise<DataSource> {
     return new DataSource(options).initialize()

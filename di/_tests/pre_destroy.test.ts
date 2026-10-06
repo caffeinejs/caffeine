@@ -51,7 +51,7 @@ describe('OnDestroy interface', function () {
 
       @Configuration()
       class AppConfigOPD {
-        @OnLifecycle<ConnOPD>({ destroy: c => spy(c) })
+        @OnLifecycle({ destroy: c => spy(c) })
         @Provides(ConnOPD)
         conn(): ConnOPD {
           return new ConnOPD()
@@ -79,7 +79,7 @@ describe('OnDestroy interface', function () {
 
       @Configuration()
       class ClientConfigOPD {
-        @OnLifecycle<ClientOPD>({ bootstrap: c => spy(c) })
+        @OnLifecycle({ bootstrap: c => spy(c) })
         @Provides(ClientOPD)
         client(): ClientOPD {
           return new ClientOPD()
@@ -104,7 +104,7 @@ describe('OnDestroy interface', function () {
 
       @Configuration()
       class CacheConfigOPD {
-        @OnLifecycle<CacheOPD>({
+        @OnLifecycle({
           destroy: async () => {
             await Promise.resolve()
             order.push('destroyed')
@@ -135,7 +135,7 @@ describe('OnDestroy interface', function () {
       @Configuration()
       class SvcConfigOPD {
         @Lazy()
-        @OnLifecycle<SvcOPD>({ destroy: s => spy(s) })
+        @OnLifecycle({ destroy: s => spy(s) })
         @Provides(SvcOPD)
         svc(): SvcOPD {
           return new SvcOPD()
@@ -155,8 +155,11 @@ describe('OnDestroy interface', function () {
 
     it('should throw ErrInvalidDecorator when used on a non-method', function () {
       expect(() => {
-        const fn = OnLifecycle({ destroy: () => {} })
-        fn(class Foo {}, { kind: 'class', name: 'Foo' } as unknown as DecoratorContext)
+        // @ts-expect-error @OnLifecycle does not apply to classes; this asserts the run-time throw a caller
+        // without types still gets
+        @OnLifecycle({ destroy: () => {} })
+        class Foo {}
+        void Foo
       }).toThrow(ErrInvalidDecorator)
     })
   })

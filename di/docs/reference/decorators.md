@@ -310,15 +310,19 @@ class DatabasePool {
 ```
 
 Configures bootstrap and pre-destroy callbacks for a bean produced by a
-`@Provides` method inside a `@Configuration` class. Each callback receives the
-produced instance and may be asynchronous. `bootstrap` runs during `init()`
-after every binding is resolved; `destroy` runs before the container is
-disposed.
+`@Provides` or `@ProvidesAsync` method inside a `@Configuration` class. Each
+callback receives the produced instance and may be asynchronous. `bootstrap`
+runs during `init()` after every binding is resolved; `destroy` runs before the
+container is disposed.
+
+`T` is inferred from the method's return type. A promise is unwrapped, because
+the callbacks receive the resolved instance. A type argument is optional; when
+given, the method must return that type or a promise of it.
 
 ```ts
 @Configuration()
 class InfraConfig {
-  @OnLifecycle<Pool>({ bootstrap: p => p.connect(), destroy: p => p.end() })
+  @OnLifecycle({ bootstrap: p => p.connect(), destroy: p => p.end() })
   @Provides(Pool)
   pool(): Pool {
     return new Pool()

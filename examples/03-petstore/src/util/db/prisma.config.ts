@@ -8,7 +8,7 @@ import { prisma } from './prisma.js'
 // drain delay and after the server has stopped — no in-flight query loses its connection mid-query.
 @Configuration()
 export class PrismaConfig {
-  @OnLifecycle<PrismaClient>({ destroy: client => client.$disconnect() })
+  @OnLifecycle({ destroy: client => client.$disconnect() })
   @Provides(PrismaClient)
   client(): PrismaClient {
     return prisma

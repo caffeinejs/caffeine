@@ -9,7 +9,7 @@ export class DatabaseConfig {
   constructor(private readonly config: AppConfig) {}
 
   @Provides(kPgPool)
-  @OnLifecycle<Pool>({ destroy: pool => pool.end() })
+  @OnLifecycle({ destroy: pool => pool.end() })
   pgPool(): Pool {
     return new Pool({
       connectionString: this.config.databaseURL,
