@@ -13,6 +13,10 @@ export interface Chain {
 
   proceed(request: FetchyRequest): Promise<FetchyResponse>
 
+  /**
+   * The configuration of the operation being called. One object serves every call to the
+   * operation, on every client of its class.
+   */
   meta(): MethodSpec
 }
 

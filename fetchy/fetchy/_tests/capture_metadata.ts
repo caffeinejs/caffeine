@@ -1,8 +1,7 @@
 /**
- * Test-only helper to read a class's `context.metadata` token from outside decorator scope,
- * without touching `Symbol.metadata` (fetchy's production code never reads that well-known
- * symbol — see `decorators/registrar/registrar.ts`). Apply `capture` as an extra decorator
- * anywhere on the class being tested, then call `metadata()` once the class has been declared.
+ * Test-only helper to read a class's `context.metadata` object from outside decorator scope,
+ * exactly as its decorators saw it. Apply `capture` as an extra decorator anywhere on the class
+ * being tested, then call `metadata()` once the class has been declared.
  */
 export function captureMetadata(): {
   capture: (_target: unknown, context: ClassDecoratorContext) => void

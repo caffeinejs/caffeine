@@ -7,13 +7,23 @@ import type { RetryOptions } from '../../retry_options.js'
 import type { ClassSpec, MethodSpec } from './builders.definition.js'
 
 export class ClassBuilder {
+  #api = false
   #path?: string
   #headers?: Headers
-  #requestType?: string
+  #formURLEncoded = false
   #responseConverter?: ResponseConverter
   #requestBodyConverter?: RequestBodyConverter
   #responseHandler?: ResponseHandler
   #retry?: RetryOptions
+
+  api(): this {
+    this.#api = true
+    return this
+  }
+
+  isAPI(): boolean {
+    return this.#api
+  }
 
   path(path: string): this {
     this.#path = path
@@ -26,8 +36,8 @@ export class ClassBuilder {
     return this
   }
 
-  requestType(type: string): this {
-    this.#requestType = type
+  formURLEncoded(): this {
+    this.#formURLEncoded = true
     return this
   }
 
@@ -53,9 +63,10 @@ export class ClassBuilder {
 
   toClassSpec(): ClassSpec {
     return {
-      path: normalizePath(this.#path ?? ''),
+      // Unset stays undefined, so a subclass that sets no path keeps its base class's, while `''` clears it.
+      path: this.#path === undefined ? undefined : normalizePath(this.#path),
       headers: this.#headers ?? new Headers(),
-      requestType: this.#requestType,
+      formURLEncoded: this.#formURLEncoded,
       responseConverter: this.#responseConverter,
       requestBodyConverter: this.#requestBodyConverter,
       responseHandler: this.#responseHandler,
@@ -65,27 +76,30 @@ export class ClassBuilder {
 }
 
 export class MethodBuilder {
+  /** The member that declares the operation. */
+  readonly name: string | symbol
+  /** The key under which a client built by `FetchyClient.create()` holds this operation's invoker. */
+  readonly key: symbol
+
   #httpMethod?: string
   #path?: string
   #headers?: Headers
   #params: ParamDescriptor[] = []
   #formURLEncoded = false
-  #requestType?: string
   #responseConverter?: ResponseConverter
   #requestBodyConverter?: RequestBodyConverter
   #responseHandler?: ResponseHandler
-  #kind: 'method' | 'field' = 'method'
   #callback = false
   #retry?: RetryOptions
   #noRetry = false
 
-  httpMethod(method: string): this {
-    this.#httpMethod = method
-    return this
+  constructor(name: string | symbol) {
+    this.name = name
+    this.key = Symbol(String(name))
   }
 
-  kind(kind: 'method' | 'field'): this {
-    this.#kind = kind
+  httpMethod(method: string): this {
+    this.#httpMethod = method
     return this
   }
 
@@ -125,11 +139,6 @@ export class MethodBuilder {
     return this
   }
 
-  requestType(type: string): this {
-    this.#requestType = type
-    return this
-  }
-
   responseConverter(converter: ResponseConverter): this {
     this.#responseConverter = converter
     return this
@@ -147,16 +156,15 @@ export class MethodBuilder {
 
   toMethodSpec(): MethodSpec {
     return {
+      name: String(this.name),
       httpMethod: this.#httpMethod ?? '',
       path: normalizePath(this.#path ?? ''),
       headers: this.#headers ?? new Headers(),
       params: [...this.#params],
       formURLEncoded: this.#formURLEncoded,
-      requestType: this.#requestType,
       responseConverter: this.#responseConverter,
       requestBodyConverter: this.#requestBodyConverter,
       responseHandler: this.#responseHandler,
-      kind: this.#kind,
       callback: this.#callback,
       retry: this.#retry,
       noRetry: this.#noRetry,

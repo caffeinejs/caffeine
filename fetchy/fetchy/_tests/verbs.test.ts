@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
+import { API } from '../decorators/api.js'
 import { HeaderMap } from '../decorators/header_map.js'
 import { Params } from '../decorators/params.js'
 import { Param } from '../decorators/params/param.js'
-import { Path } from '../decorators/path.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
@@ -80,7 +80,7 @@ describe('verb decorators', () => {
       }
     }
 
-    expect(() => new UsersAPI().list()).toThrow(/never passed to FetchyClient.create/)
+    expect(() => new UsersAPI().list()).toThrow(/is not a client built by FetchyClient\.create\(\)/)
   })
 
   it('writes httpMethod and path into the method registrar entry when declared as a field', () => {
@@ -108,7 +108,7 @@ describe('verb decorators', () => {
       list!: () => Promise<unknown>
     }
 
-    expect(() => new UsersAPI().list()).toThrow(/never passed to FetchyClient.create/)
+    expect(() => new UsersAPI().list()).toThrow(/is not a client built by FetchyClient\.create\(\)/)
   })
 
   // Two verbs on one member describe two different requests. The verb applied last used to win in silence, so the
@@ -172,11 +172,11 @@ describe('verb decorators', () => {
     ).toThrow(ErrFetchyInvalidDecoratorTarget)
   })
 
-  it('@Path sets the class-level base path', () => {
+  it('@API(path) sets the class-level base path', () => {
     const { capture, metadata } = captureMetadata()
 
     @capture
-    @Path('/api/users')
+    @API('/api/users')
     class UsersAPI {
       @GET('/{id}')
       get(): Promise<unknown> {
@@ -185,5 +185,49 @@ describe('verb decorators', () => {
     }
 
     expect(getClassBuilder(metadata())?.toClassSpec().path).toBe('/api/users')
+  })
+
+  // `create()` accepts a class only when the class or a base class carries `@API()`, and finds that out from the flag.
+  it('@API() marks the class, and other class decorators do not', () => {
+    const api = captureMetadata()
+    const other = captureMetadata()
+
+    @api.capture
+    @API()
+    class Marked {}
+
+    @other.capture
+    @HeaderMap({ 'x-trace': 'on' })
+    class Unmarked {}
+
+    void [Marked, Unmarked]
+
+    expect(getClassBuilder(api.metadata())?.isAPI()).toBe(true)
+    expect(getClassBuilder(other.metadata())?.isAPI()).toBe(false)
+  })
+
+  // The verb installs one function per method on the prototype. It has to look like the method it replaces in a stack
+  // trace or a spy, and must not be usable as a constructor.
+  it('installs a method wrapper named after the member, taking no declared parameters and not constructible', () => {
+    const tag = Symbol('lookup')
+
+    class UsersAPI {
+      @GET('/users')
+      list(_page: number): Promise<unknown> {
+        return noop()
+      }
+
+      @GET('/users/lookup')
+      [tag](): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const list = UsersAPI.prototype.list as unknown as new () => unknown
+
+    expect(UsersAPI.prototype.list.name).toBe('list')
+    expect(UsersAPI.prototype.list.length).toBe(0)
+    expect(UsersAPI.prototype[tag].name).toBe('[lookup]')
+    expect(() => new list()).toThrow(TypeError)
   })
 })

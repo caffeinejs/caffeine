@@ -7,7 +7,7 @@ import { CallbackCallAdapter } from './callback_call_adapter.js'
  * default — register via `FetchyBuilder.addCallAdapterFactory(new CallbackCallAdapterFactory())`.
  */
 export class CallbackCallAdapterFactory implements CallAdapterFactory {
-  provide(spec: MethodSpec): CallAdapter<unknown> | null {
+  provide(spec: MethodSpec): CallAdapter | null {
     return spec.callback ? CallbackCallAdapter.INSTANCE : null
   }
 }

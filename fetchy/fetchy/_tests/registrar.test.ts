@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  configureAPIAndRegisterMethods,
   configureClass,
   configureMethod,
-  getAPI,
   getClassBuilder,
+  getDeclaringClasses,
   getMethodBuilders,
 } from '../decorators/registrar/registrar.js'
 
@@ -15,6 +14,12 @@ function methodContext(metadata: object, name: string | symbol): ClassMethodDeco
 
 function fieldContext(metadata: object, name: string | symbol): ClassFieldDecoratorContext {
   return { metadata, name, kind: 'field' } as unknown as ClassFieldDecoratorContext
+}
+
+// A constructor owning `metadata` as its decorator metadata, as an emitter defines it once the class is decorated.
+function owning<C extends Function>(C: C, metadata: object | null): C {
+  Object.defineProperty(C, Symbol.metadata, { value: metadata, configurable: true, enumerable: true })
+  return C
 }
 
 function classContext(metadata: object): ClassDecoratorContext {
@@ -79,56 +84,78 @@ describe('registrar', () => {
     expect(getClassBuilder({})).toBeUndefined()
   })
 
-  it('configureMethod records kind from the context, for both method and field contexts', () => {
+  // `create()` stores each client's invoker under the key and the verb's wrapper reads it back, so every decorator on
+  // one member has to see the same key, whichever of them runs first.
+  it('gives each member one key, whichever decorator configures it first', () => {
     const metadata = {}
 
-    configureMethod(methodContext(metadata, 'asMethod'), () => {})
-    configureMethod(fieldContext(metadata, 'asField'), () => {})
+    const first = configureMethod(fieldContext(metadata, 'op'), () => {})
+    const second = configureMethod(fieldContext(metadata, 'op'), spec => spec.httpMethod('GET'))
 
-    expect(getMethodBuilders(metadata).get('asMethod')?.toMethodSpec().kind).toBe('method')
-    expect(getMethodBuilders(metadata).get('asField')?.toMethodSpec().kind).toBe('field')
+    expect(typeof first.key).toBe('symbol')
+    expect(second.key).toBe(first.key)
   })
 
-  it('configureMethod records kind regardless of which decorator call triggers it first', () => {
-    const metadata = {}
+  // A subclass that redeclares `get` declares a second operation, and `super.get()` must still reach the first one.
+  it('gives the same member name its own key in each class', () => {
+    const base = configureMethod(methodContext({}, 'get'), () => {})
+    const child = configureMethod(methodContext({}, 'get'), () => {})
 
-    // Simulates @Params (no-op mutator) running before @GET on a field-declared operation.
-    configureMethod(fieldContext(metadata, 'op'), () => {})
-    configureMethod(fieldContext(metadata, 'op'), spec => spec.httpMethod('GET'))
-
-    expect(getMethodBuilders(metadata).get('op')?.toMethodSpec().kind).toBe('field')
+    expect(child.key).not.toBe(base.key)
   })
 
-  it('configureAPIAndRegisterMethods drains methods registered before it runs, keyed by the target constructor', () => {
-    const metadata = {}
-    function TargetAPI() {}
+  describe('getDeclaringClasses', () => {
+    it('lists the classes that own fetchy metadata, the root first, and skips the others', () => {
+      const baseMetadata = {}
+      const childMetadata = {}
+      configureClass(classContext(baseMetadata), spec => spec.api())
+      configureMethod(methodContext(childMetadata, 'get'), spec => spec.httpMethod('GET'))
 
-    configureMethod(methodContext(metadata, 'get'), spec => spec.httpMethod('GET'))
-    configureAPIAndRegisterMethods(classContext(metadata), TargetAPI, spec => spec.path('/users'))
+      const Base = owning(class {}, baseMetadata)
+      class Mid extends Base {}
+      const Child = owning(class extends Mid {}, childMetadata)
 
-    const entry = getAPI(TargetAPI)
+      const chain = getDeclaringClasses(Child)
 
-    expect(entry?.classBuilder.toClassSpec().path).toBe('/users')
-    expect(entry?.methods.get('get')?.toMethodSpec().httpMethod).toBe('GET')
-  })
+      expect(chain.map(declaring => declaring.owner)).toEqual([Base, Child])
+      expect(chain[0].classBuilder?.isAPI()).toBe(true)
+      expect(chain[1].methods.map(method => method.name)).toEqual(['get'])
+    })
 
-  it('getAPI returns undefined for a constructor that was never drained', () => {
-    expect(getAPI(function Unregistered() {})).toBeUndefined()
-  })
+    // tsc and esbuild link a subclass's metadata to its parent's. Reading through that link would serve the parent's
+    // operations twice, once for each class, and only under those compilers.
+    it("reads each class through the metadata it owns, never through the link to its parent's", () => {
+      const baseMetadata = {}
+      configureMethod(methodContext(baseMetadata, 'get'), spec => spec.httpMethod('GET'))
+      const Base = owning(class {}, baseMetadata)
 
-  it("a second, unrelated target constructor never sees another class's drained methods", () => {
-    const metadataA = {}
-    const metadataB = {}
-    function APIA() {}
-    function APIB() {}
+      const childMetadata = Object.create(baseMetadata) as object
+      configureClass(classContext(childMetadata), spec => spec.api())
+      const Child = owning(class extends Base {}, childMetadata)
 
-    configureMethod(methodContext(metadataA, 'a'), spec => spec.httpMethod('GET'))
-    configureAPIAndRegisterMethods(classContext(metadataA), APIA, spec => spec.path('/a'))
+      const chain = getDeclaringClasses(Child)
 
-    configureMethod(methodContext(metadataB, 'b'), spec => spec.httpMethod('POST'))
-    configureAPIAndRegisterMethods(classContext(metadataB), APIB, spec => spec.path('/b'))
+      expect(chain.map(declaring => declaring.owner)).toEqual([Base, Child])
+      expect(chain.flatMap(declaring => declaring.methods.map(method => method.name))).toEqual(['get'])
+    })
 
-    expect(getAPI(APIA)?.methods.has('b')).toBe(false)
-    expect(getAPI(APIB)?.methods.has('a')).toBe(false)
+    it('skips a class whose own metadata is not an object', () => {
+      const metadata = {}
+      configureClass(classContext(metadata), spec => spec.api())
+      const Base = owning(class {}, metadata)
+      const Child = owning(class extends Base {}, null)
+
+      expect(getDeclaringClasses(Child).map(declaring => declaring.owner)).toEqual([Base])
+    })
+
+    // A mixin that copies a class's statics copies its metadata too, which would serve the same operations twice.
+    it('counts a metadata object owned by two classes once, for the one closest to the root', () => {
+      const metadata = {}
+      configureMethod(methodContext(metadata, 'get'), spec => spec.httpMethod('GET'))
+      const Base = owning(class {}, metadata)
+      const Copy = owning(class extends Base {}, metadata)
+
+      expect(getDeclaringClasses(Copy).map(declaring => declaring.owner)).toEqual([Base])
+    })
   })
 })

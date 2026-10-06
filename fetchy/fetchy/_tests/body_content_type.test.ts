@@ -8,7 +8,6 @@ import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
 import { Header } from '../decorators/params/header.js'
-import { Path } from '../decorators/path.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { POST } from '../decorators/verbs.js'
 import { MediaTypes } from '../media_types.js'
@@ -35,8 +34,7 @@ const LegacyConverter: RequestBodyConverter = {
   },
 }
 
-@API()
-@Path('/users')
+@API('/users')
 class BodyAPI {
   @POST('/')
   @Params([Body()])
@@ -143,8 +141,7 @@ describe('the content-type of a converted body', () => {
  * with `TS1240` — a compile-time failure, which is why `decorators.test-d.ts` is what pins the types. This
  * pins the behaviour they unlock: the decorators have to do their work in this position too.
  */
-@API()
-@Path('/token')
+@API('/token')
 class FieldDeclaredAPI {
   @POST('/form')
   @FormURLEncoded()
@@ -192,8 +189,7 @@ const MarkedConverter: RequestBodyConverter = {
   },
 }
 
-@API()
-@Path('/token')
+@API('/token')
 class FormBodyAPI {
   @POST('/')
   @FormURLEncoded()
@@ -212,8 +208,7 @@ class FormBodyAPI {
   }
 }
 
-@API()
-@Path('/token')
+@API('/token')
 @FormURLEncoded()
 class ClassFormBodyAPI {
   @POST('/')

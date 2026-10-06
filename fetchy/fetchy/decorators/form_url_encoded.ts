@@ -14,14 +14,13 @@ export function FormURLEncoded() {
     'FormURLEncoded',
     (_target, context) =>
       configureClass(context, spec => {
-        spec.requestType('form')
+        spec.formURLEncoded()
         spec.requestBodyConverter(FormRequestBodyConverter)
         spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
       }),
     context =>
       configureMethod(context, spec => {
         spec.formURLEncoded()
-        spec.requestType('form')
         spec.requestBodyConverter(FormRequestBodyConverter)
         spec.header('content-type', MediaTypes.FORM_URL_ENCODED)
       }),

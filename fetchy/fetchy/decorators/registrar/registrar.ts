@@ -1,15 +1,10 @@
 import '../../polyfill.js'
 import { ClassBuilder, MethodBuilder } from './builders.js'
 
+// Every registry is keyed by a class's decorator metadata object (`context.metadata`), which the class owns as
+// `Symbol.metadata` once it is defined.
 const MethodRegistry = new WeakMap<object, Map<string | symbol, MethodBuilder>>()
 const ClassRegistry = new WeakMap<object, ClassBuilder>()
-
-interface APIEntry {
-  classBuilder: ClassBuilder
-  methods: ReadonlyMap<string | symbol, MethodBuilder>
-}
-
-const APIRegistry = new WeakMap<Function, APIEntry>()
 
 export function configureMethod(
   ctx: ClassMethodDecoratorContext | ClassFieldDecoratorContext,
@@ -25,11 +20,10 @@ export function configureMethod(
   let method = methods.get(ctx.name)
 
   if (!method) {
-    method = new MethodBuilder()
+    method = new MethodBuilder(ctx.name)
     methods.set(ctx.name, method)
   }
 
-  method.kind(ctx.kind)
   mut(method)
 
   return method
@@ -55,33 +49,56 @@ export function getClassBuilder(metadata: object): ClassBuilder | undefined {
 }
 
 /**
- * Drains the `ctx.metadata`-keyed method registry into a registry keyed by the real class
- * constructor. Must be called from a class decorator (`@API()`) — method/field decorators always
- * run before any class decorator, so every method already registered under `ctx.metadata` (the
- * same object `@GET`/`@POST`/etc. saw) is complete by the time this runs.
- *
- * The class builder is kept rather than snapshotted: a class decorator listed above `@API()` runs
- * after it and still configures the client.
+ * A class in a client's constructor chain that carries fetchy configuration.
  */
-export function configureAPIAndRegisterMethods(
-  ctx: ClassDecoratorContext,
-  target: Function,
-  mut: (spec: ClassBuilder) => void,
-): void {
-  let classBuilder = ClassRegistry.get(ctx.metadata)
-
-  if (!classBuilder) {
-    classBuilder = new ClassBuilder()
-    ClassRegistry.set(ctx.metadata, classBuilder)
-  }
-
-  mut(classBuilder)
-
-  const methods = MethodRegistry.get(ctx.metadata) ?? new Map<string | symbol, MethodBuilder>()
-
-  APIRegistry.set(target, { classBuilder, methods })
+export interface DeclaringClass {
+  readonly owner: Function
+  readonly classBuilder: ClassBuilder | undefined
+  readonly methods: readonly MethodBuilder[]
 }
 
-export function getAPI(target: Function): APIEntry | undefined {
-  return APIRegistry.get(target)
+/**
+ * Lists the classes from `target` up its constructor chain that carry fetchy configuration, the root first.
+ *
+ * A class counts only through the metadata object it owns. tsc and esbuild link a subclass's metadata to its
+ * parent's, SWC only when the subclass has a class decorator, so reading through that link would find a base class's
+ * members on its subclass under one compiler and not under another. A metadata object owned twice, as when a mixin
+ * copies a class's statics, counts once, for the class closest to the root.
+ */
+export function getDeclaringClasses(target: Function): DeclaringClass[] {
+  const found: [Function, object][] = []
+
+  for (let C: unknown = target; typeof C === 'function' && C !== Function.prototype; C = Object.getPrototypeOf(C)) {
+    if (!Object.hasOwn(C, Symbol.metadata)) {
+      continue
+    }
+
+    const metadata: unknown = (C as { [Symbol.metadata]?: unknown })[Symbol.metadata]
+
+    if (typeof metadata === 'object' && metadata !== null) {
+      found.push([C, metadata])
+    }
+  }
+
+  const chain: DeclaringClass[] = []
+  const seen = new Set<object>()
+
+  for (let i = found.length - 1; i >= 0; i--) {
+    const [owner, metadata] = found[i]
+
+    if (seen.has(metadata)) {
+      continue
+    }
+
+    seen.add(metadata)
+
+    const classBuilder = ClassRegistry.get(metadata)
+    const methods = [...(MethodRegistry.get(metadata)?.values() ?? [])]
+
+    if (classBuilder !== undefined || methods.length > 0) {
+      chain.push({ owner, classBuilder, methods })
+    }
+  }
+
+  return chain
 }
