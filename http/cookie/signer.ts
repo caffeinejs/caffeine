@@ -44,14 +44,23 @@ const SIGNATURE_LENGTH: Readonly<Record<CookieSigningAlgorithm, number>> = {
 const BASE64 = /^[A-Za-z0-9+/]+$/
 const INVALID: CookieUnsignResult = { valid: false, renew: false, value: null }
 
-// How many secrets handed to single calls keep their imported key. Past it the oldest is imported again on its next use.
+// How many secrets handed to single calls keep their imported key. Past it, the one used least recently is imported
+// again on its next use.
 const MAX_CALL_KEYS = 64
 
 const encoder = new TextEncoder()
 
 /**
+ * What the cookie plugin reads off the built-in signer: whether it has secrets of its own, and how long its signatures
+ * are, so a signed cookie is checked where it is set. Kept out of the barrel.
+ */
+export const kSigning = Symbol('caffeine.http.cookies.signing')
+
+/**
  * Signs with HMAC through Web Crypto, in the format `@fastify/cookie` and `cookie-signature` write: the value, a dot,
  * and the signature in base64 without padding. A cookie either of them signed verifies here, and the reverse.
+ *
+ * A secret handed to a call is imported on its first use, and the keys of the 64 used most recently are kept.
  *
  * @throws ErrCookieConfiguration when a secret is shorter than {@link MIN_COOKIE_SECRET_LENGTH} characters, the list
  * is empty, or the algorithm is not one of `SHA-256`, `SHA-384` and `SHA-512`.
@@ -75,6 +84,10 @@ export class HMACCookieSigner extends CookieSigner {
 
     this.#algorithm = algorithm
     this.#secrets = options.secret === undefined ? undefined : secretList(options.secret)
+  }
+
+  get [kSigning](): { readonly configured: boolean; readonly signatureLength: number } {
+    return { configured: this.#secrets !== undefined, signatureLength: SIGNATURE_LENGTH[this.#algorithm] }
   }
 
   async sign(value: string, secret?: CookieSecret): Promise<string> {
@@ -152,9 +165,12 @@ export class HMACCookieSigner extends CookieSigner {
       }
 
       key = importKey(secret, this.#algorithm)
-      this.#callKeys.set(secret, key)
+    } else {
+      // A map keeps insertion order and the first entry is the one dropped: one used again goes to the back.
+      this.#callKeys.delete(secret)
     }
 
+    this.#callKeys.set(secret, key)
     return key
   }
 }

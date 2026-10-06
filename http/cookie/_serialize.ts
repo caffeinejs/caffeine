@@ -62,15 +62,16 @@ export function prepareCookie(
       ? 'lax'
       : merged.sameSite
 
+  // cookie@2 writes a flag for any truthy value, so the rules judge the flags as booleans: what it will write.
   const attributes: Attributes = {
     domain: merged.domain,
     path: merged.path,
     expires: op === 'delete' ? EPOCH : expiry(op, name, merged.expires),
     maxAge: op === 'delete' ? 0 : merged.maxAge,
-    httpOnly: merged.httpOnly,
-    secure,
+    httpOnly: Boolean(merged.httpOnly),
+    secure: Boolean(secure),
     sameSite,
-    partitioned: merged.partitioned,
+    partitioned: Boolean(merged.partitioned),
     priority: merged.priority,
   }
 
@@ -109,6 +110,13 @@ export function serializeCookie(op: CookieOperation, prepared: PreparedCookie, v
       prepared.encode === undefined ? undefined : { encode: prepared.encode },
     )
   } catch (err) {
+    // What `encodeURIComponent` throws for a lone surrogate, which no URL encoding can carry.
+    if (err instanceof URIError) {
+      throw new ErrInvalidCookie(
+        `Cannot ${op} ${describeCookie(prepared.name)}: its value holds a character that cannot be URL-encoded`,
+      )
+    }
+
     if (!(err instanceof TypeError)) {
       throw err
     }
@@ -131,21 +139,45 @@ export function serializeCookie(op: CookieOperation, prepared: PreparedCookie, v
 }
 
 /**
- * Checks the attributes of a cookie whose value is not known yet — one waiting to be signed — so a bad option fails
- * where it was written rather than when the response goes out.
+ * Checks a cookie whose line cannot be written yet — one waiting to be signed — so a bad option or value fails where
+ * it was written rather than when the response goes out. `value` stands in for what will be written: the value with a
+ * signature of the signer's length when that length is known, or nothing.
  *
- * @throws ErrInvalidCookie when an attribute cannot be written.
+ * @throws ErrInvalidCookie when an attribute or the value cannot be written, or the cookie is too large.
  */
-export function assertWritable(op: CookieOperation, prepared: PreparedCookie): void {
-  serializeCookie(op, prepared, '')
+export function assertWritable(op: CookieOperation, prepared: PreparedCookie, value: string): void {
+  serializeCookie(op, prepared, value)
 }
 
-/** The cookies a `Cookie` header carries. The first of two cookies sharing a name wins, as a browser sends the more specific first. */
+/**
+ * The cookies a `Cookie` header carries. The first of two cookies sharing a name wins, as a browser sends the more
+ * specific first, and one `decode` answers `undefined` for is left out without the next of its name taking its place.
+ */
 export function parseCookies(
   header: string | undefined,
   decode: ((value: string) => string | undefined) | undefined,
 ): Record<string, string> {
-  return parseCookie(header ?? '', decode === undefined ? undefined : { decode }) as Record<string, string>
+  if (decode === undefined) {
+    return parseCookie(header ?? '') as Record<string, string>
+  }
+
+  // cookie@2 hands a name on to its next cookie when the first decodes to `undefined`, so the values are read raw and
+  // decoded here, the first of each name only.
+  const raw = parseCookie(header ?? '', { decode: identity })
+  const cookies: Record<string, string> = Object.create(null)
+
+  for (const name of Object.keys(raw)) {
+    const value = decode(raw[name]!)
+    if (value !== undefined) {
+      cookies[name] = value
+    }
+  }
+
+  return cookies
+}
+
+function identity(value: string): string {
+  return value
 }
 
 function expiry(op: CookieOperation, name: string, expires: Date | number | undefined): Date | undefined {

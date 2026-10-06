@@ -717,6 +717,9 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
    * Rejects two schemes writing cookies of one name, whatever their kinds: each would overwrite the other's, which
    * reads as random sign-outs. A cookie scheme writes its session cookie, and its remember-me cookie when that is on;
    * an OAuth-family strategy writes its session cookie and a family of state cookies under one name.
+   *
+   * An OAuth-family handler the application builds and hands to `addStrategy` is not checked: it gets no sign-in or
+   * callback route either, so it never signs anyone in.
    */
   #assertCookieIsolation(): void {
     const cookies = new Map<string, string>()

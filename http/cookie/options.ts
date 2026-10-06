@@ -29,7 +29,10 @@ export interface CookieSerializeOptions {
   /**
    * `'auto'` sets `Secure` when the request came over HTTPS, as `request.protocol` reports it, so behind a proxy it
    * follows `trustProxy`. On a plain-HTTP request it also sends `SameSite=None` as `Lax`, which a browser would drop
-   * otherwise.
+   * otherwise. A `__Secure-` or `__Host-` name, or `partitioned`, has no such fallback: on a plain-HTTP request it is
+   * refused.
+   *
+   * A browser takes `Secure` from `http://localhost`, so `true` serves local development as well.
    */
   secure?: boolean | 'auto'
 
@@ -57,8 +60,10 @@ export interface CookieSerializeOptions {
 /** What every cookie a server sets starts from, and how it decodes the ones it reads. */
 export interface CookieParseOptions extends Omit<CookieSerializeOptions, 'secret'> {
   /**
-   * Decodes a value read from a request. Returning `undefined` skips that cookie. Defaults to `decodeURIComponent`,
-   * keeping the raw value when it fails.
+   * Decodes a value read from a request. Defaults to `decodeURIComponent`, keeping the raw value when it fails.
+   *
+   * Returning `undefined` leaves the cookie out. The first cookie of a name decides, so a later one of the same name is
+   * not read in its place.
    */
   decode?: (value: string) => string | undefined
 }

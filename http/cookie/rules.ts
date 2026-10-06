@@ -58,6 +58,9 @@ export function isCookieName(name: string): boolean {
  * Covers the name, the prefixes (`__Secure-`, `__Host-`, and the `__Http-` and `__Host-Http-` that Chromium enforces),
  * `SameSite=None` and `Partitioned` without `Secure`, and the syntax and length of Domain and Path. Prefixes are
  * matched case-insensitively, as user agents match them (RFC 6265bis §5.4).
+ *
+ * It reads the cookie, not the request. Whether a browser takes a Domain the request's host does not match, a public
+ * suffix or an address among them, or `Secure` over plain HTTP away from localhost, is the browser's to decide.
  */
 export function cookieRuleViolation(name: string, attributes: CookieAttributes): string | undefined {
   return (
@@ -103,6 +106,11 @@ function attributeViolation({ domain, path }: CookieAttributes): string | undefi
 
   if (path && !PATH.test(path)) {
     return 'its Path may hold only spaces and printable US-ASCII characters other than ";" and "<"'
+  }
+
+  // RFC 6265bis §5.6.4: a user agent stores a cookie whose Path does not start with "/" at the page's own path.
+  if (path && !path.startsWith('/')) {
+    return 'its Path does not start with "/"'
   }
 
   // Both are ASCII by now, so each character is one octet.

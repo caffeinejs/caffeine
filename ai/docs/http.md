@@ -107,15 +107,24 @@ ctx.deleteCookie('theme') // with the domain and path it was set with
 
 ctx.cookie('cart', id, { signed: true }) // signed as the response goes out
 await ctx.req.signedCookie('cart') // the value; false when it does not verify; undefined when absent
+
+const result = await ctx.req.unsignCookie(ctx.req.cookie('cart') ?? '') // { valid, renew, value }
+if (result.valid && result.renew) {
+  ctx.cookie('cart', result.value, { signed: true }) // set again: signed with the first secret
+}
 ```
 
 - A cookie nobody scoped goes out with `Path=/` and `SameSite=Lax`. `.cookie(k => k.parseOptions({ ... }))` sets
   what every cookie starts from, and a call writing an option as `undefined` clears it. Under `.basePath('/api')`,
   `Path=/` reaches every application on the origin: scope a cookie with `path: ctx.req.basePath || '/'`.
 - `.cookie(k => k.secret(secret))` signs with HMAC through Web Crypto, in the format `@fastify/cookie` writes, so
-  cookies it signed keep verifying. A secret has at least 32 characters; `k.algorithm('SHA-512')` picks the hash.
-  `k.secret([current, previous])` rotates: the first signs and any verifies. Drop `previous` once the longest-lived
-  signed cookie has expired.
+  cookies it signed keep verifying. A secret has at least 32 characters; `k.algorithm('SHA-512')` picks the hash. A
+  signature covers the value alone: under one secret, a value signed for one cookie verifies under any other name, so
+  a cookie whose value must not move between names takes a secret of its own.
+- `k.secret([current, previous])` rotates: the first signs and any verifies. `ctx.req.unsignCookie(value)` answers
+  `{ valid, renew, value }`, as `@fastify/cookie`'s `unsignCookie` does, with `renew` when `previous` verified it: set
+  the cookie again, with the options it was set with, and it goes out signed with `current`. Drop `previous` once the
+  cookies it signed have been set again or have expired.
 - `k.signer(new MySigner())`, or the container key it is bound under — `k.signer(CookieSigner)` — signs with keys of
   the application's own. A key is resolved once per server, as it starts. A signer extends `CookieSigner`; its
   `unsign` answers `{ valid, renew, value }`, `renew` when a secret other than the first verified.
@@ -123,9 +132,12 @@ await ctx.req.signedCookie('cart') // the value; false when it does not verify; 
   `ctx.cookie(name, value, { secret })` and `await ctx.req.signedCookie(name, secret)`.
 - A cookie a browser would drop without a word is refused where it is set, with `ErrInvalidCookie`: a `__Host-`,
   `__Secure-`, `__Http-` or `__Host-Http-` name, in any case, without what its prefix needs; `SameSite=None` or
-  `Partitioned` without `Secure`; a Domain that is not a domain name, or a Path holding `;`, `<` or anything but
-  spaces and printable US-ASCII; a name and value over 4096 bytes. `secure: 'auto'` sets `Secure` on a request that
-  came over HTTPS — behind a proxy, with `trustProxy` — and sends `SameSite=None` as `Lax` over plain HTTP.
+  `Partitioned` without `Secure`; a Domain that is not a domain name, or a Path that does not start with `/` or holds
+  `;`, `<` or anything but spaces and printable US-ASCII; a name and value over 4096 bytes, its signature included.
+  Whether a browser takes a Domain for the request's host is left to it.
+- `secure: 'auto'` sets `Secure` on a request that came over HTTPS — behind a proxy, with `trustProxy` — and sends
+  `SameSite=None` as `Lax` over plain HTTP. A prefixed name or `partitioned` has no such fallback: over plain HTTP it
+  is refused. A browser takes `Secure` from `http://localhost`, so `secure: true` serves local development.
 - The cookies are written by the server's first `onSend` hook. One a later plugin's `onSend` sets still goes out;
   a signed one is refused with `ErrCookieTooLate`. A route of a plugin registered in `.serverCallback()` cannot set
   cookies at all: register that plugin with `.with(...)`.
@@ -148,7 +160,10 @@ Authentication cookies:
 
 Moving from the `@fastify/cookie` wrapper:
 
-- `ctx.req.signedCookie(...)` answers with a promise: `await` it.
+- `ctx.req.signedCookie(...)` answers with a promise: `await` it. `request.unsignCookie(value)` and
+  `reply.unsignCookie(value)` are `await ctx.req.unsignCookie(value)`.
+- Under `secure: 'auto'` over plain HTTP, `SameSite=None` goes out as `Lax`; `@fastify/cookie` wrote it as given, and
+  a browser dropped it.
 - A secret under 32 characters is refused, a `Buffer` secret is not taken, and an algorithm is named `SHA-256`,
   `SHA-384` or `SHA-512`.
 - Cookies default to `Path=/`, `expires: 0` is the epoch, and `$p.signedCookie` gives `false` for an empty value.

@@ -53,7 +53,7 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
    * Reads the settings from a node of the configuration tree, e.g. `config.app.cookie`.
    *
    * The node is read once, when each server is wired. A fluent method wins over what the node carries, and a
-   * {@link signer} over the node's secret.
+   * {@link signer} over the node's secret and algorithm.
    */
   config(config: Partial<CookieOptions>): this {
     this.#config = config
@@ -84,15 +84,19 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
    * Signs with a signer of the application's own, given as the instance or as the container key it resolves from.
    * A key is resolved once per server, as it starts.
    *
-   * @throws ErrCookieConfiguration when the server starts, if the key resolves to nothing or a {@link secret} is set
-   * too.
+   * @throws ErrCookieConfiguration when the server starts, if the key resolves to nothing, or a {@link secret} or an
+   * {@link algorithm} is set too.
    */
   signer(signer: CookieSigner | InjectionToken<CookieSigner>): this {
     this.#signer = signer
     return this
   }
 
-  /** The HMAC hash a {@link secret} signs with, and a secret handed to a single call. Defaults to `SHA-256`. */
+  /**
+   * The HMAC hash a {@link secret} signs with, and a secret handed to a single call. Defaults to `SHA-256`.
+   *
+   * @throws ErrCookieConfiguration when the server starts, if a {@link signer} is set too.
+   */
   algorithm(algorithm: CookieSigningAlgorithm): this {
     this.#algorithm = algorithm
     return this
@@ -111,9 +115,9 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
     return {
       enabled: this.#enabled ?? this.#config?.enabled ?? true,
       signer: this.#signer,
-      // A signer written in code is the last word over a secret the configuration carries.
+      // A signer written in code is the last word over a secret and an algorithm the configuration carries.
       secret: this.#secret ?? (this.#signer === undefined ? this.#config?.secret : undefined),
-      algorithm: this.#algorithm ?? this.#config?.algorithm,
+      algorithm: this.#algorithm ?? (this.#signer === undefined ? this.#config?.algorithm : undefined),
       parseOptions: this.#parseOptions ?? this.#config?.parseOptions,
     }
   }

@@ -55,9 +55,14 @@ Report these only if the framework's own docs promise otherwise.
 - Signed cookies (`http/cookie/`): every secret, configured or handed to a call, is at least 32 characters. A
   signature is checked for its exact length and canonical base64 before `crypto.subtle.verify`, which compares in
   constant time. A cookie a browser would drop — a broken `__Host-`/`__Secure-`/`__Http-` prefix, `SameSite=None` or
-  `Partitioned` without `Secure`, a Domain or Path cookie@2 cannot write — is refused where it is set, deletions
-  included. Error text never repeats a cookie value. `secure: 'auto'` follows `request.protocol`, so it trusts a
-  proxy only under `trustProxy`.
+  `Partitioned` without `Secure`, a Domain or Path cookie@2 cannot write, a Path not starting with `/` — is refused
+  where it is set, deletions included. Error text never repeats a cookie value. `secure: 'auto'` follows
+  `request.protocol`, so it trusts a proxy only under `trustProxy`.
+- A cookie signature covers the value alone, as `cookie-signature`'s does: under one secret, a value signed for one
+  cookie verifies under any other name. A cookie whose value must not move between names is signed with a secret of
+  its own. Signed-cookie rotation retires a secret through `ctx.req.unsignCookie`: on `renew`, the application sets
+  the cookie again and it goes out under the first secret, so the old one can go once the cookies it signed have been
+  set again or have expired.
 - Authentication cookies take every attribute from their scheme and pin `signed: false`; no attribute of the server's
   `parseOptions` reaches them, while their values pass through its `encode`/`decode` pair. Start-up refuses a
   scheme's cookie a browser would drop, two schemes writing one cookie name, and a cookie-based scheme on a server

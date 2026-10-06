@@ -21,6 +21,7 @@ import {
   newRouter,
   Ops,
   type Context,
+  type CookieSecret,
   type CookieUnsignResult,
 } from '../index.js'
 
@@ -83,6 +84,18 @@ const signing = (options?: Parameters<Context['cookie']>[2]) =>
 const reading = (secret?: string | string[]) =>
   newRouter('/read').get('/', async ctx => ({ tok: (await ctx.req.signedCookie('tok', secret)) ?? null }))
 
+/** Sets `tok` signed and answers what the call threw, so a test sees that it failed where it was set. */
+const settingSigned = (value: string) =>
+  newRouter('/set').get('/', ctx => {
+    try {
+      ctx.cookie('tok', value, { signed: true })
+    } catch (err) {
+      return { refused: (err as Error).name, message: (err as Error).message }
+    }
+
+    return { refused: null }
+  })
+
 /**
  * Reading cookies off the context. The cookie feature installs ahead of every plugin and parses on first read, so an
  * application neither registers anything nor has an order to get right.
@@ -137,6 +150,27 @@ describe('ctx.req.cookie()', () => {
 
     expect(await response.json()).toEqual({ a: 'X', all: { a: 'X', b: 'Y' } })
     expect(decoded).toBe(2)
+  })
+
+  // A value the decoder cannot read is not there to read, signed or not, and a later cookie of its name is not read in
+  // its place.
+  it('leaves out a cookie the decoder skips', async () => {
+    const routes = newRouter('/skip').get('/', async ctx => ({
+      all: ctx.req.cookie(),
+      signed: await ctx.req.signedCookie(),
+    }))
+
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.secret(SECRET).parseOptions({ decode: value => (value === 'unreadable' ? undefined : value) }))
+        .mount(routes),
+    )
+
+    const response = await app.fetch('/skip', {
+      headers: { cookie: `a=unreadable; a=${sign('planted', SECRET)}; b=1` },
+    })
+
+    expect(await response.json()).toEqual({ all: { b: '1' }, signed: { b: false } })
   })
 })
 
@@ -280,6 +314,79 @@ describe('signed cookies', () => {
     expect(response.headers.getSetCookie()).toEqual([])
     expect(loggedError(logged, 'Cannot set cookie "tok" signed: no secret is configured')).toBe(true)
   })
+
+  // Found by the call that set it, which can handle it, rather than as the response goes out, after the handler
+  // returned: that would answer 500 and take the response's other cookies with it.
+  it('refuses a signed value that fits only without its signature, where it is set', async () => {
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.secret(SECRET))
+        .mount(settingSigned('v'.repeat(4096 - 'tok'.length))),
+    )
+
+    expect(await (await app.fetch('/set')).json()).toEqual({
+      refused: 'ErrInvalidCookie',
+      message: 'Cannot set cookie "tok": its name and value come to 4140 bytes, past the 4096 a browser keeps',
+    })
+  })
+})
+
+// What `@fastify/cookie`'s README does to renew a cookie after a secret was rotated.
+describe('ctx.req.unsignCookie()', () => {
+  const renewing = (secret?: CookieSecret) =>
+    newRouter('/renew').get('/', async ctx => {
+      const result = await ctx.req.unsignCookie(ctx.req.cookie('tok') ?? '', secret)
+
+      if (result.valid && result.renew) {
+        ctx.cookie('tok', result.value, { signed: true, secret })
+      }
+
+      return result
+    })
+
+  const rotated = () =>
+    ready(
+      createWebApplication()
+        .cookie(k => k.secret([SECRET, OLDER]))
+        .mount(renewing()),
+    )
+
+  it('finds nothing to renew in a value the first secret signed', async () => {
+    const app = await rotated()
+
+    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
+
+    expect(await response.json()).toEqual({ valid: true, renew: false, value: 'value' })
+    expect(response.headers.getSetCookie()).toEqual([])
+  })
+
+  it('renews a value an older secret signed, under the first', async () => {
+    const app = await rotated()
+
+    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', OLDER)}` } })
+
+    expect(await response.json()).toEqual({ valid: true, renew: true, value: 'value' })
+    expect(unsign(cookieValue(response, 'tok')!, SECRET)).toEqual({ valid: true, renew: false, value: 'value' })
+  })
+
+  it('answers a value that does not verify as such, without rejecting', async () => {
+    const app = await rotated()
+
+    const response = await app.fetch('/renew', { headers: { cookie: 'tok=value.forged' } })
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ valid: false, renew: false, value: null })
+  })
+
+  // A tenant's own secrets rotate as the server's do, with no secret configured on the server at all.
+  it('verifies with the secrets the call hands over', async () => {
+    const app = await ready(createWebApplication().mount(renewing([SECRET, TENANT])))
+
+    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', TENANT)}` } })
+
+    expect(await response.json()).toEqual({ valid: true, renew: true, value: 'value' })
+    expect(unsign(cookieValue(response, 'tok')!, SECRET)).toEqual({ valid: true, renew: false, value: 'value' })
+  })
 })
 
 /** Signs by reversing the value, so a test can tell its signatures from any HMAC. */
@@ -370,6 +477,39 @@ describe('a signer of the application', () => {
     )
 
     expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
+  })
+
+  // The algorithm is the built-in signer's: written beside a signer of the application's own, it would go unused.
+  it('refuses to start with an algorithm set too', async () => {
+    const app = createWebApplication().cookie(k => k.signer(new ReversingSigner()).algorithm('SHA-512'))
+    close = () => app.close()
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      name: 'ErrCookieConfiguration',
+      message: expect.stringContaining('both a signer and an algorithm are configured'),
+    })
+  })
+
+  it('outranks the algorithm the configuration carries', async () => {
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.config({ algorithm: 'SHA-512' }).signer(new ReversingSigner()))
+        .mount(signing()),
+    )
+
+    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
+  })
+
+  // The built-in signer handed over without a secret signs only with one a call brings, as `.secret()` left unset does:
+  // a call that brings none is refused where it is made.
+  it('refuses a signed cookie at the call when the built-in signer it was handed has no secret', async () => {
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.signer(new HMACCookieSigner()))
+        .mount(settingSigned('value')),
+    )
+
+    expect(await (await app.fetch('/set')).json()).toMatchObject({ refused: 'ErrCookieConfiguration' })
   })
 })
 

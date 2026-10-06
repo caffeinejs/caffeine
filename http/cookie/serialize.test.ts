@@ -147,6 +147,36 @@ describe('what a cookie is refused for', () => {
   it('a name it cannot carry, without repeating it', () => {
     expect(() => line('set', 'a\nb', 'v')).toThrow(/^Cannot set a cookie with an invalid name: its name may hold/)
   })
+
+  // No URL encoding carries a lone surrogate; what `encodeURIComponent` throws for one, a URIError, stays inside.
+  it('a value holding a lone surrogate', () => {
+    let thrown: unknown
+
+    try {
+      line('set', 'id', 'a\uD800b')
+    } catch (err) {
+      thrown = err
+    }
+
+    expect(thrown).toBeInstanceOf(ErrInvalidCookie)
+    expect((thrown as Error).message).toBe(
+      'Cannot set cookie "id": its value holds a character that cannot be URL-encoded',
+    )
+    expect((thrown as Error).cause).toBeUndefined()
+  })
+})
+
+// JavaScript can hand a flag any value, and cookie@2 writes the flag for any truthy one: the rules judge what it writes.
+describe('a flag given as a truthy non-boolean', () => {
+  it('is refused as the flag it writes', () => {
+    expect(() => line('set', 'id', 'v', { partitioned: 1 as unknown as boolean })).toThrow('Partitioned needs Secure')
+  })
+
+  it('meets what a prefix needs as the flag it writes', () => {
+    expect(line('set', '__Host-id', 'v', { secure: 1 as unknown as boolean })).toBe(
+      '__Host-id=v; Path=/; Secure; SameSite=Lax',
+    )
+  })
 })
 
 describe('what an encoder throws', () => {
@@ -213,9 +243,20 @@ describe('parseCookies', () => {
     expect(parseCookies('a=x', value => value.toUpperCase())).toEqual({ a: 'X' })
   })
 
+  // A cookie planted from a sibling domain comes after the one the application set: it must not take the place of a
+  // first value the decoder cannot read.
+  it('leaves out a cookie the decoder answers undefined for, and not for the next of its name', () => {
+    const decode = (value: string) => (value === 'unreadable' ? undefined : value)
+
+    expect(parseCookies('a=unreadable; a=planted; b=1', decode)).toEqual({ b: '1' })
+  })
+
   // Cookie names are the client's to choose.
-  it('reaches no prototype through a name', () => {
-    const cookies = parseCookies('__proto__=x; constructor=y; toString=z', undefined)
+  it.each([
+    ['without a decoder', undefined],
+    ['with one', (value: string) => value],
+  ])('reaches no prototype through a name, %s', (_what, decode) => {
+    const cookies = parseCookies('__proto__=x; constructor=y; toString=z', decode)
 
     expect(cookies.__proto__).toBe('x')
     expect(cookies.constructor).toBe('y')

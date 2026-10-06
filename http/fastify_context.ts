@@ -16,7 +16,7 @@ import {
 } from './context.js'
 import type { CookieSerializeOptions } from './cookie/options.js'
 import { reopenCookieFlush, serverCookies } from './cookie/plugin.js'
-import type { CookieSecret } from './cookie/signer.js'
+import type { CookieSecret, CookieUnsignResult } from './cookie/signer.js'
 import { statusErrorBody } from './error/http.js'
 import type { FastifyPlatform, FastifyTypes } from './fastify_adapter.js'
 import type { RouteValidationSchema } from './routing/spec.js'
@@ -300,6 +300,10 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
     const values = await Promise.all(names.map(cookie => server.verify(cookies[cookie]!, undefined)))
 
     return Object.fromEntries(names.map((cookie, i) => [cookie, values[i]]))
+  }
+
+  async unsignCookie(value: string, secret?: CookieSecret): Promise<CookieUnsignResult> {
+    return serverCookies(this.request, 'unsign a cookie').unsign(value, secret)
   }
 
   /** Parsed once per request, on first read. */

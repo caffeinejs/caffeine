@@ -97,6 +97,11 @@ describe('cookieRuleViolation', () => {
       expect(cookieRuleViolation('id', { path })).toBeUndefined()
     })
 
+    // RFC 6265bis §5.6.4: a user agent stores such a cookie at the page's own path, not at the one it names.
+    it.each(['foo', 'a/b', ' /x'])('refuses the Path %j, which does not start with "/"', path => {
+      expect(cookieRuleViolation('id', { path })).toBe('its Path does not start with "/"')
+    })
+
     it.each(['/a;b', '/a<b', '/a\nb', '/a\u007Fb', '/é'])('refuses the Path %j', path => {
       expect(cookieRuleViolation('id', { path })).toBe(
         'its Path may hold only spaces and printable US-ASCII characters other than ";" and "<"',

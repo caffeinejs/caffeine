@@ -21,7 +21,15 @@ import {
 } from './_serialize.js'
 import { ErrCookieConfiguration, ErrCookiesDisabled, ErrCookieTooLate } from './errors.js'
 import type { CookieParseOptions, CookieSerializeOptions } from './options.js'
-import { CookieSigner, HMACCookieSigner, secretList, type CookieSecret, type CookieSigningAlgorithm } from './signer.js'
+import {
+  CookieSigner,
+  HMACCookieSigner,
+  kSigning,
+  secretList,
+  type CookieSecret,
+  type CookieSigningAlgorithm,
+  type CookieUnsignResult,
+} from './signer.js'
 
 /** What the cookie plugin of one server runs on. */
 export interface CookiePluginOptions {
@@ -30,8 +38,18 @@ export interface CookiePluginOptions {
   signer?: CookieSigner | InjectionToken<CookieSigner>
   /** Builds the HMAC signer. Refused together with {@link signer}. */
   secret?: CookieSecret
+  /** The HMAC signer's hash. Refused together with {@link signer}. */
   algorithm?: CookieSigningAlgorithm
   parseOptions?: CookieParseOptions
+}
+
+/** The signer a server settled on as it started, and what it knows of it. */
+interface ResolvedSigner {
+  readonly signer: CookieSigner
+  /** Whether it signs without a secret handed to the call. */
+  readonly signsByDefault: boolean
+  /** How long its signatures are: known for the built-in signer, not for one of the application's. */
+  readonly signatureLength: number | undefined
 }
 
 const kServerCookies = Symbol('caffeine.http.cookies')
@@ -65,14 +83,17 @@ interface CookieInstance {
 export class ServerCookies {
   readonly #signer: CookieSigner
   readonly #signsByDefault: boolean
+  // A stand-in for the signature, when its length is known: a dot and as many base64 characters.
+  readonly #signature: string | undefined
   readonly #defaults: CookieSerializeOptions
   readonly #decode: ((value: string) => string | undefined) | undefined
 
-  constructor(signer: CookieSigner, signsByDefault: boolean, parseOptions: CookieParseOptions | undefined) {
+  constructor(resolved: ResolvedSigner, parseOptions: CookieParseOptions | undefined) {
     const { defaults, decode } = cookieDefaults(parseOptions)
 
-    this.#signer = signer
-    this.#signsByDefault = signsByDefault
+    this.#signer = resolved.signer
+    this.#signsByDefault = resolved.signsByDefault
+    this.#signature = resolved.signatureLength === undefined ? undefined : `.${'A'.repeat(resolved.signatureLength)}`
     this.#defaults = defaults
     this.#decode = decode
   }
@@ -83,13 +104,22 @@ export class ServerCookies {
   }
 
   /**
-   * The value `signed` carries, or `false` when it does not verify: with `secret` when one is given, otherwise with
-   * the server's signer.
+   * What verifying `signed` found: with `secret` when one is given, otherwise with the server's signer. A value that
+   * does not verify is a result, never a rejection.
+   *
+   * @throws ErrCookieConfiguration when there is nothing to verify with.
+   */
+  unsign(signed: string, secret: CookieSecret | undefined): Promise<CookieUnsignResult> {
+    return this.#signer.unsign(signed, secret)
+  }
+
+  /**
+   * The value `signed` carries, or `false` when it does not verify.
    *
    * @throws ErrCookieConfiguration when there is nothing to verify with.
    */
   async verify(signed: string, secret: CookieSecret | undefined): Promise<string | false> {
-    const result = await this.#signer.unsign(signed, secret)
+    const result = await this.unsign(signed, secret)
 
     return result.valid ? result.value : false
   }
@@ -161,7 +191,10 @@ export class ServerCookies {
       )
     }
 
-    assertWritable(op, prepared)
+    // Checked as it will be written, with a stand-in for the signature it does not have yet. The built-in signer's
+    // length is known, and its base64 grows only when the value itself needs URL-encoding, which the flush still
+    // catches. A custom signer's output is checked when the response goes out, its attributes here.
+    assertWritable(op, prepared, this.#signature === undefined ? '' : `${value}${this.#signature}`)
     pendingOf(cookieReply).set(prepared.key, { op, prepared, value, line: undefined })
   }
 
@@ -239,8 +272,8 @@ export class ServerCookies {
  * reads, and writes each response's cookies from a root `onSend` hook — which runs ahead of every hook a later plugin
  * or a route adds, so one that inspects `Set-Cookie`, as HTTP caching does, sees them.
  *
- * @throws ErrCookieConfiguration while the server starts, when the signer cannot be had: both a signer and a secret
- * given, a key nothing is bound to, a short secret.
+ * @throws ErrCookieConfiguration while the server starts, when the signer cannot be had: a signer given with a secret
+ * or an algorithm, a key nothing is bound to, a short secret.
  */
 export function cookiePlugin(options: CookiePluginOptions): FastifyPluginAsync {
   return fp(
@@ -249,8 +282,7 @@ export function cookiePlugin(options: CookiePluginOptions): FastifyPluginAsync {
         return
       }
 
-      const { signer, signsByDefault } = resolveSigner(instance, options)
-      const cookies = new ServerCookies(signer, signsByDefault, options.parseOptions)
+      const cookies = new ServerCookies(resolveSigner(instance, options), options.parseOptions)
 
       instance.decorate(kServerCookies, cookies)
       instance.decorateReply(kPendingCookies, null)
@@ -298,14 +330,11 @@ export function reopenCookieFlush(reply: FastifyReply): void {
   }
 }
 
-function resolveSigner(
-  instance: FastifyInstance,
-  options: CookiePluginOptions,
-): { signer: CookieSigner; signsByDefault: boolean } {
+function resolveSigner(instance: FastifyInstance, options: CookiePluginOptions): ResolvedSigner {
   const { signer, secret, algorithm } = options
 
   if (signer === undefined) {
-    return { signer: new HMACCookieSigner({ secret, algorithm }), signsByDefault: secret !== undefined }
+    return described(new HMACCookieSigner({ secret, algorithm }))
   }
 
   if (secret !== undefined) {
@@ -315,8 +344,18 @@ function resolveSigner(
     )
   }
 
+  if (algorithm !== undefined) {
+    throw new ErrCookieConfiguration(
+      'Cannot install cookies: both a signer and an algorithm are configured' +
+        solutions(
+          'Keep the signer: it signs as it was built to',
+          'Keep the algorithm: it is the hash of the HMAC signer',
+        ),
+    )
+  }
+
   if (!isValidKey<CookieSigner>(signer)) {
-    return { signer: assertSigner(signer), signsByDefault: true }
+    return described(assertSigner(signer))
   }
 
   const resolved = instance.$container.getOptional(signer)
@@ -327,7 +366,18 @@ function resolveSigner(
     )
   }
 
-  return { signer: assertSigner(resolved), signsByDefault: true }
+  return described(assertSigner(resolved))
+}
+
+// The built-in signer tells whether it has secrets of its own and how long its signatures are. An application's signer
+// tells neither, and is taken to sign by default.
+function described(signer: CookieSigner): ResolvedSigner {
+  if (signer instanceof HMACCookieSigner) {
+    const { configured, signatureLength } = signer[kSigning]
+    return { signer, signsByDefault: configured, signatureLength }
+  }
+
+  return { signer, signsByDefault: true, signatureLength: undefined }
 }
 
 function assertSigner(value: unknown): CookieSigner {

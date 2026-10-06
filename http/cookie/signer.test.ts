@@ -178,6 +178,22 @@ describe('HMACCookieSigner', () => {
       expect(importKey).toHaveBeenCalledTimes(66)
     })
 
+    // A tenant's secret in steady use stays imported while secrets used once come and go.
+    it('lets go of the secret used least recently, not the one imported first', async () => {
+      const signer = new HMACCookieSigner()
+      const secrets = Array.from({ length: 65 }, (_, i) => `${OTHER}-${i}`)
+      const importKey = vi.spyOn(crypto.subtle, 'importKey')
+
+      for (const secret of secrets.slice(0, 64)) {
+        await signer.sign('v', secret)
+      }
+      await signer.sign('v', secrets[0])
+      await signer.sign('v', secrets[64])
+      await signer.sign('v', secrets[0])
+
+      expect(importKey).toHaveBeenCalledTimes(65)
+    })
+
     it('is held to the same floor', async () => {
       await expect(new HMACCookieSigner().sign('v', 'short')).rejects.toBeInstanceOf(ErrCookieConfiguration)
     })
