@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
 import { Claim } from '../../../index.js'
-import { encodeSession, decodeSession, claimsToSession } from './session_store.js'
+import { sealCookie } from './_sealed_cookie.js'
+import { encodeSession, decodeSession, claimsToSession, decodeTicketRef, encodeTicketRef } from './session_store.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
 import { encodeState, decodeState } from './state_store.js'
 
@@ -56,6 +57,25 @@ describe('session_store', () => {
   it('decode rejects a session token presented as state', async () => {
     const token = await encodeSession(SESSION, SECRET, SCHEME, 3600)
     await expect(decodeState(token, SECRET, SCHEME)).rejects.toThrow()
+  })
+})
+
+describe('ticket references', () => {
+  it('carry the key of the ticket they stand for', async () => {
+    const ref = await encodeTicketRef('ticket-1', SECRET, SCHEME, 3600)
+
+    await expect(decodeTicketRef(ref, SECRET, SCHEME)).resolves.toBe('ticket-1')
+  })
+
+  // A reference that names no ticket would look one up by nothing.
+  it.each<[string, Record<string, unknown>]>([
+    ['without a key', {}],
+    ['with an empty key', { key: '' }],
+    ['with a key that is not a string', { key: 42 }],
+  ])('are refused %s', async (_what, payload) => {
+    const ref = await sealCookie(payload, 'oidc-ticket+jwt', SECRET, SCHEME, 3600)
+
+    await expect(decodeTicketRef(ref, SECRET, SCHEME)).rejects.toThrow('Ticket reference cookie is missing its key')
   })
 })
 

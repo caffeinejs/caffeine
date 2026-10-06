@@ -110,6 +110,24 @@ describe('HMACCookieSigner', () => {
 
       await expect(signer.unsign(longer)).resolves.toEqual(invalid)
     })
+
+    // The contract is a string, but a caller in JavaScript can hand over anything.
+    it('for a value that is not a string', async () => {
+      await expect(signer.unsign(42 as unknown as string)).resolves.toEqual(invalid)
+    })
+  })
+
+  // The signer is built once, as the server starts, and its keys are imported once: never on every request.
+  it('imports the keys of its secrets on first use, and once', async () => {
+    const importKey = vi.spyOn(crypto.subtle, 'importKey')
+    const signer = new HMACCookieSigner({ secret: [SECRET, OLDER] })
+
+    expect(importKey).not.toHaveBeenCalled()
+
+    await signer.sign('a')
+    await signer.unsign(await signer.sign('b'))
+
+    expect(importKey).toHaveBeenCalledTimes(2)
   })
 
   describe('a secret handed to the call', () => {

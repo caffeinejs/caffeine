@@ -123,8 +123,9 @@ await ctx.req.signedCookie('cart') // the value; false when it does not verify; 
   `ctx.cookie(name, value, { secret })` and `await ctx.req.signedCookie(name, secret)`.
 - A cookie a browser would drop without a word is refused where it is set, with `ErrInvalidCookie`: a `__Host-`,
   `__Secure-`, `__Http-` or `__Host-Http-` name, in any case, without what its prefix needs; `SameSite=None` or
-  `Partitioned` without `Secure`; a name and value over 4096 bytes. `secure: 'auto'` sets `Secure` on a request
-  that came over HTTPS — behind a proxy, with `trustProxy` — and sends `SameSite=None` as `Lax` over plain HTTP.
+  `Partitioned` without `Secure`; a Domain that is not a domain name, or a Path holding `;`, `<` or anything but
+  spaces and printable US-ASCII; a name and value over 4096 bytes. `secure: 'auto'` sets `Secure` on a request that
+  came over HTTPS — behind a proxy, with `trustProxy` — and sends `SameSite=None` as `Lax` over plain HTTP.
 - The cookies are written by the server's first `onSend` hook. One a later plugin's `onSend` sets still goes out;
   a signed one is refused with `ErrCookieTooLate`. A route of a plugin registered in `.serverCallback()` cannot set
   cookies at all: register that plugin with `.with(...)`.
@@ -136,11 +137,13 @@ await ctx.req.signedCookie('cart') // the value; false when it does not verify; 
 Authentication cookies:
 
 - `sessionSecret` takes a list on the cookie scheme, OIDC, OAuth and GitHub: the first seals and any opens, and a
-  session an older secret opened is sealed again under the first, keeping its expiry. From the environment:
-  `AUTH__SCHEMES__<NAME>__SESSION_SECRET__0`, `__1`, and on.
-- Their cookies take every attribute from the scheme and none from `parseOptions`. The cookie scheme takes
-  `domain(...)`, `partitioned()` and `priority(...)`; OIDC and OAuth take `cookieDomain(...)`, `cookiePartitioned()`
-  and `cookiePriority(...)`, and a name they derive switches from `__Host-` to `__Secure-` when given a domain.
+  session an older secret opened is sealed again under the first, keeping its expiry. A cookie-scheme session sealed
+  by an earlier release, which does not record whether its cookie outlives the browser, is left to run out under the
+  older secret. From the environment: `AUTH__SCHEMES__<NAME>__SESSION_SECRET__0`, `__1`, and on.
+- Their cookies take every attribute from the scheme and none from `parseOptions`; their values still pass through
+  its `encode` and `decode`, which must round-trip. The cookie scheme takes `domain(...)`, `partitioned()` and
+  `priority(...)`; OIDC and OAuth take `cookieDomain(...)`, `cookiePartitioned()` and `cookiePriority(...)`, and a
+  name they derive switches from `__Host-` to `__Secure-` when given a domain.
 - Start-up refuses a cookie a browser would drop and two schemes writing cookies of one name.
 
 Moving from the `@fastify/cookie` wrapper:
@@ -151,8 +154,8 @@ Moving from the `@fastify/cookie` wrapper:
 - Cookies default to `Path=/`, `expires: 0` is the epoch, and `$p.signedCookie` gives `false` for an empty value.
 - `request.cookies` and `reply.setCookie` exist only when the application registers `@fastify/cookie`, which no
   longer configures `ctx.req.signedCookie`.
-- Authentication cookies ignore `parseOptions`; `addStrategy(name, fn)` with a function that is not a class takes it
-  as a container key.
+- Authentication cookies take no attribute from `parseOptions`, only its `encode` and `decode`;
+  `addStrategy(name, fn)` with a function that is not a class takes it as a container key.
 
 ## Programmatic routers
 

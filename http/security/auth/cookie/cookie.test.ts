@@ -550,6 +550,12 @@ describe('CookieAuthenticationHandler', () => {
         'cookieName "my session": its name may hold only',
       ],
       [
+        'a domain a header cannot carry',
+        o => o.domain('bad domain'),
+        'cookieName "caf.session": its Domain is not a valid domain name',
+      ],
+      ['a path a header cannot carry', o => o.path('/a;b'), 'cookieName "caf.session": its Path may hold only'],
+      [
         'a remember-me name of the session cookie',
         o => o.rememberMe().rememberMeCookieName('caf.session'),
         'cookieName and rememberMeCookieName are both "caf.session"',
@@ -566,6 +572,15 @@ describe('CookieAuthenticationHandler', () => {
 
       expect(() => options.build()).toThrow(
         expect.objectContaining({ name: 'ErrAuthConfiguration', message: expect.stringContaining(message) }),
+      )
+    })
+
+    it('without a sessionSecret', () => {
+      expect(() => new CookieAuthenticationOptionsBuilder().build()).toThrow(
+        expect.objectContaining({
+          name: 'ErrAuthConfiguration',
+          message: 'Cannot build CookieAuthenticationOptions: sessionSecret is required',
+        }),
       )
     })
   })
@@ -627,8 +642,9 @@ describe('CookieAuthenticationHandler', () => {
       expect(resealed.claims.claims.map(claim => claim.value)).toEqual(['u1', 'admin'])
     })
 
-    // Sealed by a version that did not record persistence: one that outlives a session cookie was persistent.
-    it('reads the persistence of a session sealed before it was recorded from its lifetime', async () => {
+    // Sealed by a version that did not record persistence. Its lifetime cannot tell it once `maxAge` may have changed,
+    // and guessing wrong would keep a session cookie past the browser: it opens with the older secret until it expires.
+    it('leaves a session sealed before its persistence was recorded as it is', async () => {
       const legacy = await sealSession(
         { scheme: 'Cookie', claims: [{ type: 'sub', value: 'u1', issuer: '' }], roleClaimType: 'roles' },
         SECRET,
@@ -637,9 +653,31 @@ describe('CookieAuthenticationHandler', () => {
       )
       const { ctx, setCookie } = makeCtx(legacy)
 
-      await rotated().authenticate(ctx)
+      expect((await rotated().authenticate(ctx)).succeeded).toBe(true)
+      expect(setCookie).not.toHaveBeenCalled()
+    })
 
-      expect((setCookie.mock.calls[0]![2] as { maxAge?: number }).maxAge).toBeGreaterThan(EIGHT_HOURS)
+    // The hook may take until the session runs out, which leaves no time to seal it again for.
+    it('does not seal again a session that ran out while validatePrincipal decided', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+
+      try {
+        vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+        const { value } = await sealedFor(false)
+        const { ctx, setCookie } = makeCtx(value)
+
+        const result = await rotated(o =>
+          o.validatePrincipal((_ctx, opened) => {
+            vi.setSystemTime(new Date('2026-01-01T08:00:00Z'))
+            return opened
+          }),
+        ).authenticate(ctx)
+
+        expect(result.succeeded).toBe(true)
+        expect(setCookie).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

@@ -125,14 +125,14 @@ describe('sealed tokens', () => {
       await expect(unsealJWT(sealedNew, TYP, NEWER, INFO)).resolves.toMatchObject({ sub: 'ada' })
     })
 
-    it('tells when the token was sealed and when it expires', async () => {
+    it('tells when the token expires', async () => {
       vi.useFakeTimers({ toFake: ['Date'] })
       vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
       const token = await sealJWT({ sub: 'ada' }, TYP, SECRET, INFO, 60)
 
       const opened = await openJWT(token, TYP, SECRET, INFO)
 
-      expect(opened.exp - opened.iat).toBe(60)
+      expect(opened.exp).toBe(Date.UTC(2026, 0, 1) / 1000 + 60)
     })
 
     // Only a key that could not decrypt the token is worth another try. An expired token was decrypted: had the next

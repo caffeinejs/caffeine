@@ -1,24 +1,26 @@
 import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
 import { cookieRuleViolation } from '../../../../cookie/rules.js'
-import { MIN_COOKIE_SECRET_LENGTH, type CookieSecret } from '../../../../cookie/signer.js'
+import { MIN_COOKIE_SECRET_LENGTH } from '../../../../cookie/signer.js'
 import { isNavigation } from '../../../../navigation.js'
 import type { AuthenticationProperties } from '../../ticket.js'
+import { sealingSecrets, type SealingSecrets } from '../sealed_jwt.js'
 import { ErrOAuthConfiguration } from './errors.js'
 
 /**
- * What is wrong with a strategy's `sessionSecret`, or `undefined`. A secret below the floor leaves the derived cookie
+ * What is wrong with a scheme's `sessionSecret`, or `undefined`. A secret below the floor leaves the derived cookie
  * keys brute-forceable. A failure names a secret of a list by its position, never its value.
  */
-export function sessionSecretViolation(secret: CookieSecret): string | undefined {
-  const secrets = typeof secret === 'string' ? [secret] : secret
+export function sessionSecretViolation(secret: SealingSecrets): string | undefined {
+  const secrets = sealingSecrets(secret)
   if (secrets.length === 0) {
     return 'the list of sessionSecret is empty'
   }
 
+  const listed = Array.isArray(secret)
   for (let i = 0; i < secrets.length; i++) {
     if (secrets[i]!.length < MIN_COOKIE_SECRET_LENGTH) {
-      const which = typeof secret === 'string' ? 'sessionSecret' : `sessionSecret ${i} of the list`
+      const which = listed ? `sessionSecret ${i} of the list` : 'sessionSecret'
       return `${which} must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`
     }
   }
@@ -225,6 +227,13 @@ export function cookieName(
   protocol: string,
   domain?: string,
 ): string {
-  const prefix = !secure ? `__${protocol}` : domain === undefined ? `__Host-${protocol}` : `__Secure-${protocol}`
-  return `${prefix}_${sanitizeSchemeName(scheme)}_${kind}`
+  return `${cookiePrefix(secure, domain)}${protocol}_${sanitizeSchemeName(scheme)}_${kind}`
+}
+
+function cookiePrefix(secure: boolean, domain: string | undefined): string {
+  if (!secure) {
+    return '__'
+  }
+
+  return domain === undefined ? '__Host-' : '__Secure-'
 }

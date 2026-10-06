@@ -226,6 +226,11 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
         o => o.secureCookie(false).cookiePartitioned(),
         'sessionCookieName "__oidc_OIDC_session": Partitioned needs Secure',
       ],
+      [
+        'a domain a header cannot carry',
+        o => o.cookieDomain('bad domain'),
+        'sessionCookieName "__Secure-oidc_OIDC_session": its Domain is not a valid domain name',
+      ],
     ])('%s', (_what, configure, message) => {
       expect(() => configure(minimal()).build(SCHEME)).toThrow(`Cannot configure OIDC: ${message}`)
     })

@@ -49,15 +49,19 @@ Report these only if the framework's own docs promise otherwise.
   `unsealJWT` pins `typ`; sealing keys are HKDF-SHA256 per purpose and scheme (`internal/sealed_jwt.ts`).
 - Sealed-cookie rotation: the first secret seals and any opens. `openJWT` tries the next secret only on
   `ERR_JWE_DECRYPTION_FAILED`, so an expired or wrong-purpose token stops at the key that opened it. A re-issue keeps
-  the original `exp`, so an old secret can be dropped once the longest session has run out.
+  the original `exp`, so an old secret can be dropped once the longest session has run out. A cookie-scheme session
+  that does not record whether it is persistent is never re-issued, so rotation cannot make a session cookie outlive
+  the browser.
 - Signed cookies (`http/cookie/`): every secret, configured or handed to a call, is at least 32 characters. A
   signature is checked for its exact length and canonical base64 before `crypto.subtle.verify`, which compares in
   constant time. A cookie a browser would drop — a broken `__Host-`/`__Secure-`/`__Http-` prefix, `SameSite=None` or
-  `Partitioned` without `Secure` — is refused where it is set, deletions included. Error text never repeats a cookie
-  value. `secure: 'auto'` follows `request.protocol`, so it trusts a proxy only under `trustProxy`.
-- Authentication cookies take every attribute from their scheme and pin `signed: false`; the server's `parseOptions`
-  never reach them. Start-up refuses a scheme's cookie a browser would drop, two schemes writing one cookie name, and
-  a cookie-based scheme on a server whose cookies are off.
+  `Partitioned` without `Secure`, a Domain or Path cookie@2 cannot write — is refused where it is set, deletions
+  included. Error text never repeats a cookie value. `secure: 'auto'` follows `request.protocol`, so it trusts a
+  proxy only under `trustProxy`.
+- Authentication cookies take every attribute from their scheme and pin `signed: false`; no attribute of the server's
+  `parseOptions` reaches them, while their values pass through its `encode`/`decode` pair. Start-up refuses a
+  scheme's cookie a browser would drop, two schemes writing one cookie name, and a cookie-based scheme on a server
+  whose cookies are off.
 - Secret comparisons use `timingSafeEqual` after a length check: `tokenMatches`, `assertAccessTokenHash`, the
   scrypt `ScryptPasswordHasher`.
 - A replayed remember-me or refresh token outside the grace window removes its whole series.

@@ -1,12 +1,11 @@
 import type { Context } from '../../../context.js'
 import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
 import { cookieRuleViolation } from '../../../cookie/rules.js'
-import { MIN_COOKIE_SECRET_LENGTH } from '../../../cookie/signer.js'
 import { solutions } from '../../../error/util.js'
 import type { Principal } from '../../index.js'
 import { ErrAuthConfiguration } from '../errors.js'
-import type { ChallengeMode } from '../internal/remote/config.js'
-import { sealingSecrets, type SealingSecrets } from '../internal/sealed_jwt.js'
+import { sessionSecretViolation, type ChallengeMode } from '../internal/remote/config.js'
+import type { SealingSecrets } from '../internal/sealed_jwt.js'
 
 export interface CookieAuthenticationOptions {
   /**
@@ -271,19 +270,9 @@ export class CookieAuthenticationOptionsBuilder {
     // The same HKDF-SHA256 into dir/A256GCM that the OAuth-family strategies seal their cookies with, so
     // the same floor applies: below it the derived key is brute-forceable and the session cookie is
     // forgeable. Enforced here rather than trusted to the caller because a short secret fails silently.
-    const secrets = sealingSecrets(this.#options.sessionSecret)
-    if (secrets.length === 0) {
-      throw new ErrAuthConfiguration('Cannot build CookieAuthenticationOptions: the list of sessionSecret is empty')
-    }
-
-    const listed = Array.isArray(this.#options.sessionSecret)
-    for (let i = 0; i < secrets.length; i++) {
-      if (secrets[i]!.length < MIN_COOKIE_SECRET_LENGTH) {
-        const which = listed ? `sessionSecret ${i} of the list` : 'sessionSecret'
-        throw new ErrAuthConfiguration(
-          `Cannot build CookieAuthenticationOptions: ${which} must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`,
-        )
-      }
+    const secretViolation = sessionSecretViolation(this.#options.sessionSecret)
+    if (secretViolation !== undefined) {
+      throw new ErrAuthConfiguration(`Cannot build CookieAuthenticationOptions: ${secretViolation}`)
     }
 
     // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path

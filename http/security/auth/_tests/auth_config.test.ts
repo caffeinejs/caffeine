@@ -302,7 +302,11 @@ describe('authentication configuration', () => {
                 usePkce: $t.Optional($t.Boolean()),
                 sessionSecret: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
                 domain: $t.Optional($t.String()),
+                partitioned: $t.Optional($t.Boolean()),
                 priority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
+                cookieDomain: $t.Optional($t.String()),
+                cookiePartitioned: $t.Optional($t.Boolean()),
+                cookiePriority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
               }),
             ),
           ),
@@ -377,6 +381,7 @@ describe('authentication configuration', () => {
             AUTH__SCHEMES__COOKIE__SESSION_SECRET__0: NEWER,
             AUTH__SCHEMES__COOKIE__SESSION_SECRET__1: OLDER,
             AUTH__SCHEMES__COOKIE__DOMAIN: 'app.test',
+            AUTH__SCHEMES__COOKIE__PARTITIONED: 'true',
             AUTH__SCHEMES__COOKIE__PRIORITY: 'high',
           }),
         )
@@ -397,6 +402,7 @@ describe('authentication configuration', () => {
 
       const reissued = res.headers.getSetCookie().find(line => line.startsWith('caf.session='))!
       expect(reissued).toContain('Domain=app.test')
+      expect(reissued).toContain('Partitioned')
       expect(reissued).toContain('Priority=High')
 
       const cookie = reissued.slice(0, reissued.indexOf(';'))
@@ -414,6 +420,9 @@ describe('authentication configuration', () => {
             AUTH__SCHEMES__OAUTH__CLIENT_ID: 'env-client',
             AUTH__SCHEMES__OAUTH__CALLBACK_URL: 'https://app.test/signin/callback',
             AUTH__SCHEMES__OAUTH__USE_PKCE: 'false',
+            AUTH__SCHEMES__OAUTH__COOKIE_DOMAIN: 'app.test',
+            AUTH__SCHEMES__OAUTH__COOKIE_PARTITIONED: 'true',
+            AUTH__SCHEMES__OAUTH__COOKIE_PRIORITY: 'high',
           }),
         )
         .build().config
@@ -447,6 +456,12 @@ describe('authentication configuration', () => {
       expect(authorization.searchParams.get('client_id')).toBe('env-client')
       expect(authorization.searchParams.get('redirect_uri')).toBe('https://app.test/signin/callback')
       expect(authorization.searchParams.has('code_challenge')).toBe(false)
+
+      // The flow's state cookie is scoped as configured, and given a domain it is named "__Secure-", not "__Host-".
+      const state = res.headers.getSetCookie().find(line => line.startsWith('__Secure-oauth2_oauth_state.'))!
+      expect(state).toContain('Domain=app.test')
+      expect(state).toContain('Partitioned')
+      expect(state).toContain('Priority=High')
 
       await app.close()
     })

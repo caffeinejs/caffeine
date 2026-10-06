@@ -16,6 +16,9 @@ import {
   Authentication,
   authentication,
   Authorization,
+  CookieAuthenticationHandler,
+  CookieAuthenticationOptionsBuilder,
+  ErrAuthenticationCookies,
   healthProbes,
 } from '../../index.js'
 
@@ -368,6 +371,20 @@ describe('an application whose scheme reads cookies', () => {
       name: 'ErrAuthenticationCookies',
       message: expect.stringContaining('authentication scheme "Cookie" keeps its session in a cookie'),
     })
+    await app.close()
+  })
+
+  it('refuses a cookie scheme handed over built, too', async () => {
+    const handler = new CookieAuthenticationHandler(
+      'session',
+      new CookieAuthenticationOptionsBuilder().sessionSecret(secret).build(),
+    )
+    const app = createWebApplication()
+      .cookie(k => k.enabled(false))
+      .install(Authentication(auth => auth.addStrategy('session', handler)))
+      .with(authentication())
+
+    await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrAuthenticationCookies)
     await app.close()
   })
 

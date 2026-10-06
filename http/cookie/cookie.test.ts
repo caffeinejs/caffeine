@@ -241,6 +241,31 @@ describe('signed cookies', () => {
     expect(await (await app.fetch('/read', { headers: { cookie: `tok=${tok}` } })).json()).toEqual({ tok: 'value' })
   })
 
+  // `false` says the cookie came and did not verify; `undefined` says it never came.
+  it('verifies every cookie the request carries, read without a name', async () => {
+    const routes = newRouter('/all').get('/', async ctx => ctx.req.signedCookie())
+
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.secret(SECRET))
+        .mount(routes),
+    )
+
+    const response = await app.fetch('/all', { headers: { cookie: `good=${sign('value', SECRET)}; forged=value.sig` } })
+
+    expect(await response.json()).toEqual({ good: 'value', forged: false })
+  })
+
+  it('answers undefined for a signed cookie the request did not send', async () => {
+    const app = await ready(
+      createWebApplication()
+        .cookie(k => k.secret(SECRET))
+        .mount(reading()),
+    )
+
+    expect(await (await app.fetch('/read')).json()).toEqual({ tok: null })
+  })
+
   it('refuses a signed cookie with nothing to sign it with, where it is set', async () => {
     const logged: LogEntry[] = []
     const app = await ready(
@@ -317,6 +342,18 @@ describe('a signer of the application', () => {
     await expect(app.bootstrap()).rejects.toMatchObject({
       name: 'ErrCookieConfiguration',
       message: expect.stringContaining('both a signer and a secret are configured'),
+    })
+  })
+
+  // Found as the server starts, not as the first signed cookie fails to verify.
+  it('refuses to start with a signer that cannot verify', async () => {
+    const signsOnly = { sign: async (value: string) => value } as unknown as CookieSigner
+    const app = createWebApplication().cookie(k => k.signer(signsOnly))
+    close = () => app.close()
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      name: 'ErrCookieConfiguration',
+      message: expect.stringContaining('the signer has no "sign" and "unsign" methods'),
     })
   })
 
@@ -771,6 +808,24 @@ describe('the cookie pickers', () => {
     const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ valid: false })
+  })
+
+  it('injects every signed cookie via signedCookie() picker without a name', async () => {
+    @Controller('/ck')
+    class AllSignedController {
+      @Get('/all-signed')
+      @Args([$p.signedCookie()])
+      get(cookies: Record<string, string | false>) {
+        return cookies
+      }
+    }
+    void [AllSignedController]
+
+    const app = await ready(createWebApplication().cookie(k => k.secret(SECRET)))
+
+    const res = await app.fetch('/ck/all-signed', { headers: { Cookie: `a=${sign('one', SECRET)}; b=badvalue.sig` } })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ a: 'one', b: false })
   })
 
   it('setCookie helper sets a Set-Cookie header on the response', async () => {

@@ -149,6 +149,45 @@ describe('what a cookie is refused for', () => {
   })
 })
 
+describe('what an encoder throws', () => {
+  // A TypeError reads like one of cookie@2's, and its message may repeat the value just as theirs do.
+  it('is refused without its message, when it is a TypeError', () => {
+    let thrown: unknown
+
+    try {
+      line('set', 'id', 'card=4111', {
+        encode: value => {
+          throw new TypeError(`cannot encode ${value}`)
+        },
+      })
+    } catch (err) {
+      thrown = err
+    }
+
+    expect(thrown).toBeInstanceOf(ErrInvalidCookie)
+    expect((thrown as Error).message).toBe('Cannot set cookie "id": it cannot be written as a Set-Cookie header')
+    expect((thrown as Error).cause).toBeUndefined()
+  })
+
+  // The encoder is the application's, and so is any other error it throws: it reaches the caller as it was thrown.
+  it('passes through, when it is not a TypeError', () => {
+    const failure = new RangeError('the encoder gave up')
+    let thrown: unknown
+
+    try {
+      line('set', 'id', 'v', {
+        encode: () => {
+          throw failure
+        },
+      })
+    } catch (err) {
+      thrown = err
+    }
+
+    expect(thrown).toBe(failure)
+  })
+})
+
 describe('which cookies replace one another in a response', () => {
   const key = (name: string, options?: CookieSerializeOptions) =>
     prepareCookie('set', name, { path: '/' }, { secure: true, ...options }, true).key

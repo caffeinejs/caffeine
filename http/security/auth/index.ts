@@ -38,6 +38,7 @@ export {
 export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
 export {
   ErrAuthConfiguration,
+  ErrAuthenticationCookies,
   ErrAuthenticationGateRequired,
   ErrAuthenticationRequired,
   ErrAuthSchemeNotFound,

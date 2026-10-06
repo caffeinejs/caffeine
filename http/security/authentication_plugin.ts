@@ -216,7 +216,8 @@ export class AuthenticationGateBuilder {
  *
  * @throws ErrFeatureNotInstalled at start-up when `Authentication(...)` is not installed.
  * @throws ErrAuthenticationCookies at start-up when a scheme keeps its session in a cookie and the server the gate
- * installs on has cookies off.
+ * installs on has cookies off. A scheme `addStrategy` resolves from a container key is not built at start-up to be
+ * asked: its first cookie read throws `ErrCookiesDisabled` instead.
  * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
  */
 export function authentication<C = unknown>(
@@ -331,7 +332,8 @@ interface Fallback {
 
 /** A scheme that keeps its session in a cookie, or `undefined` when none does. */
 function cookieSchemeOf(container: Container): string | undefined {
-  for (const [name, descriptor] of container.getOptional(kAuthSchemeDescriptors) ?? []) {
+  // Bound by the `auth` feature, which the factory has already found installed.
+  for (const [name, descriptor] of container.get(kAuthSchemeDescriptors)) {
     if (descriptor.in === 'cookie') {
       return name
     }

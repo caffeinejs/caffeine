@@ -234,6 +234,13 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): this {
     this.#reserve(name)
     this.#schemes.set(name, keyOrHandler)
+
+    // Built, a cookie scheme says how it takes its credential as `addCookie` does: the gate then refuses it on a
+    // server whose cookies are off.
+    if (keyOrHandler instanceof CookieAuthenticationHandler) {
+      this.#describe(name, { kind: 'apiKey', in: 'cookie', name: keyOrHandler.options.cookieName })
+    }
+
     return this
   }
 
@@ -286,7 +293,8 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
 
   /**
    * Records how `name` expects credentials. Called by the `addX` methods, which are the only ones that know;
-   * a scheme registered through a bare `addStrategy` stays undescribed.
+   * a scheme registered through a bare `addStrategy` stays undescribed, unless it is a built
+   * `CookieAuthenticationHandler`.
    */
   #describe(name: string, descriptor: AuthSchemeDescriptor): void {
     this.#descriptors.set(name, descriptor)

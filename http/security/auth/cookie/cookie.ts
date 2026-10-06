@@ -41,7 +41,7 @@ interface SessionPayload {
   scheme: string
   claims: SealedClaim[]
   roleClaimType: string
-  /** Whether the cookie carries `Max-Age`. Absent from a session sealed before it was recorded. */
+  /** Whether the cookie carries `Max-Age`. Absent from a session sealed before it was recorded, which is not resealed. */
   persistent?: boolean
 }
 
@@ -303,17 +303,17 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   /**
    * Seals a session an older secret opened with the current one. What was sealed is sealed again, not a principal
    * `validatePrincipal` swapped in, and it keeps its expiry.
+   *
+   * A session sealed before its persistence was recorded is left as it is: whether its cookie outlives the browser
+   * cannot be told from its lifetime once `maxAge` may have changed. It opens with the older secret until it expires.
    */
   async #resealSession(ctx: Context, session: OpenedJWT<SessionPayload>): Promise<void> {
+    const { scheme, claims, roleClaimType, persistent } = session.claims
     const ttl = session.exp - Math.floor(Date.now() / 1000)
-    if (ttl <= 0) {
+
+    if (persistent === undefined || ttl <= 0) {
       return
     }
-
-    const { scheme, claims, roleClaimType } = session.claims
-    // A session sealed before `persistent` was recorded outlives the session-cookie lifetime only when it was
-    // persistent.
-    const persistent = session.claims.persistent ?? session.exp - session.iat > this.options.maxAge!
 
     await this.#writeSealed(ctx, { scheme, claims, roleClaimType, persistent }, ttl)
   }
@@ -442,6 +442,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   // Every attribute is the scheme's own, one it leaves unset written as `undefined`: that clears whatever the
   // server's `parseOptions` default, so an application-wide domain or `signed` never reaches a session cookie.
+  // `encode` stays the server's: every read decodes with the server's `decode`, and the two have to match.
   #cookieOpts(ctx: Context, name: string, maxAge?: number): CookieSerializeOptions {
     return {
       httpOnly: true,

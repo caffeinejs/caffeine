@@ -205,18 +205,21 @@ export class ServerCookies {
     )
   }
 
-  // Until none is left unsigned: a cookie queued while the others were signing is written too.
+  // Until none is left unsigned: a cookie queued while these were signing is signed by the next round.
   async #sign(pending: Map<string, PendingCookie>): Promise<void> {
-    for (let unsigned = [...pending.values()].filter(cookie => cookie.line === undefined); unsigned.length > 0;) {
-      await Promise.all(
-        unsigned.map(async cookie => {
-          const signed = await this.#signer.sign(cookie.value, cookie.prepared.secret)
-          cookie.line = serializeCookie(cookie.op, cookie.prepared, signed)
-        }),
-      )
-
-      unsigned = [...pending.values()].filter(cookie => cookie.line === undefined)
+    const unsigned = [...pending.values()].filter(cookie => cookie.line === undefined)
+    if (unsigned.length === 0) {
+      return
     }
+
+    await Promise.all(
+      unsigned.map(async cookie => {
+        const signed = await this.#signer.sign(cookie.value, cookie.prepared.secret)
+        cookie.line = serializeCookie(cookie.op, cookie.prepared, signed)
+      }),
+    )
+
+    return this.#sign(pending)
   }
 
   #write(cookieReply: CookieReply, reply: FastifyReply, pending: Map<string, PendingCookie>): void {
@@ -352,12 +355,9 @@ function hasUnsigned(pending: Map<string, PendingCookie>): boolean {
 }
 
 // Merged, never replaced: a value the route set with `@Header('Set-Cookie')`, another plugin wrote, or a raw
-// `res.setHeader` left goes out ahead of these. Never an empty list either, which would read as a cookie to caching.
+// `res.setHeader` left goes out ahead of these. Never handed an empty list, which would read as a cookie to caching:
+// `flush` writes nothing when nothing is pending.
 function writeLines(reply: FastifyReply, lines: readonly string[]): void {
-  if (lines.length === 0) {
-    return
-  }
-
   const current = reply.getHeader('set-cookie')
   reply.removeHeader('set-cookie')
   reply.header(

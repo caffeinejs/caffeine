@@ -58,8 +58,9 @@ const encoder = new TextEncoder()
  */
 export class HMACCookieSigner extends CookieSigner {
   readonly #algorithm: CookieSigningAlgorithm
-  readonly #keys: Promise<CryptoKey[]> | undefined
+  readonly #secrets: readonly string[] | undefined
   readonly #callKeys = new Map<string, Promise<CryptoKey>>()
+  #keys: Promise<CryptoKey[]> | undefined
 
   constructor(options: HMACCookieSignerOptions = {}) {
     super()
@@ -73,13 +74,7 @@ export class HMACCookieSigner extends CookieSigner {
     }
 
     this.#algorithm = algorithm
-
-    if (options.secret !== undefined) {
-      const keys = Promise.all(secretList(options.secret).map(secret => importKey(secret, algorithm)))
-      // Read by the first sign or verify, which reports a failure; until then nothing must count it unhandled.
-      keys.catch(() => undefined)
-      this.#keys = keys
-    }
+    this.#secrets = options.secret === undefined ? undefined : secretList(options.secret)
   }
 
   async sign(value: string, secret?: CookieSecret): Promise<string> {
@@ -131,7 +126,7 @@ export class HMACCookieSigner extends CookieSigner {
       return Promise.all(secretList(secret).map(entry => this.#callKey(entry)))
     }
 
-    if (this.#keys === undefined) {
+    if (this.#secrets === undefined) {
       return Promise.reject(
         new ErrCookieConfiguration(
           'Cannot sign cookies: no secret is configured' +
@@ -143,6 +138,8 @@ export class HMACCookieSigner extends CookieSigner {
       )
     }
 
+    // Imported by the first sign or verify, and only then: every later one reuses the keys.
+    this.#keys ??= Promise.all(this.#secrets.map(entry => importKey(entry, this.#algorithm)))
     return this.#keys
   }
 
@@ -197,11 +194,15 @@ function importKey(secret: string, algorithm: CookieSigningAlgorithm): Promise<C
 
 function toBase64(bytes: Uint8Array): string {
   let binary = ''
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]!)
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
   }
 
-  return btoa(binary).replace(/=+$/, '')
+  // Unpadded: `btoa` pads with at most two "=", and only at the end.
+  const encoded = btoa(binary)
+  const padding = encoded.indexOf('=')
+
+  return padding < 0 ? encoded : encoded.slice(0, padding)
 }
 
 function fromBase64(text: string): Uint8Array<ArrayBuffer> {

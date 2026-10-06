@@ -27,8 +27,6 @@ export type SealingSecrets = SealingSecret | readonly SealingSecret[]
 /** A token {@link openJWT} opened. `renew` says a secret other than the first opened it. */
 export interface OpenedJWT<T> {
   claims: T
-  /** When it was sealed, in seconds since the epoch. */
-  iat: number
   /** When it expires, in seconds since the epoch. */
   exp: number
   renew: boolean
@@ -121,7 +119,7 @@ export async function openJWT<T>(
         contentEncryptionAlgorithms: [ENC],
       })
 
-      return { claims: payload as unknown as T, iat: payload.iat!, exp: payload.exp!, renew: i > 0 }
+      return { claims: payload as unknown as T, exp: payload.exp!, renew: i > 0 }
     } catch (err) {
       // Only a key that could not decrypt it is worth trying the next secret for. An expired token, or one of
       // another purpose, was decrypted: the key was right, and another would fail it the same way.

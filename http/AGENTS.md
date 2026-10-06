@@ -28,7 +28,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   handed to that signer; never construct a signer on a request's path.
 - Error text never repeats a cookie value: cookie@2's `TypeError`s are mapped without `cause`.
 - The authentication schemes write every attribute of their cookies, an unset one as `undefined`, so the server's
-  `parseOptions` defaults never reach them; they pin `signed: false`.
+  `parseOptions` defaults never reach them; they pin `signed: false`. Their values keep the server's `encode`: every
+  read decodes with the server's `decode`, so clearing one without the other breaks sign-in.
 - `respond()` (`error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send that died writing
   its cookies left `ctx.sent` true with nothing in flight.
 

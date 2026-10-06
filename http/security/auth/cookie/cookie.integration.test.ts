@@ -206,6 +206,18 @@ describe('cookie session login (application)', () => {
     expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
   })
 
+  // The value is not an attribute: every cookie a request carries is read through the server's `decode`, so the
+  // session cookie goes out through its `encode`. Written past it, the session would be decoded into garbage.
+  it("writes the session cookie through the application's encoder, which its decoder reads back", async () => {
+    const reverse = (value: string) => value.split('').reverse().join('')
+    const app = await buildApp(k => k.parseOptions({ encode: reverse, decode: reverse }))
+
+    const res = await login(app, { email: 'alice', password: 's3cret' })
+    const line = res.headers.getSetCookie().find(set => set.startsWith('caf.session='))!
+
+    expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
+  })
+
   it('rejects the protected route without a session cookie', async () => {
     const app = await buildApp()
     const me = await app.fetch('/me')

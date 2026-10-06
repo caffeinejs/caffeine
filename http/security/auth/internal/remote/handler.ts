@@ -456,7 +456,7 @@ export abstract class RemoteAuthenticationHandler<
   #stateCookieNames(ctx: Context): string[] {
     const prefix = `${this.options.stateCookieName}.`
 
-    return Object.keys(ctx.req.cookie() ?? {}).filter(
+    return Object.keys(ctx.req.cookie()).filter(
       name => name.startsWith(prefix) && STATE_CHARSET.test(name.slice(prefix.length)),
     )
   }
@@ -755,7 +755,8 @@ export abstract class RemoteAuthenticationHandler<
   }
 
   // Every attribute is the strategy's own, one it leaves unset written as `undefined`: that clears whatever the
-  // server's `parseOptions` default, so an application-wide domain or `signed` never reaches these cookies.
+  // server's `parseOptions` default, so an application-wide domain or `signed` never reaches these cookies. `encode`
+  // stays the server's: every read decodes with the server's `decode`, and the two have to match.
   protected cookieOpts(maxAge?: number): CookieSerializeOptions {
     return {
       httpOnly: true,

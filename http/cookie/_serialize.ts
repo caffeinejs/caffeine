@@ -180,7 +180,7 @@ const REASONS: ReadonlyArray<readonly [prefix: string, reason: string]> = [
   ['argument val', 'its value, once encoded, holds characters a cookie cannot carry'],
   ['option maxAge', 'its Max-Age is not a whole number of seconds'],
   ['option domain', 'its Domain is not a valid domain name'],
-  ['option path', 'its Path holds a control character or ";"'],
+  ['option path', 'its Path may hold only spaces and printable US-ASCII characters other than ";" and "<"'],
   ['option expires', 'its expiry is not a valid date'],
   ['option priority', 'its Priority is not "low", "medium" or "high"'],
   ['option sameSite', 'its SameSite is not "strict", "lax" or "none"'],
