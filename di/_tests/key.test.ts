@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { DeferredCtor } from '../deferred_ctor.js'
-import { isNamedKey, isValidKey, keyStr, token } from '../key.js'
+import * as exported from '../index.js'
+import { isNamedKey, isValidKey, keyStr, token, type InjectionToken } from '../key.js'
 import { Scopes, bindScope, type Scope } from '../scope.js'
 
 describe('keyStr()', function () {
@@ -102,6 +103,26 @@ describe('isValidKey()', function () {
 
   it('should return false for a number', function () {
     expect(isValidKey(42)).toBe(false)
+  })
+
+  // Packages that take a component or the key to resolve it from ask this, so a plain function counts as a key
+  // like a class does: treated as the component, it would fail only when first used, as "not a function".
+  it('should tell a key from a component of the union a package accepts', function () {
+    interface Store {
+      read(): string
+    }
+    class StoreImpl implements Store {
+      read() {
+        return 'impl'
+      }
+    }
+
+    const instance: Store = { read: () => 'instance' }
+    const accepted: Array<Store | InjectionToken<Store>> = [instance, StoreImpl, token<Store>('store')]
+
+    expect(accepted.map(value => isValidKey<Store>(value))).toEqual([false, true, true])
+    expect(isValidKey(() => instance)).toBe(true)
+    expect(exported.isValidKey).toBe(isValidKey)
   })
 })
 

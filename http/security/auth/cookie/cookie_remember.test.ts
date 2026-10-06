@@ -195,7 +195,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     await handler.revoke(ctx)
 
     expect(store.remove).toHaveBeenCalledWith(series)
-    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' }
+    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/', signed: false }
     expect(deleteCookie).toHaveBeenCalledWith(SESSION, clearedWith)
     expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, clearedWith)
   })
@@ -218,7 +218,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
     const { ctx, deleteCookie } = makeCtx({ [SESSION]: signIn.jar[SESSION], [REMEMBER]: signIn.jar[REMEMBER] }, '/api')
     await handler.revoke(ctx)
 
-    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/api' }
+    const clearedWith = { httpOnly: true, secure: true, sameSite: 'lax', path: '/api', signed: false }
     expect(deleteCookie).toHaveBeenCalledWith(SESSION, clearedWith)
     expect(deleteCookie).toHaveBeenCalledWith(REMEMBER, clearedWith)
   })

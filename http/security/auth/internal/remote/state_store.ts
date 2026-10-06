@@ -1,3 +1,4 @@
+import type { CookieSecret } from '../../../../cookie/signer.js'
 import { sealCookie, unsealCookie } from './_sealed_cookie.js'
 
 export interface RemoteAuthenticationState {
@@ -20,10 +21,18 @@ export interface RemoteAuthenticationState {
 /** The authorization round-trip must complete within this window. */
 export const STATE_TTL_SECONDS = 600
 
-export async function encodeState(value: RemoteAuthenticationState, secret: string, scheme: string): Promise<string> {
+export async function encodeState(
+  value: RemoteAuthenticationState,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<string> {
   return sealCookie(value as unknown as Record<string, unknown>, 'oidc-state+jwt', secret, scheme, STATE_TTL_SECONDS)
 }
 
-export async function decodeState(cookie: string, secret: string, scheme: string): Promise<RemoteAuthenticationState> {
+export async function decodeState(
+  cookie: string,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<RemoteAuthenticationState> {
   return unsealCookie<RemoteAuthenticationState>(cookie, 'oidc-state+jwt', secret, scheme)
 }

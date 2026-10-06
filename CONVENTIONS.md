@@ -195,7 +195,7 @@ Those are the only answers.
 - The application's own server's construction and listen settings are not a feature: `.server(configure)` hands them to the adapter, which builds the server in `setup()` once the container has initialized. An ops server's are its feature's, `Ops(name, o => o.server(configure))`, and the adapter builds it through the same `setup()`.
 - A plugin reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it. Registered at the root by `.with(...)`, an fp-wrapped plugin covers every route; registered on a route group by `router.plugin(...)` or `@Use(...)`, it covers that group alone.
 - Plugins install in the order of the `.with(...)` calls of the server they are registered on. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts.
-- Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookie parsing. The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
+- Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookies (each server's cookie settings and its `Set-Cookie` writer). The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
 
 ## A feature's configuration schema
 

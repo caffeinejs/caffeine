@@ -1,3 +1,4 @@
+import type { CookiePriority, CookieSameSite } from '../../cookie/options.js'
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
 import type { JWTAuthenticationOptionsBuilder } from './jwt/jwt_options.js'
@@ -35,7 +36,8 @@ export interface OpaqueSchemeConfig {
 
 /** A cookie scheme's configurable keys. */
 export interface CookieSchemeConfig {
-  sessionSecret?: string
+  /** An array rotates secrets: the first seals, and any of them opens. */
+  sessionSecret?: string | readonly string[]
   cookieName?: string
   rememberMe?: boolean
   rememberMeCookieName?: string
@@ -48,8 +50,11 @@ export interface CookieSchemeConfig {
   maxAge?: number
   rememberMeMaxAge?: number
   secure?: boolean
-  sameSite?: 'strict' | 'lax' | 'none'
+  sameSite?: CookieSameSite
   path?: string
+  domain?: string
+  partitioned?: boolean
+  priority?: CookiePriority
   roleClaimType?: string
 }
 
@@ -57,7 +62,8 @@ export interface CookieSchemeConfig {
 export interface OIDCSchemeConfig {
   clientId?: string
   clientSecret?: string
-  sessionSecret?: string
+  /** An array rotates secrets: the first seals, and any of them opens. */
+  sessionSecret?: string | readonly string[]
   discoveryUrl?: string
   issuer?: string
   authorizationEndpoint?: string
@@ -71,6 +77,9 @@ export interface OIDCSchemeConfig {
   sessionCookieTtlSeconds?: number
   stateCookieName?: string
   secureCookie?: boolean
+  cookieDomain?: string
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
   roleClaimType?: string
   allowPlainPkce?: boolean
   clockToleranceSeconds?: number
@@ -95,7 +104,8 @@ export interface OIDCSchemeConfig {
 export interface OAuthSchemeConfig {
   clientId?: string
   clientSecret?: string
-  sessionSecret?: string
+  /** An array rotates secrets: the first seals, and any of them opens. */
+  sessionSecret?: string | readonly string[]
   authorizationEndpoint?: string
   tokenEndpoint?: string
   userInfoEndpoint?: string
@@ -106,6 +116,9 @@ export interface OAuthSchemeConfig {
   sessionCookieTtlSeconds?: number
   stateCookieName?: string
   secureCookie?: boolean
+  cookieDomain?: string
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
   roleClaimType?: string
   httpTimeoutMs?: number
   showPii?: boolean
@@ -243,6 +256,9 @@ const cookie: SchemeAppliers<CookieAuthenticationOptionsBuilder, CookieSchemeCon
   secure: (b, v) => b.secure(v),
   sameSite: (b, v) => b.sameSite(v),
   path: (b, v) => b.path(v),
+  domain: (b, v) => b.domain(v),
+  partitioned: (b, v) => b.partitioned(v),
+  priority: (b, v) => b.priority(v),
   roleClaimType: (b, v) => b.roleClaimType(v),
 }
 
@@ -263,6 +279,9 @@ const oidc: SchemeAppliers<OIDCAuthenticationOptionsBuilder, OIDCSchemeConfig> =
   sessionCookieTtlSeconds: (b, v) => b.sessionCookieTtlSeconds(v),
   stateCookieName: (b, v) => b.stateCookieName(v),
   secureCookie: (b, v) => b.secureCookie(v),
+  cookieDomain: (b, v) => b.cookieDomain(v),
+  cookiePartitioned: (b, v) => b.cookiePartitioned(v),
+  cookiePriority: (b, v) => b.cookiePriority(v),
   roleClaimType: (b, v) => b.roleClaimType(v),
   allowPlainPkce: (b, v) => b.allowPlainPKCE(v),
   clockToleranceSeconds: (b, v) => b.clockToleranceSeconds(v),
@@ -297,6 +316,9 @@ const oauth: SchemeAppliers<OAuth2AuthenticationOptionsBuilder, OAuthSchemeConfi
   sessionCookieTtlSeconds: (b, v) => b.sessionCookieTtlSeconds(v),
   stateCookieName: (b, v) => b.stateCookieName(v),
   secureCookie: (b, v) => b.secureCookie(v),
+  cookieDomain: (b, v) => b.cookieDomain(v),
+  cookiePartitioned: (b, v) => b.cookiePartitioned(v),
+  cookiePriority: (b, v) => b.cookiePriority(v),
   roleClaimType: (b, v) => b.roleClaimType(v),
   httpTimeoutMs: (b, v) => b.httpTimeoutMs(v),
   showPii: (b, v) => b.showPii(v),

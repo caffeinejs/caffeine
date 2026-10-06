@@ -8,7 +8,6 @@ import { Server as TLSServer } from 'node:tls'
 import { Container, Scopes } from '@caffeinejs/di'
 import { ConfigStore } from '@caffeinejs/std/config'
 import type { Logger } from '@caffeinejs/std/logger'
-import type { CookieSerializeOptions } from '@fastify/cookie'
 import Fastify, {
   LogController,
   type FastifyHttpOptions,
@@ -35,6 +34,7 @@ import type {
 } from './adapter.js'
 import { kRawBasePath, stripBasePath, type BasePathCarrier } from './base_path.js'
 import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints.js'
+import type { CookieSerializeOptions } from './cookie/options.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { solutions } from './error/util.js'
@@ -120,7 +120,7 @@ export interface FastifyTypes<
   hook: FastifyMiddlewareHook
   raw: IncomingMessage
   cookieOptions: CookieSerializeOptions
-  asyncCookies: false
+  asyncCookies: true
   platform: FastifyPlatform<RES>
   serverOptions: FastifyServerSettings
   runArgs: [options?: FastifyListenOptions]

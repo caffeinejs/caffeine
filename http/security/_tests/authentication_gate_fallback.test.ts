@@ -325,9 +325,8 @@ describe('the challenge of a route that names several schemes', () => {
 describe('an application whose scheme reads cookies', () => {
   const secret = 'a-session-secret-of-at-least-32-characters'
 
-  // The adapter registers @fastify/cookie before any plugin, so the parsing is in place whatever slot the gate
-  // lands in. Ordering this by hand used to be the application's job, and getting it wrong was a TypeError on
-  // every request.
+  // Cookies are parsed when first read, so whatever slot the gate lands in finds them. Ordering this by hand used to
+  // be the application's job, and getting it wrong was a TypeError on every request.
   it('starts with nothing registered by the application', async () => {
     const app = createWebApplication()
       .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
@@ -342,7 +341,7 @@ describe('an application whose scheme reads cookies', () => {
       .with(() =>
         fp(
           async (instance: FastifyInstance) => {
-            instance.get('/seen', request => ({ seen: request.cookies.probe ?? null }))
+            instance.get('/seen', request => ({ seen: request.httpContext.req.cookie('probe') ?? null }))
           },
           { name: 'early-route' },
         ),
@@ -358,8 +357,23 @@ describe('an application whose scheme reads cookies', () => {
     await app.close()
   })
 
+  // Every request carrying the session cookie would fail to read it, so the server does not start.
+  it('refuses to start a cookie scheme on a server whose cookies are off', async () => {
+    const app = createWebApplication()
+      .cookie(k => k.enabled(false))
+      .install(Authentication(auth => auth.addCookie(c => c.sessionSecret(secret))))
+      .with(authentication())
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      name: 'ErrAuthenticationCookies',
+      message: expect.stringContaining('authentication scheme "Cookie" keeps its session in a cookie'),
+    })
+    await app.close()
+  })
+
   it('asks nothing of an application whose schemes read no cookie', async () => {
     const app = createWebApplication()
+      .cookie(k => k.enabled(false))
       .install(Authentication(auth => auth.addBasic(b => b.validate(() => null))))
       .with(authentication())
 

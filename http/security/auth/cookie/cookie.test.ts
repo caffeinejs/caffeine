@@ -3,14 +3,16 @@ import { describe, it, expect, vi } from 'vitest'
 import type { Context } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationTicket } from '../ticket.js'
+import { openSession, sealSession } from './_session_cookie.js'
 import { CookieAuthenticationHandler } from './cookie.js'
 import { CookieAuthenticationOptionsBuilder } from './cookie_options.js'
 
 const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 
 // A cookie is cleared with the attributes it was set with: a browser refuses a `__Host-` or `__Secure-` cookie
-// that arrives without `Secure`, the clearing one included.
-const CLEARED_WITH = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' }
+// that arrives without `Secure`, the clearing one included. `signed: false` holds against a server-wide
+// `parseOptions({ signed: true })`, since the sealed session is read back unsigned.
+const CLEARED_WITH = { httpOnly: true, secure: true, sameSite: 'lax', path: '/', signed: false }
 const EIGHT_HOURS = 8 * 60 * 60
 const THIRTY_DAYS = 30 * 24 * 60 * 60
 
@@ -435,6 +437,11 @@ describe('CookieAuthenticationHandler', () => {
       expect(await writtenPath('/api', o => o.cookieName('__Host-sess'))).toBe('/')
     })
 
+    // A browser matches the prefix whatever its case, and holds the cookie to it the same way.
+    it('keeps a "__host-" cookie at "/" as well', async () => {
+      expect(await writtenPath('/api', o => o.cookieName('__host-sess'))).toBe('/')
+    })
+
     it('clears the session cookie at the path it set it at', async () => {
       const { ctx, deleteCookie } = makeCtx(undefined, '/x', {}, '/api')
       await makeHandler().revoke(ctx)
@@ -478,6 +485,161 @@ describe('CookieAuthenticationHandler', () => {
 
       const result = await handler.authenticate(ctx)
       expect(result.ticket!.principal.findFirst('sub')?.value).toBe('u2')
+    })
+  })
+
+  // A1: an application-wide default must not reach a session cookie: `signed` would have it read back as false, and
+  // a domain breaks a `__Host-` name outright. A4: what the scheme configures reaches both the write and the clear.
+  describe('cookie attributes', () => {
+    it('writes and clears its cookies with the domain, partitioning and priority it is given', async () => {
+      const handler = makeHandler(o => o.domain('example.com').partitioned().priority('high'))
+      const { ctx, setCookie, deleteCookie } = makeCtx()
+
+      await handler.persist(ctx, new AuthenticationTicket(principal(), 'Cookie'))
+      await handler.revoke(ctx)
+
+      const attributes = { domain: 'example.com', partitioned: true, priority: 'high' }
+      expect(setCookie.mock.calls[0]![2]).toMatchObject({ ...attributes, signed: false })
+      expect(deleteCookie).toHaveBeenCalledWith('caf.session', { ...CLEARED_WITH, ...attributes })
+    })
+
+    // Every attribute is written, an unset one as `undefined`, which is what clears a server default.
+    it('names every attribute it leaves unset', async () => {
+      const { ctx, setCookie } = makeCtx()
+
+      await makeHandler().persist(ctx, new AuthenticationTicket(principal(), 'Cookie'))
+
+      expect(Object.keys(setCookie.mock.calls[0]![2] as object).sort()).toEqual([
+        'domain',
+        'expires',
+        'httpOnly',
+        'maxAge',
+        'partitioned',
+        'path',
+        'priority',
+        'sameSite',
+        'secure',
+        'signed',
+      ])
+    })
+  })
+
+  // A2: a cookie a browser would drop fails as the application starts, not as a sign-in that never sticks.
+  describe('options refused at start-up', () => {
+    it.each<[string, (o: CookieAuthenticationOptionsBuilder) => void, string]>([
+      [
+        'a "__Host-" name without Secure',
+        o => o.cookieName('__Host-sess').secure(false),
+        'cookieName "__Host-sess": a "__Host-" cookie needs Secure',
+      ],
+      [
+        'a "__Host-" name under a path',
+        o => o.cookieName('__Host-sess').path('/app'),
+        'cookieName "__Host-sess": a "__Host-" cookie needs',
+      ],
+      [
+        'a "__Host-" name with a domain',
+        o => o.cookieName('__Host-sess').domain('example.com'),
+        'a "__Host-" cookie needs',
+      ],
+      ['SameSite=None without Secure', o => o.sameSite('none').secure(false), 'SameSite=None needs Secure'],
+      ['Partitioned without Secure', o => o.partitioned().secure(false), 'Partitioned needs Secure'],
+      [
+        'a name a header cannot carry',
+        o => o.cookieName('my session'),
+        'cookieName "my session": its name may hold only',
+      ],
+      [
+        'a remember-me name of the session cookie',
+        o => o.rememberMe().rememberMeCookieName('caf.session'),
+        'cookieName and rememberMeCookieName are both "caf.session"',
+      ],
+      [
+        'a short secret in a rotation list',
+        o => o.sessionSecret([SECRET, 'too-short']),
+        'sessionSecret 1 of the list must be at least 32 characters',
+      ],
+      ['an empty list of secrets', o => o.sessionSecret([]), 'the list of sessionSecret is empty'],
+    ])('%s', (_what, configure, message) => {
+      const options = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET)
+      configure(options)
+
+      expect(() => options.build()).toThrow(
+        expect.objectContaining({ name: 'ErrAuthConfiguration', message: expect.stringContaining(message) }),
+      )
+    })
+  })
+
+  // A3: the first secret seals and any opens, and a session an older one opened goes back out under the first, so the
+  // older one can be dropped once the longest session has run out.
+  describe('rotating sessionSecret', () => {
+    const NEWER = 'a-newer-session-secret-of-32-characters-or-more'
+
+    const rotated = (configure: (o: CookieAuthenticationOptionsBuilder) => void = () => {}) =>
+      makeHandler(o => configure(o.sessionSecret([NEWER, SECRET])))
+
+    it('seals a session an older secret opened with the first, keeping its expiry', async () => {
+      const { value } = await sealedFor(false)
+      const { ctx, setCookie } = makeCtx(value)
+
+      expect((await rotated().authenticate(ctx)).succeeded).toBe(true)
+
+      const [name, resealed, opts] = setCookie.mock.calls[0] as [string, string, Record<string, unknown>]
+      expect(name).toBe('caf.session')
+      expect(opts.maxAge).toBeUndefined()
+      expect((await openSession(resealed, NEWER, 'Cookie')).exp).toBe((await openSession(value, SECRET, 'Cookie')).exp)
+      await expect(openSession(resealed, SECRET, 'Cookie')).rejects.toThrow()
+    })
+
+    it('keeps a persistent session persistent, for the time it has left', async () => {
+      const { value } = await sealedFor(true)
+      const { ctx, setCookie } = makeCtx(value)
+
+      await rotated().authenticate(ctx)
+
+      const opts = setCookie.mock.calls[0]![2] as { maxAge: number }
+      expect(opts.maxAge).toBeGreaterThan(THIRTY_DAYS - 5)
+      expect(opts.maxAge).toBeLessThanOrEqual(THIRTY_DAYS)
+    })
+
+    it('leaves a session the first secret opened as it is', async () => {
+      const { value } = await sealedFor(false)
+      const { ctx, setCookie } = makeCtx(value)
+
+      await makeHandler(o => o.sessionSecret([SECRET, NEWER])).authenticate(ctx)
+
+      expect(setCookie).not.toHaveBeenCalled()
+    })
+
+    // A principal the hook swapped in stands for this request; the session it was opened from is what is resealed.
+    it('seals again what was sealed, not a principal validatePrincipal swapped in', async () => {
+      const { value } = await sealedFor(false)
+      const { ctx, setCookie } = makeCtx(value)
+      const swapped = new Principal(true, new Identity('Cookie', true, [new Claim('sub', 'someone-else', '')]))
+
+      await rotated(o => o.validatePrincipal(() => swapped)).authenticate(ctx)
+
+      const resealed = await openSession<{ claims: Array<{ value: unknown }> }>(
+        setCookie.mock.calls[0]![1] as string,
+        NEWER,
+        'Cookie',
+      )
+      expect(resealed.claims.claims.map(claim => claim.value)).toEqual(['u1', 'admin'])
+    })
+
+    // Sealed by a version that did not record persistence: one that outlives a session cookie was persistent.
+    it('reads the persistence of a session sealed before it was recorded from its lifetime', async () => {
+      const legacy = await sealSession(
+        { scheme: 'Cookie', claims: [{ type: 'sub', value: 'u1', issuer: '' }], roleClaimType: 'roles' },
+        SECRET,
+        'Cookie',
+        THIRTY_DAYS,
+      )
+      const { ctx, setCookie } = makeCtx(legacy)
+
+      await rotated().authenticate(ctx)
+
+      expect((setCookie.mock.calls[0]![2] as { maxAge?: number }).maxAge).toBeGreaterThan(EIGHT_HOURS)
     })
   })
 })

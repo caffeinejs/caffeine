@@ -1,11 +1,64 @@
 import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
+import { cookieRuleViolation } from '../../../../cookie/rules.js'
+import { MIN_COOKIE_SECRET_LENGTH, type CookieSecret } from '../../../../cookie/signer.js'
 import { isNavigation } from '../../../../navigation.js'
 import type { AuthenticationProperties } from '../../ticket.js'
 import { ErrOAuthConfiguration } from './errors.js'
 
-/** Secrets shorter than this leave the derived cookie keys brute-forceable. */
-export const MIN_SESSION_SECRET_LENGTH = 32
+/**
+ * What is wrong with a strategy's `sessionSecret`, or `undefined`. A secret below the floor leaves the derived cookie
+ * keys brute-forceable. A failure names a secret of a list by its position, never its value.
+ */
+export function sessionSecretViolation(secret: CookieSecret): string | undefined {
+  const secrets = typeof secret === 'string' ? [secret] : secret
+  if (secrets.length === 0) {
+    return 'the list of sessionSecret is empty'
+  }
+
+  for (let i = 0; i < secrets.length; i++) {
+    if (secrets[i]!.length < MIN_COOKIE_SECRET_LENGTH) {
+      const which = typeof secret === 'string' ? 'sessionSecret' : `sessionSecret ${i} of the list`
+      return `${which} must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * Why a browser would drop a strategy's session or state cookie, or `undefined`. Checked at start-up, so a name or an
+ * attribute that cannot work fails there rather than as a sign-in that never sticks.
+ */
+export function remoteCookieViolation(options: {
+  sessionCookieName: string
+  stateCookieName: string
+  secureCookie: boolean
+  cookieDomain?: string
+  cookiePartitioned?: boolean
+}): string | undefined {
+  const attributes = {
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+    secure: options.secureCookie,
+    domain: options.cookieDomain,
+    partitioned: options.cookiePartitioned,
+  } as const
+
+  // A state cookie is named for its flow, so the name is checked with a state appended.
+  for (const [option, name, written] of [
+    ['sessionCookieName', options.sessionCookieName, options.sessionCookieName],
+    ['stateCookieName', options.stateCookieName, `${options.stateCookieName}.state`],
+  ] as const) {
+    const violation = cookieRuleViolation(written, attributes)
+    if (violation !== undefined) {
+      return `${option} "${name}": ${violation}`
+    }
+  }
+
+  return undefined
+}
 
 /**
  * The deadline applied to every outbound provider call.
@@ -163,8 +216,15 @@ export function sanitizeSchemeName(scheme: string): string {
  * names would otherwise overwrite each other's cookies, and a deployment that adds a second
  * provider later would break the first without touching its configuration. `__Host-` binds the
  * cookie to the exact origin with `Path=/` and no `Domain`, and is only legal on a Secure cookie.
+ * A cookie given a domain cannot carry it, and takes `__Secure-` instead.
  */
-export function cookieName(kind: 'session' | 'state', scheme: string, secure: boolean, protocol: string): string {
-  const prefix = secure ? `__Host-${protocol}` : `__${protocol}`
+export function cookieName(
+  kind: 'session' | 'state',
+  scheme: string,
+  secure: boolean,
+  protocol: string,
+  domain?: string,
+): string {
+  const prefix = !secure ? `__${protocol}` : domain === undefined ? `__Host-${protocol}` : `__Secure-${protocol}`
   return `${prefix}_${sanitizeSchemeName(scheme)}_${kind}`
 }

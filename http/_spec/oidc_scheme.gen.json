@@ -10,7 +10,17 @@
       "type": "string"
     },
     "sessionSecret": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "discoveryUrl": {
       "type": "string"
@@ -53,6 +63,28 @@
     },
     "secureCookie": {
       "type": "boolean"
+    },
+    "cookieDomain": {
+      "type": "string"
+    },
+    "cookiePartitioned": {
+      "type": "boolean"
+    },
+    "cookiePriority": {
+      "anyOf": [
+        {
+          "const": "low",
+          "type": "string"
+        },
+        {
+          "const": "medium",
+          "type": "string"
+        },
+        {
+          "const": "high",
+          "type": "string"
+        }
+      ]
     },
     "roleClaimType": {
       "type": "string"

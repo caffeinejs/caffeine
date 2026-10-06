@@ -1,6 +1,7 @@
 import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
+import { cookieFlushFailed } from '../cookie/plugin.js'
 import type { FastifyContext } from '../fastify_context.js'
 import { Responder } from '../response.js'
 import { kErrorUnhandled, type RouteGroup } from '../routing/route.js'
@@ -246,7 +247,9 @@ function respond(ctx: FastifyContext, result: unknown): unknown {
   // The handler answered from the context. Handed the reply back, the runner waits for that send out rather
   // than sending this over it — `reply.sent` alone is still false while an `onSend` hook holds it open, and
   // this runs inside an async `setErrorHandler`, whose `undefined` the server takes as a request to send.
-  if (ctx.sent) {
+  // Unless that answer died writing its cookies, which is the error being handled: nothing is in flight to wait
+  // for, and the wait would hang the request. An answer from the catch handler itself reopened them first.
+  if (ctx.sent && !cookieFlushFailed(reply)) {
     return reply
   }
 

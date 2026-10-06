@@ -1,13 +1,21 @@
 import type { Context } from '../../../context.js'
+import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
+import { cookieRuleViolation } from '../../../cookie/rules.js'
+import { MIN_COOKIE_SECRET_LENGTH } from '../../../cookie/signer.js'
 import { solutions } from '../../../error/util.js'
 import type { Principal } from '../../index.js'
-import { type ChallengeMode, MIN_SESSION_SECRET_LENGTH } from '../internal/remote/config.js'
-
-export type CookieSameSite = 'strict' | 'lax' | 'none'
+import { ErrAuthConfiguration } from '../errors.js'
+import type { ChallengeMode } from '../internal/remote/config.js'
+import { sealingSecrets, type SealingSecrets } from '../internal/sealed_jwt.js'
 
 export interface CookieAuthenticationOptions {
-  /** Secret used to derive the sealing key. Required. */
-  sessionSecret: string | Uint8Array
+  /**
+   * Secret used to derive the sealing key. Required, at least 32 characters.
+   *
+   * An array rotates secrets: the first seals, and any of them opens. A session opened with an older one is sealed
+   * again with the first, keeping its expiry, so an old secret can go once the longest session has run out.
+   */
+  sessionSecret: SealingSecrets
   /** Cookie name. Default `'caf.session'`. */
   cookieName?: string
   /**
@@ -108,6 +116,12 @@ export interface CookieAuthenticationOptions {
    * which every path on the host receives. Setting it pins one scope for both: `'/'` shares one session across them.
    */
   path?: string
+  /** Cookie `Domain`. Unset by default, which keeps the cookie to the host that set it; a `__Host-` name refuses one. */
+  domain?: string
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires {@link secure}. */
+  partitioned?: boolean
+  /** Cookie `Priority`. */
+  priority?: CookiePriority
   /** Claim type treated as the role claim on the rebuilt identity. Default `'roles'`. */
   roleClaimType?: string
   /**
@@ -125,7 +139,8 @@ const THIRTY_DAYS = 30 * 24 * 60 * 60
 export class CookieAuthenticationOptionsBuilder {
   readonly #options: Partial<CookieAuthenticationOptions> = {}
 
-  sessionSecret(secret: string | Uint8Array): this {
+  /** An array rotates secrets: the first seals, and any of them opens. See the option docs. */
+  sessionSecret(secret: SealingSecrets): this {
     this.#options.sessionSecret = secret
     return this
   }
@@ -222,6 +237,21 @@ export class CookieAuthenticationOptionsBuilder {
     return this
   }
 
+  domain(domain: string): this {
+    this.#options.domain = domain
+    return this
+  }
+
+  partitioned(partitioned = true): this {
+    this.#options.partitioned = partitioned
+    return this
+  }
+
+  priority(priority: CookiePriority): this {
+    this.#options.priority = priority
+    return this
+  }
+
   roleClaimType(type: string): this {
     this.#options.roleClaimType = type
     return this
@@ -235,16 +265,25 @@ export class CookieAuthenticationOptionsBuilder {
 
   build(): CookieAuthenticationOptions {
     if (this.#options.sessionSecret === undefined) {
-      throw new Error('Cannot build CookieAuthenticationOptions: sessionSecret is required')
+      throw new ErrAuthConfiguration('Cannot build CookieAuthenticationOptions: sessionSecret is required')
     }
 
     // The same HKDF-SHA256 into dir/A256GCM that the OAuth-family strategies seal their cookies with, so
     // the same floor applies: below it the derived key is brute-forceable and the session cookie is
     // forgeable. Enforced here rather than trusted to the caller because a short secret fails silently.
-    if (this.#options.sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
-      throw new Error(
-        `Cannot build CookieAuthenticationOptions: sessionSecret must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
-      )
+    const secrets = sealingSecrets(this.#options.sessionSecret)
+    if (secrets.length === 0) {
+      throw new ErrAuthConfiguration('Cannot build CookieAuthenticationOptions: the list of sessionSecret is empty')
+    }
+
+    const listed = Array.isArray(this.#options.sessionSecret)
+    for (let i = 0; i < secrets.length; i++) {
+      if (secrets[i]!.length < MIN_COOKIE_SECRET_LENGTH) {
+        const which = listed ? `sessionSecret ${i} of the list` : 'sessionSecret'
+        throw new ErrAuthConfiguration(
+          `Cannot build CookieAuthenticationOptions: ${which} must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`,
+        )
+      }
     }
 
     // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path
@@ -254,18 +293,49 @@ export class CookieAuthenticationOptionsBuilder {
       ['accessDeniedPath', this.#options.accessDeniedPath],
     ] as const) {
       if (path?.startsWith('~/')) {
-        throw new Error(
+        throw new ErrAuthConfiguration(
           `Cannot build CookieAuthenticationOptions: ${option} "${path}" starts with "~/"` +
             solutions(`Write it as "${path.slice(1)}", which is put under the base path already`),
         )
       }
     }
 
+    const cookieName = this.#options.cookieName ?? 'caf.session'
+    const rememberMeCookieName = this.#options.rememberMeCookieName ?? 'caf.remember'
+    const secure = this.#options.secure ?? true
+    const sameSite = this.#options.sameSite ?? 'lax'
+
+    // A cookie a browser would drop fails here, rather than as a sign-in that never sticks. Without a path of its
+    // own the cookie goes to the base path, which no rule constrains, or to `/` for a `__Host-` name.
+    for (const [option, name] of [
+      ['cookieName', cookieName],
+      ['rememberMeCookieName', rememberMeCookieName],
+    ] as const) {
+      const violation = cookieRuleViolation(name, {
+        httpOnly: true,
+        secure,
+        sameSite,
+        path: this.#options.path ?? '/',
+        domain: this.#options.domain,
+        partitioned: this.#options.partitioned,
+      })
+
+      if (violation !== undefined) {
+        throw new ErrAuthConfiguration(`Cannot build CookieAuthenticationOptions: ${option} "${name}": ${violation}`)
+      }
+    }
+
+    if (this.#options.rememberMe === true && cookieName === rememberMeCookieName) {
+      throw new ErrAuthConfiguration(
+        `Cannot build CookieAuthenticationOptions: cookieName and rememberMeCookieName are both "${cookieName}"`,
+      )
+    }
+
     return {
       sessionSecret: this.#options.sessionSecret,
-      cookieName: this.#options.cookieName ?? 'caf.session',
+      cookieName,
       rememberMe: this.#options.rememberMe ?? false,
-      rememberMeCookieName: this.#options.rememberMeCookieName ?? 'caf.remember',
+      rememberMeCookieName,
       rememberMeAbsoluteMaxAge: this.#options.rememberMeAbsoluteMaxAge,
       rememberMeRotationGraceSeconds: this.#options.rememberMeRotationGraceSeconds ?? 60,
       loginPath: this.#options.loginPath,
@@ -277,9 +347,12 @@ export class CookieAuthenticationOptionsBuilder {
       onFail: this.#options.onFail,
       maxAge: this.#options.maxAge ?? EIGHT_HOURS,
       rememberMeMaxAge: this.#options.rememberMeMaxAge ?? THIRTY_DAYS,
-      secure: this.#options.secure ?? true,
-      sameSite: this.#options.sameSite ?? 'lax',
+      secure,
+      sameSite,
       path: this.#options.path,
+      domain: this.#options.domain,
+      partitioned: this.#options.partitioned,
+      priority: this.#options.priority,
       roleClaimType: this.#options.roleClaimType ?? 'roles',
       onChallenge: this.#options.onChallenge,
     }

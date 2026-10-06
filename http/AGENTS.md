@@ -9,9 +9,28 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Hand a `@fastify/*` plugin back with its options, `[plugin, options]`, unwrapped; a wrapper with its own body
   still needs `fp()`.
 - `.with(...)` is not generic in that pair; write `satisfies` where the shape matters.
-- The adapter installs the form body parser itself, before the plugin loop; cookies are parsed before the
-  authentication gate, which carries no cookie check.
+- The adapter installs the form body parser itself, before the plugin loop. Cookies are parsed on first read, so no
+  plugin has an order to get right; the gate refuses to start a cookie-based scheme on a server whose cookies are off
+  (`ErrAuthenticationCookies`).
 - A plugin's per-request setting is a Fastify decoration read off `request.server`, as `@caffeinejs/html` does.
+
+## Cookies
+
+- `http/cookie/` is the cookie implementation. Its core (`signer.ts`, `options.ts`, `rules.ts`, `_serialize.ts`)
+  imports nothing from Fastify, `node:crypto` or `Buffer`: signing is Web Crypto, so `ctx.req.signedCookie()` is
+  async. `plugin.ts` is the glue, built once per server by the cookie head slot.
+- Nothing here reads `request.cookies` or calls `reply.setCookie`/`clearCookie`. Cookies go through `ctx.req.cookie()`
+  and `ctx.cookie()`, or `request.httpContext` from a raw hook. An application may register `@fastify/cookie` for an
+  ecosystem plugin; the two coexist.
+- The writer is the plugin's root `onSend` hook, which runs ahead of every later plugin's and route's `onSend`, so
+  caching sees `Set-Cookie`. It merges `set-cookie`, never replaces it, and never writes an empty list.
+- A signer, given as an instance or a container key, is resolved once, in the plugin body. A per-call secret is
+  handed to that signer; never construct a signer on a request's path.
+- Error text never repeats a cookie value: cookie@2's `TypeError`s are mapped without `cause`.
+- The authentication schemes write every attribute of their cookies, an unset one as `undefined`, so the server's
+  `parseOptions` defaults never reach them; they pin `signed: false`.
+- `respond()` (`error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send that died writing
+  its cookies left `ctx.sent` true with nothing in flight.
 
 ## Authentication
 

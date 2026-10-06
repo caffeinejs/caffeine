@@ -1,7 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
-import type { CookieSerializeOptions } from '@fastify/cookie'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { kRawBasePath, resolveAppURL, type BasePathCarrier } from './base_path.js'
@@ -15,6 +14,9 @@ import {
   type Req,
   type UnsignedCookie,
 } from './context.js'
+import type { CookieSerializeOptions } from './cookie/options.js'
+import { reopenCookieFlush, serverCookies } from './cookie/plugin.js'
+import type { CookieSecret } from './cookie/signer.js'
 import { statusErrorBody } from './error/http.js'
 import type { FastifyPlatform, FastifyTypes } from './fastify_adapter.js'
 import type { RouteValidationSchema } from './routing/spec.js'
@@ -127,6 +129,8 @@ export class FastifyContext<
     if (current === undefined) {
       this.#reply.header(key, value)
     } else {
+      // Removed first: Fastify adds a `set-cookie` value to the ones it holds, which would send these twice.
+      this.#reply.removeHeader(key)
       this.#reply.header(key, [...(Array.isArray(current) ? current : [String(current)]), value])
     }
 
@@ -150,6 +154,8 @@ export class FastifyContext<
   body(body?: unknown): this {
     // Before the send, so a send that throws still leaves the context answered.
     this.#answered = true
+    // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
+    reopenCookieFlush(this.#reply)
     this.#reply.send(body)
     return this
   }
@@ -172,17 +178,18 @@ export class FastifyContext<
 
   redirect(url: string, status?: number): this {
     this.#answered = true
+    reopenCookieFlush(this.#reply)
     this.#reply.redirect(resolveAppURL(url, this.req.basePath), status)
     return this
   }
 
   cookie(name: string, value: string, opts?: CookieSerializeOptions): this {
-    this.#reply.setCookie(name, value, opts)
+    serverCookies(this.#fastifyRequest, 'set cookies').set(this.#fastifyRequest, this.#reply, name, value, opts)
     return this
   }
 
   deleteCookie(name: string, opts?: CookieSerializeOptions): this {
-    this.#reply.clearCookie(name, opts)
+    serverCookies(this.#fastifyRequest, 'delete cookies').delete(this.#fastifyRequest, this.#reply, name, opts)
     return this
   }
 
@@ -202,9 +209,11 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
   InferParams<SCHEMA>,
   InferQuery<SCHEMA>,
   InferHeaders<SCHEMA>,
-  false,
+  true,
   InferBody<SCHEMA>
 > {
+  #cookies?: Record<string, string>
+
   constructor(private readonly request: FastifyRequest) {}
 
   get raw(): IncomingMessage {
@@ -270,62 +279,31 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
   cookie(): Record<string, string>
   cookie(name: string): string | undefined
   cookie(name?: string): Record<string, string> | string | undefined {
-    this.#assertCookiesParsed()
+    const cookies = this.#parsedCookies()
 
-    if (name === undefined) {
-      return this.request.cookies as Record<string, string>
-    }
-
-    return this.request.cookies[name] as string | undefined
+    return name === undefined ? cookies : cookies[name]
   }
 
-  signedCookie(): Record<string, UnsignedCookie>
-  signedCookie(name: string): UnsignedCookie
-  signedCookie(name?: string): Record<string, UnsignedCookie> | UnsignedCookie {
-    this.#assertCookiesParsed()
+  signedCookie(): Promise<Record<string, UnsignedCookie>>
+  signedCookie(name: string, secret?: CookieSecret): Promise<UnsignedCookie>
+  async signedCookie(name?: string, secret?: CookieSecret): Promise<Record<string, UnsignedCookie> | UnsignedCookie> {
+    const server = serverCookies(this.request, 'read cookies')
+    const cookies = this.#parsedCookies()
 
-    if (typeof name === 'string') {
-      const cookie = this.request.cookies[name]
-      if (cookie === undefined) {
-        return undefined
-      }
+    if (name !== undefined) {
+      const raw = cookies[name]
 
-      const result = this.request.unsignCookie(cookie)
-
-      return result.valid && result.value !== null ? result.value : false
+      return raw === undefined ? undefined : server.verify(raw, secret)
     }
 
-    const cookies = this.request.cookies as Record<string, string>
-    const ret: Record<string, UnsignedCookie> = {}
-    for (const [name, value] of Object.entries(cookies)) {
-      ret[name] = this.#unsignCookie(value)
-    }
+    const names = Object.keys(cookies)
+    const values = await Promise.all(names.map(cookie => server.verify(cookies[cookie]!, undefined)))
 
-    return ret
+    return Object.fromEntries(names.map((cookie, i) => [cookie, values[i]]))
   }
 
-  /**
-   * `@fastify/cookie` decorates the request with `cookies: null` and fills it in from a hook of its own, so `null`
-   * means the plugin is there and has not run yet for this request, which is a different mistake from its absence.
-   */
-  #assertCookiesParsed(): void {
-    if (this.request.cookies === undefined) {
-      throw new Error(
-        'Cannot read cookies: @fastify/cookie plugin is not registered on this Fastify instance: turn cookie ' +
-          'parsing back on with .cookie(k => k.enabled(true))',
-      )
-    }
-
-    if (this.request.cookies === null) {
-      throw new Error(
-        'Cannot read cookies: @fastify/cookie has not parsed them yet for this request: register it before whatever ' +
-          'reads cookies, such as the authentication gate, and leave its "hook" option on "onRequest"',
-      )
-    }
-  }
-
-  #unsignCookie(cookie: string): string | false {
-    const result = this.request.unsignCookie(cookie)
-    return result.valid && result.value !== null ? result.value : false
+  /** Parsed once per request, on first read. */
+  #parsedCookies(): Record<string, string> {
+    return (this.#cookies ??= serverCookies(this.request, 'read cookies').parse(this.request))
   }
 }

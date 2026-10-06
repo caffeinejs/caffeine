@@ -1,6 +1,7 @@
 import type { Provider } from '@caffeinejs/di'
 
 import type { Context } from '../../../context.js'
+import type { CookieSerializeOptions } from '../../../cookie/options.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { buildCredentialPrincipal, type UserProvider } from '../credentials/index.js'
 import { BaseAuthenticationHandler } from '../handler.js'
@@ -11,6 +12,7 @@ import {
   returnTargetOf,
   shouldRedirectChallenge,
 } from '../internal/remote/config.js'
+import { sealingSecrets, type OpenedJWT, type SealingSecret } from '../internal/sealed_jwt.js'
 import {
   newSeriesToken,
   parseToken,
@@ -19,7 +21,7 @@ import {
   type SeriesTokenPolicy,
 } from '../internal/series_token.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../ticket.js'
-import { sealSession, unsealSession } from './_session_cookie.js'
+import { openSession, sealSession } from './_session_cookie.js'
 import type { CookieAuthenticationOptions } from './cookie_options.js'
 import type { RememberMeTokenStore } from './remember_me_token_store.js'
 
@@ -39,6 +41,8 @@ interface SessionPayload {
   scheme: string
   claims: SealedClaim[]
   roleClaimType: string
+  /** Whether the cookie carries `Max-Age`. Absent from a session sealed before it was recorded. */
+  persistent?: boolean
 }
 
 /**
@@ -47,7 +51,7 @@ interface SessionPayload {
  * `persist` is sign-in (seal the principal into the cookie), `revoke` is sign-out (clear it),
  * `authenticate` reads and unseals the cookie back into a principal. A login endpoint verifies
  * credentials with `CredentialsService` and then persists the session via `AuthenticationService`.
- * Requires the Fastify cookie plugin to be registered on the instance.
+ * Needs cookies on: a gate refuses to start on a server whose cookies are off.
  *
  * The session is the sealed cookie itself, so between issue and expiry nothing server-side is consulted —
  * `validatePrincipal` is the hook for applications that need a say. Durable remember-me is the one part that
@@ -62,6 +66,7 @@ interface SessionPayload {
  */
 export class CookieAuthenticationHandler extends BaseAuthenticationHandler<CookieAuthenticationOptions> {
   readonly #name: string
+  readonly #secrets: readonly SealingSecret[]
 
   #rememberStore: Provider<RememberMeTokenStore> | undefined
   #userProvider: Provider<UserProvider> | undefined
@@ -69,6 +74,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   constructor(name: string, options: CookieAuthenticationOptions) {
     super(options)
     this.#name = name
+    this.#secrets = sealingSecrets(options.sessionSecret)
   }
 
   /**
@@ -89,7 +95,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     let unreadable: Error | undefined
 
     if (raw) {
-      let fromCookie: Principal | undefined
+      let fromCookie: { principal: Principal; session: OpenedJWT<SessionPayload> } | undefined
 
       // Only the unsealing is guarded. `validatePrincipal` runs outside it: when the application cannot tell
       // whether a session still stands — its store is down — that is an error to surface, not a reason to treat
@@ -101,8 +107,12 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
       }
 
       if (fromCookie !== undefined) {
-        const principal = await this.#validate(ctx, fromCookie)
+        const principal = await this.#validate(ctx, fromCookie.principal)
         if (principal) {
+          if (fromCookie.session.renew) {
+            await this.#resealSession(ctx, fromCookie.session)
+          }
+
           return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
         }
 
@@ -271,11 +281,12 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   // --- session cookie -------------------------------------------------------
 
-  async #principalFromCookie(raw: string): Promise<Principal> {
-    const payload = await unsealSession<SessionPayload>(raw, this.options.sessionSecret, this.#name)
+  async #principalFromCookie(raw: string): Promise<{ principal: Principal; session: OpenedJWT<SessionPayload> }> {
+    const session = await openSession<SessionPayload>(raw, this.#secrets, this.#name)
+    const payload = session.claims
     const claims = payload.claims.map(c => new Claim(c.type, c.value, c.issuer))
     const identity = new Identity(payload.scheme, true, claims, payload.roleClaimType ?? this.options.roleClaimType)
-    return new Principal(true, identity)
+    return { principal: new Principal(true, identity), session }
   }
 
   async #writeSessionCookie(ctx: Context, principal: Principal, ttl: number, persistent: boolean): Promise<void> {
@@ -283,19 +294,38 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
       scheme: this.#name,
       claims: principal.claims().map(c => ({ type: c.type, value: c.value, issuer: c.issuer })),
       roleClaimType: this.options.roleClaimType!,
+      persistent,
     }
-    const sealed = await sealSession(
-      payload as unknown as Record<string, unknown>,
-      this.options.sessionSecret,
-      this.#name,
-      ttl,
-    )
+
+    await this.#writeSealed(ctx, payload, ttl)
+  }
+
+  /**
+   * Seals a session an older secret opened with the current one. What was sealed is sealed again, not a principal
+   * `validatePrincipal` swapped in, and it keeps its expiry.
+   */
+  async #resealSession(ctx: Context, session: OpenedJWT<SessionPayload>): Promise<void> {
+    const ttl = session.exp - Math.floor(Date.now() / 1000)
+    if (ttl <= 0) {
+      return
+    }
+
+    const { scheme, claims, roleClaimType } = session.claims
+    // A session sealed before `persistent` was recorded outlives the session-cookie lifetime only when it was
+    // persistent.
+    const persistent = session.claims.persistent ?? session.exp - session.iat > this.options.maxAge!
+
+    await this.#writeSealed(ctx, { scheme, claims, roleClaimType, persistent }, ttl)
+  }
+
+  async #writeSealed(ctx: Context, payload: SessionPayload, ttl: number): Promise<void> {
+    const sealed = await sealSession(payload as unknown as Record<string, unknown>, this.#secrets, this.#name, ttl)
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
     ctx.cookie(
       this.options.cookieName!,
       sealed,
-      this.#cookieOpts(ctx, this.options.cookieName!, persistent ? ttl : undefined),
+      this.#cookieOpts(ctx, this.options.cookieName!, payload.persistent === true ? ttl : undefined),
     )
     noStore(ctx)
   }
@@ -410,27 +440,34 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     noStore(ctx)
   }
 
-  #cookieOpts(ctx: Context, name: string, maxAge?: number): Record<string, unknown> {
+  // Every attribute is the scheme's own, one it leaves unset written as `undefined`: that clears whatever the
+  // server's `parseOptions` default, so an application-wide domain or `signed` never reaches a session cookie.
+  #cookieOpts(ctx: Context, name: string, maxAge?: number): CookieSerializeOptions {
     return {
       httpOnly: true,
       secure: this.options.secure,
       sameSite: this.options.sameSite,
       path: this.#cookiePath(ctx, name),
-      ...(maxAge !== undefined ? { maxAge } : {}),
+      domain: this.options.domain,
+      partitioned: this.options.partitioned,
+      priority: this.options.priority,
+      maxAge,
+      expires: undefined,
+      signed: false,
     }
   }
 
   /**
    * The configured `path`, or else the application's base path as this request came in — `/` for one that came
    * without it — so applications sharing an origin under different bases keep their sessions apart. A `__Host-`
-   * cookie stays at `/`: a browser refuses one set anywhere else.
+   * cookie stays at `/`: a browser refuses one set anywhere else, and matches the prefix in any case.
    */
   #cookiePath(ctx: Context, name: string): string {
     if (this.options.path !== undefined) {
       return this.options.path
     }
 
-    return name.startsWith('__Host-') ? '/' : ctx.req.basePath || '/'
+    return /^__host-/i.test(name) ? '/' : ctx.req.basePath || '/'
   }
 }
 

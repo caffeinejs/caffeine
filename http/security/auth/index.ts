@@ -22,7 +22,6 @@ export {
   CookieAuthenticationHandler,
   type CookieAuthenticationOptions,
   CookieAuthenticationOptionsBuilder,
-  type CookieSameSite,
   REMEMBERED_CLAIM,
   RememberMeTokenStore,
 } from './cookie/index.js'

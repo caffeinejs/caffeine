@@ -194,6 +194,59 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
       expect(opts.sessionCookieName).toBe('sess')
       expect(opts.stateCookieName).toBe('st')
     })
+
+    // `__Host-` refuses a Domain, so a cookie given one keeps the Secure guarantee under `__Secure-` instead.
+    it('uses __Secure- names when the cookies are given a domain', () => {
+      const opts = minimal().cookieDomain('example.com').build(SCHEME)
+      expect(opts.sessionCookieName).toBe('__Secure-oidc_OIDC_session')
+      expect(opts.stateCookieName).toBe('__Secure-oidc_OIDC_state')
+    })
+  })
+
+  // A cookie a browser would drop fails as the application starts, not as a sign-in that never sticks.
+  describe('cookies refused at start-up', () => {
+    it.each<[string, (o: OIDCAuthenticationOptionsBuilder) => OIDCAuthenticationOptionsBuilder, string]>([
+      [
+        'an explicit "__Host-" name without Secure',
+        o => o.secureCookie(false).sessionCookieName('__Host-sess'),
+        'sessionCookieName "__Host-sess": a "__Host-" cookie needs Secure',
+      ],
+      [
+        'an explicit "__Host-" name with a domain',
+        o => o.sessionCookieName('__Host-sess').cookieDomain('example.com'),
+        'sessionCookieName "__Host-sess": a "__Host-" cookie needs',
+      ],
+      [
+        'a state name a header cannot carry',
+        o => o.stateCookieName('my state'),
+        'stateCookieName "my state": its name may hold only',
+      ],
+      [
+        'partitioned cookies without Secure',
+        o => o.secureCookie(false).cookiePartitioned(),
+        'sessionCookieName "__oidc_OIDC_session": Partitioned needs Secure',
+      ],
+    ])('%s', (_what, configure, message) => {
+      expect(() => configure(minimal()).build(SCHEME)).toThrow(`Cannot configure OIDC: ${message}`)
+    })
+  })
+
+  describe('a list of session secrets', () => {
+    it('takes one, the first sealing', () => {
+      const secrets = ['session-secret-at-least-32-chars!!', 'an-older-session-secret-of-32-chars']
+      expect(minimal().sessionSecret(secrets).build(SCHEME).sessionSecret).toEqual(secrets)
+    })
+
+    it.each<[string, string[], string]>([
+      [
+        'a short entry by its position',
+        ['session-secret-at-least-32-chars!!', 'short'],
+        'sessionSecret 1 of the list must be at least 32 characters',
+      ],
+      ['an empty list', [], 'the list of sessionSecret is empty'],
+    ])('refuses %s', (_what, secrets, message) => {
+      expect(() => minimal().sessionSecret(secrets).build(SCHEME)).toThrow(`Cannot configure OIDC: ${message}`)
+    })
   })
 
   describe('endpoint TLS enforcement', () => {

@@ -491,9 +491,9 @@ describe('OIDC integration', () => {
     expect(res.status).toBe(403)
   })
 
-  // The adapter registers @fastify/cookie itself, so the state and session cookies this flow depends on are
-  // parsed with nothing asked of the application.
-  it('starts with @fastify/cookie registered by nobody', async () => {
+  // Every application has cookies, so the state and session cookies this flow depends on are parsed with nothing
+  // asked of the application.
+  it('starts with no cookie plugin registered by the application', async () => {
     const builder = makeOIDCApp()
     await expect(builder.bootstrap()).resolves.toBeUndefined()
     await builder.close()

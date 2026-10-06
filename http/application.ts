@@ -112,9 +112,9 @@ export class WebApplication<
     super(options)
 
     // Installed unconditionally, so their names are dedupe-protected and `$hasFeature` answers for them. The
-    // order here is configure order only; the server order is the head slots in `#registerExtensions`: error
-    // handling first, then cookies, ahead of everything `.with(...)` registers — so cookies are parsed before
-    // any plugin that reads one runs, the authentication gate included.
+    // order here is configure order only; the server order is the head slots in `#headSlots()`: error handling
+    // first, then cookies, ahead of everything `.with(...)` registers. Cookies are read lazily, so no plugin that
+    // reads one has an order to get right, and the cookie writer's `onSend` hook leads every later plugin's.
     this.install(this.#errorHandling)
     this.install(this.#cookieBuilder)
 
@@ -369,13 +369,15 @@ export class WebApplication<
   }
 
   /**
-   * Configures the cookie parsing every application gets: the signing secret, the serialization defaults, and
-   * whether cookies are parsed at all. The feature is registered either way, so this only overrides the
-   * defaults — and it is registered ahead of every plugin, so where in the chain the call is written makes no
-   * difference.
+   * Configures the cookies every application gets: the secret or the signer signed cookies use, the defaults every
+   * cookie starts from, and whether servers handle cookies at all. The feature is registered either way, so this
+   * only overrides the defaults — and it is registered ahead of every plugin, so where in the chain the call is
+   * written makes no difference.
    *
    * ```ts
    * .cookie((k, { config }) => k.config(config.app.cookie))
+   * .cookie(k => k.secret([current, previous]))   // rotation: the first signs, either verifies
+   * .cookie(k => k.signer(MyCookieSigner))        // a container key, resolved as each server starts
    * ```
    *
    * @throws ErrApplicationStarted when {@link ready} has already started.

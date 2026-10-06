@@ -32,9 +32,6 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // makes no difference to install order.
       .server(({ config }) => ({ listener: config.server }))
       .logger((b, { config }) => b.level(config.log.level))
-      // The CSRF plugin signs its own cookie, and `signedCookie()` has nothing to verify with otherwise. The
-      // session cookie does not need this — it seals itself.
-      .cookie((c, { config }) => c.secret(config.auth.cookieSecret))
       .shutdown(s => {
         if (process.env.VITEST !== undefined) {
           s.drainDelay(0).shutdownTimeout(200)

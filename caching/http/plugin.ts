@@ -1,4 +1,4 @@
-import { DeferredCtor, type Container, type InjectionToken } from '@caffeinejs/di'
+import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
 import {
   ErrConfiguration,
   type AdapterRouteOptions,
@@ -138,12 +138,7 @@ function resolveCache(
     )
   }
 
-  if (
-    typeof value === 'string' ||
-    typeof value === 'symbol' ||
-    typeof value === 'function' ||
-    value instanceof DeferredCtor
-  ) {
+  if (isValidKey(value)) {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
       throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given store token')
@@ -165,12 +160,7 @@ function resolveObserver(
     return undefined
   }
 
-  if (
-    typeof value === 'string' ||
-    typeof value === 'symbol' ||
-    typeof value === 'function' ||
-    value instanceof DeferredCtor
-  ) {
+  if (isValidKey(value)) {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
       throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given observer token')

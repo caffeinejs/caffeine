@@ -106,12 +106,9 @@ describe('$p.map', () => {
     const mapped = $p.map($p.signedCookie('tok'), (value: unknown) => `[${String(value)}]`)
 
     expect(mapped.async).toBe(true)
-    await expect(
-      argOf(mapped, {
-        cookies: { tok: 'signed' },
-        unsignCookie: () => ({ valid: true, value: 'plain', renew: false }),
-      }),
-    ).resolves.toBe('[plain]')
+    await expect(argOf(mapped, { httpContext: { req: { signedCookie: async () => 'plain' } } })).resolves.toBe(
+      '[plain]',
+    )
   })
 
   it('resolves $p.map(..., { async: true }) before returning', async () => {

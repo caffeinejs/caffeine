@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
-import { decodeSession, encodeSession, claimsToSession } from '../internal/remote/session_store.js'
+import { decodeSession, encodeSession, claimsToSession, openSessionCookie } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { accessTokenHash } from './_at_hash.js'
 import { OIDCAuthenticationHandler } from './handler.js'
@@ -115,6 +115,34 @@ describe('OIDCAuthenticationHandler', () => {
       expect(result.succeeded).toBe(true)
       expect(result.ticket!.principal.findFirst('sub')?.value).toBe('user1')
       expect(result.ticket!.principal.findFirst('email')?.value).toBe('u@x.com')
+    })
+
+    // The first secret seals and any opens; a session an older one opened goes back out under the first.
+    it('seals a session an older secret opened with the first, keeping its expiry', async () => {
+      const NEWER = 'a-newer-session-secret-of-32-characters-or-more'
+      const jwt = await encodeSession(
+        claimsToSession([new Claim('sub', 'user1', ISSUER)], 'OIDC'),
+        SESSION_SECRET,
+        SCHEME,
+        3600,
+      )
+
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ sessionSecret: [NEWER, SESSION_SECRET] }))
+      const { ctx, cookie } = makeCtx({ cookies: { __oidc_session: jwt } })
+
+      expect((await handler.authenticate(ctx)).succeeded).toBe(true)
+
+      const [name, resealed] = cookie.mock.calls[0] as [string, string]
+      expect(name).toBe('__oidc_session')
+      expect((await openSessionCookie(resealed, NEWER, SCHEME)).exp).toBe(
+        (await openSessionCookie(jwt, SESSION_SECRET, SCHEME)).exp,
+      )
+      await expect(decodeSession(resealed, SESSION_SECRET, SCHEME)).rejects.toThrow()
+
+      // Opened with the first secret, the session stays as it is.
+      const current = makeCtx({ cookies: { __oidc_session: resealed } })
+      await handler.authenticate(current.ctx)
+      expect(current.cookie).not.toHaveBeenCalled()
     })
 
     it('returns fail() when session cookie is expired or tampered', async () => {
@@ -627,6 +655,34 @@ describe('OIDCAuthenticationHandler', () => {
       expect(deleteCookie).toHaveBeenCalledOnce()
       const [name] = deleteCookie.mock.calls[0] as [string]
       expect(name).toBe('__oidc_session')
+    })
+
+    // A browser drops only the cookie whose domain and partition match, so the clear carries what the write did; and
+    // none of the server's own cookie defaults, `signed` among them, reach either.
+    it('clears the session cookie with the domain, partitioning and priority it was written with', async () => {
+      const handler = new OIDCAuthenticationHandler(
+        'OIDC',
+        makeBaseOptions({
+          secureCookie: true,
+          cookieDomain: 'app.example.com',
+          cookiePartitioned: true,
+          cookiePriority: 'high',
+        }),
+      )
+      const { ctx, deleteCookie } = makeCtx()
+
+      await handler.revoke(ctx)
+
+      expect(deleteCookie).toHaveBeenCalledWith('__oidc_session', {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: true,
+        domain: 'app.example.com',
+        partitioned: true,
+        priority: 'high',
+        signed: false,
+      })
     })
   })
 

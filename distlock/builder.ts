@@ -1,6 +1,6 @@
 import type { EventEmitter } from 'node:events'
 
-import { DeferredCtor, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
+import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { toMillis, type Duration } from '@caffeinejs/std/duration'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/std/logger'
@@ -172,12 +172,7 @@ function resolveLogger(logger: Logger | false | undefined, container: ContainerO
 
 function resolveBackend(value: Backend | InjectionToken<Backend>, container: ContainerOps): Backend {
   // A backend is always an object; every valid key is a class, a `DeferredCtor`, or a branded string/symbol.
-  if (
-    typeof value === 'string' ||
-    typeof value === 'symbol' ||
-    typeof value === 'function' ||
-    value instanceof DeferredCtor
-  ) {
+  if (isValidKey(value)) {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
       throw new ErrDistLockConfiguration(

@@ -2,6 +2,7 @@ import type { ConfigSnapshot } from '@caffeinejs/std/config'
 import type { AnySchema, InferSchema } from '@caffeinejs/std/schema'
 
 import type { AdapterTypes, AnyAdapterTypes } from './adapter.js'
+import type { CookieSecret } from './cookie/signer.js'
 import type { RouteValidationSchema } from './routing/spec.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'
@@ -81,11 +82,30 @@ export interface Req<
   param(): TParams
   param(key: string): string | undefined
 
+  /**
+   * The cookies the request carries, parsed on first read. Of two sharing a name, the first wins: a browser sends
+   * the more specific one first.
+   *
+   * @throws ErrCookiesDisabled when the server has cookies off.
+   */
   cookie(): Record<string, string>
   cookie(name: string): string | undefined
 
+  /**
+   * Every cookie the request carries, verified with the server's signer: the value, or `false` for one that does not
+   * verify.
+   */
   signedCookie(): TAsync extends true ? Promise<Record<string, UnsignedCookie>> : Record<string, UnsignedCookie>
-  signedCookie(name: string): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
+  /**
+   * The value a signed cookie carries, `false` when it does not verify, or `undefined` when the request did not send
+   * it.
+   *
+   * `secret` verifies with that secret instead of the server's signer, the one `ctx.cookie(name, value, { secret })`
+   * signed with. An array rotates: any of its entries verifies.
+   *
+   * @throws ErrCookieConfiguration when there is no secret to verify with.
+   */
+  signedCookie(name: string, secret?: CookieSecret): TAsync extends true ? Promise<UnsignedCookie> : UnsignedCookie
 }
 
 /**
@@ -172,8 +192,29 @@ export interface Context<
   headers(headers: Record<string, string>): this
   hasHeader(key: string): boolean
 
+  /**
+   * Sets a cookie on the response, over the server's `parseOptions`. Written when the response is sent; a second
+   * cookie with the same name, domain and path replaces the first.
+   *
+   * A cookie a browser would drop is refused here: a broken `__Host-` or `__Secure-` prefix, `SameSite=None` or
+   * `Partitioned` without `Secure`, a name and value past 4096 bytes. A signed one is signed when the response goes
+   * out.
+   *
+   * @throws ErrInvalidCookie when a browser would drop or misread the cookie.
+   * @throws ErrCookieConfiguration when it is to be signed and there is no secret to sign with.
+   * @throws ErrCookieTooLate when the response's headers are already sent.
+   * @throws ErrCookiesDisabled when the server has cookies off.
+   */
   cookie(name: string, value: string, opts?: T['cookieOptions']): this
 
+  /**
+   * Tells the browser to drop a cookie. `opts` must name the domain and path, and for a partitioned cookie
+   * `partitioned`, it was set with: a browser drops only the cookie they match.
+   *
+   * @throws ErrInvalidCookie when a browser would ignore the deletion, as one of a `__Host-` cookie without `Secure`.
+   * @throws ErrCookieTooLate when the response's headers are already sent.
+   * @throws ErrCookiesDisabled when the server has cookies off.
+   */
   deleteCookie(name: string, opts?: T['cookieOptions']): this
 
   body(body?: unknown): this

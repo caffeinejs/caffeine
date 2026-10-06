@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
-import { claimsToSession, encodeSession, encodeTicketRef } from '../internal/remote/session_store.js'
+import { claimsToSession, encodeSession, encodeTicketRef, openTicketRef } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 import { OIDCAuthenticationHandler } from './handler.js'
@@ -239,6 +239,41 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
 
       const fresh = makeCtx({ cookies: { __oidc_session: second } })
       expect((await handler.authenticate(fresh.ctx)).succeeded).toBe(true)
+    })
+  })
+
+  // The first secret seals and any opens. A reference an older one sealed goes back out under the first, with the
+  // same key and expiry, so the older secret can be dropped once the longest session has run out.
+  describe('rotating sessionSecret', () => {
+    const NEWER = 'a-newer-session-secret-of-32-characters-or-more'
+    const rotated = (ticketStore: RemoteAuthenticationTicketStore) =>
+      new OIDCAuthenticationHandler(
+        'OIDC',
+        makeBaseOptions({ jwksResolver, ticketStore, sessionSecret: [NEWER, SESSION_SECRET] }),
+      )
+
+    it('seals a reference an older secret opened with the first, keeping its key and expiry', async () => {
+      const sessionCookie = await signIn(handlerWith(store))
+      const { ctx, cookie } = makeCtx({ cookies: { __oidc_session: sessionCookie } })
+
+      expect((await rotated(store).authenticate(ctx)).succeeded).toBe(true)
+
+      const [name, resealed, opts] = cookie.mock.calls[0] as [string, string, { maxAge: number }]
+      const before = await openTicketRef(sessionCookie, SESSION_SECRET, SCHEME)
+      const after = await openTicketRef(resealed, NEWER, SCHEME)
+
+      expect(name).toBe('__oidc_session')
+      expect(after.key).toBe(before.key)
+      expect(after.exp).toBe(before.exp)
+      expect(opts.maxAge).toBeLessThanOrEqual(3600)
+    })
+
+    it('revoke() drops a ticket whose reference an older secret sealed', async () => {
+      const sessionCookie = await signIn(handlerWith(store))
+
+      await rotated(store).revoke(makeCtx({ cookies: { __oidc_session: sessionCookie } }).ctx)
+
+      expect(store.tickets.size).toBe(0)
     })
   })
 

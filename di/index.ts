@@ -36,6 +36,7 @@ export {
 export {
   type Identifier,
   type InjectionToken,
+  isValidKey,
   type NamedToken,
   token,
   type TokenBrand,

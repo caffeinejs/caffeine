@@ -42,6 +42,15 @@ describe('state_store', () => {
     await expect(decodeState(token, 'wrong-secret-at-least-32-chars!!', SCHEME)).rejects.toThrow()
   })
 
+  // A sign-in under way when the secrets rotate comes back within its ten minutes; any listed secret opens it, and
+  // the first one seals the next.
+  it('decodes a state an older secret of the list sealed, and seals with the first', async () => {
+    const newer = 'a-newer-state-secret-at-least-32-chars'
+
+    expect(await decodeState(await encodeState(STATE, SECRET, SCHEME), [newer, SECRET], SCHEME)).toMatchObject(STATE)
+    expect(await decodeState(await encodeState(STATE, [newer, SECRET], SCHEME), newer, SCHEME)).toMatchObject(STATE)
+  })
+
   it('preserves plain pkceMethod', async () => {
     const plain: RemoteAuthenticationState = { ...STATE, pkceMethod: 'plain' }
     const token = await encodeState(plain, SECRET, SCHEME)

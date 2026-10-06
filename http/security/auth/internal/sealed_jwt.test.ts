@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { sealJWT, unsealJWT } from './sealed_jwt.js'
+import { openJWT, sealJWT, unsealJWT } from './sealed_jwt.js'
 
 const SECRET = 'test-session-secret-at-least-32-chars!!'
 const TYP = 'session+jwt'
@@ -107,5 +107,56 @@ describe('sealed tokens', () => {
     const token = forged({ alg: 'dir', enc: 'A128CBC-HS256', typ: TYP })
 
     await expect(unsealJWT(token, TYP, SECRET, INFO)).rejects.toMatchObject({ code: 'ERR_JOSE_ALG_NOT_ALLOWED' })
+  })
+
+  // Rotation: the first secret seals, any opens, and `renew` says the token is worth sealing again under the first.
+  describe('under a list of secrets', () => {
+    const NEWER = 'a-newer-session-secret-at-least-32-chars'
+
+    it('seals with the first and opens with any, saying when an older one did', async () => {
+      const sealedOld = await sealJWT({ sub: 'ada' }, TYP, SECRET, INFO, 60)
+      const sealedNew = await sealJWT({ sub: 'ada' }, TYP, [NEWER, SECRET], INFO, 60)
+
+      await expect(openJWT(sealedOld, TYP, [NEWER, SECRET], INFO)).resolves.toMatchObject({
+        claims: { sub: 'ada' },
+        renew: true,
+      })
+      await expect(openJWT(sealedNew, TYP, [NEWER, SECRET], INFO)).resolves.toMatchObject({ renew: false })
+      await expect(unsealJWT(sealedNew, TYP, NEWER, INFO)).resolves.toMatchObject({ sub: 'ada' })
+    })
+
+    it('tells when the token was sealed and when it expires', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const token = await sealJWT({ sub: 'ada' }, TYP, SECRET, INFO, 60)
+
+      const opened = await openJWT(token, TYP, SECRET, INFO)
+
+      expect(opened.exp - opened.iat).toBe(60)
+    })
+
+    // Only a key that could not decrypt the token is worth another try. An expired token was decrypted: had the next
+    // secret been tried, the error would be its failure to decrypt instead.
+    it('tries the next secret only when one fails to decrypt', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const token = await sealJWT({ sub: 'ada' }, TYP, SECRET, INFO, 60)
+      vi.setSystemTime(new Date('2026-01-01T00:01:01Z'))
+
+      await expect(openJWT(token, TYP, [SECRET, NEWER], INFO)).rejects.toMatchObject({ code: 'ERR_JWT_EXPIRED' })
+      await expect(openJWT(token, TYP, [NEWER, SECRET], INFO)).rejects.toMatchObject({ code: 'ERR_JWT_EXPIRED' })
+    })
+
+    it('fails as the last secret failed when none opens it', async () => {
+      const token = await sealJWT({ sub: 'ada' }, TYP, SECRET, INFO, 60)
+
+      await expect(openJWT(token, TYP, [NEWER, 'a-third-secret-at-least-32-characters'], INFO)).rejects.toMatchObject({
+        code: 'ERR_JWE_DECRYPTION_FAILED',
+      })
+    })
+
+    it('refuses an empty list', async () => {
+      await expect(sealJWT({}, TYP, [], INFO, 60)).rejects.toThrow('the list of secrets is empty')
+    })
   })
 })

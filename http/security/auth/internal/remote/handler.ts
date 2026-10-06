@@ -2,6 +2,8 @@ import { randomBytes } from 'node:crypto'
 
 import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
+import type { CookiePriority, CookieSerializeOptions } from '../../../../cookie/options.js'
+import type { CookieSecret } from '../../../../cookie/signer.js'
 import { Claim, Identity, Principal } from '../../../index.js'
 import { BaseAuthenticationHandler } from '../../handler.js'
 import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
@@ -19,10 +21,11 @@ import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
 import {
   assertValidSession,
   claimsToSession,
-  decodeSession,
   decodeTicketRef,
   encodeSession,
   encodeTicketRef,
+  openSessionCookie,
+  openTicketRef,
 } from './session_store.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
 import { decodeState, encodeState, STATE_TTL_SECONDS } from './state_store.js'
@@ -71,6 +74,9 @@ export type RemoteChallengeMode = ChallengeMode
 /** Sign-ins a browser may have under way at once for one strategy. One more clears the rest before it starts. */
 const MAX_OUTSTANDING_FLOWS = 8
 
+/** What a `state` this handler mints is spelled in: base64url without padding. */
+const STATE_CHARSET = /^[A-Za-z0-9_-]+$/
+
 /** The options every OAuth-family strategy shares. */
 export interface RemoteAuthenticationOptions {
   clientID: string
@@ -79,11 +85,15 @@ export interface RemoteAuthenticationOptions {
   defaultRedirectPath: string
   scopes: string[]
 
-  sessionSecret: string
+  /** One secret, or several: the first seals, and any of them opens. */
+  sessionSecret: CookieSecret
   sessionCookieName: string
   sessionCookieTtlSeconds: number
   stateCookieName: string
   secureCookie: boolean
+  cookieDomain?: string
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
 
   roleClaimType: string
   httpTimeoutMs: number
@@ -219,10 +229,25 @@ export abstract class RemoteAuthenticationHandler<
     }
 
     let session: RemoteAuthenticationSession
+    // Set when an older secret opened the cookie: how to seal it again with the current one, before it expires.
+    let reseal: { exp: number; seal: (ttl: number) => Promise<string> } | undefined
     try {
-      session = this.options.ticketStore
-        ? await this.#retrieveTicket(cookie)
-        : await decodeSession(cookie, this.options.sessionSecret, this.name)
+      if (this.options.ticketStore) {
+        const ref = await openTicketRef(cookie, this.options.sessionSecret, this.name)
+        session = await this.#retrieveTicket(ref.key)
+
+        if (ref.renew) {
+          reseal = { exp: ref.exp, seal: ttl => encodeTicketRef(ref.key, this.options.sessionSecret, this.name, ttl) }
+        }
+      } else {
+        const opened = await openSessionCookie(cookie, this.options.sessionSecret, this.name)
+        session = opened.claims
+
+        if (opened.renew) {
+          const sealed = { claims: opened.claims.claims, scheme: opened.claims.scheme }
+          reseal = { exp: opened.exp, seal: ttl => encodeSession(sealed, this.options.sessionSecret, this.name, ttl) }
+        }
+      }
     } catch (e) {
       // A cookie was presented and it did not resolve to a session — expired, tampered,
       // revoked, or a cookie of another purpose replayed as a session. That is a failure,
@@ -245,18 +270,24 @@ export abstract class RemoteAuthenticationHandler<
     const identity = new Identity(session.scheme, true, claims, this.options.roleClaimType)
     const principal = new Principal(true, identity)
 
+    // Sealed again with the current secret, keeping its expiry, so a retired secret can go once the longest
+    // session has run out.
+    const ttl = reseal === undefined ? 0 : reseal.exp - Math.floor(Date.now() / 1000)
+    if (reseal !== undefined && ttl > 0) {
+      ctx.cookie(this.options.sessionCookieName, await reseal.seal(ttl), this.cookieOpts(ttl))
+      noStore(ctx)
+    }
+
     return AuthenticateResult.success(new AuthenticationTicket(principal, session.scheme))
   }
 
   /**
-   * Resolves a reference cookie against the ticket store.
+   * Resolves a reference cookie's key against the ticket store.
    *
    * Every path out of here other than a live ticket throws, so authentication fails closed:
    * a store that is down or throwing must never be the reason someone is let in.
    */
-  async #retrieveTicket(cookie: string): Promise<RemoteAuthenticationSession> {
-    const key = await decodeTicketRef(cookie, this.options.sessionSecret, this.name)
-
+  async #retrieveTicket(key: string): Promise<RemoteAuthenticationSession> {
     let ticket: Awaited<ReturnType<RemoteAuthenticationTicketStore['retrieve']>>
     try {
       ticket = await this.options.ticketStore!.retrieve(key)
@@ -416,11 +447,18 @@ export abstract class RemoteAuthenticationHandler<
     return authURL.toString()
   }
 
-  /** The names of the state cookies of this strategy the request carries. */
+  /**
+   * The names of the state cookies of this strategy the request carries.
+   *
+   * Only names this handler could have minted: a cookie planted under the prefix — from a sibling subdomain — with
+   * a name a header cannot carry is not one of its flows, and deleting it would fail the sign-in.
+   */
   #stateCookieNames(ctx: Context): string[] {
     const prefix = `${this.options.stateCookieName}.`
 
-    return Object.keys(ctx.req.cookie() ?? {}).filter(name => name.startsWith(prefix))
+    return Object.keys(ctx.req.cookie() ?? {}).filter(
+      name => name.startsWith(prefix) && STATE_CHARSET.test(name.slice(prefix.length)),
+    )
   }
 
   /**
@@ -591,7 +629,7 @@ export abstract class RemoteAuthenticationHandler<
     // attacker-controlled and composes a cookie name, and nothing outside the set this handler mints can
     // identify a real flow anyway.
     const stateCookieName =
-      stateParam !== undefined && /^[A-Za-z0-9_-]+$/.test(stateParam) ? this.#stateCookieNameFor(stateParam) : undefined
+      stateParam !== undefined && STATE_CHARSET.test(stateParam) ? this.#stateCookieNameFor(stateParam) : undefined
 
     // Cleared on every path out of here, the provider's own refusal included: a flow that came back is over,
     // whichever way it went, and its cookie would otherwise stay good for the rest of its ten minutes.
@@ -716,13 +754,20 @@ export abstract class RemoteAuthenticationHandler<
     noStore(ctx)
   }
 
-  protected cookieOpts(maxAge?: number): Record<string, unknown> {
+  // Every attribute is the strategy's own, one it leaves unset written as `undefined`: that clears whatever the
+  // server's `parseOptions` default, so an application-wide domain or `signed` never reaches these cookies.
+  protected cookieOpts(maxAge?: number): CookieSerializeOptions {
     return {
       httpOnly: true,
       sameSite: 'lax',
       path: '/',
       secure: this.options.secureCookie,
-      ...(maxAge !== undefined ? { maxAge } : {}),
+      domain: this.options.cookieDomain,
+      partitioned: this.options.cookiePartitioned,
+      priority: this.options.cookiePriority,
+      maxAge,
+      expires: undefined,
+      signed: false,
     }
   }
 }

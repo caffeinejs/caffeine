@@ -95,6 +95,65 @@ the gateway's job or authorization's.
 - `@caffeinejs/openapi` names the base as the document's server when the application named none, and links the
   docs page under it. A typed client takes the base in its URL: `brewer<App>('https://gateway.example/api')`.
 
+## Cookies
+
+Every application has cookies, on its own server and on every ops server; there is nothing to register. A request's
+cookies are parsed when first read, so a hook or a plugin reads them wherever it sits.
+
+```ts
+ctx.req.cookie('theme') // string | undefined
+ctx.cookie('theme', 'dark', { maxAge: 3600 })
+ctx.deleteCookie('theme') // with the domain and path it was set with
+
+ctx.cookie('cart', id, { signed: true }) // signed as the response goes out
+await ctx.req.signedCookie('cart') // the value; false when it does not verify; undefined when absent
+```
+
+- A cookie nobody scoped goes out with `Path=/` and `SameSite=Lax`. `.cookie(k => k.parseOptions({ ... }))` sets
+  what every cookie starts from, and a call writing an option as `undefined` clears it. Under `.basePath('/api')`,
+  `Path=/` reaches every application on the origin: scope a cookie with `path: ctx.req.basePath || '/'`.
+- `.cookie(k => k.secret(secret))` signs with HMAC through Web Crypto, in the format `@fastify/cookie` writes, so
+  cookies it signed keep verifying. A secret has at least 32 characters; `k.algorithm('SHA-512')` picks the hash.
+  `k.secret([current, previous])` rotates: the first signs and any verifies. Drop `previous` once the longest-lived
+  signed cookie has expired.
+- `k.signer(new MySigner())`, or the container key it is bound under — `k.signer(CookieSigner)` — signs with keys of
+  the application's own. A key is resolved once per server, as it starts. A signer extends `CookieSigner`; its
+  `unsign` answers `{ valid, renew, value }`, `renew` when a secret other than the first verified.
+- A secret of the call's own, a tenant's, replaces the server's for that cookie:
+  `ctx.cookie(name, value, { secret })` and `await ctx.req.signedCookie(name, secret)`.
+- A cookie a browser would drop without a word is refused where it is set, with `ErrInvalidCookie`: a `__Host-`,
+  `__Secure-`, `__Http-` or `__Host-Http-` name, in any case, without what its prefix needs; `SameSite=None` or
+  `Partitioned` without `Secure`; a name and value over 4096 bytes. `secure: 'auto'` sets `Secure` on a request
+  that came over HTTPS — behind a proxy, with `trustProxy` — and sends `SameSite=None` as `Lax` over plain HTTP.
+- The cookies are written by the server's first `onSend` hook. One a later plugin's `onSend` sets still goes out;
+  a signed one is refused with `ErrCookieTooLate`. A route of a plugin registered in `.serverCallback()` cannot set
+  cookies at all: register that plugin with `.with(...)`.
+- `.cookie(k => k.enabled(false))` turns them off on every server: reading or setting one throws
+  `ErrCookiesDisabled`, and a cookie-based authentication scheme refuses to start.
+- A Fastify plugin that needs `@fastify/cookie`, such as `@fastify/csrf-protection`, has the application register
+  it beside the framework's: `.with(() => [fastifyCookie, { secret }])`. The context's cookies stay the framework's.
+
+Authentication cookies:
+
+- `sessionSecret` takes a list on the cookie scheme, OIDC, OAuth and GitHub: the first seals and any opens, and a
+  session an older secret opened is sealed again under the first, keeping its expiry. From the environment:
+  `AUTH__SCHEMES__<NAME>__SESSION_SECRET__0`, `__1`, and on.
+- Their cookies take every attribute from the scheme and none from `parseOptions`. The cookie scheme takes
+  `domain(...)`, `partitioned()` and `priority(...)`; OIDC and OAuth take `cookieDomain(...)`, `cookiePartitioned()`
+  and `cookiePriority(...)`, and a name they derive switches from `__Host-` to `__Secure-` when given a domain.
+- Start-up refuses a cookie a browser would drop and two schemes writing cookies of one name.
+
+Moving from the `@fastify/cookie` wrapper:
+
+- `ctx.req.signedCookie(...)` answers with a promise: `await` it.
+- A secret under 32 characters is refused, a `Buffer` secret is not taken, and an algorithm is named `SHA-256`,
+  `SHA-384` or `SHA-512`.
+- Cookies default to `Path=/`, `expires: 0` is the epoch, and `$p.signedCookie` gives `false` for an empty value.
+- `request.cookies` and `reply.setCookie` exist only when the application registers `@fastify/cookie`, which no
+  longer configures `ctx.req.signedCookie`.
+- Authentication cookies ignore `parseOptions`; `addStrategy(name, fn)` with a function that is not a class takes it
+  as a container key.
+
 ## Programmatic routers
 
 The second way to declare routes. Same compilation as a controller — same guards, authorization, validation, error
