@@ -6,16 +6,15 @@ import { RequestBuilder } from '../request_builder.js'
 
 function methodMeta(overrides: Partial<MethodSpec> = {}): MethodSpec {
   return {
+    name: 'op',
     httpMethod: '',
     path: '',
     headers: new Headers(),
     params: [],
     formURLEncoded: false,
-    requestType: undefined,
     responseConverter: undefined,
     requestBodyConverter: undefined,
     responseHandler: undefined,
-    kind: 'method',
     callback: false,
     retry: undefined,
     noRetry: false,

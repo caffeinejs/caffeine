@@ -3,23 +3,27 @@ import { Pool } from 'undici'
 
 import { UndiciCall } from './undici_call.js'
 
-/**
- * `CallFactory` that dispatches through an `undici` connection-pooling `Pool`, one `Pool` per
- * `provide()` call (i.e. one per `FetchyClient`, since `FetchyClient` calls `provide()` exactly
- * once). There is no automatic teardown hook in fetchy's client lifecycle — keep a reference to
- * this factory and call `factory.pool()?.close()` yourself once done with the client.
- */
-export class UndiciCallFactory implements CallFactory {
-  private _pool: Pool | undefined
-
-  constructor(private readonly options?: Pool.Options) {}
-
-  pool(): Pool | undefined {
-    return this._pool
+// A call over a pool its factory created, so closing the client closes the pool. A `UndiciCall` built over a caller's
+// dispatcher has no `close()`, and leaves that dispatcher to the caller.
+class PoolCall extends UndiciCall {
+  constructor(private readonly pool: Pool) {
+    super(pool)
   }
 
+  close(): Promise<void> {
+    return this.pool.close()
+  }
+}
+
+/**
+ * `CallFactory` that dispatches through an `undici` connection-pooling `Pool`, one `Pool` per
+ * `provide()` call, that is one per `FetchyClient`. `FetchyClient.close()` closes it, once the
+ * requests already sent complete.
+ */
+export class UndiciCallFactory implements CallFactory {
+  constructor(private readonly options?: Pool.Options) {}
+
   provide(baseURL: string): Call {
-    this._pool = new Pool(new URL(baseURL).origin, this.options)
-    return new UndiciCall(this._pool)
+    return new PoolCall(new Pool(new URL(baseURL).origin, this.options))
   }
 }

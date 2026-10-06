@@ -1,13 +1,15 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
 
 /**
- * Adapts the final (already request-built, intercepted, converted) method invoker into a
- * different return shape than the default `Promise<T>` — e.g. a Node-style callback.
+ * Adapts an operation's invoker (request already built, intercepted and converted) into a different
+ * call shape than the default `Promise<T>`, such as a Node-style callback.
+ *
+ * The function `adapt()` returns is what a call to the operation runs, without a receiver.
  */
-export interface CallAdapter<T> {
+export interface CallAdapter<T extends (...args: never[]) => unknown = (...args: never[]) => unknown> {
   adapt(invoker: (...args: unknown[]) => Promise<unknown>): T
 }
 
 export interface CallAdapterFactory {
-  provide(spec: MethodSpec): CallAdapter<unknown> | null
+  provide(spec: MethodSpec): CallAdapter | null
 }

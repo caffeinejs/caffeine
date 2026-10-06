@@ -1,5 +1,8 @@
 import { ErrFetchyClientNotBuilt, ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
+import type { Invoker } from '../service_invoker.js'
 import { configureMethod } from './registrar/registrar.js'
+
+type Dispatch = (this: unknown, ...args: unknown[]) => unknown
 
 function decorateVerb(httpMethod: string, path: string) {
   // Return type deliberately `any`: this must satisfy both the method decorator return type
@@ -11,7 +14,7 @@ function decorateVerb(httpMethod: string, path: string) {
     }
 
     const name = String(context.name)
-    configureMethod(context, spec => {
+    const { key } = configureMethod(context, spec => {
       const declared = spec.toMethodSpec().httpMethod
 
       if (declared) {
@@ -21,13 +24,38 @@ function decorateVerb(httpMethod: string, path: string) {
       spec.httpMethod(httpMethod).path(path)
     })
 
-    const stub = (): never => {
-      throw new ErrFetchyClientNotBuilt(name)
+    // `create()` stores each client's invoker on the client under `key`. A method becomes one prototype function
+    // shared by every client, which finds the invoker through `this`, so a subclass's `super` call reaches the base
+    // class's operation. Method shorthand cannot be constructed and takes the member's name.
+    if (context.kind === 'method') {
+      return (
+        {
+          [context.name](this: unknown, ...args: unknown[]): unknown {
+            const invoke = (this as Partial<Record<symbol, Invoker>> | null | undefined)?.[key]
+
+            if (invoke === undefined) {
+              throw new ErrFetchyClientNotBuilt(name)
+            }
+
+            return invoke(args)
+          },
+        } as Record<string | symbol, Dispatch>
+      )[context.name]
     }
 
-    // Field decorators return an *initializer* (called at construction time with the field's
-    // current value) rather than the value itself — methods get the stand-in directly.
-    return context.kind === 'field' ? () => stub : stub
+    // A field decorator returns an initializer, run with the instance as `this`. The function it returns is bound to
+    // that instance, as an arrow-function field would be, so the operation still works destructured.
+    return function (this: Partial<Record<symbol, Invoker>>): Dispatch {
+      return (...args: unknown[]): unknown => {
+        const invoke = this[key]
+
+        if (invoke === undefined) {
+          throw new ErrFetchyClientNotBuilt(name)
+        }
+
+        return invoke(args)
+      }
+    }
   }
 }
 

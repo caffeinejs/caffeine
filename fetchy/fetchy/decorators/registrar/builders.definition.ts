@@ -5,27 +5,32 @@ import type { ResponseHandler } from '../../response_handler.js'
 import type { RetryOptions } from '../../retry_options.js'
 
 export interface ClassSpec {
-  path: string
+  path: string | undefined
   headers: Headers
-  requestType: string | undefined
+  formURLEncoded: boolean
   responseConverter: ResponseConverter | undefined
   requestBodyConverter: RequestBodyConverter | undefined
   responseHandler: ResponseHandler | undefined
   retry: RetryOptions | undefined
 }
 
+/**
+ * The configuration of one operation, as an interceptor reads it through `chain.meta()`.
+ *
+ * One object serves every call to the operation, on every client of its class, so it is read-only.
+ */
 export interface MethodSpec {
-  httpMethod: string
-  path: string
-  headers: Headers
-  params: ParamDescriptor[]
-  formURLEncoded: boolean
-  requestType: string | undefined
-  responseConverter: ResponseConverter | undefined
-  requestBodyConverter: RequestBodyConverter | undefined
-  responseHandler: ResponseHandler | undefined
-  kind: 'method' | 'field'
-  callback: boolean
-  retry: RetryOptions | undefined
-  noRetry: boolean
+  /** The member that declares the operation, as written in the class, such as `getUser`. */
+  readonly name: string
+  readonly httpMethod: string
+  readonly path: string
+  readonly headers: Headers
+  readonly params: readonly ParamDescriptor[]
+  readonly formURLEncoded: boolean
+  readonly responseConverter: ResponseConverter | undefined
+  readonly requestBodyConverter: RequestBodyConverter | undefined
+  readonly responseHandler: ResponseHandler | undefined
+  readonly callback: boolean
+  readonly retry: RetryOptions | undefined
+  readonly noRetry: boolean
 }

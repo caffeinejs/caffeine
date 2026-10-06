@@ -11,44 +11,44 @@ import type { ResponseConverter } from './response_converter.js'
  * `.callFactory()` is never called.
  */
 export class FetchyBuilder {
-  private _baseURL = ''
-  private _callFactory: CallFactory | undefined
-  private readonly _interceptors: Interceptor[] = []
-  private readonly _callAdapterFactories: CallAdapterFactory[] = []
-  private _responseConverter: ResponseConverter | undefined
+  #baseURL = ''
+  #callFactory: CallFactory | undefined
+  readonly #interceptors: Interceptor[] = []
+  readonly #callAdapterFactories: CallAdapterFactory[] = []
+  #responseConverter: ResponseConverter | undefined
 
   baseURL(url: string): this {
-    this._baseURL = url.endsWith('/') ? url.slice(0, -1) : url
+    this.#baseURL = url.endsWith('/') ? url.slice(0, -1) : url
     return this
   }
 
   callFactory(factory: CallFactory): this {
-    this._callFactory = factory
+    this.#callFactory = factory
     return this
   }
 
   addInterceptor(interceptor: Interceptor | InterceptorFunction): this {
-    this._interceptors.push(toInterceptor(interceptor))
+    this.#interceptors.push(toInterceptor(interceptor))
     return this
   }
 
   addCallAdapterFactory(factory: CallAdapterFactory): this {
-    this._callAdapterFactories.push(factory)
+    this.#callAdapterFactories.push(factory)
     return this
   }
 
   responseConverter(converter: ResponseConverter): this {
-    this._responseConverter = converter
+    this.#responseConverter = converter
     return this
   }
 
   build(): FetchyClient {
     return new FetchyClient({
-      baseURL: this._baseURL,
-      callFactory: this._callFactory ?? new FetchCallFactory(),
-      interceptors: this._interceptors,
-      callAdapterFactories: this._callAdapterFactories,
-      responseConverter: this._responseConverter,
+      baseURL: this.#baseURL,
+      callFactory: this.#callFactory ?? new FetchCallFactory(),
+      interceptors: this.#interceptors,
+      callAdapterFactories: this.#callAdapterFactories,
+      responseConverter: this.#responseConverter,
     })
   }
 }

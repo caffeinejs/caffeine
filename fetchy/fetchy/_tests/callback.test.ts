@@ -6,9 +6,8 @@ import { API } from '../decorators/api.js'
 import { Callback } from '../decorators/callback.js'
 import { Params } from '../decorators/params.js'
 import { Param } from '../decorators/params/param.js'
-import { Path } from '../decorators/path.js'
 import { GET } from '../decorators/verbs.js'
-import { ErrFetchyHTTP, ErrFetchyMissingCallbackArgument } from '../errors.js'
+import { ErrFetchyClientNotBuilt, ErrFetchyHTTP, ErrFetchyMissingCallbackArgument } from '../errors.js'
 import { noop } from '../noop.js'
 import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
 
@@ -20,8 +19,7 @@ interface User {
 type UserCallback = (error: Error | null, user: User | null) => void
 
 function buildClient(callFactory: TestCallFactory) {
-  @API()
-  @Path('/users')
+  @API('/users')
   class UsersAPI {
     @GET('/{id}')
     @Callback()
@@ -104,6 +102,17 @@ describe('@Callback() / CallbackCallAdapterFactory', () => {
 
     expect(calls).toBe(1)
     expect(unhandled).toHaveLength(1)
+  })
+
+  // `util.promisify(api.getUser)` and the like hand a method on without its client. The adapter cannot make up for it:
+  // there is no client to send through, and the call says so instead of calling back with nothing.
+  it('throws ErrFetchyClientNotBuilt for a callback method called detached from its client', () => {
+    const callback = vi.fn()
+    const api = buildClient(new TestCallFactory())
+    const getUser = api.getUser
+
+    expect(() => getUser('1', callback)).toThrow(ErrFetchyClientNotBuilt)
+    expect(callback).not.toHaveBeenCalled()
   })
 
   it('works identically for a field-declared operation', async () => {

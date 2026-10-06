@@ -2,6 +2,7 @@ import {
   API,
   Body,
   FetchyRequest,
+  GET,
   HeaderMap,
   newClient,
   noop,
@@ -71,6 +72,103 @@ const intercepted = newClient()
   .addInterceptor(chain => chain.proceed(chain.request()))
   .build()
   .create(OverheadAPI)
+
+// Dispatch alone: what reaching a client's invoker costs, measured in front of a synchronous invoker. The keys are
+// fetchy's internal ones, read off a client because nothing exports them, as a benchmark may and an application must
+// not. The own-property rows are what `create()` defined before symbol dispatch: the invoker as an own property of the
+// client, collecting its arguments itself.
+@API()
+class DispatchAPI {
+  @GET('/')
+  method(_n: number): Promise<unknown> {
+    return noop()
+  }
+
+  @GET('/')
+  field!: (n: number) => Promise<unknown>
+}
+
+interface OwnProperty {
+  own(n: number): unknown
+}
+
+const probe = newClient()
+  .baseURL('http://bench.test')
+  .callFactory({ provide: () => call })
+  .build()
+  .create(DispatchAPI)
+
+function keyOf(name: string): symbol {
+  const key = Object.getOwnPropertySymbols(probe).find(symbol => symbol.description === name)
+
+  if (key === undefined) {
+    throw new Error(`No dispatch key named "${name}" on a client`)
+  }
+
+  return key
+}
+
+const methodKey = keyOf('method')
+const fieldKey = keyOf('field')
+
+function dispatching<T extends object>(target: T): T & OwnProperty {
+  const sink = (args: readonly unknown[]): unknown => do_not_optimize(args)
+
+  Object.defineProperty(target, methodKey, { value: sink })
+  Object.defineProperty(target, fieldKey, { value: sink })
+  Object.defineProperty(target, 'own', {
+    value: (...args: unknown[]): unknown => do_not_optimize(args),
+    writable: true,
+    configurable: true,
+  })
+
+  return target as T & OwnProperty
+}
+
+const single = dispatching(new DispatchAPI())
+// One subclass per instance, so each call site meets 8 object shapes, as one base class serving 8 APIs does.
+const eight = Array.from({ length: 8 }, () => dispatching(new (class extends DispatchAPI {})()))
+const adapted = newClient()
+  .baseURL('http://bench.test')
+  .callFactory({ provide: () => call })
+  .addCallAdapterFactory({
+    provide: () => ({
+      adapt:
+        () =>
+        (...args: unknown[]) =>
+          do_not_optimize(args),
+    }),
+  })
+  .build()
+  .create(DispatchAPI)
+
+// Bounded, so the argument stays a small integer for every case.
+let n = 0
+const next = (): number => (n = (n + 1) & 0xffff)
+
+group('dispatch', () => {
+  summary(() => {
+    bench('own property, before symbol dispatch', () => do_not_optimize(single.own(next())))
+    bench('method', () => do_not_optimize(single.method(next())))
+    bench('field', () => do_not_optimize(single.field(next())))
+    bench('method with a call adapter', () => do_not_optimize(adapted.method(next())))
+  })
+})
+
+group('dispatch across 8 classes', () => {
+  summary(() => {
+    bench('own property, before symbol dispatch', () => {
+      for (const target of eight) {
+        do_not_optimize(target.own(next()))
+      }
+    })
+    bench('method', () => {
+      for (const target of eight) {
+        do_not_optimize(target.method(next()))
+      }
+    })
+  })
+})
 
 group('in-memory call', () => {
   summary(() => {
