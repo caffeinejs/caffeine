@@ -6,12 +6,19 @@ import { $t } from '@caffeinejs/std/schema'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 
+import type { Context } from '../../../context.js'
 import {
   AllowAnonymous,
   AuthenticationSchemeProvider,
+  AuthenticationTicket,
   Authorize,
+  Claim,
   Controller,
+  CookieAuthenticationHandler,
+  CookieAuthenticationOptionsBuilder,
   Get,
+  Identity,
+  Principal,
   createWebApplication,
   Authentication,
   authentication,
@@ -158,7 +165,7 @@ describe('authentication configuration', () => {
         }),
       )
       .build().config
-    // A cookie scheme is registered, so the cookie plugin has to be there first or the application refuses to start.
+    // A cookie scheme is registered, so the server's cookies have to be on, or the application refuses to start.
 
     const app = createWebApplication({
       config: conf,
@@ -293,6 +300,13 @@ describe('authentication configuration', () => {
                 clientId: $t.Optional($t.String()),
                 callbackUrl: $t.Optional($t.String()),
                 usePkce: $t.Optional($t.Boolean()),
+                sessionSecret: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
+                domain: $t.Optional($t.String()),
+                partitioned: $t.Optional($t.Boolean()),
+                priority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
+                cookieDomain: $t.Optional($t.String()),
+                cookiePartitioned: $t.Optional($t.Boolean()),
+                cookiePriority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
               }),
             ),
           ),
@@ -342,6 +356,61 @@ describe('authentication configuration', () => {
       })
     })
 
+    // Rotation is a deployment's to do: the new secret goes first, the one being retired after it, and a session
+    // sealed under the old one is let in and sealed again under the new.
+    it("rotates a cookie scheme's secrets and scopes its cookie through the variables a deployment would write", async () => {
+      const NEWER = 'a-newer-session-secret-of-32-characters-or-more'
+      const OLDER = 'an-older-session-secret-of-32-characters-or-more'
+
+      // What signing in under the old secret alone wrote, before the rotation.
+      let sealed = ''
+      const issued = {
+        cookie: (_name: string, value: string) => void (sealed = value),
+        header: () => issued,
+        req: { basePath: '' },
+      } as unknown as Context
+      const ada = new Principal(true, new Identity('cookie', true, [new Claim('sub', 'ada', '')]))
+      await new CookieAuthenticationHandler(
+        'cookie',
+        new CookieAuthenticationOptionsBuilder().sessionSecret(OLDER).build(),
+      ).persist(issued, new AuthenticationTicket(ada, 'cookie'))
+
+      const conf = newConfiguration(openSchema)
+        .source(
+          env({
+            AUTH__SCHEMES__COOKIE__SESSION_SECRET__0: NEWER,
+            AUTH__SCHEMES__COOKIE__SESSION_SECRET__1: OLDER,
+            AUTH__SCHEMES__COOKIE__DOMAIN: 'app.test',
+            AUTH__SCHEMES__COOKIE__PARTITIONED: 'true',
+            AUTH__SCHEMES__COOKIE__PRIORITY: 'high',
+          }),
+        )
+        .build().config
+
+      const app = createWebApplication({ config: conf })
+        .install(
+          Authentication((a, { config }) =>
+            a.config(config.auth).addCookie('cookie', b => b.sessionSecret('a-code-session-secret-of-32-characters')),
+          ),
+        )
+        .with(authentication())
+
+      await app.bootstrap()
+
+      const res = await app.fetch('/protected', { headers: { cookie: `caf.session=${sealed}` } })
+      expect(res.status).toBe(200)
+
+      const reissued = res.headers.getSetCookie().find(line => line.startsWith('caf.session='))!
+      expect(reissued).toContain('Domain=app.test')
+      expect(reissued).toContain('Partitioned')
+      expect(reissued).toContain('Priority=High')
+
+      const cookie = reissued.slice(0, reissued.indexOf(';'))
+      expect((await app.fetch('/protected', { headers: { cookie } })).headers.getSetCookie()).toEqual([])
+
+      await app.close()
+    })
+
     // A client id and a callback URL are what a deployment most often sets from its environment, and `CLIENT_ID`
     // folds to `clientId`. An option spelled any other way is one the variable never reaches.
     it('reaches an OAuth 2.0 scheme through the variables a deployment would write', async () => {
@@ -351,6 +420,9 @@ describe('authentication configuration', () => {
             AUTH__SCHEMES__OAUTH__CLIENT_ID: 'env-client',
             AUTH__SCHEMES__OAUTH__CALLBACK_URL: 'https://app.test/signin/callback',
             AUTH__SCHEMES__OAUTH__USE_PKCE: 'false',
+            AUTH__SCHEMES__OAUTH__COOKIE_DOMAIN: 'app.test',
+            AUTH__SCHEMES__OAUTH__COOKIE_PARTITIONED: 'true',
+            AUTH__SCHEMES__OAUTH__COOKIE_PRIORITY: 'high',
           }),
         )
         .build().config
@@ -384,6 +456,12 @@ describe('authentication configuration', () => {
       expect(authorization.searchParams.get('client_id')).toBe('env-client')
       expect(authorization.searchParams.get('redirect_uri')).toBe('https://app.test/signin/callback')
       expect(authorization.searchParams.has('code_challenge')).toBe(false)
+
+      // The flow's state cookie is scoped as configured, and given a domain it is named "__Secure-", not "__Host-".
+      const state = res.headers.getSetCookie().find(line => line.startsWith('__Secure-oauth2_oauth_state.'))!
+      expect(state).toContain('Domain=app.test')
+      expect(state).toContain('Partitioned')
+      expect(state).toContain('Priority=High')
 
       await app.close()
     })

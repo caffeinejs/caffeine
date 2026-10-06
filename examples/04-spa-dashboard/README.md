@@ -15,7 +15,8 @@ else, and every client route is a route the application wrote.
 - **Both route sources side by side** — `@Controller` classes for `/api/profile` and `/api/admin`, a
   programmatic `newRouter()` for `/api/projects`. They compile identically.
 - **CSRF** with `@fastify/csrf-protection` and **security headers** with `@fastify/helmet` — two official
-  Fastify plugins the application registers itself, because `@caffeinejs/http` ships no wrapper for either.
+  Fastify plugins the application registers itself, because `@caffeinejs/http` ships no wrapper for either. The
+  CSRF plugin needs `@fastify/cookie` beside it, which it registers with its own secret.
 - **A real front-end build**: esbuild, content-hashed asset names, and a `.br`/`.gz` beside every file for
   `preCompressed`.
 - **OpenAPI** for the API, with the client routes deliberately absent from it.

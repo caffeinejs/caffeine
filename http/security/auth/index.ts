@@ -22,7 +22,6 @@ export {
   CookieAuthenticationHandler,
   type CookieAuthenticationOptions,
   CookieAuthenticationOptionsBuilder,
-  type CookieSameSite,
   REMEMBERED_CLAIM,
   RememberMeTokenStore,
 } from './cookie/index.js'
@@ -39,6 +38,7 @@ export {
 export type { AuthSchemeDescriptor, AuthSchemeFlows } from './descriptor.js'
 export {
   ErrAuthConfiguration,
+  ErrAuthenticationCookies,
   ErrAuthenticationGateRequired,
   ErrAuthenticationRequired,
   ErrAuthSchemeNotFound,

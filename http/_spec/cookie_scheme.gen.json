@@ -4,7 +4,17 @@
   "type": "object",
   "properties": {
     "sessionSecret": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
     },
     "cookieName": {
       "type": "string"
@@ -73,6 +83,28 @@
     },
     "path": {
       "type": "string"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "partitioned": {
+      "type": "boolean"
+    },
+    "priority": {
+      "anyOf": [
+        {
+          "const": "low",
+          "type": "string"
+        },
+        {
+          "const": "medium",
+          "type": "string"
+        },
+        {
+          "const": "high",
+          "type": "string"
+        }
+      ]
     },
     "roleClaimType": {
       "type": "string"

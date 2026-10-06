@@ -1,4 +1,6 @@
 import type { Context } from '../../../context.js'
+import type { CookiePriority } from '../../../cookie/options.js'
+import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../index.js'
 import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
@@ -7,7 +9,8 @@ import {
   DEFAULT_HTTP_TIMEOUT_MS,
   defaultSecureCookie,
   isSafeReturnPath,
-  MIN_SESSION_SECRET_LENGTH,
+  remoteCookieViolation,
+  sessionSecretViolation,
 } from '../internal/remote/config.js'
 import { ErrOAuthConfiguration } from '../internal/remote/errors.js'
 import type { RemoteAuthenticationTokens, RemoteChallengeMode } from '../internal/remote/handler.js'
@@ -51,11 +54,20 @@ export interface ResolvedOAuth2AuthenticationOptions {
   defaultRedirectPath: string
   scopes: string[]
 
-  sessionSecret: string
+  /**
+   * Seals the session and state cookies. An array rotates secrets: the first seals, and any of them opens. A
+   * session opened with an older one is sealed again with the first, keeping its expiry.
+   */
+  sessionSecret: CookieSecret
   sessionCookieName: string
   sessionCookieTtlSeconds: number
   stateCookieName: string
   secureCookie: boolean
+  /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
+  cookieDomain?: string
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires {@link secureCookie}. */
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
 
   roleClaimType: string
   httpTimeoutMs: number
@@ -154,7 +166,7 @@ export function resolveOAuth2Options(
   input: OAuth2AuthenticationOptions,
   scheme: string,
 ): ResolvedOAuth2AuthenticationOptions {
-  const required: Array<[string, string | undefined]> = [
+  const required: Array<[string, CookieSecret | undefined]> = [
     ['clientID', input.clientID],
     ['clientSecret', input.clientSecret],
     ['sessionSecret', input.sessionSecret],
@@ -169,10 +181,9 @@ export function resolveOAuth2Options(
     }
   }
 
-  if (input.sessionSecret!.length < MIN_SESSION_SECRET_LENGTH) {
-    throw new ErrOAuthConfiguration(
-      `Cannot configure OAuth2: sessionSecret must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
-    )
+  const secretViolation = sessionSecretViolation(input.sessionSecret!)
+  if (secretViolation !== undefined) {
+    throw new ErrOAuthConfiguration(`Cannot configure OAuth2: ${secretViolation}`)
   }
 
   // The callback carries the authorization code and the endpoints carry the token and the
@@ -189,6 +200,16 @@ export function resolveOAuth2Options(
   }
 
   const secureCookie = input.secureCookie ?? defaultSecureCookie(input.callbackURL!)
+  const sessionCookieName =
+    input.sessionCookieName ?? cookieName('session', scheme, secureCookie, 'oauth2', input.cookieDomain)
+  const stateCookieName =
+    input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oauth2', input.cookieDomain)
+
+  const cookieViolation = remoteCookieViolation({ ...input, sessionCookieName, stateCookieName, secureCookie })
+  if (cookieViolation !== undefined) {
+    throw new ErrOAuthConfiguration(`Cannot configure OAuth2: ${cookieViolation}`)
+  }
+
   const roleClaimType = input.roleClaimType ?? 'roles'
   const subjectClaim = input.subjectClaim ?? 'id'
 
@@ -228,8 +249,8 @@ export function resolveOAuth2Options(
     defaultRedirectPath,
     scopes: input.scopes ?? [],
     secureCookie,
-    sessionCookieName: input.sessionCookieName ?? cookieName('session', scheme, secureCookie, 'oauth2'),
-    stateCookieName: input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oauth2'),
+    sessionCookieName,
+    stateCookieName,
     sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
     httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
     showPii: input.showPii ?? false,
@@ -287,7 +308,8 @@ export class OAuth2AuthenticationOptionsBuilder {
     return this
   }
 
-  sessionSecret(secret: string): this {
+  /** An array rotates secrets: the first seals, and any of them opens. See the option docs. */
+  sessionSecret(secret: CookieSecret): this {
     this.#options.sessionSecret = secret
     return this
   }
@@ -309,6 +331,23 @@ export class OAuth2AuthenticationOptionsBuilder {
 
   secureCookie(secure: boolean): this {
     this.#options.secureCookie = secure
+    return this
+  }
+
+  /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
+  cookieDomain(domain: string): this {
+    this.#options.cookieDomain = domain
+    return this
+  }
+
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires a secure cookie. */
+  cookiePartitioned(partitioned = true): this {
+    this.#options.cookiePartitioned = partitioned
+    return this
+  }
+
+  cookiePriority(priority: CookiePriority): this {
+    this.#options.cookiePriority = priority
     return this
   }
 

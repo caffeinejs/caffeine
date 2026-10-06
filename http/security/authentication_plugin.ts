@@ -4,11 +4,18 @@ import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { Context } from '../context.js'
+import { hasServerCookies } from '../cookie/plugin.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { type GatedRoute } from '../routing/fastify/route_config.js'
 import type { RouteGroup } from '../routing/route.js'
-import { ErrAuthenticationGateRequired, ErrAuthenticationRequired, ErrAuthSchemeNotFound } from './auth/errors.js'
+import {
+  ErrAuthenticationCookies,
+  ErrAuthenticationGateRequired,
+  ErrAuthenticationRequired,
+  ErrAuthSchemeNotFound,
+} from './auth/errors.js'
 import { AuthenticationGates } from './auth/gates.js'
+import { kAuthSchemeDescriptors } from './auth/keys.js'
 import { OIDCRoutesRef, oidcRoutesPlugin } from './auth/oidc/oidc_routes.js'
 import { AuthenticationSchemeProvider } from './auth/scheme_provider.js'
 import { AuthenticationService } from './auth/service.js'
@@ -204,10 +211,13 @@ export class AuthenticationGateBuilder {
  * Start-up refuses a route a gate would authorize — one declaring protection, or one the fallback policy reaches
  * — when no gate covers it: installing `Authentication(...)` is not what gates a request.
  *
- * A scheme reading its credential from a cookie needs no ordering care: the adapter registers `@fastify/cookie`
- * before any plugin, so the cookies are parsed whatever slot this lands in.
+ * A scheme reading its credential from a cookie needs no ordering care: cookies are parsed when first read, so
+ * whatever slot this lands in finds them.
  *
  * @throws ErrFeatureNotInstalled at start-up when `Authentication(...)` is not installed.
+ * @throws ErrAuthenticationCookies at start-up when a scheme keeps its session in a cookie and the server the gate
+ * installs on has cookies off. A scheme `addStrategy` resolves from a container key is not built at start-up to be
+ * asked: its first cookie read throws `ErrCookiesDisabled` instead.
  * @throws ErrAuthSchemeNotFound at start-up when the gate's `defaultScheme(...)` names an unregistered scheme.
  */
 export function authentication<C = unknown>(
@@ -238,10 +248,16 @@ export function authentication<C = unknown>(
 
     const defaultScheme = override ?? schemeProvider.defaultAuthenticateScheme
     const fallback = fallbackFor(container)
+    const cookieScheme = cookieSchemeOf(container)
     const gates = container.get(AuthenticationGates)
     const gateID = Symbol(label)
 
     const plugin: FastifyPluginAsync = async instance => {
+      // Refused as the server starts, rather than as every request carrying the cookie failing to read it.
+      if (cookieScheme !== undefined && !hasServerCookies(instance)) {
+        throw new ErrAuthenticationCookies(cookieScheme)
+      }
+
       // Where this gate reaches, for the start-up check that refuses a protected route no gate covers.
       gates.installed.push({ id: gateID, context: instance })
 
@@ -312,6 +328,18 @@ interface Fallback {
   for(request: FastifyRequest): GatedRoute | undefined
   /** For the route registered under `path`, which is how start-up asks. */
   forPath(path: string): GatedRoute | undefined
+}
+
+/** A scheme that keeps its session in a cookie, or `undefined` when none does. */
+function cookieSchemeOf(container: Container): string | undefined {
+  // Bound by the `auth` feature, which the factory has already found installed.
+  for (const [name, descriptor] of container.get(kAuthSchemeDescriptors)) {
+    if (descriptor.in === 'cookie') {
+      return name
+    }
+  }
+
+  return undefined
 }
 
 /** The application's {@link Fallback}, or `undefined` when it set no fallback policy. */

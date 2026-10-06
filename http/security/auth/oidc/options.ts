@@ -1,6 +1,8 @@
 import type { JWTVerifyGetKey } from 'jose'
 
 import type { Context } from '../../../context.js'
+import type { CookiePriority } from '../../../cookie/options.js'
+import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../index.js'
 import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
@@ -9,7 +11,8 @@ import {
   defaultSecureCookie,
   isSafeReturnPath,
   DEFAULT_HTTP_TIMEOUT_MS,
-  MIN_SESSION_SECRET_LENGTH,
+  remoteCookieViolation,
+  sessionSecretViolation,
 } from '../internal/remote/config.js'
 import type { RemoteChallengeMode } from '../internal/remote/handler.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
@@ -82,11 +85,20 @@ export interface ResolvedOIDCAuthenticationOptions {
   defaultRedirectPath: string
   scopes: string[]
 
-  sessionSecret: string
+  /**
+   * Seals the session and state cookies. An array rotates secrets: the first seals, and any of them opens. A
+   * session opened with an older one is sealed again with the first, keeping its expiry.
+   */
+  sessionSecret: CookieSecret
   sessionCookieName: string
   sessionCookieTtlSeconds: number
   stateCookieName: string
   secureCookie: boolean
+  /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
+  cookieDomain?: string
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires {@link secureCookie}. */
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
 
   roleClaimType: string
   /** Permits the `plain` PKCE method against providers that do not advertise S256. */
@@ -290,10 +302,9 @@ export function resolveOIDCOptions(
   if (!sessionSecret) {
     throw new ErrOIDCConfiguration('Cannot configure OIDC: sessionSecret is required')
   }
-  if (sessionSecret.length < MIN_SESSION_SECRET_LENGTH) {
-    throw new ErrOIDCConfiguration(
-      `Cannot configure OIDC: sessionSecret must be at least ${MIN_SESSION_SECRET_LENGTH} characters`,
-    )
+  const secretViolation = sessionSecretViolation(sessionSecret)
+  if (secretViolation !== undefined) {
+    throw new ErrOIDCConfiguration(`Cannot configure OIDC: ${secretViolation}`)
   }
   if (!callbackURL) {
     throw new ErrOIDCConfiguration('Cannot configure OIDC: callbackURL is required')
@@ -359,6 +370,16 @@ export function resolveOIDCOptions(
   }
 
   const secureCookie = input.secureCookie ?? defaultSecureCookie(callback.href)
+  // __Host- binds the cookie to the exact origin with Path=/ and no Domain, which the handler already satisfies
+  // unless a domain is configured. The prefix is only legal on a Secure cookie.
+  const sessionCookieName =
+    input.sessionCookieName ?? cookieName('session', scheme, secureCookie, 'oidc', input.cookieDomain)
+  const stateCookieName = input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oidc', input.cookieDomain)
+
+  const cookieViolation = remoteCookieViolation({ ...input, sessionCookieName, stateCookieName, secureCookie })
+  if (cookieViolation !== undefined) {
+    throw new ErrOIDCConfiguration(`Cannot configure OIDC: ${cookieViolation}`)
+  }
 
   return {
     ...input,
@@ -373,10 +394,8 @@ export function resolveOIDCOptions(
     // Always namespaced by strategy, not only when several are registered: two handlers on
     // default names would otherwise overwrite each other's cookies, and a deployment that
     // adds a second IdP later would break the first without touching its configuration.
-    // __Host- binds the cookie to the exact origin with Path=/ and no Domain, which the
-    // handler already satisfies. The prefix is only legal on a Secure cookie.
-    sessionCookieName: input.sessionCookieName ?? cookieName('session', scheme, secureCookie, 'oidc'),
-    stateCookieName: input.stateCookieName ?? cookieName('state', scheme, secureCookie, 'oidc'),
+    sessionCookieName,
+    stateCookieName,
     sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
     roleClaimType: input.roleClaimType ?? 'roles',
     allowPlainPKCE: input.allowPlainPKCE ?? false,
@@ -449,7 +468,8 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
-  sessionSecret(secret: string): this {
+  /** An array rotates secrets: the first seals, and any of them opens. See the option docs. */
+  sessionSecret(secret: CookieSecret): this {
     this.#options.sessionSecret = secret
     return this
   }
@@ -478,6 +498,23 @@ export class OIDCAuthenticationOptionsBuilder {
    */
   secureCookie(secure: boolean): this {
     this.#options.secureCookie = secure
+    return this
+  }
+
+  /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
+  cookieDomain(domain: string): this {
+    this.#options.cookieDomain = domain
+    return this
+  }
+
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires a secure cookie. */
+  cookiePartitioned(partitioned = true): this {
+    this.#options.cookiePartitioned = partitioned
+    return this
+  }
+
+  cookiePriority(priority: CookiePriority): this {
+    this.#options.cookiePriority = priority
     return this
   }
 

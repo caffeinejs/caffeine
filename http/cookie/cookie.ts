@@ -1,30 +1,33 @@
+import type { InjectionToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName } from '@caffeinejs/std'
-import FastifyCookie, { type CookieSerializeOptions } from '@fastify/cookie'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 
 import { kServerExtension, type FastifyExtension } from '../plugin.js'
+import type { CookieParseOptions } from './options.js'
+import { cookiePlugin, type CookiePluginOptions } from './plugin.js'
+import type { CookieSecret, CookieSigner, CookieSigningAlgorithm } from './signer.js'
 
-/** How the cookie feature registers `@fastify/cookie`. */
+/** How the cookie feature sets up every server's cookies. */
 export interface CookieOptions {
-  /** Whether cookies are parsed at all. Off means the plugin is not registered. */
+  /** Whether servers handle cookies at all. Off leaves them without: reading or setting one throws. */
   enabled: boolean
   /**
-   * The key the plugin signs and unsigns with. An array rotates keys: the first signs, and any of them
-   * verifies.
+   * The secret signed cookies are signed with. An array rotates secrets: the first signs, and any of them verifies.
+   * Each must be at least 32 characters.
    */
-  secret?: string | string[]
-  /** Defaults applied to every cookie the application sets. */
-  parseOptions?: CookieSerializeOptions
+  secret?: CookieSecret
+  /** The HMAC hash the secret signs with. Defaults to `SHA-256`. */
+  algorithm?: CookieSigningAlgorithm
+  /** What every cookie a server sets starts from, and how cookies read from a request are decoded. */
+  parseOptions?: CookieParseOptions
 }
 
 /**
- * Configures the cookie parsing every application gets.
+ * Configures the cookies every application gets.
  *
- * The feature is registered unconditionally and ahead of everything `.with(...)` installs, so cookies are
- * parsed for every request whether or not this is ever called, and no feature reading one — the authentication
- * gate included — has an order to get right. What a call adds is what registration cannot guess: the signing
- * secret, without which `ctx.req.signedCookie()` has nothing to verify with.
+ * The feature is registered unconditionally and installs ahead of everything `.with(...)` registers, on the
+ * application's server and on every ops server, each with a signer of its own resolved once as the server starts.
+ * Cookies are parsed when first read, so no plugin reading one — the authentication gate included — has an order to
+ * get right. The `Set-Cookie` writer runs ahead of every later plugin's `onSend` hook.
  *
  * What a fluent method sets is final. To let the environment carry the secret, declare a block of
  * {@link CookieOptions} in the application's schema and hand its node over:
@@ -33,23 +36,24 @@ export interface CookieOptions {
  * .cookie((k, { config }) => k.config(config.app.cookie))
  * ```
  *
- * An application whose own Fastify instance already registered `@fastify/cookie` keeps that registration and
- * its options: this feature stands down rather than registering a second time, which Fastify refuses over the
- * decorators already in place.
+ * An application whose own server registers `@fastify/cookie`, for a plugin that needs it, keeps both: the context's
+ * cookies are this feature's, and that plugin's decorations are its own.
  */
 export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   readonly [kFeatureName] = 'cookie'
 
   #config: Partial<CookieOptions> | undefined
   #enabled: boolean | undefined
-  #secret: string | string[] | undefined
-  #parseOptions: CookieSerializeOptions | undefined
+  #secret: CookieSecret | undefined
+  #signer: CookieSigner | InjectionToken<CookieSigner> | undefined
+  #algorithm: CookieSigningAlgorithm | undefined
+  #parseOptions: CookieParseOptions | undefined
 
   /**
    * Reads the settings from a node of the configuration tree, e.g. `config.app.cookie`.
    *
-   * The node is read once, when the server is wired. {@link enabled} and {@link secret} win over what the node
-   * carries.
+   * The node is read once, when each server is wired. A fluent method wins over what the node carries, and a
+   * {@link signer} over the node's secret and algorithm.
    */
   config(config: Partial<CookieOptions>): this {
     this.#config = config
@@ -57,49 +61,64 @@ export class CookieBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   /**
-   * Turns cookie parsing off, which leaves the plugin unregistered: `ctx.req.cookie()` then fails rather than
-   * answering `undefined`, and a scheme authenticating from a cookie authenticates nobody.
+   * Turns cookies off, which leaves every server without them: reading or setting one throws `ErrCookiesDisabled`
+   * rather than answering nothing, and a scheme that keeps its session in a cookie refuses to start.
    */
   enabled(enabled: boolean): this {
     this.#enabled = enabled
     return this
   }
 
-  secret(secret: string | string[]): this {
+  /**
+   * The secret signed cookies are signed with. An array rotates: the first signs, and any of them verifies.
+   *
+   * @throws ErrCookieConfiguration when the server starts, if a secret is shorter than 32 characters or a
+   * {@link signer} is set too.
+   */
+  secret(secret: CookieSecret): this {
     this.#secret = secret
     return this
   }
 
-  parseOptions(options: CookieSerializeOptions): this {
-    this.#parseOptions = options
+  /**
+   * Signs with a signer of the application's own, given as the instance or as the container key it resolves from.
+   * A key is resolved once per server, as it starts.
+   *
+   * @throws ErrCookieConfiguration when the server starts, if the key resolves to nothing, or a {@link secret} or an
+   * {@link algorithm} is set too.
+   */
+  signer(signer: CookieSigner | InjectionToken<CookieSigner>): this {
+    this.#signer = signer
     return this
   }
 
   /**
-   * The plugin half. The application puts it in a head slot ahead of everything `.with(...)` registers. The
-   * enabled and stand-down checks live in the plugin body: both need the instance.
+   * The HMAC hash a {@link secret} signs with, and a secret handed to a single call. Defaults to `SHA-256`.
+   *
+   * @throws ErrCookieConfiguration when the server starts, if a {@link signer} is set too.
    */
-  readonly [kServerExtension] = (): FastifyExtension =>
-    fp(
-      async (instance: FastifyInstance) => {
-        if (!(this.#enabled ?? this.#config?.enabled ?? true)) {
-          return
-        }
+  algorithm(algorithm: CookieSigningAlgorithm): this {
+    this.#algorithm = algorithm
+    return this
+  }
 
-        // The application registered the plugin on its own Fastify instance, so it owns the settings — including
-        // the secret, which this feature must not quietly replace. Registering again fails on the decorators.
-        if (instance.hasRequestDecorator('cookies')) {
-          return
-        }
+  /** What every cookie a server sets starts from, and how cookies read from a request are decoded. */
+  parseOptions(options: CookieParseOptions): this {
+    this.#parseOptions = options
+    return this
+  }
 
-        const secret = this.#secret ?? this.#config?.secret
-        const parseOptions = this.#parseOptions ?? this.#config?.parseOptions
+  /** The plugin half. The application puts it in a head slot ahead of everything `.with(...)` registers. */
+  readonly [kServerExtension] = (): FastifyExtension => cookiePlugin(this.#settings())
 
-        await instance.register(FastifyCookie, {
-          ...(secret !== undefined && { secret }),
-          ...(parseOptions !== undefined && { parseOptions }),
-        })
-      },
-      { name: 'caffeine-cookie' },
-    )
+  #settings(): CookiePluginOptions {
+    return {
+      enabled: this.#enabled ?? this.#config?.enabled ?? true,
+      signer: this.#signer,
+      // A signer written in code is the last word over a secret and an algorithm the configuration carries.
+      secret: this.#secret ?? (this.#signer === undefined ? this.#config?.secret : undefined),
+      algorithm: this.#algorithm ?? (this.#signer === undefined ? this.#config?.algorithm : undefined),
+      parseOptions: this.#parseOptions ?? this.#config?.parseOptions,
+    }
+  }
 }

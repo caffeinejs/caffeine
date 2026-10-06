@@ -1,5 +1,7 @@
+import type { CookieSecret } from '../../../../cookie/signer.js'
 import type { Claim } from '../../../index.js'
-import { sealCookie, unsealCookie } from './_sealed_cookie.js'
+import type { OpenedJWT } from '../sealed_jwt.js'
+import { openCookie, sealCookie, unsealCookie } from './_sealed_cookie.js'
 
 export interface RemoteAuthenticationSession {
   claims: Array<{ type: string; value: unknown; issuer: string }>
@@ -38,7 +40,7 @@ export function claimsToSession(claims: Claim[], scheme: string): RemoteAuthenti
 
 export async function encodeSession(
   value: RemoteAuthenticationSession,
-  secret: string,
+  secret: CookieSecret,
   scheme: string,
   ttlSeconds: number,
 ): Promise<string> {
@@ -47,10 +49,19 @@ export async function encodeSession(
 
 export async function decodeSession(
   cookie: string,
-  secret: string,
+  secret: CookieSecret,
   scheme: string,
 ): Promise<RemoteAuthenticationSession> {
   return unsealCookie<RemoteAuthenticationSession>(cookie, 'oidc-session+jwt', secret, scheme)
+}
+
+/** {@link decodeSession}, with when the cookie expires and whether an older secret opened it. */
+export async function openSessionCookie(
+  cookie: string,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<OpenedJWT<RemoteAuthenticationSession>> {
+  return openCookie<RemoteAuthenticationSession>(cookie, 'oidc-session+jwt', secret, scheme)
 }
 
 /**
@@ -64,17 +75,26 @@ export async function decodeSession(
  */
 export async function encodeTicketRef(
   key: string,
-  secret: string,
+  secret: CookieSecret,
   scheme: string,
   ttlSeconds: number,
 ): Promise<string> {
   return sealCookie({ key }, 'oidc-ticket+jwt', secret, scheme, ttlSeconds)
 }
 
-export async function decodeTicketRef(cookie: string, secret: string, scheme: string): Promise<string> {
-  const { key } = await unsealCookie<{ key?: unknown }>(cookie, 'oidc-ticket+jwt', secret, scheme)
-  if (typeof key !== 'string' || key.length === 0) {
+export async function decodeTicketRef(cookie: string, secret: CookieSecret, scheme: string): Promise<string> {
+  return (await openTicketRef(cookie, secret, scheme)).key
+}
+
+/** {@link decodeTicketRef}, with when the cookie expires and whether an older secret opened it. */
+export async function openTicketRef(
+  cookie: string,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<{ key: string; exp: number; renew: boolean }> {
+  const { claims, exp, renew } = await openCookie<{ key?: unknown }>(cookie, 'oidc-ticket+jwt', secret, scheme)
+  if (typeof claims.key !== 'string' || claims.key.length === 0) {
     throw new TypeError('Ticket reference cookie is missing its key')
   }
-  return key
+  return { key: claims.key, exp, renew }
 }

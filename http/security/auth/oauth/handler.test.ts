@@ -155,6 +155,24 @@ describe('OAuth2AuthenticationHandler', () => {
       expect(Object.keys(cookiesSetBy(eight))).toHaveLength(1)
     })
 
+    // A sibling subdomain can plant a cookie under the prefix with a name no header can carry. It is not one of this
+    // strategy's flows, and deleting it would refuse the response and with it every sign-in from that browser.
+    it('leaves alone a cookie planted under the prefix that is not one of its flows', async () => {
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options())
+
+      const held: Record<string, string> = { [`${STATE_COOKIE}.planté`]: 'x', [`${STATE_COOKIE}.a b`]: 'x' }
+      for (let tab = 0; tab < 8; tab++) {
+        held[`${STATE_COOKIE}.tab${tab}`] = await sealed({ state: `tab${tab}` })
+      }
+
+      const mocks = makeCtx({ cookies: held })
+      await handler.challenge(mocks.ctx)
+
+      const deleted = (mocks.deleteCookie.mock.calls as Array<[string]>).map(([name]) => name)
+      expect(deleted.toSorted()).toEqual(Array.from({ length: 8 }, (_, tab) => `${STATE_COOKIE}.tab${tab}`).toSorted())
+      expect(Object.keys(cookiesSetBy(mocks))).toHaveLength(1)
+    })
+
     it('leaves the state cookies of another strategy alone', async () => {
       const handler = new OAuth2AuthenticationHandler(SCHEME, options())
 

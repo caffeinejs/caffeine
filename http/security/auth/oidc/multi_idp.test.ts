@@ -291,6 +291,38 @@ describe('startup validation', () => {
     ).rejects.toThrow(/"Google" and "Okta" share the loginPath "\/auth\/google"/)
   })
 
+  // Two schemes of any kind writing one cookie overwrite each other's sessions, which reads as random sign-outs.
+  it('rejects two cookie schemes on the default session cookie name', async () => {
+    const SECRET = 'session-secret-at-least-32-chars-long!!'
+
+    await expect(
+      configure(b => {
+        b.addCookie('Site', o => o.sessionSecret(SECRET))
+        b.addCookie('Admin', o => o.sessionSecret(SECRET))
+      }),
+    ).rejects.toThrow(/"Site" and "Admin" share the session cookie name "caf.session"/)
+  })
+
+  it('rejects a cookie scheme and an OIDC strategy on one session cookie name', async () => {
+    await expect(
+      configure(b => {
+        b.addCookie('Site', o => o.sessionSecret('session-secret-at-least-32-chars-long!!').cookieName('shared'))
+        addOIDC(b, 'Google', GOOGLE, { sessionCookieName: 'shared' })
+      }),
+    ).rejects.toThrow(/"Site" and "Google" share the session cookie name "shared"/)
+  })
+
+  it("rejects a remember-me cookie on another scheme's session cookie name", async () => {
+    const SECRET = 'session-secret-at-least-32-chars-long!!'
+
+    await expect(
+      configure(b => {
+        b.addCookie('Site', o => o.sessionSecret(SECRET).rememberMe().rememberMeCookieName('admin.session'))
+        b.addCookie('Admin', o => o.sessionSecret(SECRET).cookieName('admin.session'))
+      }),
+    ).rejects.toThrow(/"Site" and "Admin" share the session cookie name "admin.session"/)
+  })
+
   it('names both offending strategies', async () => {
     await expect(
       configure(b => {

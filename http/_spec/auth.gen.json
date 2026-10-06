@@ -63,7 +63,17 @@
               "type": "string"
             },
             "sessionSecret": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             },
             "cookieName": {
               "type": "string"
@@ -133,6 +143,28 @@
             "path": {
               "type": "string"
             },
+            "domain": {
+              "type": "string"
+            },
+            "partitioned": {
+              "type": "boolean"
+            },
+            "priority": {
+              "anyOf": [
+                {
+                  "const": "low",
+                  "type": "string"
+                },
+                {
+                  "const": "medium",
+                  "type": "string"
+                },
+                {
+                  "const": "high",
+                  "type": "string"
+                }
+              ]
+            },
             "clientId": {
               "type": "string"
             },
@@ -171,6 +203,28 @@
             },
             "secureCookie": {
               "type": "boolean"
+            },
+            "cookieDomain": {
+              "type": "string"
+            },
+            "cookiePartitioned": {
+              "type": "boolean"
+            },
+            "cookiePriority": {
+              "anyOf": [
+                {
+                  "const": "low",
+                  "type": "string"
+                },
+                {
+                  "const": "medium",
+                  "type": "string"
+                },
+                {
+                  "const": "high",
+                  "type": "string"
+                }
+              ]
             },
             "httpTimeoutMs": {
               "type": "number"

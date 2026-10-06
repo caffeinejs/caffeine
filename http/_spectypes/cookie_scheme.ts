@@ -7,7 +7,7 @@ const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto
 
 /** A cookie scheme's block. */
 export const CookieSchemeConfigSchema = $t.Object({
-  sessionSecret: $t.Optional($t.String()),
+  sessionSecret: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
   cookieName: $t.Optional($t.String()),
   rememberMe: $t.Optional($t.Boolean()),
   rememberMeCookieName: $t.Optional($t.String()),
@@ -22,6 +22,9 @@ export const CookieSchemeConfigSchema = $t.Object({
   secure: $t.Optional($t.Boolean()),
   sameSite: $t.Optional($t.UnionEnum(['strict', 'lax', 'none'])),
   path: $t.Optional($t.String()),
+  domain: $t.Optional($t.String()),
+  partitioned: $t.Optional($t.Boolean()),
+  priority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
   roleClaimType: $t.Optional($t.String()),
 })
 

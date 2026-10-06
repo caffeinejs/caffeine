@@ -2,16 +2,38 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CookieConfigSchema",
   "type": "object",
-  "required": [
-    "enabled"
-  ],
   "properties": {
     "enabled": {
-      "default": true,
       "type": "boolean"
     },
     "secret": {
-      "type": "string"
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "algorithm": {
+      "anyOf": [
+        {
+          "const": "SHA-256",
+          "type": "string"
+        },
+        {
+          "const": "SHA-384",
+          "type": "string"
+        },
+        {
+          "const": "SHA-512",
+          "type": "string"
+        }
+      ]
     }
   }
 }

@@ -342,6 +342,52 @@ describe('cookie session behind a credentials login', () => {
 
     expect((await browser.navigate(`${origin}/admin`)).status).toBe(200)
   })
+
+  // A deployment rotates its session secret by putting the new one first and keeping the old one until the longest
+  // session has run out. A browser signed in before the rotation stays signed in, and the session it carries is
+  // sealed again under the new secret on its first request.
+  it('keeps a session across a rotation of the session secret, sealing it again under the new one', async () => {
+    const browser = new Browser()
+    await login(browser, 'alice', 'wonderland')
+    const before = (await browser.cookie(origin, SESSION_COOKIE))!.value
+
+    const container = new CaffeineIoC()
+    container.bind(Users, t => t.toSelf().extends())
+    container.bind(PasswordHasher, t => t.toValue(hasher))
+
+    // The same host, so the browser sends it the cookie the first deployment set.
+    const rotated = await startApp(
+      app =>
+        app
+          .install(
+            Authentication(auth =>
+              auth
+                .addCookie(c =>
+                  c.sessionSecret(['cookie-e2e-rotated-secret-of-32-characters', SESSION_SECRET]).secure(false),
+                )
+                .addCredentials(),
+            ),
+          )
+          .with(authentication())
+          .mount(routes()),
+      { container },
+    )
+
+    try {
+      const page = await browser.navigate(`${rotated.origin}/private`)
+      expect(page.status).toBe(200)
+      expect(page.json()).toEqual({ sub: 'alice' })
+
+      const after = (await browser.cookie(rotated.origin, SESSION_COOKIE))!.value
+      expect(after).not.toBe(before)
+      expect((await browser.xhr(`${rotated.origin}/private`)).status).toBe(200)
+
+      // Sealed under the new secret alone: the deployment that knows only the old one cannot open it.
+      expect((await browser.xhr(`${origin}/private`)).status).toBe(401)
+    } finally {
+      await rotated.close()
+    }
+  })
 })
 
 // A browser refuses a `__Host-` cookie that arrives without `Secure`, and that goes for the one that clears it.

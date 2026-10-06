@@ -35,7 +35,7 @@ export interface AdapterTypes {
   /** What `ctx.cookie(...)` and `ctx.deleteCookie(...)` take as options. */
   cookieOptions: unknown
 
-  /** Whether `ctx.req.signedCookie(...)` answers with a promise. */
+  /** Whether `ctx.req.signedCookie(...)` and `ctx.req.unsignCookie(...)` answer with a promise. */
   asyncCookies: boolean
 
   /** What `ctx.platform` is. */

@@ -1,4 +1,16 @@
-import { Controller, Get, Head, Header, Post, Principal, Status, createWebApplication } from '@caffeinejs/http'
+import {
+  $p,
+  Args,
+  Controller,
+  Get,
+  Head,
+  Header,
+  Post,
+  Principal,
+  Status,
+  createWebApplication,
+  type Context,
+} from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -248,6 +260,35 @@ describe('what the cache says about a response', () => {
 
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(second.headers.get('set-cookie')).toBe('session=1')
+    expect(await second.json()).toEqual({ n: 2 })
+  })
+
+  // The cookie a handler sets is written by the server's own root `onSend` hook, ahead of the route hook that decides
+  // whether to store: the response is seen to set a cookie, as one with a declared header is.
+  it('does not store a response whose handler set a cookie', async () => {
+    let calls = 0
+
+    @Controller('/resp-ctx-cookie')
+    class ContextCookieController {
+      @CacheControl({ ttl: 60 })
+      @Get('/start')
+      @Args([$p.context()])
+      start(ctx: Context) {
+        ctx.cookie('session', String(++calls))
+        return { n: calls }
+      }
+    }
+    void [ContextCookieController]
+
+    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
+    close = () => app.close()
+    await app.bootstrap()
+
+    await app.fetch('/resp-ctx-cookie/start')
+    const second = await app.fetch('/resp-ctx-cookie/start')
+
+    expect(second.headers.get('x-cache')).toBe('MISS')
+    expect(second.headers.get('set-cookie')).toBe('session=2; Path=/; SameSite=Lax')
     expect(await second.json()).toEqual({ n: 2 })
   })
 

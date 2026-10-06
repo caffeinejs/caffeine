@@ -9,7 +9,7 @@ const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto
 export const OAuthSchemeConfigSchema = $t.Object({
   clientId: $t.Optional($t.String()),
   clientSecret: $t.Optional($t.String()),
-  sessionSecret: $t.Optional($t.String()),
+  sessionSecret: $t.Optional($t.Union([$t.String(), $t.Array($t.String())])),
   authorizationEndpoint: $t.Optional($t.String()),
   tokenEndpoint: $t.Optional($t.String()),
   userInfoEndpoint: $t.Optional($t.String()),
@@ -20,6 +20,9 @@ export const OAuthSchemeConfigSchema = $t.Object({
   sessionCookieTtlSeconds: $t.Optional($t.Number()),
   stateCookieName: $t.Optional($t.String()),
   secureCookie: $t.Optional($t.Boolean()),
+  cookieDomain: $t.Optional($t.String()),
+  cookiePartitioned: $t.Optional($t.Boolean()),
+  cookiePriority: $t.Optional($t.UnionEnum(['low', 'medium', 'high'])),
   roleClaimType: $t.Optional($t.String()),
   httpTimeoutMs: $t.Optional($t.Number()),
   showPii: $t.Optional($t.Boolean()),

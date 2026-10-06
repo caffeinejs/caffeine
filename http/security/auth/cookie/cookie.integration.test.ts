@@ -9,6 +9,7 @@ import {
   type Context,
   Controller,
   type CookieAuthenticationOptionsBuilder,
+  type CookieBuilder,
   type CredentialUser,
   CredentialsService,
   Get,
@@ -137,12 +138,15 @@ class SchemeScopedMeController {
 }
 void [SessionController, MeController, SchemeScopedMeController]
 
-async function buildApp() {
+async function buildApp(cookies?: (k: CookieBuilder) => void) {
   const container = new CaffeineIoC()
   container.bind(TestUserProvider, t => t.toSelf().extends())
   // Fast hasher keeps the test snappy; overrides the default ScryptPasswordHasher from addCredentials.
   container.bind(PasswordHasher, t => t.toValue(new ScryptPasswordHasher({ N: 1024 })))
   const builder = createWebApplication({ container })
+  if (cookies !== undefined) {
+    builder.cookie(cookies)
+  }
   builder
     .install(Authentication(auth => auth.addCookie(o => o.sessionSecret(SECRET).secure(false)).addCredentials()))
     .with(authentication())
@@ -184,6 +188,34 @@ describe('cookie session login (application)', () => {
     const body = (await me.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice')
     expect(body.admin).toBe(true)
+  })
+
+  // What the application sets for its own cookies stays off the session cookie: signed, it would be read back as
+  // false and nobody would stay signed in; with a domain, it would reach every subdomain.
+  it("keeps the application's cookie defaults off the session cookie", async () => {
+    const app = await buildApp(k =>
+      k
+        .secret('an-application-cookie-secret-of-32-chars')
+        .parseOptions({ signed: true, domain: 'example.com', partitioned: true, secure: true, priority: 'high' }),
+    )
+
+    const res = await login(app, { email: 'alice', password: 's3cret' })
+    const line = res.headers.getSetCookie().find(set => set.startsWith('caf.session='))!
+
+    expect(line).not.toMatch(/Domain=|Partitioned|Priority=|; Secure/)
+    expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
+  })
+
+  // The value is not an attribute: every cookie a request carries is read through the server's `decode`, so the
+  // session cookie goes out through its `encode`. Written past it, the session would be decoded into garbage.
+  it("writes the session cookie through the application's encoder, which its decoder reads back", async () => {
+    const reverse = (value: string) => value.split('').reverse().join('')
+    const app = await buildApp(k => k.parseOptions({ encode: reverse, decode: reverse }))
+
+    const res = await login(app, { email: 'alice', password: 's3cret' })
+    const line = res.headers.getSetCookie().find(set => set.startsWith('caf.session='))!
+
+    expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
   })
 
   it('rejects the protected route without a session cookie', async () => {

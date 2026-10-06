@@ -62,6 +62,22 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
 }
 
 /**
+ * ErrAuthenticationCookies is thrown at start-up when a gate installs on a server whose cookies are off while a scheme
+ * keeps its session in a cookie: every request carrying one would fail on reading it.
+ */
+export class ErrAuthenticationCookies extends ErrCaffeineWebApplication {
+  constructor(scheme: string) {
+    super(
+      `Cannot start application: authentication scheme "${scheme}" keeps its session in a cookie, and cookies are ` +
+        'disabled on this server' +
+        solutions('Turn cookies back on with ".cookie(k => k.enabled(true))"'),
+      'ERR_AUTHENTICATION_COOKIES',
+    )
+    this.name = 'ErrAuthenticationCookies'
+  }
+}
+
+/**
  * ErrAuthenticationGateRequired is thrown at start-up when a route requires authentication and no authentication
  * gate covers it.
  *

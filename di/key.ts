@@ -70,7 +70,13 @@ export function keyStr(key?: InjectionToken | Identifier): string {
   return typeof key === 'function' ? key.name : key.toString()
 }
 
-export function isValidKey(key: unknown): boolean {
+/**
+ * Whether `key` is a container key: a non-empty string, a symbol, a function or a {@link DeferredCtor}.
+ *
+ * What an API that takes either a component or the key to resolve it from asks to tell the two apart. A component
+ * that is itself a function cannot be told from a class this way, so such an API takes only string and symbol keys.
+ */
+export function isValidKey<T = unknown>(key: unknown): key is InjectionToken<T> {
   return (
     key !== undefined && key !== null && (isNamedKey(key) || typeof key === 'function' || key instanceof DeferredCtor)
   )

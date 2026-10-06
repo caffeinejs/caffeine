@@ -1,8 +1,11 @@
 import type { HTTPPluginFactory } from '@caffeinejs/http'
+import fastifyCookie from '@fastify/cookie'
 import csrfProtection from '@fastify/csrf-protection'
 import helmet from '@fastify/helmet'
-import type { FastifyReply, FastifyRequest } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
+
+import type { Config } from '../app.config.js'
 
 /**
  * The two official Fastify plugins this application registers itself.
@@ -69,11 +72,16 @@ const SAFE = new Set(['GET', 'HEAD', 'OPTIONS'])
  * request has cost anything.
  *
  * `cookieOpts` **replaces** the plugin's defaults rather than extending them, so the sensible ones are
- * restated here. `signed` is why `app.ts` gives the cookie plugin a secret.
+ * restated here.
+ *
+ * The plugin reads and writes its cookie through `@fastify/cookie`'s request and reply decorations, so that plugin
+ * is registered here too, with the secret its `signed` cookie needs. It sits alongside the framework's own cookies
+ * — the session's — and changes nothing about them.
  */
-export const csrf = () =>
+export const csrf: HTTPPluginFactory<Config> = ({ config }) =>
   fp(
-    async instance => {
+    async (instance: FastifyInstance) => {
+      await instance.register(fastifyCookie, { secret: config.auth.cookieSecret })
       await instance.register(csrfProtection, {
         cookieOpts: { path: '/', sameSite: 'strict', httpOnly: true, signed: true },
         getToken: (req: FastifyRequest) => req.headers['x-csrf-token'] as string | undefined,

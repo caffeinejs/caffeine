@@ -1,4 +1,4 @@
-import { DeferredCtor, Provider, type Ctor, type InjectionToken, type NamedToken } from '@caffeinejs/di'
+import { isValidKey, Provider, type InjectionToken, type NamedToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import { Context } from '../../context.js'
@@ -234,6 +234,13 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   addStrategy(name: string, keyOrHandler: InjectionToken<AuthenticationHandler> | AuthenticationHandler): this {
     this.#reserve(name)
     this.#schemes.set(name, keyOrHandler)
+
+    // Built, a cookie scheme says how it takes its credential as `addCookie` does: the gate then refuses it on a
+    // server whose cookies are off.
+    if (keyOrHandler instanceof CookieAuthenticationHandler) {
+      this.#describe(name, { kind: 'apiKey', in: 'cookie', name: keyOrHandler.options.cookieName })
+    }
+
     return this
   }
 
@@ -286,7 +293,8 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
 
   /**
    * Records how `name` expects credentials. Called by the `addX` methods, which are the only ones that know;
-   * a scheme registered through a bare `addStrategy` stays undescribed.
+   * a scheme registered through a bare `addStrategy` stays undescribed, unless it is a built
+   * `CookieAuthenticationHandler`.
    */
   #describe(name: string, descriptor: AuthSchemeDescriptor): void {
     this.#descriptors.set(name, descriptor)
@@ -494,6 +502,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
 
   #doConfigure(kit: FeatureConfigureKit<C>): void {
     this.#buildSchemes()
+    this.#assertCookieIsolation()
 
     // Configuration over code, the same order the schemes themselves are merged in.
     const opts: Partial<AuthenticationOptions> = {
@@ -533,7 +542,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     for (const [name, keyOrHandler] of this.#schemes) {
       // A key of any spelling — a class, a named token — resolves from the container. Only what is left is the
       // handler itself.
-      const handler: Provider<AuthenticationHandler> = isKey(keyOrHandler)
+      const handler: Provider<AuthenticationHandler> = isValidKey<AuthenticationHandler>(keyOrHandler)
         ? wrapLazily(kit.container, keyOrHandler)
         : { get: () => keyOrHandler }
       schemes.set(name, handler)
@@ -564,7 +573,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
       // `OpaqueTokenStore` abstract-class token.
       if (keyOrHandler instanceof OpaqueTokenAuthenticationHandler) {
         const store = keyOrHandler.options.store ?? OpaqueTokenStore
-        const provider: Provider<OpaqueTokenStore> = isKey(store)
+        const provider: Provider<OpaqueTokenStore> = isValidKey<OpaqueTokenStore>(store)
           ? wrapLazily<OpaqueTokenStore>(kit.container, store)
           : { get: () => store }
         keyOrHandler.setStore(provider)
@@ -667,21 +676,18 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
    * derived keys are distinct.
    */
   #assertOIDCIsolation(): void {
-    // A callback path and a sign-in path are both routes, so they are kept apart from each other as well.
+    // A callback path and a sign-in path are both routes, so they are kept apart from each other as well. The
+    // cookies are kept apart across every kind of scheme, by `#assertCookieIsolation`.
     const paths = new Map<string, string>()
     const seen = new Map<string, Map<string, string>>([
       ['callbackPath', paths],
       ['loginPath', paths],
-      ['session cookie name', new Map()],
-      ['state cookie name', new Map()],
     ])
 
     for (const handler of this.#oidcHandlers) {
       const values: Array<[string, string]> = [
         ['callbackPath', handler.callbackPath],
         ['loginPath', handler.loginPath],
-        ['session cookie name', handler.sessionCookieName],
-        ['state cookie name', handler.stateCookieName],
       ]
 
       for (const [label, value] of values) {
@@ -705,6 +711,44 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     // The underlying hazard is still real, so it is still reported — just as what it actually is, a
     // strategy nothing can reach, rather than as a demand for a particular default. Forward remains the
     // way to choose per request when routes do not name schemes themselves.
+  }
+
+  /**
+   * Rejects two schemes writing cookies of one name, whatever their kinds: each would overwrite the other's, which
+   * reads as random sign-outs. A cookie scheme writes its session cookie, and its remember-me cookie when that is on;
+   * an OAuth-family strategy writes its session cookie and a family of state cookies under one name.
+   *
+   * An OAuth-family handler the application builds and hands to `addStrategy` is not checked: it gets no sign-in or
+   * callback route either, so it never signs anyone in.
+   */
+  #assertCookieIsolation(): void {
+    const cookies = new Map<string, string>()
+    const states = new Map<string, string>()
+
+    const claim = (owners: Map<string, string>, scheme: string, label: string, name: string): void => {
+      const owner = owners.get(name)
+      if (owner !== undefined) {
+        throw new ErrAuthConfiguration(
+          `Cannot configure authentication: strategies "${owner}" and "${scheme}" share the ${label} "${name}"`,
+        )
+      }
+      owners.set(name, scheme)
+    }
+
+    for (const [scheme, handler] of this.#schemes) {
+      if (handler instanceof CookieAuthenticationHandler) {
+        claim(cookies, scheme, 'session cookie name', handler.options.cookieName!)
+
+        if (handler.options.rememberMe === true) {
+          claim(cookies, scheme, 'remember-me cookie name', handler.options.rememberMeCookieName!)
+        }
+      }
+    }
+
+    for (const handler of this.#oidcHandlers) {
+      claim(cookies, handler.schemeName, 'session cookie name', handler.sessionCookieName)
+      claim(states, handler.schemeName, 'state cookie name', handler.stateCookieName)
+    }
   }
 
   /**
@@ -749,16 +793,6 @@ function noOptions(): void {
  */
 function stripUndefined<T extends object>(value: T): Partial<T> {
   return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined)) as Partial<T>
-}
-
-function isConstructable<T>(value: unknown): value is Ctor<T> {
-  return typeof value === 'function' && value.prototype !== undefined && value.prototype.constructor === value
-}
-
-function isKey<T>(value: InjectionToken<T> | T): value is InjectionToken<T> {
-  return (
-    typeof value === 'string' || typeof value === 'symbol' || isConstructable(value) || value instanceof DeferredCtor
-  )
 }
 
 /**

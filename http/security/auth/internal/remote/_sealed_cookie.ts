@@ -1,4 +1,5 @@
-import { sealJWT, sealingKey, unsealJWT } from '../sealed_jwt.js'
+import type { CookieSecret } from '../../../../cookie/signer.js'
+import { openJWT, sealJWT, sealingKey, unsealJWT, type OpenedJWT } from '../sealed_jwt.js'
 
 /**
  * What a cookie of the OAuth-family strategies is for, carried as the token's `typ` and folded into its key.
@@ -20,13 +21,27 @@ export function keyFor(secret: string, purpose: OIDCTokenPurpose, scheme: string
 export function sealCookie(
   payload: Record<string, unknown>,
   purpose: OIDCTokenPurpose,
-  secret: string,
+  secret: CookieSecret,
   scheme: string,
   ttlSeconds: number,
 ): Promise<string> {
   return sealJWT(payload, purpose, secret, info(purpose, scheme), ttlSeconds)
 }
 
-export function unsealCookie<T>(cookie: string, purpose: OIDCTokenPurpose, secret: string, scheme: string): Promise<T> {
+export function unsealCookie<T>(
+  cookie: string,
+  purpose: OIDCTokenPurpose,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<T> {
   return unsealJWT<T>(cookie, purpose, secret, info(purpose, scheme))
+}
+
+export function openCookie<T>(
+  cookie: string,
+  purpose: OIDCTokenPurpose,
+  secret: CookieSecret,
+  scheme: string,
+): Promise<OpenedJWT<T>> {
+  return openJWT<T>(cookie, purpose, secret, info(purpose, scheme))
 }

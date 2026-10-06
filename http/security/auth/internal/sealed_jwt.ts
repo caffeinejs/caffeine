@@ -18,6 +18,25 @@ import { EncryptJWT, jwtDecrypt } from 'jose'
 const ALG = 'dir'
 const ENC = 'A256GCM'
 
+/** A secret a token is sealed with. */
+export type SealingSecret = string | Uint8Array
+
+/** One secret, or several: the first seals, and any of them opens. */
+export type SealingSecrets = SealingSecret | readonly SealingSecret[]
+
+/** A token {@link openJWT} opened. `renew` says a secret other than the first opened it. */
+export interface OpenedJWT<T> {
+  claims: T
+  /** When it expires, in seconds since the epoch. */
+  exp: number
+  renew: boolean
+}
+
+/** The secrets of `secret`, in order. */
+export function sealingSecrets(secret: SealingSecrets): readonly SealingSecret[] {
+  return typeof secret === 'string' || secret instanceof Uint8Array ? [secret] : secret
+}
+
 // The key for one (secret, info) is derived and imported once for the life of the process. A token is opened on
 // every request that carries one, and handed raw bytes jose imports them again each time. Two levels, keyed by the
 // secret and then by `info`, so that a lookup builds no string of its own.
@@ -57,13 +76,15 @@ function forBytes(secret: Uint8Array): Map<string, Promise<CryptoKey>> {
 }
 
 /**
+ * Seals with the first of `secret`'s secrets.
+ *
  * @param typ - The token's purpose, written to the `typ` header and demanded back by {@link unsealJWT}.
  * @param info - The key derivation label. Tokens sealed under different labels cannot open one another.
  */
 export async function sealJWT(
   payload: Record<string, unknown>,
   typ: string,
-  secret: string | Uint8Array,
+  secret: SealingSecrets,
   info: string,
   ttlSeconds: number,
 ): Promise<string> {
@@ -71,21 +92,53 @@ export async function sealJWT(
     .setProtectedHeader({ alg: ALG, enc: ENC, typ })
     .setIssuedAt()
     .setExpirationTime(`${ttlSeconds}s`)
-    .encrypt(await sealingKey(secret, info))
+    .encrypt(await sealingKey(firstOf(sealingSecrets(secret)), info))
 }
 
 /**
- * Opens a token {@link sealJWT} made, with the same `typ`, `secret` and `info`.
+ * Opens a token {@link sealJWT} made, with the same `typ` and `info`, trying `secret`'s secrets in order.
  *
- * Rejects on anything else: another key, another purpose, a changed byte, an expired token. The two algorithms are
- * pinned rather than read off the token (RFC 8725 §3.1), so what the token says about itself decides nothing.
+ * Rejects on anything else: a key none of them derives, another purpose, a changed byte, an expired token. The two
+ * algorithms are pinned rather than read off the token (RFC 8725 §3.1), so what the token says about itself decides
+ * nothing.
  */
-export async function unsealJWT<T>(token: string, typ: string, secret: string | Uint8Array, info: string): Promise<T> {
-  const { payload } = await jwtDecrypt(token, await sealingKey(secret, info), {
-    typ,
-    keyManagementAlgorithms: [ALG],
-    contentEncryptionAlgorithms: [ENC],
-  })
+export async function openJWT<T>(
+  token: string,
+  typ: string,
+  secret: SealingSecrets,
+  info: string,
+): Promise<OpenedJWT<T>> {
+  const secrets = sealingSecrets(secret)
+  firstOf(secrets)
 
-  return payload as unknown as T
+  for (let i = 0; ; i++) {
+    try {
+      const { payload } = await jwtDecrypt(token, await sealingKey(secrets[i]!, info), {
+        typ,
+        keyManagementAlgorithms: [ALG],
+        contentEncryptionAlgorithms: [ENC],
+      })
+
+      return { claims: payload as unknown as T, exp: payload.exp!, renew: i > 0 }
+    } catch (err) {
+      // Only a key that could not decrypt it is worth trying the next secret for. An expired token, or one of
+      // another purpose, was decrypted: the key was right, and another would fail it the same way.
+      if (i + 1 >= secrets.length || (err as { code?: unknown }).code !== 'ERR_JWE_DECRYPTION_FAILED') {
+        throw err
+      }
+    }
+  }
+}
+
+/** The claims of a token {@link openJWT} opens. */
+export async function unsealJWT<T>(token: string, typ: string, secret: SealingSecrets, info: string): Promise<T> {
+  return (await openJWT<T>(token, typ, secret, info)).claims
+}
+
+function firstOf(secrets: readonly SealingSecret[]): SealingSecret {
+  if (secrets.length === 0) {
+    throw new TypeError('Cannot seal or open a token: the list of secrets is empty')
+  }
+
+  return secrets[0]!
 }
