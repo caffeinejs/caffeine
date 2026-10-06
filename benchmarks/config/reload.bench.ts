@@ -5,7 +5,8 @@ import { $t } from '@caffeinejs/std/schema'
 import { bench, do_not_optimize, run, summary } from 'mitata'
 
 // What one reload costs: 448 leaves, 4 levels deep, 4 sources, validated against a `$t` schema. One case writes one
-// value to the live source; the other reloads it with nothing written, which must cost only the load.
+// value to the live source, which builds one new snapshot; the other reloads it with nothing written, which must
+// cost only the load.
 
 type Tree = Record<string, Record<string, Record<string, unknown>>>
 
@@ -59,8 +60,9 @@ const written: ConfigSource = {
 const store = await loadConfig<Tree>(
   {
     schema: makeSchema() as ConfigSchema<Tree>,
-    key: undefined,
-    storeKey: undefined,
+    configToken: Symbol('bench.config') as never,
+    liveConfigToken: Symbol('bench.config.live') as never,
+    storeToken: Symbol('bench.config.store') as never,
     sources: [
       new InlineConfigSource(makeTree('default'), 'defaults'),
       new InlineConfigSource(makeTree('file'), 'file'),
@@ -72,18 +74,16 @@ const store = await loadConfig<Tree>(
   { start: false },
 )
 
-const live = store.live
-
 summary(() => {
   bench('one value written, one reload', async () => {
     flip = !flip
     await store.reload()
-    do_not_optimize(live.section1.group1.key1)
+    do_not_optimize(store.current.section1.group1.key1)
   })
 
   bench('nothing written, one reload', async () => {
     await store.reload()
-    do_not_optimize(live.section1.group1.key1)
+    do_not_optimize(store.current.section1.group1.key1)
   })
 })
 

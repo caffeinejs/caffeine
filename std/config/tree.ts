@@ -16,7 +16,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 /**
  * Freezes `value` and everything beneath it. A subtree that is already frozen is taken to be frozen all the way
- * down and is not walked again, which is what keeps freezing a reconciled tree proportional to what changed.
+ * down and is not walked again.
  */
 export function freezeDeep<T>(value: T): T {
   if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
@@ -33,11 +33,9 @@ export function freezeDeep<T>(value: T): T {
 /**
  * Returns `value` frozen all the way down, with each plain object and array a frozen copy. One that is frozen already
  * is copied too: being frozen says nothing about what is beneath it. Any other object is frozen in place.
- *
- * A subtree that is `previous` itself, or what `previous` holds under the same key, comes back as it is.
  */
-export function freezeCopy<T>(value: T, previous?: unknown): T {
-  if (value === previous || value === null || typeof value !== 'object') {
+export function freezeCopy<T>(value: T): T {
+  if (value === null || typeof value !== 'object') {
     return value
   }
   if (Array.isArray(value)) {
@@ -50,10 +48,7 @@ export function freezeCopy<T>(value: T, previous?: unknown): T {
   const copy: Record<string, unknown> = {}
   for (const key of Object.keys(value)) {
     if (!isForbiddenKey(key)) {
-      copy[key] = freezeCopy(
-        value[key],
-        isPlainObject(previous) && Object.hasOwn(previous, key) ? previous[key] : undefined,
-      )
+      copy[key] = freezeCopy(value[key])
     }
   }
   return Object.freeze(copy) as T

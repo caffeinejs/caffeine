@@ -12,6 +12,7 @@ import {
 } from '../observe.js'
 import { passthroughConfigSchema } from '../schema.js'
 import { ConfigStore } from '../store.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigSource } from '../types.js'
 
 const unsubscribe: (() => void)[] = []
@@ -50,7 +51,7 @@ function remote(initial: Record<string, unknown>) {
 }
 
 function definition(sources: ConfigSource[]) {
-  return { schema: passthroughConfigSchema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 describe('the diagnostics channels', () => {

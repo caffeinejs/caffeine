@@ -12,6 +12,7 @@
   - [defer](#defer)
   - [just](#just)
   - [config](#config)
+  - [liveConfig](#liveconfig)
   - [compose](#compose)
 
 Prefer the `$i` helpers over building an `InjectionDescriptor` manually — they are
@@ -300,6 +301,32 @@ absence. When no values were bound at all, the injection resolves to `defaultVal
 one, and to `undefined` if it is wrapped in `$i.optional`. Otherwise compiling the injection
 throws [`ErrNoValuesProvider`](./errors.md#errnovaluesprovider), naming the injection that
 needed the values; for a component, that happens at `init()`.
+
+### liveConfig
+
+```ts
+$i.liveConfig<T = unknown, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionDescriptor<Provider<R>>
+```
+
+Injects a `Provider` of a value selected out of what the provider bound with
+[`di.bindScopedConfig()`](./container.md#bindscopedconfig) answers, by a selector function or by a
+dot-separated path. Where `$i.config` reads once, when the consumer is built, this reads on every
+`get()`, so a singleton built once still reads the value as it is now. It is accepted in a
+component of any scope.
+
+```ts
+di.bindScopedConfig<AppConfig>({ get: () => store.current })
+
+@Injectable([$i.liveConfig<AppConfig>(cfg => cfg.limits.rps)])
+class RateLimiter {
+  constructor(readonly rps: Provider<number>) {}
+}
+```
+
+`defaultValue` is what `get()` returns when the selected value is `undefined`. A provider is
+always injected: when no scoped config was bound, its `get()` returns `defaultValue`, or
+`undefined` if the injection is wrapped in `$i.optional`. Otherwise compiling the injection throws
+[`ErrNoValuesProvider`](./errors.md#errnovaluesprovider).
 
 ### compose
 

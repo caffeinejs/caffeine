@@ -69,7 +69,6 @@ function gadget<C = unknown>(configure?: FeatureConfigurer<GadgetBuilder<C>, C>)
 
 const appSchema = $t.Object({ app: $t.Object({ gadget: gadgetSchema }) })
 type AppConfig = { app: { gadget: GadgetConfig } }
-const kAppConfig = token<AppConfig>(Symbol('app.config'))
 
 const headless = () => createApplication({ container: new CaffeineIoC({ decorators: false }) })
 
@@ -96,9 +95,9 @@ describe('FeatureBuilder', () => {
   it('keeps a fluent value even when a source names the same setting', async () => {
     const g = gadget<AppConfig>(b => b.size(7))
 
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
@@ -110,9 +109,9 @@ describe('FeatureBuilder', () => {
   it('reads a setting from the tree when the callback wires it', async () => {
     const g = gadget<AppConfig>((b, { config }) => b.config(config.app.gadget))
 
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ app: { gadget: { size: 99 } } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
@@ -132,9 +131,9 @@ describe('FeatureBuilder', () => {
       b.config(config.app.gadget)
     })
 
-    const conf = newConfiguration(appSchema, kAppConfig)
+    const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ app: { gadget: { size: 12 } } }))
-      .build()
+      .build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
@@ -198,9 +197,10 @@ describe('FeatureBuilder', () => {
     expect(order).toEqual(['callback', 'configure'])
   })
 
-  // Liveness is the author's choice, not something the framework manufactures: a node read through follows a
-  // refresh, while a scalar copied out of it at bootstrap does not.
-  it('hands over a live node, so a refresh is visible through it', async () => {
+  // A feature is configured once, from the configuration the application started with: a node handed to its builder
+  // is a frozen snapshot, so a later refresh cannot change what the feature was built from behind its back. Code that
+  // must follow a reload asks for the live token, or subscribes to the store.
+  it('hands over a snapshot node, which a refresh does not reach', async () => {
     let size = 5
     const changing: ConfigSource = {
       name: 'gadget-test',
@@ -209,20 +209,19 @@ describe('FeatureBuilder', () => {
     }
 
     const g = gadget<AppConfig>((b, { config }) => b.config(config.app.gadget))
-    const conf = newConfiguration(appSchema, kAppConfig).source(changing).build()
+    const conf = newConfiguration(appSchema).source(changing).build().config
     const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install(g)
 
     await app.bootstrap()
 
-    expect(g.resolved?.size).toBe(5)
     expect(g.node?.size).toBe(5)
+    expect(Object.isFrozen(g.node)).toBe(true)
 
     size = 42
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
-    // The node reads through the tree as it stands now...
-    expect(g.node?.size).toBe(42)
-    // ...while the value copied out of it at bootstrap is fixed, which is what copying one means.
+    expect(app.config.app.gadget.size).toBe(42)
+    expect(g.node?.size).toBe(5)
     expect(g.resolved?.size).toBe(5)
   })
 })

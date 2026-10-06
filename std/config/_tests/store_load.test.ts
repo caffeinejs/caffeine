@@ -6,6 +6,7 @@ import { ErrConfig } from '../errors.js'
 import { loadConfig } from '../load.js'
 import { RecordingLogger } from '../log.testkit.js'
 import { passthroughConfigSchema } from '../schema.js'
+import { testTokens } from '../tokens.testkit.js'
 import type { ConfigDefinition, ConfigLoadContext, ConfigSchema, ConfigSource } from '../types.js'
 import { hasFastProperties } from './v8.testkit.js'
 
@@ -14,7 +15,7 @@ function definition<T = unknown>(
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
   loadTimeoutMs = 30_000,
 ): ConfigDefinition<T> {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs }
+  return { schema, ...testTokens(), sources, loadTimeoutMs }
 }
 
 function source(name: string, data: Record<string, unknown>, extra: Partial<ConfigSource> = {}): ConfigSource {
@@ -48,12 +49,12 @@ describe('loadConfig', () => {
     expect(store.current).toEqual({ server: { host: '0.0.0.0', port: 8080 } })
   })
 
-  it('freezes the snapshot and builds the live object over it', async () => {
+  it('freezes the snapshot', async () => {
     const store = await loadConfig(definition([source('a', { server: { port: 1 } })]))
 
     expect(Object.isFrozen(store.current)).toBe(true)
     expect(Object.isFrozen((store.current as { server: object }).server)).toBe(true)
-    expect((store.live as { server: { port: number } }).server.port).toBe(1)
+    expect((store.current as { server: { port: number } }).server.port).toBe(1)
   })
 
   // A schema drops an undeclared key by deleting it, and V8 then keeps the object in dictionary mode, where every

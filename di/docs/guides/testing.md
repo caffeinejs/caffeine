@@ -83,7 +83,8 @@ no setup work. Take one explicitly when the source will change after you build f
 it.
 
 Either way, the test container keeps the values the source bound with
-`bindConfig()`, so `$i.config` injections resolve as they do in production.
+`bindConfig()`, and the provider it bound with `bindScopedConfig()`, so `$i.config` and
+`$i.liveConfig` injections resolve as they do in production.
 
 When constructed empty, the test container registers decorated classes, so types
 imported via the feature module register on it.

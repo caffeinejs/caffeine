@@ -1,6 +1,7 @@
 import { BuiltInStages, type InjectionMiddleware } from './injection_resolver.js'
 import {
   configStage,
+  liveConfigStage,
   manyStage,
   mapStage,
   objectStage,
@@ -19,6 +20,7 @@ import {
  */
 export const builtInStages: ReadonlyArray<readonly [symbol, InjectionMiddleware, { terminal?: boolean }]> = [
   [BuiltInStages.CONFIG, configStage, { terminal: true }],
+  [BuiltInStages.LIVE_CONFIG, liveConfigStage, { terminal: true }],
   [BuiltInStages.MANY, manyStage, { terminal: true }],
   [BuiltInStages.MAP, mapStage, { terminal: true }],
   [BuiltInStages.OBJECT, objectStage, { terminal: true }],

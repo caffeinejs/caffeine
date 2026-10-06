@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
@@ -52,29 +51,24 @@ export const ConfigSchema = $t.Object({
 
 export type Config = InferConfig<typeof ConfigSchema>
 
+const conf = newConfiguration(ConfigSchema)
+  .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
+  .build()
+
 /**
- * The key the resolved configuration is bound under, declared beside the schema it is typed from so
- * `container.get(kConfig)` needs no type argument at the call site.
+ * The configuration the application resolves at `bootstrap()`. Data only: importing this module reads no
+ * environment, the source reads it when the application loads.
  */
-export const kConfig = token<Config>(Symbol('petstore.config'))
+export const configuration = conf.config
+
+/** The key the configuration the application started with is bound under, typed from the schema. */
+export const kConfig = conf.configToken
 
 /** Fixed name for the GitHub session cookie. `app.ts` sets it on the scheme, and the tests present it. */
 export const GITHUB_SESSION_COOKIE = 'petstore_gh_session'
 
 /** Fixed name for the per-flow GitHub state cookie. */
 export const GITHUB_STATE_COOKIE = 'petstore_gh_state'
-
-/**
- * Builds the configuration the application resolves at `bootstrap()`.
- *
- * A function rather than a built value, so importing this module reads no environment and a test can build a
- * fresh one.
- */
-export function configuration() {
-  return newConfiguration(ConfigSchema, kConfig)
-    .source(new EnvConfigSource({ prefix: 'PETSTORE_' }))
-    .build()
-}
 
 /** Whether real GitHub credentials were configured. Shapes the home page's copy. */
 export function githubConfigured(config: Config): boolean {

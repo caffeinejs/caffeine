@@ -7,7 +7,7 @@ import {
   type Feature,
   type FeatureConfigurer,
 } from '@caffeinejs/std'
-import type { InferConfig, LiveConfig } from '@caffeinejs/std/config'
+import type { ConfigSnapshot, InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
@@ -305,7 +305,6 @@ describe('adapter types', () => {
 describe('configure callback typing', () => {
   const schema = $t.Object({ name: $t.String({ default: 'app' }) })
   type AppConfig = InferSchema<typeof schema>
-  const kConfig = token<InferConfig<typeof schema>>(Symbol('adapter-agnostic.config'))
 
   class PlainBuilder<C = unknown> extends FeatureBuilder<C> {
     readonly [kFeatureName] = 'plain-probe'
@@ -328,11 +327,11 @@ describe('configure callback typing', () => {
   // feature through its `FeatureConfigureKit` on `.install(...)`, a plugin factory's builder through its
   // `HTTPSetupContext` on `.with(...)`.
   it('types the callback against the application configuration, on either registration', () => {
-    const conf = newConfiguration(schema, kConfig).source(new InlineConfigSource({})).build()
+    const conf = newConfiguration(schema).source(new InlineConfigSource({})).build().config
 
     const app = createWebApplication({ config: conf })
-      .install(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
-      .with(pluginSide((_b, context) => expectTypeOf(context.config).toEqualTypeOf<LiveConfig<AppConfig>>()))
+      .install(plain((_b, kit) => expectTypeOf(kit.config).toEqualTypeOf<ConfigSnapshot<AppConfig>>()))
+      .with(pluginSide((_b, context) => expectTypeOf(context.config).toEqualTypeOf<ConfigSnapshot<AppConfig>>()))
 
     expect(app).toBeDefined()
   })

@@ -291,12 +291,13 @@ export class ErrMissingInjectionKey extends CaffeineIoCError {
 /**
  * ErrNoValuesProvider is thrown when the values are read but `bindConfig()` was never called: by the container's
  * `values` getter, and when a `$i.config` injection that is neither optional nor has a default is compiled, which
- * `init()` does for every component.
+ * `init()` does for every component. Likewise for `bindScopedConfig()`: by the `scopedConfig` getter, and for a
+ * `$i.liveConfig` injection.
  */
 export class ErrNoValuesProvider extends CaffeineIoCError {
-  constructor(context?: string) {
+  constructor(context?: string, binder: 'bindConfig' | 'bindScopedConfig' = 'bindConfig') {
     super(
-      'Cannot read values: no values are bound — call bindConfig() before init()' +
+      `Cannot read values: no values are bound — call ${binder}() before init()` +
         (context === undefined ? '' : `\n${context}`),
       'ERR_NO_VALUES_PROVIDER',
     )

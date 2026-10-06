@@ -564,6 +564,36 @@ function config<T = unknown, R = any>(access: ((provider: T) => R) | string, def
 }
 
 /**
+ * liveConfig creates an injection descriptor that injects a {@link Provider} of a typed value selected out of what
+ * the provider bound with `bindScopedConfig()` answers, by selector function or dot-separated path.
+ *
+ * {@link config} reads once, when the consumer is built. This reads on every `get()`, so a singleton built once
+ * still reads the value the scoped config holds now.
+ *
+ * @param access - Selector function or dot-path string to the desired value.
+ * @param defaultValue - Returned by `get()` when the selected value is `undefined` or no provider is bound. `null`
+ *   is a valid default.
+ *
+ * @example
+ * ```ts
+ * di.bindScopedConfig<AppConfig>({ get: () => store.current })
+ *
+ * @Injectable([$i.liveConfig<AppConfig>(cfg => cfg.limits.rps)])
+ * class RateLimiter {
+ *   constructor(readonly rps: Provider<number>) {}
+ * }
+ * ```
+ */
+function liveConfig<T = unknown, R = any>(
+  access: ((provider: T) => R) | string,
+  defaultValue?: R,
+): InjectionResult<Provider<R>> {
+  return encode({
+    stages: [{ name: BuiltInStages.LIVE_CONFIG, args: { access, defaultValue } }],
+  })
+}
+
+/**
  * compose creates a composition of injection descriptors.
  *
  * @param key - The key to compose the injection descriptors for.
@@ -639,11 +669,20 @@ export interface InjectionHelpers<C = unknown> {
    * `T` falls back to `C`, which is what types a selector whose call names no type argument.
    */
   config<T = C, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<R>
+
+  /**
+   * Injects a {@link Provider} of a typed value selected out of the provider bound with `bindScopedConfig()`, by
+   * selector or dot-path. Reads on every `get()`.
+   *
+   * `T` falls back to `C`, which is what types a selector whose call names no type argument.
+   */
+  liveConfig<T = C, R = any>(access: ((provider: T) => R) | string, defaultValue?: R): InjectionResult<Provider<R>>
 }
 
 export const $i: InjectionHelpers = {
   allOf,
   config,
+  liveConfig,
   ordered,
   mapped,
   defer,

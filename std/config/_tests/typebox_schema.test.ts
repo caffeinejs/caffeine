@@ -5,6 +5,7 @@ import { ErrConfigValidation } from '../errors.js'
 import { loadConfig } from '../load.js'
 import { validateConfig } from '../schema.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
+import { testTokens } from '../tokens.testkit.js'
 
 const schema = $t.Object({
   server: $t.Object({
@@ -51,12 +52,11 @@ describe('validateConfig with the $t dialect', () => {
   it('works end to end through loadConfig', async () => {
     const store = await loadConfig<{ server: { host: string; port: number } }>({
       schema,
-      key: undefined,
-      storeKey: undefined,
+      ...testTokens(),
       sources: [new InlineConfigSource({ server: { host: '127.0.0.1', port: '1234' } })],
       loadTimeoutMs: 30_000,
     })
-    expect(store.live.server.host).toBe('127.0.0.1')
-    expect(store.live.server.port).toBe(1234)
+    expect(store.current.server.host).toBe('127.0.0.1')
+    expect(store.current.server.port).toBe(1234)
   })
 })

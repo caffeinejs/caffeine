@@ -13,6 +13,7 @@ import { EnvConfigSource } from '../sources/env/index.js'
 import { InlineConfigSource } from '../sources/inline/index.js'
 import { JSONConfigSource } from '../sources/json/index.js'
 import { kMergedTree } from '../store.js'
+import { testTokens } from '../tokens.testkit.js'
 import { readPath } from '../tree.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSchema, ConfigSource } from '../types.js'
 
@@ -40,7 +41,7 @@ function definition<T = Record<string, unknown>>(
   sources: ConfigSource[],
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
 ): ConfigDefinition<T> {
-  return { schema, key: undefined, storeKey: undefined, sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
 }
 
 /** A live source over data the test changes. */

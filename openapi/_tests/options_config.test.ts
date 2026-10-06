@@ -1,4 +1,3 @@
-import { token } from '@caffeinejs/di'
 import { createWebApplication, type WebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
@@ -74,7 +73,6 @@ describe('openapi() configured from the tree', () => {
       { default: {} },
     ),
   })
-  const kConfig = token<InferConfig<typeof schema>>(Symbol('openapi.config.test'))
 
   let app: WebApplication | undefined
 
@@ -84,13 +82,13 @@ describe('openapi() configured from the tree', () => {
   })
 
   it('serves the document where, and as, the configuration says', async () => {
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(
         new InlineConfigSource({
           openapi: { info: { title: 'From config', version: '2.0.0' }, routes: { json: '/spec.json', docs: false } },
         }),
       )
-      .build()
+      .build().config
 
     app = createWebApplication({ config: conf }).with(
       openapi<InferConfig<typeof schema>>((o, { config }) => o.config(config.openapi).public()),

@@ -1,6 +1,7 @@
 import { Binding } from './binding.js'
 import { InjectionToken } from './key.js'
 import type { Module, ModuleFn } from './module.js'
+import type { Provider } from './provider.js'
 
 /**
  * A binding declared with `bind()`, `rebind()` or `aspect()` before the container compiled.
@@ -23,11 +24,13 @@ export interface SnapshotState {
   readonly profiles: ReadonlyArray<string>
   readonly decorators: boolean
   readonly values?: unknown
+  readonly scopedConfig?: Provider<unknown>
 }
 
 /**
  * What a {@link Container} was told to hold: the bindings declared by hand, its modules, its profiles, whether it
- * registers decorated bindings, and the values bound with `bindConfig()`.
+ * registers decorated bindings, the values bound with `bindConfig()` and the provider bound with
+ * `bindScopedConfig()`.
  *
  * It is not the registry. Restored into another container, the declarations are replayed and that container
  * registers the decorated bindings, runs the modules and decides profiles and conditions itself, when it compiles.
@@ -69,6 +72,13 @@ export class Snapshot {
    */
   get values(): unknown {
     return this.#state.values
+  }
+
+  /**
+   * The provider bound with `bindScopedConfig()` when the snapshot was taken, or `undefined` when none was.
+   */
+  get scopedConfig(): Provider<unknown> | undefined {
+    return this.#state.scopedConfig
   }
 
   /**

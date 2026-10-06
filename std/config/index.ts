@@ -17,9 +17,7 @@ export type {
   ConfigSourceStatus,
   ConfigTrigger,
   ConfigValue,
-  ConfigView,
   InferConfig,
-  LiveConfig,
   ReadonlyConfig,
   SchemaSatisfies,
 } from './types.js'

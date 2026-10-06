@@ -112,6 +112,8 @@ export interface Container extends AsyncDisposable {
   readonly hasRequestScope: boolean
   readonly values: unknown
   readonly hasValues: boolean
+  readonly scopedConfig: Provider<unknown>
+  readonly hasScopedConfig: boolean
 
   readonly [Symbol.toStringTag]: string
 
@@ -154,6 +156,8 @@ export interface Container extends AsyncDisposable {
   bind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
   bindConfig<T = unknown>(values: T): this
+
+  bindScopedConfig<T = unknown>(provider: Provider<T>): this
 
   rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<TokenValue<K>, K>) => void): this
 
@@ -208,6 +212,8 @@ export type ContainerOps = Pick<
   | 'has'
   | 'values'
   | 'hasValues'
+  | 'scopedConfig'
+  | 'hasScopedConfig'
 >
 
 /**
@@ -225,6 +231,8 @@ export type ContainerBindingOps = Pick<
   | 'bind'
   | 'bindConfig'
   | 'hasValues'
+  | 'bindScopedConfig'
+  | 'hasScopedConfig'
   | 'rebind'
   | 'aspect'
   | 'entries'

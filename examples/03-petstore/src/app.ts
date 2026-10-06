@@ -43,7 +43,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
   return (
     createWebApplication({
       container,
-      config: configuration(),
+      config: configuration,
       logger: options.logger ?? createLogger(),
     })
       // --- Settings. These configure builders the constructor already registered, so where they are written

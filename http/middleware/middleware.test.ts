@@ -108,10 +108,9 @@ describe('middleware pipeline', () => {
 
   it('infers a configured factory alongside Caffeine middleware', async () => {
     const schema = $t.Object({ middleware: $t.Object({ tag: $t.String() }) })
-    const kConfig = token<InferConfig<typeof schema>>(Symbol('middleware.app.config'))
-    const conf = newConfiguration(schema, kConfig)
+    const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ middleware: { tag: 'from-config' } }))
-      .build()
+      .build().config
     const app = createWebApplication({ container: new CaffeineIoC(), config: conf })
     const seen: string[] = []
 
