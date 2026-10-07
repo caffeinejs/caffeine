@@ -601,6 +601,23 @@ describe('writing cookies', () => {
     expect((await app.fetch('/auto')).headers.getSetCookie()).toEqual(['id=v; Path=/; SameSite=Lax'])
   })
 
+  // A proxy may write the scheme `HTTPS`. Without `Secure`, the browser would also send the cookie over plain HTTP.
+  it("sets Secure with secure: 'auto' however a trusted proxy spelled the scheme", async () => {
+    const routes = newRouter('/auto-case').get('/', ctx => {
+      ctx.cookie('id', 'v', { secure: 'auto' })
+      return { ok: true }
+    })
+
+    const app = await ready(
+      createWebApplication()
+        .server(() => ({ factory: { trustProxy: true } }))
+        .mount(routes),
+    )
+    const res = await app.fetch('/auto-case', { headers: { 'x-forwarded-proto': 'HTTPS' } })
+
+    expect(res.headers.getSetCookie()).toEqual(['id=v; Path=/; Secure; SameSite=Lax'])
+  })
+
   // Dropped by the browser without a word otherwise, which looks like a sign-in that never sticks.
   it('refuses a cookie a browser would drop, where it is set', async () => {
     const logged: LogEntry[] = []

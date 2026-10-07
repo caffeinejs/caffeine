@@ -61,6 +61,18 @@ export interface Req<
   get method(): string
 
   /**
+   * The authority the server trusts for this request, `host[:port]`: the `Host` header, `:authority` over HTTP/2,
+   * or `X-Forwarded-Host` behind a proxy the server was told to trust (`trustProxy`).
+   */
+  get host(): string
+
+  /**
+   * The scheme, lower-cased: `https` or `http` as the socket says, or `X-Forwarded-Proto` behind a proxy the server
+   * was told to trust (`trustProxy`). Empty when neither says.
+   */
+  get protocol(): string
+
+  /**
    * The parsed request body, as the adapter's content-type parser produced it, typed by the route's `body`
    * schema when it declares one.
    *

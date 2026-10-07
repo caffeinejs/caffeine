@@ -1,7 +1,10 @@
 import type { RouteExtension } from '../routing/extension.js'
 import { configureRoute } from './registrar/registrar.js'
 
-/** Reads the request body as a raw `Buffer`, whatever its content type. */
+/**
+ * Reads the request body as a raw `Buffer`, whatever its content type, held to the route's `bodyLimit` or the
+ * server's: a longer body is refused with a 413 before the handler runs.
+ */
 export function bodyAsBuffer(): RouteExtension {
   return route => route.bodyAs('buffer')
 }

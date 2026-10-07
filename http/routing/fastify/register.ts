@@ -1,7 +1,8 @@
-import { Readable } from 'node:stream'
+import { Readable, Transform } from 'node:stream'
 
 import { Ctor } from '@caffeinejs/di'
 import {
+  errorCodes,
   type FastifyInstance,
   type FastifyReply,
   type FastifyRequest,
@@ -239,16 +240,19 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         }
 
         // BodyAsBuffer
-        // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
+        // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer. Fastify reads it, through
+        // `parseAs`, and so holds it to the route's `bodyLimit` or the server's: a parser reading the payload stream
+        // itself is held to no limit at all.
         if (route.bodyAs === 'buffer') {
           server.register(async innerServer => {
             innerServer.removeAllContentTypeParsers()
-            innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit }, function (_request, payload, done) {
-              const chunks: Buffer[] = []
-              payload.on('data', (chunk: Buffer) => chunks.push(chunk))
-              payload.on('end', () => done(null, Buffer.concat(chunks)))
-              payload.on('error', done)
-            })
+            innerServer.addContentTypeParser(
+              '*',
+              { parseAs: 'buffer', bodyLimit: route.bodyLimit },
+              (_request, body, done) => {
+                done(null, body)
+              },
+            )
 
             routeFn(innerServer, routeDef)
           })
@@ -256,11 +260,22 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         }
 
         // BodyAsStream
+        // The parser is handed the route's `bodyLimit` as the buffer one is, but Fastify enforces a limit only on a
+        // body it reads itself. A stream handed on is held to it here: refused up front by its Content-Length, and
+        // failed as it passes the limit when it declares none.
         if (route.bodyAs === 'stream') {
           server.register(async innerServer => {
             innerServer.removeAllContentTypeParsers()
-            innerServer.addContentTypeParser('*', function (_request, payload, done) {
-              done(null, Readable.toWeb(payload))
+            innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit }, (request, payload, done) => {
+              // The route's limit, or the server's when it sets none, as Fastify resolves it for its own reader.
+              const limit = request.routeOptions.bodyLimit
+
+              if (Number(request.headers['content-length']) > limit) {
+                done(new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE(), undefined)
+                return
+              }
+
+              done(null, Readable.toWeb(limited(payload, limit)))
             })
 
             routeFn(innerServer, routeDef)
@@ -284,4 +299,20 @@ function isHandlerTimeout(reason: unknown): boolean {
 function joinPaths(base: string, path: string): string {
   const joined = `${base}${path}`
   return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
+}
+
+/** The body as it is read, failed with a 413 once more than `limit` bytes have passed. */
+function limited(payload: Readable, limit: number): Readable {
+  let received = 0
+  const counted = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      received += chunk.length
+      callback(received > limit ? new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE() : null, chunk)
+    },
+  })
+
+  // Piped by hand: `pipeline` would destroy the request, its socket with it, and no 413 could be sent.
+  payload.on('error', err => counted.destroy(err))
+
+  return payload.pipe(counted)
 }

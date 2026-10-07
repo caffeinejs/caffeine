@@ -19,6 +19,7 @@ import { reopenCookieFlush, serverCookies } from './cookie/plugin.js'
 import type { CookieSecret, CookieUnsignResult } from './cookie/signer.js'
 import { statusErrorBody } from './error/http.js'
 import type { FastifyPlatform, FastifyTypes } from './fastify_adapter.js'
+import { protocolOf } from './protocol.js'
 import type { RouteValidationSchema } from './routing/spec.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'
@@ -230,6 +231,14 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
 
   get method(): string {
     return this.request.method
+  }
+
+  get host(): string {
+    return this.request.host
+  }
+
+  get protocol(): string {
+    return protocolOf(this.request)
   }
 
   body(): InferBody<SCHEMA> {

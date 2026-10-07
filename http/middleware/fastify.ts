@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrConfiguration } from '../error/common.js'
+import { protocolOf } from '../protocol.js'
 import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
 import { rawContext } from './_raw_context.js'
 import type { Next } from './middleware.js'
@@ -129,7 +130,7 @@ function stampRaw(request: FastifyRequest, reply: FastifyReply): void {
   raw.originalUrl ??= raw.url
   raw.id = request.id
   raw.hostname = request.hostname
-  raw.protocol = request.protocol
+  raw.protocol = protocolOf(request)
   raw.ip = request.ip
   raw.ips = request.ips
   raw.log = request.log

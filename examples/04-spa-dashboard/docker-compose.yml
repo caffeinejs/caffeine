@@ -11,8 +11,8 @@ services:
       # The schema default is 127.0.0.1, which inside a container is reachable only from inside it.
       SPA_SERVER__HOST: 0.0.0.0
       SPA_SERVER__PORT: 9010
-      # SPA_AUTH__SESSION_SECRET and SPA_AUTH__COOKIE_SECRET are left at their demo defaults, as .env.example
-      # says. A deployment sets both, and SPA_AUTH__SECURE_COOKIE=true once there is TLS in front.
+      # SPA_AUTH__SESSION_SECRET is left at its demo default, as .env.example says. A deployment sets it, and
+      # SPA_AUTH__SECURE_COOKIE=true once there is TLS in front.
     # Compose's own stop timeout is shorter than this application's 5s drain delay, so without this the
     # container is SIGKILLed mid-shutdown (exit 137) and nothing graceful happens. 30s is what the framework
     # assumes when nothing says otherwise — std/shutdown/shutdown_options.ts defaults terminationGracePeriodMs

@@ -378,6 +378,24 @@ describe('middleware pipeline', () => {
     expect(order).toEqual(['hinted', 'second'])
     await app.close()
   })
+
+  // One scheme per request: a Node middleware reads what `ctx.req.protocol` answers, however a proxy spelled it.
+  it('hands a Node middleware the scheme ctx.req.protocol answers', async () => {
+    let protocol: unknown
+    const node: NodeMiddleware = (req, _res, next) => {
+      protocol = (req as IncomingMessage & { protocol: unknown }).protocol
+      next()
+    }
+
+    const app = newApp().server(() => ({ factory: { trustProxy: true } }))
+    app.use(node)
+    await app.bootstrap()
+
+    await app.fetch('/mw/echo', { headers: { 'x-forwarded-proto': 'HTTPS' } })
+
+    expect(protocol).toBe('https')
+    await app.close()
+  })
 })
 
 describe('application middleware registration with a path', () => {

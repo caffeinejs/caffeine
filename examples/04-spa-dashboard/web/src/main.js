@@ -6,14 +6,12 @@ import './styles.css'
 //
 // Two things here are the client half of a server decision:
 //
-//   * the CSRF token is fetched from `/auth/csrf` and sent as `x-csrf-token` on every unsafe request. The
-//     `_csrf` cookie holding the secret is HttpOnly, so the token cannot be read from `document.cookie` — it
-//     has to come back in a body.
+//   * nothing is sent against CSRF. The server judges every unsafe request by its Fetch Metadata, and a
+//     same-origin `fetch` carries `Sec-Fetch-Site: same-origin` by itself: there is no token to fetch or keep.
 //   * a 401 from the API means the session went away underneath us, so the client goes to `/login`. It does
 //     *not* try to guess: the server already redirected the navigation that brought us here.
 
 const state = {
-  csrf: '',
   user: null,
   error: '',
 }
@@ -32,11 +30,8 @@ async function api(path, options = {}) {
   const method = options.method ?? 'GET'
   const headers = { accept: 'application/json', ...options.headers }
 
-  if (method !== 'GET' && method !== 'HEAD') {
-    headers['x-csrf-token'] = state.csrf
-    if (options.body !== undefined) {
-      headers['content-type'] = 'application/json'
-    }
+  if (method !== 'GET' && method !== 'HEAD' && options.body !== undefined) {
+    headers['content-type'] = 'application/json'
   }
 
   // Same-origin, so the session cookie rides along without the client holding a token of its own.
@@ -49,12 +44,6 @@ async function api(path, options = {}) {
   }
 
   return res
-}
-
-async function refreshCsrf() {
-  const res = await fetch('/auth/csrf', { headers: { accept: 'application/json' }, credentials: 'same-origin' })
-  const body = await res.json()
-  state.csrf = body.token
 }
 
 async function refreshUser() {
@@ -228,9 +217,6 @@ async function onLogin(form) {
     return
   }
 
-  // The server rotated the CSRF secret at the session boundary and handed back a token bound to the new one,
-  // so the token in hand is stale and this is the replacement — no second round trip.
-  state.csrf = body.csrfToken
   state.user = body.user
 
   const returnURL = new URLSearchParams(location.search).get('returnUrl')
@@ -238,10 +224,7 @@ async function onLogin(form) {
 }
 
 async function onLogout() {
-  const res = await api('/auth/logout', { method: 'POST' })
-  if (res) {
-    state.csrf = (await res.json()).csrfToken
-  }
+  await api('/auth/logout', { method: 'POST' })
 
   state.user = null
   go('/')
@@ -272,7 +255,6 @@ document.addEventListener('submit', event => {
 addEventListener('popstate', () => void render())
 
 async function start() {
-  await refreshCsrf()
   await refreshUser()
   await render()
 }

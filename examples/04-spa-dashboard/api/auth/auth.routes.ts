@@ -4,11 +4,8 @@ import {
   CredentialsService,
   ErrHTTPBadRequest,
   newRouter,
-  type Context,
   type Principal,
 } from '@caffeinejs/http'
-
-import { CSRF_COOKIE } from '../app.config.js'
 
 /** The scheme's registered name. `addCookie(...)` with no name uses this one. */
 const SCHEME = 'Cookie'
@@ -28,36 +25,14 @@ function describe(principal: Principal): unknown {
 }
 
 /**
- * Issues a CSRF token, rotating the secret it is bound to.
+ * Sign-in, sign-out, and the one thing the client needs for its own state: the current principal.
  *
- * `reply.generateCsrf()` mints a new secret **only when the request carried no `_csrf` cookie**; otherwise it
- * reuses the one it was given. So rotating at the session boundary — which is the point of doing it at all —
- * means clearing the request's own copy first, because that is what the plugin reads. Clearing only the reply
- * cookie would issue a token bound to a secret the browser is about to be told to forget, and every unsafe
- * request afterwards would fail with `FST_CSRF_MISSING_SECRET`.
- *
- * The plugin exposes no rotate of its own; this is the whole of it.
- */
-function rotateCsrf(ctx: Context): string {
-  delete ctx.platform.request.cookies[CSRF_COOKIE]
-
-  return ctx.platform.reply.generateCsrf()
-}
-
-/**
- * Sign-in, sign-out, and the two things the client needs to do either: a CSRF token and the current principal.
- *
- * Only `/auth/me` is gated. The other three are `allowAnonymous` because they all have to work before there is
- * a session — including sign-out, so that signing out twice is not a 401.
+ * Only `/auth/me` is gated. The other two are `allowAnonymous` because they both have to work before there is a
+ * session — including sign-out, so that signing out twice is not a 401. Neither takes a CSRF token: the
+ * framework's `csrf()` judges every unsafe request by its Fetch Metadata, which a same-origin `fetch` sends by
+ * itself, so a login form posted from another site is refused before it reaches here.
  */
 export const authRouter = newRouter('/auth')
-  // A token to put in `x-csrf-token`. The `_csrf` cookie holding the secret is HttpOnly, so the token cannot
-  // be read from `document.cookie`; it has to come back in the body. Anonymous, because the login form itself
-  // needs one — login CSRF is a real attack, not a technicality.
-  .get('/csrf')
-  .authorize({ allowAnonymous: true })
-  .handler(ctx => ({ token: ctx.platform.reply.generateCsrf() }))
-
   .post('/login')
   .authorize({ allowAnonymous: true })
   .inject({ auth: AuthenticationService, credentials: CredentialsService })
@@ -79,9 +54,7 @@ export const authRouter = newRouter('/auth')
     // The principal is described from what was just verified, not from `ctx.user`: `persist` writes the
     // session cookie for the *next* request and does not re-authenticate this one, so `ctx.user` is still
     // anonymous here.
-    //
-    // The fresh token rides back in the body so the client needs no second round trip.
-    return { ok: true, user: describe(principal), csrfToken: rotateCsrf(ctx) }
+    return { ok: true, user: describe(principal) }
   })
 
   .post('/logout')
@@ -92,9 +65,7 @@ export const authRouter = newRouter('/auth')
       await auth.revoke(ctx, SCHEME)
     }
 
-    // `revoke` clears the session cookie and knows nothing about any other plugin's, so without this the CSRF
-    // secret would outlive the session and be inherited by whoever signs in next in this browser.
-    return { ok: true, csrfToken: rotateCsrf(ctx) }
+    return { ok: true }
   })
 
   // No `authorize` at all, so the application's `requireAuthenticatedByDefault()` covers it: anonymous callers

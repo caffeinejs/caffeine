@@ -9,6 +9,7 @@ Read before reviewing `http/security` with the `security-audit` or `sharp-edges`
   authorization (`../authz/`).
 - `http/cookie/**`: parsing, signing (`signer.ts`), the browser rules (`rules.ts`) and the `Set-Cookie` writer
   (`plugin.ts`) every scheme's cookies go through.
+- `http/csrf/**`: cross-origin protection by Fetch Metadata, `origin.ts` the check and `plugin.ts` the hook.
 - Related boundaries: response privacy in `caching/http/cache_control.ts` (rules in
   [`caching/AGENTS.md`](../../caching/AGENTS.md)), error bodies in `http/error/plugin.ts`, `~/` resolution in
   `http/base_path.ts` (`resolveAppURL`), file serving in `static/`, uploads in `multipart/`.
@@ -17,12 +18,15 @@ Read before reviewing `http/security` with the `security-audit` or `sharp-edges`
 
 Report these only if the framework's own docs promise otherwise.
 
-- CSRF protection. The cookie scheme defaults to `SameSite=lax`; `examples/04-spa-dashboard` installs
-  `@fastify/csrf-protection`.
+- A request carrying neither `Sec-Fetch-Site` nor `Origin` passes `csrf()` as non-browser traffic, by design. The
+  cookie scheme defaults to `SameSite=lax` as a second layer.
 - Credential checks for opaque tokens (`OpaqueTokenStore.validate`) and Basic (the `validate` option).
 - Store implementations: `SeriesTokenStore` (remember-me and refresh) must make `rotate` an atomic compare-and-swap;
   `OpaqueTokenStore`, ticket stores.
-- Fastify `trustProxy`; the framework never reads `X-Forwarded-*`, `Forwarded`, `Origin` or `Referer`.
+- Fastify `trustProxy`; the framework never reads `X-Forwarded-*`, `Forwarded` or `Referer`. `csrf/origin.ts` alone
+  reads `Origin` and `Sec-Fetch-Site`, and compares them with `ctx.req.host` and `ctx.req.protocol`, so
+  `trustProxy` governs what a proxy may say there. `protocolOf` (`http/protocol.ts`) is the one reader of Fastify's
+  `request.protocol`, lower-casing what a proxy wrote.
 - Validating the cookie scheme's `returnUrl` in the application's login endpoint; `isSafeReturnPath` is exported for it.
 - Multipart limits, body limits beyond the form parser's 1 MB, and logger redaction.
 
@@ -76,6 +80,19 @@ Report these only if the framework's own docs promise otherwise.
 - Authentication responses are `noStore`; a presented cookie that does not resolve fails `authenticate`, it is
   not treated as absent.
 - Remote-auth errors return `publicMessage` only; diagnostics go through `redactPii` unless `showPii` is set.
+- Cross-origin protection (`http/csrf/`): a safe method (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `QUERY`) is never
+  refused. `Sec-Fetch-Site` decides when present: anything but `same-origin` and `none` is refused unless the
+  `Origin` is trusted, `same-site` included. Without it, `Origin: null`, an unreadable `Origin`, one of a scheme other
+  than `http` and `https`, one naming another host or port, and an `http:` one on a request known to be HTTPS are
+  refused; neither header passes. An `https:` one naming the host passes on a request seen as `http`, deliberately:
+  only the host's own HTTPS side can send it, and over plain HTTP a browser sends `Origin: null` for that form unless
+  the page asks for a permissive referrer policy (see `origin.ts`). A trusted
+  origin is exactly `scheme://host[:port]`, with no path, wildcard or `null`. An exemption is judged by the
+  registered route path, and a route's own mark wins over an excluded prefix; `exclude('/')` is refused. Error text
+  never repeats a header value; the body and the query are never read, nor logged.
+- The application's checks (`trustOrigin`, `allowSecFetchSite`) only widen: they are asked on a refusal alone, and
+  no answer admits `Origin: null`, a malformed origin, or an `http:` origin on a request known to be HTTPS. Only
+  `true` lets a request through; a check that throws or rejects, with a falsy reason too, fails the request.
 
 ## Tests
 
@@ -85,4 +102,8 @@ Report these only if the framework's own docs promise otherwise.
 - Cookie unit tests: `http/cookie/{signer,rules,serialize,cookie}.test.ts`; rotation in
   `internal/sealed_jwt.test.ts`, `cookie/cookie.test.ts` and `oidc/handler_ticket_store.test.ts`.
 - End-to-end: `test/e2e/{basic,cookie,cookie_remember,jwt,opaque,refresh,oauth2,oidc,multi_scheme,spa_bff,fallback,authz,authz_startup,config_auth}.e2e.ts`.
+- Cross-origin protection: `http/csrf/origin.test.ts`, `http/csrf/origin.prop.test.ts`,
+  `http/csrf/_tests/csrf_plugin.test.ts`, the webhook receiver in `http/csrf/_tests/csrf_webhook.test.ts`, and
+  the edges (header shapes, methods, router spellings, HTTP/2, proxies, CORS) in `http/csrf/_tests/csrf_edges.test.ts`;
+  the scheme reader in `http/protocol.test.ts`.
 - A confirmed finding lands with a regression test next to the code it fixes.

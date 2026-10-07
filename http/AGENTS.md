@@ -33,6 +33,41 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `respond()` (`error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send that died writing
   its cookies left `ctx.sent` true with nothing in flight.
 
+## CSRF
+
+- `http/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
+  `origin.ts` is the check, pure, and `plugin.ts` the only file that knows Fastify; another adapter re-implements
+  `plugin.ts` alone.
+- `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
+  proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
+  neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
+  `CsrfProtectionMiddleware` have it. An `https:` `Origin` naming the host passes on a request seen as `http`, on
+  purpose: the reasons are in `origin.ts` and the HTTP docs' limitations. Do not require the schemes to match
+  without them.
+- The check is one root `onRequest` hook, callback-style, in the `.with(...)` slot it was written in. It skips
+  `request.is404`, the safe methods (`SAFE_METHODS`), a route whose config carries `'caffeine:csrf'` with
+  `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`), and an unmarked route whose registered
+  path is under `.exclude(...)`. A route's own mark wins: `exempt: false` (`csrfExempt(false)`,
+  `@CSRFExempt(false)`) keeps it protected under an exempt group or an excluded prefix, since compilation writes a
+  route's config over its group's. Read a mark with `csrfMarkOf`, never as a boolean: `false` is a mark, not its
+  absence. Exclusion is judged by `request.routeOptions.url`, never the URL requested, and `exclude('/')` is refused.
+- A refusal is `ErrCSRFCrossOrigin`, an `ErrHTTPForbidden` with its own code, handed to `done(err)`. Its message
+  never repeats a header value; the warn log carries `reason`, the method, the path without its query and the
+  headers that decided it. `enabled(false)` registers no hook and warns once as the server starts.
+- `normalizeTrustedOrigin` refuses what is not exactly `scheme://host[:port]`. The WHATWG parser takes `*` for a
+  host character, so a wildcard is refused by name.
+- A request's `Origin` is read as an `http:` or `https:` origin, or not at all (`parseOrigin`). The parser gives `ws:`
+  and `ftp:` URLs a host and a `blob:` URL its inner origin, none of which a page sends: each is `origin-malformed`.
+- The application's checks, `trustOrigin(...)` and `allowSecFetchSite(...)`, only widen. They are asked on the deny
+  path alone, about what `checkOrigin` puts in `askable`: an `http:` or `https:` origin that is not a downgrade, and
+  the site when it is `same-site` or `cross-site`. `origin.ts` alone decides what is askable; `Origin: null`, a
+  malformed origin and a downgrade never are.
+- Each check is handed `request.httpContext` and, for `trustOrigin`, a fresh `URL` per call. Only a literal `true`,
+  or a promise of it, lets the request through. A throw or a rejection reaches `done` wrapped in an `Error`, as the
+  guards do: Fastify reads a falsy `done(err)` as "continue", which would skip every later hook. Calls accumulate,
+  origin checks before site checks, in the order written. Checks are code only, never in `CSRFConfig` or the
+  schema.
+
 ## Authentication
 
 - Before a security review of `security/`, read [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md). Use
@@ -47,8 +82,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   merge them.
 - `$caffeine` is optional (a 404 has none); `$caffeine.compiled`, never `$caffeine` itself, tells a compiled
   route from a raw one; `$caffeine.auth` is a raw route's policy slot, with no helper yet.
-- `isNavigation` (`navigation.ts`) alone reads `Sec-Fetch-*` and `Accept` for that question, so
-  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree.
+- `isNavigation` (`navigation.ts`) alone reads `Sec-Fetch-Mode`, `Sec-Fetch-Dest` and `Accept` for that question, so
+  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree. `csrf/origin.ts` alone reads
+  `Sec-Fetch-Site` and `Origin`.
 - Several schemes on one route each append `WWW-Authenticate` with `ctx.appendHeader`, never `ctx.header`.
 - A catch-all is the application's: `GET /*` on its own router, marked `detail('http', { internal: true })`,
   throwing `ErrHTTPNotFound` ([`../ai/docs/spa.md`](../ai/docs/spa.md)).
@@ -61,6 +97,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
 - `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
+- `protocolOf(request)` (`protocol.ts`) is the only reader of Fastify's `request.protocol`, which carries a trusted
+  proxy's `X-Forwarded-Proto` as written (`HTTPS`) and is `undefined` without a socket; it answers lower-case, `''`
+  when unknown. `ctx.req.protocol`, the cookie writer, the CSRF check and the middleware bridge all call it, and
+  need no request context to do so.
 - The adapter applies the base path in `rewriteUrl`; never prefix at registration or rewrite `url` in `onRoute`.
   Only `ctx.redirect(...)`, `AuthenticationProperties.redirectURI` and the `returnTo` query resolve `~/`
   (`resolveAppURL`); nothing else is rewritten.
@@ -111,6 +151,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `flatten.ts` overwrites `path`, `method`, `parameters` and the handler, so an extension leaves them alone.
 - `addRouteHook` replaces a hook slot's array and never mutates it, since Fastify shares it with a GET route's
   HEAD twin; a `RouteExtension` writing plain route config comes first.
+- Both raw-body parsers are handed the route's `bodyLimit`, but Fastify enforces a limit only on a body it reads
+  itself. `bodyAsBuffer()` reads through `parseAs: 'buffer'`, so Fastify holds it to the limit; `bodyAsStream()`
+  holds its stream to `request.routeOptions.bodyLimit` itself (`limited()` in `routing/fastify/register.ts`). A new
+  parser reading the payload stream must do the same, and must not `pipeline` it: that destroys the request, and
+  its socket, before the 413 is sent.
 - `fst({ … })` (`routing/fastify/route_options.ts`) is the only Fastify escape hatch on a route. Do not widen it:
   its type omits what the adapter writes, `config` included.
 - `compile.ts` knows nothing about constraints; `constraint()`/`@Constraint` write `route.config` under

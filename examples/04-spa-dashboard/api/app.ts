@@ -1,5 +1,12 @@
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, Authentication, authentication, Authorization, healthProbes } from '@caffeinejs/http'
+import {
+  createWebApplication,
+  Authentication,
+  authentication,
+  Authorization,
+  csrf,
+  healthProbes,
+} from '@caffeinejs/http'
 import { openapi } from '@caffeinejs/openapi'
 import type { Logger } from '@caffeinejs/std/logger'
 
@@ -7,7 +14,7 @@ import { SESSION_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'
 import { authRouter } from './auth/index.js'
 import { projectsRouter } from './projects/index.js'
-import { adminPages, apiMisses, csrf, memberPages, publicPages, securityHeaders, site } from './spa/index.js'
+import { adminPages, apiMisses, memberPages, publicPages, securityHeaders, site } from './spa/index.js'
 
 export interface BuildAppOptions {
   /** The application logger, or `false` for a silent one. Tests pass `false`. */
@@ -43,10 +50,11 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
       // --- Installs, in the order they register.
       //
       // Both plugins go ahead of the authentication gate on purpose: a hook registered after it never runs for
-      // a request the gate rejected, so this is what puts the security headers on a 401 and checks CSRF before
-      // a forged request reaches the auth path at all.
+      // a request the gate rejected, so this is what puts the security headers on a 401 and refuses a
+      // cross-origin request before it reaches the auth path at all. `csrf()` is the framework's: every unsafe
+      // request is judged by its Fetch Metadata, and the client sends no token.
       .with(securityHeaders)
-      .with(csrf)
+      .with(csrf())
 
       // One scheme for the whole application — pages and API alike. The session cookie is an encrypted JWT,
       // HttpOnly, so no token is ever in JavaScript; the browser attaches it to same-origin `fetch` itself.
