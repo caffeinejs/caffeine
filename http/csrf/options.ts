@@ -1,6 +1,13 @@
+import type { Context } from '../context.js'
 import { solutions } from '../error/util.js'
 import { ErrCSRFConfiguration } from './errors.js'
 import { normalizeTrustedOrigin } from './origin.js'
+
+/** The application's word on the origin of a request the check refused: `true` lets it through. */
+export type OriginPredicate = (ctx: Context, origin: URL) => boolean | PromiseLike<boolean>
+
+/** The application's word on a request refused for its `Sec-Fetch-Site`: `true` lets it through. */
+export type SecFetchSitePredicate = (ctx: Context, site: 'same-site' | 'cross-site') => boolean | PromiseLike<boolean>
 
 /**
  * The `csrf` block of the configuration tree, handed over with `c.config(config.app.csrf)`.
@@ -32,19 +39,26 @@ export interface CSRFOptions {
   readonly enabled: boolean
   readonly trustedOrigins: ReadonlySet<string>
   readonly exclude: readonly ExcludedPath[]
+  /** Asked in the order written, ahead of {@link siteChecks}, about a refusal that leaves something to ask. */
+  readonly originChecks: readonly OriginPredicate[]
+  readonly siteChecks: readonly SecFetchSitePredicate[]
 }
 
 /**
- * Folds a block onto the defaults.
+ * Folds a block onto the defaults. The checks are code, never configuration, and come in beside it.
  *
  * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path not starting with `/` or
  * that is `/` itself.
  */
-export function resolveCSRFOptions(config: CSRFConfig): CSRFOptions {
+export function resolveCSRFOptions(
+  config: CSRFConfig,
+  checks: Pick<CSRFOptions, 'originChecks' | 'siteChecks'> = { originChecks: [], siteChecks: [] },
+): CSRFOptions {
   return {
     enabled: config.enabled ?? true,
     trustedOrigins: new Set((config.trustedOrigins ?? []).map(normalizeTrustedOrigin)),
     exclude: (config.exclude ?? []).map(excludedPath),
+    ...checks,
   }
 }
 

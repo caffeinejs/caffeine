@@ -19,6 +19,40 @@ const input: fc.Arbitrary<OriginCheckInput> = fc.record({
 /** Origins as a trusted list spells them. */
 const origins = fc.array(fc.webUrl()).map(urls => new Set(urls.map(url => new URL(url).origin)))
 
+/** An unsafe request carrying a web Origin, with or without Fetch Metadata: what a refusal can name. */
+const refusable: fc.Arbitrary<OriginCheckInput> = fc.record({
+  method: fc.constant('POST'),
+  secFetchSite: fc.option(site, { nil: undefined }),
+  origin: fc.webUrl(),
+  host: fc.domain(),
+  protocol: fc.constantFrom('http', 'https'),
+})
+
+/**
+ * A request from a browser too old for Fetch Metadata whose Origin is the request's own: its scheme and host, each
+ * side cased at random, and a default port written out or left off on either.
+ */
+const ownOrigin: fc.Arbitrary<OriginCheckInput> = fc
+  .record({
+    host: fc.domain(),
+    protocol: fc.constantFrom('http', 'https'),
+    upperOrigin: fc.boolean(),
+    upperHost: fc.boolean(),
+    portOnOrigin: fc.boolean(),
+    portOnHost: fc.boolean(),
+  })
+  .map(({ host, protocol, upperOrigin, upperHost, portOnOrigin, portOnHost }) => {
+    const port = protocol === 'https' ? ':443' : ':80'
+    const cased = (upper: boolean) => (upper ? host.toUpperCase() : host)
+
+    return {
+      method: 'POST',
+      host: cased(upperHost) + (portOnHost ? port : ''),
+      protocol,
+      origin: `${protocol}://${cased(upperOrigin)}${portOnOrigin ? port : ''}`,
+    }
+  })
+
 describe('checkOrigin (property)', () => {
   it.prop([input, origins])('never throws, and always answers one of the three verdicts', (request, trustedOrigins) => {
     const { verdict } = checkOrigin(request, { trustedOrigins })
@@ -70,6 +104,89 @@ describe('checkOrigin (property)', () => {
     expect(checkOrigin({ ...base, origin: url }, { trustedOrigins })).toEqual(
       checkOrigin({ ...base, origin: new URL(url).origin }, { trustedOrigins }),
     )
+  })
+
+  // Case and a default port are spellings of one origin: neither may turn the request's own into a stranger.
+  it.prop([ownOrigin])("never refuses an Origin that is the request's own, however it is spelled", request => {
+    expect(checkOrigin(request, { trustedOrigins: new Set() })).toEqual({ verdict: 'allow', reason: 'same-origin' })
+  })
+
+  it.prop([fc.domain(), fc.option(fc.constantFrom('cross-site', 'same-site'), { nil: undefined })])(
+    'refuses its own host over http: on a request known to be HTTPS, leaving nothing to ask',
+    (host, secFetchSite) => {
+      const request = { method: 'POST', host, protocol: 'https', origin: `http://${host}`, secFetchSite }
+      const result = checkOrigin(request, { trustedOrigins: new Set() })
+
+      expect(result.verdict).toBe('deny')
+      expect(result.askable).toBeUndefined()
+    },
+  )
+
+  // Trusting more can only let more through: a list that grows never refuses what a shorter one let in.
+  it.prop([input, origins, origins])('never refuses a request for trusting more origins', (request, some, more) => {
+    const after = checkOrigin(request, { trustedOrigins: new Set([...some, ...more]) }).verdict
+
+    if (after === 'deny') {
+      expect(checkOrigin(request, { trustedOrigins: some }).verdict).toBe('deny')
+    }
+  })
+
+  // The browser's word stands for the whole request: the host only matters when it is all there is to go on.
+  it.prop([input, fc.domain(), fc.domain(), origins])(
+    'judges by Sec-Fetch-Site alone when a browser sent it, whatever the host',
+    (request, one, other, trustedOrigins) => {
+      fc.pre(request.secFetchSite !== undefined && request.secFetchSite !== '')
+
+      expect(checkOrigin({ ...request, host: one }, { trustedOrigins })).toEqual(
+        checkOrigin({ ...request, host: other }, { trustedOrigins }),
+      )
+    },
+  )
+})
+
+describe('checkOrigin (property): what a refusal lets the application ask', () => {
+  it.prop([refusable, origins])(
+    'names a web origin, spelled once, and only on a refusal',
+    (request, trustedOrigins) => {
+      const { verdict, askable } = checkOrigin(request, { trustedOrigins })
+      if (askable === undefined) {
+        return
+      }
+
+      const url = new URL(askable.origin)
+      expect(verdict).toBe('deny')
+      expect(url.origin).toBe(askable.origin)
+      expect(['http:', 'https:']).toContain(url.protocol)
+      expect([undefined, 'same-site', 'cross-site']).toContain(askable.site)
+    },
+  )
+
+  // What a refusal names is exactly what the application may trust: listing it lets the request through.
+  it.prop([refusable, origins])('lets a request through once the origin it names is trusted', (request, trusted) => {
+    const { askable } = checkOrigin(request, { trustedOrigins: trusted })
+    if (askable === undefined) {
+      return
+    }
+
+    expect(checkOrigin(request, { trustedOrigins: new Set([...trusted, askable.origin]) }).verdict).toBe('allow')
+  })
+
+  // And nothing the exact list could let through is withheld, but the downgrade, which the list alone may take.
+  it.prop([refusable])('names the origin of every refusal that trusting it would let through', request => {
+    const refused = checkOrigin(request, { trustedOrigins: new Set() })
+    const origin = new URL(request.origin!).origin
+    const downgrade = request.protocol === 'https' && origin.startsWith('http:')
+    fc.pre(refused.verdict === 'deny' && !downgrade)
+
+    if (checkOrigin(request, { trustedOrigins: new Set([origin]) }).verdict === 'allow') {
+      expect(refused.askable?.origin).toBe(origin)
+    }
+  })
+
+  it.prop([refusable])('never names an http: origin on a request known to be HTTPS', request => {
+    const { askable } = checkOrigin({ ...request, protocol: 'https' }, { trustedOrigins: new Set() })
+
+    expect(askable === undefined || askable.origin.startsWith('https:')).toBe(true)
   })
 })
 

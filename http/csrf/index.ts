@@ -1,9 +1,10 @@
 export { ErrCSRFConfiguration, ErrCSRFCrossOrigin } from './errors.js'
-export type { CSRFConfig, CSRFOptions, ExcludedPath } from './options.js'
+export type { CSRFConfig, CSRFOptions, ExcludedPath, OriginPredicate, SecFetchSitePredicate } from './options.js'
 export {
   checkOrigin,
   normalizeTrustedOrigin,
   SAFE_METHODS,
+  type OriginCheckAskable,
   type OriginCheckInput,
   type OriginCheckOptions,
   type OriginCheckResult,

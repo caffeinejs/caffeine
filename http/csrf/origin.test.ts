@@ -45,6 +45,7 @@ describe('checkOrigin', () => {
       expect(checkOrigin(post({ secFetchSite: 'cross-site', origin: 'https://evil.example' }), NONE)).toEqual({
         verdict: 'deny',
         reason: 'sec-fetch-site',
+        askable: { origin: 'https://evil.example', site: 'cross-site' },
       })
     })
 
@@ -53,6 +54,7 @@ describe('checkOrigin', () => {
       expect(checkOrigin(post({ secFetchSite: 'same-site', origin: 'https://blog.app.example' }), NONE)).toEqual({
         verdict: 'deny',
         reason: 'sec-fetch-site',
+        askable: { origin: 'https://blog.app.example', site: 'same-site' },
       })
     })
 
@@ -140,8 +142,20 @@ describe('checkOrigin', () => {
         'https://app.example:8443',
         'https://sub.app.example',
       ]) {
-        expect(checkOrigin(post({ origin }), NONE), origin).toEqual({ verdict: 'deny', reason: 'origin-mismatch' })
+        expect(checkOrigin(post({ origin }), NONE), origin).toEqual({
+          verdict: 'deny',
+          reason: 'origin-mismatch',
+          askable: { origin },
+        })
       }
+    })
+
+    // A request with no `Host` (HTTP/1.0) names nothing an Origin could match.
+    it('refuses any Origin on a request that names no host', () => {
+      expect(checkOrigin(post({ origin: 'https://app.example', host: '' }), NONE)).toMatchObject({
+        verdict: 'deny',
+        reason: 'origin-mismatch',
+      })
     })
 
     it('allows a trusted Origin a browser too old for Fetch Metadata sends', () => {
@@ -168,6 +182,77 @@ describe('checkOrigin', () => {
 
     it('ignores a path on the Origin, which a browser never sends', () => {
       expect(checkOrigin(post({ origin: 'https://app.example/path?q#f' }), NONE).verdict).toBe('allow')
+    })
+  })
+
+  // What a refusal hands the application's own checks is what they may widen on, and nothing else: an origin a page
+  // could have, spelled once.
+  describe('what a refusal lets the application ask', () => {
+    it('names the origin as scheme://host[:port], whatever else the header carried', () => {
+      const askable = (input: Partial<OriginCheckInput>) => checkOrigin(post(input), NONE).askable
+
+      expect(askable({ secFetchSite: 'cross-site', origin: 'HTTPS://Partner.Example:443/path?q' })).toEqual({
+        origin: 'https://partner.example',
+        site: 'cross-site',
+      })
+      // The userinfo is not the host: this origin is `evil.example`.
+      expect(askable({ secFetchSite: 'cross-site', origin: 'https://partner.example@evil.example' })).toEqual({
+        origin: 'https://evil.example',
+        site: 'cross-site',
+      })
+      expect(askable({ origin: 'https://partner.example:8443' })).toEqual({ origin: 'https://partner.example:8443' })
+    })
+
+    it('names the site only when it is one a browser writes for another site', () => {
+      const site = (secFetchSite: string) =>
+        checkOrigin(post({ secFetchSite, origin: 'https://partner.example' }), NONE).askable
+
+      expect(site('same-site')).toEqual({ origin: 'https://partner.example', site: 'same-site' })
+      expect(site('cross-site')).toEqual({ origin: 'https://partner.example', site: 'cross-site' })
+      expect(site('Cross-Site')).toEqual({ origin: 'https://partner.example' })
+      expect(site('cross-site, cross-site')).toEqual({ origin: 'https://partner.example' })
+    })
+
+    // `null` is what a sandboxed frame sends: nothing an application could judge, and nothing it may let through.
+    it('leaves nothing to ask about an Origin that is absent, null, malformed or not a web origin', () => {
+      for (const origin of [
+        undefined,
+        'null',
+        'evil',
+        'chrome-extension://abc',
+        'ws://partner.example',
+        'ftp://partner.example',
+        'blob:https://partner.example/0b3e',
+      ]) {
+        expect(checkOrigin(post({ secFetchSite: 'cross-site', origin }), NONE), String(origin)).toEqual({
+          verdict: 'deny',
+          reason: 'sec-fetch-site',
+        })
+        if (origin !== undefined) {
+          expect(checkOrigin(post({ origin }), NONE).askable, origin).toBeUndefined()
+        }
+      }
+    })
+
+    // The downgrade the rules refuse stays refused: only the exact list, where the scheme is written out, takes it.
+    it('leaves nothing to ask about an http: Origin on a request known to be HTTPS', () => {
+      const downgrade = { origin: 'http://partner.example', protocol: 'https' }
+
+      expect(checkOrigin(post({ ...downgrade, secFetchSite: 'cross-site' }), NONE).askable).toBeUndefined()
+      expect(checkOrigin(post({ ...downgrade, origin: 'http://app.example' }), NONE)).toEqual({
+        verdict: 'deny',
+        reason: 'scheme-downgrade',
+      })
+      expect(checkOrigin(post({ ...downgrade, protocol: 'http' }), NONE).askable).toEqual({
+        origin: 'http://partner.example',
+      })
+    })
+
+    it('leaves nothing to ask about a request it lets through', () => {
+      expect(checkOrigin(post({ method: 'GET', origin: 'https://evil.example' }), NONE).askable).toBeUndefined()
+      expect(checkOrigin(post({ origin: 'https://app.example' }), NONE).askable).toBeUndefined()
+      expect(checkOrigin(post({ origin: 'https://admin.example' }), ADMIN).askable).toBeUndefined()
+      expect(checkOrigin(post(), NONE).askable).toBeUndefined()
     })
   })
 })

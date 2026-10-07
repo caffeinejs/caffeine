@@ -48,6 +48,19 @@ export interface OriginCheckOptions {
 export interface OriginCheckResult {
   verdict: OriginVerdict
   reason: OriginReason
+  /** On a refusal the application's own checks may overturn, what they are asked. */
+  askable?: OriginCheckAskable
+}
+
+/**
+ * What the application's own checks are asked about a refusal. A request whose `Origin` is absent, `null`,
+ * malformed, of another scheme, or `http:` on a request known to be HTTPS carries none: it stays refused.
+ */
+export interface OriginCheckAskable {
+  /** The request's `Origin` as `scheme://host[:port]`, lower-cased and without a default port. */
+  origin: string
+  /** The `Sec-Fetch-Site` that refused the request, when it is one a browser writes for another site. */
+  site?: 'same-site' | 'cross-site'
 }
 
 /**
@@ -58,6 +71,8 @@ export interface OriginCheckResult {
  * `Origin` decides: absent, the verdict is `unknown`; `null` or malformed is refused; a trusted one is allowed; an
  * `http:` origin on a request the server knows came over HTTPS is refused; one naming the request's own host is
  * allowed; any other is refused. Hosts compare case-insensitively, with a default port taken off.
+ *
+ * A refusal carries {@link OriginCheckResult.askable} when the application's own checks may still let it through.
  */
 export function checkOrigin(input: OriginCheckInput, options: OriginCheckOptions): OriginCheckResult {
   if (SAFE_METHODS.has(input.method)) {
@@ -71,9 +86,12 @@ export function checkOrigin(input: OriginCheckInput, options: OriginCheckOptions
     }
 
     // `cross-site`, `same-site`, and anything a browser would not write.
-    return isTrusted(input.origin, options)
-      ? { verdict: 'allow', reason: 'trusted-origin' }
-      : { verdict: 'deny', reason: 'sec-fetch-site' }
+    const parsed = input.origin === undefined || input.origin === '' ? undefined : parseOrigin(input.origin)
+    if (parsed !== undefined && options.trustedOrigins.has(parsed.origin)) {
+      return { verdict: 'allow', reason: 'trusted-origin' }
+    }
+
+    return refused('sec-fetch-site', askableOf(parsed, input, site))
   }
 
   const origin = input.origin
@@ -104,7 +122,7 @@ export function checkOrigin(input: OriginCheckInput, options: OriginCheckOptions
     return { verdict: 'allow', reason: 'same-origin' }
   }
 
-  return { verdict: 'deny', reason: 'origin-mismatch' }
+  return refused('origin-mismatch', askableOf(parsed, input))
 }
 
 /**
@@ -150,14 +168,23 @@ export function normalizeTrustedOrigin(text: string): string {
   return url.origin
 }
 
-function isTrusted(origin: string | undefined, options: OriginCheckOptions): boolean {
-  if (origin === undefined || origin === '' || options.trustedOrigins.size === 0) {
-    return false
+function refused(reason: OriginReason, askable: OriginCheckAskable | undefined): OriginCheckResult {
+  return askable === undefined ? { verdict: 'deny', reason } : { verdict: 'deny', reason, askable }
+}
+
+// The application's checks are asked about a web origin only, and never about an `http:` one on a request known to
+// be HTTPS: that is the downgrade the rules refuse, which only the exact list, where the scheme is written out, may
+// let through.
+function askableOf(parsed: URL | undefined, input: OriginCheckInput, site?: string): OriginCheckAskable | undefined {
+  if (parsed === undefined || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')) {
+    return undefined
   }
 
-  const parsed = parseOrigin(origin)
+  if (input.protocol === 'https' && parsed.protocol === 'http:') {
+    return undefined
+  }
 
-  return parsed !== undefined && options.trustedOrigins.has(parsed.origin)
+  return site === 'same-site' || site === 'cross-site' ? { origin: parsed.origin, site } : { origin: parsed.origin }
 }
 
 // A URL whose origin is one: a scheme the platform knows, with a host. The path a non-browser might send along is

@@ -3,7 +3,7 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   AuthenticateResult,
@@ -31,6 +31,7 @@ import {
   type Context,
   type CSRFBuilder,
   type ErrorHandler,
+  type OriginPredicate,
   type WebApplication,
 } from '../../index.js'
 
@@ -273,7 +274,7 @@ describe('csrf()', () => {
       expect((await post(app, '/echo', CROSS_SITE)).status).toBe(200)
     })
 
-    it('reads its block from the configuration tree, and lets a fluent method win over it', async () => {
+    it('reads its block from the configuration tree, lets a fluent method win over it, and asks a check beside it', async () => {
       const schema = $t.Object({
         app: $t.Object({
           csrf: $t.Object({
@@ -302,6 +303,20 @@ describe('csrf()', () => {
       )
       expect((await post(overridden, '/echo', { ...CROSS_SITE, origin: 'https://admin.example' })).status).toBe(403)
       expect((await post(overridden, '/echo', { ...CROSS_SITE, origin: 'https://other.example' })).status).toBe(200)
+      await close?.()
+
+      // A check is code, never configuration: the block's list and the check both stand.
+      const checked = await ready(
+        createWebApplication({ config: conf })
+          .with(
+            csrf((c, { config }) =>
+              c.config(config.app.csrf).trustOrigin((_ctx, { hostname }) => hostname === 'partner.example'),
+            ),
+          )
+          .mount(echo()),
+      )
+      expect((await post(checked, '/echo', { ...CROSS_SITE, origin: 'https://admin.example' })).status).toBe(200)
+      expect((await post(checked, '/echo', { ...CROSS_SITE, origin: 'https://partner.example' })).status).toBe(200)
     })
   })
 
@@ -468,6 +483,295 @@ describe('csrf()', () => {
     })
   })
 
+  describe('custom checks', () => {
+    /** A cross-site request from `origin`, as a browser sends it. */
+    const from = (origin: string): Record<string, string> => ({ ...CROSS_SITE, origin })
+
+    /** Every https subdomain of `example.com`, compared as the docs show: by hostname and scheme. */
+    const subdomains: OriginPredicate = (_ctx, { protocol, hostname }) =>
+      protocol === 'https:' && hostname.endsWith('.example.com')
+
+    it('lets through what a check trusts, from a browser with or without Fetch Metadata', async () => {
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustedOrigins('https://admin.example').trustOrigin(subdomains)))
+          .mount(echo()),
+      )
+
+      expect((await post(app, '/echo', from('https://app.example.com'))).status).toBe(200)
+      expect((await post(app, '/echo', oldBrowser('https://app.example.com'))).status).toBe(200)
+      expect((await post(app, '/echo', from('https://admin.example'))).status).toBe(200)
+      expect((await post(app, '/echo', from('https://app.example.com.evil.example'))).status).toBe(403)
+    })
+
+    // A check only widens: what the rules let through never reaches it, so it has nothing to refuse.
+    it('asks nothing about a request the rules let through', async () => {
+      const asked: unknown[] = []
+      const app = await ready(
+        createWebApplication()
+          .with(
+            csrf(c =>
+              c
+                .trustedOrigins('https://admin.example')
+                .exclude('/excluded')
+                .trustOrigin((_ctx, origin) => asked.push(origin.href) < 0)
+                .allowSecFetchSite((_ctx, site) => asked.push(site) < 0),
+            ),
+          )
+          .mount(echo(), newRouter('/hooks').with(csrfExempt()).post('/', ok), newRouter('/excluded').post('/', ok)),
+      )
+
+      expect((await post(app, '/echo', SAME_ORIGIN)).status).toBe(200)
+      expect((await app.fetch('/echo', { headers: CROSS_SITE })).status).toBe(200)
+      expect((await post(app, '/hooks', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/excluded', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/echo', from('https://admin.example'))).status).toBe(200)
+      expect((await post(app, '/echo', CURL)).status).toBe(200)
+      expect((await post(app, '/nothing', CROSS_SITE)).status).toBe(404)
+      expect(asked).toEqual([])
+    })
+
+    // `null` is what a sandboxed frame sends, and an `http:` page on an HTTPS site is the downgrade: no answer a check
+    // gives lets either through.
+    it('never lets through Origin: null, a malformed origin or a downgrade, whatever a check answers', async () => {
+      const asked: unknown[] = []
+      const app = await ready(
+        createWebApplication()
+          .server(() => ({ factory: { trustProxy: true } }))
+          .with(
+            csrf(c =>
+              c.trustOrigin((_ctx, origin) => asked.push(origin.href) > 0).allowSecFetchSite(() => asked.push(1) > 0),
+            ),
+          )
+          .mount(echo()),
+      )
+      const downgrade = { origin: 'http://localhost', 'x-forwarded-proto': 'https' }
+
+      for (const headers of [
+        from('null'),
+        oldBrowser('null'),
+        oldBrowser('evil'),
+        from('chrome-extension://abc'),
+        { ...CROSS_SITE, ...downgrade },
+        downgrade,
+      ]) {
+        expect((await post(app, '/echo', headers)).status, JSON.stringify(headers)).toBe(403)
+      }
+      expect(asked).toEqual([])
+    })
+
+    it('asks the Sec-Fetch-Site check about same-site and cross-site, and nothing else', async () => {
+      const sites: string[] = []
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.allowSecFetchSite((_ctx, site) => sites.push(site) > 0 && site === 'same-site')))
+          .mount(echo()),
+      )
+
+      expect((await post(app, '/echo', SAME_SITE)).status).toBe(200)
+      expect((await post(app, '/echo', CROSS_SITE)).status).toBe(403)
+      expect((await post(app, '/echo', { ...SAME_SITE, 'sec-fetch-site': 'Same-Site' })).status).toBe(403)
+      // A browser too old to send the header is never asked about, even from the same sibling.
+      expect((await post(app, '/echo', oldBrowser('http://blog.localhost'))).status).toBe(403)
+      expect(sites).toEqual(['same-site', 'cross-site'])
+    })
+
+    // The URL holds the origin and nothing else, so userinfo cannot pose as the host, and each check gets its own.
+    it('hands each check a fresh URL of the origin alone, and the request context', async () => {
+      const seen: Array<Record<string, string>> = []
+      const look: OriginPredicate = (ctx, origin) => {
+        seen.push({ href: origin.href, username: origin.username, host: ctx.req.host })
+        origin.hostname = 'admin.example'
+        return false
+      }
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustOrigin(look).trustOrigin(look)))
+          .mount(echo()),
+      )
+
+      expect((await post(app, '/echo', from('https://partner.example@evil.example'))).status).toBe(403)
+      expect((await post(app, '/echo', from('HTTPS://Partner.Example:443'))).status).toBe(403)
+      expect(seen).toEqual([
+        { href: 'https://evil.example/', username: '', host: 'localhost:80' },
+        { href: 'https://evil.example/', username: '', host: 'localhost:80' },
+        { href: 'https://partner.example/', username: '', host: 'localhost:80' },
+        { href: 'https://partner.example/', username: '', host: 'localhost:80' },
+      ])
+    })
+
+    // A tenant's front end, looked up by the host it posts to: the context is what tells the tenants apart.
+    it('lets a check judge an origin by the request it came with', async () => {
+      const frontEnds: Record<string, string> = {
+        'a.localhost': 'https://a-app.example',
+        'b.localhost': 'https://b-app.example',
+      }
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustOrigin((ctx, origin) => frontEnds[ctx.req.host] === origin.origin)))
+          .mount(echo()),
+      )
+      const to = (host: string, origin: string) => post(app, '/echo', { ...from(origin), host })
+
+      expect((await to('a.localhost', 'https://a-app.example')).status).toBe(200)
+      expect((await to('b.localhost', 'https://b-app.example')).status).toBe(200)
+      expect((await to('a.localhost', 'https://b-app.example')).status).toBe(403)
+    })
+
+    // A check written in JavaScript can answer anything: only `true` is a yes, so a lookup's record is not one.
+    it('reads only true as a yes, sync or async', async () => {
+      const answers: Record<string, () => unknown> = {
+        true: () => true,
+        promise: () => Promise.resolve(true),
+        thenable: () => ({ then: (resolve: (value: boolean) => void) => resolve(true) }),
+        one: () => 1,
+        text: () => 'true',
+        record: () => ({ tenant: 'a' }),
+        'promise of text': () => Promise.resolve('true'),
+      }
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustOrigin(ctx => answers[ctx.req.header('x-answer')!]!() as boolean)))
+          .mount(echo()),
+      )
+      const status = async (answer: string) =>
+        (await post(app, '/echo', { ...from('https://partner.example'), 'x-answer': answer })).status
+
+      expect(await status('true')).toBe(200)
+      expect(await status('promise')).toBe(200)
+      expect(await status('thenable')).toBe(200)
+      for (const answer of ['one', 'text', 'record', 'promise of text']) {
+        expect(await status(answer), answer).toBe(403)
+      }
+    })
+
+    // A falsy failure handed to Fastify reads as "continue": the forged request would run, past every later hook.
+    it('fails the request when a check fails, and runs nothing after it', async () => {
+      const failures: Record<string, () => unknown> = {
+        throws: () => {
+          throw new Error('lookup failed')
+        },
+        'throws nothing': () => {
+          throw undefined
+        },
+        rejects: () => Promise.reject(new Error('lookup failed')),
+        'rejects with nothing': () => Promise.reject(),
+      }
+      let later = 0
+      let handled = 0
+      const afterwards = () =>
+        fp(
+          async (instance: FastifyInstance) => {
+            instance.addHook('onRequest', (_request, _reply, done) => {
+              later++
+              done()
+            })
+          },
+          { name: 'afterwards' },
+        )
+
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustOrigin(ctx => failures[ctx.req.header('x-failure')!]!() as boolean)))
+          .with(afterwards)
+          .mount(newRouter('/echo').post('/', () => (handled++, ok()))),
+      )
+
+      for (const failure of Object.keys(failures)) {
+        const res = await post(app, '/echo', { ...from('https://partner.example'), 'x-failure': failure })
+
+        expect(res.status, failure).toBe(500)
+        expect(await res.json(), failure).toMatchObject({ code: 'ERR_INTERNAL' })
+      }
+      expect({ later, handled }).toEqual({ later: 0, handled: 0 })
+    })
+
+    it('asks origin checks, then site checks, in the order written, and stops at the first yes', async () => {
+      const asked: string[] = []
+      const answer = (name: string, yes: boolean) => () => asked.push(name) > 0 && yes
+      const app = await ready(
+        createWebApplication()
+          .with(
+            csrf(c =>
+              c
+                .allowSecFetchSite(answer('site', true))
+                .trustOrigin(answer('first', false))
+                .trustOrigin(ctx => Promise.resolve(answer('second', ctx.req.header('x-second') === 'yes')()))
+                .trustOrigin(answer('third', false)),
+            ),
+          )
+          .mount(echo()),
+      )
+
+      expect((await post(app, '/echo', { ...CROSS_SITE, 'x-second': 'yes' })).status).toBe(200)
+      expect(asked).toEqual(['first', 'second'])
+
+      asked.length = 0
+      expect((await post(app, '/echo', { ...CROSS_SITE, 'x-second': 'no' })).status).toBe(200)
+      expect(asked).toEqual(['first', 'second', 'third', 'site'])
+    })
+
+    // The second request's answer arrives first: each request still gets its own.
+    it('answers concurrent requests each by its own check', async () => {
+      const pending = new Map<string, () => void>()
+      const app = await ready(
+        createWebApplication()
+          .with(
+            csrf(c =>
+              c.trustOrigin(
+                ctx =>
+                  new Promise<boolean>(resolve => {
+                    const who = ctx.req.header('x-who')!
+                    pending.set(who, () => resolve(who === 'partner'))
+                  }),
+              ),
+            ),
+          )
+          .mount(echo()),
+      )
+
+      const partner = post(app, '/echo', { ...from('https://partner.example'), 'x-who': 'partner' })
+      const stranger = post(app, '/echo', { ...from('https://partner.example'), 'x-who': 'stranger' })
+      await vi.waitFor(() => expect(pending.size).toBe(2))
+      pending.get('stranger')!()
+      pending.get('partner')!()
+
+      expect((await partner).status).toBe(200)
+      expect((await stranger).status).toBe(403)
+    })
+
+    it('logs a refusal once, after the last check has declined', async () => {
+      const logged: Array<Record<string, unknown>> = []
+      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
+      const app = await ready(
+        createWebApplication()
+          .server(() => ({ factory: { logger } }))
+          .with(csrf(c => c.trustOrigin(() => false).trustOrigin(async () => false)))
+          .mount(echo()),
+      )
+      const refusals = () => logged.filter(entry => entry.msg === 'Cross-origin request refused').length
+
+      expect((await post(app, '/echo', from('https://partner.example'))).status).toBe(403)
+      expect(refusals()).toBe(1)
+    })
+
+    // A check widens the plugin it was given to, and no other: a route group's own plugin decides for itself.
+    it('does not widen a route group plugin of its own', async () => {
+      const admin = newRouter('/admin')
+        .plugin(csrf(c => c.name('admin')))
+        .post('/', ok)
+
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.trustOrigin(() => true)))
+          .mount(admin, echo()),
+      )
+
+      expect((await post(app, '/echo', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/admin', CROSS_SITE)).status).toBe(403)
+    })
+  })
+
   describe('with the rest of the server', () => {
     it('hands a refusal to an enrolled @Catch(ErrCSRFCrossOrigin) handler', async () => {
       @Catch(ErrCSRFCrossOrigin)
@@ -550,6 +854,32 @@ describe('csrf()', () => {
       const behind = await ready(gated().with(authentication()).with(csrf()).mount(echo()))
       expect((await post(behind, '/echo', CROSS_SITE)).status).toBe(401)
       expect((await post(behind, '/echo', { ...CROSS_SITE, 'x-user': 'alice' })).status).toBe(403)
+    })
+
+    // Written ahead of the gate, a check runs before anyone is authenticated, and `ctx.user` is not set yet.
+    it('hands a check the user the gate has established by then', async () => {
+      const seen: boolean[] = []
+      const check: OriginPredicate = ctx => seen.push((ctx.user as Principal | null)?.authenticated === true) < 0
+      const request = { ...CROSS_SITE, 'x-user': 'alice' }
+
+      const ahead = await ready(
+        gated()
+          .with(csrf(c => c.trustOrigin(check)))
+          .with(authentication())
+          .mount(echo()),
+      )
+      await post(ahead, '/echo', request)
+      await close?.()
+
+      const behind = await ready(
+        gated()
+          .with(authentication())
+          .with(csrf(c => c.trustOrigin(check)))
+          .mount(echo()),
+      )
+      await post(behind, '/echo', request)
+
+      expect(seen).toEqual([false, true])
     })
 
     it('covers one route group when registered with router.plugin(...)', async () => {
