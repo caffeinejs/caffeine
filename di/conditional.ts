@@ -1,8 +1,8 @@
 import { Binding, configurationOf, isConfigurationClass } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
-import { CaffeineIoCError, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
+import { CaffeineIoCError, ErrCircularCondition, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
-import { InjectionToken, isValidKey, keyStr } from './key.js'
+import { Identifier, InjectionToken, isValidKey, keyStr } from './key.js'
 
 /**
  * A condition a binding must meet to be registered, built with {@link $cond}.
@@ -191,48 +191,192 @@ export interface ConditionOps {
 }
 
 /**
- * Decides the held bindings: each registers when its configuration class, if any, is registered and its conditions
- * pass, and is dropped otherwise. A configuration class goes first and its `@Provides` right after it; everything
- * else follows in the order it was held.
+ * Decides the held bindings, in three steps.
+ *
+ * 1. `env` and `config` conditions never depend on another binding, so they are checked first, in the order written.
+ *    A binding that fails one is dropped. The `@Provides` of a configuration class still held are checked only once
+ *    their class passed.
+ * 2. A `present` or `missing` condition waits for every other binding still held that answers to its key, unless a
+ *    registered binding answers to it already. A `@Provides` waits for its configuration class.
+ * 3. In that order, a binding registers when its configuration class, if any, is registered and every `present` and
+ *    `missing` condition passes. It is dropped otherwise.
+ *
+ * @throws {@link ErrCircularCondition} when bindings wait for each other
  */
 export function decideConditions(held: readonly HeldBinding[], ops: ConditionOps): void {
-  const decided = new Set<HeldBinding>()
-  const decide = (entry: HeldBinding): void => {
-    decided.add(entry)
-
+  for (const entry of decisionOrder(checkFirst(held, ops), ops)) {
     const parent = configurationOf(entry.binding)
-    if ((parent === undefined || ops.isRegistered(parent)) && passes(entry, ops)) {
+    if ((parent === undefined || ops.isRegistered(parent)) && passes(entry, ops, isPresence)) {
       ops.register(entry.key, entry.binding)
     } else {
       ops.drop(entry.key, entry.binding)
     }
   }
+}
+
+// Step 1. Returns the bindings left to decide, in the order they were held. A @Provides finds its class by key, so it
+// waits for the class wherever the class was held.
+function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): HeldBinding[] {
+  const heldKeys = new Set(held.map(entry => entry.key))
+  const heldClassOf = (entry: HeldBinding): InjectionToken | undefined => {
+    const parent = configurationOf(entry.binding)
+    return parent !== undefined && heldKeys.has(parent) ? parent : undefined
+  }
+
+  const passed = new Set<HeldBinding>()
+  const passedKeys = new Set<InjectionToken>()
+  const check = (entry: HeldBinding): void => {
+    if (passes(entry, ops, isStatic)) {
+      passed.add(entry)
+      passedKeys.add(entry.key)
+    }
+  }
 
   for (const entry of held) {
-    if (!isConfigurationClass(entry.binding)) {
-      continue
+    if (heldClassOf(entry) === undefined) {
+      check(entry)
+    }
+  }
+  for (const entry of held) {
+    const parent = heldClassOf(entry)
+    if (parent !== undefined && passedKeys.has(parent)) {
+      check(entry)
+    }
+  }
+
+  const live: HeldBinding[] = []
+  for (const entry of held) {
+    if (passed.has(entry)) {
+      live.push(entry)
+    } else {
+      ops.drop(entry.key, entry.binding)
+    }
+  }
+
+  return live
+}
+
+// Step 2, depth first: a binding comes after everything it waits for, and otherwise keeps the order it was held in.
+function decisionOrder(live: readonly HeldBinding[], ops: ConditionOps): HeldBinding[] {
+  const answering = new Map<InjectionToken | Identifier, number[]>()
+  live.forEach((entry, i) => {
+    for (const key of answersTo(entry)) {
+      const list = answering.get(key)
+      if (list === undefined) {
+        answering.set(key, [i])
+      } else {
+        list.push(i)
+      }
+    }
+  })
+
+  const waits = live.map((entry, i) => waitsOf(entry, i, live, answering, ops))
+
+  const order: HeldBinding[] = []
+  const done = new Set<number>()
+  const path: number[] = []
+  const visit = (i: number): void => {
+    if (done.has(i)) {
+      return
     }
 
-    decide(entry)
+    const at = path.indexOf(i)
+    if (at !== -1) {
+      const cycle = [...path.slice(at), i]
+      throw new ErrCircularCondition(
+        cycle.slice(1).map((next, k) => describeWait(live[cycle[k]], live[next], waits[cycle[k]].get(next))),
+      )
+    }
 
-    for (const provided of held) {
-      if (configurationOf(provided.binding) === entry.key) {
-        decide(provided)
+    path.push(i)
+    for (const j of [...waits[i].keys()].sort((a, b) => a - b)) {
+      visit(j)
+    }
+    path.pop()
+
+    done.add(i)
+    order.push(live[i])
+  }
+
+  for (let i = 0; i < live.length; i++) {
+    visit(i)
+  }
+
+  return order
+}
+
+// What a binding waits for, each with the key it checks that the other answers to; none for its configuration class.
+function waitsOf(
+  entry: HeldBinding,
+  i: number,
+  live: readonly HeldBinding[],
+  answering: ReadonlyMap<InjectionToken | Identifier, number[]>,
+  ops: ConditionOps,
+): Map<number, InjectionToken | undefined> {
+  const waits = new Map<number, InjectionToken | undefined>()
+
+  const parent = configurationOf(entry.binding)
+  if (parent !== undefined) {
+    for (const j of answering.get(parent) ?? []) {
+      if (live[j].key === parent) {
+        waits.set(j, undefined)
       }
     }
   }
 
-  for (const entry of held) {
-    if (!decided.has(entry)) {
-      decide(entry)
+  const isClass = isConfigurationClass(entry.binding)
+  for (const condition of entry.binding.conditions) {
+    // A key a registered binding answers to is settled: deciding only ever adds to what answers to a key.
+    if (!isPresence(condition) || ops.has(condition.key)) {
+      continue
+    }
+
+    for (const j of answering.get(condition.key) ?? []) {
+      // A condition never waits for its own binding, nor a class for the @Provides it declares.
+      if (j === i || (isClass && configurationOf(live[j].binding) === entry.key) || waits.has(j)) {
+        continue
+      }
+
+      waits.set(j, condition.key)
     }
   }
+
+  return waits
 }
 
-// In the order they were declared, stopping at the first that fails.
-function passes(entry: HeldBinding, ops: ConditionOps): boolean {
+// The keys a binding answers to once registered, as the container maps it under them: its own, its names, and the base
+// it extends, which a configuration binding never maps under.
+function answersTo({ key, binding }: HeldBinding): Array<InjectionToken | Identifier> {
+  const keys: Array<InjectionToken | Identifier> = [key, ...binding.names]
+  if (binding.extend !== undefined && !binding.configuration) {
+    keys.push(binding.extend)
+  }
+
+  return keys
+}
+
+function describeWait(waiting: HeldBinding, on: HeldBinding, key: InjectionToken | undefined): string {
+  return key === undefined
+    ? `"${nameOf(waiting)}" waits for its configuration class "${nameOf(on)}"`
+    : `"${nameOf(waiting)}" checks "${keyStr(key)}", which "${nameOf(on)}" answers to`
+}
+
+function nameOf({ key, binding }: HeldBinding): string {
+  return binding.source === undefined ? keyStr(key) : `${binding.source.ctor.name}.${String(binding.source.method)}()`
+}
+
+function isStatic(condition: Condition): boolean {
+  return condition.kind === 'env' || condition.kind === 'config'
+}
+
+function isPresence(condition: Condition): condition is Extract<Condition, { kind: 'present' | 'missing' }> {
+  return condition.kind === 'present' || condition.kind === 'missing'
+}
+
+// The conditions `which` selects, in the order they were written, stopping at the first that fails.
+function passes(entry: HeldBinding, ops: ConditionOps, which: (condition: Condition) => boolean): boolean {
   for (const condition of entry.binding.conditions) {
-    if (!check(condition, entry, ops)) {
+    if (which(condition) && !check(condition, entry, ops)) {
       return false
     }
   }
@@ -277,6 +421,10 @@ function checkConfig(test: (config: never) => boolean, entry: HeldBinding, ops: 
   try {
     result = test(ops.values() as never)
   } catch (err) {
+    if (err instanceof CaffeineIoCError) {
+      throw err
+    }
+
     throw new ErrInvalidBinding(
       `Cannot decide the config() condition of "${keyStr(entry.key)}": its test threw "${messageOf(err)}"`,
       { cause: err },

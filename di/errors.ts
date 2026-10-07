@@ -351,6 +351,25 @@ export class ErrCircularDependency extends CaffeineIoCError {
 }
 
 /**
+ * ErrCircularCondition is thrown when the container compiles and bindings wait for each other to be decided: each has a
+ * `present()` or `missing()` condition on a key another one answers to, as two defaults of one key nothing else binds
+ * do. Which one should register is not decidable, so none is picked.
+ */
+export class ErrCircularCondition extends CaffeineIoCError {
+  constructor(waits: string[]) {
+    super(
+      `Cannot decide the conditions of bindings that wait for each other: ${waits.join('; ')}` +
+        solutions(
+          `Bind the key yourself: a condition never waits on a key a registered binding answers to`,
+          `Drop one of the present() or missing() conditions in the cycle`,
+        ),
+      'ERR_CIRCULAR_CONDITION',
+    )
+    this.name = 'ErrCircularCondition'
+  }
+}
+
+/**
  * ErrScopeMismatch is an error that is thrown when a component dependency graph is mixing different scopes.
  */
 export class ErrScopeMismatch extends CaffeineIoCError {

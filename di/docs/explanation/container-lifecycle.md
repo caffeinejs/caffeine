@@ -51,8 +51,10 @@ During init, the container does all its heavy lifting. The first steps are
 5. **Profiles and conditions** — every binding goes through the same
    registration, however it was made: one whose profiles are not active is
    dropped, and one carrying conditions waits until everything else is
-   registered and is then kept only if they pass. A key takes one binding:
-   a second one fails with `ErrDuplicateBinding`.
+   registered and is then kept only if they pass. Its `env` and `config`
+   conditions are checked first; a `present()` or `missing()` condition is
+   decided after every binding that could answer to its key. A key takes one
+   binding: a second one fails with `ErrDuplicateBinding`.
 6. **Overrides** — the steps added with `overrides()` run, in order, over the
    bindings that are left.
 7. **Circular dependency detection** — the graph is checked for cycles.

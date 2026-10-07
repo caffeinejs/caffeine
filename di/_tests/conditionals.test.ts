@@ -10,7 +10,14 @@ import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { DeferredCtor } from '../deferred_ctor.js'
-import { ErrDuplicateBinding, ErrInvalidBinding, ErrInvalidDecorator, ErrNoValuesProvider } from '../errors.js'
+import {
+  ErrCircularCondition,
+  ErrDuplicateBinding,
+  ErrInvalidBinding,
+  ErrInvalidContainerState,
+  ErrInvalidDecorator,
+  ErrNoValuesProvider,
+} from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
@@ -660,6 +667,356 @@ describe('Conditionals', function () {
       di.bind(kPlain, t => t.toValue('hand'))
 
       await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+    })
+  })
+
+  // A present() or missing() condition is decided after every binding that could answer to its key, so what registers
+  // does not depend on the order bindings were declared or bound in. A default decided before a conditional competitor
+  // used to register beside it (#49).
+  describe('decision order', function () {
+    abstract class Store {
+      abstract kind(): string
+    }
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    describe('a decorated default and a conditional competitor', function () {
+      @Injectable()
+      @Extends()
+      @Profile('cond-order-default-first')
+      @Conditional(c => c.missing(Store))
+      class MemoryFirst extends Store {
+        kind() {
+          return 'memory'
+        }
+      }
+
+      @Injectable()
+      @Extends()
+      @Profile('cond-order-default-first')
+      @Conditional(c => c.env('CAFFEINE_COND_REDIS'))
+      class RedisSecond extends Store {
+        kind() {
+          return 'redis'
+        }
+      }
+
+      @Injectable()
+      @Extends()
+      @Profile('cond-order-default-last')
+      @Conditional(c => c.env('CAFFEINE_COND_REDIS'))
+      class RedisFirst extends Store {
+        kind() {
+          return 'redis'
+        }
+      }
+
+      @Injectable()
+      @Extends()
+      @Profile('cond-order-default-last')
+      @Conditional(c => c.missing(Store))
+      class MemorySecond extends Store {
+        kind() {
+          return 'memory'
+        }
+      }
+      void [MemoryFirst, RedisSecond, RedisFirst, MemorySecond]
+
+      it('should yield to the competitor declared after it', async function () {
+        vi.stubEnv('CAFFEINE_COND_REDIS', 'on')
+
+        const di = new CaffeineIoC({ profiles: ['cond-order-default-first'] })
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['redis'])
+      })
+
+      it('should yield to the competitor declared before it', async function () {
+        vi.stubEnv('CAFFEINE_COND_REDIS', 'on')
+
+        const di = new CaffeineIoC({ profiles: ['cond-order-default-last'] })
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['redis'])
+      })
+
+      it('should register when the competitor does not, whatever the order', async function () {
+        vi.stubEnv('CAFFEINE_COND_REDIS', undefined)
+
+        for (const profile of ['cond-order-default-first', 'cond-order-default-last']) {
+          const di = new CaffeineIoC({ profiles: [profile] })
+          await di.init()
+
+          expect(di.getMany(Store).map(store => store.kind())).toEqual(['memory'])
+        }
+      })
+    })
+
+    describe('a default and a conditional competitor bound by hand', function () {
+      class MemoryStore extends Store {
+        kind() {
+          return 'memory'
+        }
+      }
+
+      class RedisStore extends Store {
+        kind() {
+          return 'redis'
+        }
+      }
+
+      const bindDefault = (di: CaffeineIoC) =>
+        di.bind(MemoryStore, t =>
+          t
+            .toSelf()
+            .extends(Store)
+            .conditional(c => c.missing(Store)),
+        )
+      const bindCompetitor = (di: CaffeineIoC) =>
+        di.bind(RedisStore, t => t.toSelf().extends(Store).conditional(always))
+
+      it('should yield to the competitor bound after it', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        bindDefault(di)
+        bindCompetitor(di)
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['redis'])
+      })
+
+      it('should yield to the competitor bound before it', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        bindCompetitor(di)
+        bindDefault(di)
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['redis'])
+      })
+    })
+
+    it('should let present() see what a missing() default registers', async function () {
+      class ScryptStore extends Store {
+        kind() {
+          return 'scrypt'
+        }
+      }
+
+      class StoreMetrics {}
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(StoreMetrics, t => t.toSelf().conditional(c => c.present(Store)))
+      di.bind(Store, t => t.toClass(ScryptStore).conditional(c => c.missing(Store)))
+      await di.init()
+
+      expect(di.has(StoreMetrics)).toBe(true)
+    })
+
+    it('should decide a chain of present() conditions declared in reverse', async function () {
+      const kA = token<string>(Symbol('cond-chain-a'))
+      const kB = token<string>(Symbol('cond-chain-b'))
+      const kC = token<string>(Symbol('cond-chain-c'))
+
+      const bindChain = (last: typeof always) => {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kA, t => t.toValue('a').conditional(c => c.present(kB)))
+        di.bind(kB, t => t.toValue('b').conditional(c => c.present(kC)))
+        di.bind(kC, t => t.toValue('c').conditional(last))
+        return di
+      }
+
+      const all = bindChain(always)
+      await all.init()
+      expect([all.has(kA), all.has(kB), all.has(kC)]).toEqual([true, true, true])
+
+      const none = bindChain(never)
+      await none.init()
+      expect([none.has(kA), none.has(kB), none.has(kC)]).toEqual([false, false, false])
+    })
+
+    describe('a configuration class that provides the key it checks is missing', function () {
+      const kDataSource = token<string>(Symbol('cond-autoconf-ds'))
+
+      @Configuration()
+      @Profile('cond-autoconf')
+      @Conditional(c => c.missing(kDataSource))
+      class DataSourceDefaults {
+        @Provides(kDataSource)
+        dataSource(): string {
+          return 'default'
+        }
+      }
+
+      it('should register with its @Provides when nothing else provides the key', async function () {
+        const di = new CaffeineIoC({ profiles: ['cond-autoconf'] })
+        await di.init()
+
+        expect(di.has(DataSourceDefaults)).toBe(true)
+        expect(di.get(kDataSource)).toBe('default')
+      })
+
+      it('should yield to an application binding of the key, conditional or not', async function () {
+        for (const bind of [
+          (di: CaffeineIoC) => di.bind(kDataSource, t => t.toValue('application')),
+          (di: CaffeineIoC) => di.bind(kDataSource, t => t.toValue('application').conditional(always)),
+        ]) {
+          const di = new CaffeineIoC({ profiles: ['cond-autoconf'] })
+          bind(di)
+          await di.init()
+
+          expect(di.has(DataSourceDefaults)).toBe(false)
+          expect(di.get(kDataSource)).toBe('application')
+        }
+      })
+    })
+
+    describe('bindings that wait for each other', function () {
+      class ConsoleStore extends Store {
+        kind() {
+          return 'console'
+        }
+      }
+
+      class FileStore extends Store {
+        kind() {
+          return 'file'
+        }
+      }
+
+      const bindDefaults = (di: CaffeineIoC) => {
+        di.bind(ConsoleStore, t =>
+          t
+            .toSelf()
+            .extends(Store)
+            .conditional(c => c.missing(Store)),
+        )
+        di.bind(FileStore, t =>
+          t
+            .toSelf()
+            .extends(Store)
+            .conditional(c => c.missing(Store)),
+        )
+      }
+
+      it('should refuse two defaults of a key nothing else binds, naming both', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        bindDefaults(di)
+
+        const error = await di.init().catch((err: unknown) => err)
+
+        expect(error).toBeInstanceOf(ErrCircularCondition)
+        expect((error as Error).message).toContain('"ConsoleStore" checks "Store", which "FileStore" answers to')
+        expect((error as Error).message).toContain('"FileStore" checks "Store", which "ConsoleStore" answers to')
+      })
+
+      it('should settle once the key is bound', async function () {
+        const own: Store = { kind: () => 'own' }
+
+        const di = new CaffeineIoC({ decorators: false })
+        bindDefaults(di)
+        di.bind(Store, t => t.toValue(own))
+        await di.init()
+
+        expect(di.getMany(Store)).toEqual([own])
+      })
+
+      it('should not wait for a binding whose env condition fails', async function () {
+        vi.stubEnv('CAFFEINE_COND_CYCLE_OFF', undefined)
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(ConsoleStore, t =>
+          t
+            .toSelf()
+            .extends(Store)
+            .conditional(c => c.missing(Store)),
+        )
+        di.bind(FileStore, t =>
+          t
+            .toSelf()
+            .extends(Store)
+            .conditional(c => [c.missing(Store), c.env('CAFFEINE_COND_CYCLE_OFF')]),
+        )
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['console'])
+      })
+
+      it('should refuse bindings that each check the other is missing', async function () {
+        const kA = token<string>(Symbol('cond-cycle-a'))
+        const kB = token<string>(Symbol('cond-cycle-b'))
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kA, t => t.toValue('a').conditional(c => c.missing(kB)))
+        di.bind(kB, t => t.toValue('b').conditional(c => c.missing(kA)))
+
+        await expect(di.init()).rejects.toThrow(ErrCircularCondition)
+      })
+
+      describe('two configuration classes that each provide the key they check is missing', function () {
+        const kCache = token<string>(Symbol('cond-cycle-cache'))
+
+        @Configuration()
+        @Profile('cond-cycle-autoconf')
+        @Conditional(c => c.missing(kCache))
+        class FirstDefaults {
+          @Provides(kCache)
+          cache(): string {
+            return 'first'
+          }
+        }
+
+        @Configuration()
+        @Profile('cond-cycle-autoconf')
+        @Conditional(c => c.missing(kCache))
+        class SecondDefaults {
+          @Provides(kCache)
+          cache(): string {
+            return 'second'
+          }
+        }
+        void [FirstDefaults, SecondDefaults]
+
+        it('should refuse them, naming the @Provides by class and method', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-cycle-autoconf'] })
+
+          const error = await di.init().catch((err: unknown) => err)
+
+          expect(error).toBeInstanceOf(ErrCircularCondition)
+          expect((error as Error).message).toContain('"SecondDefaults.cache()" waits for its configuration class')
+        })
+      })
+    })
+
+    it('should check env and config conditions before present() and missing() ones', async function () {
+      const kMixed = token<string>(Symbol('cond-mixed'))
+      const test = vi.fn(() => true)
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig({})
+      di.bind(kMixed, t => t.toValue('mixed').conditional(c => [c.present(kUnbound), c.config(test)]))
+      await di.init()
+
+      expect(test).toHaveBeenCalledTimes(1)
+      expect(di.has(kMixed)).toBe(false)
+    })
+
+    it('should refuse a binding made while conditions are decided', async function () {
+      const kGuarded = token<string>(Symbol('cond-guarded'))
+      const kLate = token<string>(Symbol('cond-late'))
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig({})
+      di.bind(kGuarded, t =>
+        t.toValue('guarded').conditional(
+          $cond.config(() => {
+            di.bind(kLate, late => late.toValue('late'))
+            return true
+          }),
+        ),
+      )
+
+      await expect(di.init()).rejects.toThrow(ErrInvalidContainerState)
     })
   })
 

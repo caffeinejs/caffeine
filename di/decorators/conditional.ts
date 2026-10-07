@@ -5,7 +5,8 @@ import { defineClassOrMemberDecorator } from './util/index.js'
 
 /**
  * Registers the component only when its conditions pass. They are decided when the container compiles, and every
- * condition of every `@Conditional` on the component must pass.
+ * condition of every `@Conditional` on the component must pass. A `present(key)` or `missing(key)` waits for every
+ * other binding that could answer to `key`, wherever it was declared.
  *
  * Takes conditions built with `$cond`, or a callback handed `$cond` that returns them. The callback runs once, when
  * the decorator is applied.

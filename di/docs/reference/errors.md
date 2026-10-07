@@ -87,6 +87,21 @@ of the bindings a profile or a condition so that only one of them is registered.
 
 ---
 
+### ErrCircularCondition
+
+**Code:** `ERR_CIRCULAR_CONDITION`
+
+Thrown during `compile()` / `init()` when bindings wait for each other to be decided:
+each carries a `present()` or `missing()` condition on a key another one answers to.
+Two defaults of one key that nothing else binds do, and so do two bindings that each
+check the other's key. Which one should register is not decidable, so none is picked.
+The message names each binding in the cycle and the key it waits on.
+
+**Fix:** Bind the key yourself: a condition never waits for a key a registered binding
+answers to. Or drop one of the conditions in the cycle.
+
+---
+
 ### ErrRepeatedInjectableConfiguration
 
 **Code:** `ERR_REPEATED_INJECTABLE`
@@ -116,7 +131,8 @@ a component listed among its own dependencies.
 Thrown when an operation is called in the wrong phase — for example, calling
 `di.get()` before `await di.init()`, `bind()` after the container has registered
 its bindings (`compile()`, `init()` or `assertResolvable()` has run), or `addProfiles()`, `addModules()`, `restore()` or `overrides()` once it has
-started compiling.
+started compiling. `bind()` and `bindConfig()` are refused too while the
+container decides conditions, as from a `config()` test.
 
 **Fix:** Declare everything before `init()`, and resolve only after it.
 `init()` itself can be called more than once: later calls do nothing.

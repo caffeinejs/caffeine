@@ -33,14 +33,8 @@ same:
 ```
 
 The callback runs once, when the decorator is applied. It is handed the condition builders, not the container: a
-condition says what to check, and the container checks it.
-
-The order conditions are decided in: every binding without conditions is registered first, whether by decorators, by
-hand or by a module. Bindings with conditions are then decided one at a time when the container compiles:
-`@Configuration` classes first, each followed by its `@Provides` methods, then the rest in the order they were
-registered. Decorated bindings come in the order they were declared, then the ones bound by hand in the order they
-were bound, then the modules'. So `present()` and `missing()` see every unconditional binding, but a conditional one
-only once it has been decided. A condition never sees its own binding.
+condition says what to check, and the container checks it, once every binding is declared. See
+[When conditions are decided](#when-conditions-are-decided).
 
 :::warning
 A binding that fails its condition is completely absent from the container. Any
@@ -133,6 +127,32 @@ without knowing which one.
 
 ---
 
+## When conditions are decided
+
+Every binding without conditions is registered first, whether by decorators, by hand or by a module. The bindings with
+conditions are then decided when the container compiles:
+
+1. `env` and `config` conditions are checked first, in the order they are written. They depend on no other binding.
+   A binding that fails one is dropped.
+2. A `present(key)` or `missing(key)` condition is decided after every other binding that could answer to `key`. So a
+   default sees a conditional replacement whatever order the two were declared or bound in, and `present()` sees a
+   binding a `missing()` default registers. A key a binding without conditions answers to is settled from the start,
+   and nothing waits for it.
+3. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it.
+
+Bindings that do not check each other keep the order they were declared in. A condition never sees its own binding,
+and a `@Configuration` class's conditions never see the `@Provides` it declares, so a class that provides a key when
+`missing()` finds it unbound registers on its own.
+
+A `config` test runs before `present()` and `missing()` are decided, even when one of them would drop the binding.
+Write it so it does not depend on what they guard.
+
+Bindings can wait for each other: two defaults of one key nothing else binds, or two bindings that each check the
+other's key. Which one should register is not decidable, so `init()` fails with `ErrCircularCondition`, naming them.
+Bind the key yourself, and neither has to wait.
+
+---
+
 ## `@Profile` — named activation groups
 
 For environment or persona-based groupings (`test`, `production`, `eu`), `@Profile`
@@ -207,6 +227,7 @@ An application built with `@caffeinejs/std` binds its configuration for you.
   register or remove the binding.
 - It must return a boolean. An async test, which returns a Promise, fails the compilation with `ErrInvalidBinding`, as
   does a test that throws.
+- It runs before the binding's `present()` and `missing()` conditions are decided.
 - Without values bound, compiling fails with `ErrNoValuesProvider`.
 
 ---
@@ -272,7 +293,8 @@ conditions. In the example above:
 - `cache` is provided when `REGION` is `eu` AND `RedisClient` is bound
 - `taxCalc` is provided when `REGION` is `eu` AND `TAX_SERVICE_URL` is set
 
-When the class-level condition fails, none of the methods' conditions are decided.
+When the class fails one of its `env` or `config` conditions, none of the methods' conditions are decided. When it
+fails a `present()` or `missing()` condition, the methods are dropped with it.
 
 ---
 
@@ -340,13 +362,13 @@ from its configuration step:
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
 
-It yields to every binding of `Cache` without conditions, whether bound by hand before or
-after it, by a module or by decorators. It also yields to every conditional one decided
-before it. It cannot see a conditional one decided after it, such as a decorated class
-declared later: that one registers too, and resolving `Cache` fails with
-`ErrNoUniqueInjectionForKey` (or `init()` fails with `ErrDuplicateBinding` when both are bound
-under `Cache` itself). Declare the default after the conditional replacement, as `MockPaymentGateway` is above. Or keep
-the default unconditional and mark the replacement `@Primary`:
+It yields to every other binding of `Cache`, conditional or not, whether bound by hand
+before or after it, by a module or by decorators: it is decided after all of them.
+
+Two defaults of one key that nothing else binds wait for each other, and `init()` fails
+with `ErrCircularCondition`. An application that binds the key itself settles them.
+
+A default can also stay unconditional, with the replacement marked `@Primary`:
 
 ```ts
 @Primary()

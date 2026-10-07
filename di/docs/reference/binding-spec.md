@@ -322,8 +322,9 @@ di.bind(RedisCacheService, t => t.toSelf().conditional(c => c.present(RedisClien
 
 A binding with conditions is decided during `compile()`, once every binding
 without conditions is registered, whether it was decorated, bound by hand or bound
-by a module. Its conditions never see the binding itself. That is what lets a
-default check for its own key:
+by a module. A `present()` or `missing()` condition waits for every other binding
+that could answer to its key. Its conditions never see the binding itself. That is
+what lets a default check for its own key:
 
 ```ts
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))

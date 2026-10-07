@@ -514,9 +514,9 @@ export class BindingSpec<TValue, K = unknown> {
    * Registers this binding only when its conditions pass. Calls chain: every condition of every call must pass.
    *
    * Takes conditions built with `$cond`, or a callback handed `$cond` that returns them. They are decided when the
-   * container compiles, once every binding without conditions is registered, and never see the binding itself, which
-   * is what lets `missing(key)` make it a default. A key takes one binding, so conditions that pass while another
-   * binding holds the key fail the compilation with `ErrDuplicateBinding`.
+   * container compiles: a `present(key)` or `missing(key)` waits for every other binding that could answer to `key`,
+   * and never sees the binding itself, which is what lets `missing(key)` make it a default. A key takes one binding,
+   * so conditions that pass while another binding holds the key fail the compilation with `ErrDuplicateBinding`.
    *
    * @throws {@link ErrInvalidBinding} when given anything but conditions
    *

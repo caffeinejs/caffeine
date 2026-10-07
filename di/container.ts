@@ -101,6 +101,8 @@ export class CaffeineIoC implements Container {
   private _initializing = false
   private _compiling = false
   private _registered = false
+  // Set while held bindings are decided: what they are decided against must not change under them.
+  private _deciding = false
   private _compiled = false
   private _registration: Promise<void> | undefined
   private _compilation: Promise<void> | undefined
@@ -747,6 +749,7 @@ export class CaffeineIoC implements Container {
    */
   bindConfig<T = unknown>(values: T): this {
     notNil(values, 'Parameter values must not be null or undefined')
+    this.assertNotDeciding('Cannot bind values')
 
     if (this._ready || this._compiled) {
       throw new ErrInvalidContainerState('Cannot bind values: container has already been compiled')
@@ -769,6 +772,7 @@ export class CaffeineIoC implements Container {
    */
   bindScopedConfig<T = unknown>(provider: Provider<T>): this {
     notNil(provider, 'Parameter provider must not be null or undefined')
+    this.assertNotDeciding('Cannot bind the scoped config')
 
     if (this._ready || this._compiled) {
       throw new ErrInvalidContainerState('Cannot bind the scoped config: container has already been compiled')
@@ -1722,7 +1726,12 @@ export class CaffeineIoC implements Container {
 
     this._held = []
 
-    decideConditions(held, this.conditionOps())
+    this._deciding = true
+    try {
+      decideConditions(held, this.conditionOps())
+    } finally {
+      this._deciding = false
+    }
   }
 
   private conditionOps(): ConditionOps {
@@ -1760,8 +1769,16 @@ export class CaffeineIoC implements Container {
   }
 
   private assertNotRegistered(action: string): void {
+    this.assertNotDeciding(action)
+
     if (this._registered || this._compiled || this._ready) {
       throw new ErrInvalidContainerState(`${action}: container has already registered its bindings`)
+    }
+  }
+
+  private assertNotDeciding(action: string): void {
+    if (this._deciding) {
+      throw new ErrInvalidContainerState(`${action}: the container is deciding conditions`)
     }
   }
 
