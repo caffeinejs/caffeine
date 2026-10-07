@@ -43,11 +43,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
   `CsrfProtectionMiddleware` have it.
 - The check is one root `onRequest` hook, callback-style, in the `.with(...)` slot it was written in. It skips
-  `request.is404`, the safe methods (`SAFE_METHODS`), a registered path under `.exclude(...)` and a route whose
-  config carries `'caffeine:csrf'` with `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`).
-  Exclusion is judged by `request.routeOptions.url`, never the URL requested.
+  `request.is404`, the safe methods (`SAFE_METHODS`), a route whose config carries `'caffeine:csrf'` with
+  `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`), and an unmarked route whose registered
+  path is under `.exclude(...)`. A route's own mark wins: `exempt: false` keeps it protected under an excluded
+  prefix. Exclusion is judged by `request.routeOptions.url`, never the URL requested, and `exclude('/')` is refused.
 - A refusal is `ErrCSRFCrossOrigin`, an `ErrHTTPForbidden` with its own code, handed to `done(err)`. Its message
-  never repeats a header value; the warn log carries `reason`, the method, the URL and the headers that decided it.
+  never repeats a header value; the warn log carries `reason`, the method, the path without its query and the
+  headers that decided it. `enabled(false)` registers no hook and warns once as the server starts.
 - `normalizeTrustedOrigin` refuses what is not exactly `scheme://host[:port]`. The WHATWG parser takes `*` for a
   host character, so a wildcard is refused by name.
 

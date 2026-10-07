@@ -9,7 +9,8 @@ export interface CSRFRouteConfig {
 
 /**
  * Leaves a route, or every route of a group, out of cross-origin protection: a webhook receiver, a form a partner's
- * site posts here. `csrfExempt(false)` puts one route of an exempt group back under it.
+ * site posts here. `csrfExempt(false)` puts one route of an exempt group back under it, and keeps a route protected
+ * whose path is under `exclude(...)`: a route's own mark wins over a path.
  *
  * The programmatic form of `@CSRFExempt()`: `router.with(csrfExempt())`, or `router.post('/hook').with(csrfExempt())`.
  */
@@ -35,5 +36,10 @@ export function csrfExemptConfig(): { [kCSRFRoute]: CSRFRouteConfig } {
 
 /** Whether a route's config, as Fastify holds it, marks the route exempt. */
 export function isCSRFExempt(config: unknown): boolean {
-  return (config as Record<string, CSRFRouteConfig | undefined> | undefined)?.[kCSRFRoute]?.exempt === true
+  return csrfMarkOf(config) === true
+}
+
+/** What a route's config says of the check: `true` exempt, `false` protected, `undefined` when it says nothing. */
+export function csrfMarkOf(config: unknown): boolean | undefined {
+  return (config as Record<string, CSRFRouteConfig | undefined> | undefined)?.[kCSRFRoute]?.exempt
 }

@@ -29,6 +29,7 @@ import {
   newRouter,
   type ActionResult,
   type Context,
+  type CSRFBuilder,
   type ErrorHandler,
   type WebApplication,
 } from '../../index.js'
@@ -138,6 +139,40 @@ describe('csrf()', () => {
         code: 'ERR_CSRF_CONFIGURATION',
         message: expect.stringContaining('"/webhooks"'),
       })
+    })
+
+    // Every route sits under `/`, so excluding it turns the check off without saying so; `CSRF__EXCLUDE__0=/`
+    // would do it from the environment.
+    it.each([
+      ['written in code', (c: CSRFBuilder) => c.exclude('/')],
+      ['read from the configuration', (c: CSRFBuilder) => c.config({ exclude: ['/'] })],
+    ])('refuses to exclude "/", %s, which would leave every route unprotected', async (_label, configure) => {
+      const app = createWebApplication().with(csrf(configure))
+      close = () => app.close().catch(() => undefined)
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CSRF_CONFIGURATION',
+        message: expect.stringContaining('Cannot exclude "/" from cross-origin protection: it covers every route'),
+      })
+    })
+
+    // An environment variable can turn the check off; that is said once, as the server starts, not found out later.
+    it('says once, as the server starts, that it is turned off', async () => {
+      const logged: Array<Record<string, unknown>> = []
+      const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
+
+      const app = await ready(
+        createWebApplication()
+          .server(() => ({ factory: { logger } }))
+          .with(csrf(c => c.enabled(false).name('api')))
+          .mount(echo()),
+      )
+      await post(app, '/echo', CROSS_SITE)
+      await post(app, '/echo', CROSS_SITE)
+
+      expect(logged.filter(entry => entry.msg === 'Cross-origin protection is turned off')).toEqual([
+        expect.objectContaining({ level: 40, plugin: 'caffeine-csrf:api' }),
+      ])
     })
 
     // Two plugins on one chain would check every request twice; refused at once by name, and admitted apart.
@@ -366,6 +401,21 @@ describe('csrf()', () => {
       expect((await post(app, '/csrf-exempt-class/github', CROSS_SITE)).status).toBe(200)
     })
 
+    // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
+    // else's routes stays protected when it says so.
+    it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {
+      const hooks = newRouter('/hooks').post('/provider', ok).post('/settings').with(csrfExempt(false)).handler(ok)
+
+      const app = await ready(
+        createWebApplication()
+          .with(csrf(c => c.exclude('/hooks')))
+          .mount(hooks),
+      )
+
+      expect((await post(app, '/hooks/provider', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/hooks/settings', CROSS_SITE)).status).toBe(403)
+    })
+
     it('takes csrfExempt() on a router, and csrfExempt(false) on one of its routes', async () => {
       const hooks = newRouter('/hooks')
         .with(csrfExempt())
@@ -439,7 +489,8 @@ describe('csrf()', () => {
       expect(await res.json()).toEqual({ caught: 'sec-fetch-site' })
     })
 
-    it('logs a refusal with what decided it', async () => {
+    // The query can carry a token a webhook sender was handed, and the check never reads it: the log keeps the path.
+    it('logs a refusal with what decided it, and the path without its query', async () => {
       const logged: Array<Record<string, unknown>> = []
       const logger = { level: 'warn', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
 
@@ -449,15 +500,17 @@ describe('csrf()', () => {
           .with(csrf())
           .mount(echo()),
       )
-      await post(app, '/echo', CROSS_SITE)
+      await post(app, '/echo?token=s3cret', CROSS_SITE)
 
-      expect(logged.find(entry => entry.msg === 'Cross-origin request refused')).toMatchObject({
+      const refusal = logged.find(entry => entry.msg === 'Cross-origin request refused')
+      expect(refusal).toMatchObject({
         reason: 'sec-fetch-site',
         method: 'POST',
-        url: '/echo',
+        path: '/echo',
         origin: 'https://evil.example',
         secFetchSite: 'cross-site',
       })
+      expect(JSON.stringify(refusal)).not.toContain('s3cret')
     })
 
     class HeaderScheme extends BaseAuthenticationHandler<object> {

@@ -18,7 +18,10 @@ export class ErrCSRFCrossOrigin extends ErrHTTPForbidden {
   }
 }
 
-/** Refuses a `csrf()` setting at start-up: a trusted origin that is not one, an excluded path not starting with `/`. */
+/**
+ * Refuses a `csrf()` setting at start-up: a trusted origin that is not one, an excluded path not starting with `/`,
+ * or `/` itself.
+ */
 export class ErrCSRFConfiguration extends ErrCaffeineWebApplication {
   constructor(message: string) {
     super(message, 'ERR_CSRF_CONFIGURATION')

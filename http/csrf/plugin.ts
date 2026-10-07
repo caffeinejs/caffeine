@@ -6,7 +6,7 @@ import { protocolOf } from '../protocol.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import { isExcluded, resolveCSRFOptions, type CSRFConfig, type CSRFOptions } from './options.js'
 import { checkOrigin, SAFE_METHODS, type OriginCheckInput } from './origin.js'
-import { isCSRFExempt } from './route.js'
+import { csrfMarkOf } from './route.js'
 
 const kBuild = Symbol('caffeine.http.csrf.build')
 
@@ -33,7 +33,10 @@ export class CSRFBuilder {
     return this
   }
 
-  /** Turns the check off, which registers nothing: for an environment where every client is a non-browser. */
+  /**
+   * Turns the check off, which registers nothing and says so once, at `warn`, as the server starts: for an
+   * environment where every client is a non-browser.
+   */
   enabled(enabled: boolean = true): this {
     this.#enabled = enabled
     return this
@@ -54,9 +57,10 @@ export class CSRFBuilder {
    * Registered route paths the check leaves alone, each a prefix of whole segments: `/webhooks` covers `/webhooks`
    * and `/webhooks/stripe`, not `/webhooks-old`. Judged by the path a route was registered under, never the URL
    * requested. For a route the application cannot mark itself; its own are marked with `@CSRFExempt()`,
-   * `csrfExempt()` or `csrfExemptConfig()`.
+   * `csrfExempt()` or `csrfExemptConfig()`, and a route's own mark wins: `csrfExempt(false)` keeps it protected
+   * under an excluded prefix.
    *
-   * @throws ErrCSRFConfiguration at start-up when one does not start with `/`.
+   * @throws ErrCSRFConfiguration at start-up when one does not start with `/`, or is `/` itself.
    */
   exclude(...prefixes: string[]): this {
     ;(this.#exclude ??= []).push(...prefixes)
@@ -98,13 +102,13 @@ export class CSRFBuilder {
  * request costs nothing past its headers. Where it sits among the plugins is where `.with(csrf())` was written:
  * ahead of `.with(authentication())`, a cross-origin request is refused before anyone is authenticated.
  *
- * A route is left alone when its registered path is under `.exclude(...)`, or when it is marked with
- * `@CSRFExempt()`, `csrfExempt()` or `csrfExemptConfig()`. A URL no route matched is the not-found handler's. An ops
+ * A route is left alone when it is marked with `@CSRFExempt()`, `csrfExempt()` or `csrfExemptConfig()`, or, unmarked,
+ * when its registered path is under `.exclude(...)`. A URL no route matched is the not-found handler's. An ops
  * server is covered by its own `Ops(name, o => o.with(csrf()))`, a route group by
  * `router.plugin(csrf(c => c.name('admin')))`.
  *
  * @throws ErrCSRFConfiguration at start-up for a trusted origin that is not one, or an excluded path not starting
- * with `/`.
+ * with `/` or that is `/` itself.
  */
 export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, C>): HTTPPluginFactory<C> {
   return context => {
@@ -113,9 +117,11 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
 
     // Resolved as the factory runs: a bad setting fails start-up where it was written, not inside Fastify.
     const { label, options } = builder[kBuild]()
+    const name = label === 'default' ? 'caffeine-csrf' : `caffeine-csrf:${label}`
 
     const plugin: FastifyPluginAsync = async instance => {
       if (!options.enabled) {
+        instance.log.warn({ plugin: name }, 'Cross-origin protection is turned off')
         return
       }
 
@@ -126,8 +132,10 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
           return
         }
 
+        // A route's own mark is the more specific word: `csrfExempt(false)` keeps it under an excluded prefix.
         const route = request.routeOptions
-        if (isExcluded(route.url ?? '', options.exclude) || isCSRFExempt(route.config)) {
+        const mark = csrfMarkOf(route.config)
+        if (mark === true || (mark === undefined && isExcluded(route.url ?? '', options.exclude))) {
           done()
           return
         }
@@ -143,7 +151,7 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
           {
             reason,
             method: input.method,
-            url: request.url,
+            path: pathOf(request.url),
             host: input.host,
             origin: input.origin,
             secFetchSite: input.secFetchSite,
@@ -154,7 +162,7 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
       })
     }
 
-    return fp(plugin, { name: label === 'default' ? 'caffeine-csrf' : `caffeine-csrf:${label}` })
+    return fp(plugin, { name })
   }
 }
 
@@ -171,4 +179,11 @@ function inputOf(request: FastifyRequest): OriginCheckInput {
 // A header sent twice reads as one value no browser writes, which the check refuses.
 function headerOf(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value.join(', ') : value
+}
+
+// The query can carry a token a webhook sender was handed, and the check never reads it.
+function pathOf(url: string): string {
+  const query = url.indexOf('?')
+
+  return query === -1 ? url : url.slice(0, query)
 }

@@ -15,7 +15,8 @@ export interface CSRFConfig {
   trustedOrigins?: readonly string[]
   /**
    * Registered route paths the check leaves alone, each a prefix of whole segments: `/webhooks` covers `/webhooks`
-   * and `/webhooks/stripe`, not `/webhooks-old`. Written without the base path.
+   * and `/webhooks/stripe`, not `/webhooks-old`. Written without the base path. `/` is refused: it would cover every
+   * route.
    */
   exclude?: readonly string[]
 }
@@ -36,7 +37,8 @@ export interface CSRFOptions {
 /**
  * Folds a block onto the defaults.
  *
- * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path not starting with `/`.
+ * @throws ErrCSRFConfiguration for a trusted origin that is not one, or an excluded path not starting with `/` or
+ * that is `/` itself.
  */
 export function resolveCSRFOptions(config: CSRFConfig): CSRFOptions {
   return {
@@ -69,6 +71,14 @@ function excludedPath(prefix: string): ExcludedPath {
   }
 
   const exact = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
+
+  // Every route sits under `/`: excluding it would turn the check off without saying so.
+  if (exact === '') {
+    throw new ErrCSRFConfiguration(
+      `Cannot exclude "${prefix}" from cross-origin protection: it covers every route` +
+        solutions('Turn the check off with enabled(false)', 'Mark the route itself with @CSRFExempt() or csrfExempt()'),
+    )
+  }
 
   return { exact, under: `${exact}/` }
 }
