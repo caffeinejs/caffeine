@@ -942,6 +942,21 @@ describe('Conditionals', function () {
         expect(di.getMany(Store).map(store => store.kind())).toEqual(['console'])
       })
 
+      it('should not wait for a binding a bound key drops', async function () {
+        const kFixed = token<string>(Symbol('cond-settled-fixed'))
+        const kA = token<string>(Symbol('cond-settled-a'))
+        const kB = token<string>(Symbol('cond-settled-b'))
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kFixed, t => t.toValue('fixed'))
+        di.bind(kA, t => t.toValue('a').conditional(c => [c.missing(kFixed), c.present(kB)]))
+        di.bind(kB, t => t.toValue('b').conditional(c => c.present(kA)))
+        await di.init()
+
+        expect(di.has(kA)).toBe(false)
+        expect(di.has(kB)).toBe(false)
+      })
+
       it('should refuse bindings that each check the other is missing', async function () {
         const kA = token<string>(Symbol('cond-cycle-a'))
         const kB = token<string>(Symbol('cond-cycle-b'))
@@ -988,7 +1003,25 @@ describe('Conditionals', function () {
       })
     })
 
-    it('should check env and config conditions before present() and missing() ones', async function () {
+    it('should decide a present() or missing() of a bound key before env and config ones', async function () {
+      const kBound = token<string>(Symbol('cond-bound'))
+      const kBefore = token<string>(Symbol('cond-settled-before'))
+      const kAfter = token<string>(Symbol('cond-settled-after'))
+      const test = vi.fn(() => true)
+
+      // No values are bound, so a config test that ran would fail the compilation.
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kBound, t => t.toValue('bound'))
+      di.bind(kBefore, t => t.toValue('before').conditional(c => [c.missing(kBound), c.config(test)]))
+      di.bind(kAfter, t => t.toValue('after').conditional(c => [c.config(test), c.missing(kBound)]))
+      await di.init()
+
+      expect(test).not.toHaveBeenCalled()
+      expect(di.has(kBefore)).toBe(false)
+      expect(di.has(kAfter)).toBe(false)
+    })
+
+    it('should check env and config conditions before a present() or missing() that waits', async function () {
       const kMixed = token<string>(Symbol('cond-mixed'))
       const test = vi.fn(() => true)
 
@@ -1091,6 +1124,34 @@ describe('Conditionals', function () {
         expect(di.has(kJSON)).toBeTruthy()
         expect(di.has(kXML)).toBeFalsy()
         expect(spy2).toHaveBeenCalledTimes(4)
+      })
+    })
+
+    describe('and a class condition on a key bound already', function () {
+      const kDataSource = token<string>(Symbol('cond-settled-ds'))
+      const kPool = token<string>(Symbol('cond-settled-pool'))
+      const test = vi.fn(() => true)
+
+      @Configuration()
+      @Profile('cond-class-settled')
+      @Conditional(c => c.missing(kDataSource))
+      class PoolDefaults {
+        @Provides(kPool)
+        @Conditional(c => c.config(test))
+        pool(): string {
+          return 'pool'
+        }
+      }
+
+      it('should drop the @Provides with the class, deciding none of their conditions', async function () {
+        // No values are bound, so a config test that ran would fail the compilation.
+        const di = new CaffeineIoC({ profiles: ['cond-class-settled'] })
+        di.bind(kDataSource, t => t.toValue('application'))
+        await di.init()
+
+        expect(test).not.toHaveBeenCalled()
+        expect(di.has(PoolDefaults)).toBe(false)
+        expect(di.has(kPool)).toBe(false)
       })
     })
   })

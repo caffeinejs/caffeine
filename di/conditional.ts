@@ -208,11 +208,11 @@ export function detachFrom(entry: HeldBinding, key: InjectionToken): HeldBinding
 /**
  * Decides the held bindings, in three steps.
  *
- * 1. `env` and `config` conditions never depend on another binding, so they are checked first, in the order written.
- *    A binding that fails one is dropped. The `@Provides` of a configuration class still held are checked only once
- *    their class passed.
- * 2. A `present` or `missing` condition waits for every other binding still held that answers to its key, unless a
- *    registered binding answers to it already. A `@Provides` waits for its configuration class.
+ * 1. What depends on no binding still held is checked first: a `present` or `missing` condition on a key a registered
+ *    binding answers to already, then the `env` and `config` conditions, in the order written. A binding that fails
+ *    one is dropped. The `@Provides` of a configuration class still held are checked only once their class passed.
+ * 2. Any other `present` or `missing` condition waits for every other binding still held that answers to its key. A
+ *    `@Provides` waits for its configuration class.
  * 3. In that order, a binding registers when its configuration class, if any, is registered and every `present` and
  *    `missing` condition passes. It is dropped otherwise.
  *
@@ -241,7 +241,7 @@ function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): HeldBindin
   const passed = new Set<HeldBinding>()
   const passedKeys = new Set<InjectionToken>()
   const check = (entry: HeldBinding): void => {
-    if (passes(entry, ops, isStatic)) {
+    if (passesFirst(entry, ops)) {
       passed.add(entry)
       passedKeys.add(entry.key)
     }
@@ -341,7 +341,7 @@ function waitsOf(
 
   const isClass = isConfigurationClass(entry.binding)
   for (const condition of entry.binding.conditions) {
-    // A key a registered binding answers to is settled: deciding only ever adds to what answers to a key.
+    // A settled key was decided in step 1.
     if (!isPresence(condition) || ops.has(condition.key)) {
       continue
     }
@@ -386,6 +386,14 @@ function isStatic(condition: Condition): boolean {
 
 function isPresence(condition: Condition): condition is Extract<Condition, { kind: 'present' | 'missing' }> {
   return condition.kind === 'present' || condition.kind === 'missing'
+}
+
+// Step 1 for one binding. A key a registered binding answers to is settled: deciding only ever adds to what answers to
+// a key, so its present() or missing() is known already, and is checked before anything with an effect runs.
+function passesFirst(entry: HeldBinding, ops: ConditionOps): boolean {
+  const settled = (condition: Condition): boolean => isPresence(condition) && ops.has(condition.key)
+
+  return passes(entry, ops, settled) && passes(entry, ops, isStatic)
 }
 
 // The conditions `which` selects, in the order they were written, stopping at the first that fails.

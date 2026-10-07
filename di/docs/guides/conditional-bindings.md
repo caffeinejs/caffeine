@@ -132,20 +132,21 @@ without knowing which one.
 Every binding without conditions is registered first, whether by decorators, by hand or by a module. The bindings with
 conditions are then decided when the container compiles:
 
-1. `env` and `config` conditions are checked first, in the order they are written. They depend on no other binding.
+1. A `present(key)` or `missing(key)` condition on a key a binding without conditions answers to is settled from the
+   start, so it is decided first. A binding that fails one is dropped before any other of its conditions is checked.
+2. `env` and `config` conditions are checked next, in the order they are written. They depend on no other binding.
    A binding that fails one is dropped.
-2. A `present(key)` or `missing(key)` condition is decided after every other binding that could answer to `key`. So a
-   default sees a conditional replacement whatever order the two were declared or bound in, and `present()` sees a
-   binding a `missing()` default registers. A key a binding without conditions answers to is settled from the start,
-   and nothing waits for it.
-3. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it.
+3. Any other `present(key)` or `missing(key)` condition is decided after every other binding that could answer to
+   `key`. So a default sees a conditional replacement whatever order the two were declared or bound in, and
+   `present()` sees a binding a `missing()` default registers.
+4. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it.
 
 Bindings that do not check each other keep the order they were declared in. A condition never sees its own binding,
 and a `@Configuration` class's conditions never see the `@Provides` it declares, so a class that provides a key when
 `missing()` finds it unbound registers on its own.
 
-A `config` test runs before `present()` and `missing()` are decided, even when one of them would drop the binding.
-Write it so it does not depend on what they guard.
+A `config` test runs before the `present()` and `missing()` conditions of step 3 are decided, even when one of them
+would drop the binding. Write it so it does not depend on what they guard.
 
 Bindings can wait for each other: two defaults of one key nothing else binds, or two bindings that each check the
 other's key. Which one should register is not decidable, so `init()` fails with `ErrCircularCondition`, naming them.
@@ -227,7 +228,8 @@ An application built with `@caffeinejs/std` binds its configuration for you.
   register or remove the binding.
 - It must return a boolean. An async test, which returns a Promise, fails the compilation with `ErrInvalidBinding`, as
   does a test that throws.
-- It runs before the binding's `present()` and `missing()` conditions are decided.
+- It runs after the binding's `present()` and `missing()` conditions on a key a binding without conditions answers
+  to, and before the others are decided. See [When conditions are decided](#when-conditions-are-decided).
 - Without values bound, compiling fails with `ErrNoValuesProvider`.
 
 ---

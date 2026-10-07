@@ -13,8 +13,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   must never see its own binding, or a default written as `.conditional(c => c.missing(key))` removes itself, and a
   `@Configuration` class's conditions never see the `@Provides` it declares.
 - Conditions are data from `$cond`, and their kinds are fixed: `present`, `missing`, `config`, `env`. A new kind is a
-  design change, not a helper. `env` and `config` are checked first; a `present(key)` or `missing(key)` is decided
-  after every held binding that answers to `key`, and bindings that wait for each other are `ErrCircularCondition`.
+  design change, not a helper. A `present(key)` or `missing(key)` on a key a registered binding answers to is decided
+  first, then `env` and `config`; any other `present(key)` or `missing(key)` is decided after every held binding that
+  answers to `key`, and bindings that wait for each other are `ErrCircularCondition`.
 - Condition logic lives in `conditional.ts`; `container.ts` only holds bindings and hands each round to
   `decideConditions`.
 - `internal()` is a mark for tools, never a filter. The container, `snapshot()`, `overrides()` and `TestContainer`
