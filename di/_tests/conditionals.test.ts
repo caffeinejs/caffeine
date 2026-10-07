@@ -402,6 +402,110 @@ describe('Conditionals', function () {
     })
   })
 
+  // A configuration class's conditions decide its own @Provides alone. A failing one used to take the @Provides of
+  // another class with it when both provided the same key (#47).
+  describe('a @Provides of a key another, failing configuration class also provides', function () {
+    const kValue = token<string>(Symbol('cond-47-value'))
+
+    @Configuration()
+    @Profile('cond-47-failing-first')
+    @ConditionalOn(() => false)
+    class FailingFirst {
+      @Provides(kValue)
+      value(): string {
+        return 'failing'
+      }
+    }
+
+    @Configuration()
+    @Profile('cond-47-failing-first')
+    class RegularSecond {
+      @Provides(kValue)
+      value(): string {
+        return 'regular'
+      }
+    }
+
+    @Configuration()
+    @Profile('cond-47-regular-first')
+    class RegularFirst {
+      @Provides(kValue)
+      value(): string {
+        return 'regular'
+      }
+    }
+
+    @Configuration()
+    @Profile('cond-47-regular-first')
+    @ConditionalOn(() => false)
+    class FailingSecond {
+      @Provides(kValue)
+      value(): string {
+        return 'failing'
+      }
+    }
+
+    it('should register when the failing class is declared first', async function () {
+      const di = new CaffeineIoC({ profiles: ['cond-47-failing-first'] })
+      await di.init()
+
+      expect(di.has(FailingFirst)).toBe(false)
+      expect(di.has(RegularSecond)).toBe(true)
+      expect(di.get(kValue)).toBe('regular')
+    })
+
+    it('should register when the failing class is declared last', async function () {
+      const di = new CaffeineIoC({ profiles: ['cond-47-regular-first'] })
+      await di.init()
+
+      expect(di.has(FailingSecond)).toBe(false)
+      expect(di.has(RegularFirst)).toBe(true)
+      expect(di.get(kValue)).toBe('regular')
+    })
+  })
+
+  // A key bound by hand that a configuration class also provides is a clash, whether the class carries conditions or
+  // not. A conditional class's @Provides used to replace the binding made by hand, silently (#48).
+  describe('a key bound by hand that a configuration class also provides', function () {
+    const kConditional = token<string>(Symbol('cond-48-conditional'))
+    const kPlain = token<string>(Symbol('cond-48-plain'))
+
+    @Configuration()
+    @Profile('cond-48-conditional')
+    @ConditionalOn(() => true)
+    class ConditionalProvider {
+      @Provides(kConditional)
+      value(): string {
+        return 'provided'
+      }
+    }
+    void ConditionalProvider
+
+    @Configuration()
+    @Profile('cond-48-plain')
+    class PlainProvider {
+      @Provides(kPlain)
+      value(): string {
+        return 'provided'
+      }
+    }
+    void PlainProvider
+
+    it('should fail when the class carries conditions', async function () {
+      const di = new CaffeineIoC({ profiles: ['cond-48-conditional'] })
+      di.bind(kConditional, t => t.toValue('hand'))
+
+      await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+    })
+
+    it('should fail the same way when the class carries none', async function () {
+      const di = new CaffeineIoC({ profiles: ['cond-48-plain'] })
+      di.bind(kPlain, t => t.toValue('hand'))
+
+      await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
+    })
+  })
+
   describe('using on configuration class', function () {
     describe('and using the decorator on class level', function () {
       const spy1 = vi.fn()
