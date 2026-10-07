@@ -179,6 +179,54 @@ describe('Conditionals', function () {
 
       expect(di.get(kEnv)).toBe('set')
     })
+
+    // Deno without --allow-env refuses the read.
+    it('should fail the compilation when the host refuses to read the variable, with its error as the cause', async function () {
+      const refusal = new Error('Requires env access')
+      const env = process.env
+      process.env = new Proxy(env, {
+        get: (target, name) => {
+          if (name === 'CAFFEINE_COND_ENV_DENIED') {
+            throw refusal
+          }
+
+          return Reflect.get(target, name)
+        },
+      })
+
+      try {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_DENIED')))
+
+        await expect(di.init()).rejects.toThrow(
+          expect.objectContaining({
+            name: 'ErrInvalidBinding',
+            message: expect.stringContaining('"CAFFEINE_COND_ENV_DENIED"'),
+            cause: refusal,
+          }),
+        )
+      } finally {
+        process.env = env
+      }
+    })
+
+    // A browser has no process.
+    it('should see every variable unset on a host with no environment', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_HOSTLESS', 'on')
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_HOSTLESS')))
+
+      const env = process.env
+      process.env = undefined as never
+      try {
+        await di.compile()
+      } finally {
+        process.env = env
+      }
+
+      expect(di.has(kEnv)).toBe(false)
+    })
   })
 
   describe('config', function () {
@@ -234,6 +282,28 @@ describe('Conditionals', function () {
       )
 
       await expect(di.init()).rejects.toThrow(expect.objectContaining({ name: 'ErrInvalidBinding', cause: failure }))
+    })
+
+    it('should report a test that throws something other than an Error, with it as the cause', async function () {
+      const failure: unknown = 'no cache section'
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig({})
+      di.bind(kCache, t =>
+        t.toValue('cache').conditional(
+          $cond.config(() => {
+            throw failure
+          }),
+        ),
+      )
+
+      await expect(di.init()).rejects.toThrow(
+        expect.objectContaining({
+          name: 'ErrInvalidBinding',
+          message: expect.stringContaining('"no cache section"'),
+          cause: failure,
+        }),
+      )
     })
   })
 
@@ -296,8 +366,37 @@ describe('Conditionals', function () {
       expect(() => new CaffeineIoC().bind(Svc, t => t.toSelf().conditional(true as never))).toThrow(ErrInvalidBinding)
     })
 
+    it('should refuse a condition of a kind it does not know', function () {
+      expect(() => Conditional({ kind: 'when', test: () => true } as never)).toThrow(ErrInvalidDecorator)
+    })
+
     it('should refuse a callback that returns a boolean', function () {
       expect(() => Conditional((() => true) as never)).toThrow(ErrInvalidDecorator)
+    })
+
+    it('should report a callback that returns nothing', function () {
+      const forgetsToReturn = (c: typeof $cond) => {
+        c.present(Svc)
+      }
+
+      expect(() => Conditional(forgetsToReturn as never)).toThrow(
+        'expected a condition built with $cond, got undefined',
+      )
+    })
+
+    it('should not flatten a list nested in the list', function () {
+      expect(() => Conditional(c => [[c.present(Svc)]] as never)).toThrow(
+        'expected a condition built with $cond, got an array',
+      )
+    })
+
+    it('should report what a helper refused in the callback as it is, not as an old predicate', function () {
+      expect(() => Conditional(c => c.env(''))).toThrow(
+        expect.objectContaining({
+          name: 'ErrInvalidBinding',
+          message: expect.not.stringContaining('c => c.present(X)'),
+        }),
+      )
     })
 
     it('should point an old predicate to the helpers, with its error as the cause', function () {
@@ -801,6 +900,39 @@ describe('Conditionals', function () {
 
         expect(di.getMany(Store).map(store => store.kind())).toEqual(['redis'])
       })
+    })
+
+    it('should decide a missing() default after every binding that could answer to its key', async function () {
+      class DefaultStore extends Store {
+        kind() {
+          return 'default'
+        }
+      }
+
+      class FailingStore extends Store {
+        kind() {
+          return 'failing'
+        }
+      }
+
+      class PassingStore extends Store {
+        kind() {
+          return 'passing'
+        }
+      }
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(DefaultStore, t =>
+        t
+          .toSelf()
+          .extends(Store)
+          .conditional(c => c.missing(Store)),
+      )
+      di.bind(FailingStore, t => t.toSelf().extends(Store).conditional(never))
+      di.bind(PassingStore, t => t.toSelf().extends(Store).conditional(always))
+      await di.init()
+
+      expect(di.getMany(Store).map(store => store.kind())).toEqual(['passing'])
     })
 
     it('should let present() see what a missing() default registers', async function () {
@@ -1404,6 +1536,20 @@ describe('Conditionals', function () {
 
           expect(test).toHaveBeenCalledTimes(1)
           expect(di.get(kPool)).toBe('pool')
+        })
+
+        it('should drop its @Provides when a condition they waited with fails', async function () {
+          vi.stubEnv('CAFFEINE_COND_DEFER_REDIS', undefined)
+          test.mockReturnValueOnce(false)
+
+          const di = new CaffeineIoC({ profiles: ['cond-defer'] })
+          di.bindConfig({})
+          bindRedis(di)
+          await di.init()
+
+          expect(test).toHaveBeenCalledTimes(1)
+          expect(di.has(CacheDefaults)).toBe(true)
+          expect(di.has(kPool)).toBe(false)
         })
       })
 
