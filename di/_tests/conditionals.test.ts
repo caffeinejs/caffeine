@@ -319,6 +319,13 @@ describe('Conditionals', function () {
       expect(() => $cond.env('REGION', 1 as never)).toThrow(ErrInvalidBinding)
       expect(() => $cond.config('cache.enabled' as never)).toThrow(ErrInvalidBinding)
     })
+
+    it('should say what a helper refused as a key', function () {
+      expect(() => $cond.present({} as never)).toThrow('expected a binding key, got a value of type object')
+      expect(() => $cond.present('' as never)).toThrow('expected a binding key, got an empty string')
+      expect(() => $cond.missing(null as never)).toThrow('expected a binding key, got null')
+      expect(() => $cond.missing(new DeferredCtor(() => Svc))).toThrow('a deferred key never answers to a binding')
+    })
   })
 
   describe('BindingSpec.conditional()', function () {

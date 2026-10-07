@@ -80,10 +80,13 @@ function env(name: string, expected?: string): Condition {
   return expected === undefined ? { kind: 'env', name } : { kind: 'env', name, expected }
 }
 
-// A deferred key never answers to anything the container registers, so a condition on one could never pass.
 function checkedKey(kind: string, key: InjectionToken): InjectionToken {
-  if (!isValidKey(key) || key instanceof DeferredCtor) {
-    throw new ErrInvalidBinding(`Cannot build a ${kind}() condition: "${String(key)}" is not a binding key`)
+  // A deferred key never answers to anything the container registers, so a condition on one could never pass.
+  if (key instanceof DeferredCtor) {
+    throw new ErrInvalidBinding(`Cannot build a ${kind}() condition: a deferred key never answers to a binding`)
+  }
+  if (!isValidKey(key)) {
+    throw new ErrInvalidBinding(`Cannot build a ${kind}() condition: expected a binding key, got ${typeName(key)}`)
   }
 
   return key
@@ -555,6 +558,9 @@ function messageOf(err: unknown): string {
 function typeName(value: unknown): string {
   if (value === null || value === undefined) {
     return String(value)
+  }
+  if (value === '') {
+    return 'an empty string'
   }
   if (Array.isArray(value)) {
     return 'an array'
