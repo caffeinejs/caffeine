@@ -1154,5 +1154,195 @@ describe('Conditionals', function () {
         expect(di.has(kPool)).toBe(false)
       })
     })
+
+    describe('and another binding of its class key', function () {
+      const test = vi.fn(() => true)
+
+      beforeEach(() => {
+        test.mockClear()
+      })
+
+      afterEach(() => {
+        vi.unstubAllEnvs()
+      })
+
+      const kOut = token<string>(Symbol('cond-follow-out'))
+
+      // No test sets CAFFEINE_COND_FOLLOW_CLASS, so the class itself never registers.
+      @Configuration()
+      @Profile('cond-follow')
+      @Conditional(c => c.env('CAFFEINE_COND_FOLLOW_CLASS'))
+      class Gated {
+        @Provides(kOut)
+        @Conditional(c => c.config(test))
+        out(): string {
+          return 'from-class'
+        }
+      }
+
+      it('should drop the @Provides of a class that fails, when a conditional binding of its key passes', async function () {
+        vi.stubEnv('CAFFEINE_COND_FOLLOW_SIBLING', 'on')
+        const own = new Gated()
+
+        const di = new CaffeineIoC({ profiles: ['cond-follow'] })
+        di.bind(Gated, t => t.toValue(own).conditional(c => c.env('CAFFEINE_COND_FOLLOW_SIBLING', 'on')))
+        await di.init()
+
+        expect(di.get(Gated)).toBe(own)
+        expect(di.has(kOut)).toBe(false)
+        expect(test).not.toHaveBeenCalled()
+      })
+
+      it('should call the @Provides on what rebind() replaced the class with, whatever its conditions', async function () {
+        const fake = Object.assign(new Gated(), { out: () => 'from-fake' })
+
+        const di = new CaffeineIoC({ profiles: ['cond-follow'] })
+        di.bindConfig({})
+        di.rebind(Gated, t => t.toValue(fake))
+        await di.init()
+
+        expect(di.get(Gated)).toBe(fake)
+        expect(di.get(kOut)).toBe('from-fake')
+      })
+
+      it('should drop the @Provides, deciding none of their conditions, when the rebind() replacement is dropped', async function () {
+        const di = new CaffeineIoC({ profiles: ['cond-follow'] })
+        di.rebind(Gated, t => t.toValue(new Gated()).profiles('cond-follow-off'))
+        await di.init()
+
+        expect(di.has(Gated)).toBe(false)
+        expect(di.has(kOut)).toBe(false)
+        expect(test).not.toHaveBeenCalled()
+      })
+
+      describe('when the class fails a present() or missing() condition', function () {
+        const kOpen = token<string>(Symbol('cond-follow-open'))
+        const kYielded = token<string>(Symbol('cond-follow-yielded'))
+
+        @Configuration()
+        @Profile('cond-follow-yield')
+        @Conditional(c => c.missing(kOpen))
+        class Yielding {
+          @Provides(kYielded)
+          yielded(): string {
+            return 'from-class'
+          }
+        }
+
+        it('should drop its @Provides, when a conditional binding of its key passes', async function () {
+          const own = new Yielding()
+
+          const di = new CaffeineIoC({ profiles: ['cond-follow-yield'] })
+          di.bind(kOpen, t => t.toValue('open').conditional(always))
+          di.bind(Yielding, t => t.toValue(own).conditional(always))
+          await di.init()
+
+          expect(di.get(Yielding)).toBe(own)
+          expect(di.has(kYielded)).toBe(false)
+        })
+
+        it('should drop its @Provides, when its key is bound by hand', async function () {
+          const own = new Yielding()
+
+          const di = new CaffeineIoC({ profiles: ['cond-follow-yield'] })
+          di.bind(kOpen, t => t.toValue('open').conditional(always))
+          di.bind(Yielding, t => t.toValue(own))
+          await di.init()
+
+          expect(di.get(Yielding)).toBe(own)
+          expect(di.has(kYielded)).toBe(false)
+        })
+      })
+
+      describe('that checks what the class provides', function () {
+        const kProvided = token<string>(Symbol('cond-follow-provided'))
+
+        @Configuration()
+        @Profile('cond-follow-held')
+        @Conditional(always)
+        class HeldProvider {
+          @Provides(kProvided)
+          provided(): string {
+            return 'provided'
+          }
+        }
+
+        @Configuration()
+        @Profile('cond-follow-registered')
+        class RegisteredProvider {
+          @Provides(kProvided)
+          @Conditional(always)
+          provided(): string {
+            return 'provided'
+          }
+        }
+
+        it('should not wait for each other when the class is held', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-follow-held'] })
+          di.bind(HeldProvider, t => t.toValue(new HeldProvider()).conditional(c => c.missing(kProvided)))
+          await di.init()
+
+          expect(di.get(kProvided)).toBe('provided')
+        })
+
+        it('should not wait for each other when the class is registered', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-follow-registered'] })
+          di.bind(RegisteredProvider, t => t.toValue(new RegisteredProvider()).conditional(c => c.missing(kProvided)))
+          await di.init()
+
+          expect(di.get(kProvided)).toBe('provided')
+        })
+
+        it('should not wait for each other when rebind() made it', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-follow-held'] })
+          di.rebind(HeldProvider, t => t.toClass(HeldProvider).conditional(c => c.missing(kProvided)))
+          await di.init()
+
+          expect(di.get(kProvided)).toBe('provided')
+        })
+      })
+
+      describe('made by a conditional rebind() of a class without conditions', function () {
+        const kGreeting = token<string>(Symbol('cond-follow-greeting'))
+
+        @Configuration()
+        @Profile('cond-follow-replaced')
+        class Greetings {
+          @Provides(kGreeting)
+          @Conditional(always)
+          greeting(): string {
+            return 'from-class'
+          }
+        }
+
+        const bindReplacement = (di: CaffeineIoC) =>
+          di.rebind(Greetings, t =>
+            t
+              .toValue(Object.assign(new Greetings(), { greeting: () => 'from-replacement' }))
+              .conditional(c => c.env('CAFFEINE_COND_FOLLOW_REPLACED')),
+          )
+
+        it('should register the @Provides on the replacement once it registers', async function () {
+          vi.stubEnv('CAFFEINE_COND_FOLLOW_REPLACED', 'on')
+
+          const di = new CaffeineIoC({ profiles: ['cond-follow-replaced'] })
+          bindReplacement(di)
+          await di.init()
+
+          expect(di.get(kGreeting)).toBe('from-replacement')
+        })
+
+        it('should drop the @Provides when the replacement is dropped', async function () {
+          vi.stubEnv('CAFFEINE_COND_FOLLOW_REPLACED', undefined)
+
+          const di = new CaffeineIoC({ profiles: ['cond-follow-replaced'] })
+          bindReplacement(di)
+          await di.init()
+
+          expect(di.has(Greetings)).toBe(false)
+          expect(di.has(kGreeting)).toBe(false)
+        })
+      })
+    })
   })
 })

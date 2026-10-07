@@ -139,11 +139,12 @@ conditions are then decided when the container compiles:
 3. Any other `present(key)` or `missing(key)` condition is decided after every other binding that could answer to
    `key`. So a default sees a conditional replacement whatever order the two were declared or bound in, and
    `present()` sees a binding a `missing()` default registers.
-4. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it.
+4. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it, whatever else binds the
+   class key. Once `rebind()` replaced the class, the method goes with the replacement instead.
 
 Bindings that do not check each other keep the order they were declared in. A condition never sees its own binding,
-and a `@Configuration` class's conditions never see the `@Provides` it declares, so a class that provides a key when
-`missing()` finds it unbound registers on its own.
+nor the `@Provides` that go with it, so a `@Configuration` class that provides a key when `missing()` finds it unbound
+registers on its own.
 
 A `config` test runs before the `present()` and `missing()` conditions of step 3 are decided, even when one of them
 would drop the binding. Write it so it does not depend on what they guard.
@@ -297,6 +298,10 @@ conditions. In the example above:
 
 When the class fails one of its `env` or `config` conditions, none of the methods' conditions are decided. When it
 fails a `present()` or `missing()` condition, the methods are dropped with it.
+
+The methods go with the class, not with its key: a binding of the class key made by hand, with conditions or without,
+does not keep them when the class fails. `rebind()` replaces the class, conditions included. Its methods then go with
+the replacement, and are called on it.
 
 ---
 

@@ -195,7 +195,9 @@ Those keep resolving under their own keys. `configure` receives the same `Bindin
 
 It is the one way to replace a binding. Called before the container compiles, the replacement
 is applied after the decorated bindings, the ones bound by hand and the modules' are
-registered, so it replaces any of them. A key with no binding is simply bound.
+registered, so it replaces any of them. A key with no binding is simply bound. Rebinding a
+`@Configuration` class replaces it, conditions included: the `@Provides` it declares stay,
+and are called on the replacement.
 
 ```ts
 di.rebind(Logger, t => t.toClass(StructuredLogger))

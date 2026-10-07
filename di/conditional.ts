@@ -210,69 +210,102 @@ export function detachFrom(entry: HeldBinding, key: InjectionToken): HeldBinding
  *
  * 1. What depends on no binding still held is checked first: a `present` or `missing` condition on a key a registered
  *    binding answers to already, then the `env` and `config` conditions, in the order written. A binding that fails
- *    one is dropped. The `@Provides` of a configuration class still held are checked only once their class passed.
- * 2. Any other `present` or `missing` condition waits for every other binding still held that answers to its key. A
- *    `@Provides` waits for its configuration class.
- * 3. In that order, a binding registers when its configuration class, if any, is registered and every `present` and
- *    `missing` condition passes. It is dropped otherwise.
+ *    one is dropped. A `@Provides` is checked once the binding it follows passed, and is dropped with it.
+ * 2. Any other `present` or `missing` condition waits for every other binding still held that answers to its key,
+ *    except the `@Provides` that follow its own binding. A `@Provides` waits for the binding it follows.
+ * 3. In that order, a binding registers when every `present` and `missing` condition passes and, for a `@Provides`,
+ *    the binding it follows registered. It is dropped otherwise.
+ *
+ * A `@Provides` follows its configuration class while that is held, or the replacement `rebind()` holds in its place.
+ * One whose class is registered follows nothing, and one whose class key nothing holds is dropped.
  *
  * @throws {@link ErrCircularCondition} when bindings wait for each other
  */
 export function decideConditions(held: readonly HeldBinding[], ops: ConditionOps): void {
-  for (const entry of decisionOrder(checkFirst(held, ops), ops)) {
-    const parent = configurationOf(entry.binding)
-    if ((parent === undefined || ops.isRegistered(parent)) && passes(entry, ops, isPresence)) {
+  const pending = checkFirst(held, ops)
+  const registered = new Set<HeldBinding>()
+
+  for (const entry of decisionOrder(pending, ops)) {
+    if (passesLast(entry, pending, registered, ops)) {
       ops.register(entry.key, entry.binding)
+      registered.add(entry)
     } else {
       ops.drop(entry.key, entry.binding)
     }
   }
 }
 
-// Step 1. Returns the bindings left to decide, in the order they were held. A @Provides finds its class by key, so it
-// waits for the class wherever the class was held.
-function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): HeldBinding[] {
-  const heldKeys = new Set(held.map(entry => entry.key))
-  const heldClassOf = (entry: HeldBinding): InjectionToken | undefined => {
-    const parent = configurationOf(entry.binding)
-    return parent !== undefined && heldKeys.has(parent) ? parent : undefined
-  }
+// What step 1 leaves to decide: the bindings left, in the order they were held, and the binding each @Provides follows.
+interface Pending {
+  live: HeldBinding[]
+  follows: Map<HeldBinding, HeldBinding>
+}
 
-  const passed = new Set<HeldBinding>()
-  const passedKeys = new Set<InjectionToken>()
-  const check = (entry: HeldBinding): void => {
-    if (passesFirst(entry, ops)) {
-      passed.add(entry)
-      passedKeys.add(entry.key)
+// Step 1.
+function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): Pending {
+  const follows = followedBy(held, ops)
+
+  const live = new Set<HeldBinding>()
+  for (const entry of held) {
+    if (!follows.has(entry) && classRegistered(entry, ops) && passesFirst(entry, ops)) {
+      live.add(entry)
+    }
+  }
+  // A @Provides goes with the binding it follows: none of its conditions is checked once that one failed.
+  for (const [entry, followed] of follows) {
+    if (live.has(followed) && passesFirst(entry, ops)) {
+      live.add(entry)
     }
   }
 
   for (const entry of held) {
-    if (heldClassOf(entry) === undefined) {
-      check(entry)
-    }
-  }
-  for (const entry of held) {
-    const parent = heldClassOf(entry)
-    if (parent !== undefined && passedKeys.has(parent)) {
-      check(entry)
-    }
-  }
-
-  const live: HeldBinding[] = []
-  for (const entry of held) {
-    if (passed.has(entry)) {
-      live.push(entry)
-    } else {
+    if (!live.has(entry)) {
       ops.drop(entry.key, entry.binding)
     }
   }
 
-  return live
+  return { live: held.filter(entry => live.has(entry)), follows }
+}
+
+// The held binding each @Provides follows: its configuration class while that is held, or else, while nothing is
+// registered under the class key, the binding held there, which only a rebind() replacement can be.
+function followedBy(held: readonly HeldBinding[], ops: ConditionOps): Map<HeldBinding, HeldBinding> {
+  const under = new Map<InjectionToken, HeldBinding>()
+  for (const entry of held) {
+    if (isConfigurationClass(entry.binding) || !under.has(entry.key)) {
+      under.set(entry.key, entry)
+    }
+  }
+
+  const follows = new Map<HeldBinding, HeldBinding>()
+  for (const entry of held) {
+    const key = configurationOf(entry.binding)
+    const followed = key === undefined ? undefined : under.get(key)
+    if (followed !== undefined && (isConfigurationClass(followed.binding) || !ops.isRegistered(followed.key))) {
+      follows.set(entry, followed)
+    }
+  }
+
+  return follows
+}
+
+// A @Provides that follows no held binding needs its class registered already: nothing registers it this round.
+function classRegistered(entry: HeldBinding, ops: ConditionOps): boolean {
+  const key = configurationOf(entry.binding)
+
+  return key === undefined || ops.isRegistered(key)
+}
+
+// The bindings step 2 orders, and what it looks up about them.
+interface Graph {
+  live: readonly HeldBinding[]
+  follows: ReadonlyMap<HeldBinding, HeldBinding>
+  index: ReadonlyMap<HeldBinding, number>
+  answering: ReadonlyMap<InjectionToken | Identifier, number[]>
 }
 
 // Step 2, depth first: a binding comes after everything it waits for, and otherwise keeps the order it was held in.
-function decisionOrder(live: readonly HeldBinding[], ops: ConditionOps): HeldBinding[] {
+function decisionOrder({ live, follows }: Pending, ops: ConditionOps): HeldBinding[] {
   const answering = new Map<InjectionToken | Identifier, number[]>()
   live.forEach((entry, i) => {
     for (const key of answersTo(entry)) {
@@ -285,7 +318,8 @@ function decisionOrder(live: readonly HeldBinding[], ops: ConditionOps): HeldBin
     }
   })
 
-  const waits = live.map((entry, i) => waitsOf(entry, i, live, answering, ops))
+  const graph: Graph = { live, follows, index: new Map(live.map((entry, i) => [entry, i])), answering }
+  const waits = live.map((_, i) => waitsOf(i, graph, ops))
 
   const order: HeldBinding[] = []
   const done = new Set<number>()
@@ -320,26 +354,20 @@ function decisionOrder(live: readonly HeldBinding[], ops: ConditionOps): HeldBin
   return order
 }
 
-// What a binding waits for, each with the key it checks that the other answers to; none for its configuration class.
+// What a binding waits for, each with the key it checks that the other answers to; none for the binding it follows.
 function waitsOf(
-  entry: HeldBinding,
   i: number,
-  live: readonly HeldBinding[],
-  answering: ReadonlyMap<InjectionToken | Identifier, number[]>,
+  { live, follows, index, answering }: Graph,
   ops: ConditionOps,
 ): Map<number, InjectionToken | undefined> {
+  const entry = live[i]
   const waits = new Map<number, InjectionToken | undefined>()
 
-  const parent = configurationOf(entry.binding)
-  if (parent !== undefined) {
-    for (const j of answering.get(parent) ?? []) {
-      if (live[j].key === parent) {
-        waits.set(j, undefined)
-      }
-    }
+  const followed = follows.get(entry)
+  if (followed !== undefined) {
+    waits.set(index.get(followed)!, undefined)
   }
 
-  const isClass = isConfigurationClass(entry.binding)
   for (const condition of entry.binding.conditions) {
     // A settled key was decided in step 1.
     if (!isPresence(condition) || ops.has(condition.key)) {
@@ -347,8 +375,8 @@ function waitsOf(
     }
 
     for (const j of answering.get(condition.key) ?? []) {
-      // A condition never waits for its own binding, nor a class for the @Provides it declares.
-      if (j === i || (isClass && configurationOf(live[j].binding) === entry.key) || waits.has(j)) {
+      // A condition never waits for its own binding, nor for the @Provides that follow it.
+      if (j === i || follows.get(live[j]) === entry || waits.has(j)) {
         continue
       }
 
@@ -357,6 +385,21 @@ function waitsOf(
   }
 
   return waits
+}
+
+// Step 3 for one binding, once everything it waits for is decided.
+function passesLast(
+  entry: HeldBinding,
+  { follows }: Pending,
+  registered: ReadonlySet<HeldBinding>,
+  ops: ConditionOps,
+): boolean {
+  const followed = follows.get(entry)
+  if (followed !== undefined && !registered.has(followed)) {
+    return false
+  }
+
+  return passes(entry, ops, isPresence)
 }
 
 // The keys a binding answers to once registered, as the container maps it under them: its own, its names, and the base
