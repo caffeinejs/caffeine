@@ -60,7 +60,7 @@ export class CSRFBuilder {
    * @throws ErrCSRFConfiguration at start-up when one is not an origin.
    */
   trustedOrigins(...origins: string[]): this {
-    ;(this.#trustedOrigins ??= []).push(...origins)
+    this.#trustedOrigins = [...(this.#trustedOrigins ?? []), ...origins]
     return this
   }
 
@@ -74,7 +74,7 @@ export class CSRFBuilder {
    * @throws ErrCSRFConfiguration at start-up when one does not start with `/`, or is `/` itself.
    */
   exclude(...prefixes: string[]): this {
-    ;(this.#exclude ??= []).push(...prefixes)
+    this.#exclude = [...(this.#exclude ?? []), ...prefixes]
     return this
   }
 

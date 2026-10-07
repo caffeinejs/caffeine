@@ -47,8 +47,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`), and an unmarked route whose registered
   path is under `.exclude(...)`. A route's own mark wins: `exempt: false` (`csrfExempt(false)`,
   `@CSRFExempt(false)`) keeps it protected under an exempt group or an excluded prefix, since compilation writes a
-  route's config over its group's. Exclusion is judged by `request.routeOptions.url`, never the URL requested, and
-  `exclude('/')` is refused.
+  route's config over its group's. Read a mark with `csrfMarkOf`, never as a boolean: `false` is a mark, not its
+  absence. Exclusion is judged by `request.routeOptions.url`, never the URL requested, and `exclude('/')` is refused.
 - A refusal is `ErrCSRFCrossOrigin`, an `ErrHTTPForbidden` with its own code, handed to `done(err)`. Its message
   never repeats a header value; the warn log carries `reason`, the method, the path without its query and the
   headers that decided it. `enabled(false)` registers no hook and warns once as the server starts.

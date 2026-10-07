@@ -34,11 +34,6 @@ export function csrfExemptConfig(): { [kCSRFRoute]: CSRFRouteConfig } {
   return { [kCSRFRoute]: { exempt: true } }
 }
 
-/** Whether a route's config, as Fastify holds it, marks the route exempt. */
-export function isCSRFExempt(config: unknown): boolean {
-  return csrfMarkOf(config) === true
-}
-
 /** What a route's config says of the check: `true` exempt, `false` protected, `undefined` when it says nothing. */
 export function csrfMarkOf(config: unknown): boolean | undefined {
   return (config as Record<string, CSRFRouteConfig | undefined> | undefined)?.[kCSRFRoute]?.exempt

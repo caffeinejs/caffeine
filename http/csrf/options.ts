@@ -52,7 +52,7 @@ export interface CSRFOptions {
  */
 export function resolveCSRFOptions(
   config: CSRFConfig,
-  checks: Pick<CSRFOptions, 'originChecks' | 'siteChecks'> = { originChecks: [], siteChecks: [] },
+  checks: Pick<CSRFOptions, 'originChecks' | 'siteChecks'>,
 ): CSRFOptions {
   return {
     enabled: config.enabled ?? true,
