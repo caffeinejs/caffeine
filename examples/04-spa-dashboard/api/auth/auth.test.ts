@@ -2,7 +2,7 @@ import type { WebApplication } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { SESSION_COOKIE } from '../app.config.js'
-import { NAVIGATION, XHR, anonymousSession, newApp, signIn } from '../util/testing/harness.js'
+import { NAVIGATION, XHR, newApp, signIn } from '../util/testing/harness.js'
 
 /**
  * One scheme, for the pages and for the API.
@@ -37,10 +37,9 @@ describe('cookie authentication', () => {
     })
 
     it('refuses a wrong password without saying which half was wrong', async () => {
-      const anon = await anonymousSession(app)
       const res = await app.fetch('/auth/login', {
         method: 'POST',
-        headers: { ...XHR, 'content-type': 'application/json', 'x-csrf-token': anon.csrf, cookie: anon.cookie },
+        headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'user', password: 'wrong' }),
       })
 
@@ -51,10 +50,9 @@ describe('cookie authentication', () => {
     // `persist` writes the cookie for the *next* request; it does not re-authenticate this one. The response
     // therefore describes what was just verified, not `ctx.user` — which is still anonymous here.
     it('describes the principal in the login response itself', async () => {
-      const anon = await anonymousSession(app)
       const res = await app.fetch('/auth/login', {
         method: 'POST',
-        headers: { ...XHR, 'content-type': 'application/json', 'x-csrf-token': anon.csrf, cookie: anon.cookie },
+        headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'admin', password: 'admin123' }),
       })
 
@@ -66,10 +64,9 @@ describe('cookie authentication', () => {
 
   describe('the session cookie', () => {
     it('is HttpOnly, SameSite=Lax and path-wide', async () => {
-      const anon = await anonymousSession(app)
       const res = await app.fetch('/auth/login', {
         method: 'POST',
-        headers: { ...XHR, 'content-type': 'application/json', 'x-csrf-token': anon.csrf, cookie: anon.cookie },
+        headers: { ...XHR, 'content-type': 'application/json' },
         body: JSON.stringify({ username: 'user', password: 'user123' }),
       })
 
@@ -120,7 +117,7 @@ describe('cookie authentication', () => {
 
       const out = await app.fetch('/auth/logout', {
         method: 'POST',
-        headers: { ...XHR, 'x-csrf-token': member.csrf, cookie: member.cookie },
+        headers: { ...XHR, cookie: member.cookie },
       })
       expect(out.status).toBe(200)
 
@@ -131,11 +128,7 @@ describe('cookie authentication', () => {
 
     // Anonymous, so that signing out twice — or from a tab whose session already expired — is not a 401.
     it('is anonymous', async () => {
-      const anon = await anonymousSession(app)
-      const res = await app.fetch('/auth/logout', {
-        method: 'POST',
-        headers: { ...XHR, 'x-csrf-token': anon.csrf, cookie: anon.cookie },
-      })
+      const res = await app.fetch('/auth/logout', { method: 'POST', headers: XHR })
 
       expect(res.status).toBe(200)
     })

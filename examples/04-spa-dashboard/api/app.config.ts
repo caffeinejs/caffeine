@@ -7,8 +7,8 @@ import { $t } from '@caffeinejs/std/schema'
  * Everything this application reads from its environment, in one schema.
  *
  * Every field has a default, so the example runs with nothing configured — which is the point of an example.
- * The two secrets are demo values and are named as such; a deployment overrides them from
- * `SPA_AUTH__SESSION_SECRET` and `SPA_AUTH__COOKIE_SECRET`.
+ * The session secret is a demo value and is named as such; a deployment overrides it from
+ * `SPA_AUTH__SESSION_SECRET`.
  *
  * Keys are spelled the way an environment variable folds, because `EnvConfigSource` lowercases each path
  * segment: `secureCookie` comes from `SPA_AUTH__SECURE_COOKIE`.
@@ -25,8 +25,6 @@ export const ConfigSchema = $t.Object({
   auth: $t.Object({
     // The cookie scheme seals the session under this. It refuses anything shorter than 32 characters.
     sessionSecret: $t.String({ default: 'spa-dashboard-dev-session-secret-32ch!!' }),
-    // Signs the CSRF plugin's own cookie. Separate from the session secret so neither can open the other's.
-    cookieSecret: $t.String({ default: 'spa-dashboard-dev-cookie-secret-32chr!!' }),
     // The demo runs on plain http, where a Secure cookie would never be sent back. Turn this on behind TLS.
     secureCookie: $t.Boolean({ default: false }),
   }),
@@ -49,6 +47,3 @@ export const kConfig = conf.configToken
 
 /** The session cookie's name. Fixed here so the tests can read it off `Set-Cookie`. */
 export const SESSION_COOKIE = 'spa.session'
-
-/** The CSRF plugin's secret cookie. Logout clears it, so the name is needed in two places. */
-export const CSRF_COOKIE = '_csrf'

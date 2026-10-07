@@ -143,8 +143,8 @@ if (result.valid && result.renew) {
   cookies at all: register that plugin with `.with(...)`.
 - `.cookie(k => k.enabled(false))` turns them off on every server: reading or setting one throws
   `ErrCookiesDisabled`, and a cookie-based authentication scheme refuses to start.
-- A Fastify plugin that needs `@fastify/cookie`, such as `@fastify/csrf-protection`, has the application register
-  it beside the framework's: `.with(() => [fastifyCookie, { secret }])`. The context's cookies stay the framework's.
+- A Fastify plugin that needs `@fastify/cookie`, such as `@fastify/session`, has the application register it beside
+  the framework's: `.with(() => [fastifyCookie, { secret }])`. The context's cookies stay the framework's.
 
 Authentication cookies:
 
@@ -171,6 +171,61 @@ Moving from the `@fastify/cookie` wrapper:
   longer configures `ctx.req.signedCookie`.
 - Authentication cookies take no attribute from `parseOptions`, only its `encode` and `decode`;
   `addStrategy(name, fn)` with a function that is not a class takes it as a container key.
+
+## CSRF
+
+`.with(csrf())` refuses a request that changes state from another origin, judged by what the browser says of it:
+`Sec-Fetch-Site`, then `Origin` against the request's host. The approach of Go's `net/http` and ASP.NET Core: no
+token, no cookie, and nothing for a page this application serves to do, since its own requests are `same-origin`.
+
+```ts
+const app = createWebApplication()
+  .with(csrf((c, { config }) => c.config(config.app.csrf).trustedOrigins('https://admin.example.com')))
+  .with(authentication())
+
+@CSRFExempt() // a controller or a method: a webhook receiver, a form a partner's site posts here
+@Controller('/webhooks')
+class WebhooksController {}
+
+newRouter('/hooks').with(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
+```
+
+- `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY` are never checked: a safe method changes nothing, so an application
+  that changes state on one has nothing to rely on.
+- `Sec-Fetch-Site: same-origin` or `none` passes; `cross-site` and `same-site` are refused, a sibling subdomain
+  being another origin. Without the header, `Origin` decides: absent, the request is a non-browser client's and
+  passes; `null` or unreadable is refused; one naming the request's host passes and any other is refused, as is an
+  `http:` origin on a request the server knows came over HTTPS.
+- A refusal is a 403 with the code `ERR_CSRF_CROSS_ORIGIN`, in the standard error envelope, logged at `warn` with
+  what decided it; the message never repeats a header value. `@Catch(ErrCSRFCrossOrigin)`, or a handler enrolled with
+  `.errorHandling(e => e.globalHandlers(...))`, answers it differently.
+- `c.trustedOrigins('https://admin.example.com')` lets a cross-origin request through from an exact
+  `scheme://host[:port]`: a front end served from another origin, a partner's site posting a form, or the public
+  origin of a proxy that rewrites `Host`. A path, a wildcard or `null` is refused at start-up with
+  `ErrCSRFConfiguration`.
+- The host and scheme an `Origin` is compared with are `ctx.req.host` and `ctx.req.protocol`, Fastify's
+  `request.host` and `request.protocol`: they follow `X-Forwarded-Host` and `X-Forwarded-Proto` only under
+  `trustProxy`, `.server(() => ({ factory: { trustProxy: true } }))`.
+- `c.exclude('/webhooks')` leaves the routes registered under that prefix alone, whole segments only: `/webhooks`
+  and `/webhooks/stripe`, not `/webhooks-old`, judged by the path a route was registered under, never the URL
+  requested. For a route the application cannot mark; its own take `@CSRFExempt()`, `csrfExempt()`, or
+  `csrfExemptConfig()` as the `config` of a raw Fastify route. A URL no route matched stays a 404.
+- The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
+  `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
+  is authenticated; behind it, an anonymous one meets the challenge first. An [ops server](#ops-servers) is covered
+  by its own `Ops('admin', o => o.with(csrf()))`, a route group alone by `router.plugin(csrf(c => c.name('admin')))`.
+- From the environment, under whatever prefix the block has in the application's schema: `CSRF__ENABLED`,
+  `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing.
+
+Moving from `@fastify/csrf-protection`:
+
+- There is no token, no `_csrf` cookie and no route handing a token out: delete the `/csrf` route, the
+  `x-csrf-token` header the client sent and every `reply.generateCsrf()`. A browser needs nothing, and a non-browser
+  client that used to send a token now sends nothing at all.
+- `FST_CSRF_INVALID_TOKEN` and `FST_CSRF_MISSING_SECRET` become one refusal, `ERR_CSRF_CROSS_ORIGIN`, answered
+  before the body is parsed.
+- Every route of the server is covered, not only those the hook was attached to: exempt a route, or exclude its
+  path.
 
 ## Programmatic routers
 

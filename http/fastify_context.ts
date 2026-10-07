@@ -232,6 +232,14 @@ export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteV
     return this.request.method
   }
 
+  get host(): string {
+    return this.request.host
+  }
+
+  get protocol(): string {
+    return this.request.protocol
+  }
+
   body(): InferBody<SCHEMA> {
     return this.request.body as InferBody<SCHEMA>
   }

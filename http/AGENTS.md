@@ -33,6 +33,24 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `respond()` (`error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send that died writing
   its cookies left `ctx.sent` true with nothing in flight.
 
+## CSRF
+
+- `http/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
+  `origin.ts` is the check, pure, and `plugin.ts` the only file that knows Fastify; another adapter re-implements
+  `plugin.ts` alone. A token fallback would be a feature of its own, not a mode here.
+- `checkOrigin` compares an `Origin` with `request.host` and `request.protocol`, so `trustProxy` governs what a
+  proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
+  neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
+  `CsrfProtectionMiddleware` have it.
+- The check is one root `onRequest` hook, callback-style, in the `.with(...)` slot it was written in. It skips
+  `request.is404`, the safe methods (`SAFE_METHODS`), a registered path under `.exclude(...)` and a route whose
+  config carries `'caffeine:csrf'` with `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`).
+  Exclusion is judged by `request.routeOptions.url`, never the URL requested.
+- A refusal is `ErrCSRFCrossOrigin`, an `ErrHTTPForbidden` with its own code, handed to `done(err)`. Its message
+  never repeats a header value; the warn log carries `reason`, the method, the URL and the headers that decided it.
+- `normalizeTrustedOrigin` refuses what is not exactly `scheme://host[:port]`. The WHATWG parser takes `*` for a
+  host character, so a wildcard is refused by name.
+
 ## Authentication
 
 - Before a security review of `security/`, read [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md). Use
@@ -47,8 +65,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   merge them.
 - `$caffeine` is optional (a 404 has none); `$caffeine.compiled`, never `$caffeine` itself, tells a compiled
   route from a raw one; `$caffeine.auth` is a raw route's policy slot, with no helper yet.
-- `isNavigation` (`navigation.ts`) alone reads `Sec-Fetch-*` and `Accept` for that question, so
-  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree.
+- `isNavigation` (`navigation.ts`) alone reads `Sec-Fetch-Mode`, `Sec-Fetch-Dest` and `Accept` for that question, so
+  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree. `csrf/origin.ts` alone reads
+  `Sec-Fetch-Site` and `Origin`.
 - Several schemes on one route each append `WWW-Authenticate` with `ctx.appendHeader`, never `ctx.header`.
 - A catch-all is the application's: `GET /*` on its own router, marked `detail('http', { internal: true })`,
   throwing `ErrHTTPNotFound` ([`../ai/docs/spa.md`](../ai/docs/spa.md)).

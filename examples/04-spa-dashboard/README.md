@@ -14,9 +14,9 @@ else, and every client route is a route the application wrote.
   and scrypt hashing, with no plaintext comparison anywhere.
 - **Both route sources side by side** — `@Controller` classes for `/api/profile` and `/api/admin`, a
   programmatic `newRouter()` for `/api/projects`. They compile identically.
-- **CSRF** with `@fastify/csrf-protection` and **security headers** with `@fastify/helmet` — two official
-  Fastify plugins the application registers itself, because `@caffeinejs/http` ships no wrapper for either. The
-  CSRF plugin needs `@fastify/cookie` beside it, which it registers with its own secret.
+- **CSRF protection by Fetch Metadata** — the framework's `csrf()`, which judges every unsafe request by
+  `Sec-Fetch-Site` and `Origin`, so the client sends no token — and **security headers** with `@fastify/helmet`, an
+  official Fastify plugin the application registers itself, because `@caffeinejs/http` ships no wrapper for it.
 - **A real front-end build**: esbuild, content-hashed asset names, and a `.br`/`.gz` beside every file for
   `preCompressed`.
 - **OpenAPI** for the API, with the client routes deliberately absent from it.
@@ -36,11 +36,11 @@ examples/04-spa-dashboard/
 └── api/                      the server
     ├── app.ts                buildApp(container) — the testable factory
     ├── app.config.ts         the $t schema every SPA_* variable folds into
-    ├── auth/                 the two accounts, and /auth/csrf · /login · /logout · /me
+    ├── auth/                 the two accounts, and /auth/login · /logout · /me
     ├── profile/              @Controller('/api/profile')
     ├── projects/             newRouter('/api/projects') — the programmatic half
     ├── admin/                @Controller('/api/admin'), behind a role
-    └── spa/                  the static mount, the client routes, helmet and CSRF
+    └── spa/                  the static mount, the client routes, helmet
 ```
 
 The only path that crosses the boundary is `api/spa/site.ts`, which points the mount at `web/dist`.
@@ -104,23 +104,22 @@ a PID 1 that forwards signals and reaps orphans.
 
 ## Pages and endpoints
 
-| Path                | Who          | What                                             |
-| ------------------- | ------------ | ------------------------------------------------ |
-| `/`, `/about`       | anyone       | client routes, served as the shell               |
-| `/login`            | anyone       | the sign-in form. Gating it would loop           |
-| `/forbidden`        | anyone       | where a navigation lands on a 403                |
-| `/dashboard`        | signed in    | reads `/api/profile`                             |
-| `/projects`         | signed in    | reads `/api/projects`                            |
-| `/admin`            | role `admin` | reads `/api/admin/users`                         |
-| `/api/profile`      | signed in    | the principal                                    |
-| `/api/projects`     | signed in    | programmatic router, with schemas                |
-| `/api/admin/users`  | role `admin` | the account directory                            |
-| `/auth/csrf`        | anyone       | a CSRF token; the `_csrf` cookie is `HttpOnly`   |
-| `/auth/login`       | anyone       | sets the session cookie, rotates the CSRF secret |
-| `/auth/logout`      | anyone       | clears both cookies                              |
-| `/auth/me`          | signed in    | the principal, for the client's own state        |
-| `/openapi.json`     | signed in    | the document, `.secure('Cookie')`                |
-| `/livez`, `/readyz` | anyone       | probes, exempt from authentication entirely      |
+| Path                | Who          | What                                        |
+| ------------------- | ------------ | ------------------------------------------- |
+| `/`, `/about`       | anyone       | client routes, served as the shell          |
+| `/login`            | anyone       | the sign-in form. Gating it would loop      |
+| `/forbidden`        | anyone       | where a navigation lands on a 403           |
+| `/dashboard`        | signed in    | reads `/api/profile`                        |
+| `/projects`         | signed in    | reads `/api/projects`                       |
+| `/admin`            | role `admin` | reads `/api/admin/users`                    |
+| `/api/profile`      | signed in    | the principal                               |
+| `/api/projects`     | signed in    | programmatic router, with schemas           |
+| `/api/admin/users`  | role `admin` | the account directory                       |
+| `/auth/login`       | anyone       | sets the session cookie                     |
+| `/auth/logout`      | anyone       | clears the session cookie                   |
+| `/auth/me`          | signed in    | the principal, for the client's own state   |
+| `/openapi.json`     | signed in    | the document, `.secure('Cookie')`           |
+| `/livez`, `/readyz` | anyone       | probes, exempt from authentication entirely |
 
 Try the split that one scheme buys:
 
@@ -135,6 +134,10 @@ curl -si localhost:9010/pricing | head -1
 
 # the bundle is pre-compressed, and the compressed file is not a URL of its own
 curl -si -H 'accept-encoding: br' localhost:9010/assets/main-*.js | grep -i content-encoding
+
+# a form posted from another site is refused before anyone is authenticated; a client that is no browser is not
+curl -si -X POST -H 'origin: https://evil.example' -H 'content-type: application/json' -d '{}' localhost:9010/auth/login | head -1
+curl -si -X POST -H 'content-type: application/json' -d '{}' localhost:9010/auth/login | head -1
 ```
 
 ## Configuration
@@ -146,7 +149,6 @@ Every value has a default, so the example runs with nothing set. Copy `.env.exam
 | `SPA_SERVER__HOST/PORT`    | what the server listens on                                     |
 | `SPA_LOG__LEVEL`           | the log level                                                  |
 | `SPA_AUTH__SESSION_SECRET` | seals the session cookie. At least 32 characters               |
-| `SPA_AUTH__COOKIE_SECRET`  | signs the CSRF cookie. Separate, so neither opens the other's  |
 | `SPA_AUTH__SECURE_COOKIE`  | `true` behind TLS. On plain http a Secure cookie never returns |
 
 ## Security notes
@@ -155,13 +157,12 @@ Every value has a default, so the example runs with nothing set. Copy `.env.exam
   bearer token in `localStorage`: a cross-site script cannot read it.
 - **CSRF is layered on `SameSite=Lax`, not replaced by it.** `Lax` is scoped to the _site_ rather than the
   origin — a sibling subdomain is same-site — it exempts top-level `GET` navigations, and it does nothing in a
-  client that does not enforce it. Unsafe methods therefore carry `x-csrf-token` as well.
-- **The CSRF secret is rotated when a session begins**, so a token minted before sign-in cannot be replayed
-  against the session it created. `generateCsrf()` only mints a new secret when the request carried no `_csrf`
-  cookie, so `api/auth/auth.routes.ts` clears the request's own copy first. The plugin has no rotate of its own.
-- **Signing out clears both cookies.** The cookie scheme's `revoke` clears its own and knows nothing about any
-  other plugin's, so the route does the rest — otherwise the CSRF secret would be inherited by the next user of
-  that browser.
+  client that does not enforce it. So `csrf()` judges every unsafe request by what the browser says of where it
+  came from, `Sec-Fetch-Site` and `Origin`, which no page can forge: a cross-site or same-site request is refused
+  with `ERR_CSRF_CROSS_ORIGIN` before its body is read, a same-origin one passes with no token, and a client that
+  sends neither header is no browser and carries no victim's cookies.
+- **Signing out clears the session cookie**, through the cookie scheme's `revoke`. There is no second cookie to
+  clear.
 - **Content-Security-Policy** is stated rather than inherited. Two helmet defaults are off because this demo
   runs over plain http: `upgrade-insecure-requests` would rewrite every subresource to `https:` on any host
   that is not localhost, and HSTS would be a footgun. Behind TLS, drop both overrides.
@@ -179,7 +180,3 @@ Notes:
 
 - The icons are SVG so every file here stays text and reviewable. A real site adds a binary `favicon.ico` for
   older clients, at `/favicon.ico`; nothing about the mount changes.
-- `@fastify/csrf-protection`'s README says `generateCsrf` "returns a promise that resolves to the associated
-  secret". Its implementation and its types return the **token**, synchronously — do not `await` it. Its
-  `logLevel` option is documented but missing from the types, and it declares no plugin `dependencies`, so a
-  missing companion plugin surfaces as a request-time 500 rather than a start-up failure.

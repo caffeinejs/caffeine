@@ -1,33 +1,24 @@
 import type { HTTPPluginFactory } from '@caffeinejs/http'
-import fastifyCookie from '@fastify/cookie'
-import csrfProtection from '@fastify/csrf-protection'
 import helmet from '@fastify/helmet'
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import fp from 'fastify-plugin'
-
-import type { Config } from '../app.config.js'
 
 /**
- * The two official Fastify plugins this application registers itself.
+ * Security headers, through the one official Fastify plugin this application registers itself.
  *
- * `@caffeinejs/http` ships no wrapper for either, by design — security headers and CSRF are the application's
- * to choose, exactly like CORS and compression.
+ * `@caffeinejs/http` ships no wrapper for `@fastify/helmet`, by design — security headers are the application's to
+ * choose, exactly like CORS and compression. Cross-origin protection, on the other hand, is the framework's own
+ * `csrf()`, registered in `app.ts`.
  *
- * The two are registered differently, and the difference is the point. `securityHeaders` hands `helmet` back
- * *with* its options: `@fastify/helmet` already wraps itself in `fastify-plugin`, so registering it directly is
- * what puts its hooks on every route, and a wrapper written only to carry the options would take an
- * encapsulation context of its own and cover nothing. `csrf` is a plugin in its own right — it registers a
- * plugin *and* adds a hook of its own — so it is wrapped, for exactly that reason.
+ * `securityHeaders` hands `helmet` back *with* its options: `@fastify/helmet` already wraps itself in
+ * `fastify-plugin`, so registering it directly is what puts its hooks on every route, and a wrapper written only
+ * to carry the options would take an encapsulation context of its own and cover nothing.
  *
- * Both are installed **before** the authentication gate, `.with(authentication())`, in `app.ts`. Hook *coverage* does not depend on order —
- * Fastify binds route contexts at `preReady` — but hook *execution* does, and a hook registered after the
- * authentication gate never runs for a request the gate rejected. Registering first is what puts the security
- * headers on a 401 and checks CSRF before a forged request reaches the auth path.
+ * Installed **before** the authentication gate, `.with(authentication())`, in `app.ts`. Hook *coverage* does not
+ * depend on order — Fastify binds route contexts at `preReady` — but hook *execution* does, and a hook registered
+ * after the authentication gate never runs for a request the gate rejected. Registering first is what puts the
+ * security headers on a 401.
  */
 
 /**
- * Security headers.
- *
  * Helmet's defaults already suit this application: `script-src 'self'` covers the module bundle, `style-src`
  * covers the stylesheet, and a same-origin `fetch` falls through to `default-src 'self'`. The directives below
  * are stated rather than inherited so the policy is readable, and two defaults are turned off because this
@@ -56,47 +47,3 @@ export const securityHeaders: HTTPPluginFactory = () => [
     strictTransportSecurity: false,
   },
 ]
-
-/** Methods that change nothing, so nothing to forge. */
-const SAFE = new Set(['GET', 'HEAD', 'OPTIONS'])
-
-/**
- * CSRF, on top of the session cookie's `SameSite=Lax` rather than instead of it.
- *
- * `Lax` is a browser control and covers the common case, but it is scoped to the *site* rather than the
- * origin — a sibling subdomain is same-site — it exempts top-level `GET` navigations, and it does nothing in a
- * client that does not enforce it. So unsafe methods carry a token as well.
- *
- * `getToken` is narrowed to one header on purpose. The default also reads `body._csrf`, which would force the
- * check onto `preValidation` so the body is parsed first; reading a header keeps it on `onRequest`, before the
- * request has cost anything.
- *
- * `cookieOpts` **replaces** the plugin's defaults rather than extending them, so the sensible ones are
- * restated here.
- *
- * The plugin reads and writes its cookie through `@fastify/cookie`'s request and reply decorations, so that plugin
- * is registered here too, with the secret its `signed` cookie needs. It sits alongside the framework's own cookies
- * — the session's — and changes nothing about them.
- */
-export const csrf: HTTPPluginFactory<Config> = ({ config }) =>
-  fp(
-    async (instance: FastifyInstance) => {
-      await instance.register(fastifyCookie, { secret: config.auth.cookieSecret })
-      await instance.register(csrfProtection, {
-        cookieOpts: { path: '/', sameSite: 'strict', httpOnly: true, signed: true },
-        getToken: (req: FastifyRequest) => req.headers['x-csrf-token'] as string | undefined,
-      })
-
-      // `csrfProtection` is a plain (req, reply, done) hook with no lifecycle stage of its own and no method
-      // filter — attached as-is it would reject every GET, the shell included.
-      instance.addHook('onRequest', function (req: FastifyRequest, reply: FastifyReply, done: (err?: Error) => void) {
-        if (SAFE.has(req.method)) {
-          done()
-          return
-        }
-
-        instance.csrfProtection(req, reply, done)
-      })
-    },
-    { name: 'csrf' },
-  )
