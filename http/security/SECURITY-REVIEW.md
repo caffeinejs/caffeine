@@ -18,14 +18,15 @@ Read before reviewing `http/security` with the `security-audit` or `sharp-edges`
 
 Report these only if the framework's own docs promise otherwise.
 
-- A CSRF token for a client that sends neither `Sec-Fetch-Site` nor `Origin`: `csrf()` lets it through as
-  non-browser traffic, as Go and ASP.NET Core do. The cookie scheme defaults to `SameSite=lax` as a second layer.
+- A request carrying neither `Sec-Fetch-Site` nor `Origin` passes `csrf()` as non-browser traffic, by design. The
+  cookie scheme defaults to `SameSite=lax` as a second layer.
 - Credential checks for opaque tokens (`OpaqueTokenStore.validate`) and Basic (the `validate` option).
 - Store implementations: `SeriesTokenStore` (remember-me and refresh) must make `rotate` an atomic compare-and-swap;
   `OpaqueTokenStore`, ticket stores.
 - Fastify `trustProxy`; the framework never reads `X-Forwarded-*`, `Forwarded` or `Referer`. `csrf/origin.ts` alone
-  reads `Origin` and `Sec-Fetch-Site`, and compares them with Fastify's `request.host` and `request.protocol`, so
-  `trustProxy` governs what a proxy may say there.
+  reads `Origin` and `Sec-Fetch-Site`, and compares them with `ctx.req.host` and `ctx.req.protocol`, so
+  `trustProxy` governs what a proxy may say there. `protocolOf` (`http/protocol.ts`) is the one reader of Fastify's
+  `request.protocol`, lower-casing what a proxy wrote.
 - Validating the cookie scheme's `returnUrl` in the application's login endpoint; `isSafeReturnPath` is exported for it.
 - Multipart limits, body limits beyond the form parser's 1 MB, and logger redaction.
 
@@ -84,7 +85,11 @@ Report these only if the framework's own docs promise otherwise.
   `Origin` is trusted, `same-site` included. Without it, `Origin: null`, an unreadable `Origin`, one naming another
   host or port, and an `http:` one on a request known to be HTTPS are refused; neither header passes. A trusted
   origin is exactly `scheme://host[:port]`, with no path, wildcard or `null`. An exemption is judged by the
-  registered route path. Error text never repeats a header value; the body and the query are never read.
+  registered route path, and a route's own mark wins over an excluded prefix; `exclude('/')` is refused. Error text
+  never repeats a header value; the body and the query are never read, nor logged.
+- The application's checks (`trustOrigin`, `allowSecFetchSite`) only widen: they are asked on a refusal alone, and
+  no answer admits `Origin: null`, a malformed origin, or an `http:` origin on a request known to be HTTPS. Only
+  `true` lets a request through; a check that throws or rejects, with a falsy reason too, fails the request.
 
 ## Tests
 
@@ -95,5 +100,5 @@ Report these only if the framework's own docs promise otherwise.
   `internal/sealed_jwt.test.ts`, `cookie/cookie.test.ts` and `oidc/handler_ticket_store.test.ts`.
 - End-to-end: `test/e2e/{basic,cookie,cookie_remember,jwt,opaque,refresh,oauth2,oidc,multi_scheme,spa_bff,fallback,authz,authz_startup,config_auth}.e2e.ts`.
 - Cross-origin protection: `http/csrf/origin.test.ts`, `http/csrf/origin.prop.test.ts`,
-  `http/csrf/_tests/csrf_plugin.test.ts`.
+  `http/csrf/_tests/csrf_plugin.test.ts`, and the webhook receiver in `http/csrf/_tests/csrf_webhook.test.ts`.
 - A confirmed finding lands with a regression test next to the code it fixes.

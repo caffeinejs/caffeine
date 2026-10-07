@@ -175,8 +175,8 @@ Moving from the `@fastify/cookie` wrapper:
 ## CSRF
 
 `.with(csrf())` refuses a request that changes state from another origin, judged by what the browser says of it:
-`Sec-Fetch-Site`, then `Origin` against the request's host. The approach of Go's `net/http` and ASP.NET Core: no
-token, no cookie, and nothing for a page this application serves to do, since its own requests are `same-origin`.
+`Sec-Fetch-Site`, then `Origin` against the request's host. The approach of Go's `net/http`: no token, no cookie,
+and nothing for a page this application serves to do, since its own requests are `same-origin`.
 
 ```ts
 const app = createWebApplication()
@@ -197,25 +197,90 @@ newRouter('/hooks').with(csrfExempt()) // the programmatic form; csrfExempt(fals
   passes; `null` or unreadable is refused; one naming the request's host passes and any other is refused, as is an
   `http:` origin on a request the server knows came over HTTPS.
 - A refusal is a 403 with the code `ERR_CSRF_CROSS_ORIGIN`, in the standard error envelope, logged at `warn` with
-  what decided it; the message never repeats a header value. `@Catch(ErrCSRFCrossOrigin)`, or a handler enrolled with
-  `.errorHandling(e => e.globalHandlers(...))`, answers it differently.
+  what decided it and the path, never the query; the message never repeats a header value.
+  `@Catch(ErrCSRFCrossOrigin)`, or a handler enrolled with `.errorHandling(e => e.globalHandlers(...))`, answers it
+  differently.
 - `c.trustedOrigins('https://admin.example.com')` lets a cross-origin request through from an exact
   `scheme://host[:port]`: a front end served from another origin, a partner's site posting a form, or the public
   origin of a proxy that rewrites `Host`. A path, a wildcard or `null` is refused at start-up with
   `ErrCSRFConfiguration`.
-- The host and scheme an `Origin` is compared with are `ctx.req.host` and `ctx.req.protocol`, Fastify's
-  `request.host` and `request.protocol`: they follow `X-Forwarded-Host` and `X-Forwarded-Proto` only under
-  `trustProxy`, `.server(() => ({ factory: { trustProxy: true } }))`.
+- The host and scheme an `Origin` is compared with are `ctx.req.host` and `ctx.req.protocol`, the scheme
+  lower-cased: they follow `X-Forwarded-Host` and `X-Forwarded-Proto` only under `trustProxy`,
+  `.server(() => ({ factory: { trustProxy: true } }))`. `trustProxy` names the proxy, as `true`, its addresses or a
+  function: a hop count (`trustProxy: 1`) trusts no peer in Fastify 5.12, and the forwarding headers are ignored.
 - `c.exclude('/webhooks')` leaves the routes registered under that prefix alone, whole segments only: `/webhooks`
   and `/webhooks/stripe`, not `/webhooks-old`, judged by the path a route was registered under, never the URL
   requested. For a route the application cannot mark; its own take `@CSRFExempt()`, `csrfExempt()`, or
   `csrfExemptConfig()` as the `config` of a raw Fastify route. A URL no route matched stays a 404.
+- A route's own mark wins over a path: `csrfExempt(false)` keeps a route under an excluded prefix protected.
+  `c.exclude('/')`, which would cover every route, is refused at start-up; `c.enabled(false)` turns the check off.
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
   is authenticated; behind it, an anonymous one meets the challenge first. An [ops server](#ops-servers) is covered
   by its own `Ops('admin', o => o.with(csrf()))`, a route group alone by `router.plugin(csrf(c => c.name('admin')))`.
 - From the environment, under whatever prefix the block has in the application's schema: `CSRF__ENABLED`,
-  `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing.
+  `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing, and says so once, at `warn`,
+  as the server starts.
+
+Custom checks, for an origin no exact list can spell:
+
+```ts
+csrf(c =>
+  c
+    // Every https subdomain: compare the hostname and the scheme, never a prefix of the string
+    .trustOrigin((_ctx, { protocol, hostname }) => protocol === 'https:' && hostname.endsWith('.example.com'))
+    // A tenant's own front end, by the host the request came to
+    .trustOrigin((ctx, origin) => frontEnds.get(ctx.req.host) === origin.origin)
+    // Pages on sibling subdomains
+    .allowSecFetchSite((_ctx, site) => site === 'same-site'),
+)
+```
+
+- A check only lets through. It is asked once the exemptions, the rules and `trustedOrigins(...)` have refused a
+  request, never about one they let through.
+- `trustOrigin` is asked about an `http:` or `https:` origin alone, handed as a fresh `URL` that holds the origin and
+  nothing else. `Origin: null`, a malformed origin, and an `http:` origin on a request known to be HTTPS stay refused
+  whatever it answers. `https://app.example.com` is a prefix of `https://app.example.com.evil.example`: compare
+  `hostname`.
+- `allowSecFetchSite` is asked about `same-site` or `cross-site` alone, once every `trustOrigin` check has declined,
+  and only when the request carries an origin `trustOrigin` could be asked about. A browser too old to send the
+  header is never asked about. `same-site` takes in every subdomain, one a user can publish to or one taken over
+  included; naming the hosts with `trustOrigin` is narrower.
+- Only `true`, or a promise of it, lets the request through. A check that throws or rejects fails the request with
+  its error, a 500 for a plain `Error`. Each call adds a check; they are asked in the order written, and the first
+  `true` wins.
+- A check runs before the body is read and, written ahead of `.with(authentication())`, before anyone is
+  authenticated, so `ctx.user` is not set yet. Any page can make its visitors' browsers send a request that asks it:
+  keep it cheap, and cache a lookup.
+- A check is code: `c.config(...)` carries none, and a block's `trustedOrigins` stands beside it.
+
+Webhooks:
+
+- A delivery from the sender's servers carries neither `Sec-Fetch-Site` nor `Origin`, so it passes with no
+  configuration, whatever its content type: JSON, or form-encoded as Twilio and Slack post theirs.
+- Exempt the receiver when the sender sets an `Origin` of its own, or when the callback comes back through the
+  user's browser, such as a 3-D Secure return or a SAML POST. One that arrives with `Origin: null` after a
+  cross-origin redirect can only be exempted: no trusted origin or check takes it.
+- An exempt receiver authenticates every delivery itself, by a signature over the bytes it was sent, read with
+  `bodyAsBuffer()`: a forgery from a victim's browser now reaches it.
+- Keep the exemption narrow, `c.exclude('/webhooks/github')` or a mark on the receiver: the route that rotates the
+  signing secret sits beside it.
+- Exempting a receiver from the check does not open it to anonymous callers: under
+  `Authorization(z => z.requireAuthenticatedByDefault())`, declare it public as well.
+
+Limitations:
+
+- `Sec-Fetch-Site` is sent only to HTTPS origins and `localhost`; a plain-HTTP site is judged by `Origin` alone.
+- A proxy or an extension that strips both headers makes a browser's request look like a non-browser client's,
+  which passes. The cookie scheme's `SameSite=lax` is the second layer.
+- An origin `@fastify/cors` allows is not trusted here: list it in `trustedOrigins(...)` as well. A refusal carries
+  the CORS headers only when `@fastify/cors` is registered ahead of `.with(csrf())`; behind it, the browser reports a
+  network error instead of the 403.
+- A plugin registered ahead of `.with(csrf())` that answers a request from its own hook answers it unchecked.
+- A WebSocket upgrade is a `GET`, and is not checked: an endpoint authenticated by cookie checks the handshake's
+  `Origin` itself.
+- An origin of another scheme, such as `capacitor://localhost` or `tauri://localhost`, can be neither trusted nor
+  checked, only exempted.
 
 Moving from `@fastify/csrf-protection`:
 

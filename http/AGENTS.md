@@ -37,7 +37,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - `http/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
   `origin.ts` is the check, pure, and `plugin.ts` the only file that knows Fastify; another adapter re-implements
-  `plugin.ts` alone. A token fallback would be a feature of its own, not a mode here.
+  `plugin.ts` alone.
 - `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
   proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
   neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
@@ -52,6 +52,15 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   headers that decided it. `enabled(false)` registers no hook and warns once as the server starts.
 - `normalizeTrustedOrigin` refuses what is not exactly `scheme://host[:port]`. The WHATWG parser takes `*` for a
   host character, so a wildcard is refused by name.
+- The application's checks, `trustOrigin(...)` and `allowSecFetchSite(...)`, only widen. They are asked on the deny
+  path alone, about what `checkOrigin` puts in `askable`: an `http:` or `https:` origin that is not a downgrade, and
+  the site when it is `same-site` or `cross-site`. `origin.ts` alone decides what is askable; `Origin: null`, a
+  malformed origin and a downgrade never are.
+- Each check is handed `request.httpContext` and, for `trustOrigin`, a fresh `URL` per call. Only a literal `true`,
+  or a promise of it, lets the request through. A throw or a rejection reaches `done` wrapped in an `Error`, as the
+  guards do: Fastify reads a falsy `done(err)` as "continue", which would skip every later hook. Calls accumulate,
+  origin checks before site checks, in the order written. Checks are code only, never in `CSRFConfig` or the
+  schema.
 
 ## Authentication
 
