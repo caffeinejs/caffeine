@@ -1596,6 +1596,10 @@ export class CaffeineIoC implements Container {
       }
     }
 
+    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
+    // the overrides and the hooks, so there is none, not even from a listener of the hooks below.
+    this._registered = true
+
     for (const [key, binding] of this.registry) {
       this.hooks.emit('onBindingRegistered', { key, binding })
     }
@@ -1603,10 +1607,6 @@ export class CaffeineIoC implements Container {
       this.hooks.emit('onBindingNotRegistered', { key, binding })
     }
     this._dropped = []
-
-    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
-    // the overrides and the hooks, so there is none.
-    this._registered = true
   }
 
   /**

@@ -93,7 +93,9 @@ container.hooks.on('onDecoratedBinding', ({ key, binding }) => {
 
 Fired once for every binding the container holds after compiling, however it
 was made: decorated, bound by hand, bound by a module or added by an override.
-Fires after profiles, conditions and overrides are decided.
+Fires after profiles, conditions and overrides are decided, so a listener of it
+or of `onBindingNotRegistered` cannot bind: `bind()`, `rebind()` and `aspect()`
+throw `ErrInvalidContainerState` from one.
 
 ```ts
 container.hooks.on('onBindingRegistered', ({ key, binding }) => {
