@@ -21,7 +21,7 @@ There are four kinds of condition:
 | `$cond.present(key)`        | a binding answers to `key`: one registered under it, named after it, or extending it     |
 | `$cond.missing(key)`        | no binding answers to `key`                                                              |
 | `$cond.config(test)`        | `test` returns `true` for the values bound with `bindConfig()`                           |
-| `$cond.env(name, expected)` | the environment variable equals `expected`, or is set at all when `expected` is left out |
+| `$cond.env(name, expected)` | the environment variable equals `expected`, or reads as true when `expected` is left out |
 
 `@Conditional` takes one condition, a list, or a callback handed `$cond` that returns either. These three are the
 same:
@@ -244,12 +244,14 @@ An application built with `@caffeinejs/std` binds its configuration for you.
 
 ## Environment variables
 
-`env(name)` passes when the variable is set, an empty value included. `env(name, expected)` passes when it equals
-`expected`.
+`env(name)` reads the variable as a flag, in any letter case: `1`, `t`, `true`, `on` and `yes` pass, while `0`, `f`,
+`false`, `off`, `no` and an unset variable fail. Any other value, an empty one included, fails the compilation with
+`ErrInvalidBinding`. The error names the variable but not its value. `env(name, expected)` passes when the value
+equals `expected` exactly.
 
 ```ts
-// Only when SMTP_HOST is set
-@Conditional(c => c.env('SMTP_HOST'))
+// Only when SMTP_ENABLED is true
+@Conditional(c => c.env('SMTP_ENABLED'))
 @Injectable()
 @Extends()
 class SmtpMailer extends Mailer {
@@ -287,8 +289,8 @@ class EUInfrastructureConfig {
     return new RedisEUCache(client)
   }
 
-  // Only provided in EU AND when the tax service is configured
-  @Conditional(c => c.env('TAX_SERVICE_URL'))
+  // Only provided in EU AND when the tax service is enabled
+  @Conditional(c => c.env('TAX_SERVICE_ENABLED'))
   @Provides(TaxCalculator)
   taxCalc() {
     return new EUTaxCalculator()
@@ -301,7 +303,7 @@ conditions. In the example above:
 
 - `gateway` is provided whenever `REGION` is `eu`
 - `cache` is provided when `REGION` is `eu` AND `RedisClient` is bound
-- `taxCalc` is provided when `REGION` is `eu` AND `TAX_SERVICE_URL` is set
+- `taxCalc` is provided when `REGION` is `eu` AND `TAX_SERVICE_ENABLED` is true
 
 When the class fails any of its conditions, its methods are dropped with it, and none of their conditions is decided.
 While the class waits on a `present()` or `missing()` condition, their `env` and `config` wait with it.

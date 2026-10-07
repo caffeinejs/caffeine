@@ -35,12 +35,12 @@ const $cond: ConditionHelpers
 | `present(key)`        | a binding answers to `key`: one registered under it, named after it with `.names()`, or extending it |
 | `missing(key)`        | no binding answers to `key`                                                                          |
 | `config(test)`        | `test` returns `true` for the values bound with `bindConfig()`                                       |
-| `env(name)`           | the environment variable is set, an empty value included                                             |
+| `env(name)`           | the environment variable reads as true: `1`, `t`, `true`, `on` or `yes`, in any letter case          |
 | `env(name, expected)` | the environment variable equals `expected`                                                           |
 
 ```ts
 di.bind(Cache, t => t.toClass(InMemoryCache).conditional($cond.missing(Cache)))
-di.bind(Mailer, t => t.toClass(SmtpMailer).conditional([$cond.env('SMTP_HOST'), $cond.present(MailTemplates)]))
+di.bind(Mailer, t => t.toClass(SmtpMailer).conditional([$cond.env('SMTP_ENABLED'), $cond.present(MailTemplates)]))
 ```
 
 - A condition never sees its own binding.
@@ -51,6 +51,8 @@ di.bind(Mailer, t => t.toClass(SmtpMailer).conditional([$cond.env('SMTP_HOST'), 
 - A `@Provides` method's conditions are decided after its `@Configuration` class: none of them when the class fails,
   and its `env` and `config` only once the class is sure to register.
 - `env` and `config` are read when the container compiles, not when the condition is written.
+- `env(name)` fails on `0`, `f`, `false`, `off`, `no` or an unset variable. Any other value fails the compilation with
+  `ErrInvalidBinding`, which names the variable but not its value. `env(name, expected)` compares the value exactly.
 - A `config` condition needs values. Without `bindConfig()`, compiling fails with `ErrNoValuesProvider`.
 - A `config` test must return a boolean. Any other result, a Promise included, fails the compilation with
   `ErrInvalidBinding`, and so does a test that throws, with the thrown error as its `cause`.

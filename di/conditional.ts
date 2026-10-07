@@ -1,6 +1,7 @@
 import { Binding, configurationOf, isConfigurationClass, newBinding } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { CaffeineIoCError, ErrCircularCondition, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
+import { parseBool } from './internal/util/bool/index.js'
 import { solutions } from './internal/util/errutil/index.js'
 import { Identifier, InjectionToken, isValidKey, keyStr } from './key.js'
 
@@ -47,8 +48,11 @@ export interface ConditionHelpers<C = unknown> {
   config<T = C>(test: (config: T) => boolean): Condition
 
   /**
-   * Passes when the environment variable is set, an empty value included, or equals `expected` when given. The
-   * variable is read when the container compiles.
+   * Passes when the environment variable reads as true: `1`, `t`, `true`, `on` or `yes`, in any letter case. `0`,
+   * `f`, `false`, `off`, `no` or an unset variable fail it, and any other value fails the container's compilation with
+   * `ErrInvalidBinding`. With `expected`, passes when the value equals it exactly.
+   *
+   * The variable is read when the container compiles.
    */
   env(name: string, expected?: string): Condition
 }
@@ -514,7 +518,26 @@ function checkEnv(name: string, expected: string | undefined, entry: HeldBinding
     )
   }
 
-  return expected === undefined ? value !== undefined : value === expected
+  if (expected !== undefined) {
+    return value === expected
+  }
+  if (value === undefined) {
+    return false
+  }
+
+  const flag = parseBool(value)
+  if (flag === undefined) {
+    // The value stays out of the message: a variable once checked only for being set may hold a credential.
+    throw new ErrInvalidBinding(
+      `Cannot decide the env() condition of "${keyStr(entry.key)}": the variable "${name}" is not a boolean` +
+        solutions(
+          `Set "${name}" to 1, t, true, on or yes to register the binding, or to 0, f, false, off or no to skip it, in any letter case`,
+          `Match another value with env("${name}", expected)`,
+        ),
+    )
+  }
+
+  return flag
 }
 
 function checkConfig(test: (config: never) => boolean, entry: HeldBinding, ops: ConditionOps): boolean {

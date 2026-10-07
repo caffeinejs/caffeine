@@ -134,14 +134,48 @@ describe('Conditionals', function () {
       vi.unstubAllEnvs()
     })
 
-    it('should pass when the variable is set, an empty value included', async function () {
-      vi.stubEnv('CAFFEINE_COND_ENV_SET', '')
+    it('should pass when the variable reads as true, in any letter case', async function () {
+      for (const value of ['1', 't', 'TRUE', 'tRuE', 'On', 'YES']) {
+        vi.stubEnv('CAFFEINE_COND_ENV_SET', value)
 
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_SET')))
-      await di.init()
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_SET')))
+        await di.init()
 
-      expect(di.get(kEnv)).toBe('set')
+        expect(di.has(kEnv), value).toBe(true)
+      }
+    })
+
+    // Being set is not enough: OFF=false must not turn a feature on.
+    it('should fail when the variable reads as false, in any letter case', async function () {
+      for (const value of ['0', 'f', 'FALSE', 'fAlSe', 'Off', 'NO']) {
+        vi.stubEnv('CAFFEINE_COND_ENV_SET', value)
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_SET')))
+        await di.init()
+
+        expect(di.has(kEnv), value).toBe(false)
+      }
+    })
+
+    // A variable once checked only for being set may hold a URL with a password in it; the message ends up in a log.
+    it('should fail the compilation when the variable is not a boolean, naming the variable but not its value', async function () {
+      for (const value of ['', 'y', ' true', 'redis://user:s3cr3t@cache:6379']) {
+        vi.stubEnv('CAFFEINE_COND_ENV_INVALID', value)
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_INVALID')))
+
+        const err = await di.init().then(
+          () => undefined,
+          (err: unknown) => err,
+        )
+
+        expect(err, JSON.stringify(value)).toBeInstanceOf(ErrInvalidBinding)
+        expect((err as Error).message).toContain('"CAFFEINE_COND_ENV_INVALID" is not a boolean')
+        expect((err as Error).message).not.toContain('s3cr3t')
+      }
     })
 
     it('should fail when the variable is not set', async function () {
@@ -166,6 +200,16 @@ describe('Conditionals', function () {
 
       expect(di.has(kEU)).toBe(true)
       expect(di.has(kUS)).toBe(false)
+    })
+
+    it('should compare an expected value exactly, never reading it as a boolean', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_EXACT', 'TRUE')
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_EXACT', 'true')))
+      await di.init()
+
+      expect(di.has(kEnv)).toBe(false)
     })
 
     it('should read the variable when the container compiles, not when the condition is written', async function () {
