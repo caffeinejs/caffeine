@@ -1,10 +1,10 @@
 import { Container, Ctor, InjectionToken, Provider } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import { Context } from '../context.js'
 import { ActionResult } from '../response.js'
 import type { CatchByMap } from '../routing/route.js'
 import { ErrConfiguration } from './common.js'
-import { solutions } from './util.js'
 
 export const kErrorHandler = Symbol('caffeine:http:error_handler')
 
@@ -116,19 +116,23 @@ export function buildCatchByMap(
     const binding = container.getBinding(ref)
     if (!binding) {
       throw new ErrConfiguration(
-        `Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered` +
-          solutions(
+        errMessage(`Cannot resolve error handler "${name}" referenced by "${owner}": no binding registered`)
+          .solutions(
             `Decorate "${name}" with "@Catch(ErrorType)" so it is registered in the container`,
             'Make sure the handler module is imported by the application',
-          ),
+          )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
     const meta = binding.tags.get(kErrorHandler) as CatchMetadata | undefined
     if (!meta) {
       throw new ErrConfiguration(
-        `Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"` +
-          solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`),
+        errMessage(`Cannot use "${name}" as an error handler in "${owner}": it is not decorated with "@Catch"`)
+          .solutions(`Decorate "${name}" with "@Catch(ErrorType)" to declare the errors it handles`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
@@ -137,8 +141,12 @@ export function buildCatchByMap(
       const previous = owners.get(errorType)
       if (previous !== undefined) {
         throw new ErrConfiguration(
-          `Ambiguous ${declaredBy} in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"` +
-            solutions(`Keep a single handler for "${errorType.name}" in "${owner}"`),
+          errMessage(
+            `Ambiguous ${declaredBy} in "${owner}": both "${previous}" and "${name}" handle "${errorType.name}"`,
+          )
+            .solutions(`Keep a single handler for "${errorType.name}" in "${owner}"`)
+            .reference('@caffeinejs/http', ErrConfiguration)
+            .build(),
         )
       }
 

@@ -2,7 +2,7 @@ import { Binding, configurationOf, isConfigurationClass, newBinding } from './bi
 import { DeferredCtor } from './deferred_ctor.js'
 import { CaffeineIoCError, ErrCircularCondition, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
 import { parseBool } from './internal/util/bool/index.js'
-import { solutions } from './internal/util/errutil/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { Identifier, InjectionToken, isValidKey, keyStr } from './key.js'
 
 /**
@@ -153,12 +153,14 @@ export function toConditions<C>(
         throw err
       }
 
+      // The caller's `fail` names the class and adds the reference.
       throw fail(
-        `the callback threw "${messageOf(err)}"` +
-          solutions(
+        errMessage(`the callback threw "${messageOf(err)}"`)
+          .solutions(
             'A callback is handed $cond, not a context: write c => c.present(X) where a predicate read ' +
               'ctx => ctx.container.has(X)',
-          ),
+          )
+          .build(),
         { cause: err },
       )
     }
@@ -529,11 +531,13 @@ function checkEnv(name: string, expected: string | undefined, entry: HeldBinding
   if (flag === undefined) {
     // The value stays out of the message: a variable once checked only for being set may hold a credential.
     throw new ErrInvalidBinding(
-      `Cannot decide the env() condition of "${keyStr(entry.key)}": the variable "${name}" is not a boolean` +
-        solutions(
+      errMessage(`Cannot decide the env() condition of "${keyStr(entry.key)}": the variable "${name}" is not a boolean`)
+        .solutions(
           `Set "${name}" to 1, t, true, on or yes to register the binding, or to 0, f, false, off or no to skip it, in any letter case`,
           `Match another value with env("${name}", expected)`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
     )
   }
 

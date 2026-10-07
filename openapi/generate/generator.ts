@@ -1,4 +1,5 @@
-import { type AuthSchemeDescriptor, type Route, type RouteGroup, solutions } from '@caffeinejs/http'
+import type { AuthSchemeDescriptor, Route, RouteGroup } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'
@@ -174,12 +175,15 @@ function addRoute(ctx: AddRouteInput): void {
       // silently dropping it would be worse — so it is dropped loudly.
       if (options.version === '3.1.1') {
         warn(
-          `Route "${method} ${url}" (${site}) is omitted from the OpenAPI document: ` +
-            `OpenAPI 3.1.1 cannot represent the "${method}" method` +
-            solutions(
+          errMessage(
+            `Route "${method} ${url}" (${site}) is omitted from the OpenAPI document: ` +
+              `OpenAPI 3.1.1 cannot represent the "${method}" method`,
+          )
+            .solutions(
               'Set .version("3.2.0") on the OpenAPI builder, which represents it via additionalOperations',
               'Hide the route with @Operation({ hidden: true }) to omit it deliberately',
-            ),
+            )
+            .build(),
         )
         continue
       }
@@ -254,12 +258,16 @@ export function validateDocument(document: OpenAPIDocument): void {
       for (const name of Object.keys(requirement)) {
         if (!definedSchemes.has(name)) {
           throw new ErrOpenAPIConfiguration(
-            `Cannot generate OpenAPI document: ${where} requires the security scheme "${name}", ` +
-              'which components.securitySchemes does not define' +
-              solutions(
+            errMessage(
+              `Cannot generate OpenAPI document: ${where} requires the security scheme "${name}", ` +
+                'which components.securitySchemes does not define',
+            )
+              .solutions(
                 `Declare it with .securityScheme("${name}", { ... }) on the OpenAPI builder`,
                 'Register it through .install(Authentication(...)) so it can be described automatically',
-              ),
+              )
+              .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+              .build(),
           )
         }
       }
@@ -290,11 +298,13 @@ export function validateDocument(document: OpenAPIDocument): void {
     for (const [, name] of template.matchAll(/\{([^}]+)\}/g)) {
       if (operations.length > 0 && !declared.has(name)) {
         throw new ErrOpenAPIConfiguration(
-          `Cannot generate OpenAPI document: path "${template}" declares no parameter for "{${name}}"` +
-            solutions(
+          errMessage(`Cannot generate OpenAPI document: path "${template}" declares no parameter for "{${name}}"`)
+            .solutions(
               `Add "${name}" to the route's @Schema({ params }) so it is described`,
               `Add it via @Operation({ parameters: [{ name: "${name}", in: "path" }] })`,
-            ),
+            )
+            .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+            .build(),
         )
       }
     }

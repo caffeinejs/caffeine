@@ -1,8 +1,5 @@
+import { errMessage } from './framework/err/index.js'
 import { CaffeineRuntime } from './platform.js'
-
-export function solutions(...solutions: string[]) {
-  return '\nPossible Solutions:\n  - ' + solutions.join('\n  - ')
-}
 
 export class ErrCaffeine extends Error {
   readonly code: string
@@ -14,10 +11,9 @@ export class ErrCaffeine extends Error {
     ...solutions: string[]
   ) {
     super(
-      message +
-        (solutions.length > 0 && !CaffeineRuntime.hideErrorSolutions
-          ? '\nPossible Solutions:\n  - ' + solutions.join('\n  - ')
-          : ''),
+      errMessage(message)
+        .solutions(...(CaffeineRuntime.hideErrorSolutions ? [] : solutions))
+        .build(),
     )
     // The most-derived class name, so a subclass never has to repeat `this.name = 'ErrX'`.
     this.name = new.target.name

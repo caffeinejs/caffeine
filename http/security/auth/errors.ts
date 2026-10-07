@@ -1,5 +1,6 @@
+import { errMessage } from '@caffeinejs/std/framework'
+
 import { ErrCaffeineWebApplication } from '../../error/common.js'
-import { solutions } from '../../error/util.js'
 
 /**
  * ErrAuthSchemeNotFound is thrown when a scheme name does not resolve to a registered handler.
@@ -68,9 +69,13 @@ export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
 export class ErrAuthenticationCookies extends ErrCaffeineWebApplication {
   constructor(scheme: string) {
     super(
-      `Cannot start application: authentication scheme "${scheme}" keeps its session in a cookie, and cookies are ` +
-        'disabled on this server' +
-        solutions('Turn cookies back on with ".cookie(k => k.enabled(true))"'),
+      errMessage(
+        `Cannot start application: authentication scheme "${scheme}" keeps its session in a cookie, and cookies are ` +
+          'disabled on this server',
+      )
+        .solutions('Turn cookies back on with ".cookie(k => k.enabled(true))"')
+        .reference('@caffeinejs/http', ErrAuthenticationCookies)
+        .build(),
       'ERR_AUTHENTICATION_COOKIES',
     )
     this.name = 'ErrAuthenticationCookies'
@@ -97,9 +102,11 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
     const more = routes.length > 5 ? ` and ${routes.length - 5} more` : ''
 
     super(
-      `Cannot start application: ${one ? 'route' : 'routes'} ${named}${more} ${one ? 'requires' : 'require'} ` +
-        `authentication and no authentication gate covers ${one ? 'it' : 'them'}` +
-        solutions(
+      errMessage(
+        `Cannot start application: ${one ? 'route' : 'routes'} ${named}${more} ${one ? 'requires' : 'require'} ` +
+          `authentication and no authentication gate covers ${one ? 'it' : 'them'}`,
+      )
+        .solutions(
           'Register the gate on the application, where it covers every route of its own server: ' +
             '".with(authentication())"',
           'Or, for a route an ops server serves, register one on that server: ' +
@@ -108,7 +115,9 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
           'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
             'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +
             'from an "onRoute" hook for a route another plugin registers',
-        ),
+        )
+        .reference('@caffeinejs/http', ErrAuthenticationGateRequired)
+        .build(),
       'ERR_AUTHENTICATION_GATE_REQUIRED',
     )
     this.name = 'ErrAuthenticationGateRequired'

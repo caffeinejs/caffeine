@@ -1,5 +1,6 @@
+import { errMessage } from '@caffeinejs/std/framework'
+
 import { ErrConfiguration } from './error/common.js'
-import { solutions } from './error/util.js'
 import { normalizeGroupPath } from './routing/builder.js'
 
 const SLASH = 47
@@ -39,7 +40,10 @@ export function normalizeBasePath(value: string | undefined): string | undefined
 
   if (base.charCodeAt(0) !== SLASH) {
     throw new ErrConfiguration(
-      `Cannot set the base path: "${value}" does not start with "/"` + solutions(`Write it as "/${base}"`),
+      errMessage(`Cannot set the base path: "${value}" does not start with "/"`)
+        .solutions(`Write it as "/${base}"`)
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
@@ -48,8 +52,10 @@ export function normalizeBasePath(value: string | undefined): string | undefined
   const second = base.charCodeAt(1)
   if (second === SLASH || second === BACKSLASH) {
     throw new ErrConfiguration(
-      `Cannot set the base path: "${value}" starts with "${base.slice(0, 2)}"` +
-        solutions('Start it with a single "/": a browser reads "//" or "/\\" as the start of another host'),
+      errMessage(`Cannot set the base path: "${value}" starts with "${base.slice(0, 2)}"`)
+        .solutions('Start it with a single "/": a browser reads "//" or "/\\" as the start of another host')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
@@ -57,8 +63,10 @@ export function normalizeBasePath(value: string | undefined): string | undefined
     const code = base.charCodeAt(i)
     if (code < 0x20 || code === 0x7f) {
       throw new ErrConfiguration(
-        `Cannot set the base path: ${JSON.stringify(value)} contains a control character` +
-          solutions('Give the base path as path segments only'),
+        errMessage(`Cannot set the base path: ${JSON.stringify(value)} contains a control character`)
+          .solutions('Give the base path as path segments only')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
   }
@@ -66,8 +74,10 @@ export function normalizeBasePath(value: string | undefined): string | undefined
   for (const char of ['?', '#']) {
     if (base.includes(char)) {
       throw new ErrConfiguration(
-        `Cannot set the base path: "${value}" contains "${char}"` +
-          solutions('Give the base path as path segments only, without a query or a fragment'),
+        errMessage(`Cannot set the base path: "${value}" contains "${char}"`)
+          .solutions('Give the base path as path segments only, without a query or a fragment')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
   }

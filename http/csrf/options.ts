@@ -1,5 +1,6 @@
+import { errMessage } from '@caffeinejs/std/framework'
+
 import type { Context } from '../context.js'
-import { solutions } from '../error/util.js'
 import { ErrCSRFConfiguration } from './errors.js'
 import { normalizeTrustedOrigin } from './origin.js'
 
@@ -72,15 +73,21 @@ export function isExcluded(path: string, excluded: readonly ExcludedPath[]): boo
 function excludedPath(prefix: string): ExcludedPath {
   if (prefix.startsWith('~/')) {
     throw new ErrCSRFConfiguration(
-      `Cannot exclude "${prefix}" from cross-origin protection: a path is matched after the base path is taken off` +
-        solutions(`Write it as "${prefix.slice(1)}"`),
+      errMessage(
+        `Cannot exclude "${prefix}" from cross-origin protection: a path is matched after the base path is taken off`,
+      )
+        .solutions(`Write it as "${prefix.slice(1)}"`)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 
   if (!prefix.startsWith('/')) {
     throw new ErrCSRFConfiguration(
-      `Cannot exclude "${prefix}" from cross-origin protection: a path starts with "/"` +
-        solutions(`Write it as "/${prefix}"`),
+      errMessage(`Cannot exclude "${prefix}" from cross-origin protection: a path starts with "/"`)
+        .solutions(`Write it as "/${prefix}"`)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 
@@ -89,8 +96,10 @@ function excludedPath(prefix: string): ExcludedPath {
   // Every route sits under `/`: excluding it would turn the check off without saying so.
   if (exact === '') {
     throw new ErrCSRFConfiguration(
-      `Cannot exclude "${prefix}" from cross-origin protection: it covers every route` +
-        solutions('Turn the check off with enabled(false)', 'Mark the route itself with @CSRFExempt() or csrfExempt()'),
+      errMessage(`Cannot exclude "${prefix}" from cross-origin protection: it covers every route`)
+        .solutions('Turn the check off with enabled(false)', 'Mark the route itself with @CSRFExempt() or csrfExempt()')
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 

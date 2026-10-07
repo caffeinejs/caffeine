@@ -7,7 +7,7 @@ import { Injection, InjectionDescriptor, InjectionsFor, ResolveInjection } from 
 import { functionFactory } from './internal/core/factory/function_closure.js'
 import { valueFactory } from './internal/core/factory/value.js'
 import { notNil } from './internal/util/assert/index.js'
-import { solutions } from './internal/util/errutil/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { InjectionToken, Identifier, NamedToken, TypedKey, isNamedKey, keyStr } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { hasScope, type Scope } from './scope.js'
@@ -93,11 +93,13 @@ export class BindingSpec<TValue, K = unknown> {
       for (const injection of normalized) {
         if (injection.key === ctor || (this.key !== undefined && injection.key === this.key)) {
           throw new ErrInvalidBinding(
-            `Cannot bind "${ctor.name}": a component cannot be its own dependency` +
-              solutions(
-                `- Remove "${ctor.name}" from the injection list`,
-                `- Use $i.defer(() => ${ctor.name}) if the cycle is intended, so the key resolves lazily`,
-              ),
+            errMessage(`Cannot bind "${ctor.name}": a component cannot be its own dependency`)
+              .solutions(
+                `Remove "${ctor.name}" from the injection list`,
+                `Use $i.defer(() => ${ctor.name}) if the cycle is intended, so the key resolves lazily`,
+              )
+              .reference('@caffeinejs/di', ErrInvalidBinding)
+              .build(),
           )
         }
       }
@@ -529,7 +531,13 @@ export class BindingSpec<TValue, K = unknown> {
   conditional<C = unknown>(conditions: Conditions | ((cond: ConditionHelpers<C>) => Conditions)): this {
     const list = toConditions(
       conditions,
-      (reason, options) => new ErrInvalidBinding(`Cannot bind "${keyStr(this.key)}": ${reason}`, options),
+      (reason, options) =>
+        new ErrInvalidBinding(
+          errMessage(`Cannot bind "${keyStr(this.key)}": ${reason}`)
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
+          options,
+        ),
     )
     this.binding.conditions = [...this.binding.conditions, ...list]
 

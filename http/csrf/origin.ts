@@ -1,4 +1,5 @@
-import { solutions } from '../error/util.js'
+import { errMessage } from '@caffeinejs/std/framework'
+
 import { ErrCSRFConfiguration } from './errors.js'
 
 /**
@@ -100,8 +101,10 @@ export function normalizeTrustedOrigin(text: string): string {
     url = new URL(text)
   } catch {
     throw new ErrCSRFConfiguration(
-      `Cannot trust origin "${text}": it is not an absolute URL` +
-        solutions('Write it as scheme://host[:port], e.g. "https://admin.example.com"'),
+      errMessage(`Cannot trust origin "${text}": it is not an absolute URL`)
+        .solutions('Write it as scheme://host[:port], e.g. "https://admin.example.com"')
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 
@@ -112,17 +115,23 @@ export function normalizeTrustedOrigin(text: string): string {
   // The URL parser takes `*` for a host character, so a pattern would be trusted as a host nobody has.
   if (url.hostname.includes('*')) {
     throw new ErrCSRFConfiguration(
-      `Cannot trust origin "${text}": a trusted origin is exact, with no wildcard` +
-        solutions('List every origin to trust'),
+      errMessage(`Cannot trust origin "${text}": a trusted origin is exact, with no wildcard`)
+        .solutions('List every origin to trust')
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 
   // An origin and a slash: the one spelling a URL of nothing but scheme, host and port has.
   if (url.href !== `${url.origin}/`) {
     throw new ErrCSRFConfiguration(
-      `Cannot trust origin "${text}": an origin is a scheme, a host and a port, with no path, query, fragment or ` +
-        'credentials' +
-        solutions(`Write it as "${url.origin}"`),
+      errMessage(
+        `Cannot trust origin "${text}": an origin is a scheme, a host and a port, with no path, query, fragment or ` +
+          'credentials',
+      )
+        .solutions(`Write it as "${url.origin}"`)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
     )
   }
 

@@ -1,9 +1,8 @@
 import { $i, type Container, type ObjectInjectionSpec } from '@caffeinejs/di'
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import { errMessage, type ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import { boundTo } from '../../binding.js'
 import { ErrConfiguration } from '../../error/index.js'
-import { solutions } from '../../error/util.js'
 import { normalizeGroupPath, normalizeRoutePath } from '../builder.js'
 import { inheritGroupSpec } from '../inherit.js'
 import { $p } from '../picker.js'
@@ -92,11 +91,15 @@ function assertBindingFollows<R>(parent: Parent<R>, own: RouteGroupSpec<R>, name
   }
 
   throw new ErrConfiguration(
-    `Cannot nest router "${name}" in "${parent.name}": it is bound to "${inner}", and "${parent.name}" to "${outer}"` +
-      solutions(
+    errMessage(
+      `Cannot nest router "${name}" in "${parent.name}": it is bound to "${inner}", and "${parent.name}" to "${outer}"`,
+    )
+      .solutions(
         'A nested router is served where its parent is: drop its own binding',
         `Or mount "${name}" outside "${parent.name}"`,
-      ),
+      )
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
   )
 }
 
@@ -110,8 +113,10 @@ function compileRoute<R>(
 
   if (state.handle === undefined) {
     throw new ErrConfiguration(
-      `Cannot build route "${state.method.join('|')} ${groupPath}${path}": it declares no handler` +
-        solutions('Close the chain with ".handler(fn)"'),
+      errMessage(`Cannot build route "${state.method.join('|')} ${groupPath}${path}": it declares no handler`)
+        .solutions('Close the chain with ".handler(fn)"')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
@@ -178,8 +183,10 @@ function assertUniqueRouteNames<R>(routes: RouteSpec<R>[], group: string): void 
   for (const route of routes) {
     if (seen.has(route.name)) {
       throw new ErrConfiguration(
-        `Duplicate route name "${String(route.name)}" in "${group}"` +
-          solutions('Give one of the routes its own name with ".name(...)"'),
+        errMessage(`Duplicate route name "${String(route.name)}" in "${group}"`)
+          .solutions('Give one of the routes its own name with ".name(...)"')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 

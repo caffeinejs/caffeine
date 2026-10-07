@@ -1,9 +1,8 @@
 import { Container, InjectionToken } from '@caffeinejs/di'
-import { compileGuardKeys, type CompiledGuard } from '@caffeinejs/std/framework'
+import { compileGuardKeys, errMessage, type CompiledGuard } from '@caffeinejs/std/framework'
 
 import { boundTo } from '../binding.js'
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'
-import { solutions } from '../error/util.js'
 import type { Guard } from '../guards/index.js'
 import { kGlobalGuards } from '../guards/keys.js'
 import { AuthenticationSchemeProvider } from '../security/auth/scheme_provider.js'
@@ -188,11 +187,13 @@ function defaultDispatch<R>(route: RouteSpec<R>): RouteDispatch<R, unknown> {
 
   if (handle === undefined) {
     throw new ErrConfiguration(
-      `Cannot compile route "${String(route.name)}": it declares no handler` +
-        solutions(
+      errMessage(`Cannot compile route "${String(route.name)}": it declares no handler`)
+        .solutions(
           'Set the function to call with "RouteBuilder.handle(fn)"',
           'Supply a dispatch for the route from the route source that declared it',
-        ),
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 

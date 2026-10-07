@@ -7,13 +7,13 @@ import {
   collectRouteGroups,
   RouteBuilder,
   kAuthSchemeDescriptors,
-  solutions,
   type AuthSchemeDescriptor,
   type HTTPPluginConfigurer,
   type HTTPPluginFactory,
   type RouteAuthzOptions,
   type RouteGroup,
 } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
@@ -224,12 +224,14 @@ function assertSchemesExist(instance: FastifyInstance, options: OpenAPIOptions):
   for (const name of wanted) {
     if (!known.includes(name)) {
       throw new ErrOpenAPIConfiguration(
-        `Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered` +
-          solutions(
+        errMessage(`Cannot secure the OpenAPI endpoints: no authentication scheme named "${name}" is registered`)
+          .solutions(
             known.length === 0
               ? 'Register a scheme with .install(Authentication(auth => auth.addJWTBearer(...))) before securing the document'
               : `Use one of the registered schemes: ${known.map(n => `"${n}"`).join(', ')}`,
-          ),
+          )
+          .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+          .build(),
       )
     }
   }
@@ -254,11 +256,12 @@ function warnIfUnprotected(instance: FastifyInstance, options: OpenAPIOptions): 
   }
 
   process.emitWarning(
-    'The OpenAPI document is served publicly while authentication is configured' +
-      solutions(
+    errMessage('The OpenAPI document is served publicly while authentication is configured')
+      .solutions(
         'Call .secure(s => s.schemes("Bearer")) on the OpenAPI builder to require authentication',
         'Call .public() to state that public access is intended and silence this warning',
-      ),
+      )
+      .build(),
     'CaffeineOpenAPIWarning',
   )
 }
@@ -282,11 +285,13 @@ function readDocument(source: OpenAPISource): OpenAPIDocument {
     contents = readFileSync(path, 'utf8')
   } catch (cause) {
     throw new ErrOpenAPIConfiguration(
-      `Cannot read the OpenAPI specification at "${path}": ${describe(cause)}` +
-        solutions(
+      errMessage(`Cannot read the OpenAPI specification at "${path}": ${describe(cause)}`)
+        .solutions(
           'Check the path — it is resolved against the process working directory unless absolute',
           'Pass the document itself with .document(obj) instead of reading it from disk',
-        ),
+        )
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
     )
   }
 

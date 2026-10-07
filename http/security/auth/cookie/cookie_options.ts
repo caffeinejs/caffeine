@@ -1,7 +1,8 @@
+import { errMessage } from '@caffeinejs/std/framework'
+
 import type { Context } from '../../../context.js'
 import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
 import { cookieRuleViolation } from '../../../cookie/rules.js'
-import { solutions } from '../../../error/util.js'
 import type { Principal } from '../../index.js'
 import { ErrAuthConfiguration } from '../errors.js'
 import { sessionSecretViolation, type ChallengeMode } from '../internal/remote/config.js'
@@ -283,8 +284,10 @@ export class CookieAuthenticationOptionsBuilder {
     ] as const) {
       if (path?.startsWith('~/')) {
         throw new ErrAuthConfiguration(
-          `Cannot build CookieAuthenticationOptions: ${option} "${path}" starts with "~/"` +
-            solutions(`Write it as "${path.slice(1)}", which is put under the base path already`),
+          errMessage(`Cannot build CookieAuthenticationOptions: ${option} "${path}" starts with "~/"`)
+            .solutions(`Write it as "${path.slice(1)}", which is put under the base path already`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
         )
       }
     }

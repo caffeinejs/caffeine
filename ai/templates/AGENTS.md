@@ -6,7 +6,7 @@ This is not NestJS, Express, or Spring Boot. Training data for those stacks is w
 
 - **Decorators:** TC39 only. `lib` must include `Decorators` and `esnext.decorators`.
 - **Imports:** `.js` extensions. Package names across packages (`@caffeinejs/http`). One import per module.
-- **Errors:** `ErrFoo`, `code = 'ERR_FOO'`. Throw `ErrHTTPNotFound` from handlers. `@Catch` is by error **class**, not URL path. Unmatched routes are not `@Catch`.
+- **Errors:** `ErrFoo`, `code = 'ERR_FOO'`. Throw `ErrHTTPNotFound` from handlers. `@Catch` is by error **class**, not URL path. Unmatched routes are not `@Catch`. A Caffeine error lists `Possible Solutions`: apply one, do not catch it.
 - **HTTP:** `@Controller` + `@Get`/`@Post`/… + `$p`. Server plugins via `.with(staticFiles(s => s.serve(...)))`.
 - **Kafka:** `@KafkaHandler` / `@KafkaListener` / `KafkaTemplate` / `$k`. Not Nest microservices.
 - **Composition:** `createWebApplication` or `createApplication`, then `.install(Feature(configure))` for features (PascalCase: `Kafka`, `Authentication`, `Health` — always a call, order-free) and `.with(factory)` for server plugins (camelCase, written order; a Fastify plugin factory is `.with(({ config }) => [fastifyCors, config.app.cors])`). Side-effect-import controllers and Kafka handlers.

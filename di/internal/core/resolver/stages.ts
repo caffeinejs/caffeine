@@ -4,7 +4,7 @@ import { ErrMissingInjectionKey, ErrNoResolutionForKey, ErrNoValuesProvider } fr
 import type { InjectionMiddleware } from '../../../injection_resolver.js'
 import { Identifier, keyStr, TypedKey } from '../../../key.js'
 import type { Provider } from '../../../provider.js'
-import { solutions } from '../../util/errutil/index.js'
+import { errMessage } from '../../util/errutil/index.js'
 import { excludeSelf, uniqueBindingOrThrow } from './_binding_util.js'
 import { describeContext } from './_fmt.js'
 
@@ -56,11 +56,10 @@ export const mapStage: InjectionMiddleware = ctx => {
   // Distinct from the empty case below: a missing key is a mistake in the injection, not an empty container.
   if (!ctx.descriptor.key) {
     throw new ErrMissingInjectionKey(
-      `${describeContext(ctx)}: no injection key provided` +
-        solutions(
-          `- Provide an injection key`,
-          `- For circular dependencies, use defer(() => key) to defer resolution`,
-        ),
+      errMessage(`${describeContext(ctx)}: no injection key provided`)
+        .solutions(`Provide an injection key`, `For circular dependencies, use defer(() => key) to defer resolution`)
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 
@@ -70,8 +69,10 @@ export const mapStage: InjectionMiddleware = ctx => {
     }
 
     throw new ErrNoResolutionForKey(
-      `${describeContext(ctx)}: no bindings registered for key "${keyStr(ctx.descriptor.key)}"` +
-        solutions(`- Register a binding for key "${keyStr(ctx.descriptor.key)}"`),
+      errMessage(`${describeContext(ctx)}: no bindings registered for key "${keyStr(ctx.descriptor.key)}"`)
+        .solutions(`Register a binding for key "${keyStr(ctx.descriptor.key)}"`)
+        .reference('@caffeinejs/di', ErrNoResolutionForKey)
+        .build(),
     )
   }
 
@@ -198,11 +199,10 @@ export const uniqueStage: InjectionMiddleware = ctx => {
 
   if (!rawKey) {
     throw new ErrMissingInjectionKey(
-      `${describeContext(ctx)}: no injection key provided` +
-        solutions(
-          `- Provide an injection key`,
-          `- For circular dependencies, use defer(() => key) to defer resolution`,
-        ),
+      errMessage(`${describeContext(ctx)}: no injection key provided`)
+        .solutions(`Provide an injection key`, `For circular dependencies, use defer(() => key) to defer resolution`)
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 
@@ -215,11 +215,10 @@ export const uniqueStage: InjectionMiddleware = ctx => {
     }
 
     throw new ErrNoResolutionForKey(
-      `${describeContext(ctx)}: no binding registered for key "${keyStr(key)}"` +
-        solutions(
-          `- Register a binding for key "${keyStr(key)}"`,
-          `- If the dependency is optional, use optional(key)`,
-        ),
+      errMessage(`${describeContext(ctx)}: no binding registered for key "${keyStr(key)}"`)
+        .solutions(`Register a binding for key "${keyStr(key)}"`, `If the dependency is optional, use optional(key)`)
+        .reference('@caffeinejs/di', ErrNoResolutionForKey)
+        .build(),
     )
   }
 

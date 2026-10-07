@@ -15,5 +15,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Nothing in `health/` knows about HTTP: rendering and routes stay in `http/health/`.
 - `framework/guards/` holds only what every kind of application shares: `runGuards`, `compileGuardKeys`,
   `ErrGuardConfiguration`, `BaseGuard<I>` and `GuardOutcome`.
+- `framework/err/message.ts` is the error message builder (`errMessage`). It imports nothing, because `di` cannot
+  depend on `std` and carries a copy at `di/internal/util/errutil/errutil.ts`: change both. The reference line is
+  printed only once `REFERENCE_BASE_URL` is set, in both files.
 - A transport owns its own `Guard`, `GuardResult` / `GuardReturn` / `GuardTarget` and `GuardDenial`; do not add a
   `GuardResult` or a user-facing `Guard` here.

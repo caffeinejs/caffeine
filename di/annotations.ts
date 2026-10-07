@@ -1,5 +1,5 @@
 import { ErrInvalidDecorator } from './errors.js'
-import { solutions } from './internal/util/errutil/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import {
   type Annotation,
   type AnnotationOptions,
@@ -75,8 +75,10 @@ function claimHalf(context: ClassGetterDecoratorContext | ClassSetterDecoratorCo
   if (owner !== undefined && owner !== context.kind) {
     const name = String(context.name)
     throw new ErrInvalidDecorator(
-      `Cannot apply an annotation to ${context.kind} "${name}": ${owner} "${name}" already carries it` +
-        solutions('Apply it to either the getter or the setter: the two are one member'),
+      errMessage(`Cannot apply an annotation to ${context.kind} "${name}": ${owner} "${name}" already carries it`)
+        .solutions('Apply it to either the getter or the setter: the two are one member')
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
     )
   }
 
@@ -94,8 +96,10 @@ function build(
 
   if (settings.inherit === 'accumulate' && typeof settings.combine !== 'function') {
     throw new ErrInvalidDecorator(
-      'Cannot create an annotation that accumulates: it has no combine rule' +
-        solutions('Pass combine(outer, inner) together with inherit: "accumulate"'),
+      errMessage('Cannot create an annotation that accumulates: it has no combine rule')
+        .solutions('Pass combine(outer, inner) together with inherit: "accumulate"')
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
     )
   }
 
@@ -125,8 +129,10 @@ function build(
       // A first application may have stored `undefined`, which reads as absent.
       if (isWritten(context, factory)) {
         throw new ErrInvalidDecorator(
-          `Cannot apply an annotation twice to ${context.kind} "${String(context.name)}"` +
-            solutions('Create the annotation with { repeatable: true } to collect every value'),
+          errMessage(`Cannot apply an annotation twice to ${context.kind} "${String(context.name)}"`)
+            .solutions('Create the annotation with { repeatable: true } to collect every value')
+            .reference('@caffeinejs/di', ErrInvalidDecorator)
+            .build(),
         )
       }
 

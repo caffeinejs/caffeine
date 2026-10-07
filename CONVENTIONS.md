@@ -272,13 +272,40 @@ export function Thing<C = unknown>(instance: string, configure?: FeatureConfigur
 
 ## Error messages
 
+A person reads the message in a terminal and a coding agent reads it in a log. Both act on the text alone, so it says what failed, why, and what to do next.
+
 - Sentence case; no trailing period; no contractions (`does not`, not `doesn't`)
 - Active voice: `Cannot X` not `Unable to X` or `Failed to X`
 - Colon for detail: `Cannot do X: reason`
 - Double-quote user-supplied values: `"${keyStr(key)}"`
 - Class prefix `Err`: `ErrNoResolutionForKey`, not `NoResolutionForKeyError`
 - `.name` and `code` align: `ErrFoo` → `this.name = 'ErrFoo'`, `code = 'ERR_FOO'`
-- Fixed, context-free solutions may call `solutions()` in the constructor. Contextual errors call `solutions()` at the throw site.
+- The first line stands alone: what failed and why, naming the exact key, route, option or file the reader can search for. Logs and tools often keep only that line.
+- Plain text: no ANSI codes, no markdown, no emoji. Never a secret, a token or a request body.
+
+### Solutions and links
+
+Build a message that carries solutions or links with `errMessage(...)` from `@caffeinejs/std/framework`. Never hand-write a `Possible Solutions` block, a bullet or a URL.
+
+```ts
+// correct
+throw new ErrConfiguration(
+  errMessage(`Cannot set the base path: "${value}" does not start with "/"`)
+    .solutions(`Write it as "/${base}"`)
+    .reference('@caffeinejs/http', ErrConfiguration)
+    .build(),
+)
+
+// wrong
+throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start with "/"\n  - Write it as "/${base}"`)
+```
+
+- A solution is one action the reader can take now: imperative, naming the exact method, option or decorator, most likely fix first. `Check your configuration` is not a solution.
+- No leading dash and no trailing period: the builder writes the bullets.
+- Fixed, context-free solutions go in the constructor. Solutions that depend on the call go at the throw site.
+- Pass `.reference(package, ErrClass)` on every message built for an error: the class being constructed and the package that defines it. Nothing is printed until the error pages are published. A warning takes none.
+- `.links(...)` adds further reading.
+- `@caffeinejs/di` cannot import `std`: it has its own copy in `di/internal/util/errutil/errutil.ts`. Change both.
 
 ## Documentation
 

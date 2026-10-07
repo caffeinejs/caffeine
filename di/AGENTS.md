@@ -69,6 +69,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Do not widen `InjectionContext` for one stage's internal need; a stage that has to compile something calls
   `compileChain`.
 
+## Errors
+
+- `internal/util/errutil/errutil.ts` is a copy of `std/framework/err/message.ts`, the error message builder: `di`
+  cannot depend on `std`. Change both, and set `REFERENCE_BASE_URL` in both when the error pages are published.
+
 ## Process-wide registration
 
 - `package.json` `"sideEffects"` lists the files that register at load (`_polyfill.js`, `container.js`, `scope.js`,

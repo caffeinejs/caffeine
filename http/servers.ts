@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework'
+
 import type {
   Adapter,
   AdapterExtensions,
@@ -10,7 +12,6 @@ import type {
 import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
 import { ErrConfiguration } from './error/common.js'
-import { solutions } from './error/util.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
 import type { RouteGroup } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
@@ -215,8 +216,10 @@ function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): 
       const server = name === undefined ? "the application's own server" : `ops server "${name}"`
 
       throw new ErrConfiguration(
-        `Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"` +
-          solutions('Drop the binding: "$route" adds the group to the server its plugin runs on'),
+        errMessage(`Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"`)
+          .solutions('Drop the binding: "$route" adds the group to the server its plugin runs on')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
@@ -248,8 +251,12 @@ function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly str
   }
 
   throw new ErrConfiguration(
-    `Cannot serve router "${unserved.name}": it is bound to "${name}", and no installed server has that name` +
-      solutions(...fixes),
+    errMessage(
+      `Cannot serve router "${unserved.name}": it is bound to "${name}", and no installed server has that name`,
+    )
+      .solutions(...fixes)
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
   )
 }
 

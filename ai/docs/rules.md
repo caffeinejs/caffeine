@@ -14,9 +14,11 @@ Use the `.js` extension on TypeScript source imports. Group symbols from one mod
 
 ## Errors
 
-Name classes `ErrFoo`. `.name` is `'ErrFoo'`. `code` is `'ERR_FOO'`. Message: sentence case, no trailing period, no contractions, active voice (`Cannot X: reason`). Double-quote user values.
+Name classes `ErrFoo`. `.name` is `'ErrFoo'`. `code` is `'ERR_FOO'`. Message: sentence case, no trailing period, no contractions, active voice (`Cannot X: reason`). Double-quote user values. The first line says what failed and why; say what to do next when there is a fix.
 
 Throw `ErrHTTPNotFound` (and other `ErrHTTP*` types) from handlers. Do not invent Nest-style `HttpException`.
+
+A framework error lists `Possible Solutions`: apply one instead of catching the error. See [messages/](messages/README.md).
 
 ## Identity
 

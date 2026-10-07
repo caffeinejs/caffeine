@@ -7,6 +7,7 @@ import { Server as TLSServer } from 'node:tls'
 
 import { Container, Scopes } from '@caffeinejs/di'
 import { ConfigStore } from '@caffeinejs/std/config'
+import { errMessage } from '@caffeinejs/std/framework'
 import type { Logger } from '@caffeinejs/std/logger'
 import Fastify, {
   LogController,
@@ -37,7 +38,6 @@ import { CONSTRAINTS_PLUGIN, kRouteConstraints } from './constraints/constraints
 import type { CookieSerializeOptions } from './cookie/options.js'
 import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
-import { solutions } from './error/util.js'
 import { FastifyContext } from './fastify_context.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
@@ -377,12 +377,16 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       if (routeTable !== 'open') {
         // Built here, so its stack names the plugin that called.
         const refused = new ErrConfiguration(
-          `Cannot add route group "${name}": "$route" is open only to a plugin registered with ".with(...)", ` +
-            'while it installs' +
-            solutions(
+          errMessage(
+            `Cannot add route group "${name}": "$route" is open only to a plugin registered with ".with(...)", ` +
+              'while it installs',
+          )
+            .solutions(
               'Register the plugin that adds the group with ".with(...)" on the application — not with ' +
                 '"router.plugin(...)" or "@Use(...)", which install it after the route table has closed',
-            ),
+            )
+            .reference('@caffeinejs/http', ErrConfiguration)
+            .build(),
         )
 
         if (routeTable === 'closed') {
@@ -688,8 +692,10 @@ function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPl
 function assertFastifyPlugin(value: unknown): asserts value is AnyFastifyPlugin {
   if (typeof value !== 'function') {
     throw new ErrCaffeineWebApplication(
-      `Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}` +
-        solutions('Return the plugin from the factory, or a [plugin, options] pair, not the object it configures'),
+      errMessage(`Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}`)
+        .solutions('Return the plugin from the factory, or a [plugin, options] pair, not the object it configures')
+        .reference('@caffeinejs/http', ErrCaffeineWebApplication)
+        .build(),
       'ERR_HTTP_INVALID_PLUGIN',
     )
   }
@@ -711,8 +717,10 @@ function assertPluginNotRegistered(
 
   if (name !== undefined && instance.hasPlugin(name)) {
     throw new ErrCaffeineWebApplication(
-      `Cannot register plugin "${name}": it is already registered` +
-        solutions(`Extend "${name}" once, or give the factory that produces it a different name`),
+      errMessage(`Cannot register plugin "${name}": it is already registered`)
+        .solutions(`Extend "${name}" once, or give the factory that produces it a different name`)
+        .reference('@caffeinejs/http', ErrCaffeineWebApplication)
+        .build(),
       'ERR_HTTP_DUPLICATE_PLUGIN',
     )
   }
@@ -747,11 +755,15 @@ function assertRouteFeaturesInstalled(
 
       if (cached && !installed) {
         throw new ErrConfiguration(
-          'Cannot register routes decorated with @CacheControl or @CacheInvalidate: the caching plugin is not installed' +
-            solutions(
+          errMessage(
+            'Cannot register routes decorated with @CacheControl or @CacheInvalidate: the caching plugin is not installed',
+          )
+            .solutions(
               'Add ".with(HTTPCaching(...))" to the application builder',
               'Install it on the route group with ".plugin(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
-            ),
+            )
+            .reference('@caffeinejs/http', ErrConfiguration)
+            .build(),
         )
       }
     }
@@ -762,8 +774,10 @@ function assertRouteFeaturesInstalled(
     routeGroups.some(group => group.routes.some(route => route.config?.has(kRouteConstraints) === true))
   ) {
     throw new ErrConfiguration(
-      'Cannot register constrained routes: the constraints plugin is not installed' +
-        solutions('Add ".with(() => constraints())" to the application builder'),
+      errMessage('Cannot register constrained routes: the constraints plugin is not installed')
+        .solutions('Add ".with(() => constraints())" to the application builder')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 }

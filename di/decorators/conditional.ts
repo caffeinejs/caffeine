@@ -1,5 +1,6 @@
 import { type ConditionHelpers, type Conditions, toConditions } from '../conditional.js'
 import { ErrInvalidDecorator } from '../errors.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { extendMemberInjectableAttributes, extendInjectableAttributes } from './registrar/index.js'
 import { defineClassOrMemberDecorator } from './util/index.js'
 
@@ -29,7 +30,13 @@ import { defineClassOrMemberDecorator } from './util/index.js'
 export function Conditional<C = unknown>(conditions: Conditions | ((cond: ConditionHelpers<C>) => Conditions)) {
   const list = toConditions(
     conditions,
-    (reason, options) => new ErrInvalidDecorator(`Cannot apply @${Conditional.name}(): ${reason}`, options),
+    (reason, options) =>
+      new ErrInvalidDecorator(
+        errMessage(`Cannot apply @${Conditional.name}(): ${reason}`)
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
+        options,
+      ),
   )
 
   return defineClassOrMemberDecorator(

@@ -1,9 +1,9 @@
 import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
-import { solutions } from '../../error/util.js'
 import { Keys } from '../../symbols.js'
 import type { RouteGroupMeta } from '../compile.js'
 import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from '../route.js'
@@ -164,15 +164,23 @@ function buildErrorHandlerMap(
   for (const [errorType, methodKey] of handlers) {
     if (routeHandlers.has(methodKey)) {
       throw new ErrConfiguration(
-        `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler` +
-          solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`),
+        errMessage(
+          `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler`,
+        )
+          .solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
     if (map.has(errorType)) {
       throw new ErrConfiguration(
-        `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"` +
-          solutions(`Keep a single "@Catch(${errorType.name})" method per controller`),
+        errMessage(
+          `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"`,
+        )
+          .solutions(`Keep a single "@Catch(${errorType.name})" method per controller`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 

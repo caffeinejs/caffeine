@@ -1,8 +1,8 @@
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework'
 import { kHealthRegistryOptions } from '@caffeinejs/std/health'
 
-import { solutions } from '../error/util.js'
 import { ErrHealthConfiguration } from './errors.js'
 import { mergeHealthConfig, type HealthConfig, type HealthOptions } from './options.js'
 
@@ -87,15 +87,23 @@ function assertBudgets(options: HealthOptions): void {
 
   if (!(indicatorTimeoutMs > 0)) {
     throw new ErrHealthConfiguration(
-      `Cannot configure health: an indicator timeout of "${indicatorTimeoutMs}ms" cancels every indicator that awaits` +
-        solutions("Set a budget above 0, such as '2s'"),
+      errMessage(
+        `Cannot configure health: an indicator timeout of "${indicatorTimeoutMs}ms" cancels every indicator that awaits`,
+      )
+        .solutions("Set a budget above 0, such as '2s'")
+        .reference('@caffeinejs/http', ErrHealthConfiguration)
+        .build(),
     )
   }
 
   if (!(probeDeadlineMs > 0)) {
     throw new ErrHealthConfiguration(
-      `Cannot configure health: a probe deadline of "${probeDeadlineMs}ms" cancels every indicator that awaits` +
-        solutions("Set a budget above 0, such as '3s'"),
+      errMessage(
+        `Cannot configure health: a probe deadline of "${probeDeadlineMs}ms" cancels every indicator that awaits`,
+      )
+        .solutions("Set a budget above 0, such as '3s'")
+        .reference('@caffeinejs/http', ErrHealthConfiguration)
+        .build(),
     )
   }
 }

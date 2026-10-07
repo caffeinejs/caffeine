@@ -1,4 +1,5 @@
-import { ErrCaffeineWebApplication, solutions } from '@caffeinejs/http'
+import { ErrCaffeineWebApplication } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework'
 
 /**
  * ErrSendFileUnavailable is thrown when {@link sendFile} or {@link download} is called and no static mount
@@ -10,11 +11,13 @@ import { ErrCaffeineWebApplication, solutions } from '@caffeinejs/http'
 export class ErrSendFileUnavailable extends ErrCaffeineWebApplication {
   constructor(decorator: string) {
     super(
-      `Cannot send a file: "${decorator}" is not decorated on the reply` +
-        solutions(
+      errMessage(`Cannot send a file: "${decorator}" is not decorated on the reply`)
+        .solutions(
           'Install staticFiles(...) with at least one .serve(...) mount',
           'Leave decorateReply unset on the mount whose settings these helpers should use',
-        ),
+        )
+        .reference('@caffeinejs/static', ErrSendFileUnavailable)
+        .build(),
       'ERR_SEND_FILE_UNAVAILABLE',
     )
     this.name = 'ErrSendFileUnavailable'

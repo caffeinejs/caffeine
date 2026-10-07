@@ -1,7 +1,7 @@
 import { Container } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import { ErrConfiguration } from '../error/common.js'
-import { solutions } from '../error/util.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
 import type { RouteGroup } from './route.js'
 import type { RouteGroupSpec } from './spec.js'
@@ -89,8 +89,10 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
 
         if (taken.has(group)) {
           throw new ErrConfiguration(
-            `Cannot select route group "${group.name}": another server already serves it` +
-              solutions('Select each group for one server only: the labels it carries decide which'),
+            errMessage(`Cannot select route group "${group.name}": another server already serves it`)
+              .solutions('Select each group for one server only: the labels it carries decide which')
+              .reference('@caffeinejs/http', ErrConfiguration)
+              .build(),
           )
         }
 

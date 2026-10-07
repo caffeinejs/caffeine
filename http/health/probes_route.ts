@@ -1,7 +1,7 @@
+import { errMessage } from '@caffeinejs/std/framework'
 import type { ApplicationHealth, ProbeOptions, ProbeResult } from '@caffeinejs/std/health'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
-import { solutions } from '../error/util.js'
 import { authenticationExempt } from '../routing/fastify/route_config.js'
 import { ErrHealthConfiguration } from './errors.js'
 import type { HealthOptions } from './options.js'
@@ -84,8 +84,10 @@ function assertNoCollision(server: FastifyInstance, probePaths: readonly string[
     }
 
     throw new ErrHealthConfiguration(
-      `Cannot mount health probes: a route is already registered at "${route.url}"` +
-        solutions('Move the probe with healthProbes(p => p.paths({ ... }))', 'Change the conflicting route path'),
+      errMessage(`Cannot mount health probes: a route is already registered at "${route.url}"`)
+        .solutions('Move the probe with healthProbes(p => p.paths({ ... }))', 'Change the conflicting route path')
+        .reference('@caffeinejs/http', ErrHealthConfiguration)
+        .build(),
     )
   })
 }

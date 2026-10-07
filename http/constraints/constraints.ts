@@ -1,8 +1,8 @@
+import { errMessage } from '@caffeinejs/std/framework'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
 import { ErrConfiguration } from '../error/index.js'
-import { solutions } from '../error/util.js'
 import { appendVary } from '../vary.js'
 import type { ConstraintStrategy } from './strategy.js'
 
@@ -58,12 +58,16 @@ export function constraints(strategies: readonly ConstraintStrategy[] = []): Fas
       for (const [name, constraint] of declared) {
         if (existing !== undefined && name in existing) {
           throw new ErrConfiguration(
-            `Cannot register "${options.method} ${options.url}": constraint "${name}" is set by both ` +
-              `"fst({ constraints })" and "@Constraint" or "constraint()"` +
-              solutions(
+            errMessage(
+              `Cannot register "${options.method} ${options.url}": constraint "${name}" is set by both ` +
+                `"fst({ constraints })" and "@Constraint" or "constraint()"`,
+            )
+              .solutions(
                 `Remove "${name}" from the "fst({ constraints })" call`,
                 'Declare each constraint one way only',
-              ),
+              )
+              .reference('@caffeinejs/http', ErrConfiguration)
+              .build(),
           )
         }
 

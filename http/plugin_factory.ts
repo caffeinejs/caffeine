@@ -1,7 +1,7 @@
 import { kFeatureName, type Feature } from '@caffeinejs/std'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import { ErrConfiguration } from './error/common.js'
-import { solutions } from './error/util.js'
 
 /**
  * Refuses what a `.with(...)` was handed when it is not a plugin factory. The compiler already refuses a feature
@@ -20,13 +20,16 @@ export function assertPluginFactory(factory: unknown): void {
   const got = factory === null ? 'null' : typeof factory
 
   throw new ErrConfiguration(
-    typeof name === 'string'
-      ? `Cannot register feature "${name}" with ".with(...)": a feature is not a server plugin` +
-          solutions('Install a feature with ".install(...)", at any position in the chain')
-      : `Cannot register an HTTP plugin: expected a plugin factory function, got ${got}` +
-          solutions(
-            'Pass a factory: ".with(({ config }) => [plugin, options])"',
-            'Install a feature with ".install(feature)"',
-          ),
+    (typeof name === 'string'
+      ? errMessage(`Cannot register feature "${name}" with ".with(...)": a feature is not a server plugin`).solutions(
+          'Install a feature with ".install(...)", at any position in the chain',
+        )
+      : errMessage(`Cannot register an HTTP plugin: expected a plugin factory function, got ${got}`).solutions(
+          'Pass a factory: ".with(({ config }) => [plugin, options])"',
+          'Install a feature with ".install(feature)"',
+        )
+    )
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
   )
 }

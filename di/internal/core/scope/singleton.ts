@@ -4,7 +4,7 @@ import { Factory } from '../../../factory.js'
 import { keyStr } from '../../../key.js'
 import { ResolutionContext } from '../../../resolution_context.js'
 import { Scope, ScopedInstance } from '../../../scope.js'
-import { solutions } from '../../util/errutil/index.js'
+import { errMessage } from '../../util/errutil/index.js'
 import { nextSequence } from './_sequence.js'
 
 function isThenable(value: unknown): boolean {
@@ -47,8 +47,10 @@ export class SingletonScope implements Scope {
     // above, this runs once per binding.
     if (ctx.binding.configuration && isThenable(resolved)) {
       throw new ErrInvalidBinding(
-        `Cannot provide "${keyStr(ctx.key)}": the factory returned a promise and the binding is not async` +
-          solutions('Declare the factory with @ProvidesAsync instead of @Provides'),
+        errMessage(`Cannot provide "${keyStr(ctx.key)}": the factory returned a promise and the binding is not async`)
+          .solutions('Declare the factory with @ProvidesAsync instead of @Provides')
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 

@@ -1,4 +1,5 @@
-import { solutions } from '../error/util.js'
+import { errMessage } from '@caffeinejs/std/framework'
+
 import { ErrCookieConfiguration } from './errors.js'
 
 /** One secret, or several: the first signs, and any of them verifies. */
@@ -77,8 +78,10 @@ export class HMACCookieSigner extends CookieSigner {
     const algorithm = options.algorithm ?? 'SHA-256'
     if (!Object.hasOwn(SIGNATURE_LENGTH, algorithm)) {
       throw new ErrCookieConfiguration(
-        `Cannot sign cookies: unsupported algorithm "${String(algorithm)}"` +
-          solutions('Use one of "SHA-256", "SHA-384" and "SHA-512"'),
+        errMessage(`Cannot sign cookies: unsupported algorithm "${String(algorithm)}"`)
+          .solutions('Use one of "SHA-256", "SHA-384" and "SHA-512"')
+          .reference('@caffeinejs/http', ErrCookieConfiguration)
+          .build(),
       )
     }
 
@@ -142,11 +145,13 @@ export class HMACCookieSigner extends CookieSigner {
     if (this.#secrets === undefined) {
       return Promise.reject(
         new ErrCookieConfiguration(
-          'Cannot sign cookies: no secret is configured' +
-            solutions(
+          errMessage('Cannot sign cookies: no secret is configured')
+            .solutions(
               'Configure one with ".cookie(k => k.secret(...))"',
               'Hand one to the call: "{ secret }", or "ctx.req.signedCookie(name, secret)"',
-            ),
+            )
+            .reference('@caffeinejs/http', ErrCookieConfiguration)
+            .build(),
         ),
       )
     }

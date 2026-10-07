@@ -1,4 +1,5 @@
 import { isValidKey, type InjectionToken } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework'
 import type {
   FastifyInstance,
   FastifyPluginAsync,
@@ -8,7 +9,6 @@ import type {
 } from 'fastify'
 import fp from 'fastify-plugin'
 
-import { solutions } from '../error/util.js'
 import { protocolOf } from '../protocol.js'
 import {
   assertWritable,
@@ -146,11 +146,15 @@ export class ServerCookies {
 
     if (state === undefined) {
       throw new ErrCookiesDisabled(
-        `Cannot ${op} ${describeCookie(name)}: this route was registered before the cookie plugin, and its ` +
-          'responses carry no cookies' +
-          solutions(
+        errMessage(
+          `Cannot ${op} ${describeCookie(name)}: this route was registered before the cookie plugin, and its ` +
+            'responses carry no cookies',
+        )
+          .solutions(
             'Register the plugin that declares the route with ".with(...)" rather than in ".serverCallback(...)"',
-          ),
+          )
+          .reference('@caffeinejs/http', ErrCookiesDisabled)
+          .build(),
       )
     }
 
@@ -174,8 +178,10 @@ export class ServerCookies {
 
     if (prepared.secret === undefined && !this.#signsByDefault) {
       throw new ErrCookieConfiguration(
-        `Cannot set ${describeCookie(name)} signed: no secret is configured` +
-          solutions('Configure one with ".cookie(k => k.secret(...))"', 'Hand one to the call: "{ secret }"'),
+        errMessage(`Cannot set ${describeCookie(name)} signed: no secret is configured`)
+          .solutions('Configure one with ".cookie(k => k.secret(...))"', 'Hand one to the call: "{ secret }"')
+          .reference('@caffeinejs/http', ErrCookieConfiguration)
+          .build(),
       )
     }
 
@@ -187,8 +193,10 @@ export class ServerCookies {
 
     if (state === 'done') {
       throw new ErrCookieTooLate(
-        `Cannot set ${describeCookie(name)} signed: the response's cookies are already written` +
-          solutions('Set it before the response is sent: in the handler, a middleware or a guard'),
+        errMessage(`Cannot set ${describeCookie(name)} signed: the response's cookies are already written`)
+          .solutions('Set it before the response is sent: in the handler, a middleware or a guard')
+          .reference('@caffeinejs/http', ErrCookieTooLate)
+          .build(),
       )
     }
 
@@ -304,8 +312,10 @@ export function serverCookies(request: FastifyRequest, action: string): ServerCo
 
   if (cookies === undefined) {
     throw new ErrCookiesDisabled(
-      `Cannot ${action}: cookies are disabled on this server` +
-        solutions('Turn them back on with ".cookie(k => k.enabled(true))"'),
+      errMessage(`Cannot ${action}: cookies are disabled on this server`)
+        .solutions('Turn them back on with ".cookie(k => k.enabled(true))"')
+        .reference('@caffeinejs/http', ErrCookiesDisabled)
+        .build(),
     )
   }
 
@@ -340,18 +350,22 @@ function resolveSigner(instance: FastifyInstance, options: CookiePluginOptions):
 
   if (secret !== undefined) {
     throw new ErrCookieConfiguration(
-      'Cannot install cookies: both a signer and a secret are configured' +
-        solutions('Keep the signer: it signs with keys of its own', 'Keep the secret: it builds the HMAC signer'),
+      errMessage('Cannot install cookies: both a signer and a secret are configured')
+        .solutions('Keep the signer: it signs with keys of its own', 'Keep the secret: it builds the HMAC signer')
+        .reference('@caffeinejs/http', ErrCookieConfiguration)
+        .build(),
     )
   }
 
   if (algorithm !== undefined) {
     throw new ErrCookieConfiguration(
-      'Cannot install cookies: both a signer and an algorithm are configured' +
-        solutions(
+      errMessage('Cannot install cookies: both a signer and an algorithm are configured')
+        .solutions(
           'Keep the signer: it signs as it was built to',
           'Keep the algorithm: it is the hash of the HMAC signer',
-        ),
+        )
+        .reference('@caffeinejs/http', ErrCookieConfiguration)
+        .build(),
     )
   }
 
@@ -362,8 +376,10 @@ function resolveSigner(instance: FastifyInstance, options: CookiePluginOptions):
   const resolved = instance.$container.getOptional(signer)
   if (resolved === undefined) {
     throw new ErrCookieConfiguration(
-      'Cannot install cookies: no binding registered for the given signer key' +
-        solutions('Bind the signer before the application starts', 'Pass the instance itself to ".signer(...)"'),
+      errMessage('Cannot install cookies: no binding registered for the given signer key')
+        .solutions('Bind the signer before the application starts', 'Pass the instance itself to ".signer(...)"')
+        .reference('@caffeinejs/http', ErrCookieConfiguration)
+        .build(),
     )
   }
 

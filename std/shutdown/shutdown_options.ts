@@ -1,7 +1,7 @@
 import { token } from '@caffeinejs/di'
 
 import { type Duration, toMillis } from '../duration/index.js'
-import { solutions } from '../error.js'
+import { errMessage } from '../framework/err/index.js'
 import { ErrShutdownConfiguration } from './errors.js'
 import { type SignalDispatcher, type ShutdownSignal, detectSignalDispatcher } from './signals.js'
 
@@ -171,11 +171,15 @@ export function validateShutdownOptions(
   // about a drain delay that has already eaten the whole grace period.
   if (remaining <= 0) {
     throw new ErrShutdownConfiguration(
-      `Cannot configure graceful shutdown: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms` +
-        solutions(
+      errMessage(
+        `Cannot configure graceful shutdown: a drain delay of ${options.drainDelayMs}ms does not fit in a termination grace period of ${options.terminationGracePeriodMs}ms`,
+      )
+        .solutions(
           'Lower the drain delay with .drainDelay(...)',
           'Raise terminationGracePeriodSeconds on the pod spec and mirror it with .terminationGracePeriod(...)',
-        ),
+        )
+        .reference('@caffeinejs/std', ErrShutdownConfiguration)
+        .build(),
     )
   }
 

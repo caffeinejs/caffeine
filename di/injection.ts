@@ -1,7 +1,7 @@
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrMissingInjectionKey } from './errors.js'
 import { BuiltInStages } from './injection_resolver.js'
-import { solutions } from './internal/util/errutil/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { InjectionToken, isValidKey } from './key.js'
 import type { Provider } from './provider.js'
 
@@ -266,11 +266,13 @@ function allOf<K extends InjectionToken<any> | InjectionResult<any>>(
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call 'allOf': descriptor does not have a valid key` +
-          solutions(
-            `- Pass a key directly or use an injection function that resolves to a key, e.g. allOf(optional(key))`,
-            `- A circular module import may have caused the key to be undefined at declaration time — use allOf(defer(() => ClassName)) to defer resolution`,
-          ),
+        errMessage(`Cannot call 'allOf': descriptor does not have a valid key`)
+          .solutions(
+            `Pass a key directly or use an injection function that resolves to a key, e.g. allOf(optional(key))`,
+            `A circular module import may have caused the key to be undefined at declaration time — use allOf(defer(() => ClassName)) to defer resolution`,
+          )
+          .reference('@caffeinejs/di', ErrMissingInjectionKey)
+          .build(),
       )
     }
 
@@ -322,11 +324,13 @@ function ordered<K extends InjectionToken<any> | InjectionResult<any>>(
 
     if (!isValidKey(descriptor.key)) {
       throw new ErrMissingInjectionKey(
-        `Cannot call 'ordered': descriptor does not have a valid key` +
-          solutions(
-            `- Pass a key directly or use an injection function that resolves to a key, e.g. ordered(optional(key))`,
-            `- A circular module import may have caused the key to be undefined at declaration time — use ordered(defer(() => ClassName)) to defer resolution`,
-          ),
+        errMessage(`Cannot call 'ordered': descriptor does not have a valid key`)
+          .solutions(
+            `Pass a key directly or use an injection function that resolves to a key, e.g. ordered(optional(key))`,
+            `A circular module import may have caused the key to be undefined at declaration time — use ordered(defer(() => ClassName)) to defer resolution`,
+          )
+          .reference('@caffeinejs/di', ErrMissingInjectionKey)
+          .build(),
       )
     }
 
@@ -377,11 +381,13 @@ function ordered<K extends InjectionToken<any> | InjectionResult<any>>(
 function mapped<K extends InjectionToken<any>>(key: K): InjectionResult<Map<string, ResolveInjection<K>>> {
   if (key == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call 'mapped': key is null or undefined` +
-        solutions(
-          `- A circular module import may have caused the key to be undefined at declaration time — use mapped(defer(() => ClassName)) to defer resolution`,
-          `- Verify that the key is correctly imported`,
-        ),
+      errMessage(`Cannot call 'mapped': key is null or undefined`)
+        .solutions(
+          `A circular module import may have caused the key to be undefined at declaration time — use mapped(defer(() => ClassName)) to defer resolution`,
+          `Verify that the key is correctly imported`,
+        )
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 
@@ -487,11 +493,13 @@ function provide<K extends InjectionToken<any> | InjectionResult<any>>(
 ): InjectionResult<Provider<ResolveInjection<K>>> {
   if (keyOrDescriptor == null) {
     throw new ErrMissingInjectionKey(
-      `Cannot call 'provide': key is null or undefined` +
-        solutions(
-          `- A circular module import may have caused the key to be undefined at declaration time — use provide(defer(() => ClassName)) to defer resolution`,
-          `- Verify that the key is correctly imported`,
-        ),
+      errMessage(`Cannot call 'provide': key is null or undefined`)
+        .solutions(
+          `A circular module import may have caused the key to be undefined at declaration time — use provide(defer(() => ClassName)) to defer resolution`,
+          `Verify that the key is correctly imported`,
+        )
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 

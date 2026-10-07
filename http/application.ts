@@ -6,6 +6,7 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
+import { errMessage } from '@caffeinejs/std/framework'
 
 import {
   AdapterExtensions,
@@ -23,7 +24,6 @@ import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
-import { solutions } from './error/util.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
 import {
   type MiddlewareFactory,
@@ -471,8 +471,10 @@ export class WebApplication<
   mount(...routers: Router<any, any, any, any, any, any>[]): this {
     if (this.#built) {
       throw new ErrConfiguration(
-        'Cannot mount a router: routing has already been built' +
-          solutions('Call "mount()" before the application is started'),
+        errMessage('Cannot mount a router: routing has already been built')
+          .solutions('Call "mount()" before the application is started')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 

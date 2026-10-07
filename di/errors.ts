@@ -1,4 +1,4 @@
-import { solutions } from './internal/util/errutil/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { Ctor } from './types.js'
 
@@ -21,13 +21,17 @@ export class CaffeineIoCError extends Error {
 export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
   constructor(key: InjectionToken, message?: string) {
     super(
-      (message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`) +
-        solutions(
+      errMessage(
+        message ?? `Found more than one component bound to the key "${keyStr(key)}" when a single one was expected`,
+      )
+        .solutions(
           `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
           `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
           `Use @Primary to specify an unique injectable`,
           `Use @Conditional to register injectables only when their conditions pass, leaving one for the given key`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrNoUniqueInjectionForKey)
+        .build(),
       'ERR_NO_UNIQUE_INJECTION',
     )
     this.name = 'ErrNoUniqueInjectionForKey'
@@ -81,12 +85,14 @@ export class ErrRepeatedInjectableConfiguration extends CaffeineIoCError {
 export class ErrDuplicateBinding extends CaffeineIoCError {
   constructor(key: InjectionToken) {
     super(
-      `Cannot register "${keyStr(key)}": a binding is already registered under this key` +
-        solutions(
+      errMessage(`Cannot register "${keyStr(key)}": a binding is already registered under this key`)
+        .solutions(
           `Use rebind() to replace the binding of "${keyStr(key)}" deliberately`,
           `Remove the bind() of a class that is already decorated, or set the "decorators" option to false`,
           `Give one of the bindings a profile or a condition, so that only one of them is registered`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrDuplicateBinding)
+        .build(),
       'ERR_DUPLICATE_BINDING',
     )
     this.name = 'ErrDuplicateBinding'
@@ -159,11 +165,15 @@ export class ErrOrphanedBindingConfig extends CaffeineIoCError {
 export class ErrMultiplePrimary extends CaffeineIoCError {
   constructor(key: InjectionToken | Identifier) {
     super(
-      `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditions reduce the candidates to exactly one` +
-        solutions(
+      errMessage(
+        `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditions reduce the candidates to exactly one`,
+      )
+        .solutions(
           `Use @Conditional to ensure only one primary injectable is active at a time`,
           `Leave only one injectable decorated with @Primary()`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrMultiplePrimary)
+        .build(),
       'ERR_MULTIPLE_PRIMARY_SAME_COMPONENT',
     )
     this.name = 'ErrMultiplePrimary'
@@ -198,11 +208,15 @@ export class ErrOutOfScope extends CaffeineIoCError {
 export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
   constructor(className: string, methodName: string, configScopeID: Identifier, methodScopeID: Identifier) {
     super(
-      `Cannot configure provider "${methodName}" in "${className}": the @Configuration class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"` +
-        solutions(
+      errMessage(
+        `Cannot configure provider "${methodName}" in "${className}": the @Configuration class declares scope "${String(configScopeID)}" but the method declares scope "${String(methodScopeID)}"`,
+      )
+        .solutions(
           `Remove the scope configuration from the "${methodName}" method and let the @Configuration class scope apply to all provided components`,
           `Remove the scope from @Configuration and decorate each @Provides method individually with @Lifetime()`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrScopeMismatchInConfiguration)
+        .build(),
       'ERR_SCOPE_MISMATCH_IN_CONFIGURATION',
     )
     this.name = 'ErrScopeMismatchInConfiguration'
@@ -267,11 +281,15 @@ export class ErrInjectionStageAlreadyRegistered extends CaffeineIoCError {
 export class ErrConflictingInjectionStages extends CaffeineIoCError {
   constructor(first: symbol, second: symbol) {
     super(
-      `Cannot compose injection stages "${first.description ?? String(first)}" and "${second.description ?? String(second)}": both decide what the injection resolves to` +
-        solutions(
-          `- Keep only one of them`,
-          `- Stages that transform or wrap, such as ordered and provide, compose with any of them`,
-        ),
+      errMessage(
+        `Cannot compose injection stages "${first.description ?? String(first)}" and "${second.description ?? String(second)}": both decide what the injection resolves to`,
+      )
+        .solutions(
+          `Keep only one of them`,
+          `Stages that transform or wrap, such as ordered and provide, compose with any of them`,
+        )
+        .reference('@caffeinejs/di', ErrConflictingInjectionStages)
+        .build(),
       'ERR_CONFLICTING_INJECTION_STAGES',
     )
     this.name = 'ErrConflictingInjectionStages'
@@ -358,11 +376,13 @@ export class ErrCircularDependency extends CaffeineIoCError {
 export class ErrCircularCondition extends CaffeineIoCError {
   constructor(waits: string[]) {
     super(
-      `Cannot decide the conditions of bindings that wait for each other: ${waits.join('; ')}` +
-        solutions(
+      errMessage(`Cannot decide the conditions of bindings that wait for each other: ${waits.join('; ')}`)
+        .solutions(
           `Bind the key yourself: a condition never waits on a key a registered binding answers to`,
           `Drop one of the present() or missing() conditions in the cycle`,
-        ),
+        )
+        .reference('@caffeinejs/di', ErrCircularCondition)
+        .build(),
       'ERR_CIRCULAR_CONDITION',
     )
     this.name = 'ErrCircularCondition'
@@ -375,13 +395,16 @@ export class ErrCircularCondition extends CaffeineIoCError {
 export class ErrScopeMismatch extends CaffeineIoCError {
   constructor(readonly violations: string[]) {
     super(
-      `Scope check detected ${violations.length} violation(s)\n\n` +
-        violations.map(v => `  - ${v}`).join('\n') +
-        solutions(
+      errMessage(
+        `Scope check detected ${violations.length} violation(s)\n\n` + violations.map(v => `  - ${v}`).join('\n'),
+      )
+        .solutions(
           'Use $i.provide(key) injection function and declare the parameter as Provider<T> to inject different-scoped dependencies',
           'Or align the scopes: make the dependency use the same scope as the consumer',
           "Or disable scope checks with { checks: { scopes: 'off' } } in the container options",
-        ),
+        )
+        .reference('@caffeinejs/di', ErrScopeMismatch)
+        .build(),
       'ERR_SCOPE_MISMATCH',
     )
     this.name = 'ErrScopeMismatch'

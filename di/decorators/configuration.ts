@@ -1,7 +1,7 @@
 import { ErrInvalidDecorator, ErrScopeMismatchInConfiguration } from '../errors.js'
 import { Injection, InjectionsFor } from '../injection.js'
 import { isNil } from '../internal/util/assert/index.js'
-import { solutions } from '../internal/util/errutil/index.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { InjectionToken } from '../key.js'
 import { Ctor } from '../types.js'
 import { Provides } from './provides.js'
@@ -51,8 +51,12 @@ export function Configuration<T>(injections?: Injection[]) {
 
       if (factory.bindingKey === undefined) {
         throw new ErrInvalidDecorator(
-          `Cannot determine injection key for injectable on method "${String(method)}" at class "${target.name}"` +
-            solutions(`- Ensure the method "${String(method)}" is decorated with '@${Provides.name}'`),
+          errMessage(
+            `Cannot determine injection key for injectable on method "${String(method)}" at class "${target.name}"`,
+          )
+            .solutions(`Ensure the method "${String(method)}" is decorated with '@${Provides.name}'`)
+            .reference('@caffeinejs/di', ErrInvalidDecorator)
+            .build(),
         )
       }
 
