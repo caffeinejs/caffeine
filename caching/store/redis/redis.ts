@@ -96,6 +96,9 @@ interface HTTPMeta {
  * or expires. No command names more than one key, and nothing walks the keyspace, so a cluster client needs
  * nothing more: a call's commands are sent together and spread over the cluster.
  *
+ * A `put` handed the snapshot a `get` filled writes without reading: one round trip. Without it, or for a tag
+ * it does not hold, the counters are read first.
+ *
  * Counters have no `ttl`. Under an `allkeys-*` eviction policy the server may evict one, which restarts the
  * tag's count: an entry written under a number that comes round again is readable until its own `ttl`. Run the
  * server with `noeviction` or a `volatile-*` policy.
@@ -132,6 +135,12 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
       commands.hmGet(this.#entryKey(key), FIELDS),
       ...hintedKeys.map(tagKey => commands.get(tagKey)),
     ])
+
+    // Before the entry is looked at: a read that finds nothing is the one a `put` follows.
+    const snapshot = options?.snapshot
+    if (snapshot !== undefined) {
+      hinted.forEach((tag, i) => snapshot.set(tag, text(counters[i]) ?? '0'))
+    }
 
     const [payload, meta] = fields as (Buffer | null)[]
     if (payload === null || payload === undefined || meta === null || meta === undefined) {
@@ -173,13 +182,28 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
     const tagKeys = tags.map(tag => this.#tagKey(tag))
     const commands = this.#commands(options.signal)
 
-    // Read together, once for the call. An eviction landing between this and the write leaves an entry under the
-    // earlier count, which reads as absent.
+    // A count the snapshot holds was read before the response was produced, and is not read again: with every
+    // tag in it the write is the only command. The rest are read together, once for the call. An eviction landing
+    // between either read and the write leaves an entry under the earlier count, which reads as absent.
     let generations: Record<string, string> | undefined
     if (tags.length > 0) {
-      const counters = await Promise.all(tagKeys.map(tagKey => commands.get(tagKey)))
-      generations = {}
-      tags.forEach((tag, i) => (generations![tag] = text(counters[i]) ?? '0'))
+      const recorded: Record<string, string> = {}
+      const unread: number[] = []
+      tags.forEach((tag, i) => {
+        const seen = text(options.snapshot?.get(tag))
+        if (seen === undefined) {
+          unread.push(i)
+        } else {
+          recorded[tag] = seen
+        }
+      })
+
+      if (unread.length > 0) {
+        const counters = await Promise.all(unread.map(i => commands.get(tagKeys[i])))
+        unread.forEach((i, n) => (recorded[tags[i]] = text(counters[n]) ?? '0'))
+      }
+
+      generations = recorded
     }
 
     // Both fields on every put: HSETEX leaves a field it does not name in place, so an entry made of a fixed set

@@ -8,6 +8,7 @@ export type {
   HTTPCacheGetOptions,
   HTTPCachePutOptions,
   HTTPCacheStore,
+  HTTPCacheTagSnapshot,
 } from './store.js'
 export type { HTTPCachingOptions } from './options.js'
 export { HTTPCachingOptionsBuilder } from './options_builder.js'

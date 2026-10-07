@@ -208,6 +208,38 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     ])
   })
 
+  // What the cache does on a miss: its read already has every counter, so the write that follows is one round
+  // trip instead of two.
+  it('writes with HSETEX alone under the snapshot its read filled', async () => {
+    const server = fakeHTTPServer()
+    const { sent } = server
+    const store = new RedisHTTPCacheStore(server.client)
+    const snapshot = new Map<string, unknown>()
+    await store.get('k', { tags: ['a', 'b'], snapshot })
+    server.reset()
+
+    await store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b'], snapshot })
+
+    expect(sent.map(item => [item.command, item.key, item.batch])).toEqual([['hSetEx', 'caffeine:cache:e:k', 0]])
+  })
+
+  it('reads only the counters the snapshot does not hold, in one batch', async () => {
+    const server = fakeHTTPServer()
+    const { sent } = server
+    const store = new RedisHTTPCacheStore(server.client)
+    const snapshot = new Map<string, unknown>()
+    await store.get('k', { tags: ['a'], snapshot })
+    server.reset()
+
+    await store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b', 'c'], snapshot })
+
+    expect(sent.map(item => [item.command, item.key, item.batch])).toEqual([
+      ['get', 'caffeine:cache:t:b', 0],
+      ['get', 'caffeine:cache:t:c', 0],
+      ['hSetEx', 'caffeine:cache:e:k', 2],
+    ])
+  })
+
   it('sends nothing for an empty eviction, or for a ttl that is not positive', async () => {
     const { client, sent } = fakeHTTPServer()
     const store = new RedisHTTPCacheStore(client)

@@ -346,8 +346,9 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 - The client is yours. The store never connects, closes or reconnects it. A client from `createClient()` and
   one from `createCluster()` both fit.
 - An entry is one hash, with the payload stored as the bytes it was given. A tag is a counter. A read is one
-  round trip: the entry and its tags' counters go out together. A write is two for a tagged entry and one
-  otherwise, an eviction one.
+  round trip: the entry and its tags' counters go out together. So is the write that follows it, which is handed
+  the counters that read saw, and so is an eviction. A tagged entry you `put` yourself without a read's
+  `snapshot` costs a second one, to read the counters first.
 - It never sends `SCAN`, `KEYS`, `FLUSHDB`, `FLUSHALL`, `MULTI`, a script, or a command naming two keys, so it
   is safe on a cluster and on a shared server.
 - Every call carries the signal the cache hands it, so a command a request gave up on is taken out of the
@@ -412,11 +413,14 @@ Implement `HTTPCacheStore` from `@caffeinejs/caching/http`:
 
 ```ts
 interface HTTPCacheStore {
-  get(key: string, options?: { tags?: readonly string[]; signal?: AbortSignal }): Promise<HTTPCacheEntry | undefined>
+  get(
+    key: string,
+    options?: { tags?: readonly string[]; snapshot?: Map<string, unknown>; signal?: AbortSignal },
+  ): Promise<HTTPCacheEntry | undefined>
   put(
     key: string,
     entry: HTTPCacheEntry,
-    options: { ttl: Duration; tags?: readonly string[]; signal?: AbortSignal },
+    options: { ttl: Duration; tags?: readonly string[]; snapshot?: Map<string, unknown>; signal?: AbortSignal },
   ): Promise<void>
   evictByTag(tags: string | readonly string[], options?: { signal?: AbortSignal }): Promise<void>
 }
@@ -426,6 +430,10 @@ interface HTTPCacheStore {
   is not positive stores nothing.
 - The `tags` a read is handed are a hint — the route's tags, so a store that keeps tags apart from entries can
   read both in one go. The answer is the same with or without it.
+- A read handed a `snapshot` fills it with what it saw of those `tags`, whether or not it found an entry. The
+  write that follows is handed the same one and stores the entry as of that read: an entry whose tag was evicted
+  in between reads as `undefined`, and the store has no tag to read again. A tag the snapshot does not hold is
+  read during the write. What a tag maps to is the store's own business.
 - A `Buffer` payload comes back a `Buffer`, byte for byte; a string comes back a string.
 - A call whose signal is aborted stops what it can and rejects; one made with a signal already aborted rejects
   and does nothing.
@@ -501,8 +509,11 @@ All of these fail `app.bootstrap()` with `ErrConfiguration`:
 ## Limits
 
 - One handler run per miss holds in one process. Replicas do not share a lock.
-- A `GET` already running when a mutation evicts can store the older response after the eviction. One handler
-  run per miss narrows that to one writer per key; keep `ttl` short where it matters.
+- A `GET` already running when a mutation evicts answers its own client with the older response. That response
+  is stored as of the read that did not find it, so the eviction hides it and the next request runs the handler
+  again. The exception is a request that skipped the read (`no-cache`, `max-age=0`, `Pragma: no-cache`) or whose
+  read failed: its response is stored as of the write, and can outlive an eviction that landed while its handler
+  ran. Keep `ttl` short where it matters.
 - A stale entry is served only while a handler run is under way for it (`staleWhileRevalidate`) or once one
   failed (`staleIfError`). Nothing refreshes an entry in the background.
 - A `HEAD` that misses stores nothing, and carries no `ETag` when the server dropped its body before the cache saw
