@@ -145,6 +145,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `flatten.ts` overwrites `path`, `method`, `parameters` and the handler, so an extension leaves them alone.
 - `addRouteHook` replaces a hook slot's array and never mutates it, since Fastify shares it with a GET route's
   HEAD twin; a `RouteExtension` writing plain route config comes first.
+- `bodyAsBuffer()` reads through Fastify's `parseAs: 'buffer'`, which holds the body to the route's `bodyLimit` or
+  the server's. A content-type parser that reads the payload stream itself is held to no limit at all.
 - `fst({ … })` (`routing/fastify/route_options.ts`) is the only Fastify escape hatch on a route. Do not widen it:
   its type omits what the adapter writes, `config` included.
 - `compile.ts` knows nothing about constraints; `constraint()`/`@Constraint` write `route.config` under

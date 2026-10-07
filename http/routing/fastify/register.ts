@@ -239,16 +239,19 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         }
 
         // BodyAsBuffer
-        // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer.
+        // When the route is decorated with @BodyAsBuffer(), the body is read as a raw buffer. Fastify reads it, through
+        // `parseAs`, and so holds it to the route's `bodyLimit` or the server's: a parser reading the payload stream
+        // itself is held to no limit at all.
         if (route.bodyAs === 'buffer') {
           server.register(async innerServer => {
             innerServer.removeAllContentTypeParsers()
-            innerServer.addContentTypeParser('*', { bodyLimit: route.bodyLimit }, function (_request, payload, done) {
-              const chunks: Buffer[] = []
-              payload.on('data', (chunk: Buffer) => chunks.push(chunk))
-              payload.on('end', () => done(null, Buffer.concat(chunks)))
-              payload.on('error', done)
-            })
+            innerServer.addContentTypeParser(
+              '*',
+              { parseAs: 'buffer', bodyLimit: route.bodyLimit },
+              (_request, body, done) => {
+                done(null, body)
+              },
+            )
 
             routeFn(innerServer, routeDef)
           })
