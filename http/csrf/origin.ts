@@ -80,49 +80,8 @@ export function checkOrigin(input: OriginCheckInput, options: OriginCheckOptions
   }
 
   const site = input.secFetchSite
-  if (site !== undefined && site !== '') {
-    if (site === 'same-origin' || site === 'none') {
-      return { verdict: 'allow', reason: 'same-origin' }
-    }
 
-    // `cross-site`, `same-site`, and anything a browser would not write.
-    const parsed = input.origin === undefined || input.origin === '' ? undefined : parseOrigin(input.origin)
-    if (parsed !== undefined && options.trustedOrigins.has(parsed.origin)) {
-      return { verdict: 'allow', reason: 'trusted-origin' }
-    }
-
-    return refused('sec-fetch-site', askableOf(parsed, input, site))
-  }
-
-  const origin = input.origin
-  if (origin === undefined || origin === '') {
-    return { verdict: 'unknown', reason: 'no-browser-headers' }
-  }
-
-  if (origin === 'null') {
-    return { verdict: 'deny', reason: 'origin-null' }
-  }
-
-  const parsed = parseOrigin(origin)
-  if (parsed === undefined) {
-    return { verdict: 'deny', reason: 'origin-malformed' }
-  }
-
-  if (options.trustedOrigins.has(parsed.origin)) {
-    return { verdict: 'allow', reason: 'trusted-origin' }
-  }
-
-  // Known HTTPS and an `http:` origin is never same-origin. The reverse is left alone: a proxy that ended TLS and
-  // was not trusted reports `http`, and refusing it would refuse every old browser behind it.
-  if (input.protocol === 'https' && parsed.protocol === 'http:') {
-    return { verdict: 'deny', reason: 'scheme-downgrade' }
-  }
-
-  if (parsed.host === normalizeHost(input.host, input.protocol)) {
-    return { verdict: 'allow', reason: 'same-origin' }
-  }
-
-  return refused('origin-mismatch', askableOf(parsed, input))
+  return site === undefined || site === '' ? judgeOrigin(input, options) : judgeSite(site, input, options)
 }
 
 /**
@@ -168,6 +127,54 @@ export function normalizeTrustedOrigin(text: string): string {
   return url.origin
 }
 
+// The browser's own word on where the request came from, which no script can forge.
+function judgeSite(site: string, input: OriginCheckInput, options: OriginCheckOptions): OriginCheckResult {
+  if (site === 'same-origin' || site === 'none') {
+    return { verdict: 'allow', reason: 'same-origin' }
+  }
+
+  // `cross-site`, `same-site`, and anything a browser would not write.
+  const parsed = input.origin === undefined || input.origin === '' ? undefined : parseOrigin(input.origin)
+  if (parsed !== undefined && options.trustedOrigins.has(parsed.origin)) {
+    return { verdict: 'allow', reason: 'trusted-origin' }
+  }
+
+  return refused('sec-fetch-site', askableOf(parsed, input, site))
+}
+
+// A browser too old for Fetch Metadata, or no browser at all: the `Origin` decides, against the request's own host.
+function judgeOrigin(input: OriginCheckInput, options: OriginCheckOptions): OriginCheckResult {
+  const origin = input.origin
+  if (origin === undefined || origin === '') {
+    return { verdict: 'unknown', reason: 'no-browser-headers' }
+  }
+
+  if (origin === 'null') {
+    return { verdict: 'deny', reason: 'origin-null' }
+  }
+
+  const parsed = parseOrigin(origin)
+  if (parsed === undefined) {
+    return { verdict: 'deny', reason: 'origin-malformed' }
+  }
+
+  if (options.trustedOrigins.has(parsed.origin)) {
+    return { verdict: 'allow', reason: 'trusted-origin' }
+  }
+
+  // Known HTTPS and an `http:` origin is never same-origin. The reverse is left alone: a proxy that ended TLS and
+  // was not trusted reports `http`, and refusing it would refuse every old browser behind it.
+  if (input.protocol === 'https' && parsed.protocol === 'http:') {
+    return { verdict: 'deny', reason: 'scheme-downgrade' }
+  }
+
+  if (parsed.host === normalizeHost(input.host, input.protocol)) {
+    return { verdict: 'allow', reason: 'same-origin' }
+  }
+
+  return refused('origin-mismatch', askableOf(parsed, input))
+}
+
 function refused(reason: OriginReason, askable: OriginCheckAskable | undefined): OriginCheckResult {
   return askable === undefined ? { verdict: 'deny', reason } : { verdict: 'deny', reason, askable }
 }
@@ -199,10 +206,16 @@ function parseOrigin(origin: string): URL | undefined {
   }
 }
 
-// Lower-cased, and without the port the scheme implies, which `URL` takes off the origin's host as well.
+// The port each scheme implies, which `URL` takes off an origin's host.
+const DEFAULT_PORTS: ReadonlyMap<string, string> = new Map([
+  ['http', ':80'],
+  ['https', ':443'],
+])
+
+// Lower-cased, and without the port the scheme implies, as `URL` spells the origin's host.
 function normalizeHost(host: string, protocol: string): string {
   const lower = host.toLowerCase()
-  const defaultPort = protocol === 'https' ? ':443' : protocol === 'http' ? ':80' : undefined
+  const defaultPort = DEFAULT_PORTS.get(protocol)
 
   return defaultPort !== undefined && lower.endsWith(defaultPort) ? lower.slice(0, -defaultPort.length) : lower
 }
