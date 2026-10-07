@@ -140,7 +140,8 @@ conditions are then decided when the container compiles:
    `key`. So a default sees a conditional replacement whatever order the two were declared or bound in, and
    `present()` sees a binding a `missing()` default registers.
 4. A `@Provides` method is decided after its `@Configuration` class, and is dropped with it, whatever else binds the
-   class key. Once `rebind()` replaced the class, the method goes with the replacement instead.
+   class key. Once `rebind()` replaced the class, the method goes with the replacement instead. While the class waits
+   on a condition of step 3, the method's `env` and `config` wait with it, and run only once the class registered.
 
 Bindings that do not check each other keep the order they were declared in. A condition never sees its own binding,
 nor the `@Provides` that go with it, so a `@Configuration` class that provides a key when `missing()` finds it unbound
@@ -152,6 +153,10 @@ would drop the binding. Write it so it does not depend on what they guard.
 Bindings can wait for each other: two defaults of one key nothing else binds, or two bindings that each check the
 other's key. Which one should register is not decidable, so `init()` fails with `ErrCircularCondition`, naming them.
 Bind the key yourself, and neither has to wait.
+
+A `@Provides` method of a class that waits counts as an answer to its key until the class is decided, whatever its own
+`env` and `config` would say. Two `@Configuration` classes that each provide a key they check is `missing()` wait for
+each other, even when the `env` of one of the methods fails.
 
 ---
 
@@ -231,6 +236,8 @@ An application built with `@caffeinejs/std` binds its configuration for you.
   does a test that throws.
 - It runs after the binding's `present()` and `missing()` conditions on a key a binding without conditions answers
   to, and before the others are decided. See [When conditions are decided](#when-conditions-are-decided).
+- On a `@Provides` method, it never runs when the `@Configuration` class fails, and waits for the class to register
+  while the class waits on a `present()` or `missing()` condition.
 - Without values bound, compiling fails with `ErrNoValuesProvider`.
 
 ---
@@ -296,8 +303,8 @@ conditions. In the example above:
 - `cache` is provided when `REGION` is `eu` AND `RedisClient` is bound
 - `taxCalc` is provided when `REGION` is `eu` AND `TAX_SERVICE_URL` is set
 
-When the class fails one of its `env` or `config` conditions, none of the methods' conditions are decided. When it
-fails a `present()` or `missing()` condition, the methods are dropped with it.
+When the class fails any of its conditions, its methods are dropped with it, and none of their conditions is decided.
+While the class waits on a `present()` or `missing()` condition, their `env` and `config` wait with it.
 
 The methods go with the class, not with its key: a binding of the class key made by hand, with conditions or without,
 does not keep them when the class fails. `rebind()` replaces the class, conditions included. Its methods then go with

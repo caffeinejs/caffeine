@@ -1344,5 +1344,222 @@ describe('Conditionals', function () {
         })
       })
     })
+
+    describe('and a class that waits on a present() or missing() condition', function () {
+      const test = vi.fn(() => true)
+
+      beforeEach(() => {
+        test.mockClear()
+      })
+
+      afterEach(() => {
+        vi.unstubAllEnvs()
+      })
+
+      describe('that yields to a conditional binding', function () {
+        const kCache = token<string>(Symbol('cond-defer-cache'))
+        const kPool = token<string>(Symbol('cond-defer-pool'))
+
+        @Configuration()
+        @Profile('cond-defer')
+        @Conditional(c => c.missing(kCache))
+        class CacheDefaults {
+          @Provides(kPool)
+          @Conditional(c => c.config(test))
+          pool(): string {
+            return 'pool'
+          }
+        }
+
+        const bindRedis = (di: CaffeineIoC) =>
+          di.bind(kCache, t => t.toValue('redis').conditional(c => c.env('CAFFEINE_COND_DEFER_REDIS')))
+
+        it('should decide none of the conditions of its @Provides when it yields', async function () {
+          vi.stubEnv('CAFFEINE_COND_DEFER_REDIS', 'on')
+
+          // No values are bound, so a config test that ran would fail the compilation.
+          const di = new CaffeineIoC({ profiles: ['cond-defer'] })
+          bindRedis(di)
+          await di.init()
+
+          expect(test).not.toHaveBeenCalled()
+          expect(di.has(CacheDefaults)).toBe(false)
+          expect(di.has(kPool)).toBe(false)
+        })
+
+        it('should decide the conditions of its @Provides once it registers', async function () {
+          vi.stubEnv('CAFFEINE_COND_DEFER_REDIS', undefined)
+
+          const di = new CaffeineIoC({ profiles: ['cond-defer'] })
+          di.bindConfig({})
+          bindRedis(di)
+          await di.init()
+
+          expect(test).toHaveBeenCalledTimes(1)
+          expect(di.get(kPool)).toBe('pool')
+        })
+      })
+
+      describe('made by rebind()', function () {
+        const kTaken = token<string>(Symbol('cond-defer-taken'))
+        const kReplaced = token<string>(Symbol('cond-defer-replaced'))
+
+        @Configuration()
+        @Profile('cond-defer-rebind')
+        @Conditional(always)
+        class ReplacedDefaults {
+          @Provides(kReplaced)
+          @Conditional(c => c.config(test))
+          replaced(): string {
+            return 'replaced'
+          }
+        }
+
+        it('should decide none of the conditions of the @Provides when the replacement yields', async function () {
+          // No values are bound, so a config test that ran would fail the compilation.
+          const di = new CaffeineIoC({ profiles: ['cond-defer-rebind'] })
+          di.bind(kTaken, t => t.toValue('taken').conditional(always))
+          di.rebind(ReplacedDefaults, t => t.toClass(ReplacedDefaults).conditional(c => c.missing(kTaken)))
+          await di.init()
+
+          expect(test).not.toHaveBeenCalled()
+          expect(di.has(ReplacedDefaults)).toBe(false)
+          expect(di.has(kReplaced)).toBe(false)
+        })
+      })
+
+      describe('and @Provides a condition on a key bound already drops', function () {
+        const kBound = token<string>(Symbol('cond-defer-bound'))
+        const kShared = token<string>(Symbol('cond-defer-shared'))
+
+        @Configuration()
+        @Profile('cond-defer-settled')
+        @Conditional(c => c.missing(kShared))
+        class FirstShared {
+          @Provides(kShared)
+          @Conditional(c => c.missing(kBound))
+          shared(): string {
+            return 'first'
+          }
+        }
+
+        @Configuration()
+        @Profile('cond-defer-settled')
+        @Conditional(c => c.missing(kShared))
+        class SecondShared {
+          @Provides(kShared)
+          shared(): string {
+            return 'second'
+          }
+        }
+        void [FirstShared, SecondShared]
+
+        it('should not wait for that @Provides', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-defer-settled'] })
+          di.bind(kBound, t => t.toValue('bound'))
+          await di.init()
+
+          expect(di.get(kShared)).toBe('second')
+        })
+      })
+
+      describe('and a @Provides whose config test binds', function () {
+        const guarded: { di?: CaffeineIoC } = {}
+        const kGuardedOut = token<string>(Symbol('cond-defer-guarded-out'))
+        const kLate = token<string>(Symbol('cond-defer-late'))
+
+        @Configuration()
+        @Profile('cond-defer-guard')
+        @Conditional(always)
+        class GuardedDefaults {
+          @Provides(kGuardedOut)
+          @Conditional(c =>
+            c.config(() => {
+              guarded.di?.bind(kLate, t => t.toValue('late'))
+              return true
+            }),
+          )
+          out(): string {
+            return 'out'
+          }
+        }
+        void GuardedDefaults
+
+        it('should refuse the binding, made while the conditions are decided', async function () {
+          const di = new CaffeineIoC({ profiles: ['cond-defer-guard'] })
+          guarded.di = di
+          di.bindConfig({})
+
+          await expect(di.init()).rejects.toThrow(ErrInvalidContainerState)
+        })
+      })
+
+      describe('that each provide the key they check is missing', function () {
+        const kAuto = token<string>(Symbol('cond-defer-auto'))
+
+        @Configuration()
+        @Profile('cond-defer-cycle')
+        @Conditional(c => c.missing(kAuto))
+        class RedisAuto {
+          @Provides(kAuto)
+          @Conditional(c => c.env('CAFFEINE_COND_DEFER_AUTO_REDIS'))
+          cache(): string {
+            return 'redis'
+          }
+        }
+
+        @Configuration()
+        @Profile('cond-defer-cycle')
+        @Conditional(c => c.missing(kAuto))
+        class MemoryAuto {
+          @Provides(kAuto)
+          cache(): string {
+            return 'memory'
+          }
+        }
+        void [RedisAuto, MemoryAuto]
+
+        it('should refuse them, even when the env of one @Provides fails', async function () {
+          vi.stubEnv('CAFFEINE_COND_DEFER_AUTO_REDIS', undefined)
+
+          const di = new CaffeineIoC({ profiles: ['cond-defer-cycle'] })
+          const error = await di.init().catch((err: unknown) => err)
+
+          expect(error).toBeInstanceOf(ErrCircularCondition)
+          expect((error as Error).message).toContain('"RedisAuto.cache()"')
+        })
+      })
+    })
+
+    describe('and a class sure to register', function () {
+      afterEach(() => {
+        vi.unstubAllEnvs()
+      })
+
+      const kStore = token<string>(Symbol('cond-sure-store'))
+
+      @Configuration()
+      @Profile('cond-sure')
+      @Conditional(c => c.env('CAFFEINE_COND_SURE'))
+      class SureDefaults {
+        @Provides(kStore)
+        @Conditional(c => [c.env('CAFFEINE_COND_SURE_REDIS'), c.missing(kStore)])
+        store(): string {
+          return 'redis'
+        }
+      }
+      void SureDefaults
+
+      it('should not wait for a @Provides whose env condition fails', async function () {
+        vi.stubEnv('CAFFEINE_COND_SURE', 'on')
+        vi.stubEnv('CAFFEINE_COND_SURE_REDIS', undefined)
+
+        const di = new CaffeineIoC({ profiles: ['cond-sure'] })
+        di.bind(kStore, t => t.toValue('memory').conditional(c => c.missing(kStore)))
+        await di.init()
+
+        expect(di.get(kStore)).toBe('memory')
+      })
+    })
   })
 })

@@ -13,7 +13,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   must never see its own binding, or a default written as `.conditional(c => c.missing(key))` removes itself, nor
   the `@Provides` that follow its binding.
 - A `@Provides` follows the held binding of its class, the `@Configuration` class or the `rebind()` replacement held
-  in its place, never another binding of the class key: it is decided after that binding and dropped with it.
+  in its place, never another binding of the class key: it is decided after that binding and dropped with it, and its
+  `env` and `config` run only once that binding is sure to register.
 - Conditions are data from `$cond`, and their kinds are fixed: `present`, `missing`, `config`, `env`. A new kind is a
   design change, not a helper. A `present(key)` or `missing(key)` on a key a registered binding answers to is decided
   first, then `env` and `config`; any other `present(key)` or `missing(key)` is decided after every held binding that

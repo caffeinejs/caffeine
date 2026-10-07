@@ -48,6 +48,8 @@ di.bind(Mailer, t => t.toClass(SmtpMailer).conditional([$cond.env('SMTP_HOST'), 
   `env` and `config` conditions. Any other `present(key)` or `missing(key)` is decided after every other binding that
   could answer to `key`, and bindings that wait for each other fail the compilation with `ErrCircularCondition`. See
   [When conditions are decided](../guides/conditional-bindings.md#when-conditions-are-decided).
+- A `@Provides` method's conditions are decided after its `@Configuration` class: none of them when the class fails,
+  and its `env` and `config` only once the class is sure to register.
 - `env` and `config` are read when the container compiles, not when the condition is written.
 - A `config` condition needs values. Without `bindConfig()`, compiling fails with `ErrNoValuesProvider`.
 - A `config` test must return a boolean. Any other result, a Promise included, fails the compilation with

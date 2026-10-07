@@ -210,11 +210,12 @@ export function detachFrom(entry: HeldBinding, key: InjectionToken): HeldBinding
  *
  * 1. What depends on no binding still held is checked first: a `present` or `missing` condition on a key a registered
  *    binding answers to already, then the `env` and `config` conditions, in the order written. A binding that fails
- *    one is dropped. A `@Provides` is checked once the binding it follows passed, and is dropped with it.
+ *    one is dropped. A `@Provides` is checked once the binding it follows passed, and is dropped with it. While that
+ *    binding still waits on a `present` or `missing` condition, the `env` and `config` of the `@Provides` wait too.
  * 2. Any other `present` or `missing` condition waits for every other binding still held that answers to its key,
  *    except the `@Provides` that follow its own binding. A `@Provides` waits for the binding it follows.
  * 3. In that order, a binding registers when every `present` and `missing` condition passes and, for a `@Provides`,
- *    the binding it follows registered. It is dropped otherwise.
+ *    the binding it follows registered and any `env` and `config` it waited with pass. It is dropped otherwise.
  *
  * A `@Provides` follows its configuration class while that is held, or the replacement `rebind()` holds in its place.
  * One whose class is registered follows nothing, and one whose class key nothing holds is dropped.
@@ -235,10 +236,12 @@ export function decideConditions(held: readonly HeldBinding[], ops: ConditionOps
   }
 }
 
-// What step 1 leaves to decide: the bindings left, in the order they were held, and the binding each @Provides follows.
+// What step 1 leaves to decide: the bindings left, in the order they were held, the binding each @Provides follows, and
+// the @Provides whose env and config wait for step 3.
 interface Pending {
   live: HeldBinding[]
   follows: Map<HeldBinding, HeldBinding>
+  deferred: Set<HeldBinding>
 }
 
 // Step 1.
@@ -251,12 +254,7 @@ function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): Pending {
       live.add(entry)
     }
   }
-  // A @Provides goes with the binding it follows: none of its conditions is checked once that one failed.
-  for (const [entry, followed] of follows) {
-    if (live.has(followed) && passesFirst(entry, ops)) {
-      live.add(entry)
-    }
-  }
+  const deferred = checkProvides(follows, live, ops)
 
   for (const entry of held) {
     if (!live.has(entry)) {
@@ -264,7 +262,38 @@ function checkFirst(held: readonly HeldBinding[], ops: ConditionOps): Pending {
     }
   }
 
-  return { live: held.filter(entry => live.has(entry)), follows }
+  return { live: held.filter(entry => live.has(entry)), follows, deferred }
+}
+
+// Adds to `live` the @Provides step 1 leaves, and returns those whose env and config wait for step 3. A @Provides goes
+// with the binding it follows: none of its conditions is checked once that one failed, and its env and config only once
+// that one is sure to register.
+function checkProvides(
+  follows: ReadonlyMap<HeldBinding, HeldBinding>,
+  live: Set<HeldBinding>,
+  ops: ConditionOps,
+): Set<HeldBinding> {
+  const deferred = new Set<HeldBinding>()
+  for (const [entry, followed] of follows) {
+    if (!live.has(followed)) {
+      continue
+    }
+
+    const sure = isSure(followed, ops)
+    if (sure ? passesFirst(entry, ops) : passes(entry, ops, settledBy(ops))) {
+      live.add(entry)
+      if (!sure) {
+        deferred.add(entry)
+      }
+    }
+  }
+
+  return deferred
+}
+
+// A binding left after step 1 registers for sure when none of its present() and missing() conditions waits.
+function isSure(entry: HeldBinding, ops: ConditionOps): boolean {
+  return entry.binding.conditions.every(condition => !isPresence(condition) || ops.has(condition.key))
 }
 
 // The held binding each @Provides follows: its configuration class while that is held, or else, while nothing is
@@ -387,15 +416,19 @@ function waitsOf(
   return waits
 }
 
-// Step 3 for one binding, once everything it waits for is decided.
+// Step 3 for one binding, once everything it waits for is decided. A @Provides that waited checks its env and config
+// first, as step 1 would have.
 function passesLast(
   entry: HeldBinding,
-  { follows }: Pending,
+  { follows, deferred }: Pending,
   registered: ReadonlySet<HeldBinding>,
   ops: ConditionOps,
 ): boolean {
   const followed = follows.get(entry)
   if (followed !== undefined && !registered.has(followed)) {
+    return false
+  }
+  if (deferred.has(entry) && !passes(entry, ops, isStatic)) {
     return false
   }
 
@@ -431,12 +464,15 @@ function isPresence(condition: Condition): condition is Extract<Condition, { kin
   return condition.kind === 'present' || condition.kind === 'missing'
 }
 
-// Step 1 for one binding. A key a registered binding answers to is settled: deciding only ever adds to what answers to
-// a key, so its present() or missing() is known already, and is checked before anything with an effect runs.
+// Step 1 for one binding: what is settled is checked before anything with an effect runs.
 function passesFirst(entry: HeldBinding, ops: ConditionOps): boolean {
-  const settled = (condition: Condition): boolean => isPresence(condition) && ops.has(condition.key)
+  return passes(entry, ops, settledBy(ops)) && passes(entry, ops, isStatic)
+}
 
-  return passes(entry, ops, settled) && passes(entry, ops, isStatic)
+// A key a registered binding answers to is settled: deciding only ever adds to what answers to a key, so its present()
+// or missing() is known already.
+function settledBy(ops: ConditionOps): (condition: Condition) => boolean {
+  return condition => isPresence(condition) && ops.has(condition.key)
 }
 
 // The conditions `which` selects, in the order they were written, stopping at the first that fails.
