@@ -142,6 +142,17 @@ describe('csrf()', () => {
       })
     })
 
+    // A path is matched after the base path is taken off, so one written from the base path would match nothing.
+    it('refuses an excluded path written from the base path, naming the path to write instead', async () => {
+      const app = createWebApplication().with(csrf(c => c.exclude('~/webhooks')))
+      close = () => app.close().catch(() => undefined)
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CSRF_CONFIGURATION',
+        message: expect.stringContaining('Write it as "/webhooks"'),
+      })
+    })
+
     // Every route sits under `/`, so excluding it turns the check off without saying so; `CSRF__EXCLUDE__0=/`
     // would do it from the environment.
     it.each([

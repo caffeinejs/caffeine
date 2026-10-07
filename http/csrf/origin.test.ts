@@ -173,6 +173,24 @@ describe('checkOrigin', () => {
       ).toBe('deny')
     })
 
+    // A trailing dot names the host as fully qualified, which a browser keeps apart: another origin either way.
+    it('reads a trailing dot as another host', () => {
+      expect(checkOrigin(post({ origin: 'https://app.example.' }), NONE).reason).toBe('origin-mismatch')
+      expect(checkOrigin(post({ origin: 'https://app.example', host: 'app.example.' }), NONE).reason).toBe(
+        'origin-mismatch',
+      )
+    })
+
+    // A scheme nobody reported, as a socketless request has, is never taken for HTTPS: the host decides, and no
+    // default port can be taken off it.
+    it('lets the host decide when the scheme is unknown', () => {
+      expect(checkOrigin(post({ origin: 'https://app.example', protocol: '' }), NONE).verdict).toBe('allow')
+      expect(checkOrigin(post({ origin: 'http://app.example', protocol: '' }), NONE).verdict).toBe('allow')
+      expect(
+        checkOrigin(post({ origin: 'https://app.example', host: 'app.example:443', protocol: '' }), NONE).verdict,
+      ).toBe('deny')
+    })
+
     // A request with no `Host` (HTTP/1.0) names nothing an Origin could match.
     it('refuses any Origin on a request that names no host', () => {
       expect(checkOrigin(post({ origin: 'https://app.example', host: '' }), NONE)).toMatchObject({
