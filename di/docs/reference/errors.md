@@ -77,7 +77,7 @@ Thrown by `bindScope()` when the scope identifier is already bound.
 Thrown during `compile()` / `init()` when a key ends up with a second binding,
 whatever made either of them: a decorated class also bound with `bind()`, two
 `@Provides` methods for one key, a module binding a key already bound, or a
-conditional binding whose predicate passes while another binding holds its key.
+conditional binding whose conditions pass while another binding holds its key.
 Profiles and conditions are decided first, so bindings of one key that they
 leave to a single survivor do not throw.
 

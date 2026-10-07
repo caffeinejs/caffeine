@@ -10,8 +10,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A key takes one binding once profiles and conditions are decided: a second one is `ErrDuplicateBinding`.
   `rebind(key)` and `overrides()` are the only replacements. `bind()` does not read decorators.
 - A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
-  must never see its own binding, or a default written as `.conditional(ctx => !ctx.container.has(key))` removes
-  itself.
+  must never see its own binding, or a default written as `.conditional(c => c.missing(key))` removes itself.
 - `internal()` is a mark for tools, never a filter. The container, `snapshot()`, `overrides()` and `TestContainer`
   treat an internal binding like any other: never exempt, skip or drop a binding because it is internal.
 - `token<T>(...)` brands an injection key only. Never use it for a label, tag, metadata key, resolver name or plain

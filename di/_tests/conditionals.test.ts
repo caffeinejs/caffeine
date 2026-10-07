@@ -1,17 +1,20 @@
-import { describe, it, beforeEach, expect, vi } from 'vitest'
+import { describe, it, afterEach, beforeEach, expect, vi } from 'vitest'
 
+import { $cond } from '../conditional.js'
 import { CaffeineIoC } from '../container.js'
 import { ContainerBindingOps } from '../container_interface.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
-import { ErrDuplicateBinding, ErrInvalidDecorator } from '../errors.js'
+import { DeferredCtor } from '../deferred_ctor.js'
+import { ErrDuplicateBinding, ErrInvalidBinding, ErrInvalidDecorator, ErrNoValuesProvider } from '../errors.js'
 import { $i } from '../injection.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
+import { always, kUnbound, never } from './_conditional.js'
 
 describe('Conditionals', function () {
   describe('using default conditional', function () {
@@ -21,17 +24,17 @@ describe('Conditionals', function () {
     class Managed {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(NonManaged))
+    @Conditional(c => c.present(NonManaged))
     class NoPass {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(NonManaged))
-    @ConditionalOn(() => process.env.NODE === 'test')
+    @Conditional(c => c.present(NonManaged))
+    @Conditional(c => c.env('NODE', 'test'))
     class NoPassToo {}
 
     @Injectable()
-    @ConditionalOn(ctx => ctx.container.has(Managed))
-    @ConditionalOn(() => true)
+    @Conditional(c => c.present(Managed))
+    @Conditional(always)
     class Pass {}
 
     @Injectable([Pass])
@@ -50,7 +53,7 @@ describe('Conditionals', function () {
       constructor(readonly noPass?: NoPass) {}
     }
 
-    it('should only register components that pass all provided conditionals', async function () {
+    it('should only register components that pass all provided conditions', async function () {
       const di = new CaffeineIoC()
 
       expect(di.has(Pass)).toBeFalsy()
@@ -64,7 +67,7 @@ describe('Conditionals', function () {
       expect(di.has(NoPassToo)).toBeFalsy()
     })
 
-    it('should resolve components that pass conditionals and handle optional absent deps', async function () {
+    it('should resolve components that pass conditions and handle optional absent deps', async function () {
       const di = new CaffeineIoC({ decorators: false })
       di.bind(Managed, t => t.toSelf())
       di.bind(Pass, t => t.toSelf())
@@ -87,7 +90,7 @@ describe('Conditionals', function () {
       class ModuleSvc {}
 
       @Injectable()
-      @ConditionalOn(ctx => ctx.container.has(ModuleSvc))
+      @Conditional(c => c.present(ModuleSvc))
       class DependsOnModuleSvc {}
 
       const di = new CaffeineIoC({
@@ -107,7 +110,7 @@ describe('Conditionals', function () {
       class NeverBound {}
 
       @Injectable()
-      @ConditionalOn(ctx => ctx.container.has(NeverBound))
+      @Conditional(c => c.present(NeverBound))
       class DependsOnNeverBound {}
 
       const di = new CaffeineIoC()
@@ -117,27 +120,197 @@ describe('Conditionals', function () {
     })
   })
 
-  describe('async conditional functions', function () {
-    it('should register a component when an async conditional resolves to true', async function () {
-      @Injectable()
-      @ConditionalOn(async () => true)
-      class AsyncTrueBean {}
+  describe('env', function () {
+    const kEnv = token<string>(Symbol('cond-env'))
 
-      const di = new CaffeineIoC()
-      await di.init()
-
-      expect(di.has(AsyncTrueBean)).toBeTruthy()
+    afterEach(() => {
+      vi.unstubAllEnvs()
     })
 
-    it('should not register a component when an async conditional resolves to false', async function () {
-      @Injectable()
-      @ConditionalOn(async () => false)
-      class AsyncFalseBean {}
+    it('should pass when the variable is set, an empty value included', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_SET', '')
 
-      const di = new CaffeineIoC()
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_SET')))
       await di.init()
 
-      expect(di.has(AsyncFalseBean)).toBeFalsy()
+      expect(di.get(kEnv)).toBe('set')
+    })
+
+    it('should fail when the variable is not set', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_UNSET', undefined)
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEnv, t => t.toValue('set').conditional(c => c.env('CAFFEINE_COND_ENV_UNSET')))
+      await di.init()
+
+      expect(di.has(kEnv)).toBe(false)
+    })
+
+    it('should compare the value when one is expected', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_REGION', 'eu')
+      const kEU = token<string>(Symbol('cond-env-eu'))
+      const kUS = token<string>(Symbol('cond-env-us'))
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEU, t => t.toValue('eu').conditional(c => c.env('CAFFEINE_COND_ENV_REGION', 'eu')))
+      di.bind(kUS, t => t.toValue('us').conditional(c => c.env('CAFFEINE_COND_ENV_REGION', 'us')))
+      await di.init()
+
+      expect(di.has(kEU)).toBe(true)
+      expect(di.has(kUS)).toBe(false)
+    })
+
+    it('should read the variable when the container compiles, not when the condition is written', async function () {
+      vi.stubEnv('CAFFEINE_COND_ENV_LATE', undefined)
+      const condition = $cond.env('CAFFEINE_COND_ENV_LATE')
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kEnv, t => t.toValue('set').conditional(condition))
+      vi.stubEnv('CAFFEINE_COND_ENV_LATE', 'on')
+      await di.init()
+
+      expect(di.get(kEnv)).toBe('set')
+    })
+  })
+
+  describe('config', function () {
+    type AppConfig = { cache: { enabled: boolean } }
+
+    const kCache = token<string>(Symbol('cond-config-cache'))
+    const enabled = $cond.config<AppConfig>(cfg => cfg.cache.enabled)
+
+    it('should pass when the test returns true for the bound values', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig<AppConfig>({ cache: { enabled: true } })
+      di.bind(kCache, t => t.toValue('cache').conditional(enabled))
+      await di.init()
+
+      expect(di.get(kCache)).toBe('cache')
+    })
+
+    it('should fail when the test returns false', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig<AppConfig>({ cache: { enabled: false } })
+      di.bind(kCache, t => t.toValue('cache').conditional(enabled))
+      await di.init()
+
+      expect(di.has(kCache)).toBe(false)
+    })
+
+    it('should fail the compilation when no values are bound', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kCache, t => t.toValue('cache').conditional(enabled))
+
+      await expect(di.init()).rejects.toThrow(ErrNoValuesProvider)
+    })
+
+    it('should refuse a test that does not return a boolean, such as an async one', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig({})
+      di.bind(kCache, t => t.toValue('cache').conditional(c => c.config((async () => true) as never)))
+
+      await expect(di.init()).rejects.toThrow(ErrInvalidBinding)
+    })
+
+    it('should report a test that throws, with the error as its cause', async function () {
+      const failure = new TypeError('no cache section')
+
+      const di = new CaffeineIoC({ decorators: false })
+      di.bindConfig({})
+      di.bind(kCache, t =>
+        t.toValue('cache').conditional(
+          $cond.config(() => {
+            throw failure
+          }),
+        ),
+      )
+
+      await expect(di.init()).rejects.toThrow(expect.objectContaining({ name: 'ErrInvalidBinding', cause: failure }))
+    })
+  })
+
+  describe('input', function () {
+    const kOne = token<string>(Symbol('cond-input-one'))
+    const kList = token<string>(Symbol('cond-input-list'))
+    const kCallback = token<string>(Symbol('cond-input-callback'))
+    const kCallbackList = token<string>(Symbol('cond-input-callback-list'))
+    const kChained = token<string>(Symbol('cond-input-chained'))
+
+    @Injectable()
+    @Profile('cond-input')
+    @Conditional([always, $cond.missing(kOne)])
+    @Conditional(c => c.missing(kList))
+    class DecoratedPass {}
+
+    @Injectable()
+    @Profile('cond-input')
+    @Conditional(always)
+    @Conditional(c => [always, c.present(kUnbound)])
+    class DecoratedFail {}
+
+    it('should take one condition, a list, or a callback returning either', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kOne, t => t.toValue('one').conditional(always))
+      di.bind(kList, t => t.toValue('list').conditional([always, never]))
+      di.bind(kCallback, t => t.toValue('callback').conditional(c => c.missing(kUnbound)))
+      di.bind(kCallbackList, t => t.toValue('callback list').conditional(c => [always, c.missing(kUnbound)]))
+      await di.init()
+
+      expect(di.has(kOne)).toBe(true)
+      expect(di.has(kList)).toBe(false)
+      expect(di.has(kCallback)).toBe(true)
+      expect(di.has(kCallbackList)).toBe(true)
+    })
+
+    it('should need every condition of every .conditional() call', async function () {
+      const di = new CaffeineIoC({ decorators: false })
+      di.bind(kChained, t => t.toValue('chained').conditional(always).conditional(never))
+      await di.init()
+
+      expect(di.has(kChained)).toBe(false)
+    })
+
+    it('should need every condition of every @Conditional', async function () {
+      const di = new CaffeineIoC({ profiles: ['cond-input'] })
+      await di.init()
+
+      expect(di.has(DecoratedPass)).toBe(true)
+      expect(di.has(DecoratedFail)).toBe(false)
+    })
+  })
+
+  describe('invalid conditions', function () {
+    class Svc {}
+
+    it('should refuse a value that is not a condition', function () {
+      expect(() => Conditional('x' as never)).toThrow(ErrInvalidDecorator)
+      expect(() => Conditional([{ kind: 'present' }] as never)).toThrow(ErrInvalidDecorator)
+      expect(() => new CaffeineIoC().bind(Svc, t => t.toSelf().conditional(true as never))).toThrow(ErrInvalidBinding)
+    })
+
+    it('should refuse a callback that returns a boolean', function () {
+      expect(() => Conditional((() => true) as never)).toThrow(ErrInvalidDecorator)
+    })
+
+    it('should point an old predicate to the helpers, with its error as the cause', function () {
+      const predicate = (ctx: { container: { has(key: unknown): boolean } }) => ctx.container.has(Svc)
+
+      expect(() => Conditional(predicate as never)).toThrow(
+        expect.objectContaining({
+          name: 'ErrInvalidDecorator',
+          message: expect.stringContaining('c => c.present(X)'),
+          cause: expect.any(TypeError),
+        }),
+      )
+    })
+
+    it('should check the arguments of the helpers', function () {
+      expect(() => $cond.present(undefined as never)).toThrow(ErrInvalidBinding)
+      expect(() => $cond.missing(new DeferredCtor(() => Svc))).toThrow(ErrInvalidBinding)
+      expect(() => $cond.env('')).toThrow(ErrInvalidBinding)
+      expect(() => $cond.env('REGION', 1 as never)).toThrow(ErrInvalidBinding)
+      expect(() => $cond.config('cache.enabled' as never)).toThrow(ErrInvalidBinding)
     })
   })
 
@@ -148,7 +321,7 @@ describe('Conditionals', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(PresenceSvc, t => t.toSelf())
-      di.bind(ConditionalSvc, t => t.toSelf().conditional(ctx => ctx.container.has(PresenceSvc)))
+      di.bind(ConditionalSvc, t => t.toSelf().conditional(c => c.present(PresenceSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvc)).toBeTruthy()
@@ -160,7 +333,7 @@ describe('Conditionals', function () {
       class ConditionalSvcFailing {}
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(ConditionalSvcFailing, t => t.toSelf().conditional(ctx => ctx.container.has(AbsentSvc)))
+      di.bind(ConditionalSvcFailing, t => t.toSelf().conditional(c => c.present(AbsentSvc)))
       await di.init()
 
       expect(di.has(ConditionalSvcFailing)).toBeFalsy()
@@ -188,27 +361,16 @@ describe('Conditionals', function () {
       }
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kChannel, t => t.toClass(FailingChannel).conditional(() => false))
+      di.bind(kChannel, t => t.toClass(FailingChannel).conditional(never))
       di.bind(NamedChannel, t => t.toSelf().names(kChannel))
       await di.init()
 
       expect(di.get(kChannel).kind()).toBe('named')
     })
 
-    it('should support async conditional functions', async function () {
-      class AsyncConditionalSvc {}
-
-      const di = new CaffeineIoC({ decorators: false })
-      di.bind(AsyncConditionalSvc, t => t.toSelf().conditional(async () => true))
-      await di.init()
-
-      expect(di.has(AsyncConditionalSvc)).toBeTruthy()
-      expect(di.get(AsyncConditionalSvc)).toBeInstanceOf(AsyncConditionalSvc)
-    })
-
     // A binding made by hand waits for compile() like a decorated one. Registered at bind time, its condition saw the
     // binding itself, and it replaced a binding of its key before the condition ran — so a default written as
-    // `.conditional(ctx => !ctx.container.has(key))` removed itself, or took the application's own binding with it.
+    // `.conditional(c => c.missing(key))` removed itself, or took the application's own binding with it.
     describe('held back until compile()', function () {
       abstract class Hasher {
         abstract kind(): string
@@ -236,7 +398,7 @@ describe('Conditionals', function () {
       }
 
       const bindDefault = (di: CaffeineIoC) =>
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(ctx => !ctx.container.has(Hasher)))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(c => c.missing(Hasher)))
 
       it('should register a default when nothing else answers to its key', async function () {
         const di = new CaffeineIoC({ decorators: false })
@@ -285,7 +447,7 @@ describe('Conditionals', function () {
 
       it('should not be visible before init()', async function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(ScryptHasher, t => t.toSelf().conditional(() => true))
+        di.bind(ScryptHasher, t => t.toSelf().conditional(always))
 
         expect(di.has(ScryptHasher)).toBe(false)
 
@@ -296,7 +458,7 @@ describe('Conditionals', function () {
 
       it('should conflict with another binding of its key when its condition passes', async function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(always))
         di.bind(Hasher, t => t.toClass(ArgonHasher))
 
         await expect(di.init()).rejects.toThrow(ErrDuplicateBinding)
@@ -304,7 +466,7 @@ describe('Conditionals', function () {
 
       it('should be discarded by a rebind() of its key', async function () {
         const di = new CaffeineIoC({ decorators: false })
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => true))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(always))
         di.rebind(Hasher, t => t.toClass(ArgonHasher))
         await di.init()
 
@@ -314,7 +476,7 @@ describe('Conditionals', function () {
       it('should leave the earlier binding of its key in place when its condition fails', async function () {
         const di = new CaffeineIoC({ decorators: false })
         di.bind(Hasher, t => t.toClass(ArgonHasher))
-        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(() => false))
+        di.bind(Hasher, t => t.toClass(ScryptHasher).conditional(never))
         await di.init()
 
         expect(di.get(Hasher).kind()).toBe('argon')
@@ -322,12 +484,7 @@ describe('Conditionals', function () {
 
       it('should still be matched against the active profiles', async function () {
         const di = new CaffeineIoC({ decorators: false, profiles: ['prod'] })
-        di.bind(ScryptHasher, t =>
-          t
-            .toSelf()
-            .profiles('test')
-            .conditional(() => true),
-        )
+        di.bind(ScryptHasher, t => t.toSelf().profiles('test').conditional(always))
         await di.init()
 
         expect(di.has(ScryptHasher)).toBe(false)
@@ -364,7 +521,7 @@ describe('Conditionals', function () {
       const kCascadedProvide = token<string>(Symbol('cascadedProvide'))
 
       @Configuration()
-      @ConditionalOn(() => false)
+      @Conditional(never)
       class FailingConf {
         @Provides(kCascadedProvide)
         provided() {
@@ -384,7 +541,7 @@ describe('Conditionals', function () {
       const kPassingProvide = token<string>(Symbol('passingProvide'))
 
       @Configuration()
-      @ConditionalOn(() => true)
+      @Conditional(always)
       class PassingConf {
         @Provides(kPassingProvide)
         provided() {
@@ -409,7 +566,7 @@ describe('Conditionals', function () {
 
     @Configuration()
     @Profile('cond-47-failing-first')
-    @ConditionalOn(() => false)
+    @Conditional(never)
     class FailingFirst {
       @Provides(kValue)
       value(): string {
@@ -437,7 +594,7 @@ describe('Conditionals', function () {
 
     @Configuration()
     @Profile('cond-47-regular-first')
-    @ConditionalOn(() => false)
+    @Conditional(never)
     class FailingSecond {
       @Provides(kValue)
       value(): string {
@@ -472,7 +629,7 @@ describe('Conditionals', function () {
 
     @Configuration()
     @Profile('cond-48-conditional')
-    @ConditionalOn(() => true)
+    @Conditional(always)
     class ConditionalProvider {
       @Provides(kConditional)
       value(): string {
@@ -511,22 +668,24 @@ describe('Conditionals', function () {
       const spy1 = vi.fn()
       const spy2 = vi.fn()
 
+      // A config test that counts its calls, to tell which conditions are decided.
+      const counted = (spy: () => void, result: boolean) =>
+        $cond.config(() => {
+          spy()
+          return result
+        })
+
       const kTxt = token<string>(Symbol('txt'))
       const kVal = token<string>(Symbol('val'))
       const kJSON = token<string>(Symbol('json'))
       const kXML = token<string>(Symbol('xml'))
 
       @Configuration()
-      @ConditionalOn(() => {
-        spy1()
-        return false
-      })
+      @Profile('cond-class-and-method')
+      @Conditional(counted(spy1, false))
       class NoConf {
         @Provides(kTxt)
-        @ConditionalOn(() => {
-          spy1()
-          return true
-        })
+        @Conditional(counted(spy1, true))
         txt() {
           return 'txt'
         }
@@ -538,33 +697,19 @@ describe('Conditionals', function () {
       }
 
       @Configuration()
-      @ConditionalOn(() => {
-        spy2()
-        return true
-      })
+      @Profile('cond-class-and-method')
+      @Conditional(counted(spy2, true))
       class Conf {
         @Provides(kJSON)
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
+        @Conditional(counted(spy2, true))
+        @Conditional(counted(spy2, true))
         json() {
           return 'json'
         }
 
         @Provides(kXML)
-        @ConditionalOn(() => {
-          spy2()
-          return false
-        })
-        @ConditionalOn(() => {
-          spy2()
-          return true
-        })
+        @Conditional(counted(spy2, false))
+        @Conditional(counted(spy2, true))
         xml() {
           return 'xml'
         }
@@ -575,8 +720,9 @@ describe('Conditionals', function () {
         spy2.mockReset()
       })
 
-      it('should merge the conditionals from class and method level', async function () {
-        const di = new CaffeineIoC()
+      it('should merge the conditions from class and method level', async function () {
+        const di = new CaffeineIoC({ profiles: ['cond-class-and-method'] })
+        di.bindConfig({})
         await di.init()
 
         expect(di.has(NoConf)).toBeFalsy()
@@ -590,11 +736,5 @@ describe('Conditionals', function () {
         expect(spy2).toHaveBeenCalledTimes(4)
       })
     })
-  })
-})
-
-describe('@ConditionalOn argument errors', function () {
-  it('throws ErrInvalidDecorator, not a string, when the condition is not a function', function () {
-    expect(() => ConditionalOn('x' as never)).toThrow(ErrInvalidDecorator)
   })
 })

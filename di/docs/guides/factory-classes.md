@@ -214,20 +214,20 @@ their own scope.
 
 ## Conditional factory methods
 
-Factory methods support `@ConditionalOn` individually. The method is skipped when its
-predicate returns `false`. If the class itself carries `@ConditionalOn`, the effective
-condition for each method is the AND of the class-level and method-level predicates.
+Factory methods support `@Conditional` individually. The method is skipped when one of
+its conditions fails. If the class itself carries `@Conditional`, the effective
+condition for each method is the AND of the class-level and method-level conditions.
 
 ```ts
 @Configuration()
-@ConditionalOn(() => process.env.REGION === 'eu')
+@Conditional(c => c.env('REGION', 'eu'))
 class EUConfig {
   @Provides(PaymentGateway)
   gateway(): PaymentGateway {
     return new StripeEUGateway() // always provided when REGION === 'eu'
   }
 
-  @ConditionalOn(ctx => ctx.container.has(RedisClient))
+  @Conditional(c => c.present(RedisClient))
   @Provides(CacheStore)
   cache(client: RedisClient): CacheStore {
     return new RedisCache(client) // only when REGION === 'eu' AND RedisClient is bound

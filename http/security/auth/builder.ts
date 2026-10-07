@@ -620,7 +620,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
       // closure (a value that is not a container key, so a plain DI injection cannot carry it).
       const options = this.#credentials
       kit.container.bind(PasswordHasher, t =>
-        t.toClass(ScryptPasswordHasher).conditional(ctx => !ctx.container.has(PasswordHasher)),
+        t.toClass(ScryptPasswordHasher).conditional(c => c.missing(PasswordHasher)),
       )
       kit.container.bind(CredentialsService, t =>
         t.toFunction(

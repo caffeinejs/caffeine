@@ -24,7 +24,7 @@ identical in both flavours; differences are noted inline where they exist.
 - [@Primary](#primary)
 - [@Lazy](#lazy)
 - [@Profile](#profile)
-- [@ConditionalOn](#conditionalon)
+- [@Conditional](#conditional)
 - [@Extends](#extends)
 - [@Label](#label)
 - [@Tag](#tag)
@@ -159,26 +159,24 @@ class ProductionMailer implements Mailer { ... }
 new CaffeineIoC({ profiles: ['production'] })
 ```
 
-### @ConditionalOn
+### @Conditional
 
 ```ts
-@ConditionalOn(condition: Conditional | Conditional[])
+@Conditional<C>(conditions: Conditions | ((cond: ConditionHelpers<C>) => Conditions))
 ```
 
-Activates this binding only when the predicate returns `true`. The predicate
-receives a `ConditionContext`.
+Activates this binding only when every condition passes. Takes one condition built
+with [`$cond`](./conditionals.md#cond), a list, or a callback handed `$cond` that
+returns either. The callback runs once, when the decorator is applied. `C` types the
+values a `config` test reads.
 
-```ts
-interface ConditionContext {
-  container: { has(key: InjectionToken): boolean }
-  key: InjectionToken
-  binding: Binding
-}
-```
+Several `@Conditional` decorators on one class must all pass. On a `@Provides`
+method, the method's conditions are added to its `@Configuration` class's.
+Anything but conditions throws `ErrInvalidDecorator`.
 
 ```ts
 @Injectable()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 class RedisCacheService implements CacheService { ... }
 ```
 
@@ -364,7 +362,7 @@ a `@Configuration` class.
 
 `deps` are resolved from the container and passed as method arguments.
 
-Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@ConditionalOn`,
+Can be combined with `@Lifetime`, `@Named`, `@Primary`, `@Conditional`,
 `@Lazy`, and `@Interceptor`.
 
 ### @ProvidesAsync

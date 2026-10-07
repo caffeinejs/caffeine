@@ -105,7 +105,7 @@ container.hooks.on('onBindingRegistered', ({ key, binding }) => {
 ### onBindingNotRegistered
 
 Fired once for every binding the container left out when compiling: its
-profile is not active, a condition returned `false`, or a `rebind()` or an
+profile is not active, a condition failed, or a `rebind()` or an
 override replaced or removed it.
 
 ```ts

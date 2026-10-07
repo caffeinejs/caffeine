@@ -3,9 +3,9 @@ import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } f
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
-import { newBinding, Binding } from './binding.js'
+import { newBinding, Binding, configurationOf } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
-import { Conditional, ConditionContext } from './conditional.js'
+import { decideConditions, type ConditionOps, type HeldBinding } from './conditional.js'
 import {
   BindingDescriptor,
   Container,
@@ -61,11 +61,6 @@ const DEFAULT_OPTIONS: Partial<Options> = {
     circularReferences: true,
     scopes: 'compatible-scopes-only',
   },
-}
-
-interface HeldBinding {
-  key: InjectionToken
-  binding: Binding
 }
 
 /**
@@ -1587,13 +1582,13 @@ export class CaffeineIoC implements Container {
       this.replace(key, binding)
     }
 
-    await this.decideConditions()
+    this.decideConditions()
 
     if (this.overriders.length > 0) {
       const ops = this.overrideOps()
       for (const override of this.overriders) {
         await override(ops)
-        await this.decideConditions()
+        this.decideConditions()
       }
     }
 
@@ -1665,7 +1660,7 @@ export class CaffeineIoC implements Container {
       return
     }
 
-    if (binding.conditionals.length > 0 || (parent !== undefined && this.isHeld(parent))) {
+    if (binding.conditions.length > 0 || (parent !== undefined && this.isHeld(parent))) {
       this._held.push({ key, binding })
       return
     }
@@ -1717,10 +1712,9 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Decides the held bindings. A configuration class goes first and its `@Provides` bindings right after it, dropped
-   * with it when its conditions fail; everything else follows in the order it was held.
+   * Decides the held bindings, with the rules in `conditional.ts`.
    */
-  private async decideConditions(): Promise<void> {
+  private decideConditions(): void {
     const held = this._held
     if (held.length === 0) {
       return
@@ -1728,44 +1722,19 @@ export class CaffeineIoC implements Container {
 
     this._held = []
 
-    const decided = new Set<HeldBinding>()
-    const decide = async (entry: HeldBinding): Promise<void> => {
-      decided.add(entry)
+    decideConditions(held, this.conditionOps())
+  }
 
-      const parent = configurationOf(entry.binding)
-      const pass =
-        (parent === undefined || this.registry.has(parent)) &&
-        (await this.evalConditionals(entry.binding.conditionals, {
-          container: this,
-          key: entry.key,
-          binding: entry.binding,
-        }))
-
-      if (pass) {
-        this.configureBinding(entry.key, entry.binding)
-      } else {
-        this._dropped.push([entry.key, entry.binding])
-      }
-    }
-
-    for (const entry of held) {
-      if (!isConfigurationClass(entry.binding)) {
-        continue
-      }
-
-      await decide(entry)
-
-      for (const provided of held) {
-        if (configurationOf(provided.binding) === entry.key) {
-          await decide(provided)
-        }
-      }
-    }
-
-    for (const entry of held) {
-      if (!decided.has(entry)) {
-        await decide(entry)
-      }
+  private conditionOps(): ConditionOps {
+    return {
+      has: key => this.has(key),
+      isRegistered: key => this.registry.has(key),
+      hasValues: () => this.hasValues,
+      values: () => this.values,
+      register: (key, binding) => this.configureBinding(key, binding),
+      drop: (key, binding) => {
+        this._dropped.push([key, binding])
+      },
     }
   }
 
@@ -1908,16 +1877,6 @@ export class CaffeineIoC implements Container {
     return result.length === entries.length ? result : entries
   }
 
-  private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
-    for (const c of conditionals) {
-      if (!(await c(ctx))) {
-        return false
-      }
-    }
-
-    return true
-  }
-
   // The queue is consumed with a cursor rather than `shift()`, which is O(n) per dequeue, and dependencies are
   // walked in place rather than gathered into a fresh array per node.
   private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: NamedToken<Scope>): boolean {
@@ -1993,17 +1952,6 @@ export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
 }
 
 /**
- * The configuration class a `@Provides` binding belongs to.
- */
-function configurationOf(binding: Binding): InjectionToken | undefined {
-  return binding.configuration === true ? binding.source?.ctor : undefined
-}
-
-function isConfigurationClass(binding: Binding): boolean {
-  return binding.configuration === true && binding.source === undefined
-}
-
-/**
  * Refuses what an async binding cannot be: lazy, scoped other than singleton or refresh, or property injected.
  */
 function assertAsyncBinding(key: InjectionToken, config: Binding): void {
@@ -2056,7 +2004,7 @@ function copyBinding<T>(binding: Binding<T>): Binding<T> {
     interceptors: [...binding.interceptors],
     profiles: new Set(binding.profiles),
     names: [...binding.names],
-    conditionals: [...binding.conditionals],
+    conditions: [...binding.conditions],
     keysProvided: [...binding.keysProvided],
     labels: [...binding.labels],
     tags: new Map(binding.tags),

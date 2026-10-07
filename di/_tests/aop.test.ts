@@ -18,6 +18,7 @@ import { token } from '../key.js'
 import type { Provider } from '../provider.js'
 import { reflect } from '../reflect.js'
 import { Scopes } from '../scope.js'
+import { never } from './_conditional.js'
 
 class Calculator {
   add(a: number, b: number): number {
@@ -1441,12 +1442,7 @@ describe('AOP', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.bind(CondTarget, t => t.toSelf())
-      di.aspect(CondAspect, t =>
-        t
-          .toSelf()
-          .pointcuts($aop.forClass(CondTarget, 'run'))
-          .conditional(() => false),
-      )
+      di.aspect(CondAspect, t => t.toSelf().pointcuts($aop.forClass(CondTarget, 'run')).conditional(never))
       await di.init()
 
       di.get(CondTarget).run()

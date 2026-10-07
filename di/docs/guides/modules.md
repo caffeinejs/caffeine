@@ -70,26 +70,23 @@ await di.init()
 ## Conditional registration
 
 The preferred way to conditionally register a binding is `.conditional()` on
-the binder. The predicate receives a `ConditionContext` with access to the
-container's `has()` method, the binding key, and the binding config. It is
-evaluated once during `init()`, so the container is partially available:
+the binder. It takes conditions built with `$cond`, or a callback handed `$cond`
+that returns them. They are decided once, when the container compiles, so a
+module's binding can check what another module binds:
 
 ```ts
 import { type ContainerBindingOps } from '@caffeinejs/di'
 
 function storageModule(di: ContainerBindingOps) {
-  di.bind(BlobStorage, t => t.toClass(S3BlobStorage).conditional(ctx => ctx.container.has(AppConfig)))
+  di.bind(BlobStorage, t => t.toClass(S3BlobStorage).conditional(c => c.present(AppConfig)))
 }
 ```
 
-Conditionals can be async:
+Several conditions must all pass:
 
 ```ts
 di.bind(FeatureFlags, t =>
-  t.toClass(RemoteFeatureFlags).conditional(async ctx => {
-    const cfg = ctx.container.has(AppConfig)
-    return cfg && process.env.NODE_ENV === 'production'
-  }),
+  t.toClass(RemoteFeatureFlags).conditional(c => [c.present(AppConfig), c.env('NODE_ENV', 'production')]),
 )
 ```
 
@@ -108,4 +105,4 @@ function storageModule(di: ContainerBindingOps) {
 
 For profile-based or decorator-driven activation, see
 [`@Profile`](../reference/decorators.md#profile) and
-[`@ConditionalOn`](../reference/decorators.md#conditionalon).
+[`@Conditional`](../reference/decorators.md#conditional).

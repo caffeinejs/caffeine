@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Label } from '../decorators/label.js'
 import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { token } from '../key.js'
+import { never } from './_conditional.js'
 
 describe('Label', function () {
   it('should tag a class and return its binding via getBy', async function () {
@@ -92,7 +93,7 @@ describe('Label', function () {
     const sym = Symbol('cond')
 
     @Label(sym)
-    @ConditionalOn(() => false)
+    @Conditional(never)
     @Injectable()
     class Excluded {}
 

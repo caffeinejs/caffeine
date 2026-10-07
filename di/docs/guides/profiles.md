@@ -14,9 +14,9 @@ import { Profile } from '@caffeinejs/di'
 ```
 
 :::tip
-For activation logic that cannot be expressed as a simple name — feature flags fetched
-at runtime, presence of another binding, environment variable comparisons — use
-[`@ConditionalOn`](./conditional-bindings.md) instead. See the comparison table at the
+For activation logic that cannot be expressed as a simple name — feature flags in the
+configuration, presence of another binding, environment variable comparisons — use
+[`@Conditional`](./conditional-bindings.md) instead. See the comparison table at the
 end of this page.
 :::
 
@@ -102,7 +102,7 @@ await di.init()
 ## `@Profile` on a `@Configuration` class
 
 When `@Profile` is on a `@Configuration` class, all `@Provides` methods inside are
-skipped unless the profile is active — the same cascade behaviour as `@ConditionalOn`
+skipped unless the profile is active — the same cascade behaviour as `@Conditional`
 on a configuration class.
 
 ```ts
@@ -145,34 +145,32 @@ di.bind(InMemoryPaymentGateway, t => t.toSelf().profiles('test', 'development'))
 
 ---
 
-## `@Profile` vs `@ConditionalOn`
+## `@Profile` vs `@Conditional`
 
-Both mechanisms control whether a binding is registered at `init()` time. The right
-choice depends on what drives the decision.
+Both mechanisms control whether a binding is registered when the container compiles.
+The right choice depends on what drives the decision.
 
-|               | `@Profile` / `.profiles()`                     | `@ConditionalOn`                         |
-| ------------- | ---------------------------------------------- | ---------------------------------------- |
-| Activation    | Container `profiles` option or `addProfiles()` | Arbitrary predicate at init time         |
-| Style         | Declarative — name a group                     | Imperative — write a function            |
-| Async support | No                                             | Yes                                      |
-| Best for      | Environment / persona groupings                | Feature flags, presence checks, env vars |
+|            | `@Profile` / `.profiles()`                     | `@Conditional`                                     |
+| ---------- | ---------------------------------------------- | -------------------------------------------------- |
+| Activation | Container `profiles` option or `addProfiles()` | Conditions decided when the container compiles     |
+| Style      | Name a group                                   | Check a binding, a setting or a variable           |
+| Best for   | Environment / persona groupings                | Feature flags, presence checks, defaults, env vars |
 
 Use `@Profile` when a binding naturally belongs to a named environment or persona
 (`test`, `production`, `eu`, `staging`). The profile name is the complete activation
-condition — no predicate needed.
+condition — nothing else to check.
 
-Use [`@ConditionalOn`](./conditional-bindings.md) when activation depends on runtime
-state: whether another binding is present, the value of an env var, or a flag fetched
-from a remote service.
+Use [`@Conditional`](./conditional-bindings.md) when activation depends on what else
+is bound, the value of an env var, or a flag in the configuration.
 
-The two can be combined — `@Profile` and `@ConditionalOn` on the same class are ANDed:
-the binding is registered only when the profile is active **and** the predicate returns
-`true`.
+The two can be combined — `@Profile` and `@Conditional` on the same class are ANDed:
+the binding is registered only when the profile is active **and** every condition
+passes.
 
 ```ts
 // Only in 'eu' profile AND only when RedisClient is bound
 @Profile('eu')
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 @Injectable()
 class RedisEUCache extends CacheStore {
   /* ... */

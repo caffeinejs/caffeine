@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Injectable } from '../decorators/injectable.js'
@@ -279,9 +279,9 @@ describe('abstract-classes: @Named + $i.mapped()', function () {
   })
 })
 
-// ─── abstract-classes: @ConditionalOn with fallback — no redis ────────────────
+// ─── abstract-classes: @Conditional with fallback — no redis ────────────────
 
-describe('abstract-classes: @ConditionalOn with fallback — no redis', function () {
+describe('abstract-classes: @Conditional with fallback — no redis', function () {
   class AcRedisClient {
     get(key: string) {
       return key
@@ -305,7 +305,7 @@ describe('abstract-classes: @ConditionalOn with fallback — no redis', function
     }
   }
 
-  @ConditionalOn(ctx => ctx.container.has(AcRedisClient))
+  @Conditional(c => c.present(AcRedisClient))
   @Injectable([AcRedisClient])
   @Extends()
   class AcRedisCacheA extends AcCacheStore {
@@ -331,9 +331,9 @@ describe('abstract-classes: @ConditionalOn with fallback — no redis', function
   })
 })
 
-// ─── abstract-classes: @ConditionalOn with fallback — with redis ──────────────
+// ─── abstract-classes: @Conditional with fallback — with redis ──────────────
 
-describe('abstract-classes: @ConditionalOn with fallback — with redis', function () {
+describe('abstract-classes: @Conditional with fallback — with redis', function () {
   class AcRedisClientB {
     get(key: string) {
       return `redis:${key}`
@@ -358,7 +358,7 @@ describe('abstract-classes: @ConditionalOn with fallback — with redis', functi
   }
 
   @Primary()
-  @ConditionalOn(ctx => ctx.container.has(AcRedisClientB))
+  @Conditional(c => c.present(AcRedisClientB))
   @Injectable([AcRedisClientB])
   @Extends()
   class AcRedisCacheB extends AcCacheStoreB {
@@ -1144,9 +1144,9 @@ describe('profiles: @Profile on @Configuration — active', function () {
   })
 })
 
-// ─── profiles: @Profile + @ConditionalOn — condition fails ───────────────────
+// ─── profiles: @Profile + @Conditional — condition fails ───────────────────
 
-describe('profiles: @Profile + @ConditionalOn — condition fails', function () {
+describe('profiles: @Profile + @Conditional — condition fails', function () {
   class PrCondRedisClientA {}
 
   abstract class PrCondCacheA {
@@ -1162,7 +1162,7 @@ describe('profiles: @Profile + @ConditionalOn — condition fails', function () 
   }
 
   @Profile('prCondEuA')
-  @ConditionalOn(ctx => ctx.container.has(PrCondRedisClientA))
+  @Conditional(c => c.present(PrCondRedisClientA))
   @Injectable([PrCondRedisClientA])
   @Extends()
   class PrCondRedisEuCacheA extends PrCondCacheA {
@@ -1182,9 +1182,9 @@ describe('profiles: @Profile + @ConditionalOn — condition fails', function () 
   })
 })
 
-// ─── profiles: @Profile + @ConditionalOn — both pass ─────────────────────────
+// ─── profiles: @Profile + @Conditional — both pass ─────────────────────────
 
-describe('profiles: @Profile + @ConditionalOn — both pass', function () {
+describe('profiles: @Profile + @Conditional — both pass', function () {
   class PrCondRedisClientB {}
 
   abstract class PrCondCacheB {
@@ -1201,7 +1201,7 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
 
   @Primary()
   @Profile('prCondEuB')
-  @ConditionalOn(ctx => ctx.container.has(PrCondRedisClientB))
+  @Conditional(c => c.present(PrCondRedisClientB))
   @Injectable([PrCondRedisClientB])
   @Extends()
   class PrCondRedisEuCacheB extends PrCondCacheB {
@@ -1222,15 +1222,15 @@ describe('profiles: @Profile + @ConditionalOn — both pass', function () {
   })
 })
 
-// ─── conditional-bindings: @ConditionalOn env-based — eu ─────────────────────
+// ─── conditional-bindings: @Conditional env-based — eu ─────────────────────
 
-describe('conditional-bindings: @ConditionalOn env-based — eu', function () {
+describe('conditional-bindings: @Conditional env-based — eu', function () {
   abstract class CbGatewayEu {
     abstract charge(amount: number): string
   }
 
   @Primary()
-  @ConditionalOn(() => process.env.CB_REGION_EU === 'eu')
+  @Conditional(c => c.env('CB_REGION_EU', 'eu'))
   @Injectable()
   @Extends()
   class CbStripeEuGateway extends CbGatewayEu {
@@ -1274,14 +1274,14 @@ describe('conditional-bindings: @ConditionalOn env-based — eu', function () {
   })
 })
 
-// ─── conditional-bindings: complementary condition for the default ───────────
+// ─── conditional-bindings: a default that yields to the region gateway ───────
 
-describe('conditional-bindings: complementary condition for the default', function () {
+describe('conditional-bindings: a default that yields to the region gateway', function () {
   abstract class CbGatewayMock {
     abstract charge(amount: number): string
   }
 
-  @ConditionalOn(() => process.env.CB_REGION_MOCK === 'eu')
+  @Conditional(c => c.env('CB_REGION_MOCK', 'eu'))
   @Injectable()
   @Extends()
   class CbStripeGatewayMock extends CbGatewayMock {
@@ -1290,7 +1290,7 @@ describe('conditional-bindings: complementary condition for the default', functi
     }
   }
 
-  @ConditionalOn(() => !['eu', 'us'].includes(process.env.CB_REGION_MOCK ?? ''))
+  @Conditional(c => c.missing(CbGatewayMock))
   @Injectable()
   @Extends()
   class CbMockGateway extends CbGatewayMock {
@@ -1326,13 +1326,13 @@ describe('conditional-bindings: complementary condition for the default', functi
   })
 })
 
-// ─── conditional-bindings: stacked @ConditionalOn (AND) — all pass ───────────
+// ─── conditional-bindings: stacked @Conditional (AND) — all pass ───────────
 
-describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', function () {
+describe('conditional-bindings: stacked @Conditional (AND) — all pass', function () {
   class CbAndRedisClientA {}
 
-  @ConditionalOn(() => process.env.CB_AND_A === 'eu')
-  @ConditionalOn(ctx => ctx.container.has(CbAndRedisClientA))
+  @Conditional(c => c.env('CB_AND_A', 'eu'))
+  @Conditional(c => c.present(CbAndRedisClientA))
   @Injectable([CbAndRedisClientA])
   class CbRedisEuCacheA {
     constructor(readonly client: CbAndRedisClientA) {}
@@ -1363,13 +1363,13 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — all pass', func
   })
 })
 
-// ─── conditional-bindings: stacked @ConditionalOn (AND) — partial fail ────────
+// ─── conditional-bindings: stacked @Conditional (AND) — partial fail ────────
 
-describe('conditional-bindings: stacked @ConditionalOn (AND) — partial fail', function () {
+describe('conditional-bindings: stacked @Conditional (AND) — partial fail', function () {
   class CbAndRedisClientB {}
 
-  @ConditionalOn(() => process.env.CB_AND_B === 'eu')
-  @ConditionalOn(ctx => ctx.container.has(CbAndRedisClientB))
+  @Conditional(c => c.env('CB_AND_B', 'eu'))
+  @Conditional(c => c.present(CbAndRedisClientB))
   @Injectable([CbAndRedisClientB])
   class CbRedisEuCacheB {
     constructor(readonly client: CbAndRedisClientB) {}
@@ -1403,22 +1403,22 @@ describe('conditional-bindings: stacked @ConditionalOn (AND) — partial fail', 
   })
 })
 
-// ─── conditional-bindings: async conditionals ────────────────────────────────
+// ─── conditional-bindings: a feature flag read from the configuration ─────────
 
-describe('conditional-bindings: async conditionals', function () {
-  abstract class CbAsyncGateway {
+describe('conditional-bindings: a feature flag read from the configuration', function () {
+  type CbFlagsConfig = { features: { newPaymentFlow: boolean } }
+
+  abstract class CbFlagGateway {
     abstract charge(amount: number): string
   }
 
-  let cbAsyncFlagEnabled = false
-
-  const isCbFeatureEnabled = async () => cbAsyncFlagEnabled
-
+  // A config condition needs bound values, so the profile keeps these out of the other containers in this file.
   @Primary()
-  @ConditionalOn(isCbFeatureEnabled)
+  @Conditional<CbFlagsConfig>(c => c.config(cfg => cfg.features.newPaymentFlow))
   @Injectable()
   @Extends()
-  class CbNewPaymentGateway extends CbAsyncGateway {
+  @Profile('cb-config-flag')
+  class CbNewPaymentGateway extends CbFlagGateway {
     charge(amount: number) {
       return `new:${amount}`
     }
@@ -1426,27 +1426,27 @@ describe('conditional-bindings: async conditionals', function () {
 
   @Injectable()
   @Extends()
-  class CbDefaultAsyncGateway extends CbAsyncGateway {
+  @Profile('cb-config-flag')
+  class CbDefaultFlagGateway extends CbFlagGateway {
     charge(amount: number) {
       return `default:${amount}`
     }
   }
 
-  it('skips bean when async condition returns false', async function () {
-    cbAsyncFlagEnabled = false
-    const di = new CaffeineIoC()
+  it('skips bean when the flag is off', async function () {
+    const di = new CaffeineIoC({ profiles: ['cb-config-flag'] })
+    di.bindConfig<CbFlagsConfig>({ features: { newPaymentFlow: false } })
     await di.init()
     expect(di.has(CbNewPaymentGateway)).toBe(false)
-    expect(di.get(CbAsyncGateway)).toBeInstanceOf(CbDefaultAsyncGateway)
+    expect(di.get(CbFlagGateway)).toBeInstanceOf(CbDefaultFlagGateway)
   })
 
-  it('registers bean when async condition returns true', async function () {
-    cbAsyncFlagEnabled = true
-    const di = new CaffeineIoC()
+  it('registers bean when the flag is on', async function () {
+    const di = new CaffeineIoC({ profiles: ['cb-config-flag'] })
+    di.bindConfig<CbFlagsConfig>({ features: { newPaymentFlow: true } })
     await di.init()
     expect(di.has(CbNewPaymentGateway)).toBe(true)
-    expect(di.get(CbAsyncGateway)).toBeInstanceOf(CbNewPaymentGateway)
-    cbAsyncFlagEnabled = false
+    expect(di.get(CbFlagGateway)).toBeInstanceOf(CbNewPaymentGateway)
   })
 })
 
@@ -1464,7 +1464,7 @@ describe('conditional-bindings: conditional @Configuration — class gate', func
   }
 
   @Configuration()
-  @ConditionalOn(() => process.env.CB_CFG_A === 'eu')
+  @Conditional(c => c.env('CB_CFG_A', 'eu'))
   class CbEuInfraConfigA {
     @Provides(CbCfgGatewayA)
     gateway(): CbCfgGatewayA {
@@ -1525,14 +1525,14 @@ describe('conditional-bindings: conditional @Configuration — method gate', fun
   class CbCfgRedisDepB {}
 
   @Configuration()
-  @ConditionalOn(() => process.env.CB_CFG_B === 'eu')
+  @Conditional(c => c.env('CB_CFG_B', 'eu'))
   class CbEuInfraConfigB {
     @Provides(CbCfgGatewayB)
     gateway(): CbCfgGatewayB {
       return new CbCfgStripeGatewayB()
     }
 
-    @ConditionalOn(ctx => ctx.container.has(CbCfgRedisDepB))
+    @Conditional(c => c.present(CbCfgRedisDepB))
     @Provides(CbCfgTaxCalc)
     taxCalc(): CbCfgTaxCalc {
       return new CbCfgTaxCalcImpl()
@@ -1607,7 +1607,7 @@ describe('conditional-bindings: fluent .conditional() API', function () {
       t
         .toSelf()
         .extends(CbFluentGateway)
-        .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
+        .conditional(c => c.env('CB_FLUENT_REGION', 'eu'))
         .primary(),
     )
     di.bind(CbFluentMockGateway, t => t.toSelf().extends(CbFluentGateway))
@@ -1622,7 +1622,7 @@ describe('conditional-bindings: fluent .conditional() API', function () {
       t
         .toSelf()
         .extends(CbFluentGateway)
-        .conditional(() => process.env.CB_FLUENT_REGION === 'eu')
+        .conditional(c => c.env('CB_FLUENT_REGION', 'eu'))
         .primary(),
     )
     di.bind(CbFluentMockGateway, t => t.toSelf().extends(CbFluentGateway))

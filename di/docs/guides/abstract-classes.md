@@ -7,7 +7,7 @@ can resolve it by the abstract type. This is the key decorator for this pattern.
 All decorators are imported from `@caffeinejs/di`.
 
 ```ts
-import { Injectable, Extends, Named, Primary, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Extends, Named, Primary, Conditional } from '@caffeinejs/di'
 ```
 
 ---
@@ -96,7 +96,7 @@ Order follows registration order unless you control it explicitly through module
 :::warning
 Injecting the abstract key directly — without `allOf` — when multiple implementations
 are registered throws `ErrNoUniqueInjectionForKey`. You must disambiguate: mark one
-implementation `@Primary`, use `@ConditionalOn` so only one survives at runtime, or
+implementation `@Primary`, use `@Conditional` so only one survives at runtime, or
 inject a specific concrete class by its own key instead of the abstract one.
 :::
 
@@ -203,13 +203,13 @@ class NotificationRouter {
 
 ---
 
-## Conditional implementations with `@ConditionalOn`
+## Conditional implementations with `@Conditional`
 
-`@ConditionalOn` registers a binding only when a predicate returns `true` at
-container initialization. Useful for environment-driven or feature-flag-driven wiring.
+`@Conditional` registers a binding only when its conditions pass when the container
+compiles. Useful for environment-driven or feature-flag-driven wiring.
 
 ```ts
-import { Injectable, Extends, Primary, ConditionalOn } from '@caffeinejs/di'
+import { Injectable, Extends, Primary, Conditional } from '@caffeinejs/di'
 
 abstract class CacheStore {
   abstract get(key: string): Promise<string | undefined>
@@ -233,7 +233,7 @@ class InMemoryCache extends CacheStore {
 @Primary()
 @Injectable()
 @Extends()
-@ConditionalOn(ctx => ctx.container.has(RedisClient))
+@Conditional(c => c.present(RedisClient))
 class RedisCache extends CacheStore {
   constructor(private readonly client: RedisClient) {}
   async get(key: string) {
@@ -248,10 +248,10 @@ class RedisCache extends CacheStore {
 When `RedisClient` is bound, `RedisCache` is registered and wins as `@Primary`.
 When absent, the container falls back to `InMemoryCache`.
 
-Every binding without conditions is registered before any `@ConditionalOn` predicate runs, so
-`ctx.container.has()` sees `RedisClient` whether it was bound by hand, by a module or by
+Every binding without conditions is registered before any condition is decided, so
+`present()` sees `RedisClient` whether it was bound by hand, by a module or by
 decorators. A conditional binding is visible only once it has been decided — see
-[Conditionals](./conditional-bindings.md#how-conditionalon-works).
+[Conditionals](./conditional-bindings.md#how-conditional-works).
 
 ---
 
