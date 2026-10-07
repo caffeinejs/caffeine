@@ -27,7 +27,7 @@ export interface CookieSerializeOptions {
   httpOnly?: boolean
 
   /**
-   * `'auto'` sets `Secure` when the request came over HTTPS, as `request.protocol` reports it, so behind a proxy it
+   * `'auto'` sets `Secure` when the request came over HTTPS, as `ctx.req.protocol` reports it, so behind a proxy it
    * follows `trustProxy`. On a plain-HTTP request it also sends `SameSite=None` as `Lax`, which a browser would drop
    * otherwise. A `__Secure-` or `__Host-` name, or `partitioned`, has no such fallback: on a plain-HTTP request it is
    * refused.

@@ -2,6 +2,7 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
+import { protocolOf } from '../protocol.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
 import { isExcluded, resolveCSRFOptions, type CSRFConfig, type CSRFOptions } from './options.js'
 import { checkOrigin, SAFE_METHODS, type OriginCheckInput } from './origin.js'
@@ -163,7 +164,7 @@ function inputOf(request: FastifyRequest): OriginCheckInput {
     secFetchSite: headerOf(request.headers['sec-fetch-site']),
     origin: headerOf(request.headers.origin),
     host: request.host,
-    protocol: request.protocol,
+    protocol: protocolOf(request),
   }
 }
 

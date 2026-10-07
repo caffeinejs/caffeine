@@ -9,6 +9,7 @@ import type {
 import fp from 'fastify-plugin'
 
 import { solutions } from '../error/util.js'
+import { protocolOf } from '../protocol.js'
 import {
   assertWritable,
   cookieDefaults,
@@ -157,7 +158,7 @@ export class ServerCookies {
       throw new ErrCookieTooLate(`Cannot ${op} ${describeCookie(name)}: the response's headers are already sent`)
     }
 
-    const prepared = prepareCookie(op, name, this.#defaults, options, request.protocol === 'https')
+    const prepared = prepareCookie(op, name, this.#defaults, options, protocolOf(request) === 'https')
 
     if (!prepared.signed) {
       const line = serializeCookie(op, prepared, value)

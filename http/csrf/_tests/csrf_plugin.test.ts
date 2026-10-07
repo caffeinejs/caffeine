@@ -305,6 +305,20 @@ describe('csrf()', () => {
       )
       expect((await post(trusting, '/echo', downgrade)).status).toBe(403)
     })
+
+    // `HTTPS` from a proxy is HTTPS: for the downgrade rule, and for the port the scheme implies on the Host.
+    it('reads the scheme a trusted proxy wrote, in any case', async () => {
+      const proxied = (origin: string, host: string) => ({ origin, host, 'x-forwarded-proto': 'HTTPS' })
+      const trusting = await ready(
+        createWebApplication()
+          .server(() => ({ factory: { trustProxy: true } }))
+          .with(csrf())
+          .mount(echo()),
+      )
+
+      expect((await post(trusting, '/echo', proxied('http://app.example', 'app.example'))).status).toBe(403)
+      expect((await post(trusting, '/echo', proxied('https://app.example', 'app.example:443'))).status).toBe(200)
+    })
   })
 
   describe('exemptions', () => {

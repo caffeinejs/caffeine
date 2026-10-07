@@ -67,8 +67,8 @@ export interface Req<
   get host(): string
 
   /**
-   * `https` or `http`: what the socket says, or `X-Forwarded-Proto` behind a proxy the server was told to trust
-   * (`trustProxy`).
+   * The scheme, lower-cased: `https` or `http` as the socket says, or `X-Forwarded-Proto` behind a proxy the server
+   * was told to trust (`trustProxy`). Empty when neither says.
    */
   get protocol(): string
 

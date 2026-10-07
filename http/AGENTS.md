@@ -38,7 +38,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `http/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
   `origin.ts` is the check, pure, and `plugin.ts` the only file that knows Fastify; another adapter re-implements
   `plugin.ts` alone. A token fallback would be a feature of its own, not a mode here.
-- `checkOrigin` compares an `Origin` with `request.host` and `request.protocol`, so `trustProxy` governs what a
+- `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
   proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
   neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
   `CsrfProtectionMiddleware` have it.
@@ -80,6 +80,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
 - `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
+- `protocolOf(request)` (`protocol.ts`) is the only reader of Fastify's `request.protocol`, which carries a trusted
+  proxy's `X-Forwarded-Proto` as written (`HTTPS`) and is `undefined` without a socket; it answers lower-case, `''`
+  when unknown. `ctx.req.protocol`, the cookie writer, the CSRF check and the middleware bridge all call it, and
+  need no request context to do so.
 - The adapter applies the base path in `rewriteUrl`; never prefix at registration or rewrite `url` in `onRoute`.
   Only `ctx.redirect(...)`, `AuthenticationProperties.redirectURI` and the `returnTo` query resolve `~/`
   (`resolveAppURL`); nothing else is rewritten.

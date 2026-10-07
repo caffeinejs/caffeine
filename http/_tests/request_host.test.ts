@@ -46,4 +46,16 @@ describe('ctx.req.host and ctx.req.protocol', () => {
       protocol: 'https',
     })
   })
+
+  // A scheme is case-insensitive and a proxy may write it `HTTPS`; every reader downstream compares with `https`.
+  it('answers the scheme lower-case, however a trusted proxy spelled it', async () => {
+    const app = await ready(
+      createWebApplication()
+        .server(() => ({ factory: { trustProxy: true } }))
+        .mount(whoami()),
+    )
+    const headers = { ...FORWARDED, 'x-forwarded-proto': 'HTTPS' }
+
+    expect(await (await app.fetch('/whoami', { headers })).json()).toMatchObject({ protocol: 'https' })
+  })
 })
