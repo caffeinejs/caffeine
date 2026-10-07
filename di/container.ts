@@ -5,7 +5,7 @@ import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
 import { newBinding, Binding, configurationOf } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
-import { decideConditions, type ConditionOps, type HeldBinding } from './conditional.js'
+import { decideConditions, detachFrom, type ConditionOps, type HeldBinding } from './conditional.js'
 import {
   BindingDescriptor,
   Container,
@@ -1684,7 +1684,7 @@ export class CaffeineIoC implements Container {
       if (entry.key === key) {
         this._dropped.push([entry.key, entry.binding])
       } else {
-        this._held.push(entry)
+        this._held.push(detachFrom(entry, key))
       }
     }
 

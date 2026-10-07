@@ -145,6 +145,48 @@ describe('registration', function () {
       expect(di.get(kOther)).toBe('other')
       expect(di.get(kKey)).toBe('replaced')
     })
+
+    // A rebind() takes the key from every binding answering to it through a name or a base, which stay registered
+    // under their own keys. One still waiting on its conditions used to join the key again once it passed.
+    describe('a conditional binding answering to the key', function () {
+      abstract class Store {
+        abstract kind(): string
+      }
+
+      class SqlStore extends Store {
+        kind(): string {
+          return 'sql'
+        }
+      }
+
+      class MemoryStore extends Store {
+        kind(): string {
+          return 'memory'
+        }
+      }
+
+      it('leaves the replacement alone under a base it extends', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().extends(Store).conditional(always))
+        di.rebind(Store, t => t.toClass(MemoryStore))
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['memory'])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
+
+      it('leaves the replacement alone under a name it is bound with', async function () {
+        const kStore = token<Store>(Symbol('reg-rebind-named-store'))
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().names(kStore).conditional(always))
+        di.rebind(kStore, t => t.toClass(MemoryStore))
+        await di.init()
+
+        expect(di.getMany(kStore).map(store => store.kind())).toEqual(['memory'])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
+    })
   })
 
   describe('decorators: false', function () {

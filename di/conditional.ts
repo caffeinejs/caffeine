@@ -1,4 +1,4 @@
-import { Binding, configurationOf, isConfigurationClass } from './binding.js'
+import { Binding, configurationOf, isConfigurationClass, newBinding } from './binding.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { CaffeineIoCError, ErrCircularCondition, ErrInvalidBinding, ErrNoValuesProvider } from './errors.js'
 import { solutions } from './internal/util/errutil/index.js'
@@ -188,6 +188,21 @@ export interface ConditionOps {
   values(): unknown
   register(key: InjectionToken, binding: Binding): void
   drop(key: InjectionToken, binding: Binding): void
+}
+
+/**
+ * The held binding without `key` among the names and the base it answers to, the way `rebind(key)` leaves a registered
+ * binding answering to its own key alone. A copy, so the binding declared stays as it was.
+ */
+export function detachFrom(entry: HeldBinding, key: InjectionToken): HeldBinding {
+  const { binding } = entry
+  const names = binding.names.filter(name => name !== key)
+  const extend = binding.extend === key ? undefined : binding.extend
+  if (names.length === binding.names.length && extend === binding.extend) {
+    return entry
+  }
+
+  return { key: entry.key, binding: newBinding({ ...binding, names, extend }) }
 }
 
 /**
