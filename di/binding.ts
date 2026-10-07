@@ -1,4 +1,4 @@
-import { Conditional } from './conditional.js'
+import type { Condition } from './conditional.js'
 import { ContainerOps } from './container_interface.js'
 import { Factory, AsyncFactory, FactoryCreator } from './factory.js'
 import { InjectionDescriptor } from './injection.js'
@@ -83,9 +83,9 @@ export interface Binding<T = any> {
   factoryCreator?: FactoryCreator<T>
 
   /**
-   * The conditionals for this binding to be evaluated against.
+   * The conditions this binding must meet to be registered, decided when the container compiles.
    */
-  conditionals: Conditional[]
+  conditions: Condition[]
 
   /**
    * The configuration class that generated this binding.
@@ -195,7 +195,7 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     interceptors: initial.interceptors || [],
     profiles: initial.profiles || new Set(),
     names: initial.names || [],
-    conditionals: initial.conditionals || [],
+    conditions: initial.conditions || [],
     configuredBy: initial.configuredBy,
     primary: initial.primary,
     lazy: initial.lazy,
@@ -219,6 +219,20 @@ export function newBinding<T>(initial: Partial<Binding<T>> = {}): Binding<T> {
     async: initial.async,
     ctx: initial.ctx,
   }
+}
+
+/**
+ * The configuration class a `@Provides` binding belongs to.
+ */
+export function configurationOf(binding: Binding): InjectionToken | undefined {
+  return binding.configuration === true ? binding.source?.ctor : undefined
+}
+
+/**
+ * Whether the binding is a `@Configuration` class itself, rather than one of the `@Provides` it declares.
+ */
+export function isConfigurationClass(binding: Binding): boolean {
+  return binding.configuration === true && binding.source === undefined
 }
 
 /**

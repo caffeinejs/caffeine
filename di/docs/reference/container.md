@@ -189,12 +189,15 @@ rebind<K extends InjectionToken<any>>(key: K, configure: (spec: BindingSpec<Toke
 ```
 
 Replaces everything that answers to `key`: the binding registered under it, however it was
-made, and any binding named after it or extending it. Those keep resolving under their own
-keys. `configure` receives the same `BindingSpec` that `bind()` provides.
+made, and any binding named after it or extending it, whether or not it carries conditions.
+Those keep resolving under their own keys. `configure` receives the same `BindingSpec` that
+`bind()` provides.
 
 It is the one way to replace a binding. Called before the container compiles, the replacement
 is applied after the decorated bindings, the ones bound by hand and the modules' are
-registered, so it replaces any of them. A key with no binding is simply bound.
+registered, so it replaces any of them. A key with no binding is simply bound. Rebinding a
+`@Configuration` class replaces it, conditions included: the `@Provides` it declares stay,
+and are called on the replacement.
 
 ```ts
 di.rebind(Logger, t => t.toClass(StructuredLogger))

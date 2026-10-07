@@ -308,23 +308,26 @@ di.bind(PaymentService, t => t.toSelf().intercept((ctx, instance) => withMetrics
 ### conditional
 
 ```ts
-conditional(fn)
+conditional<C>(conditions: Conditions | ((cond: ConditionHelpers<C>) => Conditions))
 ```
 
-Activates the binding only when all predicates in `fn` return `true`.
-Predicates receive a `ConditionContext` with `container.has()`.
+Activates the binding only when every condition passes. Takes one condition built
+with [`$cond`](./conditionals.md#cond), a list, or a callback handed `$cond` that
+returns either. Several calls chain: every condition of every call must pass.
+Anything but conditions throws `ErrInvalidBinding`.
 
 ```ts
-di.bind(RedisCacheService, t => t.toSelf().conditional(ctx => ctx.container.has(RedisClient)))
+di.bind(RedisCacheService, t => t.toSelf().conditional(c => c.present(RedisClient)))
 ```
 
 A binding with conditions is decided during `compile()`, once every binding
 without conditions is registered, whether it was decorated, bound by hand or bound
-by a module. Its predicates never see the binding itself. That is what lets a
-default check for its own key:
+by a module. A `present()` or `missing()` condition waits for every other binding
+that could answer to its key. Its conditions never see the binding itself. That is
+what lets a default check for its own key:
 
 ```ts
-di.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+di.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
 ```
 
 See [Defaults](../guides/conditional-bindings.md#defaults).

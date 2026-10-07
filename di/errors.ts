@@ -8,8 +8,8 @@ import { Ctor } from './types.js'
 export class CaffeineIoCError extends Error {
   readonly code: string
 
-  constructor(message: string, code: string) {
-    super(message)
+  constructor(message: string, code: string, options?: ErrorOptions) {
+    super(message, options)
     this.code = code
   }
 }
@@ -26,7 +26,7 @@ export class ErrNoUniqueInjectionForKey extends CaffeineIoCError {
           `Use allOf(key) if you want to inject multiple instances bound to the key "${keyStr(key)}"`,
           `Use @Named providing a name to differentiate injectables and inject the dependency using it`,
           `Use @Primary to specify an unique injectable`,
-          `Use @ConditionalOn to conditionally register injectables, leaving only one for the given key`,
+          `Use @Conditional to register injectables only when their conditions pass, leaving one for the given key`,
         ),
       'ERR_NO_UNIQUE_INJECTION',
     )
@@ -97,8 +97,8 @@ export class ErrDuplicateBinding extends CaffeineIoCError {
  * ErrInvalidBinding is an error that is thrown when a binding configuration is invalid.
  */
 export class ErrInvalidBinding extends CaffeineIoCError {
-  constructor(message: string) {
-    super(message, 'ERR_INVALID_BINDING')
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, 'ERR_INVALID_BINDING', options)
     this.name = 'ErrInvalidBinding'
   }
 }
@@ -107,8 +107,8 @@ export class ErrInvalidBinding extends CaffeineIoCError {
  * ErrInvalidDecorator is an error that is thrown when a binding decorator is invalid.
  */
 export class ErrInvalidDecorator extends CaffeineIoCError {
-  constructor(message: string) {
-    super(message, 'ERR_INVALID_DECORATOR')
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, 'ERR_INVALID_DECORATOR', options)
     this.name = 'ErrInvalidDecorator'
   }
 }
@@ -159,9 +159,9 @@ export class ErrOrphanedBindingConfig extends CaffeineIoCError {
 export class ErrMultiplePrimary extends CaffeineIoCError {
   constructor(key: InjectionToken | Identifier) {
     super(
-      `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditionals reduce the candidates to exactly one` +
+      `Found multiple primary bindings for key "${keyStr(key)}": only one primary is allowed unless conditions reduce the candidates to exactly one` +
         solutions(
-          `Use @ConditionalOn(condition) to ensure only one primary injectable is active at a time`,
+          `Use @Conditional to ensure only one primary injectable is active at a time`,
           `Leave only one injectable decorated with @Primary()`,
         ),
       'ERR_MULTIPLE_PRIMARY_SAME_COMPONENT',
@@ -347,6 +347,25 @@ export class ErrCircularDependency extends CaffeineIoCError {
   constructor(cycle: string) {
     super(`Cannot initialize: circular dependency detected: ${cycle}`, 'ERR_CIRCULAR_DEPENDENCY')
     this.name = 'ErrCircularDependency'
+  }
+}
+
+/**
+ * ErrCircularCondition is thrown when the container compiles and bindings wait for each other to be decided: each has a
+ * `present()` or `missing()` condition on a key another one answers to, as two defaults of one key nothing else binds
+ * do. Which one should register is not decidable, so none is picked.
+ */
+export class ErrCircularCondition extends CaffeineIoCError {
+  constructor(waits: string[]) {
+    super(
+      `Cannot decide the conditions of bindings that wait for each other: ${waits.join('; ')}` +
+        solutions(
+          `Bind the key yourself: a condition never waits on a key a registered binding answers to`,
+          `Drop one of the present() or missing() conditions in the cycle`,
+        ),
+      'ERR_CIRCULAR_CONDITION',
+    )
+    this.name = 'ErrCircularCondition'
   }
 }
 

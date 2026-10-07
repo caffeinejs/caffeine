@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Named } from '../decorators/named.js'
@@ -10,6 +10,7 @@ import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrDuplicateBinding, ErrMultiplePrimary } from '../errors.js'
 import { token } from '../key.js'
+import { never } from './_conditional.js'
 
 describe('@Primary', function () {
   describe('when two @Injectable classes share a named key and both are marked @Primary', function () {
@@ -77,7 +78,7 @@ describe('@Primary', function () {
     @Injectable()
     @Named(kActive)
     @Primary()
-    @ConditionalOn(() => false)
+    @Conditional(never)
     @Profile('conditional-primary')
     class Excluded {
       name() {

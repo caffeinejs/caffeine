@@ -1,5 +1,5 @@
 import { Binding } from './binding.js'
-import { Conditional } from './conditional.js'
+import { type ConditionHelpers, type Conditions, toConditions } from './conditional.js'
 import { DeferredCtor } from './deferred_ctor.js'
 import { ErrInvalidBinding, ErrNoResolutionForKey } from './errors.js'
 import { AsyncFactory, Factory } from './factory.js'
@@ -511,22 +511,27 @@ export class BindingSpec<TValue, K = unknown> {
   }
 
   /**
-   * Attaches one or more predicates that must all return `true` for this binding to be active.
+   * Registers this binding only when its conditions pass. Calls chain: every condition of every call must pass.
    *
-   * The predicates run when the container compiles, once every binding without predicates is registered. A predicate
-   * never sees the binding itself, which is what lets `!ctx.container.has(key)` make it a default. A key takes one
-   * binding, so predicates that pass while another binding holds the key fail the compilation with
-   * `ErrDuplicateBinding`.
+   * Takes conditions built with `$cond`, or a callback handed `$cond` that returns them. They are decided when the
+   * container compiles: a `present(key)` or `missing(key)` waits for every other binding that could answer to `key`,
+   * and never sees the binding itself, which is what lets `missing(key)` make it a default. A key takes one binding,
+   * so conditions that pass while another binding holds the key fail the compilation with `ErrDuplicateBinding`.
+   *
+   * @throws {@link ErrInvalidBinding} when given anything but conditions
    *
    * @example
    * ```ts
-   * container.bind(key, t => t.toClass(ProdService).conditional(ctx => process.env.NODE_ENV === 'production'))
-   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(ctx => !ctx.container.has(Cache)))
+   * container.bind(key, t => t.toClass(ProdService).conditional(c => c.env('NODE_ENV', 'production')))
+   * container.bind(Cache, t => t.toClass(InMemoryCache).conditional(c => c.missing(Cache)))
    * ```
    */
-  conditional(fn: Conditional | Conditional[]): this {
-    const fns = Array.isArray(fn) ? fn : [fn]
-    this.binding.conditionals = [...(this.binding.conditionals ?? []), ...fns]
+  conditional<C = unknown>(conditions: Conditions | ((cond: ConditionHelpers<C>) => Conditions)): this {
+    const list = toConditions(
+      conditions,
+      (reason, options) => new ErrInvalidBinding(`Cannot bind "${keyStr(this.key)}": ${reason}`, options),
+    )
+    this.binding.conditions = [...this.binding.conditions, ...list]
 
     return this
   }

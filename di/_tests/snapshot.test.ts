@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
 import { type Options } from '../container_interface.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { $i } from '../injection.js'
@@ -190,7 +190,7 @@ describe('ContainerSnapshot', function () {
 
     @Injectable()
     @Profile('snap-decl')
-    @ConditionalOn(ctx => ctx.container.has(kFlag))
+    @Conditional(c => c.present(kFlag))
     class SnapConditional {}
 
     const snapModule = mod('snap-module', c => c.bind(kModule, t => t.toValue('from-module')))

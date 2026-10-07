@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Profile } from '../decorators/profile.js'
 import { ErrDuplicateBinding, ErrInvalidContainerState, ErrUnresolvableDependencies } from '../errors.js'
 import { token } from '../key.js'
 import { mod } from '../module.js'
+import { always, never } from './_conditional.js'
 
 // Every binding goes through one registration when the container compiles, however it was made: decorated, bound by
 // hand or bound by a module. A key takes one binding; rebind() and overrides() are the ways to replace one.
@@ -63,8 +64,8 @@ describe('registration', function () {
       const kKey = token<string>(Symbol('reg-conditional'))
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kKey, t => t.toValue('a').conditional(() => true))
-      di.bind(kKey, t => t.toValue('b').conditional(() => false))
+      di.bind(kKey, t => t.toValue('a').conditional(always))
+      di.bind(kKey, t => t.toValue('b').conditional(never))
       await di.init()
 
       expect(di.get(kKey)).toBe('a')
@@ -80,7 +81,7 @@ describe('registration', function () {
       }
 
       const di = new CaffeineIoC({ profiles: ['reg-default'] })
-      di.bind(Clock, t => t.toValue({ now: () => 2 }).conditional(ctx => !ctx.container.has(Clock)))
+      di.bind(Clock, t => t.toValue({ now: () => 2 }).conditional(c => c.missing(Clock)))
       await di.init()
 
       expect(di.get(Clock).now()).toBe(1)
@@ -89,7 +90,7 @@ describe('registration', function () {
     it('lets the default register when the decorated class is dropped by its condition', async function () {
       @Injectable()
       @Profile('reg-default-absent')
-      @ConditionalOn(() => false)
+      @Conditional(never)
       class Clock {
         now(): number {
           return 1
@@ -97,7 +98,7 @@ describe('registration', function () {
       }
 
       const di = new CaffeineIoC({ profiles: ['reg-default-absent'] })
-      di.bind(Clock, t => t.toValue({ now: () => 2 }).conditional(ctx => !ctx.container.has(Clock)))
+      di.bind(Clock, t => t.toValue({ now: () => 2 }).conditional(c => c.missing(Clock)))
       await di.init()
 
       expect(di.get(Clock).now()).toBe(2)
@@ -137,12 +138,54 @@ describe('registration', function () {
       const kOther = token<string>(Symbol('reg-rebind-other'))
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kOther, t => t.toValue('other').conditional(() => true))
+      di.bind(kOther, t => t.toValue('other').conditional(always))
       di.rebind(kKey, t => t.toValue('replaced'))
       await di.init()
 
       expect(di.get(kOther)).toBe('other')
       expect(di.get(kKey)).toBe('replaced')
+    })
+
+    // A rebind() takes the key from every binding answering to it through a name or a base, which stay registered
+    // under their own keys. One still waiting on its conditions used to join the key again once it passed.
+    describe('a conditional binding answering to the key', function () {
+      abstract class Store {
+        abstract kind(): string
+      }
+
+      class SqlStore extends Store {
+        kind(): string {
+          return 'sql'
+        }
+      }
+
+      class MemoryStore extends Store {
+        kind(): string {
+          return 'memory'
+        }
+      }
+
+      it('leaves the replacement alone under a base it extends', async function () {
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().extends(Store).conditional(always))
+        di.rebind(Store, t => t.toClass(MemoryStore))
+        await di.init()
+
+        expect(di.getMany(Store).map(store => store.kind())).toEqual(['memory'])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
+
+      it('leaves the replacement alone under a name it is bound with', async function () {
+        const kStore = token<Store>(Symbol('reg-rebind-named-store'))
+
+        const di = new CaffeineIoC({ decorators: false })
+        di.bind(SqlStore, t => t.toSelf().names(kStore).conditional(always))
+        di.rebind(kStore, t => t.toClass(MemoryStore))
+        await di.init()
+
+        expect(di.getMany(kStore).map(store => store.kind())).toEqual(['memory'])
+        expect(di.get(SqlStore).kind()).toBe('sql')
+      })
     })
   })
 
@@ -242,7 +285,7 @@ describe('registration', function () {
       const di = new CaffeineIoC({ decorators: false })
       await di.assertResolvable()
 
-      expect(() => di.bind(kKey, t => t.toValue('late').conditional(() => true))).toThrow(ErrInvalidContainerState)
+      expect(() => di.bind(kKey, t => t.toValue('late').conditional(always))).toThrow(ErrInvalidContainerState)
       expect(() => di.rebind(kKey, t => t.toValue('late'))).toThrow(ErrInvalidContainerState)
     })
   })
@@ -277,7 +320,7 @@ describe('registration', function () {
       const seen: boolean[] = []
 
       const di = new CaffeineIoC({ decorators: false })
-      di.bind(kKey, t => t.toValue('conditional').conditional(ctx => ctx.container.has(kFlag)))
+      di.bind(kKey, t => t.toValue('conditional').conditional(c => c.present(kFlag)))
       di.overrides(ops => {
         seen.push(ops.has(kKey))
       })
@@ -291,7 +334,7 @@ describe('registration', function () {
 
       const di = new CaffeineIoC({ decorators: false })
       di.overrides(ops => {
-        ops.bind(kKey, t => t.toValue('added').conditional(ctx => !ctx.container.has(kKey)))
+        ops.bind(kKey, t => t.toValue('added').conditional(c => c.missing(kKey)))
       })
       await di.init()
 

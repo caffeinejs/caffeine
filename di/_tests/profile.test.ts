@@ -1,7 +1,7 @@
 import { describe, it, beforeAll, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Injectable } from '../decorators/injectable.js'
 import { Lazy } from '../decorators/lazy.js'
@@ -9,6 +9,7 @@ import { Profile } from '../decorators/profile.js'
 import { Provides } from '../decorators/provides.js'
 import { ErrNoResolutionForKey, ErrInvalidContainerState } from '../errors.js'
 import { token } from '../key.js'
+import { always, never } from './_conditional.js'
 
 describe('Profile', function () {
   @Injectable()
@@ -212,12 +213,7 @@ describe('BindingSpec.profiles()', function () {
     class FluentProfCond {}
 
     const di = new CaffeineIoC({ decorators: false, profiles: ['fluent-both'] })
-    di.bind(FluentProfCond, t =>
-      t
-        .toSelf()
-        .profiles('fluent-both')
-        .conditional(() => false),
-    )
+    di.bind(FluentProfCond, t => t.toSelf().profiles('fluent-both').conditional(never))
     await di.init()
 
     expect(di.has(FluentProfCond)).toBe(false)
@@ -277,26 +273,27 @@ describe('constructor profile evaluation', function () {
   })
 })
 
-describe('Profile + ConditionalOn dual queue', function () {
-  it('should not run the predicate when the profile misses', async function () {
-    const predicate = vi.fn(() => true)
+describe('Profile + Conditional dual queue', function () {
+  it('should not decide the conditions when the profile misses', async function () {
+    const test = vi.fn(() => true)
 
     @Injectable()
     @Profile('dual-miss')
-    @ConditionalOn(predicate)
+    @Conditional(c => c.config(test))
     class DualMissBean {}
 
     const di = new CaffeineIoC()
+    di.bindConfig({})
     await di.init()
 
-    expect(predicate).not.toHaveBeenCalled()
+    expect(test).not.toHaveBeenCalled()
     expect(di.has(DualMissBean)).toBe(false)
   })
 
   it('should register when both profile and conditional pass', async function () {
     @Injectable()
     @Profile('dual-hit')
-    @ConditionalOn(() => true)
+    @Conditional(always)
     class DualHitBean {}
 
     const di = new CaffeineIoC({ profiles: ['dual-hit'] })

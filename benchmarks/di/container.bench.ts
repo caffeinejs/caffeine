@@ -1,9 +1,10 @@
 /* oxlint-disable no-empty-function -- bench stubs */
 /* oxlint-disable no-unused-vars -- decorator-registered fixtures */
 import {
+  $cond,
   $i,
   CaffeineIoC,
-  ConditionalOn,
+  Conditional,
   Configuration,
   Extends,
   Inject,
@@ -74,8 +75,10 @@ class Act1 extends Act {
   act(): void {}
 }
 
+const kNeverBound = token<string>(Symbol('never bound'))
+
 @Injectable()
-@ConditionalOn(() => false)
+@Conditional($cond.present(kNeverBound))
 class Maybe {}
 
 const kLog = token<Logger>(Symbol('log'))

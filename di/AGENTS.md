@@ -10,8 +10,17 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A key takes one binding once profiles and conditions are decided: a second one is `ErrDuplicateBinding`.
   `rebind(key)` and `overrides()` are the only replacements. `bind()` does not read decorators.
 - A binding carrying conditions registers only once they pass at `compile()`, however it was made. A condition
-  must never see its own binding, or a default written as `.conditional(ctx => !ctx.container.has(key))` removes
-  itself.
+  must never see its own binding, or a default written as `.conditional(c => c.missing(key))` removes itself, nor
+  the `@Provides` that follow its binding.
+- A `@Provides` follows the held binding of its class, the `@Configuration` class or the `rebind()` replacement held
+  in its place, never another binding of the class key: it is decided after that binding and dropped with it, and its
+  `env` and `config` run only once that binding is sure to register.
+- Conditions are data from `$cond`, and their kinds are fixed: `present`, `missing`, `config`, `env`. A new kind is a
+  design change, not a helper. A `present(key)` or `missing(key)` on a key a registered binding answers to is decided
+  first, then `env` and `config`; any other `present(key)` or `missing(key)` is decided after every held binding that
+  answers to `key`, and bindings that wait for each other are `ErrCircularCondition`.
+- Condition logic lives in `conditional.ts`; `container.ts` only holds bindings and hands each round to
+  `decideConditions`.
 - `internal()` is a mark for tools, never a filter. The container, `snapshot()`, `overrides()` and `TestContainer`
   treat an internal binding like any other: never exempt, skip or drop a binding because it is internal.
 - `token<T>(...)` brands an injection key only. Never use it for a label, tag, metadata key, resolver name or plain
@@ -24,7 +33,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   Read `registry` for "directly bound".
 - A key's candidate list in `bindings` must not depend on registration order: registering joins the list
   (`mapUnder`), removing takes out one binding, and `rebind(key)` is the one deliberate replacement.
-- Change `buildBindingGraph` (`graph/graph.ts`) and `injectedBindings` (`binding.ts`) together with `mapUnder`.
+- Change `buildBindingGraph` (`graph/graph.ts`), `injectedBindings` (`binding.ts`) and `answersTo` (`conditional.ts`)
+  together with `mapUnder`.
 
 ## Tests
 

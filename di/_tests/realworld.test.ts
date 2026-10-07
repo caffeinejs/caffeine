@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import { CaffeineIoC } from '../container.js'
-import { ConditionalOn } from '../decorators/conditional_on.js'
+import { Conditional } from '../decorators/conditional.js'
 import { Configuration } from '../decorators/configuration.js'
 import { Extends } from '../decorators/extends.js'
 import { Inject } from '../decorators/inject.js'
@@ -14,6 +14,7 @@ import { UseFactory } from '../decorators/use_factory.js'
 import { $i } from '../injection.js'
 import { valueFactory } from '../internal/core/factory/value.js'
 import { token } from '../key.js'
+import { always, never } from './_conditional.js'
 
 describe('Real World', function () {
   const initSpy = vi.fn()
@@ -27,10 +28,6 @@ describe('Real World', function () {
   const kAf = token<string>(Symbol('af'))
   const kAs = token<string>(Symbol('as'))
   const kRegions = token<string>(Symbol('regions'))
-
-  const Globals = {
-    Env: 'test',
-  }
 
   class GenericRepository<T> {
     constructor(protected readonly model: () => T) {}
@@ -69,13 +66,13 @@ describe('Real World', function () {
   @Configuration()
   class Events {
     @Provides(EventSender)
-    @ConditionalOn(() => Globals.Env !== 'test')
+    @Conditional(never)
     rabbitEventSender(): EventSender {
       return new RabbitMqEventSender()
     }
 
     @Provides(EventSender)
-    @ConditionalOn(() => Globals.Env === 'test')
+    @Conditional(always)
     kafkaEventSender(): EventSender {
       return new KafkaEventSender()
     }

@@ -1,5 +1,5 @@
-import { CaffeineIoC, mod } from '@caffeinejs/di'
-import { describe, expect, it } from 'vitest'
+import { $cond, CaffeineIoC, mod } from '@caffeinejs/di'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   type CredentialUser,
@@ -66,5 +66,52 @@ describe('the PasswordHasher addCredentials() provides', () => {
     expect(app.container.get(PasswordHasher)).toBe(own)
 
     await app.close()
+  })
+
+  // The feature's default is decided after every binding answering to PasswordHasher, so one that is itself
+  // conditional, and decided after the default would have been, still wins.
+  describe('bound with a condition', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('is the one a module bound when its condition passes', async () => {
+      vi.stubEnv('CAFFEINE_TEST_OWN_HASHER', 'on')
+      const own = new ScryptPasswordHasher({ N: 1024 })
+      const container = new CaffeineIoC({
+        modules: [
+          mod('hasher', c =>
+            c.bind(PasswordHasher, t => t.toValue(own).conditional($cond.env('CAFFEINE_TEST_OWN_HASHER'))),
+          ),
+        ],
+      })
+
+      const app = credentialsApp(container)
+      await app.bootstrap()
+
+      expect(app.container.get(PasswordHasher)).toBe(own)
+
+      await app.close()
+    })
+
+    it('is ScryptPasswordHasher when the condition fails', async () => {
+      vi.stubEnv('CAFFEINE_TEST_OWN_HASHER', undefined)
+      const own = new ScryptPasswordHasher({ N: 1024 })
+      const container = new CaffeineIoC({
+        modules: [
+          mod('hasher', c =>
+            c.bind(PasswordHasher, t => t.toValue(own).conditional($cond.env('CAFFEINE_TEST_OWN_HASHER'))),
+          ),
+        ],
+      })
+
+      const app = credentialsApp(container)
+      await app.bootstrap()
+
+      expect(app.container.get(PasswordHasher)).not.toBe(own)
+      expect(app.container.get(PasswordHasher)).toBeInstanceOf(ScryptPasswordHasher)
+
+      await app.close()
+    })
   })
 })

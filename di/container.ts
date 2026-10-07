@@ -3,9 +3,9 @@ import { checkCircularReferences, checkIfContainerIsResolvable, checkAspects } f
 import { compileDescriptorResolver, compileFactory, compileInjectionResolvers } from './_compile.js'
 import { buildAOPInterceptors, kAspectLabel, type MethodAspect } from './aop.js'
 import { AspectSpec } from './aspect_spec.js'
-import { newBinding, Binding } from './binding.js'
+import { newBinding, Binding, configurationOf } from './binding.js'
 import { BindingSpec, kBuildBinding } from './binding_spec.js'
-import { Conditional, ConditionContext } from './conditional.js'
+import { decideConditions, detachFrom, type ConditionOps, type HeldBinding } from './conditional.js'
 import {
   BindingDescriptor,
   Container,
@@ -63,11 +63,6 @@ const DEFAULT_OPTIONS: Partial<Options> = {
   },
 }
 
-interface HeldBinding {
-  key: InjectionToken
-  binding: Binding
-}
-
 /**
  * CaffeineIoC IoC container implementation of the {@link Container} interface.
  * A container must always be initialized before it can be used.
@@ -106,6 +101,8 @@ export class CaffeineIoC implements Container {
   private _initializing = false
   private _compiling = false
   private _registered = false
+  // Set while held bindings are decided: what they are decided against must not change under them.
+  private _deciding = false
   private _compiled = false
   private _registration: Promise<void> | undefined
   private _compilation: Promise<void> | undefined
@@ -752,6 +749,7 @@ export class CaffeineIoC implements Container {
    */
   bindConfig<T = unknown>(values: T): this {
     notNil(values, 'Parameter values must not be null or undefined')
+    this.assertNotDeciding('Cannot bind values')
 
     if (this._ready || this._compiled) {
       throw new ErrInvalidContainerState('Cannot bind values: container has already been compiled')
@@ -774,6 +772,7 @@ export class CaffeineIoC implements Container {
    */
   bindScopedConfig<T = unknown>(provider: Provider<T>): this {
     notNil(provider, 'Parameter provider must not be null or undefined')
+    this.assertNotDeciding('Cannot bind the scoped config')
 
     if (this._ready || this._compiled) {
       throw new ErrInvalidContainerState('Cannot bind the scoped config: container has already been compiled')
@@ -1587,15 +1586,19 @@ export class CaffeineIoC implements Container {
       this.replace(key, binding)
     }
 
-    await this.decideConditions()
+    this.decideConditions()
 
     if (this.overriders.length > 0) {
       const ops = this.overrideOps()
       for (const override of this.overriders) {
         await override(ops)
-        await this.decideConditions()
+        this.decideConditions()
       }
     }
+
+    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
+    // the overrides and the hooks, so there is none, not even from a listener of the hooks below.
+    this._registered = true
 
     for (const [key, binding] of this.registry) {
       this.hooks.emit('onBindingRegistered', { key, binding })
@@ -1604,10 +1607,6 @@ export class CaffeineIoC implements Container {
       this.hooks.emit('onBindingNotRegistered', { key, binding })
     }
     this._dropped = []
-
-    // Modules and overrides have bound what they bind. A binding declared from here on would miss the conditions,
-    // the overrides and the hooks, so there is none.
-    this._registered = true
   }
 
   /**
@@ -1665,7 +1664,7 @@ export class CaffeineIoC implements Container {
       return
     }
 
-    if (binding.conditionals.length > 0 || (parent !== undefined && this.isHeld(parent))) {
+    if (binding.conditions.length > 0 || (parent !== undefined && this.isHeld(parent))) {
       this._held.push({ key, binding })
       return
     }
@@ -1685,7 +1684,7 @@ export class CaffeineIoC implements Container {
       if (entry.key === key) {
         this._dropped.push([entry.key, entry.binding])
       } else {
-        this._held.push(entry)
+        this._held.push(detachFrom(entry, key))
       }
     }
 
@@ -1717,10 +1716,9 @@ export class CaffeineIoC implements Container {
   }
 
   /**
-   * Decides the held bindings. A configuration class goes first and its `@Provides` bindings right after it, dropped
-   * with it when its conditions fail; everything else follows in the order it was held.
+   * Decides the held bindings, with the rules in `conditional.ts`.
    */
-  private async decideConditions(): Promise<void> {
+  private decideConditions(): void {
     const held = this._held
     if (held.length === 0) {
       return
@@ -1728,44 +1726,24 @@ export class CaffeineIoC implements Container {
 
     this._held = []
 
-    const decided = new Set<HeldBinding>()
-    const decide = async (entry: HeldBinding): Promise<void> => {
-      decided.add(entry)
-
-      const parent = configurationOf(entry.binding)
-      const pass =
-        (parent === undefined || this.registry.has(parent)) &&
-        (await this.evalConditionals(entry.binding.conditionals, {
-          container: this,
-          key: entry.key,
-          binding: entry.binding,
-        }))
-
-      if (pass) {
-        this.configureBinding(entry.key, entry.binding)
-      } else {
-        this._dropped.push([entry.key, entry.binding])
-      }
+    this._deciding = true
+    try {
+      decideConditions(held, this.conditionOps())
+    } finally {
+      this._deciding = false
     }
+  }
 
-    for (const entry of held) {
-      if (!isConfigurationClass(entry.binding)) {
-        continue
-      }
-
-      await decide(entry)
-
-      for (const provided of held) {
-        if (configurationOf(provided.binding) === entry.key) {
-          await decide(provided)
-        }
-      }
-    }
-
-    for (const entry of held) {
-      if (!decided.has(entry)) {
-        await decide(entry)
-      }
+  private conditionOps(): ConditionOps {
+    return {
+      has: key => this.has(key),
+      isRegistered: key => this.registry.has(key),
+      hasValues: () => this.hasValues,
+      values: () => this.values,
+      register: (key, binding) => this.configureBinding(key, binding),
+      drop: (key, binding) => {
+        this._dropped.push([key, binding])
+      },
     }
   }
 
@@ -1791,8 +1769,16 @@ export class CaffeineIoC implements Container {
   }
 
   private assertNotRegistered(action: string): void {
+    this.assertNotDeciding(action)
+
     if (this._registered || this._compiled || this._ready) {
       throw new ErrInvalidContainerState(`${action}: container has already registered its bindings`)
+    }
+  }
+
+  private assertNotDeciding(action: string): void {
+    if (this._deciding) {
+      throw new ErrInvalidContainerState(`${action}: the container is deciding conditions`)
     }
   }
 
@@ -1908,16 +1894,6 @@ export class CaffeineIoC implements Container {
     return result.length === entries.length ? result : entries
   }
 
-  private async evalConditionals(conditionals: Conditional[], ctx: ConditionContext): Promise<boolean> {
-    for (const c of conditionals) {
-      if (!(await c(ctx))) {
-        return false
-      }
-    }
-
-    return true
-  }
-
   // The queue is consumed with a cursor rather than `shift()`, which is O(n) per dequeue, and dependencies are
   // walked in place rather than gathered into a fresh array per node.
   private walkScopeGraph(visited: Set<number>, queue: Binding[], scopeID: NamedToken<Scope>): boolean {
@@ -1993,17 +1969,6 @@ export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
 }
 
 /**
- * The configuration class a `@Provides` binding belongs to.
- */
-function configurationOf(binding: Binding): InjectionToken | undefined {
-  return binding.configuration === true ? binding.source?.ctor : undefined
-}
-
-function isConfigurationClass(binding: Binding): boolean {
-  return binding.configuration === true && binding.source === undefined
-}
-
-/**
  * Refuses what an async binding cannot be: lazy, scoped other than singleton or refresh, or property injected.
  */
 function assertAsyncBinding(key: InjectionToken, config: Binding): void {
@@ -2056,7 +2021,7 @@ function copyBinding<T>(binding: Binding<T>): Binding<T> {
     interceptors: [...binding.interceptors],
     profiles: new Set(binding.profiles),
     names: [...binding.names],
-    conditionals: [...binding.conditionals],
+    conditions: [...binding.conditions],
     keysProvided: [...binding.keysProvided],
     labels: [...binding.labels],
     tags: new Map(binding.tags),

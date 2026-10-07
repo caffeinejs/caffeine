@@ -1,5 +1,5 @@
 import { Binding, newBinding } from '../../binding.js'
-import { Conditional } from '../../conditional.js'
+import type { Condition } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
@@ -14,7 +14,7 @@ export class DecoratedBindingConfig {
   #scopeID?: NamedToken<Scope>
   #names?: Identifier[]
   #factory?: Factory<unknown> | AsyncFactory<unknown>
-  #conditionals?: Conditional[]
+  #conditions?: Condition[]
   #key?: InjectionToken
   #dependencies?: InjectionDescriptor[]
   #type?: Function
@@ -67,10 +67,6 @@ export class DecoratedBindingConfig {
 
   get getTags(): Map<symbol, unknown> | undefined {
     return this.#tags
-  }
-
-  get getConditionals(): Conditional[] | undefined {
-    return this.#conditionals
   }
 
   get isConfiguration(): boolean | undefined {
@@ -132,9 +128,9 @@ export class DecoratedBindingConfig {
     return this
   }
 
-  conditional(conditional: Conditional): this {
-    this.#conditionals ??= new Array<Conditional>()
-    this.#conditionals.unshift(conditional)
+  // Decorators apply bottom-up, so each batch goes in front: stacked conditions keep the order they are written in.
+  conditional(conditions: readonly Condition[]): this {
+    this.#conditions = [...conditions, ...(this.#conditions ?? [])]
     return this
   }
 
@@ -285,7 +281,7 @@ export class DecoratedBindingConfig {
       scopeID: this.#scopeID,
       names: this.#names,
       factory: this.#factory,
-      conditionals: this.#conditionals,
+      conditions: this.#conditions,
       keysProvided: this.#keysProvided,
       extend: this.#extend,
       primary: this.#primary,

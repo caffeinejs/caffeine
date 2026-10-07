@@ -77,13 +77,28 @@ Thrown by `bindScope()` when the scope identifier is already bound.
 Thrown during `compile()` / `init()` when a key ends up with a second binding,
 whatever made either of them: a decorated class also bound with `bind()`, two
 `@Provides` methods for one key, a module binding a key already bound, or a
-conditional binding whose predicate passes while another binding holds its key.
+conditional binding whose conditions pass while another binding holds its key.
 Profiles and conditions are decided first, so bindings of one key that they
 leave to a single survivor do not throw.
 
 **Fix:** Use `rebind()` to replace a binding deliberately. Remove the `bind()` of
 a class that is already decorated, or turn the `decorators` option off. Give one
 of the bindings a profile or a condition so that only one of them is registered.
+
+---
+
+### ErrCircularCondition
+
+**Code:** `ERR_CIRCULAR_CONDITION`
+
+Thrown during `compile()` / `init()` when bindings wait for each other to be decided:
+each carries a `present()` or `missing()` condition on a key another one answers to.
+Two defaults of one key that nothing else binds do, and so do two bindings that each
+check the other's key. Which one should register is not decidable, so none is picked.
+The message names each binding in the cycle and the key it waits on.
+
+**Fix:** Bind the key yourself: a condition never waits for a key a registered binding
+answers to. Or drop one of the conditions in the cycle.
 
 ---
 
@@ -116,7 +131,8 @@ a component listed among its own dependencies.
 Thrown when an operation is called in the wrong phase — for example, calling
 `di.get()` before `await di.init()`, `bind()` after the container has registered
 its bindings (`compile()`, `init()` or `assertResolvable()` has run), or `addProfiles()`, `addModules()`, `restore()` or `overrides()` once it has
-started compiling.
+started compiling. `bind()` and `bindConfig()` are refused too while the
+container decides conditions, as from a `config()` test.
 
 **Fix:** Declare everything before `init()`, and resolve only after it.
 `init()` itself can be called more than once: later calls do nothing.

@@ -83,8 +83,8 @@ export function Configuration<T>(injections?: Injection[]) {
         factoryConfig.scope(scopeID)
       }
 
-      for (const c of fb.conditionals.slice().reverse()) {
-        factoryConfig.conditional(c)
+      if (fb.conditions.length > 0) {
+        factoryConfig.conditional(fb.conditions)
       }
       if (fb.names.length > 0) {
         factoryConfig.names(fb.names)
