@@ -37,8 +37,8 @@ The following documents cover the APIs you will use most often:
 - [Decorators](./decorators.md) — all class, method, member, and configuration
   decorators.
 
-- [Conditionals](./conditionals.md) — `$cond`, the `Condition` type and the
-  condition builders `@Conditional` and `.conditional()` take.
+- [Conditionals](./conditionals.md) — `$cond` and the `Condition` type: the
+  conditions `@Conditional` and `.conditional()` take.
 
 - [Errors](./errors.md) — all `ErrXxx` error classes with error codes and
   remediation guidance.
