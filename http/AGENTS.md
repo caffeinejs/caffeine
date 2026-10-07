@@ -41,7 +41,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
   proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
   neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
-  `CsrfProtectionMiddleware` have it.
+  `CsrfProtectionMiddleware` have it. An `https:` `Origin` naming the host passes on a request seen as `http`, on
+  purpose: the reasons are in `origin.ts` and the HTTP docs' limitations. Do not require the schemes to match
+  without them.
 - The check is one root `onRequest` hook, callback-style, in the `.with(...)` slot it was written in. It skips
   `request.is404`, the safe methods (`SAFE_METHODS`), a route whose config carries `'caffeine:csrf'` with
   `exempt: true` (`csrfExempt()`, `@CSRFExempt()`, `csrfExemptConfig()`), and an unmarked route whose registered

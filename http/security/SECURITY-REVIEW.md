@@ -82,8 +82,11 @@ Report these only if the framework's own docs promise otherwise.
 - Remote-auth errors return `publicMessage` only; diagnostics go through `redactPii` unless `showPii` is set.
 - Cross-origin protection (`http/csrf/`): a safe method (`GET`, `HEAD`, `OPTIONS`, `TRACE`, `QUERY`) is never
   refused. `Sec-Fetch-Site` decides when present: anything but `same-origin` and `none` is refused unless the
-  `Origin` is trusted, `same-site` included. Without it, `Origin: null`, an unreadable `Origin`, one naming another
-  host or port, and an `http:` one on a request known to be HTTPS are refused; neither header passes. A trusted
+  `Origin` is trusted, `same-site` included. Without it, `Origin: null`, an unreadable `Origin`, one of a scheme other
+  than `http` and `https`, one naming another host or port, and an `http:` one on a request known to be HTTPS are
+  refused; neither header passes. An `https:` one naming the host passes on a request seen as `http`, deliberately:
+  only the host's own HTTPS side can send it, and over plain HTTP a browser sends `Origin: null` for that form unless
+  the page asks for a permissive referrer policy (see `origin.ts`). A trusted
   origin is exactly `scheme://host[:port]`, with no path, wildcard or `null`. An exemption is judged by the
   registered route path, and a route's own mark wins over an excluded prefix; `exclude('/')` is refused. Error text
   never repeats a header value; the body and the query are never read, nor logged.
@@ -100,5 +103,7 @@ Report these only if the framework's own docs promise otherwise.
   `internal/sealed_jwt.test.ts`, `cookie/cookie.test.ts` and `oidc/handler_ticket_store.test.ts`.
 - End-to-end: `test/e2e/{basic,cookie,cookie_remember,jwt,opaque,refresh,oauth2,oidc,multi_scheme,spa_bff,fallback,authz,authz_startup,config_auth}.e2e.ts`.
 - Cross-origin protection: `http/csrf/origin.test.ts`, `http/csrf/origin.prop.test.ts`,
-  `http/csrf/_tests/csrf_plugin.test.ts`, and the webhook receiver in `http/csrf/_tests/csrf_webhook.test.ts`.
+  `http/csrf/_tests/csrf_plugin.test.ts`, the webhook receiver in `http/csrf/_tests/csrf_webhook.test.ts`, and
+  the edges (header shapes, methods, router spellings, HTTP/2, proxies, CORS) in `http/csrf/_tests/csrf_edges.test.ts`;
+  the scheme reader in `http/protocol.test.ts`.
 - A confirmed finding lands with a regression test next to the code it fixes.

@@ -278,12 +278,20 @@ Webhooks:
 Limitations:
 
 - `Sec-Fetch-Site` is sent only to HTTPS origins and `localhost`; a plain-HTTP site is judged by `Origin` alone.
+- An `https:` `Origin` naming this host passes on a request the server sees as `http`, as a proxy that ended TLS
+  without being trusted delivers it. Only this host's own HTTPS side can send it, and over plain HTTP a browser
+  posting from there sends `Origin: null`, which is refused, unless the page asked for a permissive referrer policy.
+  Serve over HTTPS, with HSTS, and name the proxy in `trustProxy`.
 - A proxy or an extension that strips both headers makes a browser's request look like a non-browser client's,
   which passes. The cookie scheme's `SameSite=lax` is the second layer.
 - An origin `@fastify/cors` allows is not trusted here: list it in `trustedOrigins(...)` as well. A refusal carries
   the CORS headers only when `@fastify/cors` is registered ahead of `.with(csrf())`; behind it, the browser reports a
   network error instead of the 403.
-- A plugin registered ahead of `.with(csrf())` that answers a request from its own hook answers it unchecked.
+- A plugin registered ahead of `.with(csrf())` that answers a request from its own hook answers it unchecked, and
+  one that rewrites the request's method there decides which method is checked.
+- A URL no route matched is the not-found handler's, which is never checked: it must not change state.
+- A page served from this origin is this origin: HTML a user uploaded and the application serves back posts as
+  `same-origin`. Serve user content from another origin.
 - A WebSocket upgrade is a `GET`, and is not checked: an endpoint authenticated by cookie checks the handshake's
   `Origin` itself.
 - An origin of another scheme, such as `capacitor://localhost` or `tauri://localhost`, can be neither trusted nor

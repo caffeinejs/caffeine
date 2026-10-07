@@ -70,7 +70,8 @@ export interface OriginCheckAskable {
  * `Origin` is trusted, `same-site` included, since a sibling subdomain is not this origin. Without that header the
  * `Origin` decides: absent, the verdict is `unknown`; `null`, malformed, or of a scheme other than `http` and `https`
  * is refused; a trusted one is allowed; an `http:` origin on a request the server knows came over HTTPS is refused;
- * one naming the request's own host is allowed; any other is refused. Hosts compare case-insensitively, with a
+ * one naming the request's own host is allowed, an `https:` one on a request seen as `http` included, as a proxy
+ * that ended TLS without being trusted delivers it; any other is refused. Hosts compare case-insensitively, with a
  * default port taken off.
  *
  * A refusal carries {@link OriginCheckResult.askable} when the application's own checks may still let it through.
@@ -164,7 +165,9 @@ function judgeOrigin(input: OriginCheckInput, options: OriginCheckOptions): Orig
   }
 
   // Known HTTPS and an `http:` origin is never same-origin. The reverse is left alone: a proxy that ended TLS and
-  // was not trusted reports `http`, and refusing it would refuse every old browser behind it.
+  // was not trusted reports `http`, and refusing it would refuse every old browser behind it. Only this host's own
+  // HTTPS side can send it, and over plain HTTP a browser posting from there sends `Origin: null`, refused above,
+  // unless the page itself asked for a permissive referrer policy.
   if (input.protocol === 'https' && parsed.protocol === 'http:') {
     return { verdict: 'deny', reason: 'scheme-downgrade' }
   }
