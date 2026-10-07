@@ -122,6 +122,24 @@ describe('checkOrigin (property)', () => {
     },
   )
 
+  // Whatever host it names, and whatever is trusted, an origin no page has never stands for this one or a trusted one.
+  it.prop([
+    fc.domain(),
+    fc.constantFrom('ws://', 'wss://', 'ftp://', 'blob:https://', 'blob:http://'),
+    fc.constantFrom('http', 'https'),
+  ])('refuses an Origin that is neither http: nor https:, whatever host it names', (host, scheme, protocol) => {
+    const origin = scheme.startsWith('blob:') ? `${scheme}${host}/0b` : `${scheme}${host}`
+    const trustedOrigins = new Set([`https://${host}`, `http://${host}`])
+
+    for (const request of [
+      { method: 'POST', host, protocol, origin },
+      { method: 'POST', host: '', protocol, origin },
+      { method: 'POST', host, protocol, origin, secFetchSite: 'cross-site' },
+    ]) {
+      expect(checkOrigin(request, { trustedOrigins }).verdict).toBe('deny')
+    }
+  })
+
   // Trusting more can only let more through: a list that grows never refuses what a shorter one let in.
   it.prop([input, origins, origins])('never refuses a request for trusting more origins', (request, some, more) => {
     const after = checkOrigin(request, { trustedOrigins: new Set([...some, ...more]) }).verdict

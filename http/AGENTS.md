@@ -52,6 +52,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   headers that decided it. `enabled(false)` registers no hook and warns once as the server starts.
 - `normalizeTrustedOrigin` refuses what is not exactly `scheme://host[:port]`. The WHATWG parser takes `*` for a
   host character, so a wildcard is refused by name.
+- A request's `Origin` is read as an `http:` or `https:` origin, or not at all (`parseOrigin`). The parser gives `ws:`
+  and `ftp:` URLs a host and a `blob:` URL its inner origin, none of which a page sends: each is `origin-malformed`.
 - The application's checks, `trustOrigin(...)` and `allowSecFetchSite(...)`, only widen. They are asked on the deny
   path alone, about what `checkOrigin` puts in `askable`: an `http:` or `https:` origin that is not a downgrade, and
   the site when it is `same-site` or `cross-site`. `origin.ts` alone decides what is askable; `Origin: null`, a

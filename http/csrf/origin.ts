@@ -68,9 +68,10 @@ export interface OriginCheckAskable {
  *
  * A safe method is allowed. `Sec-Fetch-Site: same-origin` or `none` is allowed; any other value is refused unless the
  * `Origin` is trusted, `same-site` included, since a sibling subdomain is not this origin. Without that header the
- * `Origin` decides: absent, the verdict is `unknown`; `null` or malformed is refused; a trusted one is allowed; an
- * `http:` origin on a request the server knows came over HTTPS is refused; one naming the request's own host is
- * allowed; any other is refused. Hosts compare case-insensitively, with a default port taken off.
+ * `Origin` decides: absent, the verdict is `unknown`; `null`, malformed, or of a scheme other than `http` and `https`
+ * is refused; a trusted one is allowed; an `http:` origin on a request the server knows came over HTTPS is refused;
+ * one naming the request's own host is allowed; any other is refused. Hosts compare case-insensitively, with a
+ * default port taken off.
  *
  * A refusal carries {@link OriginCheckResult.askable} when the application's own checks may still let it through.
  */
@@ -179,28 +180,23 @@ function refused(reason: OriginReason, askable: OriginCheckAskable | undefined):
   return askable === undefined ? { verdict: 'deny', reason } : { verdict: 'deny', reason, askable }
 }
 
-// The application's checks are asked about a web origin only, and never about an `http:` one on a request known to
-// be HTTPS: that is the downgrade the rules refuse, which only the exact list, where the scheme is written out, may
-// let through.
+// The application's checks are never asked about an `http:` origin on a request known to be HTTPS: that is the
+// downgrade the rules refuse, which only the exact list, where the scheme is written out, may let through.
 function askableOf(parsed: URL | undefined, input: OriginCheckInput, site?: string): OriginCheckAskable | undefined {
-  if (parsed === undefined || (parsed.protocol !== 'https:' && parsed.protocol !== 'http:')) {
-    return undefined
-  }
-
-  if (input.protocol === 'https' && parsed.protocol === 'http:') {
+  if (parsed === undefined || (input.protocol === 'https' && parsed.protocol === 'http:')) {
     return undefined
   }
 
   return site === 'same-site' || site === 'cross-site' ? { origin: parsed.origin, site } : { origin: parsed.origin }
 }
 
-// A URL whose origin is one: a scheme the platform knows, with a host. The path a non-browser might send along is
-// ignored, as Go ignores it; what is compared is the host.
+// The origin of a page: `http:` or `https:`, with a host. No page has a `ws:` or `ftp:` one, and a `blob:` URL would
+// answer with the origin inside it. The path a non-browser might send along is ignored, as Go ignores it.
 function parseOrigin(origin: string): URL | undefined {
   try {
     const url = new URL(origin)
 
-    return url.origin === 'null' ? undefined : url
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url : undefined
   } catch {
     return undefined
   }

@@ -150,6 +150,29 @@ describe('checkOrigin', () => {
       }
     })
 
+    // A page's origin is `http:` or `https:`. A `ws:` origin naming this host, or a `blob:` URL answering with its
+    // inner origin, is nothing a page sends, and must not read as this origin or a trusted one.
+    it('refuses an Origin of a scheme no page has, even one naming this host or a trusted origin', () => {
+      for (const origin of [
+        'ws://app.example',
+        'wss://app.example',
+        'ftp://app.example',
+        'blob:https://app.example/0b',
+      ]) {
+        expect(checkOrigin(post({ origin }), NONE), origin).toEqual({ verdict: 'deny', reason: 'origin-malformed' })
+      }
+
+      expect(checkOrigin(post({ origin: 'blob:https://admin.example/0b' }), ADMIN)).toEqual({
+        verdict: 'deny',
+        reason: 'origin-malformed',
+      })
+      // A `blob:` URL has no host: it must not match a request that names none either.
+      expect(checkOrigin(post({ origin: 'blob:https://app.example/0b', host: '' }), NONE).verdict).toBe('deny')
+      expect(
+        checkOrigin(post({ secFetchSite: 'cross-site', origin: 'blob:https://admin.example/0b' }), ADMIN).verdict,
+      ).toBe('deny')
+    })
+
     // A request with no `Host` (HTTP/1.0) names nothing an Origin could match.
     it('refuses any Origin on a request that names no host', () => {
       expect(checkOrigin(post({ origin: 'https://app.example', host: '' }), NONE)).toMatchObject({
