@@ -10,8 +10,8 @@ import {
   Params,
   POST,
   Query,
-  type Call,
   type FetchyResponse,
+  type Transport,
 } from '@caffeinejs/fetchy'
 import { bench, do_not_optimize, group, run, summary } from 'mitata'
 
@@ -37,7 +37,7 @@ const response: FetchyResponse = {
 
 // One settled promise for every call: a transport allocates its own, and that cost is not fetchy's.
 const answered = Promise.resolve(response)
-const call: Call = { execute: () => answered }
+const transport: Transport = { send: () => answered }
 const controlRequest = new FetchyRequest('POST', 'http://bench.test', `/items/${benchId}`)
 
 @API('/items')
@@ -62,13 +62,13 @@ class OverheadAPI {
 
 const api = newClient()
   .baseURL('http://bench.test')
-  .callFactory({ provide: () => call })
+  .transportFactory({ provide: () => transport })
   .build()
   .create(OverheadAPI)
 
 const intercepted = newClient()
   .baseURL('http://bench.test')
-  .callFactory({ provide: () => call })
+  .transportFactory({ provide: () => transport })
   .addInterceptor(chain => chain.proceed(chain.request()))
   .build()
   .create(OverheadAPI)
@@ -94,7 +94,7 @@ interface OwnProperty {
 
 const probe = newClient()
   .baseURL('http://bench.test')
-  .callFactory({ provide: () => call })
+  .transportFactory({ provide: () => transport })
   .build()
   .create(DispatchAPI)
 
@@ -130,7 +130,7 @@ const single = dispatching(new DispatchAPI())
 const eight = Array.from({ length: 8 }, () => dispatching(new (class extends DispatchAPI {})()))
 const adapted = newClient()
   .baseURL('http://bench.test')
-  .callFactory({ provide: () => call })
+  .transportFactory({ provide: () => transport })
   .addCallAdapterFactory({
     provide: () => ({
       adapt:
@@ -172,7 +172,7 @@ group('dispatch across 8 classes', () => {
 
 group('in-memory call', () => {
   summary(() => {
-    bench('control', async () => do_not_optimize(JSON.parse(await (await call.execute(controlRequest)).text())))
+    bench('control', async () => do_not_optimize(JSON.parse(await (await transport.send(controlRequest)).text())))
     bench('fetchy field', async () => do_not_optimize(await api.post(benchId, benchFilter, benchBody)))
     bench('fetchy method', async () => do_not_optimize(await api.postMethod(benchId, benchFilter, benchBody)))
     bench('fetchy method + interceptor', async () =>

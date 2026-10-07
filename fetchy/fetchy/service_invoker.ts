@@ -1,4 +1,3 @@
-import type { Call } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { ChainExecutor } from './chain.js'
 import type { MethodSpec } from './decorators/registrar/index.js'
@@ -9,19 +8,20 @@ import { RequestBuilder } from './request_builder.js'
 import type { FetchyResponse } from './response.js'
 import type { ResponseConverter } from './response_converter.js'
 import { DefaultResponseHandler } from './response_handler.js'
+import type { Transport } from './transport.js'
 
 export interface InvokerContext {
   baseURL: string
-  call: Call
+  transport: Transport
   interceptors: readonly Interceptor[]
   responseConverter: ResponseConverter
   callAdapterFactories: readonly CallAdapterFactory[]
 }
 
-function terminalInterceptor(call: Call): Interceptor {
+function terminalInterceptor(transport: Transport): Interceptor {
   return {
     intercept(chain) {
-      return call.execute(chain.request())
+      return transport.send(chain.request())
     },
   }
 }
@@ -43,15 +43,15 @@ export function buildInvoker(context: InvokerContext, meta: MethodSpec, label = 
   const responseHandler = meta.responseHandler ?? new DefaultResponseHandler(context.responseConverter)
   // The default handler passes an ok response through untouched, so awaiting it would only cost a promise and a tick.
   const handlesOk = meta.responseHandler !== undefined
-  const interceptors = [...context.interceptors, terminalInterceptor(context.call)]
-  const execute: (request: FetchyRequest) => Promise<FetchyResponse> =
+  const interceptors = [...context.interceptors, terminalInterceptor(context.transport)]
+  const send: (request: FetchyRequest) => Promise<FetchyResponse> =
     context.interceptors.length === 0
-      ? request => context.call.execute(request)
+      ? request => context.transport.send(request)
       : request => ChainExecutor.first(interceptors, request, meta).proceed(request)
 
   const invoke = async (args: readonly unknown[]): Promise<unknown> => {
     const request = requestBuilder.toRequest(args)
-    const response = await execute(request)
+    const response = await send(request)
     const handled = handlesOk || !response.ok ? await responseHandler.handle(request, response) : response
     // Awaited, not returned: an async function resolving its promise with another promise costs an extra job.
     const value = await context.responseConverter.convert(handled)

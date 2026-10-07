@@ -1,2 +1,2 @@
-export { FetchCall } from './fetch_call.js'
-export { FetchCallFactory } from './fetch_call_factory.js'
+export { FetchTransport } from './fetch_transport.js'
+export { FetchTransportFactory } from './fetch_transport_factory.js'

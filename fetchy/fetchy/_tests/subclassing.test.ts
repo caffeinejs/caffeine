@@ -17,7 +17,7 @@ import { noop } from '../noop.js'
 import type { FetchyRequest } from '../request.js'
 import type { ResponseConverter } from '../response_converter.js'
 import { captureMetadata } from './capture_metadata.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string
@@ -26,11 +26,11 @@ interface User {
 // Builds a client of `TargetAPI` whose transport answers `responses` in order and records what each call sent, along
 // with the operation configuration every call reached the interceptors with.
 function clientOf<T extends object>(TargetAPI: new () => T, responses = 1) {
-  const callFactory = new TestCallFactory()
+  const transportFactory = new TestTransportFactory()
   const metas: MethodSpec[] = []
   const api = newClient()
     .baseURL('http://example.test')
-    .callFactory(callFactory)
+    .transportFactory(transportFactory)
     .addInterceptor(chain => {
       metas.push(chain.meta())
       return chain.proceed(chain.request())
@@ -39,10 +39,10 @@ function clientOf<T extends object>(TargetAPI: new () => T, responses = 1) {
     .create(TargetAPI)
 
   for (let i = 0; i < responses; i++) {
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: String(i) }))
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: String(i) }))
   }
 
-  const sent = (): FetchyRequest | null => callFactory.calls[0].lastRequest
+  const sent = (): FetchyRequest | null => transportFactory.transports[0].lastRequest
 
   return { api, sent, metas }
 }
@@ -395,7 +395,7 @@ describe('subclassing through create()', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Child)).toThrow(ErrFetchyInvalidRoute)
     expect(() => client.create(Child)).toThrow('Invalid route configuration for method "Base.list"')

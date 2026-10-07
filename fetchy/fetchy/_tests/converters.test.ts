@@ -15,7 +15,7 @@ import { noop } from '../noop.js'
 import { FormRequestBodyConverter, RawRequestBodyConverter } from '../request_body_converter.js'
 import { JSONResponseConverter, TextResponseConverter } from '../response_converter.js'
 import { NoopResponseHandler } from '../response_handler.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 @API('/users')
 class ConverterAPI {
@@ -77,20 +77,20 @@ class ClassDefaultConverterAPI {
   }
 }
 
-function buildClient(TargetAPI: new () => object, callFactory: TestCallFactory): any {
-  const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+function buildClient(TargetAPI: new () => object, transportFactory: TestTransportFactory): any {
+  const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
   return client.create(TargetAPI)
 }
 
 describe('converters', () => {
   it('FormRequestBodyConverter form-encodes a @Body() value via @UseRequestBodyConverter', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await api.createFormUser({ name: 'Ada' })
 
-    expect(callFactory.calls[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
+    expect(transportFactory.transports[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('FormRequestBodyConverter throws ErrFetchyInvalidFormBody for a flat array', () => {
@@ -124,18 +124,18 @@ describe('converters', () => {
   // A HEAD response never has a body. Before an empty body read as `undefined`, every @HEAD operation rejected with a
   // SyntaxError after a successful response.
   it('resolves a HEAD operation with undefined instead of failing on the missing body', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(new Response(null, { status: 200 }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 200 }))
 
     await expect(api.hasUser('1')).resolves.toBeUndefined()
   })
 
   // A 201 with no content means the resource exists. Rejecting it invites the caller to retry and create it twice.
   it('resolves an empty 2xx body with undefined', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(new Response('', { status: 201 }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response('', { status: 201 }))
 
     await expect(api.createUser({ name: 'Ada' })).resolves.toBeUndefined()
   })
@@ -146,9 +146,9 @@ describe('converters', () => {
   })
 
   it('TextResponseConverter returns the body as plain text via @UseResponseConverter', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(new Response('hello world', { status: 200 }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response('hello world', { status: 200 }))
 
     const result = await api.getUserText('1')
 
@@ -162,9 +162,9 @@ describe('converters', () => {
   })
 
   it('@RawResponse() returns the raw Response and does not throw on a non-ok status', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
     const response = await api.getUserRaw('404')
 
@@ -173,9 +173,9 @@ describe('converters', () => {
   })
 
   it('@UseResponseHandler(NoopResponseHandler) does not throw, but the converter still runs', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { message: 'boom' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { message: 'boom' }))
 
     const result = await api.getUserNoopHandler('1')
 
@@ -183,30 +183,30 @@ describe('converters', () => {
   })
 
   it('a non-ok response still throws ErrFetchyHTTP without @UseResponseHandler', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { message: 'boom' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { message: 'boom' }))
 
     await expect(api.getUserText('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('inherits a class-level @UseRequestBodyConverter() default', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ClassDefaultConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ClassDefaultConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
 
     await api.createUser({ name: 'Ada' })
 
-    expect(callFactory.calls[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
+    expect(transportFactory.transports[0].lastRequest?.body).toBe(new URLSearchParams({ name: 'Ada' }).toString())
   })
 
   it('a method-level @UseRequestBodyConverter() overrides the class-level default', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(ClassDefaultConverterAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ClassDefaultConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
 
     await api.createUserOverride('raw-body')
 
-    expect(callFactory.calls[0].lastRequest?.body).toBe('raw-body')
+    expect(transportFactory.transports[0].lastRequest?.body).toBe('raw-body')
   })
 })

@@ -1,6 +1,6 @@
 import './polyfill.js'
 
-export type { Call, CallFactory } from './call.js'
+export type { Transport, TransportFactory } from './transport.js'
 export type { CallAdapter, CallAdapterFactory } from './call_adapter.js'
 export type { Chain } from './chain.js'
 export type { FetchyClientOptions } from './client.js'

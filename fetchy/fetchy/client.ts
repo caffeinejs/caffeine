@@ -1,4 +1,3 @@
-import type { Call, CallFactory } from './call.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import type { ClassSpec, MethodSpec } from './decorators/registrar/index.js'
 import { type DeclaringClass, getDeclaringClasses } from './decorators/registrar/registrar.js'
@@ -9,12 +8,13 @@ import { joinPaths } from './internal/path_util.js'
 import { JSONResponseConverter } from './response_converter.js'
 import type { ResponseConverter } from './response_converter.js'
 import { buildInvoker, type Invoker } from './service_invoker.js'
+import type { Transport, TransportFactory } from './transport.js'
 
 type AnyCtor = new (...args: any[]) => any
 
 export interface FetchyClientOptions {
   baseURL: string
-  callFactory: CallFactory
+  transportFactory: TransportFactory
   interceptors: readonly Interceptor[]
   callAdapterFactories: readonly CallAdapterFactory[]
   responseConverter?: ResponseConverter
@@ -177,25 +177,25 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
  * transport, interceptors and call adapters. Make one with {@link FetchyBuilder}.
  */
 export class FetchyClient {
-  private readonly call: Call
+  private readonly transport: Transport
   private closing: Promise<void> | undefined
 
   constructor(private readonly options: FetchyClientOptions) {
-    this.call = options.callFactory.provide(options.baseURL)
+    this.transport = options.transportFactory.provide(options.baseURL)
   }
 
   /**
-   * Releases the transport's resources, such as the connection pool `UndiciCallFactory` opens, once
+   * Releases the transport's resources, such as the connection pool `UndiciTransportFactory` opens, once
    * the requests already sent complete. Every API client this one created shares that transport. A
    * second call returns the same promise.
    */
   close(): Promise<void> {
-    this.closing ??= this.call.close?.() ?? Promise.resolve()
+    this.closing ??= this.transport.close?.() ?? Promise.resolve()
     return this.closing
   }
 
   /**
-   * Closes the client, as {@link FetchyClient.close} does, at the end of an `await using` block.
+   * Closes the client, as {@link close} does, at the end of an `await using` block.
    */
   [Symbol.asyncDispose](): Promise<void> {
     return this.close()
@@ -233,7 +233,7 @@ export class FetchyClient {
         buildInvoker(
           {
             baseURL: this.options.baseURL,
-            call: this.call,
+            transport: this.transport,
             interceptors: this.options.interceptors,
             responseConverter,
             callAdapterFactories: this.options.callAdapterFactories,

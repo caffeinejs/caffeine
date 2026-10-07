@@ -1,18 +1,18 @@
-import { FetchCallFactory } from './builtin/fetch/index.js'
-import type { CallFactory } from './call.js'
+import { FetchTransportFactory } from './builtin/fetch/index.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { FetchyClient } from './client.js'
 import type { Interceptor, InterceptorFunction } from './interceptor.js'
 import { toInterceptor } from './interceptor.js'
 import type { ResponseConverter } from './response_converter.js'
+import type { TransportFactory } from './transport.js'
 
 /**
  * Fluent builder for a {@link FetchyClient}. Defaults to a native `fetch()`-based transport when
- * `.callFactory()` is never called.
+ * `.transportFactory()` is never called.
  */
 export class FetchyBuilder {
   #baseURL = ''
-  #callFactory: CallFactory | undefined
+  #transportFactory: TransportFactory | undefined
   readonly #interceptors: Interceptor[] = []
   readonly #callAdapterFactories: CallAdapterFactory[] = []
   #responseConverter: ResponseConverter | undefined
@@ -22,8 +22,8 @@ export class FetchyBuilder {
     return this
   }
 
-  callFactory(factory: CallFactory): this {
-    this.#callFactory = factory
+  transportFactory(factory: TransportFactory): this {
+    this.#transportFactory = factory
     return this
   }
 
@@ -45,7 +45,7 @@ export class FetchyBuilder {
   build(): FetchyClient {
     return new FetchyClient({
       baseURL: this.#baseURL,
-      callFactory: this.#callFactory ?? new FetchCallFactory(),
+      transportFactory: this.#transportFactory ?? new FetchTransportFactory(),
       interceptors: this.#interceptors,
       callAdapterFactories: this.#callAdapterFactories,
       responseConverter: this.#responseConverter,

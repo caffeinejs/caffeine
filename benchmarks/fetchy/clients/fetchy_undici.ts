@@ -1,11 +1,11 @@
 import { newClient } from '@caffeinejs/fetchy'
-import { UndiciCallFactory } from '@caffeinejs/fetchy-undici'
+import { UndiciTransportFactory } from '@caffeinejs/fetchy-undici'
 
 import { BenchAPI } from '../api.js'
 import { baseURL, benchBody, benchFilter, benchId } from '../config.js'
 import type { BenchClient } from './bench_client.js'
 
-const api = newClient().baseURL(baseURL).callFactory(new UndiciCallFactory()).build().create(BenchAPI)
+const api = newClient().baseURL(baseURL).transportFactory(new UndiciTransportFactory()).build().create(BenchAPI)
 
 export const fetchyUndiciClient: BenchClient = {
   name: 'fetchy-undici',

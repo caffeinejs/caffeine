@@ -1,14 +1,14 @@
-import type { Call, CallFactory } from '../call.js'
 import type { FetchyRequest } from '../request.js'
 import type { FetchyResponse } from '../response.js'
+import type { Transport, TransportFactory } from '../transport.js'
 
 /**
- * Fake {@link Call} that records the last request it received and returns pre-programmed
+ * Fake {@link Transport} that records the last request it received and returns pre-programmed
  * responses or failures, so tests can exercise the full pipeline without a real network.
  */
-export class TestCall implements Call {
+export class TestTransport implements Transport {
   lastRequest: FetchyRequest | null = null
-  executions = 0
+  sendCount = 0
   private readonly outcomes: (Response | Error)[] = []
 
   willRespond(response: Response): this {
@@ -21,30 +21,30 @@ export class TestCall implements Call {
     return this
   }
 
-  execute(request: FetchyRequest): Promise<FetchyResponse> {
+  send(request: FetchyRequest): Promise<FetchyResponse> {
     this.lastRequest = request
-    this.executions++
+    this.sendCount++
     const outcome = this.outcomes.shift()
 
     if (!outcome) {
-      throw new Error('TestCall has no more programmed responses')
+      throw new Error('TestTransport has no more programmed responses')
     }
 
     return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome)
   }
 }
 
-export class TestCallFactory implements CallFactory {
-  readonly calls: TestCall[] = []
+export class TestTransportFactory implements TransportFactory {
+  readonly transports: TestTransport[] = []
 
-  provide(_baseURL: string): Call {
-    const call = new TestCall()
-    this.calls.push(call)
-    return call
+  provide(_baseURL: string): Transport {
+    const transport = new TestTransport()
+    this.transports.push(transport)
+    return transport
   }
 
-  get lastCall(): TestCall | undefined {
-    return this.calls[this.calls.length - 1]
+  get lastTransport(): TestTransport | undefined {
+    return this.transports[this.transports.length - 1]
   }
 }
 

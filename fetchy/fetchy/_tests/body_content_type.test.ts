@@ -18,7 +18,7 @@ import {
   RawRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
  * A body that was JSON-stringified has to say so. Without a `content-type`, `fetch` labels a string body
@@ -83,18 +83,18 @@ class BodyAPI {
   }
 }
 
-function build(callFactory: TestCallFactory): any {
-  return newClient().baseURL('http://example.test').callFactory(callFactory).build().create(BodyAPI)
+function build(transportFactory: TestTransportFactory): any {
+  return newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(BodyAPI)
 }
 
 async function contentTypeOf(call: (api: any) => Promise<unknown>): Promise<string | null> {
-  const callFactory = new TestCallFactory()
-  const api = build(callFactory)
-  callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+  const transportFactory = new TestTransportFactory()
+  const api = build(transportFactory)
+  transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
 
   await call(api)
 
-  return callFactory.calls[0].lastRequest?.headers.get('content-type') ?? null
+  return transportFactory.transports[0].lastRequest?.headers.get('content-type') ?? null
 }
 
 describe('the content-type of a converted body', () => {
@@ -156,13 +156,17 @@ class FieldDeclaredAPI {
 
 describe('an operation declared as a field', () => {
   async function callField(call: (api: any) => Promise<unknown>): Promise<FetchyRequest> {
-    const callFactory = new TestCallFactory()
-    const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(FieldDeclaredAPI)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FieldDeclaredAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
 
     await call(api)
 
-    return callFactory.calls[0].lastRequest!
+    return transportFactory.transports[0].lastRequest!
   }
 
   it('applies @FormURLEncoded() in the field position', async () => {
@@ -220,13 +224,13 @@ class ClassFormBodyAPI {
 
 describe('a @Body() under @FormURLEncoded()', () => {
   async function send(TargetAPI: new () => object, call: (api: any) => Promise<unknown>): Promise<FetchyRequest> {
-    const callFactory = new TestCallFactory()
-    const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(TargetAPI)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(TargetAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
 
     await call(api)
 
-    return callFactory.calls[0].lastRequest!
+    return transportFactory.transports[0].lastRequest!
   }
 
   // An OAuth token request is the common case, and an unset optional `scope` must not reach the server as text.

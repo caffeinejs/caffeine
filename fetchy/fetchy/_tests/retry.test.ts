@@ -16,7 +16,7 @@ import { GET, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyHTTP } from '../errors.js'
 import { noop } from '../noop.js'
 import { RawRequestBodyConverter } from '../request_body_converter.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string
@@ -90,10 +90,10 @@ class RetryClassDefaultAPI {
   }
 }
 
-function buildClient(TargetAPI: new () => object, callFactory: TestCallFactory): any {
+function buildClient(TargetAPI: new () => object, transportFactory: TestTransportFactory): any {
   const client = newClient()
     .baseURL('http://example.test')
-    .callFactory(callFactory)
+    .transportFactory(transportFactory)
     .addInterceptor(RetryInterceptor.INSTANCE)
     .build()
 
@@ -102,10 +102,10 @@ function buildClient(TargetAPI: new () => object, callFactory: TestCallFactory):
 
 describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
   it('retries a failing response until it succeeds, per @Retry() defaults', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
       .willRespond(fakeJSONResponse(500, { error: true }))
       .willRespond(fakeJSONResponse(500, { error: true }))
       .willRespond(fakeJSONResponse(200, { id: '1' }))
@@ -116,45 +116,47 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
   })
 
   it('does not retry a method without @Retry()', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.getUserNoRetryDecorator('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('resends an intact request body on a retried attempt', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     const result = await api.putUser('1', { name: 'Ada' })
 
     expect(result).toEqual({ id: '1' })
-    expect(JSON.parse(String(call.lastRequest?.body))).toEqual({ name: 'Ada' })
+    expect(JSON.parse(String(transport.lastRequest?.body))).toEqual({ name: 'Ada' })
   })
 
   it('does not retry when the request method is not in the configured methods list', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.getUserWrongMethod('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('does not retry when the response status is not in the configured statusCodes list', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.getUserWrongStatus('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('rejects and stops retrying once the request is aborted during the delay', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, {}))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    transportFactory.transports[0]
+      .willRespond(fakeJSONResponse(500, { error: true }))
+      .willRespond(fakeJSONResponse(200, {}))
 
     const controller = new AbortController()
     setTimeout(() => controller.abort(new Error('aborted')), 10)
@@ -163,10 +165,10 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
   })
 
   it('inherits the class-level @Retry() default', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryClassDefaultAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     const result = await api.getUser('1')
 
@@ -174,17 +176,17 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
   })
 
   it('a method-level @Retry() fully overrides the class-level default', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryClassDefaultAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.overwriteDefaults('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
   it('@NoRetry() cancels the inherited class-level default', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(RetryClassDefaultAPI, callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(500, { error: true }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.noRetry('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
@@ -233,83 +235,83 @@ function undiciFailure(code: string): Error {
 describe('RetryInterceptor on network failures', () => {
   // A connection reset or refused on an idempotent request is the transient failure retrying exists for.
   it('retries a fetch failure whose cause carries a transient code, until it succeeds', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
       .willFail(fetchFailure('ECONNRESET'))
       .willFail(fetchFailure('ECONNREFUSED'))
       .willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
-    expect(call.executions).toBe(3)
+    expect(transport.sendCount).toBe(3)
   })
 
   it('retries an undici failure that carries the code itself', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
-    expect(call.executions).toBe(2)
+    expect(transport.sendCount).toBe(2)
   })
 
   // A POST may have reached the server before the connection dropped. Sending it again could apply it twice.
   it('does not retry a network failure of a POST', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.createUser({ id: '1' })).rejects.toBeInstanceOf(TypeError)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 
   it('gives up after the attempt limit, with the last failure', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
     const last = undiciFailure('ECONNRESET')
-    call.willFail(undiciFailure('ECONNRESET')).willFail(undiciFailure('ECONNRESET')).willFail(last)
+    transport.willFail(undiciFailure('ECONNRESET')).willFail(undiciFailure('ECONNRESET')).willFail(last)
 
     await expect(api.getUser('1')).rejects.toBe(last)
-    expect(call.executions).toBe(3)
+    expect(transport.sendCount).toBe(3)
   })
 
   // The caller has given up on the request, so nobody waits for another attempt.
   it('does not retry a request whose signal is aborted', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
     const controller = new AbortController()
     controller.abort()
-    call.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.getUserWithSignal('1', controller.signal)).rejects.toBeInstanceOf(TypeError)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 
   it('does not retry network failures when errorCodes is empty', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(fetchFailure('ECONNRESET')).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.getUserWithoutNetworkRetry('1')).rejects.toBeInstanceOf(TypeError)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 
   // An error without a code is no transport failure, more likely a bug in an interceptor, and a retry would hide it.
   it('does not retry an error that carries no code', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(NetworkRetryAPI, callFactory)
-    const call = callFactory.calls[0]
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(NetworkRetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
     const bug = new Error('interceptor bug')
-    call.willFail(bug).willRespond(fakeJSONResponse(200, { id: '1' }))
+    transport.willFail(bug).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.getUser('1')).rejects.toBe(bug)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 })
 
@@ -349,35 +351,35 @@ describe('RetryInterceptor on a body that can be read only once', () => {
         })(),
     ],
   ])('does not retry a network failure when the body is %s', async (_kind, body) => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(UploadAPI, callFactory)
-    const call = callFactory.calls[0]
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
     const failure = undiciFailure('UND_ERR_SOCKET')
-    call.willFail(failure).willRespond(fakeJSONResponse(200, { id: '1' }))
+    transport.willFail(failure).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.upload('1', body())).rejects.toBe(failure)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 
   it('does not retry a failing response when the body is a stream', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(UploadAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(500, { error: true })).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.upload('1', webStream())).rejects.toBeInstanceOf(ErrFetchyHTTP)
-    expect(call.executions).toBe(1)
+    expect(transport.sendCount).toBe(1)
   })
 
   // Bytes held in memory are sent whole on every attempt, so they stay as retryable as a string.
   it('still retries a body held in memory', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(UploadAPI, callFactory)
-    const call = callFactory.calls[0]
-    call.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(UploadAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willFail(undiciFailure('UND_ERR_SOCKET')).willRespond(fakeJSONResponse(200, { id: '1' }))
 
     await expect(api.upload('1', content)).resolves.toEqual({ id: '1' })
-    expect(call.executions).toBe(2)
-    expect(call.lastRequest?.body).toBe(content)
+    expect(transport.sendCount).toBe(2)
+    expect(transport.lastRequest?.body).toBe(content)
   })
 })

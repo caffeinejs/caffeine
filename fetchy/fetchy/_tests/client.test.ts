@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Call } from '../call.js'
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { FormURLEncoded } from '../decorators/form_url_encoded.js'
@@ -22,14 +21,15 @@ import {
 } from '../errors.js'
 import { noop } from '../noop.js'
 import type { ResponseConverter as ResponseConverterInstance } from '../response_converter.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import type { Transport } from '../transport.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string
   name: string
 }
 
-describe('FetchyClient end-to-end (fake CallFactory)', () => {
+describe('FetchyClient end-to-end (fake TransportFactory)', () => {
   it('builds a request from decorators, dispatches it, and converts the JSON response', async () => {
     @API('/users')
     class UsersAPI {
@@ -40,17 +40,17 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const transportFactory = new TestTransportFactory()
+    const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
     const api = client.create(UsersAPI)
 
-    const testCall = callFactory.calls[0]
-    testCall.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const testTransport = transportFactory.transports[0]
+    testTransport.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const user = await api.getUser('1', true)
 
-    expect(testCall.lastRequest?.method).toBe('GET')
-    expect(testCall.lastRequest?.url).toBe('http://example.test/users/1?active=true')
+    expect(testTransport.lastRequest?.method).toBe('GET')
+    expect(testTransport.lastRequest?.url).toBe('http://example.test/users/1?active=true')
     expect(user).toEqual({ id: '1', name: 'Ada' })
   })
 
@@ -62,15 +62,15 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       getUser!: (id: string) => Promise<User>
     }
 
-    const callFactory = new TestCallFactory()
-    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const transportFactory = new TestTransportFactory()
+    const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
     const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const user = await api.getUser('1')
 
-    expect(callFactory.calls[0].lastRequest?.url).toBe('http://example.test/users/1')
+    expect(transportFactory.transports[0].lastRequest?.url).toBe('http://example.test/users/1')
     expect(user).toEqual({ id: '1', name: 'Ada' })
   })
 
@@ -84,17 +84,17 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const transportFactory = new TestTransportFactory()
+    const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
     const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(fakeJSONResponse(201, { id: '2', name: 'Grace' }))
+    transportFactory.transports[0].willRespond(fakeJSONResponse(201, { id: '2', name: 'Grace' }))
 
     const user = await api.createUser({ name: 'Grace' })
 
-    expect(callFactory.calls[0].lastRequest?.method).toBe('POST')
-    expect(callFactory.calls[0].lastRequest?.url).toBe('http://example.test/users/')
-    expect(callFactory.calls[0].lastRequest?.body).toBe('{"name":"Grace"}')
+    expect(transportFactory.transports[0].lastRequest?.method).toBe('POST')
+    expect(transportFactory.transports[0].lastRequest?.url).toBe('http://example.test/users/')
+    expect(transportFactory.transports[0].lastRequest?.body).toBe('{"name":"Grace"}')
     expect(user).toEqual({ id: '2', name: 'Grace' })
   })
 
@@ -108,11 +108,11 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const transportFactory = new TestTransportFactory()
+    const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
     const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
+    transportFactory.transports[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
     await expect(api.getUser('404')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
@@ -121,7 +121,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
     @API()
     class Empty {}
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Empty)).toThrow(ErrFetchyEmptyClient)
     expect(() => client.create(Empty)).toThrow(
@@ -139,7 +139,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
   })
@@ -153,7 +153,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
     expect(() => client.create(Invalid)).toThrow('Invalid route configuration for method "Invalid.bad"')
@@ -170,7 +170,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
   })
@@ -191,11 +191,11 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const client = newClient().baseURL('http://example.test').callFactory(callFactory).build()
+    const transportFactory = new TestTransportFactory()
+    const client = newClient().baseURL('http://example.test').transportFactory(transportFactory).build()
     const api = client.create(UsersAPI)
 
-    callFactory.calls[0].willRespond(new Response('hello', { status: 200 }))
+    transportFactory.transports[0].willRespond(new Response('hello', { status: 200 }))
 
     await expect(api.getGreeting()).resolves.toBe('HELLO')
   })
@@ -210,22 +210,22 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const firstFactory = new TestCallFactory()
-    const firstClient = newClient().baseURL('http://first.test').callFactory(firstFactory).build()
+    const firstFactory = new TestTransportFactory()
+    const firstClient = newClient().baseURL('http://first.test').transportFactory(firstFactory).build()
     const firstAPI = firstClient.create(UsersAPI)
 
-    const secondFactory = new TestCallFactory()
-    const secondClient = newClient().baseURL('http://second.test').callFactory(secondFactory).build()
+    const secondFactory = new TestTransportFactory()
+    const secondClient = newClient().baseURL('http://second.test').transportFactory(secondFactory).build()
     const secondAPI = secondClient.create(UsersAPI)
 
-    firstFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
-    secondFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    firstFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    secondFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     await firstAPI.getUser('1')
     await secondAPI.getUser('1')
 
-    expect(firstFactory.calls[0].lastRequest?.url).toBe('http://first.test/users/1')
-    expect(secondFactory.calls[0].lastRequest?.url).toBe('http://second.test/users/1')
+    expect(firstFactory.transports[0].lastRequest?.url).toBe('http://first.test/users/1')
+    expect(secondFactory.transports[0].lastRequest?.url).toBe('http://second.test/users/1')
   })
 
   // A client is shaped like any instance of its class: methods stay on the prototype and fields are own enumerable
@@ -242,7 +242,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       listViaField!: () => Promise<unknown>
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
     const api = client.create(UsersAPI)
 
     expect(Object.hasOwn(api, 'listViaMethod')).toBe(false)
@@ -265,14 +265,14 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(UsersAPI)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     await api.getUser('1')
 
-    expect(callFactory.calls[0].lastRequest?.url).toBe('http://example.test/users/1')
-    expect(callFactory.calls[0].lastRequest?.headers.get('x-api-key')).toBe('secret')
+    expect(transportFactory.transports[0].lastRequest?.url).toBe('http://example.test/users/1')
+    expect(transportFactory.transports[0].lastRequest?.headers.get('x-api-key')).toBe('secret')
   })
 
   // `/users/undefined` names a resource like any other path, so the call has to fail before anything is sent.
@@ -286,11 +286,11 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const api = newClient().baseURL('http://example.test').callFactory(callFactory).build().create(UsersAPI)
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(UsersAPI)
 
     await expect(api.remove(undefined as never)).rejects.toBeInstanceOf(ErrFetchyMissingPathArgument)
-    expect(callFactory.calls[0].lastRequest).toBeNull()
+    expect(transportFactory.transports[0].lastRequest).toBeNull()
   })
 
   // A constructor may open a connection or start a timer. `create()` used to run it and only then reject the class's
@@ -311,7 +311,7 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
@@ -326,15 +326,15 @@ describe('FetchyClient end-to-end (fake CallFactory)', () => {
       }
     }
 
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Undecorated)).toThrow(ErrFetchyMissingAPIDecorator)
   })
 })
 
 describe('a client behaves like an instance of its class', () => {
-  function clientAt(baseURL: string, callFactory = new TestCallFactory()) {
-    return newClient().baseURL(baseURL).callFactory(callFactory).build()
+  function clientAt(baseURL: string, transportFactory = new TestTransportFactory()) {
+    return newClient().baseURL(baseURL).transportFactory(transportFactory).build()
   }
 
   // Every client shares one function per method, so a spy or a breakpoint on the class sees all of them, while each
@@ -350,19 +350,19 @@ describe('a client behaves like an instance of its class', () => {
     }
 
     const spy = vi.spyOn(UsersAPI.prototype, 'getUser')
-    const first = new TestCallFactory()
-    const second = new TestCallFactory()
+    const first = new TestTransportFactory()
+    const second = new TestTransportFactory()
     const firstAPI = clientAt('http://first.test', first).create(UsersAPI)
     const secondAPI = clientAt('http://second.test', second).create(UsersAPI)
-    first.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
-    second.calls[0].willRespond(fakeJSONResponse(200, { id: '2', name: 'Grace' }))
+    first.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    second.transports[0].willRespond(fakeJSONResponse(200, { id: '2', name: 'Grace' }))
 
     await firstAPI.getUser('1')
     await secondAPI.getUser('2')
 
     expect(spy).toHaveBeenCalledTimes(2)
-    expect(first.calls[0].lastRequest?.url).toBe('http://first.test/users/1')
-    expect(second.calls[0].lastRequest?.url).toBe('http://second.test/users/2')
+    expect(first.transports[0].lastRequest?.url).toBe('http://first.test/users/1')
+    expect(second.transports[0].lastRequest?.url).toBe('http://second.test/users/2')
   })
 
   // A decorator that wraps an operation, for logging or timing, has to run. TC39 applies a method's decorators bottom
@@ -415,10 +415,10 @@ describe('a client behaves like an instance of its class', () => {
       unwrappedField!: () => Promise<unknown>
     }
 
-    const callFactory = new TestCallFactory()
-    const api = clientAt('http://example.test', callFactory).create(UsersAPI)
+    const transportFactory = new TestTransportFactory()
+    const api = clientAt('http://example.test', transportFactory).create(UsersAPI)
     for (let i = 0; i < 4; i++) {
-      callFactory.calls[0].willRespond(fakeJSONResponse(200, {}))
+      transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
     }
 
     await api.wrappedMethod()
@@ -458,16 +458,16 @@ describe('a client behaves like an instance of its class', () => {
       }
     }
 
-    const first = new TestCallFactory()
-    const second = new TestCallFactory()
+    const first = new TestTransportFactory()
+    const second = new TestTransportFactory()
     const firstAPI = clientAt('http://first.test', first).create(UsersAPI)
     const secondAPI = clientAt('http://second.test', second).create(UsersAPI)
-    second.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    second.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     await firstAPI.getUser.call(secondAPI, '1')
 
-    expect(first.calls[0].lastRequest).toBeNull()
-    expect(second.calls[0].lastRequest?.url).toBe('http://second.test/users/1')
+    expect(first.transports[0].lastRequest).toBeNull()
+    expect(second.transports[0].lastRequest?.url).toBe('http://second.test/users/1')
   })
 
   // A field operation is bound to its client, as an arrow-function field is bound to its instance.
@@ -479,15 +479,15 @@ describe('a client behaves like an instance of its class', () => {
       getUser!: (id: string) => Promise<User>
     }
 
-    const first = new TestCallFactory()
+    const first = new TestTransportFactory()
     const firstAPI = clientAt('http://first.test', first).create(UsersAPI)
     const secondAPI = clientAt('http://second.test').create(UsersAPI)
-    first.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    first.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const { getUser } = firstAPI
     await getUser('1')
 
-    expect(first.calls[0].lastRequest?.url).toBe('http://first.test/users/1')
+    expect(first.transports[0].lastRequest?.url).toBe('http://first.test/users/1')
     expect(firstAPI.getUser).not.toBe(secondAPI.getUser)
   })
 
@@ -520,10 +520,10 @@ describe('a client behaves like an instance of its class', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const api = clientAt('http://example.test', callFactory).create(UsersAPI)
+    const transportFactory = new TestTransportFactory()
+    const api = clientAt('http://example.test', transportFactory).create(UsersAPI)
     const woven = new Proxy(api, { get: (target, key, receiver) => Reflect.get(target, key, receiver) })
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     await expect(woven.getUser('1')).resolves.toEqual({ id: '1', name: 'Ada' })
   })
@@ -547,9 +547,9 @@ describe('a client behaves like an instance of its class', () => {
       }
     }
 
-    const callFactory = new TestCallFactory()
-    const api = clientAt('http://example.test', callFactory).create(UsersAPI)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transportFactory = new TestTransportFactory()
+    const api = clientAt('http://example.test', transportFactory).create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     await expect(api.getUser('1')).resolves.toEqual({ id: '1', name: 'Ada' })
     expect((api as UsersAPI & { traced?: boolean }).traced).toBe(true)
@@ -573,9 +573,9 @@ describe('a client behaves like an instance of its class', () => {
 })
 
 describe('FetchyClient.close()', () => {
-  function closingCall(onClose: () => void): Call {
+  function closingTransport(onClose: () => void): Transport {
     return {
-      execute: () => Promise.reject(new Error('no request expected')),
+      send: () => Promise.reject(new Error('no request expected')),
       close: () => {
         onClose()
         return Promise.resolve()
@@ -589,7 +589,7 @@ describe('FetchyClient.close()', () => {
     let closes = 0
     const client = newClient()
       .baseURL('http://example.test')
-      .callFactory({ provide: () => closingCall(() => closes++) })
+      .transportFactory({ provide: () => closingTransport(() => closes++) })
       .build()
 
     const first = client.close()
@@ -601,7 +601,7 @@ describe('FetchyClient.close()', () => {
   })
 
   it('resolves when the transport has nothing to release', async () => {
-    const client = newClient().baseURL('http://example.test').callFactory(new TestCallFactory()).build()
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     await expect(client.close()).resolves.toBeUndefined()
   })
@@ -611,7 +611,7 @@ describe('FetchyClient.close()', () => {
     let closes = 0
     const client = newClient()
       .baseURL('http://example.test')
-      .callFactory({ provide: () => closingCall(() => closes++) })
+      .transportFactory({ provide: () => closingTransport(() => closes++) })
       .build()
 
     await client[Symbol.asyncDispose]()

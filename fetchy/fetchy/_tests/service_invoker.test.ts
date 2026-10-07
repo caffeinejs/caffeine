@@ -4,7 +4,7 @@ import type { MethodSpec } from '../decorators/registrar/index.js'
 import { ErrFetchyInvalidRoute } from '../errors.js'
 import { JSONResponseConverter, RawResponseConverter } from '../response_converter.js'
 import { buildInvoker } from '../service_invoker.js'
-import { fakeJSONResponse, TestCall } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransport } from './test_transport_factory.js'
 
 function methodSpec(overrides: Partial<MethodSpec> = {}): MethodSpec {
   return {
@@ -32,14 +32,14 @@ describe('buildInvoker', () => {
       params: [{ kind: 'path', key: 'id', index: 0 }],
     })
 
-    const call = new TestCall()
-    call.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transport = new TestTransport()
+    transport.willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const seen: string[] = []
     const invoke = buildInvoker(
       {
         baseURL: 'http://example.test',
-        call,
+        transport,
         interceptors: [
           {
             intercept(chain) {
@@ -58,7 +58,7 @@ describe('buildInvoker', () => {
 
     expect(result).toEqual({ id: '1', name: 'Ada' })
     expect(seen).toEqual(['http://example.test/users/1'])
-    expect(call.lastRequest?.method).toBe('GET')
+    expect(transport.lastRequest?.method).toBe('GET')
   })
 
   it('throws ErrFetchyHTTP on a non-ok response, with the parsed error body', async () => {
@@ -68,13 +68,13 @@ describe('buildInvoker', () => {
       params: [{ kind: 'path', key: 'id', index: 0 }],
     })
 
-    const call = new TestCall()
-    call.willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
+    const transport = new TestTransport()
+    transport.willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
     const invoke = buildInvoker(
       {
         baseURL: 'http://example.test',
-        call,
+        transport,
         interceptors: [],
         responseConverter: JSONResponseConverter,
         callAdapterFactories: [],
@@ -92,14 +92,14 @@ describe('buildInvoker', () => {
   it('supports a raw response converter that skips JSON parsing', async () => {
     const meta = methodSpec({ httpMethod: 'GET', path: '/raw' })
 
-    const call = new TestCall()
+    const transport = new TestTransport()
     const response = fakeJSONResponse(200, { ignored: true })
-    call.willRespond(response)
+    transport.willRespond(response)
 
     const invoke = buildInvoker(
       {
         baseURL: 'http://example.test',
-        call,
+        transport,
         interceptors: [],
         responseConverter: RawResponseConverter,
         callAdapterFactories: [],
@@ -115,8 +115,8 @@ describe('buildInvoker', () => {
   // The invoker skips the default handler for an ok response, which it would hand back untouched. A handler the
   // operation names may replace an ok response, so it always runs.
   it('runs a custom response handler for an ok response too', async () => {
-    const call = new TestCall()
-    call.willRespond(fakeJSONResponse(200, { original: true }))
+    const transport = new TestTransport()
+    transport.willRespond(fakeJSONResponse(200, { original: true }))
 
     const statuses: number[] = []
     const meta = methodSpec({
@@ -133,7 +133,7 @@ describe('buildInvoker', () => {
     const invoke = buildInvoker(
       {
         baseURL: 'http://example.test',
-        call,
+        transport,
         interceptors: [],
         responseConverter: JSONResponseConverter,
         callAdapterFactories: [],
@@ -150,14 +150,14 @@ describe('buildInvoker', () => {
   it('bridges a call adapter: it receives the arguments one by one and its function is what the call runs', async () => {
     const meta = methodSpec({ httpMethod: 'GET', path: '/users/{id}', params: [{ kind: 'path', key: 'id', index: 0 }] })
 
-    const call = new TestCall()
-    call.willRespond(fakeJSONResponse(200, { id: '7' }))
+    const transport = new TestTransport()
+    transport.willRespond(fakeJSONResponse(200, { id: '7' }))
 
     const received: unknown[][] = []
     const invoke = buildInvoker(
       {
         baseURL: 'http://example.test',
-        call,
+        transport,
         interceptors: [],
         responseConverter: JSONResponseConverter,
         callAdapterFactories: [
@@ -178,7 +178,7 @@ describe('buildInvoker', () => {
 
     await expect(invoke(['7', 'extra'])).resolves.toEqual({ adapted: { id: '7' } })
     expect(received).toEqual([['7', 'extra']])
-    expect(call.lastRequest?.url).toBe('http://example.test/users/7')
+    expect(transport.lastRequest?.url).toBe('http://example.test/users/7')
   })
 
   // An adapter that returns anything but a function would otherwise fail on the first call, far from the cause.
@@ -189,7 +189,7 @@ describe('buildInvoker', () => {
       buildInvoker(
         {
           baseURL: 'http://example.test',
-          call: new TestCall(),
+          transport: new TestTransport(),
           interceptors: [],
           responseConverter: JSONResponseConverter,
           callAdapterFactories: [{ provide: () => ({ adapt: () => 42 as never }) }],

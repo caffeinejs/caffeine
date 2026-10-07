@@ -9,7 +9,7 @@ import { Param } from '../decorators/params/param.js'
 import { GET } from '../decorators/verbs.js'
 import { ErrFetchyClientNotBuilt, ErrFetchyHTTP, ErrFetchyMissingCallbackArgument } from '../errors.js'
 import { noop } from '../noop.js'
-import { fakeJSONResponse, TestCallFactory } from './test_call_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {
   id: string
@@ -18,7 +18,7 @@ interface User {
 
 type UserCallback = (error: Error | null, user: User | null) => void
 
-function buildClient(callFactory: TestCallFactory) {
+function buildClient(transportFactory: TestTransportFactory) {
   @API('/users')
   class UsersAPI {
     @GET('/{id}')
@@ -36,7 +36,7 @@ function buildClient(callFactory: TestCallFactory) {
 
   const client = newClient()
     .baseURL('http://example.test')
-    .callFactory(callFactory)
+    .transportFactory(transportFactory)
     .addCallAdapterFactory(new CallbackCallAdapterFactory())
     .build()
 
@@ -45,9 +45,9 @@ function buildClient(callFactory: TestCallFactory) {
 
 describe('@Callback() / CallbackCallAdapterFactory', () => {
   it('resolves via the callback instead of a Promise', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const result = await new Promise<[Error | null, User | null]>(resolve => {
       api.getUser('1', (error, user) => resolve([error, user]))
@@ -57,9 +57,9 @@ describe('@Callback() / CallbackCallAdapterFactory', () => {
   })
 
   it('calls the callback with an ErrFetchyHTTP on a non-ok response', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(404, { message: 'not found' }, 'Not Found'))
 
     const [error, user] = await new Promise<[Error | null, User | null]>(resolve => {
       api.getUser('404', (err, data) => resolve([err, data]))
@@ -70,16 +70,16 @@ describe('@Callback() / CallbackCallAdapterFactory', () => {
   })
 
   it('throws ErrFetchyMissingCallbackArgument when called without a trailing function', () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(callFactory)
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory)
 
     expect(() => (api.getUser as (id: string) => void)('1')).toThrow(ErrFetchyMissingCallbackArgument)
   })
 
   it('invokes a throwing callback exactly once', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     let calls = 0
     const throwingCallback: UserCallback = () => {
@@ -108,7 +108,7 @@ describe('@Callback() / CallbackCallAdapterFactory', () => {
   // there is no client to send through, and the call says so instead of calling back with nothing.
   it('throws ErrFetchyClientNotBuilt for a callback method called detached from its client', () => {
     const callback = vi.fn()
-    const api = buildClient(new TestCallFactory())
+    const api = buildClient(new TestTransportFactory())
     const getUser = api.getUser
 
     expect(() => getUser('1', callback)).toThrow(ErrFetchyClientNotBuilt)
@@ -116,9 +116,9 @@ describe('@Callback() / CallbackCallAdapterFactory', () => {
   })
 
   it('works identically for a field-declared operation', async () => {
-    const callFactory = new TestCallFactory()
-    const api = buildClient(callFactory)
-    callFactory.calls[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
 
     const callback = vi.fn()
     api.getUserField('1', callback)
