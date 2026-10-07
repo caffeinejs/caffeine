@@ -416,6 +416,53 @@ describe('csrf()', () => {
       expect((await post(app, '/csrf-exempt-class/github', CROSS_SITE)).status).toBe(200)
     })
 
+    // A method added to an exempt controller is exempt with it, so the one that rotates the receiver's secret has to
+    // be able to say it is not.
+    it('keeps a method marked @CSRFExempt(false) protected in a controller marked @CSRFExempt()', async () => {
+      @CSRFExempt()
+      @Controller('/csrf-exempt-but-one')
+      class ReceiverController {
+        @Post('/deliveries')
+        deliveries() {
+          return ok()
+        }
+
+        @CSRFExempt(false)
+        @Post('/secret')
+        rotate() {
+          return ok()
+        }
+      }
+      void [ReceiverController]
+
+      const app = await ready(createWebApplication().with(csrf()))
+
+      expect((await post(app, '/csrf-exempt-but-one/deliveries', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/csrf-exempt-but-one/secret', CROSS_SITE)).status).toBe(403)
+    })
+
+    it('keeps a method marked @CSRFExempt(false) protected under an excluded prefix', async () => {
+      @Controller('/csrf-excluded-but-one')
+      class SettingsController {
+        @Post('/provider')
+        provider() {
+          return ok()
+        }
+
+        @CSRFExempt(false)
+        @Post('/settings')
+        settings() {
+          return ok()
+        }
+      }
+      void [SettingsController]
+
+      const app = await ready(createWebApplication().with(csrf(c => c.exclude('/csrf-excluded-but-one'))))
+
+      expect((await post(app, '/csrf-excluded-but-one/provider', CROSS_SITE)).status).toBe(200)
+      expect((await post(app, '/csrf-excluded-but-one/settings', CROSS_SITE)).status).toBe(403)
+    })
+
     // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
     // else's routes stays protected when it says so.
     it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {

@@ -183,10 +183,17 @@ const app = createWebApplication()
   .with(csrf((c, { config }) => c.config(config.app.csrf).trustedOrigins('https://admin.example.com')))
   .with(authentication())
 
-@CSRFExempt() // a controller or a method: a webhook receiver, a form a partner's site posts here
 @Controller('/webhooks')
-class WebhooksController {}
+class WebhooksController {
+  @CSRFExempt() // the receiver alone: a webhook sender, a form a partner's site posts here
+  @Post('/github')
+  github() {}
 
+  @Post('/secret') // stays checked: it rotates the signing secret
+  rotate() {}
+}
+
+// On a controller, @CSRFExempt() exempts every method, one added later included; @CSRFExempt(false) keeps one checked
 newRouter('/hooks').with(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
 ```
 
@@ -263,8 +270,8 @@ Webhooks:
   cross-origin redirect can only be exempted: no trusted origin or check takes it.
 - An exempt receiver authenticates every delivery itself, by a signature over the bytes it was sent, read with
   `bodyAsBuffer()`: a forgery from a victim's browser now reaches it.
-- Keep the exemption narrow, `c.exclude('/webhooks/github')` or a mark on the receiver: the route that rotates the
-  signing secret sits beside it.
+- Keep the exemption narrow, `c.exclude('/webhooks/github')` or `@CSRFExempt()` on the receiver method: the route
+  that rotates the signing secret sits beside it. Under an exempt controller, mark that route `@CSRFExempt(false)`.
 - Exempting a receiver from the check does not open it to anonymous callers: under
   `Authorization(z => z.requireAuthenticatedByDefault())`, declare it public as well.
 
