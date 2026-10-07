@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest'
+import { once } from 'node:events'
+import { connect } from 'node:net'
+
+import { describe, it, expect, vi } from 'vitest'
 
 import { Controller, Post, Args, createWebApplication, BodyAsStream, BodyLimit } from '../index.js'
 import { $p } from '../routing/picker.js'
@@ -264,6 +267,57 @@ describe('BodyAsStream', () => {
       expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
 
       expect(await (await chunked(1024)).json()).toEqual({ size: 1024 })
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A client that leaves mid-upload sends no more bytes: the handler's read must fail, not wait for them for ever.
+  it('fails the read of a body whose client leaves mid-upload, and goes on serving', async () => {
+    const reads: string[] = []
+
+    @Controller('/stream-abandoned')
+    class AbandonedStreamController {
+      @BodyAsStream()
+      @Post('/upload')
+      @Args([$p.body()])
+      async upload(stream: ReadableStream<Uint8Array>) {
+        reads.push('reading')
+        try {
+          const { size } = await sizeOf(stream)
+          reads.push(`read ${size}`)
+        } catch {
+          reads.push('failed')
+        }
+        return { reads: reads.length }
+      }
+    }
+
+    void [AbandonedStreamController]
+
+    const app = createWebApplication().server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
+    await app.run()
+
+    try {
+      const socket = connect(app.address!.port, '127.0.0.1')
+      await once(socket, 'connect')
+      socket.write(
+        'POST /stream-abandoned/upload HTTP/1.1\r\nHost: localhost\r\n' +
+          'Content-Type: application/octet-stream\r\nTransfer-Encoding: chunked\r\n\r\n' +
+          `100\r\n${'x'.repeat(256)}\r\n`,
+      )
+      await vi.waitFor(() => expect(reads).toEqual(['reading']))
+      socket.destroy()
+
+      await vi.waitFor(() => expect(reads).toEqual(['reading', 'failed']))
+
+      const next = await fetch(`${app.address!.origin}/stream-abandoned/upload`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/octet-stream' },
+        body: 'next',
+      })
+      expect(next.status).toBe(200)
+      expect(reads.slice(2)).toEqual(['reading', 'read 4'])
     } finally {
       await app.close()
     }
