@@ -1,5 +1,6 @@
 import './polyfill.js'
 
+export type { Authenticator } from './authenticator.js'
 export type { Transport, TransportFactory } from './transport.js'
 export type { CallAdapter, CallAdapterFactory } from './call_adapter.js'
 export type { Chain } from './chain.js'
@@ -19,6 +20,7 @@ export {
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingCallbackArgument,
   ErrFetchyMissingPathArgument,
+  ErrFetchyTooManyAuthenticationAttempts,
 } from './errors.js'
 export { FetchyHeaders } from './headers.js'
 export type { Interceptor, InterceptorFunction } from './interceptor.js'

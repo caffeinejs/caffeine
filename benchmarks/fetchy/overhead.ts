@@ -73,6 +73,13 @@ const intercepted = newClient()
   .build()
   .create(OverheadAPI)
 
+const authenticated = newClient()
+  .baseURL('http://bench.test')
+  .transportFactory({ provide: () => transport })
+  .authenticator({ authenticate: () => Promise.resolve(null) })
+  .build()
+  .create(OverheadAPI)
+
 // Dispatch alone: what reaching a client's invoker costs, measured in front of a synchronous invoker. The keys are
 // fetchy's internal ones, read off a client because nothing exports them, as a benchmark may and an application must
 // not. The own-property rows are what `create()` defined before symbol dispatch: the invoker as an own property of the
@@ -179,6 +186,9 @@ group('in-memory call', () => {
       do_not_optimize(await intercepted.postMethod(benchId, benchFilter, benchBody)))
     bench('fetchy method, 3 declared headers', async () =>
       do_not_optimize(await api.postWithHeaders(benchId, benchFilter, benchBody)))
+    // Last: the rows above run before any call sends through an authenticator, as they did before it existed.
+    bench('fetchy method + authenticator', async () =>
+      do_not_optimize(await authenticated.postMethod(benchId, benchFilter, benchBody)))
   })
 })
 

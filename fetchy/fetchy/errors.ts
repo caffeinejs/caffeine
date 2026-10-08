@@ -2,6 +2,14 @@ import { errMessage } from './_err_message.gen.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 
+// Names a request in a message without its query string, which often carries credentials.
+function requestLabel(request: FetchyRequest): string {
+  const query = request.path.indexOf('?')
+  const path = query === -1 ? request.path : request.path.slice(0, query)
+
+  return `${request.method} ${request.origin}${path}`
+}
+
 /** Base class of every error fetchy throws. */
 export class ErrFetchy extends Error {
   readonly code: string
@@ -95,11 +103,8 @@ export class ErrFetchyHTTP extends ErrFetchy {
   readonly body: unknown
 
   constructor(request: FetchyRequest, response: FetchyResponse, body: unknown) {
-    const query = request.path.indexOf('?')
-    const path = query === -1 ? request.path : request.path.slice(0, query)
-
     super(
-      `Request "${request.method} ${request.origin}${path}" failed with status ${response.status} ${response.statusText}`,
+      `Request "${requestLabel(request)}" failed with status ${response.status} ${response.statusText}`,
       'ERR_FETCHY_HTTP',
     )
 
@@ -120,6 +125,28 @@ export class ErrFetchyHTTP extends ErrFetchy {
       statusText: this.statusText,
       body: this.body,
     }
+  }
+}
+
+/**
+ * Thrown when an `Authenticator` returns another follow-up after 3 follow-ups of one request were answered with 401.
+ * The message names the request without its query string, which often carries credentials.
+ */
+export class ErrFetchyTooManyAuthenticationAttempts extends ErrFetchy {
+  constructor(request: FetchyRequest, attempts: number) {
+    super(
+      errMessage(
+        `Cannot authenticate "${requestLabel(request)}": the server answered ${attempts} attempts with 401 and the authenticator still returned a follow-up`,
+      )
+        .solutions(
+          'Put the credentials the authenticator obtained on the request it returns',
+          'Return null from Authenticator.authenticate() when attempt is greater than 1',
+        )
+        .reference('@caffeinejs/fetchy', ErrFetchyTooManyAuthenticationAttempts)
+        .build(),
+      'ERR_FETCHY_TOO_MANY_AUTHENTICATION_ATTEMPTS',
+    )
+    this.name = 'ErrFetchyTooManyAuthenticationAttempts'
   }
 }
 

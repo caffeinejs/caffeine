@@ -1,3 +1,4 @@
+import type { Authenticator } from './authenticator.js'
 import { FetchTransportFactory } from './builtin/fetch/index.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { FetchyClient } from './client.js'
@@ -16,6 +17,7 @@ export class FetchyBuilder {
   readonly #interceptors: Interceptor[] = []
   readonly #callAdapterFactories: CallAdapterFactory[] = []
   #responseConverter: ResponseConverter | undefined
+  #authenticator: Authenticator | undefined
 
   baseURL(url: string): this {
     this.#baseURL = url.endsWith('/') ? url.slice(0, -1) : url
@@ -42,6 +44,15 @@ export class FetchyBuilder {
     return this
   }
 
+  /**
+   * Sets the {@link Authenticator} that answers 401 responses. It runs between the interceptors and the transport,
+   * wherever this call sits among the `addInterceptor()` calls.
+   */
+  authenticator(authenticator: Authenticator): this {
+    this.#authenticator = authenticator
+    return this
+  }
+
   build(): FetchyClient {
     return new FetchyClient({
       baseURL: this.#baseURL,
@@ -49,6 +60,7 @@ export class FetchyBuilder {
       interceptors: this.#interceptors,
       callAdapterFactories: this.#callAdapterFactories,
       responseConverter: this.#responseConverter,
+      authenticator: this.#authenticator,
     })
   }
 }

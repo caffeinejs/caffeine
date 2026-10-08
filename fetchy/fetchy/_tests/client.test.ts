@@ -618,4 +618,19 @@ describe('FetchyClient.close()', () => {
 
     expect(closes).toBe(1)
   })
+
+  // An authenticator wraps what operations send through, not what the client owns: the transport's connections still
+  // have to be released.
+  it('closes the transport when an authenticator is set', async () => {
+    let closes = 0
+    const client = newClient()
+      .baseURL('http://example.test')
+      .transportFactory({ provide: () => closingTransport(() => closes++) })
+      .authenticator({ authenticate: () => Promise.resolve(null) })
+      .build()
+
+    await client.close()
+
+    expect(closes).toBe(1)
+  })
 })

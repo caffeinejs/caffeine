@@ -8,6 +8,7 @@ import {
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingPathArgument,
+  ErrFetchyTooManyAuthenticationAttempts,
 } from '../errors.js'
 import { FetchyRequest } from '../request.js'
 
@@ -29,6 +30,11 @@ describe('errors', () => {
       'ErrFetchyMissingPathArgument',
       () => new ErrFetchyMissingPathArgument('GET', '/users/{id}', 'id', undefined),
       'ERR_FETCHY_MISSING_PATH_ARGUMENT',
+    ],
+    [
+      'ErrFetchyTooManyAuthenticationAttempts',
+      () => new ErrFetchyTooManyAuthenticationAttempts(new FetchyRequest('GET', 'http://x.test', '/users/1'), 4),
+      'ERR_FETCHY_TOO_MANY_AUTHENTICATION_ATTEMPTS',
     ],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
@@ -73,5 +79,17 @@ describe('errors', () => {
     expect(JSON.stringify(error)).not.toContain('s3cr3t')
     expect(JSON.stringify(Object.fromEntries(Object.entries(error)))).not.toContain('hunter2')
     expect(error.request.path).toBe('/token?api_key=s3cr3t')
+  })
+
+  // The message ends up in log lines, and a query string often carries an API key.
+  it('ErrFetchyTooManyAuthenticationAttempts keeps the query string out of its message', () => {
+    const request = new FetchyRequest('GET', 'https://api.test', '/users?api_key=s3cr3t')
+
+    const error = new ErrFetchyTooManyAuthenticationAttempts(request, 4)
+
+    expect(error.message.split('\n')[0]).toBe(
+      'Cannot authenticate "GET https://api.test/users": the server answered 4 attempts with 401 and the authenticator still returned a follow-up',
+    )
+    expect(error.message).not.toContain('s3cr3t')
   })
 })

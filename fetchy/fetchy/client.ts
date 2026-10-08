@@ -1,3 +1,4 @@
+import { AuthenticatingTransport, type Authenticator } from './authenticator.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import type { ClassSpec, MethodSpec } from './decorators/registrar/index.js'
 import { type DeclaringClass, getDeclaringClasses } from './decorators/registrar/registrar.js'
@@ -18,6 +19,7 @@ export interface FetchyClientOptions {
   interceptors: readonly Interceptor[]
   callAdapterFactories: readonly CallAdapterFactory[]
   responseConverter?: ResponseConverter
+  authenticator?: Authenticator
 }
 
 // An operation as every client of one class serves it: the key a client holds its invoker under, the name errors
@@ -178,10 +180,16 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
  */
 export class FetchyClient {
   private readonly transport: Transport
+  // What every operation sends through: the transport, behind the authenticator when the client has one.
+  private readonly sender: Transport
   private closing: Promise<void> | undefined
 
   constructor(private readonly options: FetchyClientOptions) {
     this.transport = options.transportFactory.provide(options.baseURL)
+    this.sender =
+      options.authenticator === undefined
+        ? this.transport
+        : new AuthenticatingTransport(this.transport, options.authenticator)
   }
 
   /**
@@ -233,7 +241,7 @@ export class FetchyClient {
         buildInvoker(
           {
             baseURL: this.options.baseURL,
-            transport: this.transport,
+            transport: this.sender,
             interceptors: this.options.interceptors,
             responseConverter,
             callAdapterFactories: this.options.callAdapterFactories,
