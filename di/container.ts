@@ -1964,10 +1964,6 @@ export class CaffeineIoC implements Container {
   }
 }
 
-export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
-  return new CaffeineIoC(options)
-}
-
 /**
  * Refuses what an async binding cannot be: lazy, scoped other than singleton or refresh, or property injected.
  */
@@ -2028,4 +2024,13 @@ function copyBinding<T>(binding: Binding<T>): Binding<T> {
     injectionResolvers: [],
     propertyResolvers: new Map(),
   })
+}
+
+/**
+ * Creates a new container instance.
+ * @param options - The options for the container.
+ * @returns A new container instance.
+ */
+export function newContainer(options: Partial<Options> = {}): CaffeineIoC {
+  return new CaffeineIoC(options)
 }
