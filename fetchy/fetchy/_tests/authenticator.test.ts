@@ -201,6 +201,57 @@ describe('Authenticator', () => {
     expect(transport.sendCount).toBe(2)
   })
 
+  // An authenticator may read part of the challenge and let go of it. What it left unread still holds the connection,
+  // so it is cancelled before the follow-up goes out.
+  it('cancels a 401 body the authenticator read in part', async () => {
+    let cancelled = false
+    const challenge = new Response(
+      new ReadableStream({
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode('{"error":"invalid_token"}'))
+        },
+        cancel() {
+          cancelled = true
+        },
+      }),
+      { status: 401, statusText: 'Unauthorized' },
+    )
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory, {
+      async authenticate(request, response) {
+        const reader = response.body!.getReader()
+        await reader.read()
+        reader.releaseLock()
+        return withToken(request, 'fresh')
+      },
+    })
+    const transport = transportFactory.transports[0]
+    transport.willRespond(challenge).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(cancelled).toBe(true)
+  })
+
+  // Cancelling only frees what the 401 still holds. When the cancel fails, the follow-up still goes out: the call waits
+  // for the answer, not for the 401's leftovers.
+  it('sends the follow-up when cancelling the 401 fails', async () => {
+    const challenge = new Response(
+      new ReadableStream({
+        cancel() {
+          throw new Error('socket gone')
+        },
+      }),
+      { status: 401, statusText: 'Unauthorized' },
+    )
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory, answerOnce())
+    const transport = transportFactory.transports[0]
+    transport.willRespond(challenge).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(2)
+  })
+
   // The first send read the stream, so a follow-up would send it empty. The authenticator is still asked, so it can
   // refresh credentials for the calls that follow.
   it('does not resend a body that can be read only once', async () => {

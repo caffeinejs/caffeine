@@ -1,5 +1,6 @@
 import type { Chain } from '../../chain.js'
 import type { Interceptor } from '../../interceptor.js'
+import { discard } from '../../internal/discard.js'
 import { isReplayable } from '../../internal/replayable.js'
 import { sleep } from '../../internal/sleep.js'
 import type { FetchyRequest } from '../../request.js'
@@ -61,10 +62,7 @@ export class RetryInterceptor implements Interceptor {
       return response
     }
 
-    if (!response.bodyUsed) {
-      await response.body?.cancel()
-    }
-
+    await discard(response)
     await sleep(options.delay, pristine.signal)
 
     return this.attempt(chain, options, current + 1)

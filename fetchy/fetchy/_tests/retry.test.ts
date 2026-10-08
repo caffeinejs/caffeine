@@ -183,6 +183,26 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
     await expect(api.overwriteDefaults('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
+  // A response being retried is thrown away. When its body cannot be cancelled, as one whose connection broke mid-body,
+  // the retry still goes out: there is nothing left to free.
+  it('retries a failing response whose body cannot be cancelled', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    const broken = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.error(new Error('socket reset'))
+        },
+      }),
+      { status: 503 },
+    )
+    transport.willRespond(broken).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1' })
+    expect(transport.sendCount).toBe(2)
+  })
+
   it('@NoRetry() cancels the inherited class-level default', async () => {
     const transportFactory = new TestTransportFactory()
     const api = buildClient(RetryClassDefaultAPI, transportFactory)

@@ -1,4 +1,5 @@
 import { ErrFetchyTooManyAuthenticationAttempts } from './errors.js'
+import { discard } from './internal/discard.js'
 import { isReplayable } from './internal/replayable.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
@@ -32,13 +33,6 @@ export interface Authenticator {
 // Every standard scheme completes within two follow-ups: an NTLM handshake, a Digest nonce gone stale.
 const MAX_FOLLOW_UPS = 3
 
-// Frees the connection the 401 holds. A body the authenticator read is locked, and finishing it is the reader's job.
-async function discard(response: FetchyResponse): Promise<void> {
-  if (!response.bodyUsed) {
-    await response.body?.cancel()
-  }
-}
-
 // What a client with an authenticator sends through. A client without one sends through its transport directly.
 export class AuthenticatingTransport implements Transport {
   constructor(
@@ -60,8 +54,7 @@ export class AuthenticatingTransport implements Transport {
       try {
         next = await this.authenticator.authenticate(request, response, attempt)
       } catch (error) {
-        // The authenticator's failure is the one the caller needs, so a cancel that fails too stays quiet.
-        await discard(response).catch(() => undefined)
+        await discard(response)
         throw error
       }
 
