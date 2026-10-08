@@ -1,6 +1,7 @@
 import { $aop, kAspectLabel, kAspectPointcuts, type Pointcut, type PointcutBuilders } from '../aop.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import type { Injection, InjectionsFor } from '../injection.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { Scopes } from '../scope.js'
 import { Ctor } from '../types.js'
 import { defineInjectable } from './registrar/index.js'
@@ -51,7 +52,9 @@ export function Aspect(arg: Pointcut[] | ((p: PointcutBuilders) => Pointcut[]), 
   return (aspectClass: Ctor, context: ClassDecoratorContext): void => {
     if (pointcuts.length === 0) {
       throw new ErrInvalidDecorator(
-        `Cannot configure @Aspect on "${String(context.name)}": at least one pointcut is required`,
+        errMessage(`Cannot configure @Aspect on "${String(context.name)}": at least one pointcut is required`)
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 

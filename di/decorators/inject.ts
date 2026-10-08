@@ -2,6 +2,7 @@ import { DeferredCtor } from '../deferred_ctor.js'
 import { ErrInvalidDecorator } from '../errors.js'
 import { InjectionDescriptor, ResolveInjection } from '../injection.js'
 import { notNil } from '../internal/util/assert/index.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { InjectionToken } from '../key.js'
 import { defineMemberInjection } from './registrar/index.js'
 
@@ -45,7 +46,11 @@ export function Inject(
     switch (context.kind) {
       case 'method':
         throw new ErrInvalidDecorator(
-          `Cannot use @${Inject.name} on method "${String(context.name)}": method injection is not supported`,
+          errMessage(
+            `Cannot use @${Inject.name} on method "${String(context.name)}": method injection is not supported`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidDecorator)
+            .build(),
         )
 
       case 'accessor':

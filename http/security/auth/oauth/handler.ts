@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import type { Context } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { basicAuthHeader } from '../internal/remote/client_auth.js'
@@ -26,7 +28,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
   }
 
   protected override callbackError(message: string): Error {
-    return new ErrOAuthCallback(message)
+    return new ErrOAuthCallback(errMessage(message).reference('@caffeinejs/http', ErrOAuthCallback).build())
   }
 
   /**

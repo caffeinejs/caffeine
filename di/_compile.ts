@@ -17,6 +17,7 @@ import {
   afterInitInterceptor,
 } from './internal/core/interceptor/index.js'
 import { compileChain } from './internal/core/resolver/index.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { keyStr, InjectionToken, Identifier } from './key.js'
 import { PostResolutionInterceptor } from './post_resolution_interceptor.js'
 import { Scope, Scopes } from './scope.js'
@@ -88,7 +89,11 @@ export function compileFactory<T>(
   }
 
   if (rawFactory === undefined || rawFactory === null) {
-    throw new ErrInvalidBinding(`Could not determine a factory for key: ${keyStr(key)}`)
+    throw new ErrInvalidBinding(
+      errMessage(`Could not determine a factory for key: ${keyStr(key)}`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
 
   const chainableFactory = rawFactory as Factory<T>

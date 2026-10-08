@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { controllerClient } from './controller_client.js'
 import { ErrFetchFailed } from './error.js'
 import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
@@ -29,7 +31,14 @@ export function controllerTypedClient<C extends RouterCtor>(
         : undefined
 
       if (!res.ok) {
-        throw new ErrFetchFailed(`${key}: ${res.status} ${res.statusText}`, res.status, res.headers, body)
+        throw new ErrFetchFailed(
+          errMessage(`${key}: ${res.status} ${res.statusText}`)
+            .reference('@caffeinejs/testing', ErrFetchFailed)
+            .build(),
+          res.status,
+          res.headers,
+          body,
+        )
       }
 
       return body

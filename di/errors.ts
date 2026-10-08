@@ -53,7 +53,12 @@ export class ErrNoResolutionForKey extends CaffeineIoCError {
  */
 export class ErrScopeNotRegistered extends CaffeineIoCError {
   constructor(scopeID: Identifier) {
-    super(`Scope "${scopeID.toString()}" is not registered: use bindScope() to register it`, 'ERR_SCOPE_NOT_REGISTERED')
+    super(
+      errMessage(`Scope "${scopeID.toString()}" is not registered: use bindScope() to register it`)
+        .reference('@caffeinejs/di', ErrScopeNotRegistered)
+        .build(),
+      'ERR_SCOPE_NOT_REGISTERED',
+    )
     this.name = 'ErrScopeNotRegistered'
   }
 }
@@ -63,7 +68,12 @@ export class ErrScopeNotRegistered extends CaffeineIoCError {
  */
 export class ErrScopeAlreadyRegistered extends CaffeineIoCError {
   constructor(scopeID: Identifier) {
-    super(`Scope "${scopeID.toString()}" is already registered`, 'ERR_SCOPE_ALREADY_REGISTERED')
+    super(
+      errMessage(`Scope "${scopeID.toString()}" is already registered`)
+        .reference('@caffeinejs/di', ErrScopeAlreadyRegistered)
+        .build(),
+      'ERR_SCOPE_ALREADY_REGISTERED',
+    )
     this.name = 'ErrScopeAlreadyRegistered'
   }
 }
@@ -138,8 +148,12 @@ export class ErrInjectableBase extends CaffeineIoCError {
 
   constructor(child: string, base: string) {
     super(
-      `Cannot register "${child}" extending "${base}": "${base}" is marked as @Injectable and cannot be used as an extension base. ` +
-        `Remove @Injectable from "${base}" or make it abstract.`,
+      errMessage(
+        `Cannot register "${child}" extending "${base}": "${base}" is marked as @Injectable and cannot be used as an extension base. ` +
+          `Remove @Injectable from "${base}" or make it abstract.`,
+      )
+        .reference('@caffeinejs/di', ErrInjectableBase)
+        .build(),
       ErrInjectableBase.code,
     )
     this.name = 'ErrInjectableBase'
@@ -152,7 +166,11 @@ export class ErrInjectableBase extends CaffeineIoCError {
 export class ErrOrphanedBindingConfig extends CaffeineIoCError {
   constructor(key: InjectionToken) {
     super(
-      `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @Injectable, @Extends`,
+      errMessage(
+        `Found binding configuration for "${keyStr(key)}" but the type is not decorated with one of: @Injectable, @Extends`,
+      )
+        .reference('@caffeinejs/di', ErrOrphanedBindingConfig)
+        .build(),
       'ERR_ORPHANED_BINDING_CONFIG',
     )
     this.name = 'ErrOrphanedBindingConfig'
@@ -229,7 +247,11 @@ export class ErrScopeMismatchInConfiguration extends CaffeineIoCError {
 export class ErrUnknownResolver extends CaffeineIoCError {
   constructor(name: symbol) {
     super(
-      `Cannot resolve injection: resolver "${name.description ?? String(name)}" is not registered: use bindResolver() to register it`,
+      errMessage(
+        `Cannot resolve injection: resolver "${name.description ?? String(name)}" is not registered: use bindResolver() to register it`,
+      )
+        .reference('@caffeinejs/di', ErrUnknownResolver)
+        .build(),
       'ERR_UNKNOWN_RESOLVER',
     )
     this.name = 'ErrUnknownResolver'
@@ -241,7 +263,12 @@ export class ErrUnknownResolver extends CaffeineIoCError {
  */
 export class ErrResolverAlreadyRegistered extends CaffeineIoCError {
   constructor(name: symbol) {
-    super(`Resolver "${name.description ?? String(name)}" is already registered`, 'ERR_RESOLVER_ALREADY_REGISTERED')
+    super(
+      errMessage(`Resolver "${name.description ?? String(name)}" is already registered`)
+        .reference('@caffeinejs/di', ErrResolverAlreadyRegistered)
+        .build(),
+      'ERR_RESOLVER_ALREADY_REGISTERED',
+    )
     this.name = 'ErrResolverAlreadyRegistered'
   }
 }
@@ -252,7 +279,11 @@ export class ErrResolverAlreadyRegistered extends CaffeineIoCError {
 export class ErrUnknownInjectionStage extends CaffeineIoCError {
   constructor(name: symbol) {
     super(
-      `Cannot resolve injection: stage "${name.description ?? String(name)}" is not registered: use registerStage() to register it`,
+      errMessage(
+        `Cannot resolve injection: stage "${name.description ?? String(name)}" is not registered: use registerStage() to register it`,
+      )
+        .reference('@caffeinejs/di', ErrUnknownInjectionStage)
+        .build(),
       'ERR_UNKNOWN_INJECTION_STAGE',
     )
     this.name = 'ErrUnknownInjectionStage'
@@ -265,7 +296,9 @@ export class ErrUnknownInjectionStage extends CaffeineIoCError {
 export class ErrInjectionStageAlreadyRegistered extends CaffeineIoCError {
   constructor(name: symbol) {
     super(
-      `Injection stage "${name.description ?? String(name)}" is already registered`,
+      errMessage(`Injection stage "${name.description ?? String(name)}" is already registered`)
+        .reference('@caffeinejs/di', ErrInjectionStageAlreadyRegistered)
+        .build(),
       'ERR_INJECTION_STAGE_ALREADY_REGISTERED',
     )
     this.name = 'ErrInjectionStageAlreadyRegistered'
@@ -315,8 +348,12 @@ export class ErrMissingInjectionKey extends CaffeineIoCError {
 export class ErrNoValuesProvider extends CaffeineIoCError {
   constructor(context?: string, binder: 'bindConfig' | 'bindScopedConfig' = 'bindConfig') {
     super(
-      `Cannot read values: no values are bound — call ${binder}() before init()` +
-        (context === undefined ? '' : `\n${context}`),
+      errMessage(
+        `Cannot read values: no values are bound — call ${binder}() before init()` +
+          (context === undefined ? '' : `\n${context}`),
+      )
+        .reference('@caffeinejs/di', ErrNoValuesProvider)
+        .build(),
       'ERR_NO_VALUES_PROVIDER',
     )
     this.name = 'ErrNoValuesProvider'
@@ -340,7 +377,11 @@ export class ErrInvalidContainerState extends CaffeineIoCError {
 export class ErrUnresolvableDependencies extends CaffeineIoCError {
   constructor(readonly issues: string[]) {
     super(
-      `Found ${issues.length} unresolvable ${issues.length === 1 ? 'dependency' : 'dependencies'}:\n${issues.join('\n')}`,
+      errMessage(
+        `Found ${issues.length} unresolvable ${issues.length === 1 ? 'dependency' : 'dependencies'}:\n${issues.join('\n')}`,
+      )
+        .reference('@caffeinejs/di', ErrUnresolvableDependencies)
+        .build(),
       'ERR_UNRESOLVABLE_DEPENDENCIES',
     )
     this.name = 'ErrUnresolvableDependencies'
@@ -353,7 +394,12 @@ export class ErrUnresolvableDependencies extends CaffeineIoCError {
  */
 export class ErrConfigurationBindingNotFound extends CaffeineIoCError {
   constructor(target: Ctor) {
-    super(`Configuration binding not found for "${target.name}"`, 'ERR_CONFIGURATION_BINDING_NOT_FOUND')
+    super(
+      errMessage(`Configuration binding not found for "${target.name}"`)
+        .reference('@caffeinejs/di', ErrConfigurationBindingNotFound)
+        .build(),
+      'ERR_CONFIGURATION_BINDING_NOT_FOUND',
+    )
     this.name = 'ErrConfigurationBindingNotFound'
   }
 }
@@ -363,7 +409,12 @@ export class ErrConfigurationBindingNotFound extends CaffeineIoCError {
  */
 export class ErrCircularDependency extends CaffeineIoCError {
   constructor(cycle: string) {
-    super(`Cannot initialize: circular dependency detected: ${cycle}`, 'ERR_CIRCULAR_DEPENDENCY')
+    super(
+      errMessage(`Cannot initialize: circular dependency detected: ${cycle}`)
+        .reference('@caffeinejs/di', ErrCircularDependency)
+        .build(),
+      'ERR_CIRCULAR_DEPENDENCY',
+    )
     this.name = 'ErrCircularDependency'
   }
 }
@@ -418,9 +469,13 @@ export class ErrScopeMismatch extends CaffeineIoCError {
 export class ErrNoRequestStorageSet extends CaffeineIoCError {
   constructor() {
     super(
-      'No request scope storage has been set.\n' +
-        'Request scope is platform specific and must be manually set.\n' +
-        'See the documentation for more information.',
+      errMessage(
+        'No request scope storage has been set.\n' +
+          'Request scope is platform specific and must be manually set.\n' +
+          'See the documentation for more information.',
+      )
+        .reference('@caffeinejs/di', ErrNoRequestStorageSet)
+        .build(),
       'ERR_NO_REQUEST_SCOPE_STORAGE_SET',
     )
     this.name = 'ErrNoRequestScopeStorageSet'
@@ -434,7 +489,11 @@ export class ErrNoRequestStorageSet extends CaffeineIoCError {
 export class ErrCannotLoadTypeScriptModule extends CaffeineIoCError {
   constructor(file: string) {
     super(
-      `Cannot load module at "${file}": TypeScript is not supported in this runtime — compile to JavaScript or run with a TypeScript-capable runtime`,
+      errMessage(
+        `Cannot load module at "${file}": TypeScript is not supported in this runtime — compile to JavaScript or run with a TypeScript-capable runtime`,
+      )
+        .reference('@caffeinejs/di', ErrCannotLoadTypeScriptModule)
+        .build(),
       'ERR_CANNOT_LOAD_TYPESCRIPT_MODULE',
     )
     this.name = 'ErrCannotLoadTypeScriptModule'

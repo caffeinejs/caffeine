@@ -1,5 +1,5 @@
-// Imports nothing on purpose: `@caffeinejs/di` cannot depend on `std` and carries a copy of this file at
-// `di/internal/util/errutil/errutil.ts`. Change both.
+// Imports nothing on purpose: a package that cannot depend on `std` gets a generated copy of this file, listed in
+// `tools/copy-err-message.json`. Edit this file only; `make err-message` rewrites the copies.
 
 /** Base URL of the error reference pages. Empty until they are published: no reference line is printed. */
 const REFERENCE_BASE_URL: string = ''
@@ -16,7 +16,8 @@ export class ErrMessageBuilder {
   readonly #message: string
   readonly #solutions: string[] = []
   readonly #links: string[] = []
-  #reference: string | undefined
+  #referencePackage: string | undefined
+  #referenceClass: ErrorClass | undefined
 
   constructor(message: string) {
     this.#message = message
@@ -39,7 +40,9 @@ export class ErrMessageBuilder {
    * @param errorClass - The class being constructed with this message
    */
   reference(pkg: `@caffeinejs/${string}`, errorClass: ErrorClass): this {
-    this.#reference = `${pkg.slice('@caffeinejs/'.length)}/${errorClass.name}`
+    // Kept as given and formatted by `build()` only when the line is printed: errors on hot paths build this.
+    this.#referencePackage = pkg
+    this.#referenceClass = errorClass
     return this
   }
 
@@ -56,8 +59,9 @@ export class ErrMessageBuilder {
       message += '\nPossible Solutions:\n  - ' + this.#solutions.join('\n  - ')
     }
 
-    if (this.#reference !== undefined && REFERENCE_BASE_URL !== '') {
-      message += `\nRead more: ${REFERENCE_BASE_URL}/${this.#reference}`
+    if (this.#referenceClass !== undefined && REFERENCE_BASE_URL !== '') {
+      const pkg = this.#referencePackage!.slice('@caffeinejs/'.length)
+      message += `\nRead more: ${REFERENCE_BASE_URL}/${pkg}/${this.#referenceClass.name}`
     }
 
     if (this.#links.length > 0) {

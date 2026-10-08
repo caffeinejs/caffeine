@@ -1,5 +1,5 @@
 import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
@@ -33,7 +33,9 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
       const rd = typeof key === 'function' ? getRouteGroup(key) : undefined
       if (rd === undefined || typeof key !== 'function') {
         throw new ErrCaffeineWebApplication(
-          `Cannot build router: no route definition found for router "${String(key)}"`,
+          errMessage(`Cannot build router: no route definition found for router "${String(key)}"`)
+            .reference('@caffeinejs/http', ErrCaffeineWebApplication)
+            .build(),
           'ERR_HTTP_MISSING_ROUTER',
         )
       }

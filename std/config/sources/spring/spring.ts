@@ -1,6 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises'
 
 import type { Duration } from '../../../duration/duration.js'
+import { errMessage } from '../../../framework/err/index.js'
 import { ErrConfig, messageOf } from '../../errors.js'
 import { expandKeys } from '../../merge.js'
 import { pollDelay } from '../../triggers.js'
@@ -99,7 +100,9 @@ export class SpringCloudConfigSource implements ConfigSource {
     }
 
     throw new ErrConfig(
-      `Cannot load config source "${this.name}": ${messageOf(lastError)}`,
+      errMessage(`Cannot load config source "${this.name}": ${messageOf(lastError)}`)
+        .reference('@caffeinejs/std', ErrConfig)
+        .build(),
       'ERR_CONFIG_SOURCE',
       lastError,
     )

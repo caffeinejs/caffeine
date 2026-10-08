@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { Context } from '../../../context.js'
 import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from '../errors.js'
 import type { AuthenticationHandler } from '../handler.js'
@@ -61,7 +63,11 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
   async #select(ctx: Context): Promise<{ scheme: string; handler: AuthenticationHandler }> {
     const scheme = await this.#selector(ctx, this.#schemeProvider.defaultAuthenticateScheme)
     if (!scheme) {
-      throw new ErrAuthConfiguration('Cannot forward authentication: the selector returned no scheme')
+      throw new ErrAuthConfiguration(
+        errMessage('Cannot forward authentication: the selector returned no scheme')
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
     }
 
     const handler = this.#schemeProvider.schemeFor(scheme)?.get()
@@ -71,7 +77,9 @@ export class ForwardAuthenticationHandler implements AuthenticationHandler {
 
     if (handler instanceof ForwardAuthenticationHandler) {
       throw new ErrAuthConfiguration(
-        `Cannot forward authentication: the selector returned "${scheme}", which forwards as well`,
+        errMessage(`Cannot forward authentication: the selector returned "${scheme}", which forwards as well`)
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
       )
     }
 

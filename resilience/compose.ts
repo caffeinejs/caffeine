@@ -1,4 +1,5 @@
 import { abortReason } from './abort.js'
+import { errMessage } from './err_message.gen.js'
 import { ErrInvalidOption } from './errors.js'
 import type { ExecutionContext, Next, Operation, Resilient, Strategy, StrategyFn } from './strategy.js'
 
@@ -25,7 +26,9 @@ class Context implements ExecutionContext {
     if (typeof ctx !== 'object' || ctx === null || !(#operation in ctx)) {
       return Promise.reject(
         new ErrInvalidOption(
-          'Cannot run the operation: the context was not created by runWith(), compose() or ctx.with()',
+          errMessage('Cannot run the operation: the context was not created by runWith(), compose() or ctx.with()')
+            .reference('@caffeinejs/resilience', ErrInvalidOption)
+            .build(),
         ),
       )
     }
@@ -88,7 +91,9 @@ function validate(strategies: ArrayLike<unknown>, count: number): void {
   for (let i = 0; i < count; i++) {
     if (!isStrategy(strategies[i])) {
       throw new ErrInvalidOption(
-        `Cannot compose: strategy #${i + 1} is neither a function nor an object with a run() method`,
+        errMessage(`Cannot compose: strategy #${i + 1} is neither a function nor an object with a run() method`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
       )
     }
   }
@@ -150,7 +155,11 @@ export function runWith<T>(operation: Operation<T>, ...args: Array<Strategy | Ab
     const tail = args[count - 1]
     if (tail === undefined || !isStrategy(tail)) {
       if (tail !== undefined && !isSignal(tail)) {
-        throw new ErrInvalidOption('Cannot run: the last argument is neither a strategy nor an AbortSignal')
+        throw new ErrInvalidOption(
+          errMessage('Cannot run: the last argument is neither a strategy nor an AbortSignal')
+            .reference('@caffeinejs/resilience', ErrInvalidOption)
+            .build(),
+        )
       }
 
       signal = tail

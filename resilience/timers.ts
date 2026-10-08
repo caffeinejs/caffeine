@@ -1,3 +1,4 @@
+import { errMessage } from './err_message.gen.js'
 import { ErrInvalidOption } from './errors.js'
 
 // The largest delay `setTimeout` honours; above it, runtimes fire after 1 ms instead.
@@ -11,7 +12,11 @@ export const clock: { now(): number } = globalThis.performance
 
 export function clampDelay(ms: number, what: string): number {
   if (typeof ms !== 'number' || !Number.isFinite(ms)) {
-    throw new ErrInvalidOption(`Cannot schedule ${what}: delay must be a finite number, got ${String(ms)}`)
+    throw new ErrInvalidOption(
+      errMessage(`Cannot schedule ${what}: delay must be a finite number, got ${String(ms)}`)
+        .reference('@caffeinejs/resilience', ErrInvalidOption)
+        .build(),
+    )
   }
 
   return ms < 0 ? 0 : ms > MAX_TIMER_MS ? MAX_TIMER_MS : ms

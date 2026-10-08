@@ -1,5 +1,6 @@
 import { ErrInvalidDecorator } from '../errors.js'
 import { Injection, InjectionsFor } from '../injection.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { isNamedKey, NamedToken, InjectionToken } from '../key.js'
 import { AbstractCtor, Ctor } from '../types.js'
 import { Extends } from './extends.js'
@@ -41,8 +42,12 @@ export function Injectable<T>(keyOrDependencies?: InjectionToken | Injection[], 
 
   if (key !== undefined && !isNamedKey(key)) {
     throw new ErrInvalidDecorator(
-      `@${Injectable.name} only accepts a string or symbol as a named key: received "${typeof key}" on the decorated class.\n` +
-        `To bind this to an abstract class, decorate this class with @${Extends.name}()`,
+      errMessage(
+        `@${Injectable.name} only accepts a string or symbol as a named key: received "${typeof key}" on the decorated class.\n` +
+          `To bind this to an abstract class, decorate this class with @${Extends.name}()`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
     )
   }
 

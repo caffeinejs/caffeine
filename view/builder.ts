@@ -1,4 +1,5 @@
 import { ErrConfiguration } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ViewEngineBuilder } from './engine_builder.js'
 import { kBuild } from './keys.js'
@@ -37,13 +38,19 @@ export class ViewBuilder {
 
     if (name === RESERVED_ENGINE_NAME) {
       throw new ErrConfiguration(
-        `Cannot register a view engine named "${RESERVED_ENGINE_NAME}": it is reserved for the default engine`,
+        errMessage(
+          `Cannot register a view engine named "${RESERVED_ENGINE_NAME}": it is reserved for the default engine`,
+        )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
     if (this.#engines.has(name)) {
       throw new ErrConfiguration(
-        `Cannot register view engine "${name ?? 'default'}": an engine with that name is already configured`,
+        errMessage(`Cannot register view engine "${name ?? 'default'}": an engine with that name is already configured`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 

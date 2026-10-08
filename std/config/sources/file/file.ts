@@ -2,6 +2,7 @@ import { watch } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 
+import { errMessage } from '../../../framework/err/index.js'
 import { ErrConfig, messageOf } from '../../errors.js'
 import { checkInterpolation } from '../../interpolation.js'
 import type { ConfigLayer, ConfigLoadContext, ConfigObject, ConfigSource } from '../../types.js'
@@ -120,11 +121,15 @@ export class FileConfigSource implements ConfigSource {
       parsed = await this.#parse(text)
     } catch (error) {
       throw new ErrConfig(
-        `Cannot parse config file "${path}": ${messageOf(error)}`,
+        errMessage(`Cannot parse config file "${path}": ${messageOf(error)}`)
+          .solutions(
+            'Check the file for a syntax error',
+            'Make sure the parser handed to the source matches the file format',
+          )
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_FILE_PARSE',
         error,
-        'Check the file for a syntax error',
-        'Make sure the parser handed to the source matches the file format',
       )
     }
 
@@ -135,11 +140,16 @@ export class FileConfigSource implements ConfigSource {
     // An array or a scalar would otherwise merge as a plausible-looking set of nonsense keys.
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new ErrConfig(
-        `Cannot parse config file "${path}": the parser returned ${describe(parsed)}, but a config file must be a mapping at the top level`,
+        errMessage(
+          `Cannot parse config file "${path}": the parser returned ${describe(parsed)}, but a config file must be a mapping at the top level`,
+        )
+          .solutions(
+            'Wrap the file contents in a top-level object',
+            'Return an empty object from the parser when the file is empty',
+          )
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_FILE_PARSE',
-        undefined,
-        'Wrap the file contents in a top-level object',
-        'Return an empty object from the parser when the file is empty',
       )
     }
 
@@ -164,10 +174,13 @@ export class FileConfigSource implements ConfigSource {
       }
       if (typeof document !== 'object' || Array.isArray(document)) {
         throw new ErrConfig(
-          `Cannot parse config file "${path}": document ${i + 1} is ${describe(document)}, but every document must be a mapping at the top level`,
+          errMessage(
+            `Cannot parse config file "${path}": document ${i + 1} is ${describe(document)}, but every document must be a mapping at the top level`,
+          )
+            .solutions('Make every document in the file a mapping, or remove it')
+            .reference('@caffeinejs/std', ErrConfig)
+            .build(),
           'ERR_CONFIG_FILE_PARSE',
-          undefined,
-          'Make every document in the file a mapping, or remove it',
         )
       }
       found.push([i + 1, document as Record<string, unknown>])

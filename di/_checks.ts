@@ -4,6 +4,7 @@ import { DeferredCtor } from './deferred_ctor.js'
 import { ErrCircularDependency, ErrInvalidAspect, ErrUnresolvableDependencies } from './errors.js'
 import { collectsMany, InjectionDescriptor, namesStage, ObjectInjections, stageArgs } from './injection.js'
 import { BuiltInStages } from './injection_resolver.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { keyStr, InjectionToken, Identifier, TypedKey } from './key.js'
 import { Scopes } from './scope.js'
 
@@ -186,11 +187,19 @@ export function checkAspects(aspects: Iterable<[InjectionToken, Binding]>): void
   for (const [key, binding] of aspects) {
     const pointcuts = binding.tags.get(kAspectPointcuts) as Pointcut[] | undefined
     if (!pointcuts || pointcuts.length === 0) {
-      throw new ErrInvalidAspect(`Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`)
+      throw new ErrInvalidAspect(
+        errMessage(`Cannot compile aspect "${keyStr(key)}": at least one pointcut is required`)
+          .reference('@caffeinejs/di', ErrInvalidAspect)
+          .build(),
+      )
     }
     const scope = binding.scopeID
     if (scope !== undefined && scope !== Scopes.SINGLETON) {
-      throw new ErrInvalidAspect(`Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`)
+      throw new ErrInvalidAspect(
+        errMessage(`Cannot compile aspect "${keyStr(key)}": aspects must be singleton scoped`)
+          .reference('@caffeinejs/di', ErrInvalidAspect)
+          .build(),
+      )
     }
   }
 }

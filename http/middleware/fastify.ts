@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrConfiguration } from '../error/common.js'
@@ -109,7 +110,11 @@ function toHook(hook: string | undefined): FastifyMiddlewareHook {
     return hook as FastifyMiddlewareHook
   }
 
-  throw new ErrConfiguration(`Cannot register a middleware: the hook "${hook}" is not a middleware hook`)
+  throw new ErrConfiguration(
+    errMessage(`Cannot register a middleware: the hook "${hook}" is not a middleware hook`)
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
 }
 
 function normalizationOptions(server: FastifyInstance): NormalizationOptions {

@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import type { CacheOperation } from './observer.js'
 
 /** Reported to `CacheObserver.onError` for a store call that did not settle within `storeTimeout`. */
@@ -5,7 +7,11 @@ export class ErrCacheStoreTimeout extends Error {
   readonly code = 'ERR_CACHE_STORE_TIMEOUT'
 
   constructor(operation: CacheOperation, ms: number) {
-    super(`Cannot wait for the cache store: "${operation}" did not settle within ${ms}ms`)
+    super(
+      errMessage(`Cannot wait for the cache store: "${operation}" did not settle within ${ms}ms`)
+        .reference('@caffeinejs/caching', ErrCacheStoreTimeout)
+        .build(),
+    )
     this.name = 'ErrCacheStoreTimeout'
   }
 }

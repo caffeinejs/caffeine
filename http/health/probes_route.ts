@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { ApplicationHealth, ProbeOptions, ProbeResult } from '@caffeinejs/std/health'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 

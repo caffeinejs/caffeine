@@ -13,7 +13,7 @@ import {
   type RouteAuthzOptions,
   type RouteGroup,
 } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'
@@ -301,7 +301,9 @@ function readDocument(source: OpenAPISource): OpenAPIDocument {
     return (yaml ? fromYAML(contents) : JSON.parse(contents)) as OpenAPIDocument
   } catch (cause) {
     throw new ErrOpenAPIConfiguration(
-      `Cannot parse the OpenAPI specification at "${path}" as ${yaml ? 'YAML' : 'JSON'}: ${describe(cause)}`,
+      errMessage(`Cannot parse the OpenAPI specification at "${path}" as ${yaml ? 'YAML' : 'JSON'}: ${describe(cause)}`)
+        .reference('@caffeinejs/openapi', ErrOpenAPIConfiguration)
+        .build(),
     )
   }
 }

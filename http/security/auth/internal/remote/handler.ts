@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto'
 
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
 import type { CookiePriority, CookieSerializeOptions } from '../../../../cookie/options.js'
@@ -146,7 +148,11 @@ export abstract class RemoteAuthenticationHandler<
 
     if (!isSafeReturnPath(this.#loginPath) || this.#loginPath === this.#callbackPath) {
       throw new ErrOAuthConfiguration(
-        `Cannot configure "${name}": loginPath "${this.#loginPath}" must be a path on this origin other than the callback's`,
+        errMessage(
+          `Cannot configure "${name}": loginPath "${this.#loginPath}" must be a path on this origin other than the callback's`,
+        )
+          .reference('@caffeinejs/http', ErrOAuthConfiguration)
+          .build(),
       )
     }
   }
@@ -201,12 +207,12 @@ export abstract class RemoteAuthenticationHandler<
 
   /** Wraps a callback failure in the protocol's error type. Override to change the class only. */
   protected callbackError(message: string): Error {
-    return new ErrOAuthCallback(message)
+    return new ErrOAuthCallback(errMessage(message).reference('@caffeinejs/http', ErrOAuthCallback).build())
   }
 
   /** Wraps a session-read failure in the protocol's error type. */
   protected sessionError(message: string): Error {
-    return new ErrOAuthSession(message)
+    return new ErrOAuthSession(errMessage(message).reference('@caffeinejs/http', ErrOAuthSession).build())
   }
 
   /**

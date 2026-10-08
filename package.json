@@ -59,7 +59,8 @@
     "license:check": "node tools/check-licenses.mjs",
     "pins:check": "node tools/check-pins.mjs",
     "spec:check": "node tools/generate-spec.mjs --check",
-    "spec:gen": "node tools/generate-spec.mjs"
+    "spec:gen": "node tools/generate-spec.mjs",
+    "err-message:copy": "node tools/copy-err-message.mjs"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.5.0",

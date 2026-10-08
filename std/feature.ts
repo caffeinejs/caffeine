@@ -2,6 +2,7 @@ import type { ContainerBindingOps, ContainerOps } from '@caffeinejs/di'
 
 import type { ConfigSnapshot, ConfigStore } from './config/index.js'
 import { ErrCaffeine } from './error.js'
+import { errMessage } from './framework/err/index.js'
 import type { Logger } from './logger/logger.js'
 
 /**
@@ -86,7 +87,12 @@ export interface Feature<C = unknown> {
 /** Thrown when `.install` installs a feature whose {@link kFeatureName} is already installed. */
 export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
   constructor(feature: string) {
-    super(`Cannot install feature "${feature}": it is already installed`, 'ERR_FEATURE_ALREADY_INSTALLED')
+    super(
+      errMessage(`Cannot install feature "${feature}": it is already installed`)
+        .reference('@caffeinejs/std', ErrFeatureAlreadyInstalled)
+        .build(),
+      'ERR_FEATURE_ALREADY_INSTALLED',
+    )
   }
 }
 
@@ -97,6 +103,12 @@ export class ErrFeatureAlreadyInstalled extends ErrCaffeine {
  */
 export class ErrFeatureNotInstalled extends ErrCaffeine {
   constructor(feature: string, ...solutions: string[]) {
-    super(`Cannot use feature "${feature}": it is not installed`, 'ERR_FEATURE_NOT_INSTALLED', undefined, ...solutions)
+    super(
+      errMessage(`Cannot use feature "${feature}": it is not installed`)
+        .solutions(...solutions)
+        .reference('@caffeinejs/std', ErrFeatureNotInstalled)
+        .build(),
+      'ERR_FEATURE_NOT_INSTALLED',
+    )
   }
 }

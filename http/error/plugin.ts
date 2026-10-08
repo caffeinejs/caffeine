@@ -1,3 +1,4 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
@@ -37,7 +38,9 @@ export class GlobalErrorHandlerRef {
   get handler(): GlobalErrorHandler {
     if (this.#handler === undefined) {
       throw new ErrCaffeineWebApplication(
-        'Cannot read the global error handler: the error handling plugin has not registered yet',
+        errMessage('Cannot read the global error handler: the error handling plugin has not registered yet')
+          .reference('@caffeinejs/http', ErrCaffeineWebApplication)
+          .build(),
         'ERR_ERROR_HANDLER_NOT_INSTALLED',
       )
     }

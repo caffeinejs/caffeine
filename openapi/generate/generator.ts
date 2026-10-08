@@ -1,5 +1,5 @@
 import type { AuthSchemeDescriptor, Route, RouteGroup } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
 import { ErrOpenAPIConfiguration, ErrOpenAPIOperationConflict } from '../errors.js'

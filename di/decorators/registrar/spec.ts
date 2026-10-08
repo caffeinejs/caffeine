@@ -3,6 +3,7 @@ import type { Condition } from '../../conditional.js'
 import { ErrInvalidDecorator, ErrRepeatedInjectableConfiguration } from '../../errors.js'
 import { Factory, AsyncFactory } from '../../factory.js'
 import { Injection, InjectionDescriptor } from '../../injection.js'
+import { errMessage } from '../../internal/util/errutil/index.js'
 import { Identifier, InjectionToken, NamedToken, keyStr } from '../../key.js'
 import { PostResolutionInterceptor } from '../../post_resolution_interceptor.js'
 import type { Scope } from '../../scope.js'
@@ -114,7 +115,9 @@ export class DecoratedBindingConfig {
 
     if (this.#names.some(value => names.includes(value))) {
       throw new ErrRepeatedInjectableConfiguration(
-        `Found repeated names for binding "${keyStr(this.#key)}": ${names.map(x => keyStr(x)).join(', ')}`,
+        errMessage(`Found repeated names for binding "${keyStr(this.#key)}": ${names.map(x => keyStr(x)).join(', ')}`)
+          .reference('@caffeinejs/di', ErrRepeatedInjectableConfiguration)
+          .build(),
       )
     }
 
@@ -353,7 +356,11 @@ export class MemberMetadata {
   postConstruct(name: string | symbol): this {
     if (this.#postConstruct) {
       throw new ErrInvalidDecorator(
-        `@PostConstruct is already defined on method "${String(this.#postConstruct)}": only 1 @PostConstruct is allowed per class`,
+        errMessage(
+          `@PostConstruct is already defined on method "${String(this.#postConstruct)}": only 1 @PostConstruct is allowed per class`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 

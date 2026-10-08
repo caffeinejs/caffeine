@@ -1,4 +1,5 @@
 import { ErrCaffeine } from '../error.js'
+import { errMessage } from '../framework/err/index.js'
 
 /**
  * A schema names a type JSON Schema does not define — `undefined`, `void`, `Date`. TypeBox builds these happily
@@ -17,11 +18,14 @@ export class ErrSchemaNotRepresentable extends ErrCaffeine {
     ...solutions: string[]
   ) {
     super(
-      `Cannot represent the "${context}" schema as JSON Schema: ${path === '' ? 'the root schema' : `"${path}"`}` +
-        ` has type "${jsonType}", which JSON Schema does not define`,
+      errMessage(
+        `Cannot represent the "${context}" schema as JSON Schema: ${path === '' ? 'the root schema' : `"${path}"`}` +
+          ` has type "${jsonType}", which JSON Schema does not define`,
+      )
+        .solutions(...solutions)
+        .reference('@caffeinejs/std', ErrSchemaNotRepresentable)
+        .build(),
       'ERR_SCHEMA_NOT_REPRESENTABLE',
-      undefined,
-      ...solutions,
     )
   }
 }
@@ -40,13 +44,17 @@ export class ErrSchemaConversion extends ErrCaffeine {
     cause?: unknown,
   ) {
     super(
-      `Cannot convert the "${context}" schema to JSON Schema: ${reason}`,
+      errMessage(`Cannot convert the "${context}" schema to JSON Schema: ${reason}`)
+        .solutions(
+          'Declare the schema with the "$t" dialect from "@caffeinejs/std", which is JSON Schema already',
+          `Keep the "${vendor}" schema free of constructs that have no JSON Schema equivalent, such as transforms` +
+            ' and custom refinements',
+          'Move validation that cannot be expressed as JSON Schema into the handler',
+        )
+        .reference('@caffeinejs/std', ErrSchemaConversion)
+        .build(),
       'ERR_SCHEMA_CONVERSION',
       cause,
-      'Declare the schema with the "$t" dialect from "@caffeinejs/std", which is JSON Schema already',
-      `Keep the "${vendor}" schema free of constructs that have no JSON Schema equivalent, such as transforms` +
-        ' and custom refinements',
-      'Move validation that cannot be expressed as JSON Schema into the handler',
     )
   }
 }

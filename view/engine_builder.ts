@@ -1,4 +1,5 @@
 import { ErrConfiguration } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { kBuild } from './keys.js'
 import type { ViewOptions } from './view.js'
@@ -132,7 +133,11 @@ export class ViewEngineBuilder {
     const options = { ...this.#config, ...definedOnly(this.#options) }
 
     if (!options.engine) {
-      throw new ErrConfiguration('Engine is required to configure Server-Side Rendering')
+      throw new ErrConfiguration(
+        errMessage('Engine is required to configure Server-Side Rendering')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
 
     return {

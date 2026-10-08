@@ -1,5 +1,6 @@
 import { isValidKey, Provider, type InjectionToken, type NamedToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { Context } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
@@ -286,7 +287,9 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
   #reserve(name: string): void {
     if (this.#schemes.has(name)) {
       throw new ErrAuthConfiguration(
-        `Cannot configure authentication: a scheme is already registered under the name "${name}"`,
+        errMessage(`Cannot configure authentication: a scheme is already registered under the name "${name}"`)
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
       )
     }
   }
@@ -309,7 +312,9 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Bearer'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
-      throw new ErrAuthConfiguration('Options are required')
+      throw new ErrAuthConfiguration(
+        errMessage('Options are required').reference('@caffeinejs/http', ErrAuthConfiguration).build(),
+      )
     }
 
     return this.#register(name, 'jwt', JWT_KIND, optsFn)
@@ -324,7 +329,9 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Basic'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
-      throw new ErrAuthConfiguration('Options are required')
+      throw new ErrAuthConfiguration(
+        errMessage('Options are required').reference('@caffeinejs/http', ErrAuthConfiguration).build(),
+      )
     }
 
     return this.#register(name, 'basic', BASIC_KIND, optsFn)
@@ -358,7 +365,9 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     const name = typeof optsOrName === 'string' ? optsOrName : 'Cookie'
     const optsFn = typeof optsOrName === 'string' ? options : optsOrName
     if (!optsFn) {
-      throw new ErrAuthConfiguration('Options are required')
+      throw new ErrAuthConfiguration(
+        errMessage('Options are required').reference('@caffeinejs/http', ErrAuthConfiguration).build(),
+      )
     }
 
     return this.#register(name, 'cookie', COOKIE_KIND, optsFn)
@@ -519,9 +528,13 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     const defaultScheme = opts.defaultAuthenticateScheme ?? (schemeCount === 1 ? firstScheme : undefined)
     if (!defaultScheme) {
       throw new ErrAuthConfiguration(
-        schemeCount === 0
-          ? 'Cannot configure authentication: no strategies are registered'
-          : 'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
+        errMessage(
+          schemeCount === 0
+            ? 'Cannot configure authentication: no strategies are registered'
+            : 'Cannot configure authentication: multiple strategies are registered and no default scheme is set',
+        )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
       )
     }
     const options: AuthenticationOptions = {
@@ -633,7 +646,11 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     if (this.#refresh !== undefined) {
       if (jwtSchemes.length === 0) {
         throw new ErrAuthConfiguration(
-          'Cannot configure refresh tokens: no JWT scheme is registered (add a JWT bearer scheme via addJWTBearer)',
+          errMessage(
+            'Cannot configure refresh tokens: no JWT scheme is registered (add a JWT bearer scheme via addJWTBearer)',
+          )
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
         )
       }
 
@@ -695,8 +712,12 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
         const owner = owners.get(value)
         if (owner !== undefined) {
           throw new ErrAuthConfiguration(
-            `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" ` +
-              `share the ${label} "${value}"`,
+            errMessage(
+              `Cannot configure authentication: OIDC strategies "${owner}" and "${handler.schemeName}" ` +
+                `share the ${label} "${value}"`,
+            )
+              .reference('@caffeinejs/http', ErrAuthConfiguration)
+              .build(),
           )
         }
         owners.set(value, handler.schemeName)
@@ -729,7 +750,11 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
       const owner = owners.get(name)
       if (owner !== undefined) {
         throw new ErrAuthConfiguration(
-          `Cannot configure authentication: strategies "${owner}" and "${scheme}" share the ${label} "${name}"`,
+          errMessage(
+            `Cannot configure authentication: strategies "${owner}" and "${scheme}" share the ${label} "${name}"`,
+          )
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
         )
       }
       owners.set(name, scheme)

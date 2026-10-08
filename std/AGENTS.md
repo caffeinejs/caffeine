@@ -15,8 +15,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Nothing in `health/` knows about HTTP: rendering and routes stay in `http/health/`.
 - `framework/guards/` holds only what every kind of application shares: `runGuards`, `compileGuardKeys`,
   `ErrGuardConfiguration`, `BaseGuard<I>` and `GuardOutcome`.
-- `framework/err/message.ts` is the error message builder (`errMessage`). It imports nothing, because `di` cannot
-  depend on `std` and carries a copy at `di/internal/util/errutil/errutil.ts`: change both. The reference line is
-  printed only once `REFERENCE_BASE_URL` is set, in both files.
+- `framework/err/message.ts` is the error message builder (`errMessage`), and the only place it is written. It
+  imports nothing: the packages in `tools/copy-err-message.json` cannot depend on `std` and get a generated copy,
+  which `make err-message` writes. The reference line is printed only once `REFERENCE_BASE_URL` is set here.
+- `framework/err/` is its own `exports` subpath, `@caffeinejs/std/framework/err`, and is never re-exported from
+  `framework/index.ts`: that barrel loads `di` through the guards, and a package that needs only the builder must not.
 - A transport owns its own `Guard`, `GuardResult` / `GuardReturn` / `GuardTarget` and `GuardDenial`; do not add a
   `GuardResult` or a user-facing `Guard` here.

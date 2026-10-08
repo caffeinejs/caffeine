@@ -1,6 +1,7 @@
 import type { Backoff } from '../backoff.js'
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
+import { errMessage } from '../err_message.gen.js'
 import { ErrCallNotPermitted, ErrInvalidOption, type NotPermittedState } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay, clock, scheduleUnref, type TimerHandle } from '../timers.js'
@@ -192,11 +193,19 @@ export class CircuitBreaker implements StrategyObject {
   constructor(options: CircuitBreakerOptions) {
     const name = (options as Partial<CircuitBreakerOptions> | undefined)?.name
     if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption('Cannot create circuit breaker: name must be a non-empty string')
+      throw new ErrInvalidOption(
+        errMessage('Cannot create circuit breaker: name must be a non-empty string')
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
     }
 
     const invalid = (reason: string): ErrInvalidOption =>
-      new ErrInvalidOption(`Cannot create circuit breaker "${name}": ${reason}`)
+      new ErrInvalidOption(
+        errMessage(`Cannot create circuit breaker "${name}": ${reason}`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
 
     const percent = (key: string, value: number): number => {
       if (typeof value !== 'number' || !(value > 0 && value <= 100)) {

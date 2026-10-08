@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import type { Context } from '../../../context.js'
 import type { CookiePriority } from '../../../cookie/options.js'
 import type { CookieSecret } from '../../../cookie/signer.js'
@@ -177,13 +179,21 @@ export function resolveOAuth2Options(
   ]
   for (const [label, value] of required) {
     if (!value) {
-      throw new ErrOAuthConfiguration(`Cannot configure OAuth2: ${label} is required`)
+      throw new ErrOAuthConfiguration(
+        errMessage(`Cannot configure OAuth2: ${label} is required`)
+          .reference('@caffeinejs/http', ErrOAuthConfiguration)
+          .build(),
+      )
     }
   }
 
   const secretViolation = sessionSecretViolation(input.sessionSecret!)
   if (secretViolation !== undefined) {
-    throw new ErrOAuthConfiguration(`Cannot configure OAuth2: ${secretViolation}`)
+    throw new ErrOAuthConfiguration(
+      errMessage(`Cannot configure OAuth2: ${secretViolation}`)
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
+    )
   }
 
   // The callback carries the authorization code and the endpoints carry the token and the
@@ -195,7 +205,11 @@ export function resolveOAuth2Options(
   const defaultRedirectPath = input.defaultRedirectPath ?? '/'
   if (!isSafeReturnPath(defaultRedirectPath)) {
     throw new ErrOAuthConfiguration(
-      `Cannot configure OAuth2: defaultRedirectPath "${defaultRedirectPath}" must be a same-site absolute path`,
+      errMessage(
+        `Cannot configure OAuth2: defaultRedirectPath "${defaultRedirectPath}" must be a same-site absolute path`,
+      )
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
     )
   }
 
@@ -207,7 +221,11 @@ export function resolveOAuth2Options(
 
   const cookieViolation = remoteCookieViolation({ ...input, sessionCookieName, stateCookieName, secureCookie })
   if (cookieViolation !== undefined) {
-    throw new ErrOAuthConfiguration(`Cannot configure OAuth2: ${cookieViolation}`)
+    throw new ErrOAuthConfiguration(
+      errMessage(`Cannot configure OAuth2: ${cookieViolation}`)
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
+    )
   }
 
   const roleClaimType = input.roleClaimType ?? 'roles'
@@ -228,9 +246,13 @@ export function resolveOAuth2Options(
   const mappedRole = claimActions?.map?.[roleClaimType]
   if (mappedRole !== undefined && input.claimMapper === undefined) {
     throw new ErrOAuthConfiguration(
-      `Cannot configure OAuth2: claimActions.map sends the user info field "${mappedRole}" into the role ` +
-        `claim "${roleClaimType}", which lets the provider choose the caller's roles — use a claimMapper ` +
-        'if that is intended',
+      errMessage(
+        `Cannot configure OAuth2: claimActions.map sends the user info field "${mappedRole}" into the role ` +
+          `claim "${roleClaimType}", which lets the provider choose the caller's roles — use a claimMapper ` +
+          'if that is intended',
+      )
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
     )
   }
 

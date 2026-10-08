@@ -3,6 +3,8 @@
 Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - The adapter is Fastify. Handlers throw `ErrHTTPNotFound` and the other `ErrHTTP*`; there is no Nest `HttpException`.
+- An `ErrHTTP` message is the response body a client reads: never give one, or a subclass, solutions or a
+  reference.
 
 ## Plugins
 

@@ -6,6 +6,7 @@ ignore:
   - '**/_tests/**'
   - '**/_testdata/**'
   - '**/*.testkit.ts'
+  - '**/*.gen.ts'
   - 'benchmarks/**'
   - 'docs/**'
   - 'examples/**'

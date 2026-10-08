@@ -5,6 +5,7 @@ import { keyStr } from '../../../key.js'
 import { RequestScopeStorage } from '../../../request_scope_manager.js'
 import { ResolutionContext } from '../../../resolution_context.js'
 import { Scope, ScopedInstance } from '../../../scope.js'
+import { errMessage } from '../../util/errutil/index.js'
 import { RequestScopeContext } from './request_context.js'
 
 export class RequestScope implements Scope {
@@ -30,7 +31,11 @@ export class RequestScope implements Scope {
     this.#checkAndthrowIfNoStorageIsSet()
 
     if (this._storage!.getStore() !== undefined) {
-      throw new ErrIllegalScopeState('A request scope block is already in progress: only one is allowed at a time')
+      throw new ErrIllegalScopeState(
+        errMessage('A request scope block is already in progress: only one is allowed at a time')
+          .reference('@caffeinejs/di', ErrIllegalScopeState)
+          .build(),
+      )
     }
 
     return (this._storage! as RequestScopeStorage<RequestScopeContext>).run(new RequestScopeContext(), async () => {
@@ -50,12 +55,18 @@ export class RequestScope implements Scope {
 
     const context = (this._storage! as RequestScopeStorage<RequestScopeContext>).getStore()
     if (!context) {
-      throw new ErrOutOfScope(`Cannot access key "${keyStr(ctx.key)}" outside of a request scope block`)
+      throw new ErrOutOfScope(
+        errMessage(`Cannot access key "${keyStr(ctx.key)}" outside of a request scope block`)
+          .reference('@caffeinejs/di', ErrOutOfScope)
+          .build(),
+      )
     }
 
     if (context.destroyed) {
       throw new ErrOutOfScope(
-        `Cannot access key "${keyStr(ctx.key)}": the request scope block it belongs to has already ended`,
+        errMessage(`Cannot access key "${keyStr(ctx.key)}": the request scope block it belongs to has already ended`)
+          .reference('@caffeinejs/di', ErrOutOfScope)
+          .build(),
       )
     }
 

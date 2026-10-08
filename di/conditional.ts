@@ -67,7 +67,11 @@ function missing(key: InjectionToken): Condition {
 
 function config<T>(test: (config: T) => boolean): Condition {
   if (typeof test !== 'function') {
-    throw new ErrInvalidBinding(`Cannot build a config() condition: the test must be a function`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot build a config() condition: the test must be a function`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
 
   return { kind: 'config', test }
@@ -75,10 +79,18 @@ function config<T>(test: (config: T) => boolean): Condition {
 
 function env(name: string, expected?: string): Condition {
   if (typeof name !== 'string' || name === '') {
-    throw new ErrInvalidBinding(`Cannot build an env() condition: the variable name must be a non-empty string`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot build an env() condition: the variable name must be a non-empty string`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
   if (expected !== undefined && typeof expected !== 'string') {
-    throw new ErrInvalidBinding(`Cannot build an env() condition for "${name}": the expected value must be a string`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot build an env() condition for "${name}": the expected value must be a string`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
 
   return expected === undefined ? { kind: 'env', name } : { kind: 'env', name, expected }
@@ -87,10 +99,18 @@ function env(name: string, expected?: string): Condition {
 function checkedKey(kind: string, key: InjectionToken): InjectionToken {
   // A deferred key never answers to anything the container registers, so a condition on one could never pass.
   if (key instanceof DeferredCtor) {
-    throw new ErrInvalidBinding(`Cannot build a ${kind}() condition: a deferred key never answers to a binding`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot build a ${kind}() condition: a deferred key never answers to a binding`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
   if (!isValidKey(key)) {
-    throw new ErrInvalidBinding(`Cannot build a ${kind}() condition: expected a binding key, got ${typeName(key)}`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot build a ${kind}() condition: expected a binding key, got ${typeName(key)}`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
 
   return key
@@ -515,7 +535,11 @@ function checkEnv(name: string, expected: string | undefined, entry: HeldBinding
   } catch (err) {
     // Deno without --allow-env refuses the read.
     throw new ErrInvalidBinding(
-      `Cannot read the environment variable "${name}" for the conditions of "${keyStr(entry.key)}": ${messageOf(err)}`,
+      errMessage(
+        `Cannot read the environment variable "${name}" for the conditions of "${keyStr(entry.key)}": ${messageOf(err)}`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
       { cause: err },
     )
   }
@@ -558,7 +582,9 @@ function checkConfig(test: (config: never) => boolean, entry: HeldBinding, ops: 
     }
 
     throw new ErrInvalidBinding(
-      `Cannot decide the config() condition of "${keyStr(entry.key)}": its test threw "${messageOf(err)}"`,
+      errMessage(`Cannot decide the config() condition of "${keyStr(entry.key)}": its test threw "${messageOf(err)}"`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
       { cause: err },
     )
   }
@@ -566,7 +592,11 @@ function checkConfig(test: (config: never) => boolean, entry: HeldBinding, ops: 
   // An async test hands back a Promise, which would otherwise read as a pass.
   if (typeof result !== 'boolean') {
     throw new ErrInvalidBinding(
-      `Cannot decide the config() condition of "${keyStr(entry.key)}": its test returned ${typeName(result)}, not a boolean`,
+      errMessage(
+        `Cannot decide the config() condition of "${keyStr(entry.key)}": its test returned ${typeName(result)}, not a boolean`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
     )
   }
 

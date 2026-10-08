@@ -1,4 +1,5 @@
 import { ErrInvalidDecorator } from './errors.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { Keys } from './symbols.js'
 import type { AnyClass, ClassMember } from './types.js'
 
@@ -124,7 +125,11 @@ function checkTarget(context: AnyContext, key: MetadataKey, memberName: string |
   if (memberName === undefined) {
     if (!targets.includes(context.kind)) {
       throw new ErrInvalidDecorator(
-        `Cannot apply an annotation to ${context.kind} "${String(context.name)}": it only applies to ${targets.join(', ')}`,
+        errMessage(
+          `Cannot apply an annotation to ${context.kind} "${String(context.name)}": it only applies to ${targets.join(', ')}`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 
@@ -133,7 +138,11 @@ function checkTarget(context: AnyContext, key: MetadataKey, memberName: string |
 
   if (!targets.some(target => target !== 'class')) {
     throw new ErrInvalidDecorator(
-      `Cannot apply an annotation to member "${String(memberName)}": it only applies to ${targets.join(', ')}`,
+      errMessage(
+        `Cannot apply an annotation to member "${String(memberName)}": it only applies to ${targets.join(', ')}`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
     )
   }
 }

@@ -1,4 +1,5 @@
 import { Responder, ActionResult, type Context, ErrConfiguration } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { type FastifyViewOptions } from '@fastify/view'
 
 /**
@@ -53,7 +54,11 @@ function renderView(view: ViewResult, res: ViewCapableReply): ActionResult {
       engine === 'view'
         ? '.with(view(v => v.add(e => e.engine(...))))'
         : `.with(view(v => v.add("${engine}", e => e.engine(...))))`
-    throw new ErrConfiguration(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
+    throw new ErrConfiguration(
+      errMessage(`Cannot render view: engine "${engine}" is not configured. Call ${named}`)
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
   }
 
   return render.call(res, view.name, (view.model ?? {}) as object, { layout: view.options?.layout }) as ActionResult

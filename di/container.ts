@@ -35,6 +35,7 @@ import { SingletonScope, RefreshScope, RequestScope } from './internal/core/scop
 import { checkScopes } from './internal/core/scope/validations.js'
 import { notNil } from './internal/util/assert/index.js'
 import { isConstructable } from './internal/util/clazz/clazz.js'
+import { errMessage } from './internal/util/errutil/index.js'
 import { keyStr, InjectionToken, Identifier, NamedToken, TokenValue } from './key.js'
 import type { OnBootstrap, OnDestroy } from './lifecycle.js'
 import { runModules, type Module, type ModuleFn } from './module.js'
@@ -252,13 +253,21 @@ export class CaffeineIoC implements Container {
    */
   get<T>(key: InjectionToken<T>): T {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot resolve: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     const resolvedKey = key
     const bindings = this.getBindings<T>(resolvedKey)
     if (bindings.length === 0) {
-      throw new ErrNoResolutionForKey(`Cannot resolve key '${keyStr(resolvedKey)}'`)
+      throw new ErrNoResolutionForKey(
+        errMessage(`Cannot resolve key '${keyStr(resolvedKey)}'`)
+          .reference('@caffeinejs/di', ErrNoResolutionForKey)
+          .build(),
+      )
     }
 
     const b = bindings[0]
@@ -285,7 +294,11 @@ export class CaffeineIoC implements Container {
    */
   getOptional<T = unknown>(key: InjectionToken<T>): T | undefined {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot resolve: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     const resolvedKey = key
@@ -316,12 +329,20 @@ export class CaffeineIoC implements Container {
    */
   getMany<T>(key: InjectionToken<T>): T[] {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot resolve: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     const bindings = this.getBindings<T>(key)
     if (bindings.length === 0) {
-      throw new ErrNoResolutionForKey(`Cannot resolve key "${keyStr(key)}"`)
+      throw new ErrNoResolutionForKey(
+        errMessage(`Cannot resolve key "${keyStr(key)}"`)
+          .reference('@caffeinejs/di', ErrNoResolutionForKey)
+          .build(),
+      )
     }
 
     if (bindings.length === 1) {
@@ -347,7 +368,11 @@ export class CaffeineIoC implements Container {
    */
   getManyOptional<T>(key: InjectionToken<T>): T[] {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot resolve: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot resolve: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     const bindings = this.getBindings<T>(key)
@@ -378,7 +403,9 @@ export class CaffeineIoC implements Container {
     const binding = this.getBinding(key)
     if (binding === undefined) {
       throw new ErrNoResolutionForKey(
-        `Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`,
+        errMessage(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
+          .reference('@caffeinejs/di', ErrNoResolutionForKey)
+          .build(),
       )
     }
 
@@ -399,7 +426,9 @@ export class CaffeineIoC implements Container {
     const bindings = this.getBindings<T>(key)
     if (bindings.length === 0) {
       throw new ErrNoResolutionForKey(
-        `Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`,
+        errMessage(`Cannot wrap key "${keyStr(key)}": no binding registered for key "${keyStr(key)}"`)
+          .reference('@caffeinejs/di', ErrNoResolutionForKey)
+          .build(),
       )
     }
 
@@ -588,7 +617,9 @@ export class CaffeineIoC implements Container {
   resolver<I extends Injection>(injection: I): () => ResolveInjection<I> {
     if (!this._ready && !this._initializing) {
       throw new ErrInvalidContainerState(
-        'Cannot compile resolver: container has not been initialized — call init() first',
+        errMessage('Cannot compile resolver: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
       )
     }
 
@@ -661,7 +692,11 @@ export class CaffeineIoC implements Container {
    */
   builder<T>(ctor: Ctor<T> | ((...args: any[]) => T), injections: (Injection | undefined | null)[] = []): () => T {
     if (!this._ready && !this._initializing) {
-      throw new ErrInvalidContainerState('Cannot build: container has not been initialized — call init() first')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot build: container has not been initialized — call init() first')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     const isClazz = isConstructable(ctor)
@@ -752,7 +787,11 @@ export class CaffeineIoC implements Container {
     this.assertNotDeciding('Cannot bind values')
 
     if (this._ready || this._compiled) {
-      throw new ErrInvalidContainerState('Cannot bind values: container has already been compiled')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot bind values: container has already been compiled')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     this._values = values
@@ -775,7 +814,11 @@ export class CaffeineIoC implements Container {
     this.assertNotDeciding('Cannot bind the scoped config')
 
     if (this._ready || this._compiled) {
-      throw new ErrInvalidContainerState('Cannot bind the scoped config: container has already been compiled')
+      throw new ErrInvalidContainerState(
+        errMessage('Cannot bind the scoped config: container has already been compiled')
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
 
     this._scopedConfig = provider
@@ -1266,7 +1309,11 @@ export class CaffeineIoC implements Container {
     if (binding.bootstrap !== undefined) {
       if (binding.scopeID !== Scopes.SINGLETON) {
         throw new ErrInvalidBinding(
-          `Cannot configure binding "${keyStr(key)}": bootstrap hooks are only allowed on singleton-scoped bindings`,
+          errMessage(
+            `Cannot configure binding "${keyStr(key)}": bootstrap hooks are only allowed on singleton-scoped bindings`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
         )
       }
 
@@ -1764,7 +1811,11 @@ export class CaffeineIoC implements Container {
 
   private assertOpen(action: string): void {
     if (this._compiling || this._compiled || this._ready) {
-      throw new ErrInvalidContainerState(`${action}: container has already started compiling`)
+      throw new ErrInvalidContainerState(
+        errMessage(`${action}: container has already started compiling`)
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
   }
 
@@ -1772,13 +1823,21 @@ export class CaffeineIoC implements Container {
     this.assertNotDeciding(action)
 
     if (this._registered || this._compiled || this._ready) {
-      throw new ErrInvalidContainerState(`${action}: container has already registered its bindings`)
+      throw new ErrInvalidContainerState(
+        errMessage(`${action}: container has already registered its bindings`)
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
   }
 
   private assertNotDeciding(action: string): void {
     if (this._deciding) {
-      throw new ErrInvalidContainerState(`${action}: the container is deciding conditions`)
+      throw new ErrInvalidContainerState(
+        errMessage(`${action}: the container is deciding conditions`)
+          .reference('@caffeinejs/di', ErrInvalidContainerState)
+          .build(),
+      )
     }
   }
 
@@ -1969,20 +2028,33 @@ export class CaffeineIoC implements Container {
  */
 function assertAsyncBinding(key: InjectionToken, config: Binding): void {
   if (config.lazy) {
-    throw new ErrInvalidBinding(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
+    throw new ErrInvalidBinding(
+      errMessage(`Cannot configure binding "${keyStr(key)}": async bindings cannot be lazy`)
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
+    )
   }
 
   const allowed =
     config.scopeID === undefined || config.scopeID === Scopes.SINGLETON || config.scopeID === Scopes.REFRESH
   if (!allowed) {
     throw new ErrInvalidBinding(
-      `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
+      errMessage(
+        `Cannot configure async binding "${keyStr(key)}": async bindings can only be singleton or refresh scoped`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
     )
   }
 
   if ((config.injectableProperties?.size ?? 0) > 0) {
     throw new ErrInvalidBinding(
-      `Cannot configure async binding for key "${keyStr(key)}":` + `async bindings cannot have injectable properties.`,
+      errMessage(
+        `Cannot configure async binding for key "${keyStr(key)}":` +
+          `async bindings cannot have injectable properties.`,
+      )
+        .reference('@caffeinejs/di', ErrInvalidBinding)
+        .build(),
     )
   }
 }

@@ -10,6 +10,7 @@ import { createApplication } from '@caffeinejs/std'
 import { describe, expect, it } from 'vitest'
 
 import { deferred, FakeBroker } from './broker.testkit.js'
+import { ErrKafkaMissingBrokers } from './errors.js'
 import { kafkaBinder } from './messaging_binder.js'
 
 let got: ReturnType<typeof deferred<{ id: number }>>
@@ -79,6 +80,15 @@ class PumpConsumer {
 }
 
 describe('kafka messaging binder', () => {
+  it('names the binder option when the binder has no brokers', () => {
+    // A binder never reads the feature's builder or configuration, so the fix names its own option.
+    const make = () => kafkaBinder({ brokers: [] })
+
+    expect(make).toThrow(ErrKafkaMissingBrokers)
+    expect(make).toThrow('kafkaBinder({ brokers: "localhost:9092" })')
+    expect(make).not.toThrow('k.brokers(')
+  })
+
   it('consumes a produced record through the messaging engine', async () => {
     got = deferred()
     const broker = new FakeBroker()

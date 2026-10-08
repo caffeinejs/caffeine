@@ -1,5 +1,6 @@
 import { $i, type Container, type ObjectInjectionSpec } from '@caffeinejs/di'
-import { errMessage, type ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { boundTo } from '../../binding.js'
 import { ErrConfiguration } from '../../error/index.js'

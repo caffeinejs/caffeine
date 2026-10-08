@@ -1,5 +1,5 @@
 import { kFeatureName, type Feature } from '@caffeinejs/std'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrConfiguration } from './error/common.js'
 

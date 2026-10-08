@@ -1,6 +1,7 @@
 import { ErrInvalidDecorator } from '../../errors.js'
 import { Injection } from '../../injection.js'
 import { notNil } from '../../internal/util/assert/index.js'
+import { errMessage } from '../../internal/util/errutil/index.js'
 import { InjectionToken } from '../../key.js'
 import { DecoratedBindingConfig, MemberMetadata } from './spec.js'
 import { idfy, MemberKind, TypeID } from './types.js'
@@ -93,7 +94,9 @@ export function extendMemberInjectableAttributes(
     // A member decorator identifies its class by the decorator metadata object, which has no name.
     const owner = typeof metaID === 'function' ? ` on class "${metaID.name}"` : ''
     throw new ErrInvalidDecorator(
-      `Invalid decorator configuration for member "${String(name)}"${owner}:\n${(error as Error).message}`,
+      errMessage(`Invalid decorator configuration for member "${String(name)}"${owner}:\n${(error as Error).message}`)
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
     )
   }
 }

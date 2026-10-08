@@ -1,5 +1,6 @@
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
+import { errMessage } from '../err_message.gen.js'
 import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay } from '../timers.js'
@@ -100,11 +101,19 @@ export class Retry implements StrategyObject {
   constructor(options: RetryOptions) {
     const name = (options as Partial<RetryOptions> | undefined)?.name
     if (typeof name !== 'string' || name.length === 0) {
-      throw new ErrInvalidOption('Cannot create retry: name must be a non-empty string')
+      throw new ErrInvalidOption(
+        errMessage('Cannot create retry: name must be a non-empty string')
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
     }
 
     const invalid = (reason: string): ErrInvalidOption =>
-      new ErrInvalidOption(`Cannot create retry "${name}": ${reason}`)
+      new ErrInvalidOption(
+        errMessage(`Cannot create retry "${name}": ${reason}`)
+          .reference('@caffeinejs/resilience', ErrInvalidOption)
+          .build(),
+      )
 
     const maxAttempts = options.maxAttempts ?? 3
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {

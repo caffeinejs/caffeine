@@ -262,7 +262,10 @@ export class KafkaBuilder<C = unknown> extends FeatureBuilder<C> {
     const brokers = configured === undefined ? [] : typeof configured === 'string' ? [configured] : [...configured]
 
     if (brokers.length === 0 || brokers.some(broker => broker.length === 0)) {
-      throw new ErrKafkaMissingBrokers()
+      throw new ErrKafkaMissingBrokers(
+        'Set them on the feature: .install(Kafka(k => k.brokers("localhost:9092")))',
+        'Or set "brokers" in the configuration block handed to k.config(...)',
+      )
     }
 
     return resolveConfig(

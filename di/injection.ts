@@ -283,7 +283,11 @@ function allOf<K extends InjectionToken<any> | InjectionResult<any>>(
   }
 
   if (keyOrDescriptor == null) {
-    throw new ErrMissingInjectionKey(`Cannot call 'allOf': key is null or undefined`)
+    throw new ErrMissingInjectionKey(
+      errMessage(`Cannot call 'allOf': key is null or undefined`)
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
+    )
   }
 
   return encode({ key: keyOrDescriptor as InjectionToken, stages: [{ name: BuiltInStages.MANY }] })
@@ -340,7 +344,11 @@ function ordered<K extends InjectionToken<any> | InjectionResult<any>>(
   }
 
   if (keyOrDescriptor == null) {
-    throw new ErrMissingInjectionKey(`Cannot call 'ordered': key is null or undefined`)
+    throw new ErrMissingInjectionKey(
+      errMessage(`Cannot call 'ordered': key is null or undefined`)
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
+    )
   }
 
   return encode({
@@ -436,7 +444,11 @@ function optional<K extends InjectionToken<any> | InjectionResult<any>>(
 
   if (descriptor.stages === undefined && !isValidKey(descriptor.key)) {
     throw new ErrMissingInjectionKey(
-      `Cannot mark injection as optional: descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
+      errMessage(
+        `Cannot mark injection as optional: descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
+      )
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 
@@ -511,7 +523,11 @@ function provide<K extends InjectionToken<any> | InjectionResult<any>>(
 
   if (!isValidKey(descriptor.key)) {
     throw new ErrMissingInjectionKey(
-      `Cannot call 'provide': descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
+      errMessage(
+        `Cannot call 'provide': descriptor does not have a valid key.\nKey must be a string, symbol or class reference, got ${typeof descriptor.key}`,
+      )
+        .reference('@caffeinejs/di', ErrMissingInjectionKey)
+        .build(),
     )
   }
 

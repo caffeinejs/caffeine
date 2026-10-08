@@ -33,7 +33,8 @@
   "peerDependencies": {
     "@caffeinejs/brewer": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/http": "*"
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*"
   },
   "peerDependenciesMeta": {
     "@caffeinejs/brewer": {
@@ -43,6 +44,9 @@
       "optional": true
     },
     "@caffeinejs/http": {
+      "optional": true
+    },
+    "@caffeinejs/std": {
       "optional": true
     }
   },

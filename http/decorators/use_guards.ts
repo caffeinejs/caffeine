@@ -1,4 +1,5 @@
 import { ErrInvalidDecorator, type InjectionToken } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { Guard } from '../guards/guard.js'
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
@@ -16,7 +17,11 @@ import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
  */
 export function UseGuards(...guards: InjectionToken<Guard>[]) {
   if (guards.length === 0) {
-    throw new ErrInvalidDecorator(`@${UseGuards.name}() requires at least one guard`)
+    throw new ErrInvalidDecorator(
+      errMessage(`@${UseGuards.name}() requires at least one guard`)
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
+    )
   }
 
   return defineClassOrMemberDecorator(

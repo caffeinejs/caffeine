@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { Context } from '../../../context.js'
 import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
@@ -265,7 +265,11 @@ export class CookieAuthenticationOptionsBuilder {
 
   build(): CookieAuthenticationOptions {
     if (this.#options.sessionSecret === undefined) {
-      throw new ErrAuthConfiguration('Cannot build CookieAuthenticationOptions: sessionSecret is required')
+      throw new ErrAuthConfiguration(
+        errMessage('Cannot build CookieAuthenticationOptions: sessionSecret is required')
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
     }
 
     // The same HKDF-SHA256 into dir/A256GCM that the OAuth-family strategies seal their cookies with, so
@@ -273,7 +277,11 @@ export class CookieAuthenticationOptionsBuilder {
     // forgeable. Enforced here rather than trusted to the caller because a short secret fails silently.
     const secretViolation = sessionSecretViolation(this.#options.sessionSecret)
     if (secretViolation !== undefined) {
-      throw new ErrAuthConfiguration(`Cannot build CookieAuthenticationOptions: ${secretViolation}`)
+      throw new ErrAuthConfiguration(
+        errMessage(`Cannot build CookieAuthenticationOptions: ${secretViolation}`)
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
     }
 
     // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path
@@ -313,13 +321,21 @@ export class CookieAuthenticationOptionsBuilder {
       })
 
       if (violation !== undefined) {
-        throw new ErrAuthConfiguration(`Cannot build CookieAuthenticationOptions: ${option} "${name}": ${violation}`)
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot build CookieAuthenticationOptions: ${option} "${name}": ${violation}`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
       }
     }
 
     if (this.#options.rememberMe === true && cookieName === rememberMeCookieName) {
       throw new ErrAuthConfiguration(
-        `Cannot build CookieAuthenticationOptions: cookieName and rememberMeCookieName are both "${cookieName}"`,
+        errMessage(
+          `Cannot build CookieAuthenticationOptions: cookieName and rememberMeCookieName are both "${cookieName}"`,
+        )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
       )
     }
 

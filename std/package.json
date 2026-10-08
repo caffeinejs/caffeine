@@ -59,6 +59,10 @@
       "types": "./dist/framework/index.d.ts",
       "default": "./dist/framework/index.js"
     },
+    "./framework/err": {
+      "types": "./dist/framework/err/index.d.ts",
+      "default": "./dist/framework/err/index.js"
+    },
     "./health": {
       "types": "./dist/health/index.d.ts",
       "default": "./dist/health/index.js"

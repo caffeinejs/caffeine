@@ -61,7 +61,7 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It runs the pin check, `lint:fix`, `lint:markdown`, `build`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It runs the pin check, `lint:fix`, the error message copies, `lint:markdown`, `build`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
 Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
 
@@ -92,6 +92,7 @@ When in doubt on **code** scope, run `make check`. A README next to a TypeScript
 
 - A test helper under `_tests/` is not `*.test.ts`; without `**/_tests/**` it is compiled into the published `dist/`. The check project still sees it, because `X/tsconfig.json` keeps `include: ["**/*.ts"]`.
 - The same patterns are excluded from coverage in root [`vitest.config.ts`](vitest.config.ts) and [`codecov.yml`](codecov.yml), and from analysis in [`sonar-project.properties`](sonar-project.properties). Change them together.
+- A generated `*.gen.ts` file is compiled like any source, so no `tsconfig.build.json` excludes it, but coverage and analysis leave it out: its source is measured where it lives.
 - `npm run build` is `tsc --build tsconfig.build.json`; `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental. Never edit `dist/` by hand.
 - A green `npm run build` says nothing about tests: only a check project reads a test file. Vitest type-checks only where a config turns it on (`brewer/` and `testing/`, through their own `tsconfig.vitest.json`); `npm test` elsewhere runs tests it never type-checked.
 - `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `devtools/ui` and `examples/**` are type-checked by nothing.
@@ -285,7 +286,7 @@ A person reads the message in a terminal and a coding agent reads it in a log. B
 
 ### Solutions and links
 
-Build a message that carries solutions or links with `errMessage(...)` from `@caffeinejs/std/framework`. Never hand-write a `Possible Solutions` block, a bullet or a URL.
+Build a message that carries solutions or links with `errMessage(...)` from `@caffeinejs/std/framework/err`. Never hand-write a `Possible Solutions` block, a bullet or a URL.
 
 ```ts
 // correct
@@ -302,10 +303,12 @@ throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start 
 
 - A solution is one action the reader can take now: imperative, naming the exact method, option or decorator, most likely fix first. `Check your configuration` is not a solution.
 - No leading dash and no trailing period: the builder writes the bullets.
-- Fixed, context-free solutions go in the constructor. Solutions that depend on the call go at the throw site.
-- Pass `.reference(package, ErrClass)` on every message built for an error: the class being constructed and the package that defines it. Nothing is printed until the error pages are published. A warning takes none.
+- Fixed, context-free solutions go in the constructor. Solutions that depend on the call go at the throw site. A class whose first line is fixed takes the site's solutions as a rest parameter and builds the message itself, as `ErrFeatureNotInstalled(feature, ...solutions)` does; a class that takes a free-form message takes it finished.
+- Every first-party error message carries `.reference(package, ErrClass)`, added where the message is written: in the constructor of a class that writes its own text, at the construction site or the factory of a class that takes a message. `package` is the package that defines the class, not the one throwing it. Nothing is printed until the error pages are published. A warning takes none.
+- An `ErrHTTP` message is the response body a client reads, so neither an `ErrHTTP` nor any subclass of it (`ErrCSRFCrossOrigin`, `ErrRefreshTokenRejected`) carries solutions or a reference.
+- On a hot path, a class may build its footer once, in a static field, and append it to the text it writes: `ErrCallNotPermitted` does, because refusals come in bulk.
 - `.links(...)` adds further reading.
-- `@caffeinejs/di` cannot import `std`: it has its own copy in `di/internal/util/errutil/errutil.ts`. Change both.
+- The builder lives in `std/framework/err/message.ts` and imports nothing. A package that cannot depend on `std` gets a generated copy, a `*.gen.ts` file whose path [`tools/copy-err-message.json`](tools/copy-err-message.json) gives. Never edit a copy: change the source and run `make err-message`, which `make check` also runs. A change to the source changes every package with a copy, so it takes `make check`.
 
 ## Documentation
 

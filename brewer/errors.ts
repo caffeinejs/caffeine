@@ -1,3 +1,5 @@
+import { errMessage } from './_err_message.gen.js'
+
 /** Base of every error this package throws. */
 export class ErrBrew extends Error {
   readonly code: string = 'ERR_BREW'
@@ -14,9 +16,10 @@ export class ErrBrewPathParam extends ErrBrew {
 
   constructor(path: string, param: string) {
     super(
-      `Cannot build a request for "${path}": no value for path parameter "${param}"` +
-        '\nPossible Solutions:' +
-        `\n  - Pass it in the request init: { params: { "${param}": value } }`,
+      errMessage(`Cannot build a request for "${path}": no value for path parameter "${param}"`)
+        .solutions(`Pass it in the request init: { params: { "${param}": value } }`)
+        .reference('@caffeinejs/brewer', ErrBrewPathParam)
+        .build(),
     )
     this.name = 'ErrBrewPathParam'
   }

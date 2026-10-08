@@ -1,5 +1,6 @@
 import { join } from 'node:path'
 
+import { errMessage } from '../framework/err/index.js'
 import { ErrConfig, messageOf } from './errors.js'
 import { expandDotenv } from './interpolation.js'
 import { PROFILES_VARIABLE } from './profiles.js'
@@ -101,10 +102,12 @@ async function load(options: DotenvOptions, filenames: string[]): Promise<void> 
     throw error instanceof ErrConfig
       ? error
       : new ErrConfig(
-          `Cannot load the dotenv files in "${options.path}": ${messageOf(error)}`,
+          errMessage(`Cannot load the dotenv files in "${options.path}": ${messageOf(error)}`)
+            .solutions('Check that every dotenv file there can be read')
+            .reference('@caffeinejs/std', ErrConfig)
+            .build(),
           'ERR_CONFIG_DOTENV',
           error,
-          'Check that every dotenv file there can be read',
         )
   }
 }

@@ -1,3 +1,4 @@
+import { errMessage } from './_err_message.gen.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 
@@ -18,7 +19,12 @@ export class ErrFetchy extends Error {
  */
 export class ErrFetchyInvalidDecoratorTarget extends ErrFetchy {
   constructor(decoratorName: string, expected: string) {
-    super(`Cannot apply @${decoratorName}: expected ${expected}`, 'ERR_FETCHY_INVALID_DECORATOR_TARGET')
+    super(
+      errMessage(`Cannot apply @${decoratorName}: expected ${expected}`)
+        .reference('@caffeinejs/fetchy', ErrFetchyInvalidDecoratorTarget)
+        .build(),
+      'ERR_FETCHY_INVALID_DECORATOR_TARGET',
+    )
     this.name = 'ErrFetchyInvalidDecoratorTarget'
   }
 }
@@ -32,7 +38,12 @@ export class ErrFetchyInvalidDecoratorTarget extends ErrFetchy {
  */
 export class ErrFetchyInvalidRoute extends ErrFetchy {
   constructor(method: string, reason: string) {
-    super(`Invalid route configuration for method "${method}": ${reason}`, 'ERR_FETCHY_INVALID_ROUTE')
+    super(
+      errMessage(`Invalid route configuration for method "${method}": ${reason}`)
+        .reference('@caffeinejs/fetchy', ErrFetchyInvalidRoute)
+        .build(),
+      'ERR_FETCHY_INVALID_ROUTE',
+    )
     this.name = 'ErrFetchyInvalidRoute'
   }
 }
@@ -43,7 +54,9 @@ export class ErrFetchyInvalidRoute extends ErrFetchy {
 export class ErrFetchyEmptyClient extends ErrFetchy {
   constructor(className: string) {
     super(
-      `Cannot create client for "${className}": neither the class nor its base classes declare an operation`,
+      errMessage(`Cannot create client for "${className}": neither the class nor its base classes declare an operation`)
+        .reference('@caffeinejs/fetchy', ErrFetchyEmptyClient)
+        .build(),
       'ERR_FETCHY_EMPTY_CLIENT',
     )
     this.name = 'ErrFetchyEmptyClient'
@@ -56,7 +69,12 @@ export class ErrFetchyEmptyClient extends ErrFetchy {
  */
 export class ErrFetchyMissingAPIDecorator extends ErrFetchy {
   constructor(className: string) {
-    super(`Cannot create client for "${className}": missing @API() class decorator`, 'ERR_FETCHY_MISSING_API_DECORATOR')
+    super(
+      errMessage(`Cannot create client for "${className}": missing @API() class decorator`)
+        .reference('@caffeinejs/fetchy', ErrFetchyMissingAPIDecorator)
+        .build(),
+      'ERR_FETCHY_MISSING_API_DECORATOR',
+    )
     this.name = 'ErrFetchyMissingAPIDecorator'
   }
 }
@@ -84,6 +102,7 @@ export class ErrFetchyHTTP extends ErrFetchy {
       `Request "${request.method} ${request.origin}${path}" failed with status ${response.status} ${response.statusText}`,
       'ERR_FETCHY_HTTP',
     )
+
     this.name = 'ErrFetchyHTTP'
     Object.defineProperty(this, 'request', { value: request })
     this.status = response.status
@@ -111,7 +130,9 @@ export class ErrFetchyHTTP extends ErrFetchy {
 export class ErrFetchyMissingCallbackArgument extends ErrFetchy {
   constructor() {
     super(
-      'Cannot invoke a @Callback() method: the last call argument must be a function',
+      errMessage('Cannot invoke a @Callback() method: the last call argument must be a function')
+        .reference('@caffeinejs/fetchy', ErrFetchyMissingCallbackArgument)
+        .build(),
       'ERR_FETCHY_MISSING_CALLBACK_ARGUMENT',
     )
     this.name = 'ErrFetchyMissingCallbackArgument'
@@ -125,7 +146,9 @@ export class ErrFetchyMissingCallbackArgument extends ErrFetchy {
 export class ErrFetchyMissingPathArgument extends ErrFetchy {
   constructor(method: string, path: string, key: string, value: null | undefined) {
     super(
-      `Cannot build request "${method} ${path}": the argument for "{${key}}" is ${value}`,
+      errMessage(`Cannot build request "${method} ${path}": the argument for "{${key}}" is ${value}`)
+        .reference('@caffeinejs/fetchy', ErrFetchyMissingPathArgument)
+        .build(),
       'ERR_FETCHY_MISSING_PATH_ARGUMENT',
     )
     this.name = 'ErrFetchyMissingPathArgument'
@@ -139,7 +162,11 @@ export class ErrFetchyMissingPathArgument extends ErrFetchy {
 export class ErrFetchyInvalidFormBody extends ErrFetchy {
   constructor() {
     super(
-      'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
+      errMessage(
+        'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
+      )
+        .reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody)
+        .build(),
       'ERR_FETCHY_INVALID_FORM_BODY',
     )
     this.name = 'ErrFetchyInvalidFormBody'
@@ -158,7 +185,9 @@ export class ErrFetchyInvalidFormBody extends ErrFetchy {
 export class ErrFetchyClientNotBuilt extends ErrFetchy {
   constructor(method: string) {
     super(
-      `Cannot call "${method}": "this" is not a client built by FetchyClient.create() that includes it`,
+      errMessage(`Cannot call "${method}": "this" is not a client built by FetchyClient.create() that includes it`)
+        .reference('@caffeinejs/fetchy', ErrFetchyClientNotBuilt)
+        .build(),
       'ERR_FETCHY_CLIENT_NOT_BUILT',
     )
     this.name = 'ErrFetchyClientNotBuilt'

@@ -1,10 +1,13 @@
 import { ErrCaffeine } from '../error.js'
+import { errMessage } from '../framework/err/index.js'
 
 /** A level outside the seven `LOG_LEVELS` reached an implementation that only supports those. */
 export class ErrInvalidLogLevel extends ErrCaffeine {
   constructor(level: string) {
     super(
-      `Cannot set log level "${level}": level must be one of trace, debug, info, warn, error, fatal, silent`,
+      errMessage(`Cannot set log level "${level}": level must be one of trace, debug, info, warn, error, fatal, silent`)
+        .reference('@caffeinejs/std', ErrInvalidLogLevel)
+        .build(),
       'ERR_INVALID_LOG_LEVEL',
     )
   }
@@ -14,10 +17,13 @@ export class ErrInvalidLogLevel extends ErrCaffeine {
 export class ErrLoggerAlreadyConfigured extends ErrCaffeine {
   constructor() {
     super(
-      'Cannot configure logger: a logger has already been provided',
+      errMessage('Cannot configure logger: a logger has already been provided')
+        .solutions(
+          'Configure the logger once, through `.logger(l => l.use(...))` or `ApplicationOptions.logger`, not both',
+        )
+        .reference('@caffeinejs/std', ErrLoggerAlreadyConfigured)
+        .build(),
       'ERR_LOGGER_ALREADY_CONFIGURED',
-      undefined,
-      'Configure the logger once, through `.logger(l => l.use(...))` or `ApplicationOptions.logger`, not both',
     )
   }
 }

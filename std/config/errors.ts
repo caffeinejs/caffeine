@@ -1,4 +1,5 @@
 import { ErrCaffeine } from '../error.js'
+import { errMessage } from '../framework/err/index.js'
 import type { SchemaIssue } from '../schema/schema.js'
 
 /**
@@ -17,7 +18,11 @@ export class ErrConfigValidation extends ErrConfig {
     cause?: unknown,
   ) {
     const detail = issues.length > 0 ? `: ${issues.map(i => `${i.path}: ${i.message}`).join('; ')}` : ''
-    super(`Config validation failed${detail}`, 'ERR_CONFIG_VALIDATION', cause)
+    super(
+      errMessage(`Config validation failed${detail}`).reference('@caffeinejs/std', ErrConfigValidation).build(),
+      'ERR_CONFIG_VALIDATION',
+      cause,
+    )
   }
 }
 

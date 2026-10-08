@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 /** Base error for the distributed lock integration. */
 export class ErrDistLock extends Error {
   readonly code: string
@@ -21,9 +23,13 @@ export class ErrDistLockConfiguration extends ErrDistLock {
 export class ErrLockNotAcquired extends ErrDistLock {
   constructor(key: string, waitMs: number) {
     super(
-      `Cannot acquire lock "${key}": still held after ${waitMs}ms` +
-        '\n  - Raise the wait budget with { wait: "30s" }' +
-        '\n  - Or use tryAcquire and handle the undefined it returns',
+      errMessage(`Cannot acquire lock "${key}": still held after ${waitMs}ms`)
+        .solutions(
+          'Raise the wait budget with { wait: "30s" }',
+          'Or use tryAcquire and handle the undefined it returns',
+        )
+        .reference('@caffeinejs/distlock', ErrLockNotAcquired)
+        .build(),
       'ERR_LOCK_NOT_ACQUIRED',
     )
     this.name = 'ErrLockNotAcquired'

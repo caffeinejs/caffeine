@@ -1,4 +1,5 @@
 import type { Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 export class ErrBFF extends Error {
   readonly code: string
@@ -15,7 +16,10 @@ export class ErrBFFTimeout extends ErrBFF {
   readonly timeoutMs: number
 
   constructor(timeoutMs: number) {
-    super(`The call exceeded ${timeoutMs}ms`, 'ERR_BFF_TIMEOUT')
+    super(
+      errMessage(`The call exceeded ${timeoutMs}ms`).reference('@caffeinejs/bff', ErrBFFTimeout).build(),
+      'ERR_BFF_TIMEOUT',
+    )
     this.timeoutMs = timeoutMs
   }
 }
@@ -23,6 +27,11 @@ export class ErrBFFTimeout extends ErrBFF {
 /** `timeout` was given a duration that is not finite and greater than zero. */
 export class ErrBFFInvalidTimeout extends ErrBFF {
   constructor(limit: Duration) {
-    super(`Cannot set a timeout of ${String(limit)}: a timeout must be a positive duration`, 'ERR_BFF_INVALID_TIMEOUT')
+    super(
+      errMessage(`Cannot set a timeout of ${String(limit)}: a timeout must be a positive duration`)
+        .reference('@caffeinejs/bff', ErrBFFInvalidTimeout)
+        .build(),
+      'ERR_BFF_INVALID_TIMEOUT',
+    )
   }
 }

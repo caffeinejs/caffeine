@@ -11,6 +11,7 @@ import {
   type ResolvedRouteConstraint,
 } from '@caffeinejs/http'
 import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { CacheControlOptions, ETagGenerator } from './cache_control.js'
 
@@ -383,9 +384,13 @@ export function durationSeconds(
 
   if (!Number.isFinite(seconds) || seconds < minimum) {
     throw new ErrConfiguration(
-      `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
-        minimum === 1 ? 'at least one second' : 'a non-negative duration'
-      }, such as ${minimum === 1 ? '60' : '0'} or "5m", got "${String(value)}"`,
+      errMessage(
+        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
+          minimum === 1 ? 'at least one second' : 'a non-negative duration'
+        }, such as ${minimum === 1 ? '60' : '0'} or "5m", got "${String(value)}"`,
+      )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
@@ -402,19 +407,27 @@ export function assertTags(
 
   if (tags === undefined) {
     if (required) {
-      throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+      throw new ErrConfiguration(
+        errMessage(`${where}: tags must name at least one tag`).reference('@caffeinejs/http', ErrConfiguration).build(),
+      )
     }
 
     return
   }
 
   if (!Array.isArray(tags) || (required && tags.length === 0)) {
-    throw new ErrConfiguration(`${where}: tags must name at least one tag`)
+    throw new ErrConfiguration(
+      errMessage(`${where}: tags must name at least one tag`).reference('@caffeinejs/http', ErrConfiguration).build(),
+    )
   }
 
   for (const tag of tags) {
     if (typeof tag !== 'string' || tag === '' || tag.includes('{') || tag.includes('}')) {
-      throw new ErrConfiguration(`${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`)
+      throw new ErrConfiguration(
+        errMessage(`${where}: a tag must be a non-empty string without "{" or "}", got "${String(tag)}"`)
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
   }
 }
@@ -447,13 +460,21 @@ export function assertConstraintsKeyed(routeDef: AdapterRouteOptions, opts: Cach
   for (const [name, header] of headers) {
     if (header === undefined) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
+        errMessage(
+          `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": constraint "${name}" reads no header the cache key can vary on: give the route a "key" function`,
+        )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 
     if (!vary.has(header.toLowerCase())) {
       throw new ErrConfiguration(
-        `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
+        errMessage(
+          `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": the route is constrained on "${header}" and its cache key does not tell it from the other routes on that URL: add "${header}" to "vary", or give the route a "key" function`,
+        )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
   }

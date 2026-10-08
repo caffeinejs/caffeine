@@ -1,4 +1,5 @@
 import type { Provider } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { Context } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
@@ -29,7 +30,11 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
 
     if (!HTTP_TOKEN.test(this.#scheme)) {
       throw new ErrAuthConfiguration(
-        `Cannot configure authentication scheme "${name}": the scheme keyword "${this.#scheme}" is not a valid HTTP token`,
+        errMessage(
+          `Cannot configure authentication scheme "${name}": the scheme keyword "${this.#scheme}" is not a valid HTTP token`,
+        )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
       )
     }
   }

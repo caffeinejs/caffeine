@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 /** Base error for the portable messaging layer. */
 export class ErrMessaging extends Error {
   readonly code: string
@@ -12,12 +14,16 @@ export class ErrMessaging extends Error {
 /** Thrown when a binding, or a handler, references a binder instance that was never registered. */
 export class ErrUnknownBinder extends ErrMessaging {
   constructor(binding: string, via: string, configured: string[]) {
-    const known = configured.length > 0 ? configured.map(name => `"${name}"`).join(', ') : '(none)'
+    const fixes = [`Register the binder with .use("${via}", ...) on the messaging builder`]
+    if (configured.length > 0) {
+      const names = configured.map(name => `"${name}"`).join(', ')
+      fixes.push(`Or point the binding with via: "..." at a registered binder: ${names}`)
+    }
     super(
-      `Cannot resolve binding "${binding}": no binder named "${via}" is registered` +
-        `\n  - Register the binder with .use("${via}", ...) on the messaging builder` +
-        '\n  - Or point the binding at a registered binder with via: "..."' +
-        `\n  - Registered binders: ${known}`,
+      errMessage(`Cannot resolve binding "${binding}": no binder named "${via}" is registered`)
+        .solutions(...fixes)
+        .reference('@caffeinejs/messaging', ErrUnknownBinder)
+        .build(),
       'ERR_UNKNOWN_BINDER',
     )
     this.name = 'ErrUnknownBinder'
@@ -28,8 +34,12 @@ export class ErrUnknownBinder extends ErrMessaging {
 export class ErrUnknownBinding extends ErrMessaging {
   constructor(binding: string, kind: 'inbound' | 'outbound') {
     super(
-      `Cannot resolve ${kind} binding "${binding}": no such binding is registered` +
-        `\n  - Declare it on the messaging builder, for example .${kind === 'inbound' ? 'in' : 'out'}("${binding}", { destination: "...", via: "..." })`,
+      errMessage(`Cannot resolve ${kind} binding "${binding}": no such binding is registered`)
+        .solutions(
+          `Declare it on the messaging builder, for example .${kind === 'inbound' ? 'in' : 'out'}("${binding}", { destination: "...", via: "..." })`,
+        )
+        .reference('@caffeinejs/messaging', ErrUnknownBinding)
+        .build(),
       'ERR_UNKNOWN_BINDING',
     )
     this.name = 'ErrUnknownBinding'
@@ -40,9 +50,13 @@ export class ErrUnknownBinding extends ErrMessaging {
 export class ErrNoConsumer extends ErrMessaging {
   constructor(binding: string) {
     super(
-      `Cannot start inbound binding "${binding}": no @Consume handler is registered for it` +
-        `\n  - Add a handler: @Consume("${binding}") on a @MessageHandler class` +
-        '\n  - Or remove the unused inbound binding declaration',
+      errMessage(`Cannot start inbound binding "${binding}": no @Consume handler is registered for it`)
+        .solutions(
+          `Add a handler: @Consume("${binding}") on a @MessageHandler class`,
+          'Or remove the unused inbound binding declaration',
+        )
+        .reference('@caffeinejs/messaging', ErrNoConsumer)
+        .build(),
       'ERR_NO_CONSUMER',
     )
     this.name = 'ErrNoConsumer'
@@ -53,8 +67,10 @@ export class ErrNoConsumer extends ErrMessaging {
 export class ErrMissingDestination extends ErrMessaging {
   constructor(binding: string) {
     super(
-      `Cannot register binding "${binding}": no destination declared` +
-        '\n  - Pass a destination, for example { destination: "orders" }',
+      errMessage(`Cannot register binding "${binding}": no destination declared`)
+        .solutions('Pass a destination, for example { destination: "orders" }')
+        .reference('@caffeinejs/messaging', ErrMissingDestination)
+        .build(),
       'ERR_MISSING_DESTINATION',
     )
     this.name = 'ErrMissingDestination'
@@ -68,7 +84,9 @@ export class ErrMessageValidation extends ErrMessaging {
   constructor(binding: string, issues: readonly { path: string; message: string }[]) {
     const detail = issues.map(issue => `${issue.path.length > 0 ? issue.path : '(root)'}: ${issue.message}`).join('; ')
     super(
-      `Cannot publish to binding "${binding}": payload does not satisfy the schema: ${detail}`,
+      errMessage(`Cannot publish to binding "${binding}": payload does not satisfy the schema: ${detail}`)
+        .reference('@caffeinejs/messaging', ErrMessageValidation)
+        .build(),
       'ERR_MESSAGE_VALIDATION',
     )
     this.name = 'ErrMessageValidation'
@@ -80,7 +98,9 @@ export class ErrMessageValidation extends ErrMessaging {
 export class ErrNackExhausted extends ErrMessaging {
   constructor(source: string, attempts: number) {
     super(
-      `Cannot redeliver message from "${source}": nack retries exhausted after ${attempts} attempts`,
+      errMessage(`Cannot redeliver message from "${source}": nack retries exhausted after ${attempts} attempts`)
+        .reference('@caffeinejs/messaging', ErrNackExhausted)
+        .build(),
       'ERR_NACK_EXHAUSTED',
     )
     this.name = 'ErrNackExhausted'

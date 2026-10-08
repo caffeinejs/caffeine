@@ -1,5 +1,6 @@
 import { Scopes, type Binding, type Container, type InjectionToken, type Provider } from '@caffeinejs/di'
 
+import { errMessage } from '../err/index.js'
 import { ErrGuardConfiguration } from './errors.js'
 import type { BaseGuard } from './guard.js'
 
@@ -47,18 +48,26 @@ function compileOne<G extends BaseGuard<never>>(
   const binding = container.getBinding(key) as Binding<G> | undefined
   if (binding === undefined) {
     throw new ErrGuardConfiguration(
-      `Cannot resolve guard "${name}" referenced by "${owner}": no binding registered`,
-      `Decorate the guard with "@Injectable()" so it is registered in the container`,
-      `Call "container.bind(${name}, t => t.toSelf())" if it is registered without decorators`,
+      errMessage(`Cannot resolve guard "${name}" referenced by "${owner}": no binding registered`)
+        .solutions(
+          `Decorate the guard with "@Injectable()" so it is registered in the container`,
+          `Call "container.bind(${name}, t => t.toSelf())" if it is registered without decorators`,
+        )
+        .reference('@caffeinejs/std', ErrGuardConfiguration)
+        .build(),
     )
   }
 
   // Registration is by strong-typed key, so the key is trusted. What follows is a shape check, not a gate.
   const notAGuard = (): ErrGuardConfiguration =>
     new ErrGuardConfiguration(
-      `Cannot use "${name}" as a guard in "${owner}": no "guard" method`,
-      `A guard must expose a "guard(input)" method`,
-      `Check that "${name}" names the guard and not another binding`,
+      errMessage(`Cannot use "${name}" as a guard in "${owner}": no "guard" method`)
+        .solutions(
+          `A guard must expose a "guard(input)" method`,
+          `Check that "${name}" names the guard and not another binding`,
+        )
+        .reference('@caffeinejs/std', ErrGuardConfiguration)
+        .build(),
     )
 
   const requestScope = container.hasScopeInGraph(key, Scopes.REQUEST)

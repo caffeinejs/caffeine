@@ -1,4 +1,5 @@
 import { ErrInvalidDecorator } from '../errors.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { AbstractCtor, Ctor } from '../types.js'
 import { defineInjectable, getBindingConfiguration } from './registrar/index.js'
 
@@ -24,7 +25,11 @@ export function Extends<T>(
 export function Extends(): <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) => void
 export function Extends<T>(base?: Ctor<T> | AbstractCtor<T>) {
   if (base !== undefined && typeof base !== 'function') {
-    throw new ErrInvalidDecorator(`@${Extends.name}(): parameter base must be a class reference (typeof 'function')`)
+    throw new ErrInvalidDecorator(
+      errMessage(`@${Extends.name}(): parameter base must be a class reference (typeof 'function')`)
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
+    )
   }
 
   return function <TFunction extends Ctor>(target: TFunction, context: ClassDecoratorContext) {
@@ -32,13 +37,21 @@ export function Extends<T>(base?: Ctor<T> | AbstractCtor<T>) {
 
     if (base === undefined && parent === Function.prototype) {
       throw new ErrInvalidDecorator(
-        `Cannot apply @${Extends.name} to "${target.name}": "${target.name}" does not explicitly extend a class`,
+        errMessage(
+          `Cannot apply @${Extends.name} to "${target.name}": "${target.name}" does not explicitly extend a class`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 
     if (base !== undefined && !(target.prototype instanceof base)) {
       throw new ErrInvalidDecorator(
-        `Cannot apply @${Extends.name} to "${target.name}": "${target.name}" does not extend "${(base as AbstractCtor).name}"`,
+        errMessage(
+          `Cannot apply @${Extends.name} to "${target.name}": "${target.name}" does not extend "${(base as AbstractCtor).name}"`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 
@@ -46,7 +59,11 @@ export function Extends<T>(base?: Ctor<T> | AbstractCtor<T>) {
 
     if (existing && (existing.keysProvided?.length ?? 0) > 0 && !existing.configuration) {
       throw new ErrInvalidDecorator(
-        `Cannot apply @${Extends.name} to "${target.name}": @${Extends.name} is already declared on this class`,
+        errMessage(
+          `Cannot apply @${Extends.name} to "${target.name}": @${Extends.name} is already declared on this class`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 

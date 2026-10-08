@@ -1,3 +1,4 @@
+import { errMessage } from '../framework/err/index.js'
 import type { SchemaIssue } from '../schema/schema.js'
 import { ErrConfig, ErrConfigValidation } from './errors.js'
 import { mergeLayers } from './merge.js'
@@ -510,18 +511,20 @@ function describe(failure: Failure, path: string): string {
 
 function errInterpolation(file: string, parts: readonly string[], reason: string, ...solutions: string[]): ErrConfig {
   return new ErrConfig(
-    `Cannot interpolate "${parts.join('.')}" in config file "${file}": ${reason}`,
+    errMessage(`Cannot interpolate "${parts.join('.')}" in config file "${file}": ${reason}`)
+      .solutions(...solutions)
+      .reference('@caffeinejs/std', ErrConfig)
+      .build(),
     'ERR_CONFIG_INTERPOLATION',
-    undefined,
-    ...solutions,
   )
 }
 
 function errDotenv(files: string, name: string, reason: string, ...solutions: string[]): ErrConfig {
   return new ErrConfig(
-    `Cannot interpolate "${name}" from the dotenv files in "${files}": ${reason}`,
+    errMessage(`Cannot interpolate "${name}" from the dotenv files in "${files}": ${reason}`)
+      .solutions(...solutions)
+      .reference('@caffeinejs/std', ErrConfig)
+      .build(),
     'ERR_CONFIG_INTERPOLATION',
-    undefined,
-    ...solutions,
   )
 }

@@ -7,7 +7,7 @@ import { Server as TLSServer } from 'node:tls'
 
 import { Container, Scopes } from '@caffeinejs/di'
 import { ConfigStore } from '@caffeinejs/std/config'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { Logger } from '@caffeinejs/std/logger'
 import Fastify, {
   LogController,

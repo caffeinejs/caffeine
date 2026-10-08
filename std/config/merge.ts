@@ -1,3 +1,4 @@
+import { errMessage } from '../framework/err/index.js'
 import { ErrConfig } from './errors.js'
 import { isForbiddenKey, isIndex, isPlainObject, splitKey } from './tree.js'
 import type { ConfigLayer, ConfigObject, ConfigValue } from './types.js'
@@ -189,9 +190,10 @@ function from(source: string | undefined): string {
 
 function errKeyConflict(parts: readonly string[], source: string | undefined): ErrConfig {
   return new ErrConfig(
-    `Cannot build config${from(source)}: "${parts.join('.')}" is set both as a value and as a parent`,
+    errMessage(`Cannot build config${from(source)}: "${parts.join('.')}" is set both as a value and as a parent`)
+      .solutions('Set the whole value in one place, or only its children')
+      .reference('@caffeinejs/std', ErrConfig)
+      .build(),
     'ERR_CONFIG_KEY_CONFLICT',
-    undefined,
-    'Set the whole value in one place, or only its children',
   )
 }

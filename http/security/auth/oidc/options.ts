@@ -1,3 +1,4 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { JWTVerifyGetKey } from 'jose'
 
 import type { Context } from '../../../context.js'
@@ -294,27 +295,51 @@ export function resolveOIDCOptions(
   const { clientID, clientSecret, sessionSecret, callbackURL } = input
 
   if (!clientID) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: clientID is required')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: clientID is required')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
   if (!clientSecret) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: clientSecret is required')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: clientSecret is required')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
   if (!sessionSecret) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: sessionSecret is required')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: sessionSecret is required')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
   const secretViolation = sessionSecretViolation(sessionSecret)
   if (secretViolation !== undefined) {
-    throw new ErrOIDCConfiguration(`Cannot configure OIDC: ${secretViolation}`)
+    throw new ErrOIDCConfiguration(
+      errMessage(`Cannot configure OIDC: ${secretViolation}`)
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
   if (!callbackURL) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: callbackURL is required')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: callbackURL is required')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
 
   let callback: URL
   try {
     callback = new URL(callbackURL)
   } catch {
-    throw new ErrOIDCConfiguration(`Cannot configure OIDC: callbackURL "${callbackURL}" is not a valid URL`)
+    throw new ErrOIDCConfiguration(
+      errMessage(`Cannot configure OIDC: callbackURL "${callbackURL}" is not a valid URL`)
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
 
   const hasDiscovery = Boolean(input.discoveryURL)
@@ -322,14 +347,22 @@ export function resolveOIDCOptions(
 
   if (!hasDiscovery && !hasManual) {
     throw new ErrOIDCConfiguration(
-      'Cannot configure OIDC: provide discoveryURL or all of authorizationEndpoint, tokenEndpoint, jwksURI, and issuer',
+      errMessage(
+        'Cannot configure OIDC: provide discoveryURL or all of authorizationEndpoint, tokenEndpoint, jwksURI, and issuer',
+      )
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
     )
   }
 
   // Without a pinned issuer the discovery document defines the issuer that every id_token is
   // then validated against, so a compromised or swapped document validates its own tokens.
   if (hasDiscovery && !input.issuer) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: issuer is required when discoveryURL is set')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: issuer is required when discoveryURL is set')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
 
   // Every configured protocol endpoint must be TLS-protected. Endpoints that arrive later
@@ -357,7 +390,11 @@ export function resolveOIDCOptions(
   const defaultRedirectPath = input.defaultRedirectPath ?? '/'
   if (!isSafeReturnPath(defaultRedirectPath)) {
     throw new ErrOIDCConfiguration(
-      `Cannot configure OIDC: defaultRedirectPath "${defaultRedirectPath}" must be a same-site absolute path`,
+      errMessage(
+        `Cannot configure OIDC: defaultRedirectPath "${defaultRedirectPath}" must be a same-site absolute path`,
+      )
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
     )
   }
 
@@ -366,7 +403,11 @@ export function resolveOIDCOptions(
   // than dropping them silently: a sign-out that needs `id_token_hint` would otherwise fail
   // at logout time, long after the misconfiguration was introduced.
   if (input.saveTokens && !input.ticketStore) {
-    throw new ErrOIDCConfiguration('Cannot configure OIDC: saveTokens requires a ticketStore')
+    throw new ErrOIDCConfiguration(
+      errMessage('Cannot configure OIDC: saveTokens requires a ticketStore')
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
 
   const secureCookie = input.secureCookie ?? defaultSecureCookie(callback.href)
@@ -378,7 +419,11 @@ export function resolveOIDCOptions(
 
   const cookieViolation = remoteCookieViolation({ ...input, sessionCookieName, stateCookieName, secureCookie })
   if (cookieViolation !== undefined) {
-    throw new ErrOIDCConfiguration(`Cannot configure OIDC: ${cookieViolation}`)
+    throw new ErrOIDCConfiguration(
+      errMessage(`Cannot configure OIDC: ${cookieViolation}`)
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
   }
 
   return {

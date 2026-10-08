@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrCSRFConfiguration } from './errors.js'
 
@@ -109,7 +109,11 @@ export function normalizeTrustedOrigin(text: string): string {
   }
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-    throw new ErrCSRFConfiguration(`Cannot trust origin "${text}": only an http or https origin can be trusted`)
+    throw new ErrCSRFConfiguration(
+      errMessage(`Cannot trust origin "${text}": only an http or https origin can be trusted`)
+        .reference('@caffeinejs/http', ErrCSRFConfiguration)
+        .build(),
+    )
   }
 
   // The URL parser takes `*` for a host character, so a pattern would be trusted as a host nobody has.

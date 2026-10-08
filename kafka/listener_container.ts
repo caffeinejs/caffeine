@@ -290,7 +290,11 @@ export class KafkaListenerContainer {
 
         const groupId = spec.groupId ?? this.#runtime.config.groupId
         if (groupId === undefined) {
-          throw new ErrKafkaMissingGroupID(String(spec.handlerName))
+          throw new ErrKafkaMissingGroupID(
+            String(spec.handlerName),
+            'Set groupId on the listener: @KafkaListener({ topic: "orders", groupId: "orders" })',
+            'Or set a default group id on the feature: .install(Kafka(k => k.groupId("orders")))',
+          )
         }
 
         const deserializers = spec.deserializers ?? this.#runtime.config.deserializers

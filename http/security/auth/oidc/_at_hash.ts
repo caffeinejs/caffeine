@@ -1,5 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { redactPii } from '../internal/remote/pii.js'
 import { ErrOIDCCallback } from './errors.js'
 
@@ -42,9 +44,13 @@ export function assertAccessTokenHash(accessToken: string, atHash: string, alg: 
 
   if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
     throw new ErrOIDCCallback(
-      'Cannot process OIDC callback: at_hash does not match the access token' +
-        ` (expected ${redactPii('at_hash', computed, showPii)},` +
-        ` received ${redactPii('at_hash', atHash, showPii)})`,
+      errMessage(
+        'Cannot process OIDC callback: at_hash does not match the access token' +
+          ` (expected ${redactPii('at_hash', computed, showPii)},` +
+          ` received ${redactPii('at_hash', atHash, showPii)})`,
+      )
+        .reference('@caffeinejs/http', ErrOIDCCallback)
+        .build(),
     )
   }
 }

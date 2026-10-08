@@ -5,7 +5,7 @@ import { ErrCaffeine } from '../../error.js'
  * when the guards are compiled at start-up, so it rejects `bootstrap()` rather than failing every request.
  */
 export class ErrGuardConfiguration extends ErrCaffeine {
-  constructor(message: string, ...solutions: string[]) {
-    super(message, 'ERR_GUARD_CONFIGURATION', undefined, ...solutions)
+  constructor(message: string) {
+    super(message, 'ERR_GUARD_CONFIGURATION')
   }
 }

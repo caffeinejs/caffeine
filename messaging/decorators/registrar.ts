@@ -1,5 +1,6 @@
 import { createAnnotation, ErrInvalidDecorator, reflect } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { Message } from '../message.js'
 
@@ -24,7 +25,9 @@ export function checkHandler(context: ClassDecoratorContext): void {
   for (const name of reflect.members(context, ConsumeParams).keys()) {
     if (reflect.get(context, ConsumeBinding, name) === undefined) {
       throw new ErrInvalidDecorator(
-        `Cannot apply @MessageParams to method "${String(name)}": the method has no @Consume binding`,
+        errMessage(`Cannot apply @MessageParams to method "${String(name)}": the method has no @Consume binding`)
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
   }

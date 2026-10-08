@@ -1,4 +1,5 @@
 import { ErrConfiguration, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { fastifyView } from '@fastify/view'
 import { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
@@ -27,7 +28,9 @@ export function view<C = unknown>(configure?: ViewConfigurer<C>): HTTPPluginFact
 
     if (builder[kBuild]().length === 0) {
       throw new ErrConfiguration(
-        'Cannot install the view plugin: no engine was configured. Call .engine(...) on the builder',
+        errMessage('Cannot install the view plugin: no engine was configured. Call .engine(...) on the builder')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
       )
     }
 

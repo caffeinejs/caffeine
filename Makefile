@@ -37,6 +37,7 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 check: ## run all checks
 	@npm run pins:check
 	@npm run lint:fix
+	@npm run err-message:copy
 	@npm run lint:markdown
 	@npm run build
 	@npm run spec:check
@@ -49,6 +50,10 @@ check: ## run all checks
 .PHONY: spec
 spec: ## generate each feature's _spec/ JSON Schema from its _spectypes/ (run after build)
 	@npm run spec:gen
+
+.PHONY: err-message
+err-message: ## copy the error message builder from std into the packages that cannot depend on std
+	@npm run err-message:copy
 
 .PHONY: fmt
 fmt: ## format code

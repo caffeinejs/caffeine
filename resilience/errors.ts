@@ -1,3 +1,5 @@
+import { errMessage } from './err_message.gen.js'
+
 export class ErrResilience extends Error {
   readonly code: string
 
@@ -25,13 +27,17 @@ const refusals: Record<NotPermittedState, string> = {
  * a trial call settles.
  */
 export class ErrCallNotPermitted extends ErrResilience {
+  // Built once rather than per refusal: refusals come in bulk while a dependency is down, and the footer is the same
+  // for every one of them.
+  static readonly #footer = errMessage('').reference('@caffeinejs/resilience', ErrCallNotPermitted).build()
+
   /** The name of the circuit breaker that refused the call. */
   readonly breaker: string
   readonly state: NotPermittedState
   readonly retryAfterMs: number | undefined
 
   constructor(breaker: string, state: NotPermittedState, retryAfterMs: number | undefined) {
-    super(`Cannot call "${breaker}": ${refusals[state]}`, 'ERR_CALL_NOT_PERMITTED')
+    super(`Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`, 'ERR_CALL_NOT_PERMITTED')
     this.name = 'ErrCallNotPermitted'
     this.breaker = breaker
     this.state = state
@@ -48,7 +54,12 @@ export class ErrMaxRetriesExceeded extends ErrResilience {
   readonly result: unknown
 
   constructor(retry: string, attempts: number, result: unknown) {
-    super(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`, 'ERR_MAX_RETRIES_EXCEEDED')
+    super(
+      errMessage(`Cannot complete "${retry}": result still retryable after ${attempts} attempts`)
+        .reference('@caffeinejs/resilience', ErrMaxRetriesExceeded)
+        .build(),
+      'ERR_MAX_RETRIES_EXCEEDED',
+    )
     this.name = 'ErrMaxRetriesExceeded'
     this.attempts = attempts
     this.result = result

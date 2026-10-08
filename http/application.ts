@@ -6,7 +6,7 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import {
   AdapterExtensions,

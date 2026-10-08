@@ -1,4 +1,5 @@
 import { type InjectionToken, Scopes } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { HTTPSetupContext } from '../adapter.js'
 import { ErrConfiguration } from '../error/common.js'
@@ -129,7 +130,11 @@ function fromFactory(produced: unknown): NodeMiddleware {
     return produced.length >= 3 ? (produced as NodeMiddleware) : adaptCaffeine(produced as MiddlewareFn)
   }
 
-  throw new ErrConfiguration('Cannot install a middleware: the middleware factory did not return a middleware')
+  throw new ErrConfiguration(
+    errMessage('Cannot install a middleware: the middleware factory did not return a middleware')
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
 }
 
 function hintOn(holder: object): unknown {

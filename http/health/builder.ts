@@ -1,6 +1,6 @@
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { type Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { kHealthRegistryOptions } from '@caffeinejs/std/health'
 
 import { ErrHealthConfiguration } from './errors.js'

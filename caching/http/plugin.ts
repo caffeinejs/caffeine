@@ -8,11 +8,13 @@ import {
 } from '@caffeinejs/http'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { Logger } from '@caffeinejs/std/logger'
 import type { FastifyPluginAsync } from 'fastify'
-import fp from 'fastify-plugin'
 
 import './_fastify.js'
+import fp from 'fastify-plugin'
+
 import { guardObserver, storeErrorLogger } from './_observe.js'
 import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache_control.js'
@@ -89,7 +91,11 @@ function resolveTimeout<D extends number | undefined>(
   const seconds = strictSeconds(value)
   if (!Number.isFinite(seconds) || seconds <= 0) {
     throw new ErrConfiguration(
-      `Cannot install HTTP caching: ${option} must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+      errMessage(
+        `Cannot install HTTP caching: ${option} must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+      )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
@@ -105,7 +111,11 @@ function resolveMaxEntrySize(value: ByteSize | undefined): number | undefined {
     return bytes(value)
   } catch {
     throw new ErrConfiguration(
-      `Cannot install HTTP caching: maxEntrySize must be a byte size such as 1048576 or "1MB", got "${String(value)}"`,
+      errMessage(
+        `Cannot install HTTP caching: maxEntrySize must be a byte size such as 1048576 or "1MB", got "${String(value)}"`,
+      )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 }
@@ -134,14 +144,22 @@ function resolveCache(
 ): HTTPCacheStore {
   if (value === undefined) {
     throw new ErrConfiguration(
-      'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryHTTPCacheStore())',
+      errMessage(
+        'Cannot install HTTP caching without a store: pass one explicitly, e.g. .store(new MemoryHTTPCacheStore())',
+      )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
     )
   }
 
   if (isValidKey(value)) {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
-      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given store token')
+      throw new ErrConfiguration(
+        errMessage('Cannot install HTTP caching: no binding registered for the given store token')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
     return resolved
   }
@@ -163,7 +181,11 @@ function resolveObserver(
   if (isValidKey(value)) {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
-      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given observer token')
+      throw new ErrConfiguration(
+        errMessage('Cannot install HTTP caching: no binding registered for the given observer token')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
     return resolved
   }
@@ -185,7 +207,11 @@ function resolveETagGenerator(
   if (typeof value === 'string' || typeof value === 'symbol') {
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
-      throw new ErrConfiguration('Cannot install HTTP caching: no binding registered for the given etagGenerator token')
+      throw new ErrConfiguration(
+        errMessage('Cannot install HTTP caching: no binding registered for the given etagGenerator token')
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
     }
     return resolved
   }

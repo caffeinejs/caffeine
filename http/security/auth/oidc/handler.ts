@@ -1,3 +1,4 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { JWTVerifyGetKey } from 'jose'
 
@@ -42,11 +43,11 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   }
 
   protected override callbackError(message: string): Error {
-    return new ErrOIDCCallback(message)
+    return new ErrOIDCCallback(errMessage(message).reference('@caffeinejs/http', ErrOIDCCallback).build())
   }
 
   protected override sessionError(message: string): Error {
-    return new ErrOIDCSession(message)
+    return new ErrOIDCSession(errMessage(message).reference('@caffeinejs/http', ErrOIDCSession).build())
   }
 
   // ---------------------------------------------------------------- protocol seams
@@ -253,7 +254,11 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     // absent — a configured logout URL must not drag in a discovery fetch that can fail.
     const endpoint = this.options.endSessionEndpoint ?? (await this.#resolveDiscovery()).end_session_endpoint
     if (!endpoint) {
-      throw new ErrOIDCConfiguration('Cannot sign out: the provider advertises no end_session_endpoint')
+      throw new ErrOIDCConfiguration(
+        errMessage('Cannot sign out: the provider advertises no end_session_endpoint')
+          .reference('@caffeinejs/http', ErrOIDCConfiguration)
+          .build(),
+      )
     }
 
     const url = new URL(endpoint)
@@ -426,8 +431,12 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     }
 
     throw new ErrOIDCConfiguration(
-      'Cannot configure OIDC: provider supports neither client_secret_basic nor client_secret_post ' +
-        `(advertised: ${supported.join(', ')})`,
+      errMessage(
+        'Cannot configure OIDC: provider supports neither client_secret_basic nor client_secret_post ' +
+          `(advertised: ${supported.join(', ')})`,
+      )
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
     )
   }
 
@@ -487,7 +496,11 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       // issuer that every id_token is then validated against.
       if (this.options.issuer && doc.issuer !== this.options.issuer) {
         throw new ErrOIDCDiscovery(
-          `Cannot resolve OIDC discovery document: issuer "${doc.issuer}" does not match the configured issuer "${this.options.issuer}"`,
+          errMessage(
+            `Cannot resolve OIDC discovery document: issuer "${doc.issuer}" does not match the configured issuer "${this.options.issuer}"`,
+          )
+            .reference('@caffeinejs/http', ErrOIDCDiscovery)
+            .build(),
         )
       }
     } else {

@@ -3,6 +3,7 @@ import type { EventEmitter } from 'node:events'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { toMillis, type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/std/logger'
 
 import type { Backend } from './backend.js'
@@ -107,9 +108,13 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     const backend = this.#backend
     if (backend === undefined) {
       throw new ErrDistLockConfiguration(
-        'Cannot install distributed locking without a backend' +
-          '\n  - Pass one explicitly, for example .backend(new MemoryLockBackend()) from @caffeinejs/distlock/backend/memory' +
-          '\n  - Or bind your own and pass its key, for example .backend(kDistLockBackend)',
+        errMessage('Cannot install distributed locking without a backend')
+          .solutions(
+            'Pass one explicitly, for example .backend(new MemoryLockBackend()) from @caffeinejs/distlock/backend/memory',
+            'Or bind your own and pass its key, for example .backend(kDistLockBackend)',
+          )
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
       )
     }
 
@@ -123,8 +128,10 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     // The schema bounds what the tree may carry; the fluent setter has nothing in front of it.
     if (!(options.retryJitter >= 0 && options.retryJitter <= 1)) {
       throw new ErrDistLockConfiguration(
-        `Cannot install distributed locking: retry jitter "${options.retryJitter}" is outside 0..1` +
-          '\n  - Pass a fraction of the retry delay, for example .retryJitter(0.5)',
+        errMessage(`Cannot install distributed locking: retry jitter "${options.retryJitter}" is outside 0..1`)
+          .solutions('Pass a fraction of the retry delay, for example .retryJitter(0.5)')
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
       )
     }
 
@@ -176,8 +183,10 @@ function resolveBackend(value: Backend | InjectionToken<Backend>, container: Con
     const resolved = container.getOptional(value)
     if (resolved === undefined) {
       throw new ErrDistLockConfiguration(
-        'Cannot install distributed locking: no binding registered for the given backend key' +
-          '\n  - Bind the backend before the feature configures, or pass the instance itself to .backend(...)',
+        errMessage('Cannot install distributed locking: no binding registered for the given backend key')
+          .solutions('Bind the backend before the feature configures', 'Or pass the instance itself to .backend(...)')
+          .reference('@caffeinejs/distlock', ErrDistLockConfiguration)
+          .build(),
       )
     }
 

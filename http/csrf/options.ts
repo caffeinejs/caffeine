@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { Context } from '../context.js'
 import { ErrCSRFConfiguration } from './errors.js'

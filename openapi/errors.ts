@@ -1,4 +1,5 @@
 import { ErrCaffeineWebApplication } from '@caffeinejs/http'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 /**
  * A configuration that cannot produce a correct document, detected while the application is starting.
@@ -24,7 +25,11 @@ export class ErrOpenAPIConfiguration extends ErrCaffeineWebApplication {
 export class ErrOpenAPIOperationConflict extends ErrCaffeineWebApplication {
   constructor(operationId: string, first: string, second: string) {
     super(
-      `Cannot generate OpenAPI document: duplicate operationId "${operationId}" on "${first}" and "${second}"`,
+      errMessage(
+        `Cannot generate OpenAPI document: duplicate operationId "${operationId}" on "${first}" and "${second}"`,
+      )
+        .reference('@caffeinejs/openapi', ErrOpenAPIOperationConflict)
+        .build(),
       'ERR_OPENAPI_OPERATION_CONFLICT',
     )
     this.name = 'ErrOpenAPIOperationConflict'
@@ -40,7 +45,9 @@ export class ErrOpenAPIOperationConflict extends ErrCaffeineWebApplication {
 export class ErrOpenAPISchemaConflict extends ErrCaffeineWebApplication {
   constructor(name: string) {
     super(
-      `Cannot generate OpenAPI document: two different schemas share the component name "${name}"`,
+      errMessage(`Cannot generate OpenAPI document: two different schemas share the component name "${name}"`)
+        .reference('@caffeinejs/openapi', ErrOpenAPISchemaConflict)
+        .build(),
       'ERR_OPENAPI_SCHEMA_CONFLICT',
     )
     this.name = 'ErrOpenAPISchemaConflict'

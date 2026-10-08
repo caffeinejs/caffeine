@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { ErrCaffeineWebApplication } from '../../error/common.js'
 
 /**
@@ -11,12 +13,16 @@ export class ErrAuthzPolicyNotFound extends ErrCaffeineWebApplication {
   // See ErrAuthSchemeNotFound: the list is optional so this cannot throw while reporting another failure.
   constructor(policy: string, registered?: readonly string[]) {
     super(
-      `Cannot evaluate authorization policy "${policy}": no policy is registered under that name` +
-        (registered === undefined
-          ? ''
-          : registered.length > 0
-            ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
-            : ' (no policies are registered)'),
+      errMessage(
+        `Cannot evaluate authorization policy "${policy}": no policy is registered under that name` +
+          (registered === undefined
+            ? ''
+            : registered.length > 0
+              ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
+              : ' (no policies are registered)'),
+      )
+        .reference('@caffeinejs/http', ErrAuthzPolicyNotFound)
+        .build(),
       'ERR_AUTHZ_POLICY_NOT_FOUND',
     )
     this.name = 'ErrAuthzPolicyNotFound'
@@ -32,7 +38,9 @@ export class ErrAuthzPolicyNotFound extends ErrCaffeineWebApplication {
 export class ErrAuthzRequirementHandlerNotFound extends ErrCaffeineWebApplication {
   constructor(kind: string) {
     super(
-      `Cannot compile authorization policy: no handler is registered for requirement kind "${kind}"`,
+      errMessage(`Cannot compile authorization policy: no handler is registered for requirement kind "${kind}"`)
+        .reference('@caffeinejs/http', ErrAuthzRequirementHandlerNotFound)
+        .build(),
       'ERR_AUTHZ_REQUIREMENT_HANDLER_NOT_FOUND',
     )
     this.name = 'ErrAuthzRequirementHandlerNotFound'
@@ -48,7 +56,11 @@ export class ErrAuthzRequirementHandlerNotFound extends ErrCaffeineWebApplicatio
 export class ErrAuthzPolicyEmpty extends ErrCaffeineWebApplication {
   constructor(policy: string) {
     super(
-      `Cannot register authorization policy "${policy}": it has no requirements, so it would allow every caller`,
+      errMessage(
+        `Cannot register authorization policy "${policy}": it has no requirements, so it would allow every caller`,
+      )
+        .reference('@caffeinejs/http', ErrAuthzPolicyEmpty)
+        .build(),
       'ERR_AUTHZ_POLICY_EMPTY',
     )
     this.name = 'ErrAuthzPolicyEmpty'
@@ -63,7 +75,9 @@ export class ErrAuthzPolicyEmpty extends ErrCaffeineWebApplication {
 export class ErrAuthzFallbackExcept extends ErrCaffeineWebApplication {
   constructor(prefix: string) {
     super(
-      `Cannot configure the fallback policy: the excepted path "${prefix}" does not start with "/"`,
+      errMessage(`Cannot configure the fallback policy: the excepted path "${prefix}" does not start with "/"`)
+        .reference('@caffeinejs/http', ErrAuthzFallbackExcept)
+        .build(),
       'ERR_AUTHZ_FALLBACK_EXCEPT',
     )
     this.name = 'ErrAuthzFallbackExcept'
@@ -79,7 +93,11 @@ export class ErrAuthzFallbackExcept extends ErrCaffeineWebApplication {
 export class ErrAuthzRequirementHandlerDuplicate extends ErrCaffeineWebApplication {
   constructor(kind: string) {
     super(
-      `Cannot register authorization requirement handlers: two handlers claim the requirement kind "${kind}"`,
+      errMessage(
+        `Cannot register authorization requirement handlers: two handlers claim the requirement kind "${kind}"`,
+      )
+        .reference('@caffeinejs/http', ErrAuthzRequirementHandlerDuplicate)
+        .build(),
       'ERR_AUTHZ_REQUIREMENT_HANDLER_DUPLICATE',
     )
     this.name = 'ErrAuthzRequirementHandlerDuplicate'
@@ -96,8 +114,12 @@ export class ErrAuthzRequirementHandlerDuplicate extends ErrCaffeineWebApplicati
 export class ErrAuthorizationRequired extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot start application: routes are protected but authorization is not configured: call ' +
-        '".install(Authorization(authz => ...))" or ".install(Authentication(auth => ...))" on the application',
+      errMessage(
+        'Cannot start application: routes are protected but authorization is not configured: call ' +
+          '".install(Authorization(authz => ...))" or ".install(Authentication(auth => ...))" on the application',
+      )
+        .reference('@caffeinejs/http', ErrAuthorizationRequired)
+        .build(),
       'ERR_AUTHORIZATION_REQUIRED',
     )
     this.name = 'ErrAuthorizationRequired'

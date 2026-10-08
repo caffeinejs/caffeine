@@ -1,3 +1,4 @@
+import { errMessage } from '../framework/err/index.js'
 import { textList } from '../schema/text.js'
 import { ErrConfig } from './errors.js'
 import { hostArgv, parseArgv } from './sources/argv/argv.js'
@@ -32,10 +33,11 @@ export function activeProfiles(raw: unknown, separator?: string): string[] {
     // A file source makes a file name of a profile, and a config server a segment of its request path.
     if (profile === '.' || profile === '..' || /[/\\]/.test(profile)) {
       throw new ErrConfig(
-        `Cannot use profile "${profile}": a profile name cannot be "." or "..", or contain "/" or "\\"`,
+        errMessage(`Cannot use profile "${profile}": a profile name cannot be "." or "..", or contain "/" or "\\"`)
+          .solutions('Name the profile with letters, digits, "-", "_" and "."')
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_PROFILE',
-        undefined,
-        'Name the profile with letters, digits, "-", "_" and "."',
       )
     }
     seen.add(profile)

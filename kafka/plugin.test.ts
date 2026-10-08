@@ -75,6 +75,19 @@ describe('kafka feature', () => {
     await expect(app.bootstrap()).rejects.toBeInstanceOf(ErrKafkaMissingBrokers)
   })
 
+  it('names the feature calls that set the brokers when an instance has none', async () => {
+    const app = createApplication({}).install(Kafka(k => k.groupId('g'), { clients: noopClients() }))
+
+    const err: unknown = await app.bootstrap().catch((e: unknown) => e)
+
+    expect(err).toBeInstanceOf(ErrKafkaMissingBrokers)
+    // The feature is configured through its builder or its configuration block: the fix names both, and not the
+    // binder's option, which a feature never reads.
+    expect((err as Error).message).toContain('k.brokers("localhost:9092")')
+    expect((err as Error).message).toContain('"brokers" in the configuration block')
+    expect((err as Error).message).not.toContain('kafkaBinder(')
+  })
+
   it('throws when the same instance is installed twice', () => {
     const kfk = <C>(configure?: KafkaConfigurer<C>, i?: string) =>
       i === undefined ? Kafka(configure, { clients: noopClients() }) : Kafka(i, configure, { clients: noopClients() })

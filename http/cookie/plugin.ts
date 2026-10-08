@@ -1,5 +1,5 @@
 import { isValidKey, type InjectionToken } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type {
   FastifyInstance,
   FastifyPluginAsync,
@@ -159,7 +159,11 @@ export class ServerCookies {
     }
 
     if (reply.sent || reply.raw.headersSent) {
-      throw new ErrCookieTooLate(`Cannot ${op} ${describeCookie(name)}: the response's headers are already sent`)
+      throw new ErrCookieTooLate(
+        errMessage(`Cannot ${op} ${describeCookie(name)}: the response's headers are already sent`)
+          .reference('@caffeinejs/http', ErrCookieTooLate)
+          .build(),
+      )
     }
 
     const prepared = prepareCookie(op, name, this.#defaults, options, protocolOf(request) === 'https')
@@ -401,7 +405,11 @@ function assertSigner(value: unknown): CookieSigner {
   const candidate = value as Partial<CookieSigner> | null
 
   if (typeof candidate?.sign !== 'function' || typeof candidate.unsign !== 'function') {
-    throw new ErrCookieConfiguration('Cannot install cookies: the signer has no "sign" and "unsign" methods')
+    throw new ErrCookieConfiguration(
+      errMessage('Cannot install cookies: the signer has no "sign" and "unsign" methods')
+        .reference('@caffeinejs/http', ErrCookieConfiguration)
+        .build(),
+    )
   }
 
   return candidate as CookieSigner

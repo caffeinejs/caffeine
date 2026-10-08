@@ -62,7 +62,7 @@ export interface KafkaBinderOptions {
  */
 export function kafkaBinder(options: KafkaBinderOptions): BinderFactory {
   if (options.brokers === undefined || options.brokers.length === 0) {
-    throw new ErrKafkaMissingBrokers()
+    throw new ErrKafkaMissingBrokers('Pass them to the binder: kafkaBinder({ brokers: "localhost:9092" })')
   }
 
   const clients = options.clients ?? defaultKafkaClients
@@ -100,7 +100,11 @@ class KafkaBinder implements Binder {
   startConsumer(binding: ConsumerBinding, dispatch: Dispatch): Promise<BoundConsumer> {
     const group = binding.group ?? this.#config.groupId
     if (group === undefined || group.length === 0) {
-      throw new ErrKafkaMissingGroupID(binding.binding)
+      throw new ErrKafkaMissingGroupID(
+        binding.binding,
+        `Set a group on the inbound binding: .in("${binding.binding}", { ..., group: "orders" })`,
+        'Or set a default group id on the binder: kafkaBinder({ ..., groupId: "orders" })',
+      )
     }
 
     const ackMode = this.#config.ackMode

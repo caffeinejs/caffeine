@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { resolveAppURL } from '../../../../base_path.js'
 import type { Context } from '../../../../context.js'
 import { cookieRuleViolation } from '../../../../cookie/rules.js'
@@ -178,7 +180,11 @@ export function assertSecureEndpoint(label: string, value: string): void {
   try {
     url = new URL(value)
   } catch {
-    throw new ErrOAuthConfiguration(`Cannot configure authentication: ${label} "${value}" is not a valid URL`)
+    throw new ErrOAuthConfiguration(
+      errMessage(`Cannot configure authentication: ${label} "${value}" is not a valid URL`)
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
+    )
   }
 
   if (url.protocol === 'https:') {
@@ -190,7 +196,11 @@ export function assertSecureEndpoint(label: string, value: string): void {
   }
 
   throw new ErrOAuthConfiguration(
-    `Cannot configure authentication: ${label} "${value}" must use https (http is allowed only for loopback)`,
+    errMessage(
+      `Cannot configure authentication: ${label} "${value}" must use https (http is allowed only for loopback)`,
+    )
+      .reference('@caffeinejs/http', ErrOAuthConfiguration)
+      .build(),
   )
 }
 
@@ -205,7 +215,9 @@ export function sanitizeSchemeName(scheme: string): string {
   const sanitized = scheme.replace(/[^A-Za-z0-9_-]/g, '_')
   if (sanitized.length === 0 || /^_+$/.test(sanitized)) {
     throw new ErrOAuthConfiguration(
-      `Cannot configure authentication: strategy name "${scheme}" has no characters usable in a cookie name`,
+      errMessage(`Cannot configure authentication: strategy name "${scheme}" has no characters usable in a cookie name`)
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
     )
   }
   return sanitized

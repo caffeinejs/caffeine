@@ -1,4 +1,5 @@
 import { Ctor, ErrInvalidDecorator, Injectable, Injection, Tag, type InjectionsFor } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { CatchMetadata, kErrorHandler } from '../error/index.js'
 import { configureControllerErrorHandler } from './registrar/registrar.js'
@@ -48,15 +49,23 @@ export function Catch<A extends unknown[]>(
 export function Catch(errors: Ctor<Error> | Ctor<Error>[], dependencies?: Injection[]) {
   const errorTypes = Array.isArray(errors) ? [...errors] : [errors]
   if (errorTypes.length === 0) {
-    throw new ErrInvalidDecorator(`@${Catch.name}() requires at least one error type`)
+    throw new ErrInvalidDecorator(
+      errMessage(`@${Catch.name}() requires at least one error type`)
+        .reference('@caffeinejs/di', ErrInvalidDecorator)
+        .build(),
+    )
   }
 
   return (target: unknown, context: ClassDecoratorContext | ClassMethodDecoratorContext): void => {
     if (context.kind === 'method') {
       if (dependencies !== undefined) {
         throw new ErrInvalidDecorator(
-          `@${Catch.name}() on method "${String(context.name)}" only accepts error types: ` +
-            'dependencies apply to handler classes',
+          errMessage(
+            `@${Catch.name}() on method "${String(context.name)}" only accepts error types: ` +
+              'dependencies apply to handler classes',
+          )
+            .reference('@caffeinejs/di', ErrInvalidDecorator)
+            .build(),
         )
       }
 

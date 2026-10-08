@@ -71,8 +71,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Errors
 
-- `internal/util/errutil/errutil.ts` is a copy of `std/framework/err/message.ts`, the error message builder: `di`
-  cannot depend on `std`. Change both, and set `REFERENCE_BASE_URL` in both when the error pages are published.
+- `internal/util/errutil/errutil.gen.ts` is generated from `std/framework/err/message.ts`, the error message
+  builder, because `di` cannot depend on `std`. Never edit it: change the source and run `make err-message`.
 
 ## Process-wide registration
 

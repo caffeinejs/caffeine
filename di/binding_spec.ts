@@ -75,7 +75,9 @@ export class BindingSpec<TValue, K = unknown> {
   toClass<V extends TValue, A extends unknown[]>(ctor: Ctor<V, A>, injections?: InjectionsFor<A>): this {
     if (typeof ctor !== 'function') {
       throw new ErrInvalidBinding(
-        `BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`,
+        errMessage(`BindingSpec .toClass() parameter must be class reference. Received: '${typeof ctor}'`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -86,7 +88,11 @@ export class BindingSpec<TValue, K = unknown> {
 
       if (normalized.length !== ctor.length) {
         throw new ErrInvalidBinding(
-          `Cannot bind "${ctor.name}": constructor has ${ctor.length} parameter(s) but ${normalized.length} injection(s) were provided`,
+          errMessage(
+            `Cannot bind "${ctor.name}": constructor has ${ctor.length} parameter(s) but ${normalized.length} injection(s) were provided`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
         )
       }
 
@@ -131,7 +137,11 @@ export class BindingSpec<TValue, K = unknown> {
   toSelf(...args: SelfInjections<K>): this {
     if (isNamedKey(this.key)) {
       throw new ErrInvalidBinding(
-        `Cannot use .toSelf() when the binding key is not a class type: current key "${keyStr(this.key)}" is of type "${typeof this.key}"`,
+        errMessage(
+          `Cannot use .toSelf() when the binding key is not a class type: current key "${keyStr(this.key)}" is of type "${typeof this.key}"`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -152,7 +162,11 @@ export class BindingSpec<TValue, K = unknown> {
    */
   toValue<V extends TValue>(value: V): this {
     if (value === undefined) {
-      throw new ErrInvalidBinding(`BindingSpec .toValue() parameter must be defined.`)
+      throw new ErrInvalidBinding(
+        errMessage(`BindingSpec .toValue() parameter must be defined.`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
+      )
     }
 
     this.binding.factory = valueFactory(value)
@@ -175,7 +189,9 @@ export class BindingSpec<TValue, K = unknown> {
   toFactory<V extends TValue>(factory: Factory<V>): this {
     if (typeof factory !== 'function') {
       throw new ErrInvalidBinding(
-        `BindingSpec .toFactory() parameter must be a function. Received: '${typeof factory}'`,
+        errMessage(`BindingSpec .toFactory() parameter must be a function. Received: '${typeof factory}'`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -200,7 +216,9 @@ export class BindingSpec<TValue, K = unknown> {
   toAsyncFactory<V extends TValue>(factory: AsyncFactory<V>): this {
     if (typeof factory !== 'function') {
       throw new ErrInvalidBinding(
-        `BindingSpec .toAsyncFactory() parameter must be a function. Received: '${typeof factory}'`,
+        errMessage(`BindingSpec .toAsyncFactory() parameter must be a function. Received: '${typeof factory}'`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -235,7 +253,11 @@ export class BindingSpec<TValue, K = unknown> {
     injections?: I,
   ): this {
     if (typeof fn !== 'function') {
-      throw new ErrInvalidBinding(`BindingSpec .toFunction() parameter must be a function. Received: '${typeof fn}'`)
+      throw new ErrInvalidBinding(
+        errMessage(`BindingSpec .toFunction() parameter must be a function. Received: '${typeof fn}'`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
+      )
     }
 
     const normalized = ((injections ?? []) as Injection[]).map(dep =>
@@ -244,7 +266,11 @@ export class BindingSpec<TValue, K = unknown> {
 
     if (normalized.length !== fn.length) {
       throw new ErrInvalidBinding(
-        `Cannot bind function "${fn.name || '<anonymous>'}": function has ${fn.length} parameter(s) but ${normalized.length} injection(s) were provided`,
+        errMessage(
+          `Cannot bind function "${fn.name || '<anonymous>'}": function has ${fn.length} parameter(s) but ${normalized.length} injection(s) were provided`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -271,7 +297,11 @@ export class BindingSpec<TValue, K = unknown> {
       const other = container.getBinding(targetKey as TypedKey<TValue>)
       if (!other) {
         throw new ErrNoResolutionForKey(
-          `Cannot resolve alias "${keyStr(this.key!)}": no binding registered for key "${keyStr(targetKey)}"`,
+          errMessage(
+            `Cannot resolve alias "${keyStr(this.key!)}": no binding registered for key "${keyStr(targetKey)}"`,
+          )
+            .reference('@caffeinejs/di', ErrNoResolutionForKey)
+            .build(),
         )
       }
       return () => (other.factory as Factory<TValue>)(other.ctx!)
@@ -291,7 +321,9 @@ export class BindingSpec<TValue, K = unknown> {
   lifetime(scopeID: NamedToken<Scope>): this {
     if (!hasScope(notNil(scopeID))) {
       throw new ErrInvalidBinding(
-        `Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`,
+        errMessage(`Scope "${String(scopeID)}" is not registered: use bindScope() to register it before use`)
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -389,7 +421,11 @@ export class BindingSpec<TValue, K = unknown> {
   injectProperty(property: Identifier, injection: Injection): this {
     if (typeof this.key !== 'function') {
       throw new ErrInvalidBinding(
-        `Cannot call injectProperty() on key "${String(this.key)}": property injection requires a class binding`,
+        errMessage(
+          `Cannot call injectProperty() on key "${String(this.key)}": property injection requires a class binding`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidBinding)
+          .build(),
       )
     }
 
@@ -595,13 +631,21 @@ export class BindingSpec<TValue, K = unknown> {
     if (base === undefined) {
       if (concreteType === undefined) {
         throw new ErrInvalidBinding(
-          `Cannot use parameterless .extends(): concrete type could not be determined. Call .toClass() or .toSelf() first`,
+          errMessage(
+            `Cannot use parameterless .extends(): concrete type could not be determined. Call .toClass() or .toSelf() first`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
         )
       }
       const parent = Object.getPrototypeOf(concreteType)
       if (parent === Function.prototype) {
         throw new ErrInvalidBinding(
-          `Cannot use parameterless .extends() for "${concreteType.name}": "${concreteType.name}" does not explicitly extend a class`,
+          errMessage(
+            `Cannot use parameterless .extends() for "${concreteType.name}": "${concreteType.name}" does not explicitly extend a class`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
         )
       }
       base = parent
@@ -609,12 +653,20 @@ export class BindingSpec<TValue, K = unknown> {
       notNil(base, `Parameter base must not be null or undefined`)
 
       if (typeof base !== 'function') {
-        throw new ErrInvalidBinding(`Cannot configure .extends(): base must be a class reference (typeof 'function')`)
+        throw new ErrInvalidBinding(
+          errMessage(`Cannot configure .extends(): base must be a class reference (typeof 'function')`)
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
+        )
       }
 
       if (concreteType !== undefined && !(concreteType.prototype instanceof base)) {
         throw new ErrInvalidBinding(
-          `Cannot configure .extends() for "${concreteType.name}": "${concreteType.name}" does not extend "${(base as AbstractCtor).name}"`,
+          errMessage(
+            `Cannot configure .extends() for "${concreteType.name}": "${concreteType.name}" does not extend "${(base as AbstractCtor).name}"`,
+          )
+            .reference('@caffeinejs/di', ErrInvalidBinding)
+            .build(),
         )
       }
     }

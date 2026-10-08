@@ -1,4 +1,5 @@
 import { ErrInvalidDecorator } from '../errors.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { Configuration } from './configuration.js'
 import { extendMemberInjectableAttributes } from './registrar/index.js'
 
@@ -35,7 +36,11 @@ export function OnLifecycle<T>(
 ): (target: (...args: never[]) => T | PromiseLike<T>, context: ClassMethodDecoratorContext) => void {
   return function (_target: Function, context: DecoratorContext) {
     if (context.kind !== 'method') {
-      throw new ErrInvalidDecorator(`@OnLifecycle can only be used on a method inside a @${Configuration.name} class`)
+      throw new ErrInvalidDecorator(
+        errMessage(`@OnLifecycle can only be used on a method inside a @${Configuration.name} class`)
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
+      )
     }
 
     extendMemberInjectableAttributes(context.metadata, context.name, config => {

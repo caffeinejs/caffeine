@@ -1,4 +1,5 @@
 import { parseDuration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { RESP_TYPES } from '@redis/client'
 
 import type {
@@ -112,7 +113,11 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
 
     // Redis hashes the first `{...}` of a key, so a brace would decide the slot.
     if (hasBrace(this.#prefix)) {
-      throw new ErrRedisCache(`Cannot create a Redis cache with the prefix "${this.#prefix}": it holds a brace`)
+      throw new ErrRedisCache(
+        errMessage(`Cannot create a Redis cache with the prefix "${this.#prefix}": it holds a brace`)
+          .reference('@caffeinejs/caching', ErrRedisCache)
+          .build(),
+      )
     }
 
     this.#client = client
@@ -221,7 +226,11 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
 
   #tagKey(tag: string): string {
     if (hasBrace(tag)) {
-      throw new ErrRedisCache(`Cannot use the tag "${tag}" on a Redis cache: it holds a brace`)
+      throw new ErrRedisCache(
+        errMessage(`Cannot use the tag "${tag}" on a Redis cache: it holds a brace`)
+          .reference('@caffeinejs/caching', ErrRedisCache)
+          .build(),
+      )
     }
 
     return `${this.#prefix}t:${tag}`

@@ -1,3 +1,4 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
 import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie'
 
 import { ErrInvalidCookie } from './errors.js'
@@ -77,7 +78,11 @@ export function prepareCookie(
 
   const violation = cookieRuleViolation(name, attributes)
   if (violation !== undefined) {
-    throw new ErrInvalidCookie(`Cannot ${op} ${describeCookie(name)}: ${violation}`)
+    throw new ErrInvalidCookie(
+      errMessage(`Cannot ${op} ${describeCookie(name)}: ${violation}`)
+        .reference('@caffeinejs/http', ErrInvalidCookie)
+        .build(),
+    )
   }
 
   const signed = op === 'set' && (merged.secret !== undefined || merged.signed === true)
@@ -113,7 +118,11 @@ export function serializeCookie(op: CookieOperation, prepared: PreparedCookie, v
     // What `encodeURIComponent` throws for a lone surrogate, which no URL encoding can carry.
     if (err instanceof URIError) {
       throw new ErrInvalidCookie(
-        `Cannot ${op} ${describeCookie(prepared.name)}: its value holds a character that cannot be URL-encoded`,
+        errMessage(
+          `Cannot ${op} ${describeCookie(prepared.name)}: its value holds a character that cannot be URL-encoded`,
+        )
+          .reference('@caffeinejs/http', ErrInvalidCookie)
+          .build(),
       )
     }
 
@@ -121,7 +130,11 @@ export function serializeCookie(op: CookieOperation, prepared: PreparedCookie, v
       throw err
     }
 
-    throw new ErrInvalidCookie(`Cannot ${op} ${describeCookie(prepared.name)}: ${reasonOf(err)}`)
+    throw new ErrInvalidCookie(
+      errMessage(`Cannot ${op} ${describeCookie(prepared.name)}: ${reasonOf(err)}`)
+        .reference('@caffeinejs/http', ErrInvalidCookie)
+        .build(),
+    )
   }
 
   const end = line.indexOf(';')
@@ -130,8 +143,12 @@ export function serializeCookie(op: CookieOperation, prepared: PreparedCookie, v
 
   if (size > MAX_NAME_VALUE_OCTETS) {
     throw new ErrInvalidCookie(
-      `Cannot ${op} ${describeCookie(prepared.name)}: its name and value come to ${size} bytes, past the ` +
-        `${MAX_NAME_VALUE_OCTETS} a browser keeps`,
+      errMessage(
+        `Cannot ${op} ${describeCookie(prepared.name)}: its name and value come to ${size} bytes, past the ` +
+          `${MAX_NAME_VALUE_OCTETS} a browser keeps`,
+      )
+        .reference('@caffeinejs/http', ErrInvalidCookie)
+        .build(),
     )
   }
 
@@ -187,7 +204,11 @@ function expiry(op: CookieOperation, name: string, expires: Date | number | unde
 
   const date = typeof expires === 'number' ? new Date(expires) : expires
   if (!(date instanceof Date) || !Number.isFinite(date.getTime())) {
-    throw new ErrInvalidCookie(`Cannot ${op} ${describeCookie(name)}: its expiry is not a valid date`)
+    throw new ErrInvalidCookie(
+      errMessage(`Cannot ${op} ${describeCookie(name)}: its expiry is not a valid date`)
+        .reference('@caffeinejs/http', ErrInvalidCookie)
+        .build(),
+    )
   }
 
   return date

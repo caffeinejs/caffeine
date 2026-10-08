@@ -1,5 +1,6 @@
 import { Container, InjectionToken } from '@caffeinejs/di'
-import { compileGuardKeys, errMessage, type CompiledGuard } from '@caffeinejs/std/framework'
+import { compileGuardKeys, type CompiledGuard } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { boundTo } from '../binding.js'
 import { buildCatchByMap, ErrConfiguration } from '../error/index.js'

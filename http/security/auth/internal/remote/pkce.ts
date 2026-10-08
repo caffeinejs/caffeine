@@ -1,5 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { ErrOAuthConfiguration } from './errors.js'
 
 export function generateCodeVerifier(): string {
@@ -25,8 +27,12 @@ export function selectPKCEMethod(supported?: string[], allowPlain = false): 'S25
   if (supported.includes('plain')) {
     if (!allowPlain) {
       throw new ErrOAuthConfiguration(
-        'Cannot configure authentication: provider advertises only the "plain" PKCE method — ' +
-          'enable allowPlainPKCE to accept it',
+        errMessage(
+          'Cannot configure authentication: provider advertises only the "plain" PKCE method — ' +
+            'enable allowPlainPKCE to accept it',
+        )
+          .reference('@caffeinejs/http', ErrOAuthConfiguration)
+          .build(),
       )
     }
 
@@ -37,7 +43,11 @@ export function selectPKCEMethod(supported?: string[], allowPlain = false): 'S25
   // provider ignoring `code_challenge` outright, which silently removes PKCE from the flow —
   // the one outcome worse than refusing to start.
   throw new ErrOAuthConfiguration(
-    'Cannot configure authentication: provider advertises no supported PKCE method ' +
-      `(advertised: ${supported.join(', ')})`,
+    errMessage(
+      'Cannot configure authentication: provider advertises no supported PKCE method ' +
+        `(advertised: ${supported.join(', ')})`,
+    )
+      .reference('@caffeinejs/http', ErrOAuthConfiguration)
+      .build(),
   )
 }

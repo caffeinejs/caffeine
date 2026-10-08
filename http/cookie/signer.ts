@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrCookieConfiguration } from './errors.js'
 
@@ -189,7 +189,11 @@ export function secretList(secret: CookieSecret): readonly string[] {
   const list = typeof secret === 'string' ? [secret] : [...secret]
 
   if (list.length === 0) {
-    throw new ErrCookieConfiguration('Cannot sign cookies: the list of secrets is empty')
+    throw new ErrCookieConfiguration(
+      errMessage('Cannot sign cookies: the list of secrets is empty')
+        .reference('@caffeinejs/http', ErrCookieConfiguration)
+        .build(),
+    )
   }
 
   for (let i = 0; i < list.length; i++) {
@@ -197,8 +201,12 @@ export function secretList(secret: CookieSecret): readonly string[] {
 
     if (typeof entry !== 'string' || entry.length < MIN_COOKIE_SECRET_LENGTH) {
       throw new ErrCookieConfiguration(
-        (list.length === 1 ? 'Cannot sign cookies: the secret' : `Cannot sign cookies: secret ${i} of the list`) +
-          ` must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`,
+        errMessage(
+          (list.length === 1 ? 'Cannot sign cookies: the secret' : `Cannot sign cookies: secret ${i} of the list`) +
+            ` must be at least ${MIN_COOKIE_SECRET_LENGTH} characters`,
+        )
+          .reference('@caffeinejs/http', ErrCookieConfiguration)
+          .build(),
       )
     }
   }

@@ -1,4 +1,5 @@
 import type { InjectionToken } from '@caffeinejs/di'
+import { errMessage } from '@caffeinejs/std/framework/err'
 import type { EntityTarget, ObjectLiteral } from 'typeorm'
 
 /** Base error for the TypeORM integration. */
@@ -16,10 +17,16 @@ export class ErrTypeORM extends Error {
 export class ErrNoDataSource extends ErrTypeORM {
   constructor(key: InjectionToken | undefined, target: EntityTarget<ObjectLiteral>) {
     super(
-      `Cannot inject a repository for "${entityName(target)}": no DataSource is bound to the key "${keyName(key)}"` +
-        '\n  - Install the feature with .install(TypeORM(t => t.dataSource(options)))' +
-        '\n  - Or provide one from a @Configuration class with @ProvidesAsync(DataSource)' +
-        '\n  - If the repository is optional, wrap it with $i.optional($repository(Entity))',
+      errMessage(
+        `Cannot inject a repository for "${entityName(target)}": no DataSource is bound to the key "${keyName(key)}"`,
+      )
+        .solutions(
+          'Install the feature with .install(TypeORM(t => t.dataSource(options)))',
+          'Or provide one from a @Configuration class with @ProvidesAsync(DataSource)',
+          'If the repository is optional, wrap it with $i.optional($repository(Entity))',
+        )
+        .reference('@caffeinejs/typeorm', ErrNoDataSource)
+        .build(),
       'ERR_NO_DATA_SOURCE',
     )
     this.name = 'ErrNoDataSource'
@@ -30,10 +37,16 @@ export class ErrNoDataSource extends ErrTypeORM {
 export class ErrNoUniqueDataSource extends ErrTypeORM {
   constructor(key: InjectionToken | undefined, target: EntityTarget<ObjectLiteral>) {
     super(
-      `Cannot inject a repository for "${entityName(target)}": more than one DataSource is bound to the key ` +
-        `"${keyName(key)}" and none is primary` +
-        '\n  - Mark the one to prefer with @Primary' +
-        '\n  - Or name each instance and select it, as $repository(Entity, dataSourceKey("orders"))',
+      errMessage(
+        `Cannot inject a repository for "${entityName(target)}": more than one DataSource is bound to the key ` +
+          `"${keyName(key)}" and none is primary`,
+      )
+        .solutions(
+          'Mark the one to prefer with @Primary',
+          'Or name each instance and select it, as $repository(Entity, dataSourceKey("orders"))',
+        )
+        .reference('@caffeinejs/typeorm', ErrNoUniqueDataSource)
+        .build(),
       'ERR_NO_UNIQUE_DATA_SOURCE',
     )
     this.name = 'ErrNoUniqueDataSource'
@@ -44,8 +57,12 @@ export class ErrNoUniqueDataSource extends ErrTypeORM {
 export class ErrMissingDataSourceOptions extends ErrTypeORM {
   constructor(feature: string) {
     super(
-      `Cannot configure feature "${feature}": no data source type was provided` +
-        "\n  - Call .dataSource(options) in the configure callback, as TypeORM(t => t.dataSource({ type: 'postgres', ... }))",
+      errMessage(`Cannot configure feature "${feature}": no data source type was provided`)
+        .solutions(
+          "Call .dataSource(options) in the configure callback, as TypeORM(t => t.dataSource({ type: 'postgres', ... }))",
+        )
+        .reference('@caffeinejs/typeorm', ErrMissingDataSourceOptions)
+        .build(),
       'ERR_MISSING_DATA_SOURCE_OPTIONS',
     )
     this.name = 'ErrMissingDataSourceOptions'

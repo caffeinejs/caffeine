@@ -34,8 +34,12 @@ export class SingletonScope implements Scope {
 
     if (ctx.binding.async) {
       throw new ErrIllegalScopeState(
-        'Async provided instances must be provided externally by the container.\n' +
-          `Check the key ${keyStr(ctx.key)}. In case you really need the instance to be undefined, use "null" instead.`,
+        errMessage(
+          'Async provided instances must be provided externally by the container.\n' +
+            `Check the key ${keyStr(ctx.key)}. In case you really need the instance to be undefined, use "null" instead.`,
+        )
+          .reference('@caffeinejs/di', ErrIllegalScopeState)
+          .build(),
       )
     }
 
@@ -72,7 +76,11 @@ export class SingletonScope implements Scope {
   reset(binding: Binding): void {
     if (binding.async) {
       throw new ErrIllegalScopeState(
-        `Cannot reset an async binding "${keyStr(binding.ctx!.key)}" directly. Use the container's resetBinding() method instead.`,
+        errMessage(
+          `Cannot reset an async binding "${keyStr(binding.ctx!.key)}" directly. Use the container's resetBinding() method instead.`,
+        )
+          .reference('@caffeinejs/di', ErrIllegalScopeState)
+          .build(),
       )
     }
 

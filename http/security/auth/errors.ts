@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrCaffeineWebApplication } from '../../error/common.js'
 
@@ -18,12 +18,16 @@ export class ErrAuthSchemeNotFound extends ErrCaffeineWebApplication {
   // with an inscrutable one.
   constructor(scheme: string, registered?: readonly string[]) {
     super(
-      `Cannot resolve authentication scheme "${scheme}": no handler is registered under that name` +
-        (registered === undefined
-          ? ''
-          : registered.length > 0
-            ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
-            : ' (no schemes are registered)'),
+      errMessage(
+        `Cannot resolve authentication scheme "${scheme}": no handler is registered under that name` +
+          (registered === undefined
+            ? ''
+            : registered.length > 0
+              ? ` (registered: ${registered.map(name => `"${name}"`).join(', ')})`
+              : ' (no schemes are registered)'),
+      )
+        .reference('@caffeinejs/http', ErrAuthSchemeNotFound)
+        .build(),
       'ERR_AUTH_SCHEME_NOT_FOUND',
     )
     this.name = 'ErrAuthSchemeNotFound'
@@ -54,8 +58,12 @@ export class ErrAuthConfiguration extends ErrCaffeineWebApplication {
 export class ErrAuthenticationRequired extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot start application: routes are protected but authentication is not configured: call ' +
-        '".install(Authentication(auth => ...))" and ".with(authentication())" on the application',
+      errMessage(
+        'Cannot start application: routes are protected but authentication is not configured: call ' +
+          '".install(Authentication(auth => ...))" and ".with(authentication())" on the application',
+      )
+        .reference('@caffeinejs/http', ErrAuthenticationRequired)
+        .build(),
       'ERR_AUTHENTICATION_REQUIRED',
     )
     this.name = 'ErrAuthenticationRequired'

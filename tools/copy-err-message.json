@@ -1,0 +1,11 @@
+{
+  "source": "std/framework/err/message.ts",
+  "copies": {
+    "@caffeinejs/di": "internal/util/errutil/errutil.gen.ts",
+    "@caffeinejs/resilience": "err_message.gen.ts",
+    "@caffeinejs/fetchy": "_err_message.gen.ts",
+    "@caffeinejs/fetchy-logging-interceptor": "_err_message.gen.ts",
+    "@caffeinejs/scan": "_err_message.gen.ts",
+    "@caffeinejs/brewer": "_err_message.gen.ts"
+  }
+}

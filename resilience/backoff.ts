@@ -1,3 +1,4 @@
+import { errMessage } from './err_message.gen.js'
 import { ErrInvalidOption } from './errors.js'
 
 /** Maps a 1-based attempt number to a delay in milliseconds. */
@@ -18,7 +19,11 @@ export interface ExponentialOptions {
 }
 
 function invalid(reason: string): ErrInvalidOption {
-  return new ErrInvalidOption(`Cannot create exponential backoff: ${reason}`)
+  return new ErrInvalidOption(
+    errMessage(`Cannot create exponential backoff: ${reason}`)
+      .reference('@caffeinejs/resilience', ErrInvalidOption)
+      .build(),
+  )
 }
 
 /**

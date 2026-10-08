@@ -23,6 +23,7 @@ import {
   type FeatureConfigureKit,
 } from './feature.js'
 import { kAddConfigurer, type FeatureConfigurer } from './feature_builder.js'
+import { errMessage } from './framework/err/index.js'
 import { ApplicationAvailability } from './health/availability.js'
 import { ApplicationHealth } from './health/health.js'
 import { loadHealthIndicators } from './health/load.js'
@@ -83,7 +84,12 @@ export const caffeineConfigSchema = $t.Object({
 /** Thrown when an application is configured after {@link Application.bootstrap} has started. */
 export class ErrApplicationStarted extends ErrCaffeine {
   constructor() {
-    super('Cannot configure the application: it has already started', 'ERR_APPLICATION_STARTED')
+    super(
+      errMessage('Cannot configure the application: it has already started')
+        .reference('@caffeinejs/std', ErrApplicationStarted)
+        .build(),
+      'ERR_APPLICATION_STARTED',
+    )
   }
 }
 
@@ -91,10 +97,11 @@ export class ErrApplicationStarted extends ErrCaffeine {
 export class ErrApplicationClosed extends ErrCaffeine {
   constructor() {
     super(
-      'Cannot start the application: it has been closed',
+      errMessage('Cannot start the application: it has been closed')
+        .solutions('An application runs once: create a new one to start again')
+        .reference('@caffeinejs/std', ErrApplicationClosed)
+        .build(),
       'ERR_APPLICATION_CLOSED',
-      undefined,
-      'An application runs once: create a new one to start again',
     )
   }
 }
@@ -102,7 +109,12 @@ export class ErrApplicationClosed extends ErrCaffeine {
 /** Thrown when {@link Application.run} is called a second time. */
 export class ErrApplicationRunning extends ErrCaffeine {
   constructor() {
-    super('Cannot run the application: run() has already been called', 'ERR_APPLICATION_RUNNING')
+    super(
+      errMessage('Cannot run the application: run() has already been called')
+        .reference('@caffeinejs/std', ErrApplicationRunning)
+        .build(),
+      'ERR_APPLICATION_RUNNING',
+    )
   }
 }
 
@@ -110,10 +122,11 @@ export class ErrApplicationRunning extends ErrCaffeine {
 export class ErrApplicationNotReady extends ErrCaffeine {
   constructor(action: string) {
     super(
-      `Cannot ${action}: the application is not ready`,
+      errMessage(`Cannot ${action}: the application is not ready`)
+        .solutions('Call "bootstrap()" or "run()" first')
+        .reference('@caffeinejs/std', ErrApplicationNotReady)
+        .build(),
       'ERR_APPLICATION_NOT_READY',
-      undefined,
-      'Call "bootstrap()" or "run()" first',
     )
   }
 }
@@ -122,10 +135,11 @@ export class ErrApplicationNotReady extends ErrCaffeine {
 export class ErrConfigNotReady extends ErrCaffeine {
   constructor() {
     super(
-      'Cannot read the application configuration: the config is not ready',
+      errMessage('Cannot read the application configuration: the config is not ready')
+        .solutions('Call "bootstrap()" or "run()" first')
+        .reference('@caffeinejs/std', ErrConfigNotReady)
+        .build(),
       'ERR_CONFIG_NOT_READY',
-      undefined,
-      'Call "bootstrap()" or "run()" first',
     )
   }
 }

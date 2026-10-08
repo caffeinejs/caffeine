@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { ErrCaffeineWebApplication } from '../error/common.js'
 
 /**
@@ -9,8 +11,12 @@ import { ErrCaffeineWebApplication } from '../error/common.js'
 export class ErrPipelineSealed extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot register a middleware: the application is already started, and the pipeline was composed at ' +
-        'start-up',
+      errMessage(
+        'Cannot register a middleware: the application is already started, and the pipeline was composed at ' +
+          'start-up',
+      )
+        .reference('@caffeinejs/http', ErrPipelineSealed)
+        .build(),
       'ERR_PIPELINE_SEALED',
     )
     this.name = 'ErrPipelineSealed'
@@ -27,7 +33,9 @@ export class ErrPipelineSealed extends ErrCaffeineWebApplication {
 export class ErrNextCalledTwice extends ErrCaffeineWebApplication {
   constructor() {
     super(
-      'Cannot continue the pipeline: next() was called more than once by the same middleware',
+      errMessage('Cannot continue the pipeline: next() was called more than once by the same middleware')
+        .reference('@caffeinejs/http', ErrNextCalledTwice)
+        .build(),
       'ERR_NEXT_CALLED_TWICE',
     )
     this.name = 'ErrNextCalledTwice'

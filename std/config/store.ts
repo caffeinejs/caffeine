@@ -1,4 +1,5 @@
 import { toMillis } from '../duration/index.js'
+import { errMessage } from '../framework/err/index.js'
 import type { Logger } from '../logger/logger.js'
 import { ErrConfig, ErrConfigValidation, messageOf } from './errors.js'
 import { describeSource, explainPath } from './explain.js'
@@ -524,7 +525,9 @@ export class ConfigStore<out T> {
     // A source that ignored the signal of a load that timed out may still be running it, and never runs two.
     if (state.loading) {
       throw new ErrConfig(
-        `Cannot load config source "${name}": the load that timed out is still running`,
+        errMessage(`Cannot load config source "${name}": the load that timed out is still running`)
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_SOURCE_TIMEOUT',
       )
     }
@@ -543,7 +546,9 @@ export class ConfigStore<out T> {
       () =>
         controller.abort(
           new ErrConfig(
-            `Cannot load config source "${name}": no answer within ${timeoutMs} ms`,
+            errMessage(`Cannot load config source "${name}": no answer within ${timeoutMs} ms`)
+              .reference('@caffeinejs/std', ErrConfig)
+              .build(),
             'ERR_CONFIG_SOURCE_TIMEOUT',
           ),
         ),
@@ -630,10 +635,11 @@ function stateOf(sources: readonly ConfigSource[]): SourceState[] {
   return sources.map(source => {
     if (names.has(source.name)) {
       throw new ErrConfig(
-        `Cannot register config source "${source.name}": the name is already taken`,
+        errMessage(`Cannot register config source "${source.name}": the name is already taken`)
+          .solutions('Give one of the sources a name of its own')
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_DUPLICATE_SOURCE',
-        undefined,
-        'Give one of the sources a name of its own',
       )
     }
     names.add(source.name)
@@ -641,7 +647,9 @@ function stateOf(sources: readonly ConfigSource[]): SourceState[] {
     const pollMs = source.pollInterval === undefined ? undefined : toMillis(source.pollInterval)
     if (pollMs !== undefined && !(pollMs > 0)) {
       throw new ErrConfig(
-        `Cannot register config source "${source.name}": the poll interval must be positive`,
+        errMessage(`Cannot register config source "${source.name}": the poll interval must be positive`)
+          .reference('@caffeinejs/std', ErrConfig)
+          .build(),
         'ERR_CONFIG_SOURCE',
       )
     }
@@ -742,5 +750,9 @@ function join(path: string, key: string): string {
 }
 
 function errSource(name: string, reason: string, cause?: unknown): ErrConfig {
-  return new ErrConfig(`Cannot load config source "${name}": ${reason}`, 'ERR_CONFIG_SOURCE', cause)
+  return new ErrConfig(
+    errMessage(`Cannot load config source "${name}": ${reason}`).reference('@caffeinejs/std', ErrConfig).build(),
+    'ERR_CONFIG_SOURCE',
+    cause,
+  )
 }

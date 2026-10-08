@@ -1,6 +1,7 @@
 import { ErrInvalidDecorator } from '../errors.js'
 import { Injection } from '../injection.js'
 import { isNil } from '../internal/util/assert/index.js'
+import { errMessage } from '../internal/util/errutil/index.js'
 import { InjectionToken, NamedToken, isNamedKey } from '../key.js'
 import { Configuration } from './configuration.js'
 import { extendMemberInjectableAttributes } from './registrar/index.js'
@@ -20,7 +21,11 @@ export function defineProvides(
   return function (_target: Function, context: DecoratorContext): void {
     if (context.kind === 'class') {
       throw new ErrInvalidDecorator(
-        `Cannot use @${decoratorName} on a class "${context.name}": use it on a method inside a @${Configuration.name} class`,
+        errMessage(
+          `Cannot use @${decoratorName} on a class "${context.name}": use it on a method inside a @${Configuration.name} class`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 
@@ -33,7 +38,11 @@ export function defineProvides(
 
     if (isNil(key)) {
       throw new ErrInvalidDecorator(
-        `@${decoratorName} on a @${Configuration.name} method must receive a valid key: received "${String(key)}" on method "${String(context.name)}"`,
+        errMessage(
+          `@${decoratorName} on a @${Configuration.name} method must receive a valid key: received "${String(key)}" on method "${String(context.name)}"`,
+        )
+          .reference('@caffeinejs/di', ErrInvalidDecorator)
+          .build(),
       )
     }
 

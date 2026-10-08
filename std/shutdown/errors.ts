@@ -1,4 +1,5 @@
 import { ErrCaffeine } from '../error.js'
+import { errMessage } from '../framework/err/index.js'
 
 /**
  * A graceful-shutdown configuration that cannot produce a correct drain — a drain delay that does not fit in
@@ -18,7 +19,12 @@ export class ErrShutdownTimeout extends ErrCaffeine {
   readonly timeoutMs: number
 
   constructor(timeoutMs: number) {
-    super(`Cannot complete graceful shutdown: teardown did not finish within ${timeoutMs}ms`, 'ERR_SHUTDOWN_TIMEOUT')
+    super(
+      errMessage(`Cannot complete graceful shutdown: teardown did not finish within ${timeoutMs}ms`)
+        .reference('@caffeinejs/std', ErrShutdownTimeout)
+        .build(),
+      'ERR_SHUTDOWN_TIMEOUT',
+    )
     this.timeoutMs = timeoutMs
   }
 }

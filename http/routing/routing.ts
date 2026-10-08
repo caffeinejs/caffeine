@@ -1,5 +1,5 @@
 import { Container } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrConfiguration } from '../error/common.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'

@@ -1,3 +1,5 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
 import { assertSecureEndpoint, DEFAULT_HTTP_TIMEOUT_MS } from '../internal/remote/config.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
@@ -39,37 +41,60 @@ export async function fetchDiscovery(
     // Without a deadline a hung provider pins the request for as long as it likes.
     response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   } catch (e) {
-    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}": ${(e as Error).message}`, {
-      unreachable: true,
-    })
+    throw new ErrOIDCDiscovery(
+      errMessage(`Cannot fetch OIDC discovery document: "${url}": ${(e as Error).message}`)
+        .reference('@caffeinejs/http', ErrOIDCDiscovery)
+        .build(),
+      {
+        unreachable: true,
+      },
+    )
   }
 
   if (!response.ok) {
-    throw new ErrOIDCDiscovery(`Cannot fetch OIDC discovery document: "${url}" returned ${response.status}`, {
-      unreachable: true,
-    })
+    throw new ErrOIDCDiscovery(
+      errMessage(`Cannot fetch OIDC discovery document: "${url}" returned ${response.status}`)
+        .reference('@caffeinejs/http', ErrOIDCDiscovery)
+        .build(),
+      {
+        unreachable: true,
+      },
+    )
   }
 
   let body: unknown
   try {
     body = await response.json()
   } catch (e) {
-    throw new ErrOIDCDiscovery(`Cannot parse OIDC discovery document: "${url}": ${(e as Error).message}`, {
-      unreachable: true,
-    })
+    throw new ErrOIDCDiscovery(
+      errMessage(`Cannot parse OIDC discovery document: "${url}": ${(e as Error).message}`)
+        .reference('@caffeinejs/http', ErrOIDCDiscovery)
+        .build(),
+      {
+        unreachable: true,
+      },
+    )
   }
 
   // Every field access below assumes an object. A body of literal `null`, an array, or a
   // string is valid JSON that would otherwise throw a bare TypeError at the first `doc[field]`,
   // outside any catch — a compromised or misconfigured discovery endpoint is in scope here.
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
-    throw new ErrOIDCDiscovery(`Cannot use OIDC discovery document: "${url}" is not a JSON object`)
+    throw new ErrOIDCDiscovery(
+      errMessage(`Cannot use OIDC discovery document: "${url}" is not a JSON object`)
+        .reference('@caffeinejs/http', ErrOIDCDiscovery)
+        .build(),
+    )
   }
   const doc = body as OIDCDiscoveryDocument
 
   for (const field of REQUIRED_FIELDS) {
     if (typeof doc[field] !== 'string' || doc[field].length === 0) {
-      throw new ErrOIDCDiscovery(`Cannot use OIDC discovery document: "${url}" is missing "${field}"`)
+      throw new ErrOIDCDiscovery(
+        errMessage(`Cannot use OIDC discovery document: "${url}" is missing "${field}"`)
+          .reference('@caffeinejs/http', ErrOIDCDiscovery)
+          .build(),
+      )
     }
   }
 
@@ -79,7 +104,11 @@ export async function fetchDiscovery(
   for (const field of STRING_ARRAY_FIELDS) {
     const value = doc[field]
     if (value !== undefined && (!Array.isArray(value) || value.some(s => typeof s !== 'string'))) {
-      throw new ErrOIDCDiscovery(`Cannot use OIDC discovery document: "${url}" has a malformed "${field}"`)
+      throw new ErrOIDCDiscovery(
+        errMessage(`Cannot use OIDC discovery document: "${url}" has a malformed "${field}"`)
+          .reference('@caffeinejs/http', ErrOIDCDiscovery)
+          .build(),
+      )
     }
   }
 
