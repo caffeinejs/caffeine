@@ -9,10 +9,11 @@ import { API } from '../decorators/api.js'
 import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
+import { SignalParam } from '../decorators/params/signal_param.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { Retry } from '../decorators/retry.js'
 import { GET, POST, PUT } from '../decorators/verbs.js'
-import { ErrFetchyTooManyAuthenticationAttempts } from '../errors.js'
+import { ErrFetchyFollowUpNotSent, ErrFetchyTooManyAuthenticationAttempts } from '../errors.js'
 import type { Interceptor, InterceptorFunction } from '../interceptor.js'
 import { noop } from '../noop.js'
 import type { FetchyRequest } from '../request.js'
@@ -50,6 +51,12 @@ class UsersAPI {
   @Retry({ delay: 1 })
   @Params([Param('id')])
   getUserWithRetry(_id: string): Promise<User> {
+    return noop()
+  }
+
+  @GET('/{id}')
+  @Params([Param('id'), SignalParam()])
+  getUserWithSignal(_id: string, _signal: AbortSignal): Promise<User> {
     return noop()
   }
 }
@@ -115,10 +122,13 @@ describe('Authenticator', () => {
   })
 
   // Giving up leaves the challenge as the server sent it: the error carries the 401's body, which says why the
-  // credentials were refused.
-  it('ends the call with the 401 when the authenticator returns null', async () => {
+  // credentials were refused. An authenticator written in JavaScript that returns nothing gives up the same way.
+  it.each([
+    ['null', null],
+    ['undefined', undefined],
+  ])('ends the call with the 401 when the authenticator returns %s', async (_name, nothing) => {
     const transportFactory = new TestTransportFactory()
-    const api = buildClient(transportFactory, { authenticate: () => Promise.resolve(null) })
+    const api = buildClient(transportFactory, { authenticate: () => Promise.resolve(nothing as null) })
     const transport = transportFactory.transports[0]
     transport.willRespond(unauthorized())
 
@@ -147,7 +157,8 @@ describe('Authenticator', () => {
   })
 
   // An authenticator that never gives up would resend forever, each resend maybe costing the token endpoint a
-  // refresh. The call fails instead, and leaves no 401 holding its connection.
+  // refresh. The call stops after 3 follow-ups instead, without asking for a 4th it would not send, and leaves no 401
+  // holding its connection.
   it('fails the call when the authenticator never gives up', async () => {
     const attempts: number[] = []
     const transportFactory = new TestTransportFactory()
@@ -166,7 +177,7 @@ describe('Authenticator', () => {
 
     await expect(api.getUser('1')).rejects.toBeInstanceOf(ErrFetchyTooManyAuthenticationAttempts)
     expect(transport.sendCount).toBe(4)
-    expect(attempts).toEqual([1, 2, 3, 4])
+    expect(attempts).toEqual([1, 2, 3])
     expect(challenges.every(challenge => challenge.bodyUsed)).toBe(true)
   })
 
@@ -252,18 +263,78 @@ describe('Authenticator', () => {
     expect(transport.sendCount).toBe(2)
   })
 
-  // The first send read the stream, so a follow-up would send it empty. The authenticator is still asked, so it can
-  // refresh credentials for the calls that follow.
-  it('does not resend a body that can be read only once', async () => {
+  // The first send read the stream, so a follow-up would send it empty. The call fails saying so, not with a 401 that
+  // would pass for refused credentials. The authenticator is still asked, so what it refreshes serves the calls that
+  // follow.
+  it('fails the call when the follow-up body can be read only once', async () => {
     const attempts: number[] = []
     const transportFactory = new TestTransportFactory()
     const api = buildClient(transportFactory, answerOnce(attempts))
     const transport = transportFactory.transports[0]
-    transport.willRespond(unauthorized()).willRespond(fakeJSONResponse(200, { id: '1' }))
+    const challenge = unauthorized()
+    transport.willRespond(challenge)
 
-    await expect(api.upload('1', webStream())).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 401 })
+    await expect(api.upload('1', webStream())).rejects.toBeInstanceOf(ErrFetchyFollowUpNotSent)
     expect(transport.sendCount).toBe(1)
     expect(attempts).toEqual([1])
+    expect(challenge.bodyUsed).toBe(true)
+  })
+
+  // Credentials stay with the origin the call was made to. A follow-up built for another, from what a challenge said or
+  // by mistake, is refused before it leaves.
+  it('fails the call when the follow-up targets another origin', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory, {
+      authenticate(request) {
+        const followUp = withToken(request, 'fresh')
+        followUp.origin = 'https://elsewhere.test'
+        return Promise.resolve(followUp)
+      },
+    })
+    const transport = transportFactory.transports[0]
+    const challenge = unauthorized()
+    transport.willRespond(challenge)
+
+    await expect(api.getUser('1')).rejects.toBeInstanceOf(ErrFetchyFollowUpNotSent)
+    expect(transport.sendCount).toBe(1)
+    expect(challenge.bodyUsed).toBe(true)
+  })
+
+  // A caller that aborted waits for nothing more. Once the authenticator returns, whatever it returned, the call rejects
+  // with the abort reason rather than send a follow-up nobody waits for, or report the 401.
+  it.each<[string, (request: FetchyRequest) => FetchyRequest | null]>([
+    ['a follow-up', request => withToken(request, 'fresh')],
+    ['null', () => null],
+  ])('rejects with the abort reason when the call aborts while the authenticator returns %s', async (_name, answer) => {
+    const controller = new AbortController()
+    const reason = new Error('caller gave up')
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory, {
+      authenticate(request) {
+        controller.abort(reason)
+        return Promise.resolve(answer(request))
+      },
+    })
+    const transport = transportFactory.transports[0]
+    const challenge = unauthorized()
+    transport.willRespond(challenge)
+
+    await expect(api.getUserWithSignal('1', controller.signal)).rejects.toBe(reason)
+    expect(transport.sendCount).toBe(1)
+    expect(challenge.bodyUsed).toBe(true)
+  })
+
+  // A call aborted before its 401 is handled needs no credentials: the authenticator is not asked, so no refresh starts
+  // for a caller that left.
+  it('does not ask the authenticator about a call already aborted', async () => {
+    const attempts: number[] = []
+    const reason = new Error('caller gave up')
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(transportFactory, answerOnce(attempts))
+    transportFactory.transports[0].willRespond(unauthorized())
+
+    await expect(api.getUserWithSignal('1', AbortSignal.abort(reason))).rejects.toBe(reason)
+    expect(attempts).toEqual([])
   })
 
   // A body held in memory is sent whole again, so an authenticated write is answered like any other call.
@@ -355,7 +426,7 @@ describe('Authenticator', () => {
 // What an application writes for a token that expires: it refreshes only when the server rejected the token still
 // current, and every call rejected meanwhile waits on that one refresh.
 class TokenAuthenticator implements Authenticator {
-  #refreshing: Promise<string> | undefined
+  #refreshing: Promise<void> | undefined
 
   constructor(
     public token: string,
@@ -373,22 +444,31 @@ class TokenAuthenticator implements Authenticator {
     }
 
     if (request.headers.get('authorization') === `Bearer ${this.token}`) {
-      this.#refreshing ??= this.fetchToken().finally(() => {
-        this.#refreshing = undefined
-      })
-      this.token = await this.#refreshing
+      // Publishes the token and frees the slot in one step. A 401 handled between the two would find the slot free and
+      // the old token still current, and start a second refresh.
+      await (this.#refreshing ??= this.fetchToken().then(
+        token => {
+          this.token = token
+          this.#refreshing = undefined
+        },
+        (error: unknown) => {
+          this.#refreshing = undefined
+          throw error
+        },
+      ))
     }
 
     return withToken(request, this.token)
   }
 }
 
-// A server that accepts only its current token. It answers by header, since concurrent calls interleave, and holds
-// `/users/late` until `released`, so that call's 401 arrives after the refresh.
-function tokenServer(current: string, released: Promise<void>): Transport {
+// A server that accepts only its current token. It answers by header, since concurrent calls interleave. It holds
+// `/users/late` until `released`, and records the `authorization` each request for it carries in `late`.
+function tokenServer(current: string, released: Promise<void>, late: (string | null)[]): Transport {
   return {
     async send(request) {
       if (request.path === '/users/late') {
+        late.push(request.headers.get('authorization'))
         await released
       }
 
@@ -401,21 +481,24 @@ function tokenServer(current: string, released: Promise<void>): Transport {
 
 describe('Authenticator refreshing a token', () => {
   // One expired token sends every call in flight to the authenticator at once. One refresh serves them all, and a call
-  // whose 401 arrives after it reuses the new token instead of refreshing again.
-  it.each([
-    ['without interceptors', false],
-    ['behind an interceptor that sets the token', true],
-  ])('refreshes once for every rejected call, %s', async (_case, intercepted) => {
+  // whose 401 arrives while the refresh completes reuses the new token instead of refreshing again.
+  it.each<[string, boolean, (string | null)[]]>([
+    ['without interceptors', false, [null, 'Bearer token-2']],
+    ['behind an interceptor that sets the token', true, ['Bearer token-1', 'Bearer token-2']],
+  ])('refreshes once for every rejected call, %s', async (_case, intercepted, lateCarried) => {
     const { promise: released, resolve: release } = Promise.withResolvers<void>()
+    const late: (string | null)[] = []
     let refreshes = 0
     const authenticator = new TokenAuthenticator('token-1', async () => {
       refreshes++
       await delay(5)
+      // The held call's 401 then lands among the jobs that complete the refresh.
+      release()
       return 'token-2'
     })
     const builder = newClient()
       .baseURL('http://example.test')
-      .transportFactory({ provide: () => tokenServer('token-2', released) })
+      .transportFactory({ provide: () => tokenServer('token-2', released, late) })
       .authenticator(authenticator)
 
     if (intercepted) {
@@ -426,16 +509,11 @@ describe('Authenticator refreshing a token', () => {
     }
 
     const api = builder.build().create(UsersAPI)
-    const late = api.getUser('late')
 
-    await expect(Promise.all([api.getUser('1'), api.getUser('2'), api.getUser('3')])).resolves.toEqual([
-      { id: '/users/1' },
-      { id: '/users/2' },
-      { id: '/users/3' },
-    ])
-    release()
-
-    await expect(late).resolves.toEqual({ id: '/users/late' })
+    await expect(
+      Promise.all([api.getUser('late'), api.getUser('1'), api.getUser('2'), api.getUser('3')]),
+    ).resolves.toEqual([{ id: '/users/late' }, { id: '/users/1' }, { id: '/users/2' }, { id: '/users/3' }])
     expect(refreshes).toBe(1)
+    expect(late).toEqual(lateCarried)
   })
 })

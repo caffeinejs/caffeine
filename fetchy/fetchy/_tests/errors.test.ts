@@ -4,6 +4,7 @@ import {
   ErrFetchy,
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
+  ErrFetchyFollowUpNotSent,
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidRoute,
@@ -33,8 +34,13 @@ describe('errors', () => {
     ],
     [
       'ErrFetchyTooManyAuthenticationAttempts',
-      () => new ErrFetchyTooManyAuthenticationAttempts(new FetchyRequest('GET', 'http://x.test', '/users/1'), 4),
+      () => new ErrFetchyTooManyAuthenticationAttempts(new FetchyRequest('GET', 'http://x.test', '/users/1'), 3),
       'ERR_FETCHY_TOO_MANY_AUTHENTICATION_ATTEMPTS',
+    ],
+    [
+      'ErrFetchyFollowUpNotSent',
+      () => new ErrFetchyFollowUpNotSent(new FetchyRequest('PUT', 'http://x.test', '/files/1'), 'body'),
+      'ERR_FETCHY_FOLLOW_UP_NOT_SENT',
     ],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
@@ -85,10 +91,25 @@ describe('errors', () => {
   it('ErrFetchyTooManyAuthenticationAttempts keeps the query string out of its message', () => {
     const request = new FetchyRequest('GET', 'https://api.test', '/users?api_key=s3cr3t')
 
-    const error = new ErrFetchyTooManyAuthenticationAttempts(request, 4)
+    const error = new ErrFetchyTooManyAuthenticationAttempts(request, 3)
 
     expect(error.message.split('\n')[0]).toBe(
-      'Cannot authenticate "GET https://api.test/users": the server answered 4 attempts with 401 and the authenticator still returned a follow-up',
+      'Cannot authenticate "GET https://api.test/users": the server answered all 3 follow-ups with 401, and fetchy sends no more',
+    )
+    expect(error.message).not.toContain('s3cr3t')
+  })
+
+  // The same holds for a follow-up fetchy refuses to send, whatever the reason.
+  it.each([
+    ['origin', 'it does not target "https://api.test"'],
+    ['body', 'its body is a stream or an iterator, which the first send may have read'],
+  ] as const)('ErrFetchyFollowUpNotSent keeps the query string out of its message about the %s', (problem, reason) => {
+    const request = new FetchyRequest('PUT', 'https://api.test', '/files/1?api_key=s3cr3t')
+
+    const error = new ErrFetchyFollowUpNotSent(request, problem)
+
+    expect(error.message.split('\n')[0]).toBe(
+      `Cannot send the authentication follow-up of "PUT https://api.test/files/1": ${reason}`,
     )
     expect(error.message).not.toContain('s3cr3t')
   })

@@ -13,6 +13,7 @@ export {
   ErrFetchy,
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
+  ErrFetchyFollowUpNotSent,
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidFormBody,
