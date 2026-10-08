@@ -225,18 +225,6 @@ resolver symbol that is not registered.
 
 ---
 
-### ErrCannotLoadTypeScriptModule
-
-**Code:** `ERR_CANNOT_LOAD_TYPESCRIPT_MODULE`
-
-Thrown by `scan()` when it attempts to import a `.ts` source file. Scan
-operates on compiled output only.
-
-**Fix:** Run the TypeScript compiler before scanning, and point `dir` at the
-compiled output directory.
-
----
-
 ### ErrScopeMismatchInConfiguration
 
 **Code:** `ERR_SCOPE_MISMATCH_IN_CONFIGURATION`

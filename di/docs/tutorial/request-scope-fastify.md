@@ -180,6 +180,5 @@ Each concurrent request gets its own `RequestContext`. They never share state.
 ## What's next
 
 - Add more request-scoped services the same way — annotate with `@Lifetime(Scopes.REQUEST)` and inject via `provide()`.
-- Use `scan()` to auto-import decorated files instead of listing them manually. See the [Scanning Files guide](../guides/scanning-files.md).
 - See the [Mixing Scopes guide](../guides/mixing-scopes.md) for the full explanation of why `provide()` is required.
 - A complete working example with PostgreSQL, Redis, and health checks is available in the [`core/examples/04-fastify-cats-complete`](https://github.com/caffeinejs/di/tree/main/core/examples/04-fastify-cats-complete) directory.

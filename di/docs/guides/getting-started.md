@@ -60,7 +60,7 @@ Three things happen here:
 `await di.init()` must be called before any resolving operation, like `di.get()`.
 :::
 
-## Scan and auto load decorated classes
+## Load decorated classes
 
 Decorators are only evaluated if the file where the decorated class is implemented is loaded at least once.  
 So this example would not work:
@@ -106,25 +106,6 @@ export function createContainer() {
   return container
 }
 ```
-
-To avoid having to import all files with decorated classes, CaffeineIoC provides a `scan` feature that does the job automatically:
-
-```ts
-import { CaffeineIoC, scan } from '@caffeinejs/di'
-
-// must be awaited before the container initializes
-await scan({
-  dir: rootDir,
-  exclude: [import.meta.url, new URL('./index.ts', import.meta.url)],
-})
-
-export function createContainer() {
-  const container = new CaffeineIoC()
-  return container
-}
-```
-
-More about the `scan` at [Auto Load Decorated Classes](../guides/scanning-files).
 
 ## Named keys
 

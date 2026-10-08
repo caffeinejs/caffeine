@@ -481,21 +481,3 @@ export class ErrNoRequestStorageSet extends CaffeineIoCError {
     this.name = 'ErrNoRequestScopeStorageSet'
   }
 }
-
-/**
- * ErrCannotLoadTypeScriptModule is an error that is thrown when attempting to load a TypeScript module
- * in a runtime that does not support TypeScript natively.
- */
-export class ErrCannotLoadTypeScriptModule extends CaffeineIoCError {
-  constructor(file: string) {
-    super(
-      errMessage(
-        `Cannot load module at "${file}": TypeScript is not supported in this runtime — compile to JavaScript or run with a TypeScript-capable runtime`,
-      )
-        .reference('@caffeinejs/di', ErrCannotLoadTypeScriptModule)
-        .build(),
-      'ERR_CANNOT_LOAD_TYPESCRIPT_MODULE',
-    )
-    this.name = 'ErrCannotLoadTypeScriptModule'
-  }
-}

@@ -5,9 +5,6 @@
       "path": "./di/tsconfig.build.json"
     },
     {
-      "path": "./scan/tsconfig.build.json"
-    },
-    {
       "path": "./http/tsconfig.build.json"
     },
     {

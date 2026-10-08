@@ -4,11 +4,9 @@ FROM denoland/deno:2.9.7@sha256:fa335acdf6b72106eda2cb6a8cb5f4187e7630e357467489
 WORKDIR /app
 RUN mkdir -p vendor
 COPY package.json vendor/
-COPY _tests/deno/deno.json _tests/deno/package.json _tests/deno/compat_test.ts _tests/deno/scan_test.ts ./
+COPY _tests/deno/deno.json _tests/deno/package.json _tests/deno/compat_test.ts ./
 RUN deno install
-COPY scan vendor/scan
 COPY dist vendor/dist
-COPY _tests/deno/_testdata ./_testdata
 # --no-check: this is a runtime compatibility smoke test. Type-checking the
 # shipped .d.ts pulls in npm:@types/node, which is irrelevant to runtime behavior.
 CMD ["deno", "test", "-A", "--no-check", "--ignore=./vendor"]

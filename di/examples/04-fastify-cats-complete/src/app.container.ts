@@ -1,24 +1,19 @@
-import { fileURLToPath } from 'node:url'
-
 import { CaffeineIoC } from '@caffeinejs/di'
-import { scan } from '@caffeinejs/scan'
-
-import { healthModule } from './health/health.mod.js'
-
-const rootDir = fileURLToPath(new URL('.', import.meta.url))
 
 // Decorated components must be loaded at least once for the decorators to be evaluated.
-// This is done by the `scan` function.
-// If the root dir is the current directory,
-// the exclude option must include the current file and the application entrypoint.
-await scan({
-  dir: rootDir,
-  exclude: [import.meta.url, new URL('./index.ts', import.meta.url)],
-})
+// Nothing else imports these modules, so they are loaded here.
+import './cats/cats.pg.repository.js'
+import './health/cache.health.js'
+import './health/db.health.js'
+import './util/cache/cache.config.js'
+import './util/db/database.config.js'
+import './util/gcs/gcs.config.js'
+import './util/gcs/gcs.watcher.js'
+import { healthModule } from './health/health.mod.js'
 
 export async function createContainer(): Promise<CaffeineIoC> {
   // The health components are configured "manually" using a Module function.
-  // All the other decorated components are automatically registered once the `scan` loads them once.
+  // All the other decorated components are registered once their modules are loaded.
   // Both concepts can be mixed.
   return new CaffeineIoC({ modules: [healthModule] })
 }

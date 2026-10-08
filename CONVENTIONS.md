@@ -33,7 +33,6 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`static/`](static/AGENTS.md)                                                       | `@caffeinejs/static`                     |
 | [`view/`](view/AGENTS.md)                                                           | `@caffeinejs/view`                       |
 | [`multipart/`](multipart/AGENTS.md)                                                 | `@caffeinejs/multipart`                  |
-| [`scan/`](scan/AGENTS.md)                                                           | `@caffeinejs/scan`                       |
 | [`cli/`](cli/AGENTS.md)                                                             | `@caffeinejs/cli`                        |
 | [`testing/`](testing/AGENTS.md)                                                     | `@caffeinejs/testing`                    |
 | [`brewer/`](brewer/AGENTS.md)                                                       | `@caffeinejs/brewer`                     |

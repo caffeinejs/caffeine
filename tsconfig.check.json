@@ -5,9 +5,6 @@
       "path": "./di"
     },
     {
-      "path": "./scan"
-    },
-    {
       "path": "./std"
     },
     {

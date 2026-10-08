@@ -18,7 +18,6 @@ export default defineConfig({
     },
     projects: [
       './di/vitest.config.ts',
-      './scan/vitest.config.ts',
       './std/vitest.config.ts',
       './http/vitest.config.ts',
       './caching/vitest.config.ts',

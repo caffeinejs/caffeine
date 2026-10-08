@@ -15,7 +15,6 @@ Task-oriented documentation for common CaffeineIoC workflows.
 - [Decorators](./guides/decorators.md) — annotate classes with `@Injectable`, `@Configuration`, `@Provides`, and related decorators.
 - [Async Bindings](./guides/async-bindings.md) — bind keys to async factories; constraints and ordering rules.
 - [Testing](./guides/testing.md) — write isolated tests with `TestContainer`.
-- [Scanning Files](./guides/scanning-files.md) — use `scan()` to auto-import decorated source files.
 - [Dependency Graph](./guides/dependency-graph.md) — render the container's dependency graph as text, Markdown, Mermaid, DOT, or JSON.
 
 ## Reference
