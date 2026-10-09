@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { API } from '../decorators/api.js'
+import { Callback } from '../decorators/callback.js'
 import { HeaderMap } from '../decorators/header_map.js'
+import { NoRetry } from '../decorators/no_retry.js'
 import { Params } from '../decorators/params.js'
 import { Param } from '../decorators/params/param.js'
+import { RawResponse } from '../decorators/raw_response.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyInvalidDecoratorTarget, ErrFetchyInvalidRoute } from '../errors.js'
@@ -166,6 +169,52 @@ describe('verb decorators', () => {
         class {
           @Params([Param('id')])
           static list(_id: string): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+  })
+
+  it('rejects @Callback(), @NoRetry() and @RawResponse() on a static member', () => {
+    expect(
+      () =>
+        class {
+          @Callback()
+          static list(): void {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+
+    expect(
+      () =>
+        class {
+          @NoRetry()
+          static list(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+
+    expect(
+      () =>
+        class {
+          @RawResponse()
+          static list(): Promise<unknown> {
+            return noop()
+          }
+        },
+    ).toThrow(ErrFetchyInvalidDecoratorTarget)
+  })
+
+  // The types keep @API() on classes, but plain JavaScript can put it anywhere, and it must fail there as loudly.
+  it('rejects @API() on anything but a class', () => {
+    expect(
+      () =>
+        class {
+          // @ts-expect-error -- @API() decorates a class
+          @API()
+          list(): Promise<unknown> {
             return noop()
           }
         },

@@ -5,6 +5,7 @@ import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
 import { Header } from '../decorators/params/header.js'
 import { Param } from '../decorators/params/param.js'
+import { Part } from '../decorators/params/part.js'
 import { Query } from '../decorators/params/query.js'
 import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
@@ -64,6 +65,24 @@ describe('@Params', () => {
     expect(spec?.params).toEqual([
       { kind: 'form-field', key: 'name', index: 0 },
       { kind: 'form-field', key: 'age', index: 1 },
+    ])
+  })
+
+  it('@Part records part descriptors', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
+    class API {
+      @POST('/upload')
+      @Params([Part('title'), Part('file')])
+      upload!: (_title: string, _file: Blob) => Promise<unknown>
+    }
+
+    const spec = getMethodBuilders(metadata()).get('upload')?.toMethodSpec()
+
+    expect(spec?.params).toEqual([
+      { kind: 'part', key: 'title', index: 0 },
+      { kind: 'part', key: 'file', index: 1 },
     ])
   })
 

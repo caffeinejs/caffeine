@@ -7,6 +7,7 @@ const DEFAULT_META: MethodSpec = {
   headers: new Headers(),
   params: [],
   formURLEncoded: false,
+  multipart: false,
   responseConverter: undefined,
   requestBodyConverter: undefined,
   responseHandler: undefined,

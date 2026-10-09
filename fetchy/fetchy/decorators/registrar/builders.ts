@@ -11,6 +11,7 @@ export class ClassBuilder {
   #path?: string
   #headers?: Headers
   #formURLEncoded = false
+  #multipart = false
   #responseConverter?: ResponseConverter
   #requestBodyConverter?: RequestBodyConverter
   #responseHandler?: ResponseHandler
@@ -41,6 +42,11 @@ export class ClassBuilder {
     return this
   }
 
+  multipart(): this {
+    this.#multipart = true
+    return this
+  }
+
   responseConverter(converter: ResponseConverter): this {
     this.#responseConverter = converter
     return this
@@ -67,6 +73,7 @@ export class ClassBuilder {
       path: this.#path === undefined ? undefined : normalizePath(this.#path),
       headers: this.#headers ?? new Headers(),
       formURLEncoded: this.#formURLEncoded,
+      multipart: this.#multipart,
       responseConverter: this.#responseConverter,
       requestBodyConverter: this.#requestBodyConverter,
       responseHandler: this.#responseHandler,
@@ -86,6 +93,7 @@ export class MethodBuilder {
   #headers?: Headers
   #params: ParamDescriptor[] = []
   #formURLEncoded = false
+  #multipart = false
   #responseConverter?: ResponseConverter
   #requestBodyConverter?: RequestBodyConverter
   #responseHandler?: ResponseHandler
@@ -139,6 +147,11 @@ export class MethodBuilder {
     return this
   }
 
+  multipart(): this {
+    this.#multipart = true
+    return this
+  }
+
   responseConverter(converter: ResponseConverter): this {
     this.#responseConverter = converter
     return this
@@ -162,6 +175,7 @@ export class MethodBuilder {
       headers: this.#headers ?? new Headers(),
       params: [...this.#params],
       formURLEncoded: this.#formURLEncoded,
+      multipart: this.#multipart,
       responseConverter: this.#responseConverter,
       requestBodyConverter: this.#requestBodyConverter,
       responseHandler: this.#responseHandler,

@@ -32,6 +32,12 @@ export interface FormFieldParamDescriptor {
   index: number
 }
 
+export interface PartParamDescriptor {
+  kind: 'part'
+  key: string
+  index: number
+}
+
 export interface SignalParamDescriptor {
   kind: 'signal'
   index: number
@@ -44,4 +50,5 @@ export type ParamDescriptor =
   | HeaderParamDescriptor
   | BodyParamDescriptor
   | FormFieldParamDescriptor
+  | PartParamDescriptor
   | SignalParamDescriptor

@@ -105,6 +105,38 @@ describe('UndiciTransportFactory', () => {
     )
   })
 
+  // fetch reports the reason phrase a server sent, and so does this transport: a logging interceptor prints it.
+  it("carries the server's reason phrase", async () => {
+    const transport = new UndiciTransportFactory().provide(server.baseURL)
+
+    const response = await transport.send(
+      new FetchyRequest(
+        'GET',
+        server.baseURL,
+        '/ping',
+        new FetchyHeaders({ 'x-test-status': '202', 'x-test-reason': 'Queued' }),
+      ),
+    )
+
+    expect(response.status).toBe(202)
+    expect(response.statusText).toBe('Queued')
+    await response.text()
+    await transport.close?.()
+  })
+
+  // A limit that reached the pool is one a server can trip: undici refuses a response whose headers pass it.
+  it('hands the options PoolOptionsBuilder built to the pool it creates', async () => {
+    const options = PoolOptionsBuilder.newBuilder().maxHeaderSize(1024).build()
+    const transport = new UndiciTransportFactory(options).provide(server.baseURL)
+
+    await expect(
+      transport.send(
+        new FetchyRequest('GET', server.baseURL, '/ping', new FetchyHeaders({ 'x-test-header-bytes': '4096' })),
+      ),
+    ).rejects.toMatchObject({ code: 'UND_ERR_HEADERS_OVERFLOW' })
+    await transport.close?.()
+  })
+
   it('honors PoolOptionsBuilder-built options', async () => {
     const options = PoolOptionsBuilder.newBuilder().connections(1).pipelining(1).build()
     const factory = new UndiciTransportFactory(options)
@@ -115,5 +147,41 @@ describe('UndiciTransportFactory', () => {
     expect(response.status).toBe(200)
     await response.text()
     await transport.close?.()
+  })
+})
+
+describe('PoolOptionsBuilder', () => {
+  // undici reads each option by its own name, and silently ignores one under any other.
+  it('builds every option under the name undici reads it by', () => {
+    const tls = { rejectUnauthorized: false }
+    const factory = (origin: URL, opts: object) => new Pool(origin, opts)
+
+    const options = PoolOptionsBuilder.newBuilder()
+      .connections(4)
+      .socketPath('/tmp/api.sock')
+      .keepAliveTimeout(1_000)
+      .keepAliveMaxTimeout(2_000)
+      .keepAliveTimeoutThreshold(500)
+      .pipelining(2)
+      .tls(tls)
+      .maxHeaderSize(8_192)
+      .headersTimeout(3_000)
+      .bodyTimeout(4_000)
+      .factory(factory)
+      .build()
+
+    expect(options).toEqual({
+      connections: 4,
+      socketPath: '/tmp/api.sock',
+      keepAliveTimeout: 1_000,
+      keepAliveMaxTimeout: 2_000,
+      keepAliveTimeoutThreshold: 500,
+      pipelining: 2,
+      connect: tls,
+      maxHeaderSize: 8_192,
+      headersTimeout: 3_000,
+      bodyTimeout: 4_000,
+      factory,
+    })
   })
 })

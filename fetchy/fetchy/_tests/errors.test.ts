@@ -7,6 +7,7 @@ import {
   ErrFetchyFollowUpNotSent,
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
+  ErrFetchyInvalidMultipartBody,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingPathArgument,
   ErrFetchyTooManyAuthenticationAttempts,
@@ -41,6 +42,11 @@ describe('errors', () => {
       'ErrFetchyFollowUpNotSent',
       () => new ErrFetchyFollowUpNotSent(new FetchyRequest('PUT', 'http://x.test', '/files/1'), 'body'),
       'ERR_FETCHY_FOLLOW_UP_NOT_SENT',
+    ],
+    [
+      'ErrFetchyInvalidMultipartBody',
+      () => new ErrFetchyInvalidMultipartBody({ pages: 12 }, 'meta'),
+      'ERR_FETCHY_INVALID_MULTIPART_BODY',
     ],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
@@ -110,6 +116,16 @@ describe('errors', () => {
 
     expect(error.message.split('\n')[0]).toBe(
       `Cannot send the authentication follow-up of "PUT https://api.test/files/1": ${reason}`,
+    )
+    expect(error.message).not.toContain('s3cr3t')
+  })
+
+  // A part may carry a token or a password, and the message ends up in log lines.
+  it('ErrFetchyInvalidMultipartBody names the part and the type of its value, never the value', () => {
+    const error = new ErrFetchyInvalidMultipartBody({ token: 's3cr3t' }, 'credentials')
+
+    expect(error.message.split('\n')[0]).toBe(
+      'Cannot add part "credentials" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got Object',
     )
     expect(error.message).not.toContain('s3cr3t')
   })

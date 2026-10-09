@@ -1,9 +1,10 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
 import { ErrFetchyMissingPathArgument } from './errors.js'
 import { FetchyHeaders } from './headers.js'
+import { isFormData } from './internal/form_data.js'
 import type { ParamDescriptor } from './internal/param_descriptor.js'
 import { FetchyRequest } from './request.js'
-import { JSONRequestBodyConverter, type RequestBodyConverter } from './request_body_converter.js'
+import { appendPart, JSONRequestBodyConverter, type RequestBodyConverter } from './request_body_converter.js'
 
 const PLACEHOLDER = /\{(\w+)\}/g
 
@@ -27,6 +28,7 @@ function compileParam(param: Exclude<ParamDescriptor, { kind: 'path' }>): Compil
     case 'header':
       return { kind: param.kind, key: param.key.toLowerCase(), index: param.index }
     case 'form-field':
+    case 'part':
       return { kind: param.kind, key: param.key, index: param.index }
     default:
       return { kind: param.kind, key: '', index: param.index }
@@ -55,8 +57,7 @@ function appendQueryEntry(query: string, key: string, value: unknown): string {
  */
 export class RequestBuilder {
   // The path split around its placeholders: `segments[i]` precedes the argument at `slots[i]`, whose placeholder is
-  // `slotKeys[i]`, and the last segment closes the path. A placeholder with no `@Param` stays in its segment as
-  // written.
+  // `slotKeys[i]`, and the last segment closes the path.
   private readonly segments: string[] = []
   private readonly slots: number[] = []
   private readonly slotKeys: string[] = []
@@ -80,19 +81,14 @@ export class RequestBuilder {
     }
 
     for (const match of meta.path.matchAll(PLACEHOLDER)) {
-      segment += meta.path.slice(last, match.index)
+      // The client refuses a route with a placeholder no `@Param` fills before it builds any request.
+      const param = meta.params.find(p => p.kind === 'path' && p.key === match[1])!
+
+      this.segments.push(segment + meta.path.slice(last, match.index))
+      this.slots.push(param.index)
+      this.slotKeys.push(match[1])
+      segment = ''
       last = match.index + match[0].length
-
-      const param = meta.params.find(p => p.kind === 'path' && p.key === match[1])
-
-      if (param) {
-        this.segments.push(segment)
-        this.slots.push(param.index)
-        this.slotKeys.push(match[1])
-        segment = ''
-      } else {
-        segment += match[0]
-      }
     }
 
     this.segments.push(segment + meta.path.slice(last))
@@ -129,6 +125,7 @@ export class RequestBuilder {
     let query = ''
     const headers = new FetchyHeaders(this.headers)
     let formFields: URLSearchParams | undefined
+    let parts: FormData | undefined
     // `BodyInit` is a DOM-lib-only type name, unavailable in this package's `lib` set — `RequestInit`
     // (the standard Fetch API type) is available via `@types/node`'s ambient fetch globals, so its
     // own `body` member type is referenced directly here instead.
@@ -166,6 +163,12 @@ export class RequestBuilder {
         case 'signal':
           signal = (value as AbortSignal | null | undefined) ?? undefined
           break
+        // Last, and setting the body itself, so an operation without parts pays nothing for them.
+        case 'part':
+          parts ??= new FormData()
+          appendPart(parts, param.key, value)
+          body = parts
+          break
       }
     }
 
@@ -176,17 +179,23 @@ export class RequestBuilder {
     // Labelled after every argument is applied, so a content-type the declaration or an argument set wins wherever it
     // sits. Without a label a JSON-stringified body reaches the server as `text/plain`, which a strict one answers
     // with 415.
-    if (body !== null && body !== undefined && !headers.has('content-type')) {
-      const mediaType =
-        (bodyValue === undefined ? undefined : this.bodyConverter.contentType?.(bodyValue)) ??
-        (typeof body === 'string'
-          ? TEXT_PLAIN_UTF8
-          : body instanceof URLSearchParams
-            ? FORM_URL_ENCODED_UTF8
-            : undefined)
+    if (body !== null && body !== undefined) {
+      // Except over a FormData: fetch and undici write its boundary only into a request that has no content-type, so
+      // any type set here would name no boundary, and the server would find no part.
+      if (typeof body === 'object' && isFormData(body)) {
+        headers.delete('content-type')
+      } else if (!headers.has('content-type')) {
+        const mediaType =
+          (bodyValue === undefined ? undefined : this.bodyConverter.contentType?.(bodyValue)) ??
+          (typeof body === 'string'
+            ? TEXT_PLAIN_UTF8
+            : body instanceof URLSearchParams
+              ? FORM_URL_ENCODED_UTF8
+              : undefined)
 
-      if (mediaType !== undefined) {
-        headers.set('content-type', mediaType)
+        if (mediaType !== undefined) {
+          headers.set('content-type', mediaType)
+        }
       }
     }
 

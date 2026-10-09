@@ -14,6 +14,7 @@ function methodSpec(overrides: Partial<MethodSpec> = {}): MethodSpec {
     headers: new Headers(),
     params: [],
     formURLEncoded: false,
+    multipart: false,
     responseConverter: undefined,
     requestBodyConverter: undefined,
     responseHandler: undefined,

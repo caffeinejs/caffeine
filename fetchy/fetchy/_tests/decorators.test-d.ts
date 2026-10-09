@@ -5,8 +5,10 @@ import { API } from '../decorators/api.js'
 import { ContentType } from '../decorators/content_type.js'
 import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
+import { Multipart } from '../decorators/multipart.js'
 import { Params } from '../decorators/params.js'
 import { Field } from '../decorators/params/field.js'
+import { Part } from '../decorators/params/part.js'
 import { RawResponse } from '../decorators/raw_response.js'
 import { Retry } from '../decorators/retry.js'
 import { POST } from '../decorators/verbs.js'
@@ -76,7 +78,24 @@ class MethodDeclaredAPI {
 @Accept('application/json')
 class ClassDeclaredAPI {}
 
-void [FieldDeclaredAPI, MethodDeclaredAPI, ClassDeclaredAPI]
+// @Multipart() takes the same three positions as @FormURLEncoded().
+@API('/documents')
+@Multipart()
+class MultipartAPI {
+  @POST('/field')
+  @Multipart()
+  @Params([Part('title')])
+  field!: (title: string) => Promise<unknown>
+
+  @POST('/method')
+  @Multipart()
+  @Params([Part('title')])
+  method(_title: string): Promise<unknown> {
+    return Promise.resolve()
+  }
+}
+
+void [FieldDeclaredAPI, MethodDeclaredAPI, ClassDeclaredAPI, MultipartAPI]
 
 // A call adapter's result is what a call to the operation runs, so it has to be a function.
 const callbackAdapter: CallAdapter = CallbackCallAdapter.INSTANCE

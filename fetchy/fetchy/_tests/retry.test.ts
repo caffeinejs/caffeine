@@ -88,6 +88,11 @@ class RetryClassDefaultAPI {
   noRetry(_id: string): Promise<User> {
     return noop()
   }
+
+  @GET('/{id}')
+  @NoRetry()
+  @Params([Param('id')])
+  noRetryField!: (id: string) => Promise<User>
 }
 
 function buildClient(TargetAPI: new () => object, transportFactory: TestTransportFactory): any {
@@ -151,6 +156,37 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
     await expect(api.getUserWrongStatus('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
   })
 
+  // Cancelled as its failure arrived, the call has nothing left to wait for: it must not sit out the retry delay first.
+  it('rejects at once when the call is aborted before its retry waits', async () => {
+    @API('/users')
+    class PatientAPI {
+      @GET('/{id}')
+      @Retry({ delay: 60_000 })
+      @Params([Param('id'), SignalParam()])
+      getUser(_id: string, _signal: AbortSignal): Promise<User> {
+        return noop()
+      }
+    }
+
+    const controller = new AbortController()
+    const reason = new Error('navigated away')
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory({
+        provide: () => ({
+          send() {
+            controller.abort(reason)
+            return Promise.resolve(new Response(null, { status: 503 }))
+          },
+        }),
+      })
+      .addInterceptor(RetryInterceptor.INSTANCE)
+      .build()
+      .create(PatientAPI)
+
+    await expect(api.getUser('1', controller.signal)).rejects.toBe(reason)
+  })
+
   it('rejects and stops retrying once the request is aborted during the delay', async () => {
     const transportFactory = new TestTransportFactory()
     const api = buildClient(RetryAPI, transportFactory)
@@ -209,6 +245,15 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
     transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
 
     await expect(api.noRetry('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+  })
+
+  it('@NoRetry() cancels the class-level default for a field-declared operation too', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(RetryClassDefaultAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(500, { error: true }))
+
+    await expect(api.noRetryField('1')).rejects.toBeInstanceOf(ErrFetchyHTTP)
+    expect(transportFactory.transports[0].sendCount).toBe(1)
   })
 })
 

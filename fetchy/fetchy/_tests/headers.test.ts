@@ -4,10 +4,12 @@ import { Accept } from '../decorators/accept.js'
 import { ContentType } from '../decorators/content_type.js'
 import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
+import { Multipart } from '../decorators/multipart.js'
 import { getClassBuilder, getMethodBuilders } from '../decorators/registrar/registrar.js'
 import { GET, POST } from '../decorators/verbs.js'
 import { FetchyHeaders } from '../headers.js'
 import { noop } from '../noop.js'
+import { MultipartRequestBodyConverter } from '../request_body_converter.js'
 import { captureMetadata } from './capture_metadata.js'
 
 describe('header/form decorators', () => {
@@ -91,6 +93,45 @@ describe('header/form decorators', () => {
 
     expect(spec?.formURLEncoded).toBe(true)
     expect(spec?.headers.get('content-type')).toBe('application/x-www-form-urlencoded')
+  })
+
+  // The boundary changes with every request, so @Multipart() declares no content-type: the transport writes it.
+  it('@Multipart sets multipart and the multipart converter, with no content-type, at method level', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
+    class API {
+      @POST('/upload')
+      @Multipart()
+      upload(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const spec = getMethodBuilders(metadata()).get('upload')?.toMethodSpec()
+
+    expect(spec?.multipart).toBe(true)
+    expect(spec?.requestBodyConverter).toBe(MultipartRequestBodyConverter)
+    expect(spec?.headers.has('content-type')).toBe(false)
+  })
+
+  it('@Multipart at class level sets multipart and the multipart converter on the class, with no content-type', () => {
+    const { capture, metadata } = captureMetadata()
+
+    @capture
+    @Multipart()
+    class API {
+      @POST('/upload')
+      upload(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const spec = getClassBuilder(metadata())?.toClassSpec()
+
+    expect(spec?.multipart).toBe(true)
+    expect(spec?.requestBodyConverter).toBe(MultipartRequestBodyConverter)
+    expect(spec?.headers.has('content-type')).toBe(false)
   })
 
   it('two same-level decorators setting the same header override rather than concatenate', () => {

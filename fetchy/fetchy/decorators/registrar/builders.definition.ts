@@ -8,6 +8,7 @@ export interface ClassSpec {
   path: string | undefined
   headers: Headers
   formURLEncoded: boolean
+  multipart: boolean
   responseConverter: ResponseConverter | undefined
   requestBodyConverter: RequestBodyConverter | undefined
   responseHandler: ResponseHandler | undefined
@@ -27,6 +28,7 @@ export interface MethodSpec {
   readonly headers: Headers
   readonly params: readonly ParamDescriptor[]
   readonly formURLEncoded: boolean
+  readonly multipart: boolean
   readonly responseConverter: ResponseConverter | undefined
   readonly requestBodyConverter: RequestBodyConverter | undefined
   readonly responseHandler: ResponseHandler | undefined

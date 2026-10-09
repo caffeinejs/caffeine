@@ -102,13 +102,14 @@ describe('the content-type of a converted body', () => {
     expect(await contentTypeOf(api => api.create({ name: 'Ada' }))).toBe(MediaTypes.JSON)
   })
 
-  // A string may be anything, a Blob carries its own type, and `fetch` labels a URLSearchParams itself.
-  // Claiming JSON for any of them would be a lie the server acts on.
+  // A string may be anything, a Blob carries its own type, `fetch` labels a URLSearchParams itself, and the transport
+  // labels a FormData with the boundary it generates. Claiming JSON for any of them would be a lie the server acts on.
   it('leaves a value the converter passes through untouched unlabelled', async () => {
     expect(await contentTypeOf(api => api.create('already encoded'))).toBe('text/plain;charset=UTF-8')
     expect(await contentTypeOf(api => api.create(new URLSearchParams({ a: '1' })))).toBe(
       'application/x-www-form-urlencoded;charset=UTF-8',
     )
+    expect(await contentTypeOf(api => api.create(new FormData()))).toBeNull()
   })
 
   it('does not overwrite a content-type the declaration already set', async () => {

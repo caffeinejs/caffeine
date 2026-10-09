@@ -29,14 +29,6 @@ function isTextual(contentType: string | null): boolean {
   return TEXTUAL_CONTENT_TYPES.some(type => lower.includes(type)) || lower.includes('text/') || lower.includes('+json')
 }
 
-function now(): number {
-  if (typeof process !== 'undefined' && typeof process.hrtime?.bigint === 'function') {
-    return Number(process.hrtime.bigint()) / 1_000_000
-  }
-
-  return Date.now()
-}
-
 /**
  * OkHttp-style request/response logging interceptor for `@caffeinejs/fetchy`.
  */
@@ -89,11 +81,11 @@ export class LoggingInterceptor implements Interceptor {
       this.logger.info(`--> END ${request.method}`)
     }
 
-    const start = now()
+    const start = performance.now()
 
     try {
       const response = await chain.proceed(request)
-      const took = now() - start
+      const took = performance.now() - start
 
       this.logger.info(`<-- ${response.status}${response.statusText ? ` ${response.statusText}` : ''} ${request.url}`)
 
@@ -118,7 +110,7 @@ export class LoggingInterceptor implements Interceptor {
 
       return logged
     } catch (err) {
-      const took = now() - start
+      const took = performance.now() - start
 
       if (err instanceof ErrFetchyHTTP) {
         this.logger.error(`<-- ${err.status}${err.statusText ? ` ${err.statusText}` : ''} ${request.url}`)

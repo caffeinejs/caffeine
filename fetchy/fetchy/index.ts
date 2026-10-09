@@ -17,6 +17,7 @@ export {
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidFormBody,
+  ErrFetchyInvalidMultipartBody,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingCallbackArgument,
@@ -34,6 +35,7 @@ export type { RequestBodyConverter } from './request_body_converter.js'
 export {
   FormRequestBodyConverter,
   JSONRequestBodyConverter,
+  MultipartRequestBodyConverter,
   RawRequestBodyConverter,
 } from './request_body_converter.js'
 export type { FetchyResponse } from './response.js'

@@ -1,5 +1,5 @@
 import { FetchyHeaders, FetchyRequest, type FetchyResponse } from '@caffeinejs/fetchy'
-import { MockAgent, Pool } from 'undici'
+import { FormData as UndiciFormData, MockAgent, Pool } from 'undici'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { UndiciTransport } from '../undici_transport.js'
@@ -316,5 +316,69 @@ describe('UndiciTransport on a body cancelled unread', () => {
 
     expect(response.bodyUsed).toBe(true)
     await expect(response.text()).rejects.toThrow(new TypeError('Body is unusable: Body has already been read'))
+  })
+})
+
+// MockAgent never runs undici's HTTP/1.1 writer, which sends what the transport encoded, so these run against a local
+// server.
+describe('UndiciTransport on a FormData body', () => {
+  let server: TestServer
+  let pool: Pool
+
+  beforeEach(async () => {
+    server = await startTestServer()
+    pool = new Pool(server.baseURL)
+  })
+
+  afterEach(async () => {
+    await pool.destroy()
+    await server.stop()
+  })
+
+  interface Echo {
+    headers: Record<string, string>
+    body: string
+  }
+
+  async function echo(body: unknown): Promise<Echo> {
+    const transport = new UndiciTransport(pool)
+    const response = await transport.send(
+      new FetchyRequest('POST', server.baseURL, '/upload', undefined, body as FetchyRequest['body']),
+    )
+
+    return (await response.json()) as Echo
+  }
+
+  // The global FormData is the one fetchy builds and callers hold. Handed to undici, it waited forever without sending
+  // even the request head. A Pool's abort waits for dispatch, so the test's own timeout, not a signal, catches a return.
+  it('sends a global FormData as multipart/form-data, with its boundary and its length', async () => {
+    const form = new FormData()
+    form.append('title', 'Q3 report')
+    form.append('file', new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }))
+    form.append('attachment', new Blob(['raw']))
+
+    const echoed = await echo(form)
+    const contentType = echoed.headers['content-type']
+    const parts = await new Response(echoed.body, { headers: { 'content-type': contentType } }).formData()
+    const file = parts.get('file') as File
+
+    expect(contentType).toMatch(/^multipart\/form-data; boundary=/)
+    expect(Number(echoed.headers['content-length'])).toBe(Buffer.byteLength(echoed.body))
+    expect(parts.get('title')).toBe('Q3 report')
+    expect(file.name).toBe('report.pdf')
+    expect(await file.text()).toBe('%PDF-1.7')
+    expect((parts.get('attachment') as File).name).toBe('blob')
+  })
+
+  it("streams undici's own FormData the same way", async () => {
+    const form = new UndiciFormData()
+    form.append('title', 'Q3 report')
+
+    const echoed = await echo(form)
+    const parts = await new Response(echoed.body, {
+      headers: { 'content-type': echoed.headers['content-type'] },
+    }).formData()
+
+    expect(parts.get('title')).toBe('Q3 report')
   })
 })

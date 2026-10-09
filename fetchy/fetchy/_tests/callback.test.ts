@@ -44,6 +44,29 @@ function buildClient(transportFactory: TestTransportFactory) {
 }
 
 describe('@Callback() / CallbackCallAdapterFactory', () => {
+  // The factory adapts only what carries @Callback(): the client's other operations keep returning a promise.
+  it('leaves an operation without @Callback() returning a promise', async () => {
+    @API('/users')
+    class UsersAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      getUser(_id: string): Promise<User> {
+        return noop()
+      }
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .addCallAdapterFactory(new CallbackCallAdapterFactory())
+      .build()
+      .create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1', name: 'Ada' }))
+
+    await expect(api.getUser('1')).resolves.toEqual({ id: '1', name: 'Ada' })
+  })
+
   it('resolves via the callback instead of a Promise', async () => {
     const transportFactory = new TestTransportFactory()
     const api = buildClient(transportFactory)

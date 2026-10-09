@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 
 /**
  * Without a global `Symbol.metadata`, as on Node 24, tsc's decorator emit hands every decorator
@@ -16,4 +16,25 @@ it('installs the registered Symbol.metadata when only the decorators entry is lo
   await import('../decorators/index.js')
 
   expect((Symbol as { metadata?: symbol }).metadata).toBe(before ?? Symbol.for('Symbol.metadata'))
+})
+
+// A runtime with native decorator metadata, or a library loaded first, already owns the symbol. Replaced, every class
+// it decorated would keep its metadata under a key nothing reads any more.
+it('keeps a Symbol.metadata that something else installed first', async () => {
+  const before = Object.getOwnPropertyDescriptor(Symbol, 'metadata')
+  const installed = Symbol('installed first')
+  Object.defineProperty(Symbol, 'metadata', { value: installed, configurable: true, writable: true })
+
+  try {
+    vi.resetModules()
+    await import('../polyfill.js')
+
+    expect((Symbol as { metadata?: symbol }).metadata).toBe(installed)
+  } finally {
+    if (before) {
+      Object.defineProperty(Symbol, 'metadata', before)
+    } else {
+      delete (Symbol as { metadata?: symbol }).metadata
+    }
+  }
 })

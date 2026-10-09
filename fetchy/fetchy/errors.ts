@@ -10,6 +10,40 @@ function requestLabel(request: FetchyRequest): string {
   return `${request.method} ${request.origin}${path}`
 }
 
+// Names what a value is without showing it, since a part may carry a secret.
+function typeName(value: unknown): string {
+  return typeof value === 'object' && value !== null
+    ? (Object.getPrototypeOf(value)?.constructor?.name ?? 'Object')
+    : typeof value
+}
+
+// The fix for a part value that cannot be sent, by what the value most likely is. Bytes come first: a typed array is
+// iterable too.
+function partSolutions(value: unknown): string[] {
+  if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
+    return ["Send bytes as new Blob([bytes]), or as new File([bytes], 'name.bin', { type }) to name them"]
+  }
+
+  if (value instanceof Date) {
+    return ['Send a date as text: date.toISOString()']
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    if (Symbol.asyncIterator in value) {
+      return [
+        'Send a file from disk as the Blob that await fs.openAsBlob(path) returns',
+        'Read any other stream into a Blob first: await new Response(stream).blob()',
+      ]
+    }
+
+    if (Symbol.iterator in value) {
+      return ['Pass the items as one flat array, one part each: Array.from(value) or value.flat()']
+    }
+  }
+
+  return ["Send an object as JSON: new Blob([JSON.stringify(value)], { type: 'application/json' })"]
+}
+
 /** Base class of every error fetchy throws. */
 export class ErrFetchy extends Error {
   readonly code: string
@@ -41,8 +75,9 @@ export class ErrFetchyInvalidDecoratorTarget extends ErrFetchy {
  * Thrown when a decorated method's configuration is structurally invalid. A second HTTP verb on
  * one member is rejected when the class is defined; the rest when the client is built (missing
  * HTTP method, a body on GET/HEAD/OPTIONS, a path parameter with no matching `{key}` placeholder,
- * a form field without `@FormURLEncoded`, more than one `@Body()`, and so on). A client-build
- * failure names the operation as `Class.member`, after the class that declares it.
+ * a form field without `@FormURLEncoded`, a part without `@Multipart`, more than one `@Body()`, and
+ * so on). A client-build failure names the operation as `Class.member`, after the class that
+ * declares it.
  */
 export class ErrFetchyInvalidRoute extends ErrFetchy {
   constructor(method: string, reason: string) {
@@ -212,20 +247,54 @@ export class ErrFetchyMissingPathArgument extends ErrFetchy {
 }
 
 /**
- * Thrown by `FormRequestBodyConverter` when given a flat (non-2D) array — it only accepts an
- * array of `[key, value]` pairs.
+ * Thrown by `FormRequestBodyConverter` when given a flat (non-2D) array, since it only accepts an
+ * array of `[key, value]` pairs, or a `FormData`, which `@Multipart()` sends.
  */
 export class ErrFetchyInvalidFormBody extends ErrFetchy {
-  constructor() {
-    super(
-      errMessage(
-        'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
-      )
-        .reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody)
-        .build(),
-      'ERR_FETCHY_INVALID_FORM_BODY',
-    )
+  constructor(problem: 'pairs' | 'form-data') {
+    const message =
+      problem === 'pairs'
+        ? errMessage(
+            'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
+          )
+        : errMessage(
+            'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
+          ).solutions('Use @Multipart() instead of @FormURLEncoded() or FormRequestBodyConverter')
+
+    super(message.reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody).build(), 'ERR_FETCHY_INVALID_FORM_BODY')
     this.name = 'ErrFetchyInvalidFormBody'
+  }
+}
+
+/**
+ * Thrown when an operation under `@Multipart()` is called with a body fetchy cannot encode: a part
+ * value that is not a string, number, boolean, bigint, `Blob` or `File`, or a `@Body()` value that
+ * is neither the global `FormData` nor a plain object. Nothing is sent. The message names the
+ * value's type, never the value.
+ */
+export class ErrFetchyInvalidMultipartBody extends ErrFetchy {
+  /**
+   * @param part - The part the value was given for, or `undefined` for a `@Body()` value
+   */
+  constructor(value: unknown, part?: string) {
+    const message =
+      part !== undefined
+        ? errMessage(
+            `Cannot add part "${part}" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${typeName(value)}`,
+          ).solutions(...partSolutions(value))
+        : Object.prototype.toString.call(value) === '[object FormData]'
+          ? errMessage(
+              'Cannot convert the @Body() value to multipart/form-data: it is a FormData from another implementation, such as the one undici exports',
+            ).solutions('Build the body with the global FormData')
+          : errMessage(
+              `Cannot convert the @Body() value to multipart/form-data: expected a FormData or a plain object, got ${typeName(value)}`,
+            ).solutions('Pass a FormData, or a plain object with one property per part')
+
+    super(
+      message.reference('@caffeinejs/fetchy', ErrFetchyInvalidMultipartBody).build(),
+      'ERR_FETCHY_INVALID_MULTIPART_BODY',
+    )
+    this.name = 'ErrFetchyInvalidMultipartBody'
   }
 }
 

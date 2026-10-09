@@ -6,6 +6,7 @@ import { ErrFetchyEmptyClient, ErrFetchyInvalidRoute, ErrFetchyMissingAPIDecorat
 import { mergeHeaders } from './headers_util.js'
 import type { Interceptor } from './interceptor.js'
 import { joinPaths } from './internal/path_util.js'
+import { MultipartRequestBodyConverter } from './request_body_converter.js'
 import { JSONResponseConverter } from './response_converter.js'
 import type { ResponseConverter } from './response_converter.js'
 import { buildInvoker, type Invoker } from './service_invoker.js'
@@ -74,13 +75,14 @@ function resolveOperations(target: Function): readonly Operation[] {
 }
 
 // Root to leaf: a subclass replaces what its base classes set where it sets something itself, headers merge by name,
-// and `@FormURLEncoded()` applies from any level. The result serves every operation in the chain, inherited ones
-// included, so a base class's operation is sent under its subclass's path.
+// and `@FormURLEncoded()` and `@Multipart()` apply from any level. The result serves every operation in the chain,
+// inherited ones included, so a base class's operation is sent under its subclass's path.
 function mergeClassSpecs(chain: readonly DeclaringClass[]): ClassSpec {
   const merged: ClassSpec = {
     path: undefined,
     headers: new Headers(),
     formURLEncoded: false,
+    multipart: false,
     responseConverter: undefined,
     requestBodyConverter: undefined,
     responseHandler: undefined,
@@ -96,6 +98,7 @@ function mergeClassSpecs(chain: readonly DeclaringClass[]): ClassSpec {
 
     merged.path = spec.path ?? merged.path
     merged.formURLEncoded ||= spec.formURLEncoded
+    merged.multipart ||= spec.multipart
     merged.responseConverter = spec.responseConverter ?? merged.responseConverter
     merged.requestBodyConverter = spec.requestBodyConverter ?? merged.requestBodyConverter
     merged.responseHandler = spec.responseHandler ?? merged.responseHandler
@@ -118,6 +121,7 @@ function mergeClassIntoMethod(defaults: ClassSpec, spec: MethodSpec): MethodSpec
     requestBodyConverter: spec.requestBodyConverter ?? defaults.requestBodyConverter,
     responseHandler: spec.responseHandler ?? defaults.responseHandler,
     formURLEncoded: spec.formURLEncoded || defaults.formURLEncoded,
+    multipart: spec.multipart || defaults.multipart,
     retry: spec.retry ?? defaults.retry,
   }
 }
@@ -128,16 +132,24 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
   }
 
   const bodyParamCount = spec.params.filter(param => param.kind === 'body').length
+  const hasParts = spec.params.some(param => param.kind === 'part')
 
   if (bodyParamCount > 1) {
     throw new ErrFetchyInvalidRoute(name, 'more than one @Body() parameter is not allowed')
   }
 
   if (
-    bodyParamCount > 0 &&
+    (bodyParamCount > 0 || hasParts) &&
     (spec.httpMethod === 'GET' || spec.httpMethod === 'HEAD' || spec.httpMethod === 'OPTIONS')
   ) {
     throw new ErrFetchyInvalidRoute(name, `${spec.httpMethod} requests cannot have a body`)
+  }
+
+  if (spec.multipart && spec.formURLEncoded) {
+    throw new ErrFetchyInvalidRoute(
+      name,
+      '@Multipart() and @FormURLEncoded() cannot both apply to one method, whether set on the method or its class',
+    )
   }
 
   const hasFormFields = spec.params.some(param => param.kind === 'form-field')
@@ -148,6 +160,28 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
 
   if (hasFormFields && bodyParamCount > 0) {
     throw new ErrFetchyInvalidRoute(name, '@Body() and @Field() cannot be used on the same method')
+  }
+
+  if (hasParts && !spec.multipart) {
+    throw new ErrFetchyInvalidRoute(name, '@Part() requires @Multipart() on the method or class')
+  }
+
+  if (hasParts && bodyParamCount > 0) {
+    throw new ErrFetchyInvalidRoute(name, '@Body() and @Part() cannot be used on the same method')
+  }
+
+  // A body that is always a FormData goes out under the boundary and the length the transport encodes it with, so a
+  // content-type or content-length argument would be dropped on every call. Where a converter decides the body, it may
+  // not be a FormData, and the argument stands.
+  if (hasParts || (bodyParamCount > 0 && spec.requestBodyConverter === MultipartRequestBodyConverter)) {
+    for (const param of spec.params) {
+      if (param.kind === 'header' && /^content-(?:type|length)$/i.test(param.key)) {
+        throw new ErrFetchyInvalidRoute(
+          name,
+          `@Header("${param.key}") cannot be used on a multipart body: the transport sets content-type and content-length when it encodes the parts`,
+        )
+      }
+    }
   }
 
   const pathKeys = new Set(

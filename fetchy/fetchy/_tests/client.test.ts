@@ -1,14 +1,21 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { newClient } from '../client_builder.js'
+import { Accept } from '../decorators/accept.js'
 import { API } from '../decorators/api.js'
 import { FormURLEncoded } from '../decorators/form_url_encoded.js'
 import { HeaderMap } from '../decorators/header_map.js'
+import { Multipart } from '../decorators/multipart.js'
 import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Field } from '../decorators/params/field.js'
+import { Header } from '../decorators/params/header.js'
 import { Param } from '../decorators/params/param.js'
+import { Part } from '../decorators/params/part.js'
 import { Query } from '../decorators/params/query.js'
+import { QueryName } from '../decorators/params/query_name.js'
+import { SignalParam } from '../decorators/params/signal_param.js'
+import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
 import { DELETE, GET, POST } from '../decorators/verbs.js'
 import {
@@ -20,7 +27,8 @@ import {
   ErrFetchyMissingPathArgument,
 } from '../errors.js'
 import { noop } from '../noop.js'
-import type { ResponseConverter as ResponseConverterInstance } from '../response_converter.js'
+import { JSONRequestBodyConverter, MultipartRequestBodyConverter } from '../request_body_converter.js'
+import { type ResponseConverter as ResponseConverterInstance, TextResponseConverter } from '../response_converter.js'
 import type { Transport } from '../transport.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
@@ -173,6 +181,139 @@ describe('FetchyClient end-to-end (fake TransportFactory)', () => {
     const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Invalid)).toThrow(ErrFetchyInvalidRoute)
+  })
+
+  // Each describes a request fetchy cannot build, so the client refuses it when it is built, before any call.
+  it('throws ErrFetchyInvalidRoute for an operation with no HTTP verb', () => {
+    @API()
+    class Invalid {
+      @Params([Query('q')])
+      bad(_q: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": missing an HTTP verb decorator (@GET/@POST/etc)',
+    )
+  })
+
+  it('throws ErrFetchyInvalidRoute for two @Body() parameters', () => {
+    @API()
+    class Invalid {
+      @POST('/x')
+      @Params([Body(), Body()])
+      bad(_first: unknown, _second: unknown): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": more than one @Body() parameter is not allowed',
+    )
+  })
+
+  it('throws ErrFetchyInvalidRoute for a @Field() without @FormURLEncoded()', () => {
+    @API()
+    class Invalid {
+      @POST('/x')
+      @Params([Field('name')])
+      bad(_name: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": @Field() requires @FormURLEncoded() on the method or class',
+    )
+  })
+
+  it('throws ErrFetchyInvalidRoute for a @Param() the path has no placeholder for', () => {
+    @API()
+    class Invalid {
+      @GET('/users')
+      @Params([Param('id')])
+      bad(_id: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": @Param("id") has no matching "{id}" placeholder in path "/users"',
+    )
+  })
+
+  // A base URL is often written with a trailing slash. Joined to a path that starts with one, it must not double it.
+  it('drops the trailing slash of a base URL', async () => {
+    @API('/users')
+    class UsersAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      getUser(_id: string): Promise<User> {
+        return noop()
+      }
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test/v1/')
+      .transportFactory(transportFactory)
+      .build()
+      .create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.getUser('1')
+
+    expect(transportFactory.transports[0].lastRequest!.url).toBe('http://example.test/v1/users/1')
+  })
+
+  // In a browser, fetch resolves a path against the page's origin, so a client without a base URL calls its own site.
+  it('sends to the path alone when the client has no base URL', async () => {
+    @API('/users')
+    class UsersAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      getUser(_id: string): Promise<User> {
+        return noop()
+      }
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().transportFactory(transportFactory).build().create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.getUser('1')
+
+    expect(transportFactory.transports[0].lastRequest!.url).toBe('/users/1')
+  })
+
+  it('converts every response with the client-wide converter where an operation names none', async () => {
+    @API('/users')
+    class UsersAPI {
+      @GET('/greeting')
+      greet(): Promise<string> {
+        return noop()
+      }
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .responseConverter(TextResponseConverter)
+      .build()
+      .create(UsersAPI)
+    transportFactory.transports[0].willRespond(new Response('hello'))
+
+    await expect(api.greet()).resolves.toBe('hello')
   })
 
   it('@ResponseConverter overrides the converter for that method, ahead of the client-wide default', async () => {
@@ -329,6 +470,123 @@ describe('FetchyClient end-to-end (fake TransportFactory)', () => {
     const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
 
     expect(() => client.create(Undecorated)).toThrow(ErrFetchyMissingAPIDecorator)
+  })
+})
+
+describe('the request an operation builds', () => {
+  @API('/search')
+  @Accept('application/json')
+  class SearchAPI {
+    @GET('')
+    @Params([Query('q'), QueryName(), QueryName()])
+    search(_q: string, _flag: string | null, _other: string | null): Promise<unknown> {
+      return noop()
+    }
+
+    @GET('')
+    @Params([QueryName(), Query('tag')])
+    flagged(_flag: string, _tags: string[]): Promise<unknown> {
+      return noop()
+    }
+
+    @GET('')
+    @Params([Query('tag'), Query('q')])
+    tagged(_tags: string[], _q: string): Promise<unknown> {
+      return noop()
+    }
+
+    @GET('/export')
+    @Accept('text/csv')
+    @Params([Header('x-trace'), SignalParam()])
+    export(_trace: string | null, _signal: AbortSignal | null): Promise<unknown> {
+      return noop()
+    }
+
+    @POST('/subscribers')
+    @FormURLEncoded()
+    @Params([Field('name'), Field('nick')])
+    subscribe(_name: string, _nick: string | null): Promise<unknown> {
+      return noop()
+    }
+  }
+
+  function clientOf<T extends object>(TargetAPI: new () => T) {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(TargetAPI)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(200, {})).willRespond(fakeJSONResponse(200, {}))
+
+    return { api, transport }
+  }
+
+  it('appends value-less query names wherever they sit, and leaves out an absent one', async () => {
+    const { api, transport } = clientOf(SearchAPI)
+
+    await api.search('ada', 'exact', null)
+    expect(transport.lastRequest!.path).toBe('/search?q=ada&exact')
+
+    await api.flagged('exact', ['math', 'history'])
+    expect(transport.lastRequest!.path).toBe('/search?exact&tag=math&tag=history')
+  })
+
+  it('opens the query string with a repeated entry as with any other', async () => {
+    const { api, transport } = clientOf(SearchAPI)
+
+    await api.tagged(['math', 'history'], 'ada')
+
+    expect(transport.lastRequest!.path).toBe('/search?tag=math&tag=history&q=ada')
+  })
+
+  // An optional argument left out is not sent, rather than sent as the text "null".
+  it('leaves out a header, a form field or a signal given as null', async () => {
+    const { api, transport } = clientOf(SearchAPI)
+
+    await api.export(null, null)
+
+    expect(transport.lastRequest!.headers.has('x-trace')).toBe(false)
+    expect(transport.lastRequest!.signal).toBeUndefined()
+
+    await api.subscribe('Ada', null)
+
+    expect(transport.lastRequest!.body).toBe('name=Ada')
+  })
+
+  it("sends the accept header a method declares in place of its class's", async () => {
+    const { api, transport } = clientOf(SearchAPI)
+
+    await api.export('t-1', null)
+    expect(transport.lastRequest!.headers.get('accept')).toBe('text/csv')
+
+    await api.search('ada', null, null)
+    expect(transport.lastRequest!.headers.get('accept')).toBe('application/json')
+  })
+
+  // Paths are written by hand, with or without their slashes; they still join into one path with single slashes.
+  it('joins paths written without their leading slash or with a trailing one', async () => {
+    @API('users/')
+    class UsersAPI {
+      @GET('active/')
+      active(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    @API()
+    class RootAPI {
+      @GET('')
+      root(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const users = clientOf(UsersAPI)
+    const root = clientOf(RootAPI)
+
+    await users.api.active()
+    await root.api.root()
+
+    expect(users.transport.lastRequest!.url).toBe('http://example.test/users/active')
+    expect(root.transport.lastRequest!.url).toBe('http://example.test/')
   })
 })
 
@@ -632,5 +890,160 @@ describe('FetchyClient.close()', () => {
     await client.close()
 
     expect(closes).toBe(1)
+  })
+})
+
+// Each is refused when the client is built, before any call: the request it describes cannot reach a server intact.
+describe('the validation of a multipart operation', () => {
+  function create(TargetAPI: new () => object): () => unknown {
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    return () => client.create(TargetAPI)
+  }
+
+  it('refuses a Part() without @Multipart()', () => {
+    @API()
+    class Invalid {
+      @POST('/x')
+      @Params([Part('file')])
+      bad(_file: Blob): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": @Part() requires @Multipart() on the method or class',
+    )
+  })
+
+  it('refuses @Body() and Part() on one method', () => {
+    @API()
+    class Invalid {
+      @POST('/x')
+      @Multipart()
+      @Params([Body(), Part('file')])
+      bad(_body: unknown, _file: Blob): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": @Body() and @Part() cannot be used on the same method',
+    )
+  })
+
+  // A method cannot opt out of the encoding its class sets, so the two conflict wherever each one is declared.
+  it('refuses @Multipart() and @FormURLEncoded() on one method, or one of them from its class', () => {
+    @API()
+    class OnMethod {
+      @POST('/x')
+      @Multipart()
+      @FormURLEncoded()
+      bad(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    @API()
+    @FormURLEncoded()
+    class FromClass {
+      @POST('/x')
+      @Multipart()
+      bad(): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    const reason =
+      '@Multipart() and @FormURLEncoded() cannot both apply to one method, whether set on the method or its class'
+
+    expect(create(OnMethod)).toThrow(`Invalid route configuration for method "OnMethod.bad": ${reason}`)
+    expect(create(FromClass)).toThrow(`Invalid route configuration for method "FromClass.bad": ${reason}`)
+  })
+
+  // A part is a body like any other: fetch refuses a GET that has one, and undici would send it.
+  it('refuses a Part() on a GET', () => {
+    @API()
+    class Invalid {
+      @GET('/x')
+      @Multipart()
+      @Params([Part('file')])
+      bad(_file: Blob): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": GET requests cannot have a body',
+    )
+  })
+
+  // A body that is always multipart goes out under the boundary and the length the transport encodes it with, so a
+  // content-type or content-length argument would be dropped on every call. Refused when the client is built, it cannot
+  // go unnoticed.
+  it.each(['Content-Type', 'Content-Length'])(
+    'refuses a %s Header() with Part() parameters, however it is spelled',
+    header => {
+      @API()
+      class Invalid {
+        @POST('/x')
+        @Multipart()
+        @Params([Part('file'), Header(header)])
+        bad(_file: Blob, _value: string): Promise<unknown> {
+          return noop()
+        }
+      }
+
+      expect(create(Invalid)).toThrow(
+        `Invalid route configuration for method "Invalid.bad": @Header("${header}") cannot be used on a multipart body: the transport sets content-type and content-length when it encodes the parts`,
+      )
+    },
+  )
+
+  it('refuses a content-type Header() with a @Body() that MultipartRequestBodyConverter converts, flag or not', () => {
+    @API()
+    class Invalid {
+      @POST('/x')
+      @UseRequestBodyConverter(MultipartRequestBodyConverter)
+      @Params([Body(), Header('content-type')])
+      bad(_body: unknown, _contentType: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Invalid)).toThrow(
+      'Invalid route configuration for method "Invalid.bad": @Header("content-type") cannot be used on a multipart body',
+    )
+  })
+
+  // The converter listed above @Multipart() decides what the body is, and may well send it under a type of its own.
+  it('allows a content-type Header() where another converter decides the body', () => {
+    @API()
+    class Valid {
+      @POST('/x')
+      @UseRequestBodyConverter(JSONRequestBodyConverter)
+      @Multipart()
+      @Params([Body(), Header('content-type')])
+      send(_body: unknown, _contentType: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Valid)).not.toThrow()
+  })
+
+  // A class-level @Multipart() reaches every operation, a bodiless GET included, which has no boundary to protect.
+  it('allows a content-type Header() on an operation with no body', () => {
+    @API()
+    @Multipart()
+    class Valid {
+      @GET('/x')
+      @Params([Header('content-type')])
+      read(_contentType: string): Promise<unknown> {
+        return noop()
+      }
+    }
+
+    expect(create(Valid)).not.toThrow()
   })
 })
