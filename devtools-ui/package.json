@@ -1,0 +1,40 @@
+{
+  "name": "@caffeinejs/devtools-ui",
+  "version": "0.0.0",
+  "description": "CaffeineJS DevTools UI: browse the DevTools endpoints of one or more applications",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "caffeine-devtools": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean:dist": "rm -rf dist",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/di": "*",
+    "@caffeinejs/fetchy": "*",
+    "@caffeinejs/html": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
+    "@kitajs/html": "^4.2.13",
+    "fastify": "^5.12.5"
+  },
+  "devDependencies": {
+    "@caffeinejs/devtools": "*"
+  }
+}

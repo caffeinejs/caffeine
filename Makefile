@@ -108,6 +108,14 @@ bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
 
+DEVTOOLS_CONFIG ?= examples/02-devtools-basic/devtools.yaml
+
+.PHONY: devtools
+# Run from its build output: a bin link exists only when its target did at install time.
+devtools: ## run the DevTools UI at http://127.0.0.1:9339 (DEVTOOLS_CONFIG=path/to/devtools.yaml)
+	@npm run build
+	@node devtools-ui/dist/main.js --config $(DEVTOOLS_CONFIG)
+
 # .
 # End-to-End Toolchain
 # End-to-End tests specific helper tasks
