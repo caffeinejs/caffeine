@@ -1,5 +1,7 @@
 import type { Chain } from '../../chain.js'
 import type { Interceptor } from '../../interceptor.js'
+import { discard } from '../../internal/discard.js'
+import { isReplayable } from '../../internal/replayable.js'
 import { sleep } from '../../internal/sleep.js'
 import type { FetchyRequest } from '../../request.js'
 import type { FetchyResponse } from '../../response.js'
@@ -11,21 +13,6 @@ function errorCode(error: unknown): string | undefined {
   const code = failure?.code ?? failure?.cause?.code
 
   return typeof code === 'string' ? code : undefined
-}
-
-// Every attempt sends the same body, so only a body that survives being sent is retried. Anything not listed is taken
-// for a stream or an iterator, which the first attempt may have read.
-function isReplayable(body: FetchyRequest['body']): boolean {
-  return (
-    body === null ||
-    body === undefined ||
-    typeof body === 'string' ||
-    body instanceof ArrayBuffer ||
-    ArrayBuffer.isView(body) ||
-    body instanceof Blob ||
-    body instanceof URLSearchParams ||
-    body instanceof FormData
-  )
 }
 
 /**
@@ -75,10 +62,7 @@ export class RetryInterceptor implements Interceptor {
       return response
     }
 
-    if (!response.bodyUsed) {
-      await response.body?.cancel()
-    }
-
+    await discard(response)
     await sleep(options.delay, pristine.signal)
 
     return this.attempt(chain, options, current + 1)

@@ -70,7 +70,8 @@ export function roundMs(ms: number): number {
 }
 
 /**
- * Writes the first load's report: `configuration loaded`, then one record per source.
+ * Writes the first load's report at `debug`: `configuration loaded`, then one record per source. A source that failed
+ * is written at `warn`.
  *
  * Configuration loads before the logger is configured, because the logger is configured from configuration, so the
  * store cannot write this itself. The host calls it once the logger is final.
@@ -79,7 +80,7 @@ export function logConfigLoaded(logger: Logger, store: ConfigStore<unknown>): vo
   const log = logger.child({ name: 'config' })
   const inspection = store.inspect()
 
-  log.info(
+  log.debug(
     {
       revision: inspection.revision,
       profiles: inspection.profiles,

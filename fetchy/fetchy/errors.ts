@@ -2,6 +2,14 @@ import { errMessage } from './_err_message.gen.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 
+// Names a request in a message without its query string, which often carries credentials.
+function requestLabel(request: FetchyRequest): string {
+  const query = request.path.indexOf('?')
+  const path = query === -1 ? request.path : request.path.slice(0, query)
+
+  return `${request.method} ${request.origin}${path}`
+}
+
 /** Base class of every error fetchy throws. */
 export class ErrFetchy extends Error {
   readonly code: string
@@ -81,7 +89,11 @@ export class ErrFetchyMissingAPIDecorator extends ErrFetchy {
 
 /**
  * Thrown by the default response handler when the underlying HTTP call resolves with a non-ok
- * response. Carries the originating request and response for inspection by callers.
+ * response. Carries the request and the response for inspection by callers.
+ *
+ * `request` is the request the operation built, before interceptors or an authenticator replaced
+ * it. `status`, `headers` and `body` come from the response that ended the call, which may answer a
+ * retry or an authentication follow-up.
  *
  * The message names the request without its query string, which often carries credentials.
  * `request` keeps the whole request but is not enumerable, so a logger that serializes an error's
@@ -95,11 +107,8 @@ export class ErrFetchyHTTP extends ErrFetchy {
   readonly body: unknown
 
   constructor(request: FetchyRequest, response: FetchyResponse, body: unknown) {
-    const query = request.path.indexOf('?')
-    const path = query === -1 ? request.path : request.path.slice(0, query)
-
     super(
-      `Request "${request.method} ${request.origin}${path}" failed with status ${response.status} ${response.statusText}`,
+      `Request "${requestLabel(request)}" failed with status ${response.status} ${response.statusText}`,
       'ERR_FETCHY_HTTP',
     )
 
@@ -120,6 +129,53 @@ export class ErrFetchyHTTP extends ErrFetchy {
       statusText: this.statusText,
       body: this.body,
     }
+  }
+}
+
+/**
+ * Thrown when the server answers with 401 every follow-up an `Authenticator` returned for one request, 3 at most. The
+ * authenticator is not asked about the last 401. The message names the request without its query string, which often
+ * carries credentials.
+ */
+export class ErrFetchyTooManyAuthenticationAttempts extends ErrFetchy {
+  constructor(request: FetchyRequest, followUps: number) {
+    super(
+      errMessage(
+        `Cannot authenticate "${requestLabel(request)}": the server answered all ${followUps} follow-ups with 401, and fetchy sends no more`,
+      )
+        .solutions(
+          'Return null from Authenticator.authenticate() once attempt is past the rounds the scheme needs: 2 covers the token held, then a refreshed one, and a Digest nonce gone stale',
+          'Put the credentials the authenticator obtained on the request it returns',
+        )
+        .reference('@caffeinejs/fetchy', ErrFetchyTooManyAuthenticationAttempts)
+        .build(),
+      'ERR_FETCHY_TOO_MANY_AUTHENTICATION_ATTEMPTS',
+    )
+    this.name = 'ErrFetchyTooManyAuthenticationAttempts'
+  }
+}
+
+/**
+ * Thrown when fetchy refuses to send the follow-up an `Authenticator` returned: it targets another origin than the
+ * call's, or its body is a stream or an iterator the first send may have read. The message names the request without
+ * its query string, which often carries credentials.
+ */
+export class ErrFetchyFollowUpNotSent extends ErrFetchy {
+  constructor(request: FetchyRequest, problem: 'origin' | 'body') {
+    const first = `Cannot send the authentication follow-up of "${requestLabel(request)}"`
+    // Names the call's own origin only: the one the authenticator built may carry anything.
+    const message =
+      problem === 'origin'
+        ? errMessage(`${first}: it does not target "${request.origin}"`).solutions(
+            'Build the follow-up with request.clone(), which keeps the origin',
+          )
+        : errMessage(`${first}: its body is a stream or an iterator, which the first send may have read`).solutions(
+            'Add the credentials with an interceptor, before the first send, so a streamed body needs no follow-up',
+            'Send the body as a string, bytes or a Blob, which fetchy can send again',
+          )
+
+    super(message.reference('@caffeinejs/fetchy', ErrFetchyFollowUpNotSent).build(), 'ERR_FETCHY_FOLLOW_UP_NOT_SENT')
+    this.name = 'ErrFetchyFollowUpNotSent'
   }
 }
 

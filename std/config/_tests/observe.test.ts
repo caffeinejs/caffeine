@@ -48,8 +48,10 @@ describe('the events the store logs', () => {
 
     // Nothing reaches the logger configuration exists before the logger itself is configured.
     expect(early.records).toEqual([])
+    // At debug, like the records about each source: an application bootstraps on every test and every start, and
+    // the report says nothing went wrong.
     expect(final.records.map(r => [r.level, r.msg])).toEqual([
-      ['info', 'configuration loaded'],
+      ['debug', 'configuration loaded'],
       ['debug', 'config source loaded'],
       ['debug', 'config source skipped'],
       ['warn', 'config source failed'],

@@ -87,6 +87,9 @@ export function checkOrigin(input: OriginCheckInput, options: OriginCheckOptions
   return site === undefined || site === '' ? judgeOrigin(input, options) : judgeSite(site, input, options)
 }
 
+// A scheme, `//`, an authority and at most one slash: the text of an origin, before the parser folds anything into it.
+const ORIGIN_TEXT = /^[a-z][a-z\d+.-]*:\/\/[^/\\?#]*\/?$/i
+
 /**
  * Spells a trusted origin the way an `Origin` header does, `scheme://host[:port]`, lower-cased and without a default
  * port: `HTTPS://Admin.Example:443/` is `https://admin.example`.
@@ -126,8 +129,9 @@ export function normalizeTrustedOrigin(text: string): string {
     )
   }
 
-  // An origin and a slash: the one spelling a URL of nothing but scheme, host and port has.
-  if (url.href !== `${url.origin}/`) {
+  // An origin and a slash: the one spelling a URL of nothing but scheme, host and port has. The text is checked too,
+  // since the parser folds a dot segment, a backslash or missing slashes into that spelling.
+  if (url.href !== `${url.origin}/` || !ORIGIN_TEXT.test(text.trim())) {
     throw new ErrCSRFConfiguration(
       errMessage(
         `Cannot trust origin "${text}": an origin is a scheme, a host and a port, with no path, query, fragment or ` +

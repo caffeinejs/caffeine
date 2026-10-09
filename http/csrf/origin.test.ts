@@ -305,6 +305,7 @@ describe('normalizeTrustedOrigin', () => {
     expect(normalizeTrustedOrigin('HTTPS://Admin.Example:443')).toBe('https://admin.example')
     expect(normalizeTrustedOrigin('http://admin.example:8080')).toBe('http://admin.example:8080')
     expect(normalizeTrustedOrigin('http://[::1]:3000')).toBe('http://[::1]:3000')
+    expect(normalizeTrustedOrigin('https://bücher.example')).toBe('https://xn--bcher-kva.example')
   })
 
   // A pattern or a URL with a path is a mistake that would trust nothing, silently: refused where it was written.
@@ -319,6 +320,22 @@ describe('normalizeTrustedOrigin', () => {
       'null',
       'admin.example',
       '',
+    ]) {
+      expect(() => normalizeTrustedOrigin(text), text).toThrow(ErrCSRFConfiguration)
+    }
+  })
+
+  // The URL parser folds a path of dot segments, a backslash, or missing slashes into a bare origin. The text written
+  // still is not one, so it is refused like any other path.
+  it('refuses a text the URL parser folds into an origin', () => {
+    for (const text of [
+      'http://a.aa/.',
+      'https://admin.example/./',
+      'https://admin.example/..',
+      'https://admin.example/%2e',
+      'https://admin.example/%2E/',
+      'https://admin.example\\.',
+      'https:admin.example',
     ]) {
       expect(() => normalizeTrustedOrigin(text), text).toThrow(ErrCSRFConfiguration)
     }

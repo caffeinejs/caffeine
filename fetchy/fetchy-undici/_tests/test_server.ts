@@ -8,7 +8,9 @@ export interface TestServer {
 
 /**
  * Minimal local `node:http` server: echoes method/url/headers/body back as JSON, honoring a
- * `x-test-status` request header to control the response status for error-path tests.
+ * `x-test-status` request header to control the response status for error-path tests, and a
+ * `x-test-body-bytes` request header that answers with that many bytes instead, for a body larger
+ * than the socket buffers.
  */
 export function startTestServer(): Promise<TestServer> {
   return new Promise((resolve, reject) => {
@@ -18,6 +20,14 @@ export function startTestServer(): Promise<TestServer> {
       req.on('data', chunk => chunks.push(chunk as Buffer))
       req.on('end', () => {
         const status = Number(req.headers['x-test-status'] ?? 200)
+        const bodyBytes = req.headers['x-test-body-bytes']
+
+        if (bodyBytes !== undefined) {
+          res.writeHead(status, { 'content-type': 'application/octet-stream' })
+          res.end(Buffer.alloc(Number(bodyBytes), 'x'))
+          return
+        }
+
         const body = Buffer.concat(chunks).toString('utf-8')
 
         res.writeHead(status, { 'content-type': 'application/json' })
