@@ -195,6 +195,16 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
    * instance's `$hasFeature(...)` instead.
    */
   hasFeature(name: string): boolean
+
+  /**
+   * The application's compiled route table, the groups `app.routeGroups` holds: every group its controllers and
+   * routers declared, on every server, with `boundTo` naming the ops server a group is bound to. Complete before
+   * any server is built, so a plugin on one server can read what another serves.
+   *
+   * A group a plugin adds with `$route`, and a route registered straight on a server, are not in it: a plugin
+   * reads what its own server registers with `collectRouteGroups(instance)`.
+   */
+  readonly routeGroups: readonly RouteGroup<unknown>[]
 }
 
 /**

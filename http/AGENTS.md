@@ -112,8 +112,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   not only `undefined` (`_tests/handler_answered.test.ts`).
 - A newly found server-library type becomes a member of `AdapterTypes` (`adapter.ts`), never another type
   parameter.
-- No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
-  (`collectRouteGroups(instance)`), not a scan in the adapter.
+- No server decoration holds the route table. A plugin factory reads every server's compiled groups from
+  `context.routeGroups`; a plugin needing what its own server registers, `$route` groups included, adds an `onRoute`
+  hook (`collectRouteGroups(instance)`), not a scan in the adapter.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to

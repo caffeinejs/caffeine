@@ -64,7 +64,9 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * The container is reached off the instance itself — `instance.$container`, decorated before any plugin
  * registers and inherited into every route group's own context. The compiled routes register after every
  * plugin: one that needs them adds an `onRoute` hook and reads `routeOptions.config.$caffeine.compiled`, which
- * carries the route and the group it was compiled in, or calls {@link collectRouteGroups}.
+ * carries the route and the group it was compiled in, or calls {@link collectRouteGroups}. The groups the
+ * application's controllers and routers declared, on every server, are on the context already:
+ * {@link HTTPSetupContext.routeGroups}.
  *
  * ```ts
  * .with(({ config }) => [fastifyCors, config.app.cors.options])

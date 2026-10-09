@@ -519,7 +519,10 @@ export class WebApplication<
       config: this.configSnapshot,
       store: this.configStore,
       logger: this.log,
+      name: this.name,
       hasFeature: name => this.hasFeature(name),
+      // Handlers take the request contravariantly, so the adapter's request type widens only by a cast.
+      routeGroups: this.#routeGroups as readonly RouteGroup<unknown>[],
     }
 
     await servers.setup(this.#adapter, {

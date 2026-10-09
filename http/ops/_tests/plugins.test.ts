@@ -2,7 +2,16 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { type Context, Ops, bindTo, createWebApplication, newRouter, type WebApplication } from '../../index.js'
+import {
+  type Context,
+  Ops,
+  RouteBuilder,
+  type RouteGroup,
+  bindTo,
+  createWebApplication,
+  newRouter,
+  type WebApplication,
+} from '../../index.js'
 
 /**
  * An ops server's own plugins and middleware: registered on its builder, `o.with(...)`, `o.use(...)` and
@@ -115,6 +124,52 @@ describe("an ops server's own plugins and middleware", () => {
     expect(onMain.headers.get('x-app-middleware')).toBe('yes')
     expect(onMain.headers.get('x-ops-middleware')).toBeNull()
     expect(onMain.headers.get('x-built-middleware')).toBeNull()
+  })
+
+  // A plugin on one server reads what another serves: the table is compiled before any server is built. A group a
+  // plugin adds with `$route` is that server's own, and stays out of it.
+  it("hands its factories the application's route table, each group with the server it is bound to", async () => {
+    let table: readonly RouteGroup<unknown>[] | undefined
+
+    app = createWebApplication()
+      .install(
+        Ops('admin', o =>
+          o
+            .server(() => ({ listener }))
+            .with(context => {
+              table = context.routeGroups
+              return fp(async () => undefined, { name: 'route-table-probe' })
+            }),
+        ),
+      )
+      .server(() => ({ listener }))
+      .with(() =>
+        fp(
+          async (instance: FastifyInstance) => {
+            instance.$route('added', group => {
+              group.path('/added').routes([
+                new RouteBuilder()
+                  .method('GET')
+                  .path('/')
+                  .handle(() => ({ added: true })),
+              ])
+            })
+          },
+          { name: 'adds-a-group' },
+        ),
+      )
+      .mount(jobs(), api()) as WebApplication
+
+    await app.bootstrap()
+
+    // Served, so its absence below is the table's doing.
+    expect((await app.fetch('/added')).status).toBe(200)
+
+    const groups = table?.toSorted((a, b) => a.path.localeCompare(b.path)).map(group => [group.path, group.boundTo])
+    expect(groups).toEqual([
+      ['/api', undefined],
+      ['/jobs', 'admin'],
+    ])
   })
 
   it('refuses a feature handed to its with(...), as the application refuses one', async () => {

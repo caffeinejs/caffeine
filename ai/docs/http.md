@@ -497,7 +497,8 @@ app.ops.get('admin')?.address // { host, port, origin }
 
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.with(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
-  start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
+  start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups`, and on the
+  `routeGroups` a plugin factory's context carries, names the server.
 - **What it gets.** The ops server is built through the same path as the application's own server: the same request
   context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
   itself follows it: `router.plugin(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.

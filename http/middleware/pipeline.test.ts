@@ -23,7 +23,9 @@ function setupContext(options: { config?: object; container?: Container } = {}):
     config: (options.config ?? {}) as ConfigSnapshot<unknown>,
     store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
+    name: '',
     hasFeature: () => false,
+    routeGroups: [],
   }
 }
 
@@ -265,7 +267,9 @@ describe('MiddlewarePipeline', () => {
         config: {} as ConfigSnapshot<unknown>,
         store: {} as ConfigStore<unknown>,
         logger,
+        name: '',
         hasFeature: () => false,
+        routeGroups: [],
       },
     })
     const res = await server.inject('/echo')

@@ -215,6 +215,24 @@ describe('plugin registration', () => {
     expect(seen.first?.container).toBe(app.container)
   })
 
+  // The name is the framework's own block, read from the merged tree: the `config` a factory gets is the
+  // application's schema, which need not declare it, so only the context can hand it over.
+  it('hands every factory the application name from caffeine.name', async () => {
+    let seen: string | undefined
+    const conf = newConfiguration($t.Object({}))
+      .source(new InlineConfigSource({ caffeine: { name: 'shop' } }))
+      .build().config
+
+    app = createWebApplication({ config: conf }).with(context => {
+      seen = context.name
+      return fp(async () => undefined, { name: 'name-probe' })
+    })
+
+    await app.bootstrap()
+
+    expect(seen).toBe('shop')
+  })
+
   // An app-level factory is called once the container has initialized — not while features configure, where
   // this would throw `ErrInvalidContainerState`. Resolving here, inside the factory itself rather than inside the
   // plugin body, is exactly the case that used to be broken.
