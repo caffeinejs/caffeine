@@ -1,6 +1,6 @@
 {
   "name": "@caffeinejs/example-devtools-basic",
-  "description": "Task API with Caffeine Devtools attached to a running HTTP application",
+  "description": "Task API serving Caffeine DevTools on an ops server, behind Basic authentication",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,10 +8,10 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
-    "@caffeinejs/di": "*",
     "@caffeinejs/devtools": "*",
-    "@caffeinejs/std": "*",
+    "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*",
     "fastify": "^5.12.5"
   }
 }

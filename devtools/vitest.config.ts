@@ -17,8 +17,10 @@ export default defineConfig({
   oxc: false,
   test: {
     name: 'devtools',
+    pool: 'threads',
     include: ['**/*.test.ts'],
     environment: 'node',
-    passWithNoTests: true,
+    testTimeout: 30000,
+    hookTimeout: 30000,
   },
 })

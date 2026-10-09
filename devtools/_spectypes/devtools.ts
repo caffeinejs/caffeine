@@ -1,14 +1,14 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { DevtoolsOptions } from '../server/server.js'
+import type { DevToolsConfig } from '../options.js'
 
 /**
- * The schema of the devtools configuration block, satisfying {@link DevtoolsOptions}. Hand the node to
- * `DevtoolsModule(...)`.
+ * The schema of a DevTools configuration block, satisfying {@link DevToolsConfig}. Hand its node to
+ * `devTools(d => d.config(...))`.
  */
-export const DevtoolsConfigSchema = $t.Object({
-  port: $t.Optional($t.Integer({ minimum: 0, maximum: 65_535 })),
+export const DevToolsConfigSchema = $t.Object({
+  path: $t.Optional($t.String()),
 })
 
-type _Satisfies = SchemaSatisfies<DevtoolsOptions, InferConfig<typeof DevtoolsConfigSchema>>
+type _Satisfies = SchemaSatisfies<DevToolsConfig, InferConfig<typeof DevToolsConfigSchema>>

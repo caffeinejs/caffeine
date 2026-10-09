@@ -88,7 +88,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 # make matches a pattern with no slash against only the part of a goal after its last slash, so lint:% never matches a
 # nested workspace such as lint:fetchy/fetchy. A pattern that names the parent directory is matched whole.
-NESTED_WORKSPACE_PARENTS := integrations fetchy devtools di/examples examples plugins
+NESTED_WORKSPACE_PARENTS := integrations fetchy di/examples examples plugins
 
 define lint_nested
 lint\:$(1)/%:
@@ -107,11 +107,6 @@ bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run build
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
-
-.PHONY: devtools
-devtools:
-	@npm run build
-	@npm run dev -w @caffeinejs/devtools-ui
 
 # .
 # End-to-End Toolchain
