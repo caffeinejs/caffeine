@@ -1,5 +1,5 @@
-import type { CallAdapter, CallAdapterFactory } from '../../call_adapter.js'
-import type { MethodSpec } from '../../decorators/registrar/index.js'
+import type { CallAdapter, CallAdapterFactory } from '../call_adapter.js'
+import type { MethodSpec } from '../decorators/registrar/index.js'
 import { CallbackCallAdapter } from './callback_call_adapter.js'
 
 /**

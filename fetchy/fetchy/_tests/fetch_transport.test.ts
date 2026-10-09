@@ -8,7 +8,6 @@ import { join } from 'node:path'
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { RetryInterceptor } from '../builtin/retry/index.js'
 import {
   API,
   type Authenticator,
@@ -26,6 +25,7 @@ import {
   Retry,
   SignalParam,
 } from '../index.js'
+import { RetryInterceptor } from '../retry/index.js'
 
 /**
  * The default transport, `fetch`, against a server that records every request it reads. Each request is read whole

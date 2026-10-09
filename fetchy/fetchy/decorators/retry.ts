@@ -4,7 +4,7 @@ import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**
  * Opts a class (default for all its methods) or a method/field into retry via `RetryInterceptor`
- * (`builtin/retry`) — a request is retried on a response status in `statusCodes`, or on a transport
+ * (`@caffeinejs/fetchy/retry`) — a request is retried on a response status in `statusCodes`, or on a transport
  * failure whose code is in `errorCodes`, when its HTTP method is in `methods`, per `options` (unset
  * fields fall back to `DEFAULT_RETRY_OPTIONS`). A request whose body can be read only once, such as
  * a stream, is never retried. A method-level `@Retry()` completely replaces an inherited class-level

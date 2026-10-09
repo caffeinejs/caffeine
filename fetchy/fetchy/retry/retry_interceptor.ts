@@ -1,11 +1,11 @@
-import type { Chain } from '../../chain.js'
-import type { Interceptor } from '../../interceptor.js'
-import { discard } from '../../internal/discard.js'
-import { isReplayable } from '../../internal/replayable.js'
-import { sleep } from '../../internal/sleep.js'
-import type { FetchyRequest } from '../../request.js'
-import type { FetchyResponse } from '../../response.js'
-import type { RetryOptions } from '../../retry_options.js'
+import type { Chain } from '../chain.js'
+import type { Interceptor } from '../interceptor.js'
+import { discard } from '../internal/discard.js'
+import { isReplayable } from '../internal/replayable.js'
+import { sleep } from '../internal/sleep.js'
+import type { FetchyRequest } from '../request.js'
+import type { FetchyResponse } from '../response.js'
+import type { RetryOptions } from '../retry_options.js'
 
 // `fetch` rejects with a `TypeError` whose `cause` is the network error; undici's own API rejects with that error.
 function errorCode(error: unknown): string | undefined {

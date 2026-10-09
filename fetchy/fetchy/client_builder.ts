@@ -1,7 +1,7 @@
 import type { Authenticator } from './authenticator.js'
-import { FetchTransportFactory } from './builtin/fetch/index.js'
 import type { CallAdapterFactory } from './call_adapter.js'
 import { FetchyClient } from './client.js'
+import { FetchTransportFactory } from './fetch/index.js'
 import type { Interceptor, InterceptorFunction } from './interceptor.js'
 import { toInterceptor } from './interceptor.js'
 import type { ResponseConverter } from './response_converter.js'

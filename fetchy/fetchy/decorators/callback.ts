@@ -3,7 +3,7 @@ import { configureMethod } from './registrar/registrar.js'
 
 /**
  * Opts a method (or field-declared operation) into Node-style callback invocation via
- * `CallbackCallAdapterFactory` (`builtin/callback`) — the last call argument becomes an
+ * `CallbackCallAdapterFactory` (`@caffeinejs/fetchy/callback`) — the last call argument becomes an
  * `(error, response) => void` callback instead of the method returning a `Promise`.
  */
 export function Callback() {

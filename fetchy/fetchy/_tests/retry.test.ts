@@ -2,7 +2,6 @@ import { Readable } from 'node:stream'
 
 import { describe, expect, it } from 'vitest'
 
-import { RetryInterceptor } from '../builtin/retry/index.js'
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { NoRetry } from '../decorators/no_retry.js'
@@ -16,6 +15,7 @@ import { GET, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyHTTP } from '../errors.js'
 import { noop } from '../noop.js'
 import { RawRequestBodyConverter } from '../request_body_converter.js'
+import { RetryInterceptor } from '../retry/index.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 interface User {

@@ -1,4 +1,4 @@
-import type { Transport, TransportFactory } from '../../transport.js'
+import type { Transport, TransportFactory } from '../transport.js'
 import { FetchTransport } from './fetch_transport.js'
 
 /**

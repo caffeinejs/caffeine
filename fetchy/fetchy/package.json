@@ -15,17 +15,17 @@
       "types": "./dist/decorators/index.d.ts",
       "default": "./dist/decorators/index.js"
     },
-    "./builtin/fetch": {
-      "types": "./dist/builtin/fetch/index.d.ts",
-      "default": "./dist/builtin/fetch/index.js"
+    "./fetch": {
+      "types": "./dist/fetch/index.d.ts",
+      "default": "./dist/fetch/index.js"
     },
-    "./builtin/callback": {
-      "types": "./dist/builtin/callback/index.d.ts",
-      "default": "./dist/builtin/callback/index.js"
+    "./callback": {
+      "types": "./dist/callback/index.d.ts",
+      "default": "./dist/callback/index.js"
     },
-    "./builtin/retry": {
-      "types": "./dist/builtin/retry/index.d.ts",
-      "default": "./dist/builtin/retry/index.js"
+    "./retry": {
+      "types": "./dist/retry/index.d.ts",
+      "default": "./dist/retry/index.js"
     },
     "./package.json": "./package.json"
   },

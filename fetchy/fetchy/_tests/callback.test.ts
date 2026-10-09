@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { CallbackCallAdapterFactory } from '../builtin/callback/index.js'
+import { CallbackCallAdapterFactory } from '../callback/index.js'
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { Callback } from '../decorators/callback.js'

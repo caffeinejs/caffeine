@@ -2,7 +2,6 @@ import { Readable } from 'node:stream'
 
 import { describe, expect, it } from 'vitest'
 
-import { RetryInterceptor } from '../builtin/retry/index.js'
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
 import { ContentType } from '../decorators/content_type.js'
@@ -22,6 +21,7 @@ import {
   MultipartRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
+import { RetryInterceptor } from '../retry/index.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**

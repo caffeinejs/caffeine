@@ -1,5 +1,5 @@
-import { CallbackCallAdapter } from '../builtin/callback/index.js'
 import type { CallAdapter } from '../call_adapter.js'
+import { CallbackCallAdapter } from '../callback/index.js'
 import { Accept } from '../decorators/accept.js'
 import { API } from '../decorators/api.js'
 import { ContentType } from '../decorators/content_type.js'

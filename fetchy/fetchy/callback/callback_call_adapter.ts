@@ -1,5 +1,5 @@
-import type { CallAdapter } from '../../call_adapter.js'
-import { ErrFetchyMissingCallbackArgument } from '../../errors.js'
+import type { CallAdapter } from '../call_adapter.js'
+import { ErrFetchyMissingCallbackArgument } from '../errors.js'
 
 type Callback = (error: Error | null, response: unknown) => void
 
