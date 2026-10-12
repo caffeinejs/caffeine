@@ -8,11 +8,13 @@ import type {
   HTTPSetupContext,
   ServerConfigurer,
   ServerCustomizer,
+  SetupApplication,
 } from './adapter.js'
 import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
 import { ErrConfiguration } from './error/common.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
+import { servedOn } from './routing/programmatic/bind.js'
 import type { RouteGroup } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
 import type { RouteGroupSpec } from './routing/spec.js'
@@ -27,19 +29,34 @@ interface Entry<T extends AdapterTypes> {
 
 /** What every server is built with that is not its own. */
 export interface ServerSetupInput<T extends AdapterTypes> {
-  /** The application's: a named server's own is this one with a child logger. */
+  /**
+   * The application's, whose `app` mounts on the application itself: a named server's own is this one with a child
+   * logger and an `app` of its own.
+   */
   readonly context: HTTPSetupContext
   /** The framework's head slots, built fresh for one server: error handling, then cookies. */
   headSlots(): T['extension'][]
-  /** What routers and controllers asked for, resolved once and installed in front of their groups on any server. */
-  scopedExtensions(): Promise<AdapterExtensions<T['extension']>>
-  /** The compiler every group went through, for a group `$route` adds. */
-  readonly compileRouteGroup: RouteGroupCompiler
+  /**
+   * Builds routing, once every server's factories have run and before any server is built. Hands back what routers
+   * and controllers asked to install in front of their groups on any server, and the compiler every group went
+   * through, for a group `$route` adds.
+   */
+  route(): Promise<{ scoped: AdapterExtensions<T['extension']>; compileRouteGroup: RouteGroupCompiler }>
+}
+
+/** One server ready to build: the context it is set up with, its settings, and what its factories produced. */
+interface Prepared<T extends AdapterTypes> {
+  readonly entry: Entry<T>
+  readonly context: HTTPSetupContext
+  readonly server: T['serverOptions']
+  readonly basePath: string | undefined
+  readonly root: T['extension'][]
 }
 
 /**
- * Every server an application runs, built one after another from its {@link ServerDefinition}, in order: the
- * application's own first, so it is the first to listen and the first to close.
+ * Every server an application runs, each built from its {@link ServerDefinition}, in order: the application's own
+ * first, so it is the first to listen and the first to close. Every server's settings and factories run before any
+ * server is built, since a factory may mount routers and routing is built once all of them have.
  */
 export class ServerSet<T extends AdapterTypes> {
   readonly #entries: Entry<T>[]
@@ -88,34 +105,25 @@ export class ServerSet<T extends AdapterTypes> {
     return compiled
   }
 
-  /** Builds every server through `adapter`, one after another, each from its own definition. */
+  /**
+   * Builds every server through `adapter`. Every server's settings and factories run first, in order; then
+   * `input.route()` builds routing; then each server is built, one after another, from its own definition.
+   */
   async setup(adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<void> {
-    let scoped: AdapterExtensions<T['extension']> | undefined
+    const prepared: Prepared<T>[] = []
 
     for (const entry of this.#entries) {
+      prepared.push(await prepare(entry, input))
+    }
+
+    const { scoped, compileRouteGroup } = await input.route()
+
+    for (const { entry, context, server, basePath, root } of prepared) {
       const { definition } = entry
-      const context: HTTPSetupContext =
-        definition.name === undefined
-          ? input.context
-          : { ...input.context, logger: input.context.logger.child({ server: definition.name }) }
-
-      // The server's own settings first: they describe what everything below registers onto, and a callback that
-      // fails should do so before a factory with side effects has run.
-      const server = await resolveServerOptions(definition.server, context)
-      const basePath = normalizeBasePath(await definition.basePath?.(context))
-
-      // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
-      const root = input.headSlots()
-      for (const factory of definition.plugins) {
-        root.push(await factory(context))
-      }
-
-      // Once, after the first server's own: every server installs them in front of the groups it serves.
-      scoped ??= await input.scopedExtensions()
 
       entry.server = await adapter.setup({
         routeGroups: entry.groups,
-        compileRouteGroup: serverCompiler(input.compileRouteGroup, definition.name),
+        compileRouteGroup: serverCompiler(compileRouteGroup, definition.name),
         context,
         middlewares: definition.middlewares,
         extensions: scoped.withRoot(root),
@@ -160,6 +168,78 @@ export class ServerSet<T extends AdapterTypes> {
   #named(): Entry<T>[] {
     return this.#entries.filter(entry => entry.definition.name !== undefined)
   }
+}
+
+/** Resolves one server's settings and runs its `.with(...)` factories, against the context the server is set up with. */
+async function prepare<T extends AdapterTypes>(entry: Entry<T>, input: ServerSetupInput<T>): Promise<Prepared<T>> {
+  const { definition } = entry
+  const context = contextOf(definition.name, input.context)
+
+  // The server's own settings first: they describe what everything below registers onto, and a callback that
+  // fails should do so before a factory with side effects has run.
+  const server = await resolveServerOptions(definition.server, context)
+  const basePath = normalizeBasePath(await definition.basePath?.(context))
+
+  // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
+  const root = input.headSlots()
+  for (const [index, factory] of definition.plugins.entries()) {
+    const extension = await factory(context)
+
+    // What a factory that only mounted routers hands back: it installs nothing.
+    if (extension === context.app) {
+      continue
+    }
+
+    if (extension === undefined) {
+      throw nothingReturned(index, definition.name)
+    }
+
+    root.push(extension as T['extension'])
+  }
+
+  return { entry, context, server, basePath, root }
+}
+
+/**
+ * The context the server named `name` is set up with: the application's for its own server, and for an ops server a
+ * copy with a logger of its own and an `app` that serves on it what names no server.
+ */
+function contextOf(name: string | undefined, base: HTTPSetupContext): HTTPSetupContext {
+  if (name === undefined) {
+    return base
+  }
+
+  const app: SetupApplication = {
+    mount: (...routers) => {
+      base.app.mount(...servedOn(name, routers))
+      return app
+    },
+  }
+
+  return { ...base, logger: base.logger.child({ server: name }), app }
+}
+
+/**
+ * Refuses a `.with(...)` factory that handed nothing back. Typed code cannot write one; untyped code would otherwise
+ * lose a forgotten plugin without a word, since a factory that mounted routers may be one that also meant to install.
+ */
+function nothingReturned(index: number, name: string | undefined): ErrConfiguration {
+  return new ErrConfiguration(
+    errMessage(
+      `Cannot register the plugin of ".with(...)" #${index + 1} on ${describeServer(name)}: its factory returned nothing`,
+    )
+      .solutions(
+        'Return what the factory installs on the server',
+        'A factory that only mounts routers returns "context.app": "return context.app.mount(router)"',
+      )
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
+}
+
+/** How a message names the server called `name`. */
+function describeServer(name: string | undefined): string {
+  return name === undefined ? "the application's own server" : `ops server "${name}"`
 }
 
 /**
@@ -213,10 +293,8 @@ function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): 
     const bound = boundTo(spec.labels)
 
     if (bound !== undefined && bound !== name) {
-      const server = name === undefined ? "the application's own server" : `ops server "${name}"`
-
       throw new ErrConfiguration(
-        errMessage(`Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"`)
+        errMessage(`Cannot add route group "${meta.name}" to ${describeServer(name)}: it is bound to "${bound}"`)
           .solutions('Drop the binding: "$route" adds the group to the server its plugin runs on')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),

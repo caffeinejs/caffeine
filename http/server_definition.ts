@@ -4,6 +4,7 @@ import type {
   HTTPSetupContext,
   ServerConfigurer,
   ServerCustomizer,
+  SetupApplication,
 } from './adapter.js'
 import { MiddlewarePipeline } from './middleware/pipeline.js'
 
@@ -21,8 +22,8 @@ export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | u
 export class ServerDefinition<T extends AdapterTypes = AdapterTypes, C = unknown> {
   /** What its `.server(...)` calls return, in call order. */
   readonly server: ServerConfigurer<T, C>[] = []
-  /** Its `.with(...)` factories, in call order. */
-  readonly plugins: AdapterExtensionFactory<T['extension'], C>[] = []
+  /** Its `.with(...)` factories, in call order. One that only mounts routers hands back `context.app`. */
+  readonly plugins: AdapterExtensionFactory<T['extension'] | SetupApplication, C>[] = []
   /** What its `.use(...)` and `.useFn(...)` calls registered: resolved, and sealed, by its server's setup. */
   readonly middlewares = new MiddlewarePipeline<T['hook']>()
   /** Its `.serverCallback(...)` callbacks, in call order. */

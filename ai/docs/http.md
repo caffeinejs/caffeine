@@ -374,6 +374,12 @@ app.mount(pets) // before app.bootstrap()
   `@Use(factory)` above `@Controller`. A router takes only plugins, never features, and nothing is
   deduplicated: two groups wanting different settings pass two factories. The factory's context carries
   `config` as `ConfigSnapshot<unknown>` — a router does not know which application it will be mounted into.
+- A plugin factory serves routes of its own by mounting a router on the application through its context:
+  `.with(({ app }) => app.mount(router))`. That is `app.mount(...)`: the routes compile, are checked and are
+  protected like the application's own, and are listed in `app.routeGroups`, though not in `RoutesOf<typeof app>`.
+  A factory that also installs a plugin mounts, then returns the plugin. Registered on an ops server, the factory
+  serves the router there unless the router names another server. Mount in the factory itself: routing is built
+  before the plugin it returns runs, and `mount` is refused from then on.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).
@@ -497,7 +503,8 @@ app.ops.get('admin')?.address // { host, port, origin }
 
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.with(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
-  start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups`, and on the
+  start-up, and so is a name no installed server has. A router an ops server's plugin factory mounts through
+  `context.app` is served on that server unless it names another. `group.boundTo` on `app.routeGroups`, and on the
   `routeGroups` a plugin factory's context carries, names the server.
 - **What it gets.** The ops server is built through the same path as the application's own server: the same request
   context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for

@@ -112,13 +112,19 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   not only `undefined` (`_tests/handler_answered.test.ts`).
 - A newly found server-library type becomes a member of `AdapterTypes` (`adapter.ts`), never another type
   parameter.
-- No server decoration holds the route table. A plugin factory reads every server's compiled groups from
-  `context.routeGroups`; a plugin needing what its own server registers, `$route` groups included, adds an `onRoute`
-  hook (`collectRouteGroups(instance)`), not a scan in the adapter.
+- No server decoration holds the route table. A plugin reads every server's compiled groups from
+  `context.routeGroups`, which routing fills once every server's factories have run: read it from the plugin's body,
+  a hook or a handler, not during the factory's own call. A plugin needing what its own server registers, `$route`
+  groups included, adds an `onRoute` hook (`collectRouteGroups(instance)`), not a scan in the adapter.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
   another server.
+- A plugin factory serves routes by mounting routers on the application, `context.app.mount(...)`, which is
+  `app.mount(...)`: give it no mount path of its own. The context carries a handle with `mount` alone, never the
+  `WebApplication`. An ops server's handle nests a router that names no server in one bound to that server
+  (`routing/programmatic/bind.ts`), and never labels the router itself. A factory that only mounts returns
+  `context.app`; one returning nothing is refused while the servers are prepared.
 
 ## Servers
 
@@ -129,13 +135,17 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   name. Nothing in that path is ops-specific: a server differs only by its name, which routers bind to.
 - The application's own server listens first, since Watt takes over the first listen to complete. It also closes
   first, so ops servers answer through the drain.
+- Every server's settings callbacks and `.with(...)` factories run before the first server is built, and routing is
+  built between the two, so a factory can mount and the route table is complete before any server is. The builds
+  still run one after another.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
-  never filters or compiles them.
+  never filters or compiles them. A router an ops server's factory mounts takes that server's label from the router
+  it is nested in.
 - Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
 - `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
-- A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches an ops server
-  only through that server's own `o.with(...)`, `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the
-  package barrel import `ops/`.
+- A router binds through `binding.ts`, with `bindTo` or `@BindTo`, or by being mounted from one of an ops server's
+  factories. A plugin or a middleware reaches an ops server only through that server's own `o.with(...)`,
+  `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the package barrel import `ops/`.
 - Each server reads `GlobalErrorHandlerRef` right after its own root loop. The servers are built one after another,
   so no server reads the ref another server wrote.
 - An ops server has no gate unless its own `o.with(...)` registers one; a gate covers only the server it was

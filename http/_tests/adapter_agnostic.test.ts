@@ -22,6 +22,7 @@ import type {
   AdapterTypes,
   AnyAdapterTypes,
   ContextPlatform,
+  HTTPSetupContext,
 } from '../adapter.js'
 import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
@@ -167,6 +168,35 @@ describe('an application on an adapter that is not Fastify', () => {
     await app.close()
   })
 
+  // Mounting is the application's, not the adapter's: the adapter receives the routes like any others, and the
+  // factory that mounted them, having nothing to install, takes no slot.
+  it('hands the adapter the routes a factory mounted, and nothing to install for that factory', async () => {
+    const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
+    const app = onFake(adapter)
+      .with(({ app: application }) => application.mount(new Router('/free').get('/', () => 1)))
+      .with(() => ({ unit: 'after' }))
+
+    await app.bootstrap()
+
+    const root = (adapter.input?.extensions.root() ?? []).map(entry =>
+      typeof entry === 'function' ? 'head' : entry.unit,
+    )
+
+    expect(adapter.input?.routeGroups.map(group => group.path)).toEqual(['/free'])
+    expect(root).toEqual(['head', 'head', 'after'])
+
+    await app.close()
+  })
+
+  // The fake adapter installs whatever it is handed, so only the application stands in the way.
+  it('refuses a factory that returns nothing, whatever the adapter', async () => {
+    const app = onFake().with((() => undefined) as never)
+
+    await expect(app.bootstrap()).rejects.toThrow(
+      /^Cannot register the plugin of "\.with\(\.\.\.\)" #1 on the application's own server: its factory returned nothing/,
+    )
+  })
+
   // The application resolves and normalizes the base path whatever the server: taking it off a request is all
   // an adapter is left to do, so every adapter reads the same value.
   it.each([
@@ -211,8 +241,28 @@ describe('adapter types', () => {
     onFake().install(fakeFeature('fits'))
     createWebApplication().install(fakeFeature('anywhere'))
 
-    // @ts-expect-error an adapter that installs nothing takes no factory
+    // @ts-expect-error an adapter that installs nothing takes only a factory that mounts
     onBare().with(() => ({ unit: 'nothing' }))
+  })
+
+  it('takes a factory that only mounts on any adapter, and nowhere but .with(...)', () => {
+    const free = new Router('/free').get('/', () => 1)
+    const mountOnly = ({ app }: HTTPSetupContext) => app.mount(free)
+
+    createWebApplication().with(mountOnly)
+    onFake().with(mountOnly)
+    onBare().with(mountOnly)
+
+    // @ts-expect-error a factory hands back what it installs, or the application it mounted on
+    createWebApplication().with(() => {})
+
+    // @ts-expect-error a factory that mounted and forgot to return
+    createWebApplication().with(({ app }) => {
+      app.mount(free)
+    })
+
+    // @ts-expect-error a router's plugin factory runs once routing is built, so it installs and never only mounts
+    newRouter('/p').plugin(mountOnly)
   })
 
   it('takes the hook names the adapter declares, and no others', () => {

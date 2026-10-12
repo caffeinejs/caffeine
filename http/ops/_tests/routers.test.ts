@@ -12,6 +12,7 @@ import {
   type Guard,
   type GuardInput,
   Guards,
+  type HTTPSetupContext,
   Ops,
   RouteBuilder,
   bindTo,
@@ -235,5 +236,73 @@ describe('ops routers with middleware, guards and plugins', () => {
     const missingOnMain = await at('main', '/nothing-here')
     expect(missing.status).toBe(404)
     expect(await missing.json()).toEqual(await missingOnMain.json())
+  })
+
+  describe("a router an ops server's plugin factory mounts", () => {
+    // What keeps an ops server's routes, DevTools' among them, off the application's public port.
+    it("is served on that ops server, bound to it, and not on the application's own", async () => {
+      app = createWebApplication()
+        .install(
+          Ops('admin', o =>
+            o
+              .server(() => ({ listener }))
+              .with(({ app: application }) => application.mount(newRouter('/mounted').get('/', () => ({ ok: true })))),
+          ),
+        )
+        .server(() => ({ listener })) as WebApplication
+
+      await app.run()
+
+      expect(await (await at('admin', '/mounted')).json()).toEqual({ ok: true })
+      expect((await at('main', '/mounted')).status).toBe(404)
+      expect(app.routeGroups.find(group => group.path === '/mounted')?.boundTo).toBe('admin')
+    })
+
+    it('is served where its binding says, as one the application mounts', async () => {
+      app = createWebApplication()
+        .install(
+          Ops('admin', o =>
+            o.with(({ app: application }) =>
+              application.mount(
+                newRouter('/elsewhere')
+                  .with(bindTo('metrics'))
+                  .get('/', () => ({ ok: true })),
+              ),
+            ),
+          ),
+        )
+        .install(Ops('metrics')) as WebApplication
+
+      await app.bootstrap()
+
+      expect((await app.ops.get('metrics')!.fetch('/elsewhere')).status).toBe(200)
+      expect((await app.ops.get('admin')!.fetch('/elsewhere')).status).toBe(404)
+    })
+
+    // Bound by nesting it, not by labelling it, so neither server takes the router from the other. Its plugins are a
+    // router's own, resolved once and installed wherever its routes are served.
+    it("serves one router two ops servers' factories mount on both, resolving its plugins once", async () => {
+      let resolved = 0
+      const shared = newRouter('/shared')
+        .plugin(() => {
+          resolved++
+          return marking('x-shared')()
+        })
+        .get('/', () => ({ ok: true }))
+      const mountShared = ({ app: application }: HTTPSetupContext) => application.mount(shared)
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.with(mountShared)))
+        .install(Ops('metrics', o => o.with(mountShared))) as WebApplication
+
+      await app.bootstrap()
+
+      for (const name of ['admin', 'metrics']) {
+        const res = await app.ops.get(name)!.fetch('/shared')
+        expect(res.status).toBe(200)
+        expect(res.headers.get('x-shared')).toBe('yes')
+      }
+      expect(resolved).toBe(1)
+    })
   })
 })

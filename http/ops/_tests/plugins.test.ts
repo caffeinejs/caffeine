@@ -126,8 +126,8 @@ describe("an ops server's own plugins and middleware", () => {
     expect(onMain.headers.get('x-built-middleware')).toBeNull()
   })
 
-  // A plugin on one server reads what another serves: the table is compiled before any server is built. A group a
-  // plugin adds with `$route` is that server's own, and stays out of it.
+  // A plugin on one server reads what another serves: the table is compiled before any server is built, the routers
+  // plugin factories mount included. A group a plugin adds with `$route` is that server's own, and stays out of it.
   it("hands its factories the application's route table, each group with the server it is bound to", async () => {
     let table: readonly RouteGroup<unknown>[] | undefined
 
@@ -158,6 +158,7 @@ describe("an ops server's own plugins and middleware", () => {
           { name: 'adds-a-group' },
         ),
       )
+      .with(({ app: application }) => application.mount(newRouter('/mounted').get('/', () => ({ mounted: true }))))
       .mount(jobs(), api()) as WebApplication
 
     await app.bootstrap()
@@ -169,6 +170,7 @@ describe("an ops server's own plugins and middleware", () => {
     expect(groups).toEqual([
       ['/api', undefined],
       ['/jobs', 'admin'],
+      ['/mounted', undefined],
     ])
   })
 
