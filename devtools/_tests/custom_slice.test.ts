@@ -1,4 +1,4 @@
-import { $p, RouteBuilder, type WebApplication } from '@caffeinejs/http'
+import { Router, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { info, type DevToolsIndex, type DevToolsSlice } from '../index.js'
@@ -11,20 +11,12 @@ class JobQueue {
 /** A slice from outside this package, as a third-party package would ship one. */
 const jobs: DevToolsSlice = {
   id: 'jobs',
-  routes: ({ container }) => {
+  router: ({ container }) => {
     const queue = container.get(JobQueue)
 
-    return [
-      new RouteBuilder()
-        .method('GET')
-        .path('/')
-        .handle(() => ({ pending: queue.jobs.size })),
-      new RouteBuilder()
-        .method('GET')
-        .path('/:id')
-        .parameters([$p.param('id')])
-        .handle((id: unknown) => queue.jobs.get(String(id)) ?? { id, state: 'unknown' }),
-    ]
+    return new Router()
+      .get('/', () => ({ pending: queue.jobs.size }))
+      .get('/:id', ctx => queue.jobs.get(ctx.req.param().id) ?? { id: ctx.req.param().id, state: 'unknown' })
   },
 }
 
@@ -60,7 +52,7 @@ describe('a slice from outside the package', () => {
     expect(await (await get(app, '/devtools/jobs/42', OPERATOR)).json()).toEqual({ id: '42', state: 'running' })
   })
 
-  // `routes` runs at start-up: what a slice cannot resolve fails `bootstrap()`, not the first request.
+  // `router` runs at start-up: what a slice cannot resolve fails `bootstrap()`, not the first request.
   it('fails start-up when what it resolves is missing', async () => {
     app = target({ devtools: d => d.slices(jobs) })
 

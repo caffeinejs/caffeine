@@ -1,24 +1,19 @@
-import { RouteBuilder, routeURL, type Route, type RouteGroup } from '@caffeinejs/http'
+import { Router, routeURL, type Route, type RouteGroup } from '@caffeinejs/http'
 
 import type { DevToolsSlice } from '../slice.js'
 import type { DevToolsRoute, DevToolsRoutesReport } from '../wire.js'
 
 /**
- * The routes the application's controllers and routers declared, on every server, `GET <path>/routes`, each group
- * naming the ops server it is bound to. A path is the one the server matches, without the application's base path.
+ * Every group in the application's route table, on every server, `GET <path>/routes`, each naming the ops server it
+ * is bound to: the controllers', and the routers mounted by the application or by a plugin factory, DevTools' own and
+ * an OpenAPI document's among them. A path is the one the server matches, without the application's base path.
  *
- * What a plugin registers on a server itself is not listed: DevTools' own endpoints, the health probes, an OpenAPI
- * document, static files.
+ * A route a plugin registers straight on a server is not listed: the health probes, the OIDC routes, static files.
  */
 export function routes(): DevToolsSlice {
   return {
     id: 'routes',
-    routes: ({ routeGroups }) => [
-      new RouteBuilder()
-        .method('GET')
-        .path('/')
-        .handle(() => report(routeGroups)),
-    ],
+    router: ({ routeGroups }) => new Router().get('/', () => report(routeGroups)),
   }
 }
 

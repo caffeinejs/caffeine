@@ -17,7 +17,7 @@ import {
   Identity,
   Ops,
   Principal,
-  RouteBuilder,
+  Router,
   authentication,
   createWebApplication,
   healthProbes,
@@ -107,15 +107,10 @@ const tasks = newRouter('/tasks')
 // package or an application wants to expose is one more `DevToolsSlice`.
 const taskSlice: DevToolsSlice = {
   id: 'tasks',
-  routes: ({ container }) => {
+  router: ({ container }) => {
     const store = container.get(TaskStore)
 
-    return [
-      new RouteBuilder()
-        .method('GET')
-        .path('/')
-        .handle(() => ({ count: store.list().length, tasks: store.list() })),
-    ]
+    return new Router().get('/', () => ({ count: store.list().length, tasks: store.list() }))
   },
 }
 

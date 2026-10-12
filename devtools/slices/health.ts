@@ -1,4 +1,4 @@
-import { RouteBuilder } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
 import { ApplicationAvailability, ApplicationHealth, type ProbeResult } from '@caffeinejs/std/health'
 
 import type { DevToolsSlice } from '../slice.js'
@@ -14,37 +14,32 @@ import type { DevToolsHealthReport, DevToolsProbe } from '../wire.js'
 export function health(): DevToolsSlice {
   return {
     id: 'health',
-    routes: ({ container }) => {
+    router: ({ container }) => {
       // Resolved at start-up: building the service is what refuses a non-singleton indicator.
       const health = container.get(ApplicationHealth)
       const availability = container.get(ApplicationAvailability)
 
-      return [
-        new RouteBuilder()
-          .method('GET')
-          .path('/')
-          .handle(async (): Promise<DevToolsHealthReport> => {
-            const [liveness, readiness, startup] = await Promise.all([
-              health.liveness(),
-              health.readiness(),
-              health.startup(),
-            ])
+      return new Router().get('/', async (): Promise<DevToolsHealthReport> => {
+        const [liveness, readiness, startup] = await Promise.all([
+          health.liveness(),
+          health.readiness(),
+          health.startup(),
+        ])
 
-            return {
-              availability: {
-                live: availability.live,
-                ready: availability.ready,
-                started: availability.started,
-                draining: availability.draining,
-                livenessReason: availability.livenessReason,
-                readinessReason: availability.readinessReason,
-              },
-              liveness: probe(liveness),
-              readiness: probe(readiness),
-              startup: probe(startup),
-            }
-          }),
-      ]
+        return {
+          availability: {
+            live: availability.live,
+            ready: availability.ready,
+            started: availability.started,
+            draining: availability.draining,
+            livenessReason: availability.livenessReason,
+            readinessReason: availability.readinessReason,
+          },
+          liveness: probe(liveness),
+          readiness: probe(readiness),
+          startup: probe(startup),
+        }
+      })
     },
   }
 }

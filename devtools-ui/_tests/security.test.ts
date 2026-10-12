@@ -1,6 +1,6 @@
 import { bindings, info, routes } from '@caffeinejs/devtools'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { RouteBuilder, newRouter, type WebApplication } from '@caffeinejs/http'
+import { Router, newRouter, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { page, startTarget, startUI, upstream, type Upstream } from './fixtures.js'
@@ -30,12 +30,7 @@ describe('the UI and what an application sends it', () => {
       devtools: d =>
         d.slices(bindings(), routes(), info(), {
           id: 'evil',
-          routes: () => [
-            new RouteBuilder()
-              .method('GET')
-              .path('/')
-              .handle(() => ({ note: PAYLOAD })),
-          ],
+          router: () => new Router().get('/', () => ({ note: PAYLOAD })),
         }),
       configure: app => {
         app.mount(

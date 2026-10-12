@@ -1,4 +1,4 @@
-import { RouteBuilder, type HTTPPluginConfigurer } from '@caffeinejs/http'
+import { Router, type HTTPPluginConfigurer } from '@caffeinejs/http'
 import type { ConfigStore } from '@caffeinejs/std/config'
 
 import type { DevToolsSlice } from '../slice.js'
@@ -56,18 +56,13 @@ export function configuration<C = unknown>(
 ): DevToolsSlice<C> {
   return {
     id: 'configuration',
-    routes: context => {
+    router: context => {
       const builder = new ConfigurationSliceBuilder()
       configure?.(builder, context)
 
       const options = builder[kBuild]()
 
-      return [
-        new RouteBuilder()
-          .method('GET')
-          .path('/')
-          .handle(() => report(context.store, options)),
-      ]
+      return new Router().get('/', () => report(context.store, options))
     },
   }
 }

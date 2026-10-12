@@ -1,5 +1,5 @@
 import { info } from '@caffeinejs/devtools'
-import { RouteBuilder, type WebApplication } from '@caffeinejs/http'
+import { Router, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { PROTECTED, closedPort, page, startTarget, startUI, upstream, type Target, type Upstream } from './fixtures.js'
@@ -70,12 +70,8 @@ describe('the UI when an application fails it', () => {
       devtools: d =>
         d.slices(info(), {
           id: 'slow',
-          routes: () => [
-            new RouteBuilder()
-              .method('GET')
-              .path('/')
-              .handle(() => new Promise(resolve => setTimeout(() => resolve({ late: true }), 1000))),
-          ],
+          router: () =>
+            new Router().get('/', () => new Promise(resolve => setTimeout(() => resolve({ late: true }), 1000))),
         }),
     })
     const view = await ui({ orders: { url: orders.url, timeout: '200ms' } })

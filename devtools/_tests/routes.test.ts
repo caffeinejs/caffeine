@@ -9,8 +9,7 @@ import {
   newRouter,
   type WebApplication,
 } from '@caffeinejs/http'
-import type { FastifyInstance, RouteOptions } from 'fastify'
-import fp from 'fastify-plugin'
+import type { RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { devTools, type DevToolsRoute, type DevToolsRoutesReport } from '../index.js'
@@ -89,25 +88,21 @@ describe('the routes slice', () => {
     expect(find(routesReport, '/open')?.authorization).toMatchObject({ hasProtection: false, roles: [] })
   })
 
-  // A client links a reported route to the server's, so a path has to be the URL the server registered.
-  it('names each route by the URL its server registered it on, and leaves out what plugins add', async () => {
+  // A client links a reported route to the server's, so a path has to be the URL the server registered. DevTools'
+  // own routes are mounted like any router, so they are listed; a route a plugin registers straight on a server is not.
+  it("names each route by the URL its server registered it on, DevTools' own included, and leaves out raw routes", async () => {
     const registered = new Set<string>()
 
     app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
       .install(Ops('devtools', o => o.server(() => ({ listener })).with(devTools())))
       .server(() => ({ listener }))
-      .with(() =>
-        fp(
-          async (instance: FastifyInstance) => {
-            instance.addHook('onRoute', (route: RouteOptions) => {
-              if (route.config?.$caffeine?.compiled !== undefined) {
-                registered.add(route.url)
-              }
-            })
-          },
-          { name: 'route-probe' },
-        ),
-      )
+      .serverCallback((_context, instance) => {
+        instance.addHook('onRoute', (route: RouteOptions) => {
+          if (route.config?.$caffeine?.compiled !== undefined) {
+            registered.add(route.url)
+          }
+        })
+      })
       .with(healthProbes())
       .mount(
         newRouter('/').get('/', () => ({})),
@@ -118,10 +113,19 @@ describe('the routes slice', () => {
       ) as WebApplication
 
     const { groups } = await report()
-    const reported = new Set(groups.flatMap(group => group.routes.map(route => route.path)))
+    const pathsOn = (server: string | undefined) =>
+      groups.filter(group => group.server === server).flatMap(group => group.routes.map(route => route.path))
 
-    expect(reported).toEqual(registered)
-    expect(reported.has('/livez')).toBe(false)
-    expect([...reported].some(path => path.startsWith('/devtools'))).toBe(false)
+    expect(new Set(pathsOn(undefined))).toEqual(registered)
+    expect(pathsOn(undefined)).not.toContain('/livez')
+    expect(pathsOn('devtools')).toEqual([
+      '/devtools',
+      '/devtools/bindings',
+      '/devtools/graph',
+      '/devtools/routes',
+      '/devtools/health',
+      '/devtools/info',
+      '/devtools/configuration',
+    ])
   })
 })

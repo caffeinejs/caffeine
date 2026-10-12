@@ -27,7 +27,7 @@ createWebApplication()
 
 `GET /devtools` lists what is served, each slice under it: `/devtools/bindings`, `/devtools/graph`, and so on.
 `devTools(d => d.slices(...))` picks the slices, and a slice of an application's own is one more value with an `id`
-and its routes: the UI shows a slice it has no page for as the JSON it answers with.
+and its router: the UI shows a slice it has no page for as the JSON it answers with.
 
 ## Run the UI
 

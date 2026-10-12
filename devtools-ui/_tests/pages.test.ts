@@ -1,6 +1,6 @@
 import { bindings, configuration, graph, health, info, routes, type DevToolsBindingsReport } from '@caffeinejs/devtools'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Ops, RouteBuilder, bindTo, newRouter, type WebApplication } from '@caffeinejs/http'
+import { Ops, Router, bindTo, newRouter, type WebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { HealthIndicator, down, type HealthReport } from '@caffeinejs/std/health'
@@ -157,6 +157,11 @@ describe('the UI pages', () => {
     const routesPage = await page(await ui({ orders: { url: orders.url } }), '/orders/routes')
     const own = routesPage.text.indexOf("<h2>The application's server</h2>")
     const admin = routesPage.text.indexOf('<h2>Ops server "admin"</h2>')
+    const sectionOf = (heading: string) => {
+      const start = routesPage.text.indexOf(heading)
+      const next = routesPage.text.indexOf('<h2>', start + heading.length)
+      return start === -1 ? '' : routesPage.text.slice(start, next === -1 ? undefined : next)
+    }
 
     expect(routesPage.status).toBe(200)
     expect(own).toBeGreaterThan(-1)
@@ -164,6 +169,10 @@ describe('the UI pages', () => {
     expect(routesPage.text.indexOf('<code>/pets</code>')).toBeGreaterThan(own)
     expect(routesPage.text.indexOf('<code>/pets</code>')).toBeLessThan(admin)
     expect(routesPage.text.indexOf('<code>/jobs</code>')).toBeGreaterThan(admin)
+
+    // DevTools' own endpoints are mounted like any router, so the page lists them under the server serving them.
+    expect(sectionOf('<h2>Ops server "devtools"</h2>')).toContain('<code>/devtools/routes</code>')
+    expect(sectionOf("<h2>The application's server</h2>")).not.toContain('<code>/devtools/routes</code>')
   })
 
   it('shows health with each indicator, and the process', async () => {
@@ -214,12 +223,7 @@ describe('the UI pages', () => {
       devtools: d =>
         d.slices(info(), {
           id: 'jobs',
-          routes: () => [
-            new RouteBuilder()
-              .method('GET')
-              .path('/')
-              .handle(() => ({ pending: 3, queues: ['mail'] })),
-          ],
+          router: () => new Router().get('/', () => ({ pending: 3, queues: ['mail'] })),
         }),
     })
 

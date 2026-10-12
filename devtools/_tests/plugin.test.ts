@@ -1,10 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Ops, collectRouteGroups, createWebApplication, type RouteGroup, type WebApplication } from '@caffeinejs/http'
+import { Ops, Router, createWebApplication, type WebApplication } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { devTools, info, type DevToolsBuilder, type DevToolsIndex } from '../index.js'
@@ -108,7 +106,7 @@ describe('devTools()', () => {
     ],
     [
       'a slice id that is not lower-case letters, digits and "-"',
-      d => d.slices({ id: 'Bad_Id', routes: () => [] }),
+      d => d.slices({ id: 'Bad_Id', router: () => new Router() }),
       /^Cannot serve DevTools slice "Bad_Id": the id is not lower-case letters, digits and "-"/,
     ],
     ['two slices sharing an id', d => d.slices(info(), info()), /^Cannot serve DevTools slice "info" twice/],
@@ -127,35 +125,34 @@ describe('devTools()', () => {
   })
 
   // A reader describing a server's API, an OpenAPI document for one, leaves an internal group out.
-  it('marks every group it adds internal', async () => {
-    let collected: (() => RouteGroup[]) | undefined
-
-    app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })
-      .install(
-        Ops('devtools', o =>
-          o
-            .server(() => ({ listener }))
-            .with(() =>
-              fp(
-                async (instance: FastifyInstance) => {
-                  collected = collectRouteGroups(instance)
-                },
-                { name: 'route-probe' },
-              ),
-            )
-            .with(devTools()),
-        ),
-      )
-      .server(() => ({ listener })) as WebApplication
+  it('marks every group it mounts internal, each named for its slice', async () => {
+    app = target()
     await app.bootstrap()
 
-    const groups = collected!()
+    const groups = app.routeGroups.filter(group => group.boundTo === 'devtools')
 
-    // The index and the six built-ins.
-    expect(groups).toHaveLength(7)
+    expect(groups.map(group => group.name)).toEqual([
+      'devtools',
+      'devtools:bindings',
+      'devtools:graph',
+      'devtools:routes',
+      'devtools:health',
+      'devtools:info',
+      'devtools:configuration',
+    ])
 
     for (const group of groups) {
       expect(group.detail?.http?.internal, group.name).toBe(true)
     }
+  })
+
+  // Mounted on the server it is registered on: the application's own server, and its public port, never answer for it.
+  it("is served on the server it is registered on, and not on the application's own", async () => {
+    app = target()
+    await app.bootstrap()
+
+    expect((await get(app, '/devtools')).status).toBe(200)
+    expect((await app.fetch('/devtools')).status).toBe(404)
+    expect((await app.fetch('/devtools/info')).status).toBe(404)
   })
 })

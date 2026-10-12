@@ -1,6 +1,6 @@
 import type { Container } from '@caffeinejs/di'
 import { buildBindingGraph } from '@caffeinejs/di/graph'
-import { RouteBuilder } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
 
 import type { DevToolsSlice } from '../slice.js'
 import type { DevToolsBinding, DevToolsBindingsReport } from '../wire.js'
@@ -12,12 +12,7 @@ import type { DevToolsBinding, DevToolsBindingsReport } from '../wire.js'
 export function bindings(): DevToolsSlice {
   return {
     id: 'bindings',
-    routes: ({ container }) => [
-      new RouteBuilder()
-        .method('GET')
-        .path('/')
-        .handle(() => report(container)),
-    ],
+    router: ({ container }) => new Router().get('/', () => report(container)),
   }
 }
 

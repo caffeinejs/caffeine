@@ -1,4 +1,4 @@
-import { RouteBuilder } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
 
 import type { DevToolsSlice } from '../slice.js'
 import type { DevToolsInfoReport } from '../wire.js'
@@ -10,23 +10,19 @@ import type { DevToolsInfoReport } from '../wire.js'
 export function info(): DevToolsSlice {
   return {
     id: 'info',
-    routes: ({ name, store }) => [
-      new RouteBuilder()
-        .method('GET')
-        .path('/')
-        .handle((): DevToolsInfoReport => {
-          const { rss, heapTotal, heapUsed, external, arrayBuffers } = process.memoryUsage()
+    router: ({ name, store }) =>
+      new Router().get('/', (): DevToolsInfoReport => {
+        const { rss, heapTotal, heapUsed, external, arrayBuffers } = process.memoryUsage()
 
-          return {
-            name,
-            profiles: [...store.profiles],
-            node: process.version,
-            platform: process.platform,
-            pid: process.pid,
-            uptime: process.uptime(),
-            memory: { rss, heapTotal, heapUsed, external, arrayBuffers },
-          }
-        }),
-    ],
+        return {
+          name,
+          profiles: [...store.profiles],
+          node: process.version,
+          platform: process.platform,
+          pid: process.pid,
+          uptime: process.uptime(),
+          memory: { rss, heapTotal, heapUsed, external, arrayBuffers },
+        }
+      }),
   }
 }

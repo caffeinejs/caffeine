@@ -1,14 +1,12 @@
 import {
   AuthenticationService,
-  RouteBuilder,
+  Router,
+  type AdapterExtensionFactory,
   type HTTPPluginConfigurer,
-  type HTTPPluginFactory,
   type RouteAuthzOptions,
-  type RouteGroupBuilder,
+  type SetupApplication,
 } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/framework/err'
-import type { FastifyInstance } from 'fastify'
-import fp from 'fastify-plugin'
 
 import { ErrDevToolsConfiguration } from './errors.js'
 import type { DevToolsConfig } from './options.js'
@@ -165,10 +163,14 @@ export class DevToolsBuilder<C = unknown> {
  * out. Without `authorize(...)` the routes declare nothing and answer to the application's fallback policy; with
  * authentication installed, that is warned about once unless `public()` says it is intended.
  *
+ * It mounts one router on the server it is registered on, through `context.app`, and installs nothing else there.
+ *
  * @throws ErrDevToolsConfiguration at start-up, for a path that does not start with "/", a slice id that is not
  *   lower-case letters, digits and "-", two slices sharing an id, or `public()` alongside `authorize(...)`.
  */
-export function devTools<C = unknown>(configure?: HTTPPluginConfigurer<DevToolsBuilder<C>, C>): HTTPPluginFactory<C> {
+export function devTools<C = unknown>(
+  configure?: HTTPPluginConfigurer<DevToolsBuilder<C>, C>,
+): AdapterExtensionFactory<SetupApplication, C> {
   return context => {
     const builder = new DevToolsBuilder<C>()
     configure?.(builder, context)
@@ -187,40 +189,22 @@ export function devTools<C = unknown>(configure?: HTTPPluginConfigurer<DevToolsB
       )
     }
 
-    // Built here, at start-up: a slice resolves what it reads while building its routes, so a misconfiguration
-    // fails before anything listens.
-    const groups = slices.map(slice => ({ id: slice.id, routes: slice.routes(context) }))
     const index: DevToolsIndex = { slices: slices.map(slice => ({ id: slice.id, href: `${base}/${slice.id}` })) }
+    const root = shared(new Router(base).name('devtools'), authorizations).get('/', () => index)
 
-    return fp(
-      async (instance: FastifyInstance) => {
-        instance.$route('devtools', router => {
-          group(router, base, authorizations).routes(
-            new RouteBuilder()
-              .method('GET')
-              .path('/')
-              .handle(() => index),
-          )
-        })
+    // Built here, at start-up: a slice resolves what it reads while building its router, so a misconfiguration
+    // fails before anything listens. Nested in the root, each slice's routes inherit what the root declares.
+    for (const slice of slices) {
+      root.mount(`/${slice.id}`, slice.router(context).name(`devtools:${slice.id}`))
+    }
 
-        for (const { id, routes } of groups) {
-          instance.$route(`devtools:${id}`, router => {
-            group(router, `${base}/${id}`, authorizations).routes(routes)
-          })
-        }
-      },
-      { name: 'caffeine-devtools' },
-    )
+    return context.app.mount(root)
   }
 }
 
-/** What every DevTools group shares. It is the plugin's to set, so no slice can loosen it. */
-function group(
-  router: RouteGroupBuilder,
-  path: string,
-  authorizations: readonly RouteAuthzOptions[],
-): RouteGroupBuilder {
-  router.path(path).produces('application/json').header('cache-control', 'no-store').detail('http', { internal: true })
+/** What every DevTools route shares, declared on the router every slice is nested in. It is the plugin's to set. */
+function shared<R extends Router<any, any, any, any, any>>(router: R, authorizations: readonly RouteAuthzOptions[]): R {
+  router.produces('application/json').header('cache-control', 'no-store').detail('http', { internal: true })
 
   // Only what was declared: routing reads any declaration, an empty one included, as protection.
   for (const authorization of authorizations) {
