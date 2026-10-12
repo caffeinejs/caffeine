@@ -95,7 +95,7 @@ When in doubt on **code** scope, run `make check`. A README next to a TypeScript
 - A generated `*.gen.ts` file is compiled like any source, so no `tsconfig.build.json` excludes it, but coverage and analysis leave it out: its source is measured where it lives.
 - `npm run build` is `tsc --build tsconfig.build.json`; `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental. Never edit `dist/` by hand.
 - A green `npm run build` says nothing about tests: only a check project reads a test file. Vitest type-checks only where a config turns it on (`brewer/` and `testing/`, through their own `tsconfig.vitest.json`); `npm test` elsewhere runs tests it never type-checked.
-- `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `examples/**` are type-checked by nothing.
+- `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `examples/**` are type-checked by their own `build` scripts, which `build:examples` runs inside `make check`: each one runs `tsc` on a `noEmit` `tsconfig.json` that includes the example's tests.
 - Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts`. There is no `source` condition and no `paths` map, so a type-check needs the dependency `dist/` to exist: build first.
 - The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
 
