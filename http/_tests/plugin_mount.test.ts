@@ -264,6 +264,59 @@ describe('a router a plugin factory mounts', () => {
       })
     })
 
+    // avvio calls a plugin from `process.nextTick` with no `try`: thrown from this body, the refusal would end the
+    // process. A start that is failing sets no further server up.
+    it("refuses a mount from a router's callback-style plugin, failing the start before the next server", async () => {
+      let opsSetUp = false
+
+      app = createWebApplication()
+        .install(
+          Ops('admin', o =>
+            o.with(context => {
+              opsSetUp = true
+              return context.app
+            }),
+          ),
+        )
+        .mount(
+          newRouter('/owner')
+            .plugin(context =>
+              fp(
+                (_instance, _options, done) => {
+                  context.app.mount(new Router('/sneaked').get('/', () => 'sneaked'))
+                  done()
+                },
+                { name: 'owner-callback-plugin' },
+              ),
+            )
+            .get('/', () => 'owner'),
+        ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CONFIGURATION',
+        message: expect.stringMatching(refusal),
+      })
+      expect(opsSetUp).toBe(false)
+    })
+
+    // The code that mounted goes on without its routers, so what fails after it is a consequence: here, the adapter
+    // refusing the handle the factory handed back as its plugin.
+    it('reports the refused mount, not what failed after it', async () => {
+      const mountOnly = ({ app: application }: HTTPSetupContext) =>
+        application.mount(new Router('/sneaked').get('/', () => 'sneaked'))
+
+      app = createWebApplication().mount(
+        newRouter('/owner')
+          .plugin(mountOnly as never)
+          .get('/', () => 'owner'),
+      ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CONFIGURATION',
+        message: expect.stringMatching(refusal),
+      })
+    })
+
     it('refuses a mount once the application has started, at once', async () => {
       let kept: HTTPSetupContext | undefined
 

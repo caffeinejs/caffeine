@@ -380,7 +380,7 @@ app.mount(pets) // before app.bootstrap()
   A factory that also installs a plugin mounts, then returns the plugin; the plugin may mount too, while it loads.
   Registered on an ops server, the factory serves the router on that server, and a router bound to another server
   fails start-up. Mount from a factory or its plugin, not from a hook, a handler or a router's plugin: by then the
-  server is routed, and `mount` is refused.
+  server is routed, so the mount fails start-up, or throws once the application has started.
 - `fst({ ... })` is the Fastify escape hatch: lifecycle hooks, `attachValidation`, `logLevel`, custom compilers —
   everything Fastify takes except what the router already decides (`method`, `url`, `schema`, `config`, `handler`,
   `bodyLimit`, `handlerTimeout`).

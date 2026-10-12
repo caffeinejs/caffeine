@@ -54,6 +54,10 @@ export interface ServerSetupInput<T extends AdapterTypes> {
  */
 export class ServerSet<T extends AdapterTypes> {
   readonly #entries: Entry<T>[]
+  #settingUp = false
+  // The first mount refused while the servers are set up. Thrown where it was called, it could land in a
+  // callback-style plugin body, which avvio calls from `process.nextTick` with no `try`, and end the process.
+  #held: ErrConfiguration | undefined
 
   /** @param definitions - The application's own first, then the named ones in install order. */
   constructor(definitions: readonly ServerDefinition<T>[]) {
@@ -81,30 +85,52 @@ export class ServerSet<T extends AdapterTypes> {
 
   /**
    * Mounts routers on the server named `name`, `undefined` for the application's own, for its routing pass to
-   * declare.
+   * declare. Once that server is routed, the mount is refused: during {@link setup}, the refusal is held and fails it
+   * once the server being set up is built; after it, the refusal is thrown.
    *
-   * @throws ErrConfiguration once that server is routed.
+   * @throws ErrConfiguration once that server is routed and setup is over.
    */
   mount(name: string | undefined, routers: readonly AnyRouter[]): void {
     const entry = this.#entries.find(candidate => candidate.definition.name === name)!
 
-    if (entry.routed) {
-      throw alreadyRouted(name)
+    if (!entry.routed) {
+      entry.definition.routers.push(...routers)
+      return
     }
 
-    entry.definition.routers.push(...routers)
+    if (this.#settingUp) {
+      this.#held ??= alreadyRouted(name)
+      return
+    }
+
+    throw alreadyRouted(name)
   }
 
   /**
    * Builds every server through `adapter`, one after another: a server's settings, then its factories, then its
    * build, in which the adapter routes it.
    *
+   * @throws ErrConfiguration for the first mount refused meanwhile, once the server being set up is built, and in
+   *   place of whatever failed after it: the code that mounted went on without its routers.
    * @throws ErrCaffeineWebApplication with code `ERR_HTTP_ADAPTER_ROUTING` for an adapter that never routed a server,
    *   or routed one twice.
    */
   async setup(adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<void> {
-    for (const entry of this.#entries) {
-      await this.#build(entry, adapter, input)
+    this.#settingUp = true
+
+    try {
+      for (const entry of this.#entries) {
+        await this.#build(entry, adapter, input)
+
+        if (this.#held !== undefined) {
+          throw this.#held
+        }
+      }
+    } catch (err) {
+      throw this.#held ?? err
+    } finally {
+      this.#settingUp = false
+      this.#held = undefined
     }
   }
 

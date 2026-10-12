@@ -124,6 +124,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   server's pass nests a router that names no server in one bound to that server (`servedOn`,
   `routing/programmatic/bind.ts`), never labels the router itself, and refuses one bound to another server. A
   factory that only mounts returns `context.app`; one returning nothing is refused before its server is built.
+- `mount` never throws while the servers are set up. avvio calls a plugin from `process.nextTick` with no `try`
+  (`node_modules/avvio/lib/plugin.js`), so a throw from a callback-style plugin's body ends the process. `ServerSet`
+  holds the first refusal and fails setup with it once the server being set up is built, in place of whatever failed
+  after it. After setup, `mount` throws.
 
 ## Servers
 

@@ -233,8 +233,11 @@ export interface SetupApplication {
    * names no server is served on this one. On the application's own server, a router bound with `bindTo(name)` is
    * served on that ops server; on an ops server, one bound to another server fails `bootstrap()`.
    *
-   * @throws ErrConfiguration once that server is routed: from a hook, a handler, a router's or a controller's plugin
-   *   factory, or another server's plugin.
+   * A mount once that server is routed, from a hook, a router's or a controller's plugin, or another server's plugin,
+   * is refused. During start-up the refusal is never thrown, since a throw from a callback-style plugin's body would
+   * end the process: it fails `bootstrap()` once the server being set up is built.
+   *
+   * @throws ErrConfiguration once the application has started.
    */
   readonly mount: (...routers: Router<any, any, any, any, any, any>[]) => SetupApplication
 }

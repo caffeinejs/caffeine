@@ -443,7 +443,8 @@ export class WebApplication<
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
    * whole surface a generated client would call. A router bound to another adapter does not compile.
    *
-   * @throws ErrConfiguration once the application's own server is routed.
+   * @throws ErrConfiguration once the application has started. During start-up, a mount once the application's own
+   *   server is routed fails {@link bootstrap} instead.
    */
   mount<const RS extends ReadonlyArray<Router<any, any, any, any, any, T>>>(
     ...routers: RS

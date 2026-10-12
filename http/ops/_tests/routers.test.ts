@@ -271,6 +271,38 @@ describe('ops routers with middleware, guards and plugins', () => {
       expect((await app.ops.get('admin')!.fetch('/twice')).status).toBe(200)
     })
 
+    // avvio calls a plugin from `process.nextTick` with no `try`: thrown from this body, the refusal would end the
+    // process.
+    it("refuses a mount on the application's own server from its callback-style plugin, failing the start", async () => {
+      let own: HTTPSetupContext | undefined
+
+      app = createWebApplication()
+        .with(context => {
+          own = context
+          return context.app
+        })
+        .install(
+          Ops('admin', o =>
+            o.with(() =>
+              fp(
+                (_instance, _options, done) => {
+                  own!.app.mount(newRouter('/stray').get('/', () => ({ ok: true })))
+                  done()
+                },
+                { name: 'ops-stray-mount' },
+              ),
+            ),
+          ),
+        ) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CONFIGURATION',
+        message: expect.stringMatching(
+          /^Cannot mount a router on the application's own server: its routing has already been built/,
+        ),
+      })
+    })
+
     // avvio does not catch a callback-style plugin's throw, so a plugin that loads before its server is routed mounts
     // there rather than being refused.
     it('serves what the callback-style plugin its factory returned mounts', async () => {
