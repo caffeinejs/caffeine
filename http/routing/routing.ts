@@ -41,35 +41,45 @@ export interface DeclaredRouteGroup<R> {
 /** The labels a group carries, keyed by whoever reads them. Empty when nothing labelled the group. */
 export type RouteGroupLabels = ReadonlyMap<symbol, unknown>
 
-/** What {@link buildRouting} produces: every declared group, compiled only once a server selects it. */
+/** What {@link buildRouting} produces: the groups declared so far, each compiled only once a server selects it. */
 export interface Routing<R> {
   /**
-   * Compiles every declared group whose labels `accept` takes, in the order the sources declared them.
+   * Declares the groups `sources` collect now, after every group declared before, and returns this call's groups in
+   * declaration order. Nothing compiles until a server selects them.
+   */
+  declare(...sources: RouteSource<R>[]): readonly DeclaredRouteGroup<R>[]
+
+  /**
+   * Compiles every declared group whose labels `accept` takes, in the order they were declared.
    *
    * @throws ErrConfiguration when `accept` takes a group an earlier call already selected: two servers would serve it.
    */
   select(accept: (labels: RouteGroupLabels) => boolean): RouteGroup<R>[]
-
-  /** The declared groups no {@link select} call has taken yet. */
-  unselected(): readonly DeclaredRouteGroup<R>[]
 }
 
 const kNoLabels: RouteGroupLabels = new Map()
 
 /**
- * Collects every router of the application, from every source, for the servers to select from.
+ * The routing of an application, with nothing declared yet: its sources are declared as their routers become known,
+ * and each server selects the groups bound to it.
  *
  * The shared state a route needs — the authorization configuration, the guard cache — is resolved once and
  * handed to every selection, so routes declared different ways and served by different servers still get one
  * guard instance per key and the same policies. Two sources claiming the same path on one server is left to the
  * server to reject at registration, which it does with the path in the message.
  */
-export function buildRouting<R>(sources: readonly RouteSource<R>[], container: Container): Routing<R> {
+export function buildRouting<R>(container: Container): Routing<R> {
   const compileRouteGroup = createRouteGroupCompiler(container)
-  const declared = sources.flatMap(source => source.collect(container))
+  const declared: DeclaredRouteGroup<R>[] = []
   const taken = new Set<DeclaredRouteGroup<R>>()
 
   return {
+    declare(...sources) {
+      const added = sources.flatMap(source => source.collect(container))
+      declared.push(...added)
+      return added
+    },
+
     select(accept) {
       const groups: RouteGroup<R>[] = []
 
@@ -98,10 +108,6 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
       }
 
       return groups
-    },
-
-    unselected() {
-      return declared.filter(group => !taken.has(group))
     },
   }
 }

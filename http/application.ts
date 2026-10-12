@@ -556,8 +556,9 @@ export class WebApplication<
         // is built, so a route that cannot compile fails before anything has started. Each server serves the routers
         // bound to it; the application's own, the unbound ones.
         this.#built = true
-        const routing = buildRouting<T['request']>(this.routeSources(), this.container)
-        this.#routeGroups.push(...servers.select(routing))
+        const routing = buildRouting<T['request']>(this.container)
+        const declared = routing.declare(...this.routeSources())
+        this.#routeGroups.push(...servers.select(routing, declared))
 
         return this.#scopedExtensions(context)
       },

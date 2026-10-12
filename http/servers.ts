@@ -15,7 +15,7 @@ import { boundTo } from './binding.js'
 import { ErrConfiguration } from './error/common.js'
 import { servedOn } from './routing/programmatic/bind.js'
 import type { RouteGroup } from './routing/route.js'
-import type { Routing } from './routing/routing.js'
+import type { DeclaredRouteGroup, Routing } from './routing/routing.js'
 import type { ServerDefinition } from './server_definition.js'
 
 /** One server: the definition it is built from, the routers selected for it, and what the adapter built. */
@@ -83,12 +83,17 @@ export class ServerSet<T extends AdapterTypes> {
   }
 
   /**
-   * Compiles the routers bound to each server, and refuses one bound to no server. Returns every group compiled,
-   * for the application's route table.
+   * Refuses a declared router bound to no server, then compiles the routers bound to each server. Returns every group
+   * compiled, for the application's route table.
    *
    * @throws ErrConfiguration for a router bound to a name no server has.
    */
-  select(routing: Routing<T['request']>): RouteGroup<T['request']>[] {
+  select(
+    routing: Routing<T['request']>,
+    declared: readonly DeclaredRouteGroup<T['request']>[],
+  ): RouteGroup<T['request']>[] {
+    assertEveryRouterServed(declared, this.names)
+
     const compiled: RouteGroup<T['request']>[] = []
 
     for (const entry of this.#entries) {
@@ -96,8 +101,6 @@ export class ServerSet<T extends AdapterTypes> {
       entry.groups = routing.select(labels => boundTo(labels) === name)
       compiled.push(...entry.groups)
     }
-
-    assertEveryRouterServed(routing, this.names)
 
     return compiled
   }
@@ -284,8 +287,11 @@ function foldCustomizers<T extends AdapterTypes>(
  * Refuses a router bound to a name no installed server has. Nothing would serve it, and serving it on the
  * application's own server instead would expose what its binding kept off that server.
  */
-function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly string[]): void {
-  const [unserved] = routing.unselected()
+function assertEveryRouterServed<R>(declared: readonly DeclaredRouteGroup<R>[], installed: readonly string[]): void {
+  const unserved = declared.find(group => {
+    const bound = boundTo(group.spec.labels)
+    return bound !== undefined && !installed.includes(bound)
+  })
 
   if (unserved === undefined) {
     return
