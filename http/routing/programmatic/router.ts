@@ -440,9 +440,10 @@ export class Router<
    * group's routes and the groups nested under it, and nowhere else.
    *
    * The same call the application takes, scoped. The factory runs once during start-up, with the same context an
-   * application's `.with(...)` factory gets, once routing is built, so it cannot mount routers. A router is written
-   * without knowing which application it will be mounted into, so the configuration there is typed `unknown`.
-   * Routing is built during start-up, so this has to be called before the application is ready.
+   * application's `.with(...)` factory gets, while the server this router is served on is routed, so it cannot mount
+   * routers. A router is written without knowing which application it will be mounted into, so the configuration
+   * there is typed `unknown`. Routing is built during start-up, so this has to be called before the application is
+   * ready.
    *
    * Only a router bound to an adapter takes one, since what it installs is that adapter's: `newRouter()` for
    * Fastify.

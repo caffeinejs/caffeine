@@ -90,26 +90,30 @@ describe('a router a plugin factory mounts', () => {
     ])
   })
 
-  // The table is complete before any server is built, so a plugin reads what every server's factories mounted. A
-  // factory finds it empty during its own call, since routing is built once every factory has run.
-  it("joins the route table, in the very array a factory kept, once every server's factories have run", async () => {
+  // Each server is routed once its plugins have loaded, the application's own first, so a factory and the plugin it
+  // returns see the servers routed before theirs, and the array they kept fills in as the others are.
+  it('fills the route table server by server, in the very array a factory kept', async () => {
     let kept: readonly RouteGroup<unknown>[] | undefined
-    let duringTheCall: string[] | undefined
-    let inThePlugin: string[] | undefined
+    let ownFactory: string[] | undefined
+    let ownPlugin: string[] | undefined
+    let opsFactory: string[] | undefined
 
     app = createWebApplication()
       .install(
         Ops('admin', o =>
-          o.with(({ app: application }) => application.mount(new Router('/ops-mounted').get('/', () => 'ops'))),
+          o.with(context => {
+            opsFactory = context.routeGroups.map(group => group.path)
+            return context.app.mount(new Router('/ops-mounted').get('/', () => 'ops'))
+          }),
         ),
       )
       .with(context => {
         kept = context.routeGroups
-        duringTheCall = context.routeGroups.map(group => group.path)
+        ownFactory = context.routeGroups.map(group => group.path)
 
         return fp(
           async () => {
-            inThePlugin = context.routeGroups.map(group => group.path)
+            ownPlugin = context.routeGroups.map(group => group.path)
           },
           { name: 'route-table-probe' },
         )
@@ -119,9 +123,38 @@ describe('a router a plugin factory mounts', () => {
 
     await app.bootstrap()
 
-    expect(duringTheCall).toEqual([])
-    expect(inThePlugin?.toSorted()).toEqual(['/declared', '/mounted', '/ops-mounted'])
+    expect(ownFactory).toEqual([])
+    expect(ownPlugin).toEqual([])
+    expect(opsFactory?.toSorted()).toEqual(['/declared', '/mounted'])
+    expect(app.routeGroups.map(group => group.path).toSorted()).toEqual(['/declared', '/mounted', '/ops-mounted'])
     expect(kept).toBe(app.routeGroups)
+  })
+
+  // A plugin loads before its server is routed, so the plugin a factory returns mounts like the factory itself,
+  // whichever style it is written in. avvio does not catch a callback-style plugin's throw, so refusing it here would
+  // end the process.
+  it.each(['async', 'callback-style'])('serves what the %s plugin a factory returned mounts', async style => {
+    const late = () => new Router('/late').get('/', () => ({ style }))
+
+    app = createWebApplication().with(context =>
+      style === 'async'
+        ? fp(
+            async () => {
+              context.app.mount(late())
+            },
+            { name: 'late-mount' },
+          )
+        : fp(
+            (_instance, _options, done) => {
+              context.app.mount(late())
+              done()
+            },
+            { name: 'late-mount' },
+          ),
+    )
+    await app.bootstrap()
+
+    expect(await (await app.fetch('/late')).json()).toEqual({ style })
   })
 
   it('installs its own plugins in front of its routes, and nowhere else', async () => {
@@ -173,7 +206,7 @@ describe('a router a plugin factory mounts', () => {
 
   // Typed code cannot write one. Untyped code would otherwise drop a forgotten plugin without a word, and Fastify's
   // own refusal would come later, once the server was half built.
-  it('refuses a factory that returns nothing, before any server is built', async () => {
+  it('refuses a factory that returns nothing, before its server is built', async () => {
     let customized = false
 
     app = createWebApplication()
@@ -193,22 +226,25 @@ describe('a router a plugin factory mounts', () => {
     expect(customized).toBe(false)
   })
 
-  describe('once routing is built', () => {
-    it('refuses a mount from the plugin a factory returned, failing the start', async () => {
+  describe('once its server is routed', () => {
+    const refusal = /^Cannot mount a router on the application's own server: its routing has already been built/
+
+    // An `onReady` hook runs once the server's routes have registered: nothing would serve the router.
+    it('refuses a mount from a hook, failing the start', async () => {
       app = createWebApplication().with(context =>
         fp(
-          async () => {
-            context.app.mount(new Router('/late').get('/', () => 'late'))
+          async (instance: FastifyInstance) => {
+            instance.addHook('onReady', async () => {
+              context.app.mount(new Router('/hooked').get('/', () => 'hooked'))
+            })
           },
-          { name: 'late-mount' },
+          { name: 'hook-mount' },
         ),
       )
 
       await expect(app.bootstrap()).rejects.toMatchObject({
         code: 'ERR_CONFIGURATION',
-        message: expect.stringMatching(
-          /^Cannot mount a router: routing has already been built[\s\S]*in the factory itself, not in the plugin it returns/,
-        ),
+        message: expect.stringMatching(refusal),
       })
     })
 
@@ -224,7 +260,7 @@ describe('a router a plugin factory mounts', () => {
 
       await expect(app.bootstrap()).rejects.toMatchObject({
         code: 'ERR_CONFIGURATION',
-        message: expect.stringMatching(/^Cannot mount a router: routing has already been built/),
+        message: expect.stringMatching(refusal),
       })
     })
 
@@ -237,9 +273,7 @@ describe('a router a plugin factory mounts', () => {
       })
       await app.bootstrap()
 
-      expect(() => kept!.app.mount(new Router('/after').get('/', () => 'after'))).toThrow(
-        /^Cannot mount a router: routing has already been built/,
-      )
+      expect(() => kept!.app.mount(new Router('/after').get('/', () => 'after'))).toThrow(refusal)
     })
   })
 })

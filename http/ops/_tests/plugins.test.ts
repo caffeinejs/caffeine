@@ -125,8 +125,8 @@ describe("an ops server's own plugins and middleware", () => {
     expect(onMain.headers.get('x-built-middleware')).toBeNull()
   })
 
-  // A plugin on one server reads what another serves: the table is compiled before any server is built, the routers
-  // plugin factories mount included.
+  // A plugin on one server reads what another serves: the table fills as each server is routed, the routers plugin
+  // factories mount included, and is complete once the application is set up.
   it("hands its factories the application's route table, each group with the server it is bound to", async () => {
     let table: readonly RouteGroup<unknown>[] | undefined
 

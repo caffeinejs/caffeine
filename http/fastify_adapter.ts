@@ -47,14 +47,7 @@ import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
 import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
 import type { RouteCompilers, RouteGroup } from './routing/route.js'
-import { assertAuthorizationConfigured } from './security/authz/index.js'
-import {
-  assertAuthenticationConfigured,
-  assertRouteSchemesResolve,
-  assertRoutesGated,
-  type Principal,
-  type RegisteredRoute,
-} from './security/index.js'
+import { assertRoutesGated, type Principal, type RegisteredRoute } from './security/index.js'
 import { Keys } from './symbols.js'
 
 /**
@@ -262,7 +255,6 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   /** Everything {@link setup} does to a server once it is constructed: decorations, hooks, plugins, routes, `ready()`. */
   async #wire(fastify: FastifyInstance, input: AdapterIn<FastifyTypes>): Promise<void> {
     const container = this.#container
-    const { routeGroups } = input
     const { factory = {} } = input.server
 
     // Every route that registers, with the context it registered on, for the gate check once they all have.
@@ -352,6 +344,10 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       await installExtension(fastify, extension)
     }
 
+    // Every plugin has loaded, and a plugin may have mounted routers on this server while it did: the routing pass
+    // compiles them with every other router bound here, and runs the start-up checks every server's routes pass.
+    const routeGroups = await input.route()
+
     // After every plugin, so one that took the not-found handler keeps it.
     installNotFoundHandler(fastify)
 
@@ -362,10 +358,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
     installFastifyMiddlewares(fastify, input.middlewares.resolve(input.context))
 
-    // The scans read the very groups the registration loop below registers.
-    assertAuthenticationConfigured(container, routeGroups)
-    assertRouteSchemesResolve(container, routeGroups)
-    assertAuthorizationConfigured(container, routeGroups)
+    // What only this adapter can tell: whether the Fastify plugins those routes need are installed.
     assertRouteFeaturesInstalled(fastify, routeGroups, input.extensions)
 
     // The same for every group, so it is built once here rather than per registration.

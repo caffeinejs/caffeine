@@ -6,7 +6,8 @@ const PluginRegistry = new WeakMap<Function, AdapterExtensionFactory<AnyAdapterE
  * Installs an adapter extension — under Fastify, a plugin — in front of this controller's routes and nowhere else.
  *
  * The controller counterpart of `router.plugin(...)`. The factory is resolved once, during start-up, with the same
- * context the application's `.with(...)` factories get, once routing is built, so it cannot mount routers.
+ * context the application's `.with(...)` factories get, while the application's own server is routed, so it cannot
+ * mount routers.
  *
  * A controller is declared without knowing which application it will be resolved into, so the configuration
  * there is typed `unknown`, and the factory may return what any registered adapter installs. Nothing checks

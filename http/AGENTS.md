@@ -113,14 +113,17 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A newly found server-library type becomes a member of `AdapterTypes` (`adapter.ts`), never another type
   parameter.
 - No server decoration holds the route table. A plugin reads every server's compiled groups from
-  `context.routeGroups`, which routing fills once every server's factories have run: read it from the plugin's body,
-  a hook or a handler, not during the factory's own call. A plugin needing what its own server registers adds an
-  `onRoute` hook (`collectRouteGroups(instance)`), not a scan in the adapter.
-- A plugin factory serves routes by mounting routers on the application, `context.app.mount(...)`, which is
-  `app.mount(...)`: give it no mount path of its own. The context carries a handle with `mount` alone, never the
-  `WebApplication`. An ops server's handle nests a router that names no server in one bound to that server
-  (`routing/programmatic/bind.ts`), and never labels the router itself. A factory that only mounts returns
-  `context.app`; one returning nothing is refused while the servers are prepared.
+  `context.routeGroups`, which each server's routing pass fills in place, the application's own first: a hook or a
+  handler sees its own server's groups, a factory or a plugin's body only those of the servers routed before it. A
+  plugin needing what its own server registers adds an `onRoute` hook (`collectRouteGroups(instance)`), not a scan
+  in the adapter.
+- A plugin factory serves routes by mounting routers on its server, `context.app.mount(...)`: give it no mount path
+  of its own. The context carries a handle with `mount` alone, never the `WebApplication`; the application's own
+  server's handle is `app.mount(...)`. A server takes mounts until its routing pass starts: its settings callbacks,
+  its factories and the plugins they return mount, while a hook, a handler or a router's plugin is refused. An ops
+  server's pass nests a router that names no server in one bound to that server (`servedOn`,
+  `routing/programmatic/bind.ts`), never labels the router itself, and refuses one bound to another server. A
+  factory that only mounts returns `context.app`; one returning nothing is refused before its server is built.
 
 ## Servers
 
@@ -131,19 +134,27 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   name. Nothing in that path is ops-specific: a server differs only by its name, which routers bind to.
 - The application's own server listens first, since Watt takes over the first listen to complete. It also closes
   first, so ops servers answer through the drain.
-- Every server's settings callbacks and `.with(...)` factories run before the first server is built, and routing is
-  built between the two, so a factory can mount and the route table is complete before any server is. The builds
-  still run one after another.
-- Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
-  never filters or compiles them. A router an ops server's factory mounts takes that server's label from the router
-  it is nested in.
+- Servers are set up one at a time, the application's own first: a server's settings callbacks, then its
+  `.with(...)` factories, then its build. The adapter routes the server it builds by calling `AdapterIn.route()`
+  once, after its root plugins and before its first route; `ServerSet` refuses one routed zero times or twice. The
+  route table is complete before any server listens.
+- Every server goes through one routing pass, `route` in `WebApplication.setup()`: declare what was mounted on it
+  (the own pass declares the controllers too), check the bindings, select with the one `Routing` from
+  `buildRouting`, fill the route table, resolve the scoped factories not resolved yet, then run the start-up
+  security checks (`assertAuthenticationConfigured`, `assertRouteSchemesResolve`, `assertAuthorizationConfigured`),
+  so they hold on every server whatever the adapter. The checks that need Fastify, `assertRouteFeaturesInstalled`
+  and `assertRoutesGated`, stay in its adapter.
+- Which server serves a router is decided once, from its labels: `Routing.select` refuses a group a second server's
+  pass would take. A source declares groups; it never filters or compiles them. The programmatic source is one per
+  application, so a router state is declared once however many servers or factories mount it. A router an ops
+  server's factory mounts takes that server's label from the router it is nested in.
 - Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
 - `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
 - A router binds through `binding.ts`, with `bindTo` or `@BindTo`, or by being mounted from one of an ops server's
   factories. A plugin or a middleware reaches an ops server only through that server's own `o.with(...)`,
   `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the package barrel import `ops/`.
-- Each server reads `GlobalErrorHandlerRef` right after its own root loop. The servers are built one after another,
-  so no server reads the ref another server wrote.
+- Each server reads `GlobalErrorHandlerRef` after its own root loop and routing pass. The servers are built one
+  after another, so no server reads the ref another server wrote.
 - An ops server has no gate unless its own `o.with(...)` registers one; a gate covers only the server it was
   registered on. `OIDCRoutesRef.claimed` is shared, so the OIDC routes go to the first gate to install, and the
   application's own server is built first.

@@ -203,7 +203,8 @@ describe('ops routers with middleware, guards and plugins', () => {
       expect(app.routeGroups.find(group => group.path === '/mounted')?.boundTo).toBe('admin')
     })
 
-    it('is served where its binding says, as one the application mounts', async () => {
+    // An ops server's factories mount on that server alone: the servers before it are built by the time they run.
+    it('refuses a router bound to another server', async () => {
       app = createWebApplication()
         .install(
           Ops('admin', o =>
@@ -218,10 +219,78 @@ describe('ops routers with middleware, guards and plugins', () => {
         )
         .install(Ops('metrics')) as WebApplication
 
+      await expect(app.bootstrap()).rejects.toMatchObject({
+        code: 'ERR_CONFIGURATION',
+        message: expect.stringMatching(
+          /^Cannot mount router "Elsewhere" on ops server "admin": it is bound to "metrics"/,
+        ),
+      })
+    })
+
+    // The application's own server is routed first, so its factories mount for any server, as `app.mount(...)` does.
+    it("serves on it a router the application's own factory binds to it, and not on the application's own", async () => {
+      app = createWebApplication()
+        .install(Ops('admin'))
+        .with(({ app: application }) =>
+          application.mount(
+            newRouter('/bound')
+              .with(bindTo('admin'))
+              .get('/', () => ({ ok: true })),
+          ),
+        ) as WebApplication
+
       await app.bootstrap()
 
-      expect((await app.ops.get('metrics')!.fetch('/elsewhere')).status).toBe(200)
-      expect((await app.ops.get('admin')!.fetch('/elsewhere')).status).toBe(404)
+      expect((await app.ops.get('admin')!.fetch('/bound')).status).toBe(200)
+      expect((await app.fetch('/bound')).status).toBe(404)
+    })
+
+    // Two copies would register the same paths twice, which the server refuses.
+    it('serves once a router the application mounts and its factory mounts again', async () => {
+      const twice = newRouter('/twice')
+        .with(bindTo('admin'))
+        .get('/', () => ({ ok: true }))
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.with(({ app: application }) => application.mount(twice))))
+        .mount(twice) as WebApplication
+
+      await app.bootstrap()
+
+      expect((await app.ops.get('admin')!.fetch('/twice')).status).toBe(200)
+    })
+
+    it('serves once a router two of its factories mount', async () => {
+      const twice = newRouter('/twice').get('/', () => ({ ok: true }))
+      const mountTwice = ({ app: application }: HTTPSetupContext) => application.mount(twice)
+
+      app = createWebApplication().install(Ops('admin', o => o.with(mountTwice).with(mountTwice))) as WebApplication
+
+      await app.bootstrap()
+
+      expect((await app.ops.get('admin')!.fetch('/twice')).status).toBe(200)
+    })
+
+    // avvio does not catch a callback-style plugin's throw, so a plugin that loads before its server is routed mounts
+    // there rather than being refused.
+    it('serves what the callback-style plugin its factory returned mounts', async () => {
+      app = createWebApplication().install(
+        Ops('admin', o =>
+          o.with(context =>
+            fp(
+              (_instance, _options, done) => {
+                context.app.mount(newRouter('/late').get('/', () => ({ ok: true })))
+                done()
+              },
+              { name: 'ops-late-mount' },
+            ),
+          ),
+        ),
+      ) as WebApplication
+
+      await app.bootstrap()
+
+      expect((await app.ops.get('admin')!.fetch('/late')).status).toBe(200)
     })
 
     // Bound by nesting it, not by labelling it, so neither server takes the router from the other. Its plugins are a

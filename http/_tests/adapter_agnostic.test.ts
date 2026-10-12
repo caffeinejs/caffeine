@@ -27,7 +27,7 @@ import type {
 import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
 import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
-import { healthProbes } from '../index.js'
+import { ErrAuthenticationRequired, healthProbes } from '../index.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
 import type { ResolvedMiddleware } from '../middleware/pipeline.js'
 import { pluginName, type AnyFastifyPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory } from '../plugin.js'
@@ -35,6 +35,7 @@ import { blend } from '../routing/programmatic/blend.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
 import type { AdapterOf, RoutesOf } from '../routing/programmatic/types.js'
+import type { RouteGroup } from '../routing/route.js'
 
 /**
  * The adapter contract, held to its word: an application whose adapter is not Fastify's.
@@ -78,12 +79,22 @@ interface BareTypes extends FakeTypes {
 /** Records what the application hands it. All this file needs is the contract, so it serves nothing. */
 class RecordingAdapter<T extends AdapterTypes> implements Adapter<T> {
   input: AdapterIn<T> | undefined
+  groups: readonly RouteGroup<T['request']>[] = []
   middlewares: ResolvedMiddleware[] = []
 
-  constructor(readonly instance: T['instance']) {}
+  /** @param routes - How many times it routes its server: once, as the contract asks. */
+  constructor(
+    readonly instance: T['instance'],
+    readonly routes = 1,
+  ) {}
 
   async setup(input: AdapterIn<T>): Promise<AdapterServer<T>> {
     this.input = input
+
+    for (let call = 0; call < this.routes; call++) {
+      this.groups = await input.route()
+    }
+
     this.middlewares = input.middlewares.resolve(input.context)
 
     return new RecordingServer(this.instance)
@@ -182,10 +193,28 @@ describe('an application on an adapter that is not Fastify', () => {
       typeof entry === 'function' ? 'head' : entry.unit,
     )
 
-    expect(adapter.input?.routeGroups.map(group => group.path)).toEqual(['/free'])
+    expect(adapter.groups.map(group => group.path)).toEqual(['/free'])
     expect(root).toEqual(['head', 'head', 'after'])
 
     await app.close()
+  })
+
+  // The start-up checks run in the routing pass every server goes through, not in an adapter, so an adapter that
+  // checks nothing still serves no protected route it has nothing to authenticate with.
+  it('refuses a protected route with nothing to authenticate it, whatever the adapter', async () => {
+    const app = onFake().mount(new Router('/secret').authorize().get('/', () => 1))
+
+    await expect(app.bootstrap()).rejects.toThrow(ErrAuthenticationRequired)
+  })
+
+  // Routing is what an adapter asks for once its plugins have loaded: one that never asks would leave the server's
+  // mounts open, and one that asks twice would compile its routes twice.
+  it.each([0, 2])('refuses an adapter that routes its server %i times', async routes => {
+    const app = onFake(new RecordingAdapter<FakeTypes>({ fake: true }, routes)).mount(
+      new Router('/routed').get('/', () => 1),
+    )
+
+    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_HTTP_ADAPTER_ROUTING' })
   })
 
   // The fake adapter installs whatever it is handed, so only the application stands in the way.
@@ -261,7 +290,7 @@ describe('adapter types', () => {
       app.mount(free)
     })
 
-    // @ts-expect-error a router's plugin factory runs once routing is built, so it installs and never only mounts
+    // @ts-expect-error a router's plugin factory runs while its server is routed, so it installs and never only mounts
     newRouter('/p').plugin(mountOnly)
   })
 

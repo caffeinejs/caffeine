@@ -65,11 +65,12 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * registers and inherited into every route group's own context. The compiled routes register after every
  * plugin: one that needs them adds an `onRoute` hook and reads `routeOptions.config.$caffeine.compiled`, which
  * carries the route and the group it was compiled in, or calls {@link collectRouteGroups}. Every server's groups
- * are on the context once routing is built: {@link HTTPSetupContext.routeGroups}.
+ * reach the context as that server is routed: {@link HTTPSetupContext.routeGroups}.
  *
  * A factory serves routes of its own by mounting routers on the application through its context,
- * `context.app.mount(router)`, never by registering them on the instance. One that installs nothing else hands back
- * `context.app`, which `.with(...)` takes and `router.plugin(...)` does not.
+ * `context.app.mount(router)`, never by registering them on the instance. The plugin it returns may mount too, while
+ * it loads. One that installs nothing else hands back `context.app`, which `.with(...)` takes and `router.plugin(...)`
+ * does not.
  *
  * ```ts
  * .with(({ config }) => [fastifyCors, config.app.cors.options])

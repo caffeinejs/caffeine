@@ -18,9 +18,13 @@ import { pluginName, type AnyFastifyPlugin } from '../../plugin.js'
 class RecordingAdapter implements Adapter<FastifyTypes> {
   /** In call order: the application's own server first. */
   readonly inputs: AdapterIn<FastifyTypes>[] = []
+  /** How many servers it has finished setting up. */
+  built = 0
 
   async setup(input: AdapterIn<FastifyTypes>): Promise<AdapterServer<FastifyTypes>> {
     this.inputs.push(input)
+    await input.route()
+    this.built++
     return new IdleServer()
   }
 }
@@ -100,6 +104,34 @@ describe('an ops server, as its adapter is handed it', () => {
     expect(seen).toHaveLength(2)
     expect(seen[0]).toBe(ops.context)
     expect(seen[1]).toBe(ops.context)
+
+    await app.close()
+  })
+
+  // The application's own server is set up whole, its build included, before an ops server's settings and factories
+  // run: whatever the application's own server did as it was built is done by then.
+  it("is set up once the application's own server is built", async () => {
+    const adapter = new RecordingAdapter()
+    const builtBefore: Record<string, number> = {}
+
+    const app = createWebApplication(() => adapter, { container: new CaffeineIoC({ decorators: false }) }).install(
+      Ops('admin', o =>
+        o
+          .server(() => {
+            builtBefore.settings = adapter.built
+            return {}
+          })
+          .with(() => {
+            builtBefore.factory = adapter.built
+            return named('ops-probe')()
+          }),
+      ),
+    )
+
+    await app.bootstrap()
+
+    expect(builtBefore).toEqual({ settings: 1, factory: 1 })
+    expect(adapter.built).toBe(2)
 
     await app.close()
   })
