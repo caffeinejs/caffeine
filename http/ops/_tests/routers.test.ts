@@ -14,7 +14,6 @@ import {
   Guards,
   type HTTPSetupContext,
   Ops,
-  RouteBuilder,
   bindTo,
   createWebApplication,
   newRouter,
@@ -146,60 +145,6 @@ describe('ops routers with middleware, guards and plugins', () => {
     expect(allowed.headers.get('x-parent-plugin')).toBe('yes')
 
     expect((await at('main', '/ops/child', { 'x-token': 'ok' })).status).toBe(404)
-  })
-
-  describe('$route', () => {
-    const extra = (bind?: string) => (instance: FastifyInstance) => {
-      instance.$route('extra', group => {
-        if (bind !== undefined) {
-          bindTo(bind)(group)
-        }
-
-        group.path('/extra').routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/')
-            .handle(() => ({ extra: true })),
-        ])
-      })
-    }
-
-    it('adds the group to the ops server whose plugin calls it', async () => {
-      app = createWebApplication()
-        .install(
-          Ops('admin', o =>
-            o.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra()(instance)),
-          ),
-        )
-        .server(() => ({ listener })) as WebApplication
-
-      await app.run()
-
-      expect(await (await at('admin', '/extra')).json()).toEqual({ extra: true })
-      expect((await at('main', '/extra')).status).toBe(404)
-    })
-
-    it("refuses a group bound to an ops server from the application's own server", async () => {
-      app = createWebApplication()
-        .install(ops())
-        .with(() => async (instance: FastifyInstance) => extra('admin')(instance)) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "extra" to the application's own server: it is bound to "admin"/,
-      )
-    })
-
-    it('refuses a group bound to another server from an ops server', async () => {
-      app = createWebApplication().install(
-        Ops('admin', o =>
-          o.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra('metrics')(instance)),
-        ),
-      ) as WebApplication
-
-      await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "extra" to ops server "admin": it is bound to "metrics"/,
-      )
-    })
   })
 
   it("answers on the ops server with the application's error handlers and its not-found envelope", async () => {

@@ -2,7 +2,6 @@ import type { Container } from '@caffeinejs/di'
 import type { BootstrapKit } from '@caffeinejs/std'
 
 import type { MiddlewarePipeline } from './middleware/pipeline.js'
-import type { RouteGroupCompiler } from './routing/compile.js'
 import type { Router } from './routing/programmatic/router.js'
 import type { RouteGroup } from './routing/route.js'
 
@@ -113,11 +112,6 @@ export type ServerCustomizer<T extends AdapterTypes, C = unknown> = (
 /** What an application hands its adapter to set one server up with. */
 export interface AdapterIn<T extends AdapterTypes> {
   routeGroups: RouteGroup<T['request']>[]
-  /**
-   * What `$route` compiles a late group with: the compiler {@link buildRouting} built the groups above with, applied
-   * the way this server applies it to every group it serves.
-   */
-  compileRouteGroup: RouteGroupCompiler
   /** What the application hands everything it builds at start-up. The middleware factories run against it. */
   context: HTTPSetupContext
   /** What `app.use()` registered, for the adapter to resolve and attach to its hooks. */
@@ -206,8 +200,8 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
    * read what another serves. A factory finds it empty during its own call: read it from the plugin's body, a hook or
    * a handler. It is filled in place, so a reference taken earlier stays current.
    *
-   * A group a plugin adds with `$route`, and a route registered straight on a server, are not in it: a plugin
-   * reads what its own server registers with `collectRouteGroups(instance)`.
+   * A route a plugin registers straight on a server is not in it: a plugin reads what its own server registers with
+   * `collectRouteGroups(instance)`.
    */
   readonly routeGroups: readonly RouteGroup<unknown>[]
 

@@ -559,7 +559,7 @@ export class WebApplication<
         const routing = buildRouting<T['request']>(this.routeSources(), this.container)
         this.#routeGroups.push(...servers.select(routing))
 
-        return { scoped: await this.#scopedExtensions(context), compileRouteGroup: routing.compileRouteGroup }
+        return this.#scopedExtensions(context)
       },
     })
 

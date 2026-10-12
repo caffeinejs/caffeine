@@ -114,12 +114,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   parameter.
 - No server decoration holds the route table. A plugin reads every server's compiled groups from
   `context.routeGroups`, which routing fills once every server's factories have run: read it from the plugin's body,
-  a hook or a handler, not during the factory's own call. A plugin needing what its own server registers, `$route`
-  groups included, adds an `onRoute` hook (`collectRouteGroups(instance)`), not a scan in the adapter.
-- `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
-  plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
-  callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
-  another server.
+  a hook or a handler, not during the factory's own call. A plugin needing what its own server registers adds an
+  `onRoute` hook (`collectRouteGroups(instance)`), not a scan in the adapter.
 - A plugin factory serves routes by mounting routers on the application, `context.app.mount(...)`, which is
   `app.mount(...)`: give it no mount path of its own. The context carries a handle with `mount` alone, never the
   `WebApplication`. An ops server's handle nests a router that names no server in one bound to that server

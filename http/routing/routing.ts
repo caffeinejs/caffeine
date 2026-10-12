@@ -2,7 +2,7 @@ import { Container } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrConfiguration } from '../error/common.js'
-import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
+import { createRouteGroupCompiler, type RouteGroupMeta } from './compile.js'
 import type { RouteGroup } from './route.js'
 import type { RouteGroupSpec } from './spec.js'
 
@@ -52,13 +52,6 @@ export interface Routing<R> {
 
   /** The declared groups no {@link select} call has taken yet. */
   unselected(): readonly DeclaredRouteGroup<R>[]
-
-  /**
-   * The compiler every selected group goes through — reused by `$route` (`http/fastify_adapter.ts`) to compile a
-   * group accumulated afterwards, so a guard shared between an ordinary route and a `$route` one resolves through
-   * the one cache, not a second one.
-   */
-  readonly compileRouteGroup: RouteGroupCompiler
 }
 
 const kNoLabels: RouteGroupLabels = new Map()
@@ -77,8 +70,6 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
   const taken = new Set<DeclaredRouteGroup<R>>()
 
   return {
-    compileRouteGroup,
-
     select(accept) {
       const groups: RouteGroup<R>[] = []
 

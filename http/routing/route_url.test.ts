@@ -3,7 +3,6 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { createWebApplication, type WebApplication } from '../application.js'
-import { RouteBuilder } from './builder.js'
 import { newRouter } from './programmatic/new_router.js'
 import { routeURL } from './route_url.js'
 
@@ -21,8 +20,17 @@ describe('routeURL', () => {
     const pairs: Array<[named: string, registered: string]> = []
 
     app = createWebApplication()
-      .with(() =>
-        fp(
+      // Mounts a prefixed router and returns the probe: a factory may do both.
+      .with(({ app: application }) => {
+        application.mount(
+          newRouter('/items')
+            .with(group => {
+              group.prefix('/v1')
+            })
+            .post('/', () => ({})),
+        )
+
+        return fp(
           async (instance: FastifyInstance) => {
             instance.addHook('onRoute', (route: RouteOptions) => {
               const compiled = route.config?.$caffeine?.compiled
@@ -30,22 +38,10 @@ describe('routeURL', () => {
                 pairs.push([routeURL(compiled.group.prefix, compiled.group.path, compiled.route.path), route.url])
               }
             })
-
-            instance.$route('versioned', group => {
-              group
-                .prefix('/v1')
-                .path('/items')
-                .routes([
-                  new RouteBuilder()
-                    .method('POST')
-                    .path('/')
-                    .handle(() => ({})),
-                ])
-            })
           },
           { name: 'route-url-probe' },
-        ),
-      )
+        )
+      })
       .mount(
         newRouter('/').get('/', () => ({})),
         newRouter('/pets')

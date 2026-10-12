@@ -11,13 +11,11 @@ import type {
   SetupApplication,
 } from './adapter.js'
 import { normalizeBasePath } from './base_path.js'
-import { boundTo, kBindTo } from './binding.js'
+import { boundTo } from './binding.js'
 import { ErrConfiguration } from './error/common.js'
-import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
 import { servedOn } from './routing/programmatic/bind.js'
 import type { RouteGroup } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
-import type { RouteGroupSpec } from './routing/spec.js'
 import type { ServerDefinition } from './server_definition.js'
 
 /** One server: the definition it is built from, the routers selected for it, and what the adapter built. */
@@ -38,10 +36,9 @@ export interface ServerSetupInput<T extends AdapterTypes> {
   headSlots(): T['extension'][]
   /**
    * Builds routing, once every server's factories have run and before any server is built. Hands back what routers
-   * and controllers asked to install in front of their groups on any server, and the compiler every group went
-   * through, for a group `$route` adds.
+   * and controllers asked to install in front of their groups on any server.
    */
-  route(): Promise<{ scoped: AdapterExtensions<T['extension']>; compileRouteGroup: RouteGroupCompiler }>
+  route(): Promise<AdapterExtensions<T['extension']>>
 }
 
 /** One server ready to build: the context it is set up with, its settings, and what its factories produced. */
@@ -116,14 +113,13 @@ export class ServerSet<T extends AdapterTypes> {
       prepared.push(await prepare(entry, input))
     }
 
-    const { scoped, compileRouteGroup } = await input.route()
+    const scoped = await input.route()
 
     for (const { entry, context, server, basePath, root } of prepared) {
       const { definition } = entry
 
       entry.server = await adapter.setup({
         routeGroups: entry.groups,
-        compileRouteGroup: serverCompiler(compileRouteGroup, definition.name),
         context,
         middlewares: definition.middlewares,
         extensions: scoped.withRoot(root),
@@ -281,31 +277,6 @@ function foldCustomizers<T extends AdapterTypes>(
     for (const customize of all) {
       await customize(context, instance)
     }
-  }
-}
-
-/**
- * What `$route` compiles a group with on the server named `name`: a group bound to another server is refused, since
- * that server would never see it, and an unbound one is bound to this one, as every group it serves is.
- */
-function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): RouteGroupCompiler {
-  return <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> => {
-    const bound = boundTo(spec.labels)
-
-    if (bound !== undefined && bound !== name) {
-      throw new ErrConfiguration(
-        errMessage(`Cannot add route group "${meta.name}" to ${describeServer(name)}: it is bound to "${bound}"`)
-          .solutions('Drop the binding: "$route" adds the group to the server its plugin runs on')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
-    }
-
-    if (name === undefined || bound !== undefined) {
-      return compile(spec, meta)
-    }
-
-    return compile({ ...spec, labels: new Map([...(spec.labels ?? []), [kBindTo, name]]) }, meta)
   }
 }
 
