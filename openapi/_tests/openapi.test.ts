@@ -10,7 +10,7 @@ import {
   Args,
   Post,
   Roles,
-  RouteBuilder,
+  Router,
   Schema,
   Status,
   WebApplication,
@@ -20,7 +20,6 @@ import {
 } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std/schema'
-import { type FastifyInstance } from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -168,19 +167,24 @@ describe('openapi endpoints', () => {
     expect(Object.keys(document.paths ?? {})).not.toContain('/openapi.json')
   })
 
+  // Mounted like any router, so its endpoints are in the route table a reader such as DevTools lists, while their
+  // group stays out of the document.
+  it('lists its endpoints in the route table, in a group the document leaves out', async () => {
+    app = buildApp(o => o.docs(false).public())
+    await app.bootstrap()
+
+    const own = app.routeGroups.find(group => group.name === 'openapi')
+
+    expect(own?.detail?.openapi).toMatchObject({ hidden: true })
+    expect(own?.routes.map(route => route.path)).toEqual(['/openapi.json', '/openapi.yaml'])
+  })
+
   // The document is generated once every route has registered, not when the plugin does, so the order the
   // plugins were installed in cannot drop a route from it.
-  it('describes a route a plugin installed after it adds', async () => {
-    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
-      instance.$route('late', router => {
-        router.path('/late').routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/hello')
-            .handle(() => ({ ok: true })),
-        ])
-      })
-    }) as WebApplication
+  it('describes a router a plugin factory registered after it mounts', async () => {
+    app = newBuilder(o => o.docs(false).public()).with(({ app: application }) =>
+      application.mount(new Router('/late').get('/hello', () => ({ ok: true }))),
+    ) as WebApplication
     await app.bootstrap()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
@@ -191,17 +195,9 @@ describe('openapi endpoints', () => {
   // A route a feature registers on the application's behalf — a single-page application's shell — is not part
   // of the API it describes. `detail('http', { internal: true })` is http's own marker for that.
   it('does not describe a group another feature marked internal', async () => {
-    app = newBuilder(o => o.docs(false).public()).with(() => async (instance: FastifyInstance) => {
-      instance.$route('shell', router => {
-        router.detail('http', { internal: true })
-        router.routes([
-          new RouteBuilder()
-            .method('GET')
-            .path('/*')
-            .handle(() => 'shell'),
-        ])
-      })
-    }) as WebApplication
+    app = newBuilder(o => o.docs(false).public()).with(({ app: application }) =>
+      application.mount(new Router().detail('http', { internal: true }).get('/*', () => 'shell')),
+    ) as WebApplication
     await app.bootstrap()
 
     const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
