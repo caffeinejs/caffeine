@@ -36,10 +36,10 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 .PHONY: check
 check: ## run all checks
 	@npm run pins:check
-	@npm run lint:fix
 	@npm run err-message:copy
-	@npm run lint:markdown
 	@npm run build
+	@npm run lint:fix
+	@npm run lint:markdown
 	@npm run spec:check
 	@$(MAKE) cli/dist/caffeine
 	@npm run build:examples

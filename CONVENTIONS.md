@@ -61,7 +61,7 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It runs the pin check, `lint:fix`, the error message copies, `lint:markdown`, `build`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
 Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
 
