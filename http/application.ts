@@ -38,7 +38,7 @@ import {
 import { parseUse } from './middleware/middleware.js'
 import type { OpsServer } from './ops/builder.js'
 import { opsServers } from './ops/servers.js'
-import { kServerExtension } from './plugin.js'
+import { kServerExtension, type HTTPPlugin } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
@@ -47,7 +47,7 @@ import { FluentRouteSource, routerStates } from './routing/programmatic/source.j
 import type { RouteGroup } from './routing/route.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
-import { ServerSet } from './servers.js'
+import { closedApplicationOps, ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -269,12 +269,15 @@ export class WebApplication<
    * A factory is never deduplicated — two calls register two plugins. A `fastify-plugin` name already on that
    * instance is refused at register time. A factory producing another adapter's extension does not compile.
    *
+   * A factory may return an `HTTPPlugin` instead of a plugin, when it needs nothing from Fastify: its `install`
+   * runs in this slot. Either kind of factory may serve routers on this server with `context.app.mount(...)`.
+   *
    * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
    * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
    *
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  with(factory: AdapterExtensionFactory<T['extension'], C>): this {
+  with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin, C>): this {
     this.assertConfigurable()
     assertPluginFactory(factory)
 
@@ -520,6 +523,8 @@ export class WebApplication<
       store: this.configStore,
       logger: this.log,
       hasFeature: name => this.hasFeature(name),
+      // Closed: only a server's own plugin slot mounts, and `ServerSet` hands each server an `app` of its own.
+      app: closedApplicationOps(),
     }
 
     await servers.setup(this.#adapter, {

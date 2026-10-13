@@ -402,6 +402,43 @@ const one = owner.get('/:id').handler(find)
 export const petsRouter = blend(all, one)
 ```
 
+## Plugins without Fastify
+
+A `.with(...)` factory may return an `HTTPPlugin` instead of a Fastify plugin: a class whose `install(context)` does
+the work in that `.with(...)` slot, handed the same context the factory got. `context.app.mount(...)` serves routers
+on the server the plugin installs on, compiled exactly as `app.mount(...)` compiles them.
+
+```ts
+import { HTTPPlugin, newRouter, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
+
+class Metrics extends HTTPPlugin {
+  install({ app, container }: HTTPSetupContext): void {
+    const registry = container.get(MetricsRegistry)
+    app.mount(newRouter('/metrics').get('/', () => registry.render()))
+  }
+}
+
+export function metrics(): AdapterExtensionFactory<HTTPPlugin> {
+  return () => new Metrics()
+}
+
+app.with(metrics()) // on the application's own server
+app.install(Ops('admin', o => o.with(metrics()))) // on the ops server alone
+```
+
+- The server is the one the `.with(...)` was written on: `Ops(name, o => o.with(...))` for an ops server. A router
+  bound with `bindTo` to another server is refused at start-up.
+- Same compilation as a mounted router: guards, authorization and the fallback policy, CSRF marks,
+  `router.plugin(...)` and the start-up checks. Mark a group the application does not own
+  `detail('http', { internal: true })` so the OpenAPI document leaves it out. The groups stay out of
+  `app.routeGroups`, and the same router mounted twice on one server is served once.
+- A Fastify plugin's factory gets the same context, so it may mount routers too and still return its plugin:
+  `.with(({ app }) => { app.mount(router); return [fastifyCors, options] })`.
+- A plugin that depends on a feature asks `context.hasFeature(name)` and throws `ErrFeatureNotInstalled`.
+- `app.mount` is open only while the plugin installs: not from `router.plugin(...)`, `@Use(...)`, `useFn(...)` or a
+  Fastify plugin body, which adds a group with `instance.$route(...)` instead. A route group takes Fastify plugins
+  only, so `router.plugin(...)` and `@Use(...)` refuse an `HTTPPlugin`.
+
 ## Authorization declarations
 
 `@Authorize` / `@Roles` / `@AllowAnonymous` and the routers' `.authorize({ ... })` are one mechanism, and
@@ -504,7 +541,8 @@ app.ops.get('admin')?.address // { host, port, origin }
 - **Plugins and middleware are per server.** `o.with(...)`, `o.use(...)` and `o.useFn(...)` take what the
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
   head slots. Nothing registered on the application reaches an ops server, an authentication gate included, and
-  `.basePath(...)` and `.serverCallback(...)` never do.
+  `.basePath(...)` and `.serverCallback(...)` never do. What a plugin mounts from `o.with(...)` with
+  `context.app.mount(...)` is served by that server alone.
 - **Settings.** `o.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
   switched by configuration there too.
 - **Authorization.** There is nothing ops-specific: a route on an ops server requires what its router or controller

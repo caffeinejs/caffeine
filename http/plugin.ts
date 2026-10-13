@@ -38,6 +38,37 @@ export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
 export const kServerExtension = Symbol('caffeine.http.server.extension')
 
 /**
+ * A server plugin written against Caffeine alone: what a `.with(...)` factory returns when the plugin needs nothing
+ * from Fastify.
+ *
+ * {@link install} does the work a Fastify plugin function would, in the `.with(...)` slot the factory was written
+ * in, and is handed the same {@link HTTPSetupContext} the factory got: `context.app.mount(...)` serves routers on
+ * the server the plugin installs on, `context.container` resolves, and `context.hasFeature(name)` lets a plugin
+ * that depends on a feature refuse a missing one with `ErrFeatureNotInstalled`. It runs before the adapter builds
+ * the server, so what it mounts registers with every other route group. Never deduplicated: two factories install
+ * two plugins. A package exporting one types its factory `AdapterExtensionFactory<HTTPPlugin, C>`, which every
+ * adapter's `.with(...)` takes.
+ *
+ * A plugin that also needs Fastify returns a Fastify plugin from its factory and mounts from the factory itself. A
+ * route group takes Fastify plugins only: the adapter refuses one of these from `router.plugin(...)` or `@Use(...)`.
+ *
+ * ```ts
+ * class Metrics extends HTTPPlugin {
+ *   install({ app, container }: HTTPSetupContext): void {
+ *     const registry = container.get(MetricsRegistry)
+ *     app.mount(newRouter('/metrics').get('/', () => registry.render()))
+ *   }
+ * }
+ *
+ * app.with(() => new Metrics())
+ * app.install(Ops('admin', o => o.with(() => new Metrics())))
+ * ```
+ */
+export abstract class HTTPPlugin {
+  abstract install(context: HTTPSetupContext): void | Promise<void>
+}
+
+/**
  * Produces a Fastify plugin from what the application resolved at start-up: its configuration, its container and
  * its logger. What `.with(...)` takes on a Fastify application, and how a third-party Fastify plugin is
  * configured from the application's own settings.
@@ -49,6 +80,10 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  *
  * A plugin needing nothing from the context is written `.with(() => myPlugin)` — `myPlugin` itself may be
  * callback-style or async, this package's own or a third party's untouched.
+ *
+ * `.with(...)` also takes a factory returning an {@link HTTPPlugin}, typed `AdapterExtensionFactory<HTTPPlugin, C>`,
+ * when the plugin needs nothing from Fastify: its `install` runs in that slot. Either kind of factory's context
+ * carries `app.mount(...)`, which serves routers on the server the `.with(...)` was written on.
  *
  * Called once, after `container.init()`, so `container.get(...)` is legal here. Its slot is where the `.with(...)`
  * call was written, so an `await` inside the factory cannot reorder it relative to the plugins around it.

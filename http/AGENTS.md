@@ -15,6 +15,18 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   plugin has an order to get right; the gate refuses to start a cookie-based scheme on a server whose cookies are off
   (`ErrAuthenticationCookies`).
 - A plugin's per-request setting is a Fastify decoration read off `request.server`, as `@caffeinejs/html` does.
+- A factory may return an `HTTPPlugin` (`plugin.ts`). `ServerSet.setup` runs its `install(context)` in its slot,
+  before `adapter.setup`, so the adapter never sees one; the adapter refuses one from `router.plugin(...)` or
+  `@Use(...)`. `HTTPPluginFactory` stays Fastify-only, since `router.plugin(...)` and `@Use(...)` take it: only the
+  `.with(...)` sites widen to `| HTTPPlugin`.
+- `context.app.mount(...)` is open only while a server's `.with(...)` factories and `install` calls run. What they
+  mount is collected through `FluentRouteSource` once the slot closes, so a router mounted twice is served once, and
+  compiled through `serverCompiler` into that server's groups, out of `app.routeGroups`. A mounted router's own
+  `.plugin(...)` factories join the scoped extensions unless its scope already has them. The application-level
+  context carries a closed `app` (`closedApplicationOps`): a router's or a controller's factories, `useFn` and
+  `.serverCallback` are refused.
+- A callback-style Fastify plugin body calling a kept `context.app.mount` throws where avvio does not catch; a plugin
+  body adds a group with `$route`.
 
 ## Cookies
 
@@ -117,7 +129,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
-  another server.
+  another server. A plugin that needs nothing from the instance mounts from its factory or an `HTTPPlugin` instead.
 
 ## Servers
 

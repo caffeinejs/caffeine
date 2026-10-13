@@ -6,6 +6,7 @@ import type {
   ServerCustomizer,
 } from './adapter.js'
 import { MiddlewarePipeline } from './middleware/pipeline.js'
+import type { HTTPPlugin } from './plugin.js'
 
 /** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */
 export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | undefined | Promise<string | undefined>
@@ -22,7 +23,7 @@ export class ServerDefinition<T extends AdapterTypes = AdapterTypes, C = unknown
   /** What its `.server(...)` calls return, in call order. */
   readonly server: ServerConfigurer<T, C>[] = []
   /** Its `.with(...)` factories, in call order. */
-  readonly plugins: AdapterExtensionFactory<T['extension'], C>[] = []
+  readonly plugins: AdapterExtensionFactory<T['extension'] | HTTPPlugin, C>[] = []
   /** What its `.use(...)` and `.useFn(...)` calls registered: resolved, and sealed, by its server's setup. */
   readonly middlewares = new MiddlewarePipeline<T['hook']>()
   /** Its `.serverCallback(...)` callbacks, in call order. */

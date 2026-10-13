@@ -24,6 +24,11 @@ function setupContext(options: { config?: object; container?: Container } = {}):
     store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
     hasFeature: () => false,
+    app: {
+      mount: () => {
+        throw new Error('not in a plugin slot')
+      },
+    },
   }
 }
 
@@ -266,6 +271,11 @@ describe('MiddlewarePipeline', () => {
         store: {} as ConfigStore<unknown>,
         logger,
         hasFeature: () => false,
+        app: {
+          mount: () => {
+            throw new Error('not in a plugin slot')
+          },
+        },
       },
     })
     const res = await server.inject('/echo')

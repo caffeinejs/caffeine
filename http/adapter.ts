@@ -3,6 +3,7 @@ import type { BootstrapKit } from '@caffeinejs/std'
 
 import type { MiddlewarePipeline } from './middleware/pipeline.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
+import type { Router } from './routing/programmatic/router.js'
 import type { RouteGroup } from './routing/route.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
@@ -180,6 +181,25 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) => Adapter<T>
 
 /**
+ * The application's operations a plugin may drive while it installs, scoped to the server it installs on. What
+ * `context.app` is on an {@link HTTPSetupContext}.
+ */
+export interface WebApplicationOps {
+  /**
+   * Serves routers on the server the plugin installs on, compiled as `app.mount(...)` compiles them: the same
+   * guards, authorization, start-up checks and a router's own `.plugin(...)`, and listed in a generated OpenAPI
+   * document unless the group is marked `detail('http', { internal: true })`. A router bound with `bindTo` to
+   * another server is refused. The groups register with the application's own and stay out of `app.routeGroups`,
+   * as a `$route` group does.
+   *
+   * Open only while this server's `.with(...)` factories and `HTTPPlugin.install` run.
+   *
+   * @throws ErrConfiguration outside that window, and from start-up for a router bound to another server.
+   */
+  mount(...routers: Router<any, any, any, any, any, any>[]): void
+}
+
+/**
  * What an HTTP application hands everything it builds at start-up: an extension factory, a middleware factory, a
  * feature's server hook.
  *
@@ -195,6 +215,9 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
    * instance's `$hasFeature(...)` instead.
    */
   hasFeature(name: string): boolean
+
+  /** What a plugin may do to the application while it installs: for now, mount routers on this server. */
+  app: WebApplicationOps
 }
 
 /**

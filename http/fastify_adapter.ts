@@ -41,7 +41,7 @@ import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { FastifyContext } from './fastify_context.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
-import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
+import { HTTPPlugin, pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
@@ -666,6 +666,22 @@ function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefin
  * The one path every plugin takes — the application's, a router's, a controller's — so each is refused the same way.
  */
 async function installExtension(server: FastifyInstance, extension: unknown): Promise<void> {
+  // The application's own were taken out before the adapter was built; one reaching here came from a route group.
+  if (extension instanceof HTTPPlugin) {
+    throw new ErrConfiguration(
+      errMessage(
+        'Cannot install an HTTPPlugin from "router.plugin(...)" or "@Use(...)": a route group takes Fastify ' +
+          'plugins only',
+      )
+        .solutions(
+          'Register its factory with ".with(...)" on the application, or "Ops(name, o => o.with(...))" on an ' +
+            'ops server',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
   const { plugin, options } = resolveExtension(extension)
   assertFastifyPlugin(plugin)
   assertPluginNotRegistered(server, plugin)

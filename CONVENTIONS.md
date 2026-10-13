@@ -164,7 +164,7 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 Two registration verbs, two kinds of thing:
 
 - **`.install(feature)`** — on every `Application`. A feature is a container binder: deduplicated by `[kFeatureName]`, platform-agnostic, and order-free — every feature configures before the container initializes, so where an `.install(...)` sits in the chain does not matter. Feature factories are **PascalCase**: `Kafka()`, `Messaging()`, `DistributedLock()`, `TypeORM()`, `Health()`, `Authentication()`, `Authorization()`, `Guards()`.
-- **`.with(factory)`** — on `WebApplication`, and on an ops server's builder for that server alone: `Ops(name, o => o.with(factory))`. A factory produces a server plugin; factories run at setup, after `container.init()`, and install in the order the `.with(...)` calls are written. Never deduplicated. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
+- **`.with(factory)`** — on `WebApplication`, and on an ops server's builder for that server alone: `Ops(name, o => o.with(factory))`. A factory produces a server plugin, or an `HTTPPlugin`, a plugin written against Caffeine alone whose `install(context)` runs in that slot; factories run at setup, after `container.init()`, and install in the order the `.with(...)` calls are written. Never deduplicated. Either kind of factory serves routers on the server the `.with(...)` was written on with `context.app.mount(...)`. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
 
 A capability that binds _and_ wires the server ships both halves under one name, cased apart: `.install(Authentication(configure))` binds the schemes and services, `.with(authentication())` registers the gate. A plugin that depends on a feature asks `context.hasFeature(name)` in its factory (or `instance.$hasFeature(name)` in its body) and throws `ErrFeatureNotInstalled` — loudly, at start-up. The feature alone stays a supported configuration, but where something needs the plugin the feature is not safe without, start-up refuses it: a protected route no gate covers fails with `ErrAuthenticationGateRequired`.
 
@@ -180,6 +180,7 @@ Where a value goes depends on who reads it, not on what is convenient:
 | something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
 | start-up wiring the server runs                       | a plugin, from a factory               | `.with(factory)`, in its written slot   |
+| routes a plugin serves                                | the server it is registered on         | `context.app.mount(...)`, in its slot   |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
 | a plugin's setting read per request                   | a Fastify decoration the plugin sets   | `request.server[kThing]`                |
 
@@ -266,7 +267,7 @@ export function Thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>
 export function Thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
 ```
 
-- The plugin half, when the capability has one, is a separate camelCase factory in the same package: `HTTPPluginFactory<C>` built from an `HTTPPluginConfigurer` callback, reading what the feature bound out of the container and refusing a missing feature with `ErrFeatureNotInstalled` (`healthProbes()` and `authentication()` are the models).
+- The plugin half, when the capability has one, is a separate camelCase factory in the same package: `HTTPPluginFactory<C>` built from an `HTTPPluginConfigurer` callback, reading what the feature bound out of the container and refusing a missing feature with `ErrFeatureNotInstalled` (`healthProbes()` and `authentication()` are the models). One that needs nothing from Fastify returns an `HTTPPlugin` instead, its factory typed `AdapterExtensionFactory<HTTPPlugin, C>`, and mounts its routers from `install(context)` with `context.app.mount(...)`.
 - Only the framework's pre-registered builders (shutdown policy, logger, cookies, error handling) hand a callback over with `builder[kAddConfigurer](configure)`, because they are constructed before an application can name one. Nothing else uses that symbol.
 - A feature the application cannot configure from the tree implements `Feature` directly, not `FeatureBuilder`: `AuthorizationBuilder` and `GuardsBuilder`, whose factories (`Authorization(fn)`, `Guards(fn)`) run their callback immediately with no kit. Having nothing to read from the configuration is what decides it, not how much work the phases do.
 

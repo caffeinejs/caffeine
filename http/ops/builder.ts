@@ -7,7 +7,7 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 
-import type { AdapterTypes, ServerAddress, ServerConfigurer } from '../adapter.js'
+import type { AdapterExtensionFactory, AdapterTypes, ServerAddress, ServerConfigurer } from '../adapter.js'
 import type { FastifyTypes } from '../fastify_adapter.js'
 import type { FastifyMiddlewareHook } from '../middleware/fastify.js'
 import {
@@ -21,7 +21,7 @@ import {
   type Next,
   type NodeMiddleware,
 } from '../middleware/middleware.js'
-import type { HTTPPluginFactory } from '../plugin.js'
+import type { FastifyExtension, HTTPPlugin } from '../plugin.js'
 import { assertPluginFactory } from '../plugin_factory.js'
 import { ServerDefinition } from '../server_definition.js'
 
@@ -70,13 +70,14 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
 
   /**
    * Registers a server plugin on this server from a factory, the way the application's `.with(...)` registers one on
-   * its own: after the framework's head slots (error handling, cookies), in the order these calls are written.
+   * its own: after the framework's head slots (error handling, cookies), in the order these calls are written. A
+   * factory may return an `HTTPPlugin`, and what either kind mounts with `context.app.mount(...)` is served here.
    *
    * ```ts
    * .install(Ops('admin', o => o.with(authentication()).with(healthProbes())))
    * ```
    */
-  with(factory: HTTPPluginFactory<C>): this {
+  with(factory: AdapterExtensionFactory<FastifyExtension | HTTPPlugin, C>): this {
     assertPluginFactory(factory)
     this.#definition.plugins.push(factory)
     return this
