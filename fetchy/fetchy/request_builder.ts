@@ -93,6 +93,11 @@ export class RequestBuilder {
 
     this.segments.push(segment + meta.path.slice(last))
 
+    // An operation that adds no path calls the base URL as written, and the root when that has no path either.
+    if (this.slots.length === 0 && this.segments[0] === '') {
+      this.segments[0] = '/'
+    }
+
     for (const param of meta.params) {
       if (param.kind !== 'path') {
         this.params.push(compileParam(param))

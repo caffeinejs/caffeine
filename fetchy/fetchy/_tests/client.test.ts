@@ -590,6 +590,58 @@ describe('the request an operation builds', () => {
   })
 })
 
+// A base URL may carry a path of its own: a versioned API, or a service mounted under a prefix. An operation that adds
+// no path calls that URL as written, since a slash fetchy added would miss a server that tells `/v1` from `/v1/`; a
+// slash the operation writes is its own, and kept.
+describe('the URL an operation calls', () => {
+  async function urlOf(
+    baseURL: string,
+    TargetAPI: new () => { call: () => Promise<unknown> },
+  ): Promise<string | undefined> {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL(baseURL).transportFactory(transportFactory).build().create(TargetAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.call()
+
+    return transportFactory.transports[0].lastRequest?.url
+  }
+
+  @API()
+  class Bare {
+    @GET()
+    call!: () => Promise<unknown>
+  }
+
+  @API()
+  class Slash {
+    @GET('/')
+    call!: () => Promise<unknown>
+  }
+
+  @API('/users')
+  class Users {
+    @GET()
+    call!: () => Promise<unknown>
+  }
+
+  it('is the base URL as written when neither the class nor the operation adds a path', async () => {
+    expect(await urlOf('http://example.test/v1', Bare)).toBe('http://example.test/v1')
+  })
+
+  it('is the root when the base URL has no path either', async () => {
+    expect(await urlOf('http://example.test', Bare)).toBe('http://example.test/')
+  })
+
+  it('keeps the slash an operation writes', async () => {
+    expect(await urlOf('http://example.test/v1', Slash)).toBe('http://example.test/v1/')
+  })
+
+  it("puts the class's path after the base URL's own", async () => {
+    expect(await urlOf('http://example.test/v1', Users)).toBe('http://example.test/v1/users')
+  })
+})
+
 describe('a client behaves like an instance of its class', () => {
   function clientAt(baseURL: string, transportFactory = new TestTransportFactory()) {
     return newClient().baseURL(baseURL).transportFactory(transportFactory).build()

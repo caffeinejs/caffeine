@@ -19,6 +19,11 @@ export class FetchyBuilder {
   #responseConverter: ResponseConverter | undefined
   #authenticator: Authenticator | undefined
 
+  /**
+   * The URL every operation's path is appended to. A path of its own, as in `https://api.test/v1`, prefixes every
+   * operation, and an operation that adds no path, on a class that adds none, calls the URL as written: `/v1`, not
+   * `/v1/`. A trailing slash on `url` is dropped; one an operation writes, `@GET('/')`, is kept.
+   */
   baseURL(url: string): this {
     this.#baseURL = url.endsWith('/') ? url.slice(0, -1) : url
     return this
