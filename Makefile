@@ -36,10 +36,10 @@ test\:%: ## run the test suite of a single package (e.g. test:http)
 .PHONY: check
 check: ## run all checks
 	@npm run pins:check
-	@npm run lint:fix
 	@npm run err-message:copy
-	@npm run lint:markdown
 	@npm run build
+	@npm run lint:fix
+	@npm run lint:markdown
 	@npm run spec:check
 	@$(MAKE) cli/dist/caffeine
 	@npm run build:examples
@@ -88,7 +88,7 @@ lint\:%: ## lint a single package and fix errors (e.g. lint:http)
 
 # make matches a pattern with no slash against only the part of a goal after its last slash, so lint:% never matches a
 # nested workspace such as lint:fetchy/fetchy. A pattern that names the parent directory is matched whole.
-NESTED_WORKSPACE_PARENTS := integrations fetchy devtools di/examples examples plugins
+NESTED_WORKSPACE_PARENTS := integrations fetchy di/examples examples plugins
 
 define lint_nested
 lint\:$(1)/%:
@@ -108,10 +108,13 @@ bench\:%: ## build and run a benchmark (e.g. bench:helloworld)
 	@npm run build -w @caffeinejs/benchmarks
 	@npm run bench:$* -w @caffeinejs/benchmarks
 
+DEVTOOLS_CONFIG ?= examples/02-devtools-basic/devtools.yaml
+
 .PHONY: devtools
-devtools:
+# Run from its build output: a bin link exists only when its target did at install time.
+devtools: ## run the DevTools UI at http://127.0.0.1:9339 (DEVTOOLS_CONFIG=path/to/devtools.yaml)
 	@npm run build
-	@npm run dev -w @caffeinejs/devtools-ui
+	@node devtools-ui/dist/main.js --config $(DEVTOOLS_CONFIG)
 
 # .
 # End-to-End Toolchain

@@ -7,7 +7,7 @@ examples-readme: ## generate the examples README table of contents
 	@node tools/generate-examples-readme.mjs
 
 .PHONY: example\:devtools
-example\:devtools:
+example\:devtools: ## run the DevTools example (app at http://127.0.0.1:3000, DevTools at http://127.0.0.1:9100/devtools)
 	@npm run build
 	@node_modules/.bin/tsx examples/02-devtools-basic/index.ts
 
@@ -45,6 +45,7 @@ example\:watt: ## run the Watt example (entrypoint at http://127.0.0.1:3042/shop
 	@node_modules/.bin/wattpm start examples/05-watt
 
 help::
+	@printf "\033[36m%-20s\033[0m %s\n" "example:devtools" "run the DevTools example (app at http://127.0.0.1:3000, DevTools at http://127.0.0.1:9100/devtools)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:petstore" "run the petstore example (Postgres in Docker, app on host at http://localhost:9999)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:spa-dashboard" "run the SPA dashboard example (app on host at http://127.0.0.1:9010)"
 	@printf "\033[36m%-20s\033[0m %s\n" "example:watt" "run the Watt example (entrypoint at http://127.0.0.1:3042/shop, probes at http://127.0.0.1:9090)"

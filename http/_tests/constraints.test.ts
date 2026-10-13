@@ -1,5 +1,4 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { type FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import { constraint, constraints, createWebApplication, fst, kRouteConstraints, Router, version } from '../index.js'
@@ -116,23 +115,18 @@ describe('route constraints', () => {
 })
 
 describe('constraint Vary header', () => {
-  // The plugin learns the constrained headers from `onRoute`, so a route a later plugin adds counts as much as a
-  // mounted one — a shared cache would otherwise mix the representations.
-  it('covers a constrained route a plugin added with $route', async () => {
+  // The plugin learns the constrained headers from `onRoute`, so a route a later plugin factory mounts counts as much
+  // as one the application mounts — a shared cache would otherwise mix the representations.
+  it('covers a constrained route a plugin factory mounted', async () => {
     const app = createWebApplication()
       .with(() => constraints([flavorStrategy()]))
-      .with(() => async (instance: FastifyInstance) => {
-        instance.$route('late', router => {
-          router.path('/late')
-          constraint('flavor', 'spicy', { header: 'X-Flavor' })(router)
-          router.routes([
-            new RouteBuilder()
-              .method('GET')
-              .path('/')
-              .handle(() => ({ ok: true })),
-          ])
-        })
-      })
+      .with(({ app: application }) =>
+        application.mount(
+          new Router('/late')
+            .with(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+            .get('/', () => ({ ok: true })),
+        ),
+      )
     await app.bootstrap()
 
     const res = await app.fetch('/late', { headers: { 'x-flavor': 'spicy' } })

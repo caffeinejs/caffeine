@@ -12,32 +12,42 @@ import type { Router } from './router.js'
  * arguments it takes are pickers, so the compiler's default dispatch covers it. What the source does is flatten
  * the routers it was given and hand the specs over — from there a programmatic route and a decorated one are the
  * same thing.
+ *
+ * One source serves the whole application: each server's routing pass adds what was mounted on it, and a router is
+ * declared once however many times, and from however many places, it was mounted.
  */
 export class FluentRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'programmatic'
 
-  readonly #routers: readonly Router<any, any, any, any, any, any>[]
+  readonly #pending: Router<any, any, any, any, any, any>[] = []
 
-  constructor(routers: readonly Router<any, any, any, any, any, any>[]) {
-    this.#routers = routers
+  // Every value `.handler()` returns names the router it was opened from, so mounting routes declared as separate
+  // statements hands the same state over more than once. All of these start at the same path, so the second one is
+  // the first one's routes again.
+  readonly #seen = new Set<RouterState>()
+
+  constructor(routers: readonly Router<any, any, any, any, any, any>[] = []) {
+    this.#pending.push(...routers)
   }
 
+  /** Adds routers for the next {@link collect}. */
+  add(routers: readonly Router<any, any, any, any, any, any>[]): this {
+    this.#pending.push(...routers)
+    return this
+  }
+
+  /** The groups of every router added since the last call whose state no earlier call declared. */
   collect(container: Container): DeclaredRouteGroup<R>[] {
     const groups: DeclaredRouteGroup<R>[] = []
 
-    // Every value `.handler()` returns names the router it was opened from, so mounting routes declared as
-    // separate statements hands the same state over more than once. All of these start at the same path, so the
-    // second one is the first one's routes again.
-    const seen = new Set<RouterState>()
-
-    for (const router of this.#routers) {
+    for (const router of this.#pending.splice(0)) {
       const state = stateOf(router)!
 
-      if (seen.has(state)) {
+      if (this.#seen.has(state)) {
         continue
       }
 
-      seen.add(state)
+      this.#seen.add(state)
 
       for (const flat of flattenRouter<R>(state, container)) {
         groups.push({ name: flat.name, spec: flat.spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })

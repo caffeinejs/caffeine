@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/devtools",
   "version": "0.0.0",
-  "description": "CaffeineJS devtools",
+  "description": "CaffeineJS DevTools: read-only endpoints into a running application, served on an ops server",
   "license": "MIT",
   "private": true,
   "type": "module",
@@ -18,27 +18,16 @@
     "package.json"
   ],
   "scripts": {
-    "build": "npm run build -w @caffeinejs/devtools-ui && tsc --build tsconfig.build.json",
+    "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@caffeinejs/di": "*",
-    "ws": "^8.21.3"
-  },
   "peerDependencies": {
-    "@caffeinejs/std": "*",
-    "@caffeinejs/http": "*"
-  },
-  "peerDependenciesMeta": {
-    "@caffeinejs/std": {
-      "optional": true
-    },
-    "@caffeinejs/http": {
-      "optional": true
-    }
+    "@caffeinejs/di": "*",
+    "@caffeinejs/http": "*",
+    "@caffeinejs/std": "*"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1"
+    "fastify": "^5.12.5"
   }
 }

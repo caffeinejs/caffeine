@@ -2,7 +2,7 @@ import type { Container } from '@caffeinejs/di'
 import type { BootstrapKit } from '@caffeinejs/std'
 
 import type { MiddlewarePipeline } from './middleware/pipeline.js'
-import type { RouteGroupCompiler } from './routing/compile.js'
+import type { Router } from './routing/programmatic/router.js'
 import type { RouteGroup } from './routing/route.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
@@ -111,12 +111,16 @@ export type ServerCustomizer<T extends AdapterTypes, C = unknown> = (
 
 /** What an application hands its adapter to set one server up with. */
 export interface AdapterIn<T extends AdapterTypes> {
-  routeGroups: RouteGroup<T['request']>[]
   /**
-   * What `$route` compiles a late group with: the compiler {@link buildRouting} built the groups above with, applied
-   * the way this server applies it to every group it serves.
+   * Routes this server and resolves to the groups to register on it, in order: compiled, checked at start-up and
+   * listed in the route table.
+   *
+   * Call it once, after installing `extensions.root()` and before registering a route: until then the plugins being
+   * installed may still mount routers on this server. By the time it resolves, `extensions.of(scope)` answers for every
+   * scope its groups name. It rejects when the server cannot be routed: a router bound to a server that does not serve
+   * it, a route that cannot compile, a protected route nothing authenticates.
    */
-  compileRouteGroup: RouteGroupCompiler
+  route(): Promise<readonly RouteGroup<T['request']>[]>
   /** What the application hands everything it builds at start-up. The middleware factories run against it. */
   context: HTTPSetupContext
   /** What `app.use()` registered, for the adapter to resolve and attach to its hooks. */
@@ -140,11 +144,13 @@ export interface AdapterIn<T extends AdapterTypes> {
  */
 export interface Adapter<T extends AdapterTypes> {
   /**
-   * Builds one server from `input.server`, hands it to `input.customize`, then wires everything else onto it. The
-   * server comes back ready and not listening.
+   * Builds one server: constructs it from `input.server`, hands it to `input.customize`, installs
+   * `input.extensions.root()` in order, calls `input.route()` once, then registers the groups it resolved to, each
+   * behind what `input.extensions.of(scope)` names for its scopes. The server comes back ready and not listening.
    *
    * Each call builds a server of its own, sharing nothing with another but the adapter's request context: the
-   * application calls it for its own server, and once more for every other server it runs.
+   * application calls it for its own server, and once more for every other server it runs. The application refuses a
+   * server whose adapter never called `input.route()`, or called it twice.
    */
   setup(input: AdapterIn<T>): Promise<AdapterServer<T>>
 }
@@ -195,14 +201,54 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
    * instance's `$hasFeature(...)` instead.
    */
   hasFeature(name: string): boolean
+
+  /**
+   * The application's compiled route table, the groups `app.routeGroups` holds: every group its controllers declared
+   * and every router mounted on it, the ones plugin factories mounted through {@link HTTPSetupContext.app} included,
+   * on every server, with `boundTo` naming the ops server a group is bound to.
+   *
+   * Filled server by server as each is routed: the application's own first, then each ops server in install order. A
+   * server is routed once its plugins have loaded, so its factories and the plugins they return see the servers routed
+   * before it, while its hooks and its handlers see it too. Complete before the application listens, and filled in
+   * place, so a reference taken earlier stays current.
+   *
+   * A route a plugin registers straight on a server is not in it: a plugin reads what its own server registers with
+   * `collectRouteGroups(instance)`.
+   */
+  readonly routeGroups: readonly RouteGroup<unknown>[]
+
+  /** The application, for a plugin factory to mount routers on: see {@link SetupApplication}. */
+  readonly app: SetupApplication
+}
+
+/** What {@link HTTPSetupContext.app} is: the application, as what it builds at start-up may use it. */
+export interface SetupApplication {
+  /**
+   * Mounts routers on the server the context belongs to: compiled, checked at start-up and protected like every
+   * router the application mounts. Returns this, so a plugin factory that installs nothing else hands it back:
+   * `({ app }) => app.mount(router)`.
+   *
+   * Open until that server's routing pass: its `.server(...)`, `.basePath(...)` and `.serverCallback(...)` callbacks,
+   * its `.with(...)` factories, and the plugins those return, async or callback-style, while they load. A router that
+   * names no server is served on this one. On the application's own server, a router bound with `bindTo(name)` is
+   * served on that ops server; on an ops server, one bound to another server fails `bootstrap()`.
+   *
+   * A mount once that server is routed, from a hook, a router's or a controller's plugin, or another server's plugin,
+   * is refused. During start-up the refusal is never thrown, since a throw from a callback-style plugin's body would
+   * end the process: it fails `bootstrap()` once the server being set up is built.
+   *
+   * @throws ErrConfiguration once the application has started.
+   */
+  readonly mount: (...routers: Router<any, any, any, any, any, any>[]) => SetupApplication
 }
 
 /**
  * Produces what an adapter installs on its server from what the application resolved at start-up. Under the
  * Fastify adapter that is a plugin: see `HTTPPluginFactory`.
  *
- * What `.with(...)` takes, and what `router.plugin(...)` and `@Use(...)` take. Called once, after the container
- * has initialized. Never deduplicated: two factories install two extensions.
+ * What `router.plugin(...)` and `@Use(...)` take. `.with(...)` takes one that may hand back `context.app` instead,
+ * when all it does is mount routers: `AdapterExtensionFactory<X | SetupApplication>`. Called once, after the
+ * container has initialized. Never deduplicated: two factories install two extensions.
  */
 export type AdapterExtensionFactory<X, C = unknown> = (context: HTTPSetupContext<C>) => X | Promise<X>
 
@@ -216,7 +262,7 @@ export type AdapterExtensionFactory<X, C = unknown> = (context: HTTPSetupContext
  */
 export class AdapterExtensions<X> {
   readonly #root: X[] = []
-  readonly #scoped = new Map<object, X[]>()
+  #scoped = new Map<object, X[]>()
 
   /** Adds an extension to the root list, or, given a router or a controller class, to that scope's own. */
   add(extension: X, scope?: object): void {
@@ -245,16 +291,13 @@ export class AdapterExtensions<X> {
   }
 
   /**
-   * The scoped extensions registered so far, in front of another root list: what one more server installs when it
-   * serves groups of the same routers and controllers.
+   * Another server's view: a root list of its own, and the scoped extensions, shared with this one rather than
+   * copied, so what a later routing pass adds for a scope reaches every view.
    */
   withRoot(root: readonly X[]): AdapterExtensions<X> {
     const extensions = new AdapterExtensions<X>()
     extensions.#root.push(...root)
-
-    for (const [scope, scoped] of this.#scoped) {
-      extensions.#scoped.set(scope, scoped)
-    }
+    extensions.#scoped = this.#scoped
 
     return extensions
   }

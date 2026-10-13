@@ -1,89 +1,162 @@
-import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
-import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
+import { createHash, timingSafeEqual } from 'node:crypto'
+
+import {
+  bindings,
+  configuration,
+  devTools,
+  graph,
+  health,
+  info,
+  routes,
+  type DevToolsSlice,
+} from '@caffeinejs/devtools'
+import {
+  Authentication,
+  Claim,
+  ErrHTTPBadRequest,
+  Identity,
+  Ops,
+  Principal,
+  Router,
+  authentication,
+  createWebApplication,
+  healthProbes,
+  newRouter,
+} from '@caffeinejs/http'
+import { newConfiguration } from '@caffeinejs/std'
+import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import { InlineConfigSource } from '@caffeinejs/std/config/inline'
+import { $t } from '@caffeinejs/std/schema'
+
+// --- configuration ---
+
+// Every key can be set from the environment: `TASKS_DEVTOOLS__PASSWORD` sets `devtools.password`. The name is the
+// framework's own `caffeine` block, so it comes from a source rather than a default here.
+const ConfigSchema = $t.Object({
+  server: $t.Object({
+    host: $t.String({ default: '127.0.0.1' }),
+    port: $t.Number({ default: 3000 }),
+  }),
+  devtools: $t.Object({
+    host: $t.String({ default: '127.0.0.1' }),
+    port: $t.Number({ default: 9100 }),
+    username: $t.String({ default: 'admin' }),
+    password: $t.String({ default: 'admin' }),
+  }),
+})
+
+const config = newConfiguration(ConfigSchema)
+  .sources(new InlineConfigSource({ caffeine: { name: 'tasks' } }), new EnvConfigSource({ prefix: 'TASKS_' }))
+  .build().config
 
 // --- services ---
 
-@Injectable()
+interface Task {
+  id: number
+  name: string
+}
+
 class TaskStore {
-  #tasks: { id: number; name: string }[] = []
+  #tasks: Task[] = []
   #next = 1
 
-  add(name: string): { id: number; name: string } {
+  add(name: string): Task {
     const task = { id: this.#next++, name }
     this.#tasks.push(task)
     return task
   }
 
-  list(): { id: number; name: string }[] {
+  list(): Task[] {
     return this.#tasks
   }
 
   remove(id: number): void {
-    this.#tasks = this.#tasks.filter(t => t.id !== id)
+    this.#tasks = this.#tasks.filter(task => task.id !== id)
   }
 }
 
-@Injectable([TaskStore])
-class TaskLogger {
-  #store: TaskStore
+// --- routes ---
 
-  constructor(store: TaskStore) {
-    this.#store = store
-  }
+const tasks = newRouter('/tasks')
+  .get('/')
+  .inject({ store: TaskStore })
+  .handler((_ctx, { store }) => store.list())
 
-  log(action: string, id?: number): void {
-    const count = this.#store.list().length
-    console.log(`[tasks] ${action}${id !== undefined ? ` id=${id}` : ''} (total=${count})`)
-  }
-}
+  .post('/')
+  .inject({ store: TaskStore })
+  .handler((ctx, { store }) => {
+    const { name } = (ctx.req.body() ?? {}) as { name?: unknown }
+    if (typeof name !== 'string' || name === '') {
+      throw new ErrHTTPBadRequest('Cannot add a task: "name" is required')
+    }
 
-// --- controller ---
+    ctx.status(201)
+    return store.add(name)
+  })
 
-@Controller('/tasks', [TaskStore, TaskLogger])
-class TaskController {
-  #store: TaskStore
-  #log: TaskLogger
-
-  constructor(store: TaskStore, log: TaskLogger) {
-    this.#store = store
-    this.#log = log
-  }
-
-  @Get('/')
-  list() {
-    return this.#store.list()
-  }
-
-  @Post('/')
-  @Args([$p.body()])
-  create(data: { name: string }) {
-    const task = this.#store.add(data.name)
-    this.#log.log('create', task.id)
-    return task
-  }
-
-  @Delete('/:id')
-  @Args([$p.param('id')])
-  remove(id: string) {
-    const numId = Number(id)
-    this.#store.remove(numId)
-    this.#log.log('delete', numId)
+  .delete('/:id')
+  .inject({ store: TaskStore })
+  .handler((ctx, { store }) => {
+    store.remove(Number(ctx.req.param().id))
     return { ok: true }
-  }
+  })
+
+// --- devtools ---
+
+// A slice of the example's own, next to the built-ins: what the store holds, at `GET /devtools/tasks`. Anything a
+// package or an application wants to expose is one more `DevToolsSlice`.
+const taskSlice: DevToolsSlice = {
+  id: 'tasks',
+  router: ({ container }) => {
+    const store = container.get(TaskStore)
+
+    return new Router().get('/', () => ({ count: store.list().length, tasks: store.list() }))
+  },
 }
 
-void [TaskStore, TaskLogger, TaskController]
+// Compared through a digest of each, so the comparison takes the same time whatever the input.
+const digest = (value: string) => createHash('sha256').update(value).digest()
+const matches = (given: string, expected: string) => timingSafeEqual(digest(given), digest(expected))
 
-// --- bootstrap ---
+// --- application ---
 
-const container = new CaffeineIoC({ modules: [DevtoolsModule({ port: 9229 })] })
-const app = createWebApplication({ container })
-await app.bootstrap()
+const app = createWebApplication({ config })
+  .install(
+    Authentication((a, { config }) =>
+      a.addBasic('devtools', b =>
+        b
+          .realm('DevTools')
+          .validate((_ctx, user, password) =>
+            matches(user, config.devtools.username) && matches(password, config.devtools.password)
+              ? new Principal(true, new Identity('Basic', true, [new Claim('sub', user, '')]))
+              : null,
+          ),
+      ),
+    ),
+  )
+  .install(
+    // DevTools gets a port of its own, and its own authentication gate: nothing on the application's server reaches it.
+    Ops('devtools', (o, { config }) =>
+      o
+        .server(() => ({ listener: { host: config.devtools.host, port: config.devtools.port } }))
+        .with(authentication())
+        .with(healthProbes())
+        .with(
+          devTools(d =>
+            d
+              .authorize({ schemes: ['devtools'] })
+              .slices(bindings(), graph(), routes(), health(), info(), configuration(), taskSlice),
+          ),
+        ),
+    ),
+  )
+  .server(({ config }) => ({ listener: config.server }))
+  .mount(tasks)
 
-const devtools = container.get(DevtoolsServer)
-devtools.attach(app).start()
+app.container.bind(TaskStore, t => t.toClass(TaskStore))
 
-await app.run({ port: 3000, host: '127.0.0.1' })
-console.log('[app] HTTP server at http://localhost:3000')
-console.log('[app] Devtools at http://localhost:9229')
+const { address } = await app.run()
+
+app.log.info(`Tasks API at ${address?.origin}/tasks`)
+app.log.info(`DevTools at ${app.ops.get('devtools')?.address?.origin}/devtools, as "admin" unless configured`)
+app.log.info('Read it with the DevTools UI: make devtools')

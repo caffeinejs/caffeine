@@ -15,6 +15,7 @@ import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../er
 import { attachGuardHook } from '../../guards/fastify.js'
 import { Responder } from '../../response.js'
 import type { RouteCompilers, RouteGroup } from '../route.js'
+import { routeURL } from '../route_url.js'
 import { compileRouteSchema } from '../schema/compile_route_schema.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
@@ -133,7 +134,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           },
         } satisfies CaffeineRouteConfig<REQ>
 
-        const url = joinPaths(basePath, route.path)
+        // No prefix here: `register({ prefix })` below applies the group's.
+        const url = routeURL(undefined, basePath, route.path)
 
         const routeDef: AdapterRouteOptions = {
           method: [...new Set(route.method.map(m => m.toUpperCase()))],
@@ -293,12 +295,6 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
 /** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
 function isHandlerTimeout(reason: unknown): boolean {
   return (reason as { code?: unknown } | null)?.code === 'FST_ERR_HANDLER_TIMEOUT'
-}
-
-/** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
-function joinPaths(base: string, path: string): string {
-  const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
 }
 
 /** The body as it is read, failed with a 413 once more than `limit` bytes have passed. */

@@ -2,7 +2,15 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { type Context, Ops, bindTo, createWebApplication, newRouter, type WebApplication } from '../../index.js'
+import {
+  type Context,
+  Ops,
+  type RouteGroup,
+  bindTo,
+  createWebApplication,
+  newRouter,
+  type WebApplication,
+} from '../../index.js'
 
 /**
  * An ops server's own plugins and middleware: registered on its builder, `o.with(...)`, `o.use(...)` and
@@ -115,6 +123,36 @@ describe("an ops server's own plugins and middleware", () => {
     expect(onMain.headers.get('x-app-middleware')).toBe('yes')
     expect(onMain.headers.get('x-ops-middleware')).toBeNull()
     expect(onMain.headers.get('x-built-middleware')).toBeNull()
+  })
+
+  // A plugin on one server reads what another serves: the table fills as each server is routed, the routers plugin
+  // factories mount included, and is complete once the application is set up.
+  it("hands its factories the application's route table, each group with the server it is bound to", async () => {
+    let table: readonly RouteGroup<unknown>[] | undefined
+
+    app = createWebApplication()
+      .install(
+        Ops('admin', o =>
+          o
+            .server(() => ({ listener }))
+            .with(context => {
+              table = context.routeGroups
+              return fp(async () => undefined, { name: 'route-table-probe' })
+            }),
+        ),
+      )
+      .server(() => ({ listener }))
+      .with(({ app: application }) => application.mount(newRouter('/mounted').get('/', () => ({ mounted: true }))))
+      .mount(jobs(), api()) as WebApplication
+
+    await app.bootstrap()
+
+    const groups = table?.toSorted((a, b) => a.path.localeCompare(b.path)).map(group => [group.path, group.boundTo])
+    expect(groups).toEqual([
+      ['/api', undefined],
+      ['/jobs', 'admin'],
+      ['/mounted', undefined],
+    ])
   })
 
   it('refuses a feature handed to its with(...), as the application refuses one', async () => {

@@ -6,7 +6,6 @@ import {
   type FeatureConfigurer,
   type RunInfo,
 } from '@caffeinejs/std'
-import { errMessage } from '@caffeinejs/std/framework/err'
 
 import {
   AdapterExtensions,
@@ -19,11 +18,12 @@ import {
   type ServerAddress,
   type ServerConfigurer,
   type ServerCustomizer,
+  type SetupApplication,
 } from './adapter.js'
+import { boundTo } from './binding.js'
 import { CookieBuilder } from './cookie/cookie.js'
 import { controllerPlugins } from './decorators/use.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
-import { ErrConfiguration } from './error/common.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
 import {
   type MiddlewareFactory,
@@ -41,13 +41,14 @@ import { opsServers } from './ops/servers.js'
 import { kServerExtension } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
-import { buildRouting, type RouteSource } from './routing/index.js'
+import { buildRouting, type Routing } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
 import type { RouteGroup } from './routing/route.js'
-import { AuthorizationBuilder } from './security/authz/index.js'
+import { assertAuthenticationConfigured, assertRouteSchemesResolve } from './security/authentication_plugin.js'
+import { AuthorizationBuilder, assertAuthorizationConfigured } from './security/authz/index.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
-import { ServerSet } from './servers.js'
+import { assertBindings, ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -99,9 +100,8 @@ export class WebApplication<
   /** The ops servers `Ops(...)` installed, once {@link setup} has built them. */
   #ops: ReadonlyMap<string, OpsServer<T>> | undefined
   #runArgs: T['runArgs'] | undefined
-  #routeGroups: RouteGroup<T['request']>[] = []
-  #mounted: Router<any, any, any, any, any, any>[] = []
-  #built = false
+  /** The route table: filled in place as each server is routed, so a reference handed out before stays current. */
+  readonly #routeGroups: RouteGroup<T['request']>[] = []
 
   // Held as fields: the instance that configured is the one whose head-slot plugin installs, and it holds
   // what its configure step bound.
@@ -266,6 +266,15 @@ export class WebApplication<
    * registering it directly is what puts its hooks on every route, while a wrapper would take an encapsulation
    * context of its own and cover nothing.
    *
+   * A factory serves routes by mounting routers on the application through its context, as {@link mount} does, and
+   * one that installs nothing else hands back what `mount` returns. The plugin it returns may mount too, while it
+   * loads. A router that names no server is served on the server the factory is registered on. It is not in the
+   * application's type, so `RoutesOf<typeof app>` leaves it out:
+   *
+   * ```ts
+   * .with(({ app, container }) => app.mount(jobsRouter(container.get(JobQueue))))
+   * ```
+   *
    * A factory is never deduplicated — two calls register two plugins. A `fastify-plugin` name already on that
    * instance is refused at register time. A factory producing another adapter's extension does not compile.
    *
@@ -274,7 +283,7 @@ export class WebApplication<
    *
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  with(factory: AdapterExtensionFactory<T['extension'], C>): this {
+  with(factory: AdapterExtensionFactory<T['extension'] | SetupApplication, C>): this {
     this.assertConfigurable()
     assertPluginFactory(factory)
 
@@ -419,43 +428,12 @@ export class WebApplication<
   }
 
   /**
-   * Resolves the extensions a mounted router or a controller registered, each paired with what registered it.
-   *
-   * After the application's own: routing is what needs these, and by the time it is built the configuration has
-   * resolved and the container has initialized — so a factory here sees exactly what one passed to the
-   * application's `.with(...)` sees, but for its configuration's type.
-   */
-  async #scopedExtensions(context: HTTPSetupContext): Promise<AdapterExtensions<T['extension']>> {
-    const extensions = new AdapterExtensions<T['extension']>()
-    const register = async (scope: object, factories: readonly AdapterExtensionFactory<unknown>[]): Promise<void> => {
-      for (const factory of factories) {
-        // Unchecked: a router's binding was checked when it was mounted, but a controller's `@Use(...)` never
-        // meets the application's type. The adapter refuses what it cannot install.
-        extensions.add((await factory(context)) as T['extension'], scope)
-      }
-    }
-
-    for (const state of routerStates(this.#mounted)) {
-      await register(state, state.plugins)
-    }
-
-    // Registered when the container compiled, so every controller the application can resolve is already known
-    // here — long before routing is built.
-    for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
-      if (typeof key !== 'function') {
-        continue
-      }
-
-      await register(key, controllerPlugins(key))
-    }
-
-    return extensions
-  }
-
-  /**
    * Mounts programmatic routers, whose routes are then compiled and registered exactly like a controller's.
    *
-   * Routing is built once, during start-up, so this has to be called before the application is ready.
+   * A router mounted here is served on the application's own server, or on the ops server it is bound to with
+   * `bindTo(name)`. Each server is routed as it is set up, the application's own first: mount before
+   * {@link bootstrap}, or while the application's own server is set up, from a plugin factory or the plugin it
+   * returns, which reach it through their context as `context.app`.
    *
    * ```ts
    * app.mount(pets, orders)
@@ -464,54 +442,38 @@ export class WebApplication<
    *
    * The application comes back carrying the mounted routers' routes in its type, so `RoutesOf<typeof app>` is the
    * whole surface a generated client would call. A router bound to another adapter does not compile.
+   *
+   * @throws ErrConfiguration once the application has started. During start-up, a mount once the application's own
+   *   server is routed fails {@link bootstrap} instead.
    */
   mount<const RS extends ReadonlyArray<Router<any, any, any, any, any, T>>>(
     ...routers: RS
   ): WebApplication<T, ROUTES | RoutesOfRouter<RS[number]>, DEPS | DepsOfRouter<RS[number]>, C>
   mount(...routers: Router<any, any, any, any, any, any>[]): this {
-    if (this.#built) {
-      throw new ErrConfiguration(
-        errMessage('Cannot mount a router: routing has already been built')
-          .solutions('Call "mount()" before the application is started')
-          .reference('@caffeinejs/http', ErrConfiguration)
-          .build(),
-      )
+    if (this.#servers === undefined) {
+      this.#own.routers.push(...routers)
+    } else {
+      this.#servers.mount(undefined, routers)
     }
-
-    this.#mounted.push(...routers)
 
     return this
   }
 
-  /**
-   * Where routes come from. One source per way of declaring them; a route declared any of those ways is
-   * compiled the same and registered the same.
-   *
-   * The programmatic source is added only when something was mounted, so an application declaring every route
-   * with decorators builds exactly what it built before there was a second way.
-   */
-  protected routeSources(): RouteSource<T['request']>[] {
-    const sources: RouteSource<T['request']>[] = [new ControllerRouteSource<T['request']>()]
-
-    if (this.#mounted.length > 0) {
-      sources.push(new FluentRouteSource<T['request']>(this.#mounted))
-    }
-
-    return sources
-  }
-
   protected override async setup(): Promise<void> {
-    const routing = buildRouting<T['request']>(this.routeSources(), this.container)
     const servers = new ServerSet<T>([
       this.#own as ServerDefinition<T>,
       ...(this.container.getManyOptional(ServerDefinition) as ServerDefinition<T>[]),
     ])
     this.#servers = servers
 
-    // Every group compiles here, before any server is built, so a route that cannot compile fails before anything
-    // has started. Each server serves the routers bound to it; the application's own, the unbound ones.
-    this.#routeGroups = servers.select(routing)
-    this.#built = true
+    // What a plugin factory mounts routers on: the application itself, which serves one that names no server on its
+    // own server. An ops server's context mounts through an `app` of its own.
+    const app: SetupApplication = {
+      mount: (...routers) => {
+        this.mount(...routers)
+        return app
+      },
+    }
 
     // One context for everything built from here on. `log` is the configured logger by now.
     const context: HTTPSetupContext = {
@@ -519,14 +481,75 @@ export class WebApplication<
       config: this.configSnapshot,
       store: this.configStore,
       logger: this.log,
+      name: this.name,
       hasFeature: name => this.hasFeature(name),
+      // Filled as each server is routed. Handlers take the request contravariantly, so the adapter's request type
+      // widens only by a cast.
+      routeGroups: this.#routeGroups as readonly RouteGroup<unknown>[],
+      app,
+    }
+
+    // One routing for every server, so a guard and the authorization policies resolve once whichever server's routes
+    // use them. Built as the application's own server is routed, which always comes first.
+    let routing: Routing<T['request']> | undefined
+    const programmatic = new FluentRouteSource<T['request']>()
+    const scoped = new AdapterExtensions<T['extension']>()
+    const resolved = new Set<object>()
+
+    // What a router or a controller installs in front of its groups, resolved once each, with the application's
+    // context: a router is written without knowing which server will serve it.
+    const resolve = async (scope: object, factories: readonly AdapterExtensionFactory<unknown>[]): Promise<void> => {
+      if (resolved.has(scope)) {
+        return
+      }
+
+      resolved.add(scope)
+
+      for (const factory of factories) {
+        // Unchecked: a router's binding was checked when it was mounted, but a controller's `@Use(...)` never meets
+        // the application's type. The adapter refuses what it cannot install.
+        scoped.add((await factory(context)) as T['extension'], scope)
+      }
     }
 
     await servers.setup(this.#adapter, {
       context,
       headSlots: () => this.#headSlots(),
-      scopedExtensions: () => this.#scopedExtensions(context),
-      compileRouteGroup: routing.compileRouteGroup,
+      scoped,
+      // The routing pass every server goes through, once its plugins have loaded: declare what was mounted on it,
+      // refuse what it cannot serve, compile what is bound to it, then resolve their plugins and run the start-up
+      // checks, the same on every server whatever the adapter.
+      route: async (name, routers) => {
+        const own = name === undefined
+        routing ??= buildRouting<T['request']>(this.container)
+
+        // Registered when the container compiled, so the application's own pass declares every controller.
+        const sources = own ? [new ControllerRouteSource<T['request']>(), programmatic] : [programmatic]
+        programmatic.add(routers)
+        const declared = routing.declare(...sources)
+        assertBindings(declared, name, servers.names)
+
+        const groups = routing.select(labels => boundTo(labels) === name)
+        this.#routeGroups.push(...groups)
+
+        for (const state of routerStates(routers)) {
+          await resolve(state, state.plugins)
+        }
+
+        if (own) {
+          for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
+            if (typeof key === 'function') {
+              await resolve(key, controllerPlugins(key))
+            }
+          }
+        }
+
+        assertAuthenticationConfigured(this.container, groups)
+        assertRouteSchemesResolve(this.container, groups)
+        assertAuthorizationConfigured(this.container, groups)
+
+        return groups
+      },
     })
 
     this.#ops = opsServers(servers.named!)

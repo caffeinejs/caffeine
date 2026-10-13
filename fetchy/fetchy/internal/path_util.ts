@@ -12,6 +12,7 @@ export function normalizePath(path: string): string {
   return normalized
 }
 
+// Empty when neither has a path: the request builder decides what that calls, the base URL's own path or the root.
 export function joinPaths(base: string, path: string): string {
-  return `${normalizePath(base)}${normalizePath(path)}` || '/'
+  return `${normalizePath(base)}${normalizePath(path)}`
 }

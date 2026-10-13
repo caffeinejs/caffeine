@@ -42,20 +42,12 @@ import { FastifyContext } from './fastify_context.js'
 import { installFormBodyParser } from './form/index.js'
 import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
 import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
-import { RouteGroupBuilder } from './routing/builder.js'
 import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
 import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
 import type { RouteCompilers, RouteGroup } from './routing/route.js'
-import { assertAuthorizationConfigured } from './security/authz/index.js'
-import {
-  assertAuthenticationConfigured,
-  assertRouteSchemesResolve,
-  assertRoutesGated,
-  type Principal,
-  type RegisteredRoute,
-} from './security/index.js'
+import { assertRoutesGated, type Principal, type RegisteredRoute } from './security/index.js'
 import { Keys } from './symbols.js'
 
 /**
@@ -148,14 +140,6 @@ declare module 'fastify' {
      * before routing, so a plugin building, at start-up, a URL a browser will follow puts it in front.
      */
     get $basePath(): string
-    /**
-     * Adds one more route group, served and protected like any other. For the body of a plugin registered with
-     * `.with(...)`: the route table closes once those have installed.
-     *
-     * @throws ErrConfiguration when called from anywhere else — a route group's plugin (`router.plugin(...)`,
-     * `@Use(...)`) or a hook — failing start-up, and at once when called after it.
-     */
-    $route(name: string, build: (router: RouteGroupBuilder) => void): void
     /**
      * Whether `.install(...)` recorded a feature under this name, the framework's built-ins included. What a
      * plugin body asks so it can fail loudly — at start-up, not per request — when the feature whose bindings
@@ -271,9 +255,6 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
   /** Everything {@link setup} does to a server once it is constructed: decorations, hooks, plugins, routes, `ready()`. */
   async #wire(fastify: FastifyInstance, input: AdapterIn<FastifyTypes>): Promise<void> {
     const container = this.#container
-    // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
-    // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
-    const routeGroups = [...input.routeGroups]
     const { factory = {} } = input.server
 
     // Every route that registers, with the context it registered on, for the gate check once they all have.
@@ -290,21 +271,11 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       registered.push({ route, url: route.url, method: route.method, context: this })
     })
 
-    // What `$route` refused while the route table was closing: thrown by the `onReady` hook below, since thrown on
-    // the spot inside a callback-style plugin it would escape the boot as an uncaught exception.
-    let routeTable: 'open' | 'closing' | 'closed' = 'open'
-    let refusedRoute: ErrConfiguration | undefined
-
     // Also ahead of `customize`, so it is the first `onReady` hook to run: every route has registered and every
     // gate has stamped the ones it owns, and no plugin's own `onReady` work has started yet.
     fastify.addHook('onReady', done => {
       try {
-        if (refusedRoute !== undefined) {
-          throw refusedRoute
-        }
-
         assertRoutesGated(container, registered)
-        routeTable = 'closed'
         done()
       } catch (err) {
         done(err as Error)
@@ -361,61 +332,21 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       })
     }
 
-    // Lets a plugin registered through the `.with(...)` loop right below add one more route, protectable the
-    // same way any other route is. Compiled on the spot, through the exact compiler `buildRouting()` built
-    // (`input.compileRouteGroup`), so a guard shared with an ordinary route resolves through the one cache
-    // rather than a second one. Only registration waits: the group registers in the loop at the bottom with
-    // every other one, which is what puts it in front of every plugin's `onRoute` hook whichever order the
-    // plugins were installed in.
-    //
-    // Registration always targets this root instance, regardless of which context's `instance` the calling
-    // plugin was handed — a decoration is visible down the prototype chain to any child context.
-    //
-    // Open only while that loop runs. A group added later — from a route group's plugin, which loads during
-    // `ready()` — would miss the start-up checks and the registration loop both, and never be served.
-    fastify.decorate('$route', (name: string, build: (router: RouteGroupBuilder) => void) => {
-      if (routeTable !== 'open') {
-        // Built here, so its stack names the plugin that called.
-        const refused = new ErrConfiguration(
-          errMessage(
-            `Cannot add route group "${name}": "$route" is open only to a plugin registered with ".with(...)", ` +
-              'while it installs',
-          )
-            .solutions(
-              'Register the plugin that adds the group with ".with(...)" on the application — not with ' +
-                '"router.plugin(...)" or "@Use(...)", which install it after the route table has closed',
-            )
-            .reference('@caffeinejs/http', ErrConfiguration)
-            .build(),
-        )
-
-        if (routeTable === 'closed') {
-          throw refused
-        }
-
-        refusedRoute ??= refused
-        return
-      }
-
-      const builder = new RouteGroupBuilder()
-      build(builder)
-      routeGroups.push(input.compileRouteGroup(builder.toRouteGroup<FastifyRequest>(), { name }))
-    })
-
     // Every plugin the head slots and the factories produced, in the order the application installed them —
     // this package's own included. Registered one at a time and awaited, so a plugin sees what the one before
     // it decorated. A plugin wrapped in `fastify-plugin` lands on this instance and therefore covers every
     // route; an unwrapped one keeps what it registers to itself. That is the plugin author's call, not this
-    // loop's. `$route` (above) is what a plugin in this loop calls to add one more route. The form body parser
-    // goes first, so every plugin registers onto a server that has it.
+    // loop's. The route groups register after it, so every plugin's `onRoute` hook is in place first. The form
+    // body parser goes first, so every plugin registers onto a server that has it.
     installFormBodyParser(fastify)
 
     for (const extension of input.extensions.root()) {
       await installExtension(fastify, extension)
     }
 
-    // The route table is complete: the scans below read it and the loop at the bottom registers it.
-    routeTable = 'closing'
+    // Every plugin has loaded, and a plugin may have mounted routers on this server while it did: the routing pass
+    // compiles them with every other router bound here, and runs the start-up checks every server's routes pass.
+    const routeGroups = await input.route()
 
     // After every plugin, so one that took the not-found handler keeps it.
     installNotFoundHandler(fastify)
@@ -427,11 +358,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
     installFastifyMiddlewares(fastify, input.middlewares.resolve(input.context))
 
-    // Every plugin has had its turn, so whatever `$route` compiled is in `routeGroups` and the two scans see
-    // the same table the registration loop below reads.
-    assertAuthenticationConfigured(container, routeGroups)
-    assertRouteSchemesResolve(container, routeGroups)
-    assertAuthorizationConfigured(container, routeGroups)
+    // What only this adapter can tell: whether the Fastify plugins those routes need are installed.
     assertRouteFeaturesInstalled(fastify, routeGroups, input.extensions)
 
     // The same for every group, so it is built once here rather than per registration.

@@ -38,6 +38,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`brewer/`](brewer/AGENTS.md)                                                       | `@caffeinejs/brewer`                     |
 | [`bff/`](bff/AGENTS.md)                                                             | `@caffeinejs/bff`                        |
 | [`devtools/`](devtools/AGENTS.md)                                                   | `@caffeinejs/devtools`                   |
+| [`devtools-ui/`](devtools-ui/AGENTS.md)                                             | `@caffeinejs/devtools-ui`                |
 | [`integrations/typeorm/`](integrations/typeorm/AGENTS.md)                           | `@caffeinejs/typeorm`                    |
 | [`fetchy/fetchy/`](fetchy/fetchy/AGENTS.md)                                         | `@caffeinejs/fetchy`                     |
 | [`fetchy/fetchy-undici/`](fetchy/fetchy-undici/AGENTS.md)                           | `@caffeinejs/fetchy-undici`              |
@@ -60,7 +61,7 @@ Run checks in this order and fix failures before considering the task complete. 
   3. `npm test -w <pkg>`
   4. `make lint:<pkg-path>` — zero errors (warnings are pre-existing and acceptable). Not `npm run lint:fix -- <pkg-path>`: npm appends the path only to `oxfmt`, so oxlint would run on the whole repo.
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
-  1. `make check`, and nothing else. It runs the pin check, `lint:fix`, the error message copies, `lint:markdown`, `build`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
+  1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
 Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
 
@@ -94,7 +95,7 @@ When in doubt on **code** scope, run `make check`. A README next to a TypeScript
 - A generated `*.gen.ts` file is compiled like any source, so no `tsconfig.build.json` excludes it, but coverage and analysis leave it out: its source is measured where it lives.
 - `npm run build` is `tsc --build tsconfig.build.json`; `npm run test:typecheck` is `tsc --build tsconfig.check.json`. Both are incremental. Never edit `dist/` by hand.
 - A green `npm run build` says nothing about tests: only a check project reads a test file. Vitest type-checks only where a config turns it on (`brewer/` and `testing/`, through their own `tsconfig.vitest.json`); `npm test` elsewhere runs tests it never type-checked.
-- `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `devtools/ui` and `examples/**` are type-checked by nothing.
+- `cli/` and `benchmarks/` are outside `tsconfig.check.json` and own a `test:typecheck` script; they are the only workspaces where `npm run test:typecheck -w <pkg>` does anything. `examples/**` are type-checked by their own `build` scripts, which `build:examples` runs inside `make check`: each one runs `tsc` on a `noEmit` `tsconfig.json` that includes the example's tests.
 - Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts`. There is no `source` condition and no `paths` map, so a type-check needs the dependency `dist/` to exist: build first.
 - The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
 
@@ -164,7 +165,7 @@ A package’s `index.ts` barrel aggregating that package’s **own** modules is 
 Two registration verbs, two kinds of thing:
 
 - **`.install(feature)`** — on every `Application`. A feature is a container binder: deduplicated by `[kFeatureName]`, platform-agnostic, and order-free — every feature configures before the container initializes, so where an `.install(...)` sits in the chain does not matter. Feature factories are **PascalCase**: `Kafka()`, `Messaging()`, `DistributedLock()`, `TypeORM()`, `Health()`, `Authentication()`, `Authorization()`, `Guards()`.
-- **`.with(factory)`** — on `WebApplication`, and on an ops server's builder for that server alone: `Ops(name, o => o.with(factory))`. A factory produces a server plugin; factories run at setup, after `container.init()`, and install in the order the `.with(...)` calls are written. Never deduplicated. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
+- **`.with(factory)`** — on `WebApplication`, and on an ops server's builder for that server alone: `Ops(name, o => o.with(factory))`. A factory produces a server plugin, mounts routers on its server through its context (`context.app.mount(router)`, handing `context.app` back when it installs nothing else), or both; the plugin it returns may mount too, while it loads. Factories run at setup, after `container.init()`, one server at a time, the application's own first, each server's right before it is built, and install in the order the `.with(...)` calls are written. Never deduplicated. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
 
 A capability that binds _and_ wires the server ships both halves under one name, cased apart: `.install(Authentication(configure))` binds the schemes and services, `.with(authentication())` registers the gate. A plugin that depends on a feature asks `context.hasFeature(name)` in its factory (or `instance.$hasFeature(name)` in its body) and throws `ErrFeatureNotInstalled` — loudly, at start-up. The feature alone stays a supported configuration, but where something needs the plugin the feature is not safe without, start-up refuses it: a protected route no gate covers fails with `ErrAuthenticationGateRequired`.
 
@@ -180,6 +181,7 @@ Where a value goes depends on who reads it, not on what is convenient:
 | something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
 | one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
 | start-up wiring the server runs                       | a plugin, from a factory               | `.with(factory)`, in its written slot   |
+| routes a plugin serves                                | a router its factory mounts            | `context.app.mount(router)`             |
 | a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
 | a plugin's setting read per request                   | a Fastify decoration the plugin sets   | `request.server[kThing]`                |
 
@@ -194,7 +196,7 @@ Those are the only answers.
 - A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` inside the factory's plugin is the whole act. State a feature binds for its plugin goes through the container (`OIDCRoutesRef` is the model), never through shared builder fields.
 - The application's own server's construction and listen settings are not a feature: `.server(configure)` hands them to the adapter, which builds the server in `setup()` once the container has initialized. An ops server's are its feature's, `Ops(name, o => o.server(configure))`, and the adapter builds it through the same `setup()`.
 - A plugin reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it. Registered at the root by `.with(...)`, an fp-wrapped plugin covers every route; registered on a route group by `router.plugin(...)` or `@Use(...)`, it covers that group alone.
-- Plugins install in the order of the `.with(...)` calls of the server they are registered on. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts.
+- Plugins install in the order of the `.with(...)` calls of the server they are registered on. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts. The routers a factory mounts register with every other router, after the server's last plugin, not in the factory's slot.
 - Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookies (each server's cookie settings and its `Set-Cookie` writer). The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
 
 ## A feature's configuration schema

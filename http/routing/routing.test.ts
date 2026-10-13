@@ -44,7 +44,8 @@ describe('route selection', () => {
     const gold = declared('gold', g => g.label(kTier, 'gold'))
     const free = declared('free', g => g.label(kTier, 'free'))
 
-    const routing = buildRouting([source(gold.group, free.group)], await container())
+    const routing = buildRouting(await container())
+    routing.declare(source(gold.group, free.group))
     const selected = routing.select(labels => labels.get(kTier) === 'gold')
 
     expect(selected.map(group => group.name)).toEqual(['gold'])
@@ -53,18 +54,21 @@ describe('route selection', () => {
     expect(free.meta).not.toHaveBeenCalled()
   })
 
-  it('reports the groups no selection took', async () => {
-    const gold = declared('gold', g => g.label(kTier, 'gold'))
-    const free = declared('free')
+  // Each server declares what it was handed as it is routed, so a later declaration adds to what is there.
+  it('declares after what was declared before, each call returning only its own groups', async () => {
+    const routing = buildRouting(await container())
 
-    const routing = buildRouting([source(gold.group, free.group)], await container())
-    routing.select(labels => labels.has(kTier))
+    const first = routing.declare(source(declared('a').group))
+    const second = routing.declare(source(declared('b').group, declared('c').group))
 
-    expect(routing.unselected().map(group => group.name)).toEqual(['free'])
+    expect(first.map(group => group.name)).toEqual(['a'])
+    expect(second.map(group => group.name)).toEqual(['b', 'c'])
+    expect(routing.select(() => true).map(group => group.name)).toEqual(['a', 'b', 'c'])
   })
 
   it('refuses a group two selections both take: two servers would serve it', async () => {
-    const routing = buildRouting([source(declared('shared').group)], await container())
+    const routing = buildRouting(await container())
+    routing.declare(source(declared('shared').group))
     routing.select(() => true)
 
     expect(() => routing.select(() => true)).toThrow(
@@ -73,10 +77,8 @@ describe('route selection', () => {
   })
 
   it('selects from every source, in the order they declared their groups', async () => {
-    const routing = buildRouting(
-      [source(declared('a').group, declared('b').group), source(declared('c').group)],
-      await container(),
-    )
+    const routing = buildRouting(await container())
+    routing.declare(source(declared('a').group, declared('b').group), source(declared('c').group))
 
     expect(routing.select(() => true).map(group => group.name)).toEqual(['a', 'b', 'c'])
   })
@@ -85,7 +87,9 @@ describe('route selection', () => {
     const bound = declared('bound', bindTo('admin'))
     const own = declared('own')
 
-    const groups = buildRouting([source(bound.group, own.group)], await container()).select(() => true)
+    const routing = buildRouting(await container())
+    routing.declare(source(bound.group, own.group))
+    const groups = routing.select(() => true)
 
     expect(groups.map(group => [group.name, group.boundTo])).toEqual([
       ['bound', 'admin'],

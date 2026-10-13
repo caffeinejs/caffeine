@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   Controller,
   Get,
-  RouteBuilder,
   Router,
   collectRouteGroups,
   createWebApplication,
@@ -65,17 +64,13 @@ function observer(seen: Seen[]): HTTPPluginFactory {
     )
 }
 
-/** Adds one `$route` group and one route registered straight on Fastify. Installed after the observer. */
-const lateAndRaw: HTTPPluginFactory = () => async (instance: FastifyInstance) => {
-  instance.$route('late', router => {
-    router.path('/meta-late').routes([
-      new RouteBuilder()
-        .method('GET')
-        .path('/hello')
-        .handle(() => ({ ok: true })),
-    ])
-  })
-  instance.get('/meta-raw', async () => ({ ok: true }))
+/** Mounts one router and registers one route straight on Fastify. Installed after the observer. */
+const lateAndRaw: HTTPPluginFactory = ({ app }) => {
+  app.mount(new Router('/meta-late').name('late').get('/hello', () => ({ ok: true })))
+
+  return async (instance: FastifyInstance) => {
+    instance.get('/meta-raw', async () => ({ ok: true }))
+  }
 }
 
 function routerWithOneRoute(): Router {
@@ -92,7 +87,7 @@ describe('route metadata on config.$caffeine', () => {
     app = undefined
   })
 
-  it('reaches onRoute for decorated, programmatic and $route routes, and not for a raw Fastify route', async () => {
+  it('reaches onRoute for decorated, programmatic and plugin-mounted routes, and not for a raw Fastify route', async () => {
     const seen: Seen[] = []
     app = createWebApplication().with(observer(seen)).with(lateAndRaw).mount(routerWithOneRoute()) as WebApplication
     await app.bootstrap()

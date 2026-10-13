@@ -4,8 +4,10 @@ import type {
   HTTPSetupContext,
   ServerConfigurer,
   ServerCustomizer,
+  SetupApplication,
 } from './adapter.js'
 import { MiddlewarePipeline } from './middleware/pipeline.js'
+import type { Router } from './routing/programmatic/router.js'
 
 /** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */
 export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | undefined | Promise<string | undefined>
@@ -21,8 +23,13 @@ export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | u
 export class ServerDefinition<T extends AdapterTypes = AdapterTypes, C = unknown> {
   /** What its `.server(...)` calls return, in call order. */
   readonly server: ServerConfigurer<T, C>[] = []
-  /** Its `.with(...)` factories, in call order. */
-  readonly plugins: AdapterExtensionFactory<T['extension'], C>[] = []
+  /** Its `.with(...)` factories, in call order. One that only mounts routers hands back `context.app`. */
+  readonly plugins: AdapterExtensionFactory<T['extension'] | SetupApplication, C>[] = []
+  /**
+   * What was mounted on it, in mount order, for its routing pass to declare: through `app.mount(...)` and its
+   * context's `app` for the application's own server, through its context's `app` for an ops server.
+   */
+  readonly routers: Router<any, any, any, any, any, any>[] = []
   /** What its `.use(...)` and `.useFn(...)` calls registered: resolved, and sealed, by its server's setup. */
   readonly middlewares = new MiddlewarePipeline<T['hook']>()
   /** Its `.serverCallback(...)` callbacks, in call order. */

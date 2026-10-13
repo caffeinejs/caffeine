@@ -11,10 +11,8 @@ import {
   Controller,
   ErrConfiguration,
   Get,
-  RouteBuilder,
   createWebApplication,
   newRouter,
-  type HTTPPluginFactory,
   type NodeMiddleware,
   type WebApplication,
   healthProbes,
@@ -54,20 +52,6 @@ function echo(path = '/pets') {
     x: ctx.req.query('x') ?? null,
     rawOriginalUrlSet: 'originalUrl' in ctx.req.raw,
   }))
-}
-
-/** A plugin adding a route through `$route`, as `@caffeinejs/openapi` does for its own endpoints. */
-function lateRoute(): HTTPPluginFactory {
-  return () => async (instance: FastifyInstance) => {
-    instance.$route('late', router => {
-      router.path('/late').routes([
-        new RouteBuilder()
-          .method('GET')
-          .path('/hello')
-          .handle(() => ({ source: '$route' })),
-      ])
-    })
-  }
 }
 
 /** The status and body of a request: JSON when the response is, its text otherwise. */
@@ -324,29 +308,34 @@ describe('an application under a base path', () => {
     const sources = [
       ['a decorated controller', '/base-path-controller/hello'],
       ['a mounted router', '/router/hello'],
-      ['a $route group', '/late/hello'],
+      ['a router a plugin factory mounted', '/late/hello'],
       ['the health probes', '/livez'],
       ['a raw route written in .serverCallback(...)', '/callback-raw'],
       ['a raw route a plugin registered', '/plugin-raw'],
     ] as const
 
     function everySource(): WebApplication {
-      return createWebApplication()
-        .basePath('/api')
-        .serverCallback((_context, instance) => {
-          instance.get('/callback-raw', async () => ({ source: 'serverCallback' }))
-        })
-        .with(lateRoute())
-        .with(healthProbes())
-        .with(() =>
-          fp(
-            async (instance: FastifyInstance) => {
-              instance.get('/plugin-raw', async () => ({ source: 'plugin' }))
-            },
-            { name: 'base-path-raw-route' },
-          ),
-        )
-        .mount(newRouter('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
+      return (
+        createWebApplication()
+          .basePath('/api')
+          .serverCallback((_context, instance) => {
+            instance.get('/callback-raw', async () => ({ source: 'serverCallback' }))
+          })
+          // As `@caffeinejs/openapi` mounts its own endpoints.
+          .with(({ app: application }) =>
+            application.mount(newRouter('/late').get('/hello', () => ({ source: 'plugin factory' }))),
+          )
+          .with(healthProbes())
+          .with(() =>
+            fp(
+              async (instance: FastifyInstance) => {
+                instance.get('/plugin-raw', async () => ({ source: 'plugin' }))
+              },
+              { name: 'base-path-raw-route' },
+            ),
+          )
+          .mount(newRouter('/router').get('/hello', () => ({ source: 'router' }))) as WebApplication
+      )
     }
 
     it.each(sources)('serves %s under the base, and without it', async (_label, path) => {

@@ -7,7 +7,7 @@ import { newNoopLogger } from '@caffeinejs/std/logger'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import type { HTTPSetupContext } from '../adapter.js'
+import type { HTTPSetupContext, SetupApplication } from '../adapter.js'
 import type { Context } from '../context.js'
 import { Keys } from '../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
@@ -17,13 +17,19 @@ import { MiddlewarePipeline } from './pipeline.js'
 
 type RawRequest = IncomingMessage & Record<string, unknown>
 
+/** The application a context hands out: nothing here mounts a router. */
+const app: SetupApplication = { mount: () => app }
+
 function setupContext(options: { config?: object; container?: Container } = {}): HTTPSetupContext {
   return {
     container: options.container ?? ({} as Container),
     config: (options.config ?? {}) as ConfigSnapshot<unknown>,
     store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
+    name: '',
     hasFeature: () => false,
+    routeGroups: [],
+    app,
   }
 }
 
@@ -265,7 +271,10 @@ describe('MiddlewarePipeline', () => {
         config: {} as ConfigSnapshot<unknown>,
         store: {} as ConfigStore<unknown>,
         logger,
+        name: '',
         hasFeature: () => false,
+        routeGroups: [],
+        app,
       },
     })
     const res = await server.inject('/echo')

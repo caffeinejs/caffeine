@@ -1,0 +1,40 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false
+  },
+  "references": [
+    {
+      "path": "../di/tsconfig.build.json"
+    },
+    {
+      "path": "../std/tsconfig.build.json"
+    },
+    {
+      "path": "../http/tsconfig.build.json"
+    },
+    {
+      "path": "../html/tsconfig.build.json"
+    },
+    {
+      "path": "../fetchy/fetchy/tsconfig.build.json"
+    },
+    {
+      "path": "../devtools/tsconfig.build.json"
+    }
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "**/_tests/**",
+    "**/_testdata/**",
+    "**/*.test.ts",
+    "**/*.test-d.ts",
+    "**/*.spec.ts",
+    "**/*.testkit.ts",
+    "**/*.e2e.ts",
+    "vitest.config.ts",
+    "**/*.test.tsx",
+    "**/*.spec.tsx"
+  ]
+}

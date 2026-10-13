@@ -1,0 +1,12 @@
+# The DevTools UI's configuration for this example: `make devtools` runs the UI with it.
+server:
+  host: 127.0.0.1
+  port: 9339
+
+applications:
+  tasks:
+    url: http://127.0.0.1:9100/devtools
+    auth:
+      basic:
+        username: admin
+        password: '${env:TASKS_DEVTOOLS__PASSWORD:-admin}'

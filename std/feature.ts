@@ -45,6 +45,9 @@ export interface BootstrapKit<C = unknown> {
 
   /** The application's logger, as the logger feature configured it. */
   logger: Logger
+
+  /** The application name, from `caffeine.name`: empty when no source sets it. */
+  name: string
 }
 
 /**

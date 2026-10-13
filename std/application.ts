@@ -835,6 +835,7 @@ export class Application<TConfig = unknown> {
       store: this.configStore,
       // Refreshed once every feature configured, so this is the logger `.logger(...)` asked for.
       logger: this.#logger,
+      name: this.#name,
     }
   }
 

@@ -435,6 +435,29 @@ describe('feature bootstrap', () => {
 
     expect(seen).toBe(custom)
   })
+
+  // The name is the framework's own block, read from the merged tree: a feature's `config` snapshot is the
+  // application's schema, which need not declare it, so the kit is the only place a feature can read it from.
+  it('hands bootstrap the application name from caffeine.name', async () => {
+    const conf = newConfiguration(caffeineSchema)
+      .source(new InlineConfigSource({ caffeine: { name: 'petstore' } }))
+      .build().config
+    let seen: string | undefined
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }), config: conf }).install({
+      [kFeatureName]: 'reads-name',
+      [kFeatureConfigure](): void {
+        // Nothing to bind.
+      },
+      [kFeatureBootstrap](kit: BootstrapKit): void {
+        seen = kit.name
+      },
+    })
+
+    await app.bootstrap()
+
+    expect(seen).toBe('petstore')
+  })
 })
 
 describe('bootstrap() callback', () => {

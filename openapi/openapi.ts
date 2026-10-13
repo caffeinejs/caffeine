@@ -5,12 +5,11 @@ import {
   AuthenticationSchemeProvider,
   AuthenticationService,
   collectRouteGroups,
-  RouteBuilder,
+  Router,
   kAuthSchemeDescriptors,
   type AuthSchemeDescriptor,
   type HTTPPluginConfigurer,
   type HTTPPluginFactory,
-  type RouteAuthzOptions,
   type RouteGroup,
 } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/framework/err'
@@ -42,6 +41,14 @@ interface EndpointPaths {
   asset: string | undefined
 }
 
+/** What the endpoints answer with: the page and its bundle, built as the plugin loads, and the document, in `onReady`. */
+interface Served {
+  document: OpenAPIDocument
+  yaml: string
+  docsPage?: string
+  asset?: string
+}
+
 /**
  * Generates and serves an OpenAPI document, as an ordinary Fastify plugin factory: `.with(openapi(o => ...))`.
  *
@@ -53,31 +60,34 @@ export function openapi<C = unknown>(configure?: OpenAPIConfigurer<C>): HTTPPlug
   return context => {
     const builder = new OpenAPIOptionsBuilder()
     configure?.(builder, context)
-    return openapiPlugin(builder[kBuild]())
+
+    const options = builder[kBuild]()
+    const paths = resolvePaths(options)
+    // Filled by the plugin before any request reaches the endpoints.
+    const served = {} as Served
+
+    context.app.mount(endpoints(options, paths, served))
+
+    return openapiPlugin(options, paths, served)
   }
 }
 
 /**
  * Collects the application's routes as they register and generates the document in `onReady`, once all of
- * them have — whichever order the plugins that contributed them were installed in. The routes that serve the
- * document are real, protectable routes registered through `instance.$route(...)`, marked hidden so the
- * document never describes them.
+ * them have — whichever order the plugins that contributed them were installed in. What it builds goes to
+ * `served`, which the routes {@link endpoints} declares answer with.
  *
  * Failures are fatal to start-up. A malformed document is not something a consumer recovers from at request
  * time, and one that silently omits routes is worse than one that never shipped; the framework already
  * refuses to start on an unconvertible route schema, and this matches it.
  */
-function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
+function openapiPlugin(options: OpenAPIOptions, paths: EndpointPaths, served: Served): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
     const descriptors = instance.$container.getOptional<Map<string, AuthSchemeDescriptor>>(kAuthSchemeDescriptors)
     assertSchemesExist(instance, options)
     warnIfUnprotected(instance, options)
 
     const routeGroups = collectRouteGroups(instance)
-
-    // Assigned in `onReady`, which settles before any request reaches the handlers below.
-    let document!: OpenAPIDocument
-    let yaml!: string
 
     instance.addHook('onReady', async () => {
       const warnings: string[] = []
@@ -94,7 +104,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
       // The transform runs in both modes, so it is equally the way to patch a generated document and to adjust
       // an imported one. Mutating in place and returning nothing is supported because it is the obvious thing
       // to reach for.
-      document = options.transformDocument?.(generated) ?? generated
+      const document = options.transformDocument?.(generated) ?? generated
 
       // A generated document is validated by default; an imported one is not, because a hand-written spec may
       // legitimately use constructs the validator rejects. `.validate(true)` opts one back in.
@@ -106,51 +116,63 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
         process.emitWarning(warning, 'CaffeineOpenAPIWarning')
       }
 
-      yaml = toYAML(document)
+      // `onReady` settles before any request reaches the endpoints.
+      served.document = document
+      served.yaml = toYAML(document)
     })
 
-    const paths = resolvePaths(options)
     const { docsPage, asset } = ui(options, paths, instance.$basePath)
-
-    const authz = options.secure === undefined ? undefined : toRouteAuthz(options.secure)
-
-    instance.$route('openapi', router => {
-      router.path(options.routes.base)
-      router.detail('openapi', { hidden: true })
-      router.routes(
-        [
-          route('GET', paths.json, 'application/json', authz).handle(() => document),
-          paths.yaml === undefined ? undefined : route('GET', paths.yaml, 'application/yaml', authz).handle(() => yaml),
-          paths.docs === undefined ? undefined : route('GET', paths.docs, 'text/html', authz).handle(() => docsPage),
-          paths.asset === undefined
-            ? undefined
-            : route('GET', paths.asset, 'text/javascript', authz)
-                .handle(() => asset)
-                .header('cache-control', ASSET_CACHE_CONTROL),
-        ].filter((r): r is RouteBuilder => r !== undefined),
-      )
-    })
+    served.docsPage = docsPage
+    served.asset = asset
   }
 
   return fp(plugin, { name: 'openapi' })
 }
 
 /**
- * Builds one endpoint route.
+ * The routes that serve the document: real, protectable routes, in a group marked hidden so the document never
+ * describes them. Each answers with what the plugin put in `served`.
  *
  * `authorize` is called only when protection was actually configured. Routing reads *any* defined authz —
  * including an empty object — as protection, and an application with no authentication then refuses to start
  * with "authorization is configured but authentication is not". Passing `{}` to mean "public" would break
  * every unauthenticated application that turns documentation on.
  */
-function route(method: string, path: string, contentType: string, authz: RouteAuthzOptions | undefined): RouteBuilder {
-  const builder = new RouteBuilder().method(method).path(path).produces(contentType)
+function endpoints(options: OpenAPIOptions, paths: EndpointPaths, served: Served): Router<any, any, any, any, any> {
+  const router = new Router(options.routes.base).name('openapi').detail('openapi', { hidden: true })
 
-  if (authz !== undefined) {
-    builder.authorize(authz)
+  if (options.secure !== undefined) {
+    router.authorize(toRouteAuthz(options.secure))
   }
 
-  return builder
+  router
+    .get(paths.json)
+    .produces('application/json')
+    .handler(() => served.document)
+
+  if (paths.yaml !== undefined) {
+    router
+      .get(paths.yaml)
+      .produces('application/yaml')
+      .handler(() => served.yaml)
+  }
+
+  if (paths.docs !== undefined) {
+    router
+      .get(paths.docs)
+      .produces('text/html')
+      .handler(() => served.docsPage)
+  }
+
+  if (paths.asset !== undefined) {
+    router
+      .get(paths.asset)
+      .produces('text/javascript')
+      .header('cache-control', ASSET_CACHE_CONTROL)
+      .handler(() => served.asset)
+  }
+
+  return router
 }
 
 /**
