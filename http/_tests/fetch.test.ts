@@ -206,4 +206,43 @@ describe('Fetch API Response Support', () => {
       await app.close()
     }
   })
+
+  // An absolute URL, as a `URL` or as a string, reaches the route with the host and query it names.
+  it('takes a URL, or an absolute URL string, as well as a path', async () => {
+    const app = createWebApplication().mount(
+      new Router('/fetch-url').get('/', ctx => ({ host: ctx.req.host, q: ctx.req.query('q') })),
+    )
+
+    try {
+      await app.bootstrap()
+
+      expect(await (await app.fetch(new URL('http://api.example:8080/fetch-url?q=1'))).json()).toEqual({
+        host: 'api.example:8080',
+        q: '1',
+      })
+      expect(await (await app.fetch('http://api.example:8080/fetch-url?q=2')).json()).toEqual({
+        host: 'api.example:8080',
+        q: '2',
+      })
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A 1xx answer has no `Response` form. The call rejects rather than never settling.
+  it('rejects an informational answer it cannot hand back as a Response', async () => {
+    const app = createWebApplication().serverCallback((_context, instance) => {
+      instance.get('/fetch-early', (_request, reply) => {
+        void reply.code(101).send()
+      })
+    })
+
+    try {
+      await app.bootstrap()
+
+      await expect(app.fetch('/fetch-early')).rejects.toThrow(RangeError)
+    } finally {
+      await app.close()
+    }
+  })
 })

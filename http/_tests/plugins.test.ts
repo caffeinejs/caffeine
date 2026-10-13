@@ -423,6 +423,28 @@ describe('scoped plugin registration', () => {
     })
   })
 
+  // A server that fails while its plugins install is closed before start-up fails. That close may fail as well, and
+  // start-up still reports what broke it, not what went wrong cleaning up after it.
+  it("fails start-up with the plugin's error when closing the half-built server fails too", async () => {
+    let closing = false
+
+    app = createWebApplication()
+      .with(() =>
+        fp(async (instance: FastifyInstance) => {
+          instance.addHook('onClose', (_instance, done) => {
+            closing = true
+            done(new Error('cannot close'))
+          })
+        }),
+      )
+      .with(() => async () => {
+        throw new Error('boom')
+      })
+
+    await expect(app.bootstrap()).rejects.toThrow('boom')
+    expect(closing).toBe(true)
+  })
+
   // A group installs its plugins through the same checks as the root server. A controller's `@Use(...)` takes
   // this path too, and never meets the application's type, so this check is all that stands in its way.
   it('refuses a router factory that produced something other than a plugin', async () => {

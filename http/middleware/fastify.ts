@@ -138,7 +138,10 @@ function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
   }
 
   // `use('/')` joins to `/admin/`, which the engine reads as `/admin`, as it reads a trailing slash on any prefix.
-  const join = (relative: string): string => `${prefix}${relative.startsWith('/') ? relative : `/${relative}`}`
+  const join = (relative: string): string => {
+    const rooted = relative.startsWith('/') ? relative : `/${relative}`
+    return `${prefix}${rooted}`
+  }
 
   return typeof path === 'string' ? join(path) : path.map(join)
 }

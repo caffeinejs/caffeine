@@ -356,7 +356,8 @@ app.mount(pets) // before app.bootstrap()
   path parameters are typed from the path when no schema declares them.
 - `.group(path, fn)` nests; `.mount(...routers)` (or `.mount(path, ...routers)`) composes ones written elsewhere. A
   nested group starts from its parent's configuration and dependencies and may override them. The same router
-  mounted twice into one host is added once.
+  mounted twice into one host is added once. A router nested in itself, directly or through the routers under it,
+  is refused at start-up.
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
 - `.extend(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
@@ -445,7 +446,8 @@ Where it is registered decides what `context.app` reaches:
 - Mounted routes compile as `app.mount(...)` compiles them: guards, authorization and the fallback policy, CSRF
   marks, routers' own `.with(...)` and the start-up checks. Mark a group the application does not own
   `detail('http', { internal: true })` so the OpenAPI document leaves it out. The groups stay out of
-  `app.routeGroups`, and a router mounted twice in one place is served once.
+  `app.routeGroups`, and a router mounted twice in one place, or one the application already serves on that server,
+  is served once.
 - A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers, names no hook, and runs
   on any adapter. `HTTPPlugin<FastifyRouterTypes>` may mount `newRouter()` routers and name Fastify hooks
   (`use(mw, { hook: 'preHandler' })`); only Fastify applications and routers take it.

@@ -13,6 +13,7 @@ import {
   ErrorHandlerProvider,
   Get,
   Args,
+  type MiddlewareFn,
   Post,
   Schema,
   createWebApplication,
@@ -271,6 +272,21 @@ describe('per-controller error handler', () => {
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ scoped: true, error: 'item 9' })
+  })
+
+  // An application middleware runs before the controller is resolved: there is no instance for its @Catch method to
+  // run on, so the error goes to the application-wide handlers, as on a route without one.
+  it('leaves an error raised before the controller resolves to the global handler', async () => {
+    const closed: MiddlewareFn = () => {
+      throw new ErrHTTPNotFound('closed for stocktaking')
+    }
+    const app = buildApp().use('/shop', closed)
+    await app.bootstrap()
+
+    const res = await app.fetch('/shop/9')
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'closed for stocktaking', via: 'handled' })
   })
 
   it('catches subclasses via a base-type @Catch method', async () => {

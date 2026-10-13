@@ -145,6 +145,20 @@ class Building extends HTTPPlugin {
   }
 }
 
+/** Mounts the routers it was built with, wherever it registers. */
+class Mounter extends HTTPPlugin {
+  readonly #routers: Router<any, any, any, any, any, never>[]
+
+  constructor(...routers: Router<any, any, any, any, any, never>[]) {
+    super()
+    this.#routers = routers
+  }
+
+  register({ app }: HTTPSetupContext): void {
+    app.mount(...this.#routers)
+  }
+}
+
 describe('HTTPPlugin', () => {
   let app: WebApplication | undefined
 
@@ -249,6 +263,32 @@ describe('HTTPPlugin', () => {
     expect((await app.fetch('/shared')).status).toBe(200)
   })
 
+  // `app.mount(...)` gave the server its groups before any slot ran: compiling the router again for the plugin would
+  // register every route twice, and Fastify refuses the second.
+  it('serves a router the application mounted once when a plugin on the same server mounts it again', async () => {
+    const shared = new Router('/shared').get('/', () => ({ shared: true }))
+
+    app = createWebApplication()
+      .mount(shared)
+      .with(() => new Mounter(shared)) as WebApplication
+    await app.bootstrap()
+
+    expect((await app.fetch('/shared')).status).toBe(200)
+  })
+
+  // Nested under another router, it is a second place, not the same one: both are served.
+  it('still serves a router where the application nested it when a plugin mounts it at the top', async () => {
+    const shared = new Router('/shared').get('/', () => ({ shared: true }))
+
+    app = createWebApplication()
+      .mount(new Router('/outer').mount(shared))
+      .with(() => new Mounter(shared)) as WebApplication
+    await app.bootstrap()
+
+    expect((await app.fetch('/outer/shared')).status).toBe(200)
+    expect((await app.fetch('/shared')).status).toBe(200)
+  })
+
   it('keeps the group out of app.routeGroups, as a $route group is', async () => {
     app = createWebApplication().with(() => new Metrics())
     await app.bootstrap()
@@ -297,6 +337,37 @@ describe('HTTPPlugin', () => {
         /^Cannot add route group "Metrics" to ops server "admin": it is bound to "metrics"/,
       )
       app = undefined
+    })
+
+    it('serves a router once on the ops server the application and its plugin both put it on', async () => {
+      const shared = new Router('/shared-admin').extend(bindTo('admin')).get('/', () => ({ shared: true }))
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.with(() => new Mounter(shared))))
+        .mount(shared) as WebApplication
+      await app.bootstrap()
+
+      expect((await app.ops.get('admin')!.fetch('/shared-admin')).status).toBe(200)
+      expect((await app.fetch('/shared-admin')).status).toBe(404)
+    })
+
+    // A router whose nested router is bound elsewhere is split: its own group on the application's server, the
+    // nested one on `admin`. A plugin on `admin` mounting it adds the group `admin` lacks and skips the one it serves.
+    it("adds a split router's own routes to the server whose plugin mounts it", async () => {
+      const split = new Router('/split')
+        .get('/', () => ({ split: true }))
+        .mount(new Router('/child').extend(bindTo('admin')).get('/', () => ({ child: true })))
+
+      app = createWebApplication()
+        .install(Ops('admin', o => o.with(() => new Mounter(split))))
+        .mount(split) as WebApplication
+      await app.bootstrap()
+
+      const admin = app.ops.get('admin')!
+      expect((await admin.fetch('/split')).status).toBe(200)
+      expect((await admin.fetch('/split/child')).status).toBe(200)
+      expect((await app.fetch('/split')).status).toBe(200)
+      expect((await app.fetch('/split/child')).status).toBe(404)
     })
   })
 
@@ -612,6 +683,32 @@ describe('HTTPPlugin', () => {
       expect(() => new Router('/x').with({} as never)).toThrow(
         'Cannot register an HTTP plugin: expected a plugin factory function, got object',
       )
+    })
+
+    // Two plugins can close a loop that no `.mount(...)` call shows. Refused at start-up, naming the loop, rather than
+    // walked until the stack runs out.
+    it("refuses a loop two routers' plugins close", async () => {
+      const a = new Router('/loop-a').get('/', () => ({ a: true }))
+      const b = new Router('/loop-b').get('/', () => ({ b: true }))
+      a.with(() => new Mounter(b))
+      b.with(() => new Mounter(a))
+
+      app = createWebApplication().mount(a) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toThrow(
+        /^Cannot nest router "\/loop-a" in itself: "\/loop-a" → "\/loop-b" → "\/loop-a"/,
+      )
+      app = undefined
+    })
+
+    it('refuses a router whose plugin mounts the router itself', async () => {
+      const self = new Router('/self').get('/', () => ({ self: true }))
+      self.with(() => new Mounter(self))
+
+      app = createWebApplication().mount(self) as WebApplication
+
+      await expect(app.bootstrap()).rejects.toThrow(/^Cannot nest router "\/self" in itself: "\/self" → "\/self"/)
+      app = undefined
     })
   })
 

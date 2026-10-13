@@ -35,7 +35,7 @@ export function flattenRouter<R>(
   childrenOf: (state: RouterState) => readonly RouterState[] = state => state.children,
 ): FlatRouteGroup<R>[] {
   const out: FlatRouteGroup<R>[] = []
-  walk<R>(root, '', undefined, undefined, [], { container, childrenOf, out })
+  walk<R>(root, '', undefined, undefined, [], { container, childrenOf, out, stack: [] })
   return out
 }
 
@@ -44,6 +44,8 @@ interface Walk<R> {
   readonly container: Container
   readonly childrenOf: (state: RouterState) => readonly RouterState[]
   readonly out: FlatRouteGroup<R>[]
+  /** The routers from the root down to the one being walked. */
+  readonly stack: RouterState[]
 }
 
 /** The group a nested router starts from: its parent's spec, and the name the parent goes by. */
@@ -60,6 +62,10 @@ function walk<R>(
   parentScopes: readonly RouteGroupScope[],
   context: Walk<R>,
 ): void {
+  // Before anything compiles: a router nested in itself would otherwise be walked until the stack runs out.
+  assertNotNestedInItself(state, context.stack)
+  context.stack.push(state)
+
   const path = normalizeGroupPath(`${parentPath}${state.path}`)
   const injection = merge(parentInjection, state.injection)
 
@@ -89,6 +95,36 @@ function walk<R>(
   for (const child of context.childrenOf(state)) {
     walk<R>(child, path, { spec, name }, injection, scopes, context)
   }
+
+  context.stack.pop()
+}
+
+/**
+ * Refuses a router nested in itself, directly or through the routers under it, by a `.mount(...)` call or by a
+ * router plugin's `context.app.mount(...)`: its routes would nest without end.
+ */
+function assertNotNestedInItself(state: RouterState, stack: readonly RouterState[]): void {
+  const at = stack.indexOf(state)
+
+  if (at === -1) {
+    return
+  }
+
+  const loop = [...stack.slice(at), state].map(router => `"${labelOf(router)}"`).join(' → ')
+
+  throw new ErrConfiguration(
+    errMessage(`Cannot nest router "${labelOf(state)}" in itself: ${loop}`)
+      .solutions(
+        'Remove the mount that closes the loop: a ".mount(...)", or a router plugin\'s "context.app.mount(...)"',
+      )
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
+}
+
+/** A router as its author wrote it: the name it was given, or else its own path. */
+function labelOf(state: RouterState): string {
+  return state.name ?? (state.path === '' ? '/' : state.path)
 }
 
 /**

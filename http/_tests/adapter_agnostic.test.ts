@@ -81,6 +81,15 @@ interface BareTypes extends FakeTypes {
   hook: never
 }
 
+/** A server whose settings are not all objects. */
+interface TunedTypes extends FakeTypes {
+  serverOptions: {
+    mode?: string | number
+    tags?: readonly string[]
+    limits?: { soft?: number; hard?: number } | null
+  }
+}
+
 /** Records what the application hands it. All this file needs is the contract, so it serves nothing. */
 class RecordingAdapter<T extends AdapterTypes> implements Adapter<T> {
   input: AdapterIn<T> | undefined
@@ -191,6 +200,48 @@ describe('an application on an adapter that is not Fastify', () => {
 
     expect(adapter.input).toBeDefined()
     expect(adapter.input!.basePath).toBe(expected)
+
+    await app.close()
+  })
+
+  // An adapter factory is all an application needs: it makes its own container.
+  it('builds on a container of its own when handed an adapter factory alone', async () => {
+    const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter))
+
+    await app.bootstrap()
+
+    expect(app.container).toBeInstanceOf(CaffeineIoC)
+    expect(app.instance).toEqual({ fake: true })
+
+    await app.close()
+  })
+
+  // Only an object section merges over the one before it. Anything else replaces it as given: an array merged by
+  // index would keep stale entries.
+  it('replaces a server section that is not an object, and merges one that is', async () => {
+    const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ mode: 'fast', tags: ['a', 'b'], limits: { soft: 1 } }))
+      .server(() => ({ mode: 2, tags: ['c'], limits: { hard: 9 } }))
+
+    await app.bootstrap()
+
+    expect(adapter.input!.server).toEqual({ mode: 2, tags: ['c'], limits: { soft: 1, hard: 9 } })
+
+    await app.close()
+  })
+
+  // Only `undefined` leaves an earlier section in place: `null` is a value like any other.
+  it('takes null as a section that replaces the one before it', async () => {
+    const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ limits: { soft: 1 } }))
+      .server(() => ({ limits: null }))
+
+    await app.bootstrap()
+
+    expect(adapter.input!.server).toEqual({ limits: null })
 
     await app.close()
   })

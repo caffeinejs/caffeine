@@ -206,11 +206,12 @@ export interface WebApplicationOps<T extends AdapterTypes = never, C = unknown> 
    * Serves routers, compiled as `app.mount(...)` compiles them: the same guards, authorization, start-up checks and
    * routers' own plugins, and listed in a generated OpenAPI document unless a group is marked
    * `detail('http', { internal: true })`. The groups stay out of `app.routeGroups`, and a router mounted twice in
-   * one place is served once.
+   * one place, or one the application already serves on that server, is served once.
    *
    * On a server, the server serves them, and a router bound with `bindTo` to another server is refused at
    * start-up. On a router, they nest under it, starting from its path, binding, guards and plugins. A controller's
-   * plugin cannot mount: a class has no children to nest routers under.
+   * plugin cannot mount: a class has no children to nest routers under. A router nested in itself, through any of
+   * these mounts, is refused at start-up.
    */
   mount(...routers: Router<any, any, any, any, any, T>[]): this
 
@@ -296,13 +297,8 @@ export class AdapterExtensions<X> {
   readonly #scoped = new Map<object, X[]>()
   readonly #middlewares = new Map<object, readonly ResolvedMiddleware[]>()
 
-  /** Adds an extension to the root list, or, given a router or a controller class, to that scope's own. */
-  add(extension: X, scope?: object): void {
-    if (scope === undefined) {
-      this.#root.push(extension)
-      return
-    }
-
+  /** Adds an extension to the list of `scope`, a router or a controller class. */
+  add(extension: X, scope: object): void {
     let scoped = this.#scoped.get(scope)
     if (scoped === undefined) {
       scoped = []

@@ -179,7 +179,8 @@ export class Router<
    * and configuration, inheriting this group's on top.
    *
    * Mounting the same router twice adds it once — which is what makes routes declared as separate statements
-   * mountable, since every value `.handler()` returns names the one router it was opened from.
+   * mountable, since every value `.handler()` returns names the one router it was opened from. A router nested in
+   * itself, directly or through the routers under it, is refused at start-up.
    *
    * A mounted router is bound to this one's adapter or to none: its plugins install on the server this router's
    * application runs.
@@ -339,7 +340,10 @@ export class Router<
     return this.#route(['QUERY'], path, schemaOrHandler, handler)
   }
 
-  /** Every method the adapter routes, for a path that answers all of them. */
+  /**
+   * GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, for a path that answers all of them. QUERY is not among them:
+   * declare it with {@link query}.
+   */
   all<P extends string>(path: P): Chain<AllMethod, P, V, C, GD, GP, R, T>
   all<P extends string, O>(
     path: P,

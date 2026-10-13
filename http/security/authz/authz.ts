@@ -24,7 +24,7 @@ export interface AuthorizationOptions {
    */
   fallbackPolicy?: AuthzPolicy
   /** Path prefixes of routes registered straight on the server that the fallback policy leaves open. */
-  fallbackExcept?: readonly string[]
+  fallbackExcept: readonly string[]
 }
 
 export interface FallbackPolicyOptions {

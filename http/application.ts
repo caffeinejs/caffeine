@@ -157,9 +157,15 @@ export class WebApplication<
     return this.#ops
   }
 
+  /**
+   * Every route group the application declared, compiled, whichever server serves it: the mounted routers' and the
+   * controllers'. What a plugin adds, with `context.app.mount(...)` or `$route`, is not among them.
+   *
+   * @throws ErrApplicationNotReady before {@link ready} has built them.
+   */
   get routeGroups(): RouteGroup<T['request']>[] {
     if (!this.started) {
-      throw new Error('Application is not ready')
+      throw new ErrApplicationNotReady('read the route groups')
     }
 
     return this.#routeGroups
@@ -522,8 +528,9 @@ export class WebApplication<
   }
 
   protected override async start(): Promise<void> {
-    // The application's own server first: under Watt, the first listen to complete is the one it takes over.
-    await this.#servers?.run((this.#runArgs ?? []) as T['runArgs'])
+    // The application's own server first: under Watt, the first listen to complete is the one it takes over. Only
+    // `run()` gets here, and it records its arguments before it does.
+    await this.#servers?.run(this.#runArgs!)
   }
 
   protected override runInfo(): WebRunInfo {

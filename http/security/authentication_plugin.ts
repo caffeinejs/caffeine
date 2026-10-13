@@ -355,7 +355,7 @@ function fallbackFor(container: Container): Fallback | undefined {
   }
   // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is
   // under it. Compared as plain text, `/assets` would open `/assets-old` as well.
-  const except = (options.fallbackExcept ?? []).map(prefix => {
+  const except = options.fallbackExcept.map(prefix => {
     const exact = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
 
     return { exact, under: `${exact}/` }
@@ -374,7 +374,7 @@ function fallbackFor(container: Container): Fallback | undefined {
 
       // The path the route was registered under, not the URL that was requested: no spelling of a URL can then
       // borrow the exemption of a route it did not match.
-      return forPath(request.routeOptions.url ?? '')
+      return forPath(request.routeOptions.url!)
     },
     forPath,
   }

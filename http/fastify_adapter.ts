@@ -344,22 +344,21 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       done()
     })
 
-    if (container.hasRequestScope) {
-      const man = container.requestScopeManager
-      fastify.addHook('onRequest', (req, reply, done) => {
-        this.#fastifyCtxAls.run(req.httpContext, () => {
-          man
-            .run(
-              () =>
-                new Promise<void>(resolve => {
-                  reply.raw.once('close', () => resolve())
-                  done()
-                }),
-            )
-            .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
-        })
+    // Always: the constructor binds `FastifyContext` request-scoped, so every application has a request scope.
+    const man = container.requestScopeManager
+    fastify.addHook('onRequest', (req, reply, done) => {
+      this.#fastifyCtxAls.run(req.httpContext, () => {
+        man
+          .run(
+            () =>
+              new Promise<void>(resolve => {
+                reply.raw.once('close', () => resolve())
+                done()
+              }),
+          )
+          .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
       })
-    }
+    })
 
     // Lets a plugin registered through the `.with(...)` loop right below add one more route, protectable the
     // same way any other route is. Compiled on the spot, through the exact compiler `buildRouting()` built
@@ -552,52 +551,34 @@ class FastifyAdapterServer implements AdapterServer<FastifyTypes> {
     // passing the original value causes a mismatch
     request.headers.delete('content-length')
 
-    return new Promise<Response>((resolve, reject) => {
-      fastify.inject(
-        {
-          method: request.method as any,
-          url: request.url,
-          headers: Object.fromEntries(request.headers),
-          payload,
-        },
-        (err, result) => {
-          if (err || !result) {
-            reject(err ?? new Error('inject produced no result'))
-            return
-          }
+    const result = await fastify.inject({
+      method: request.method as any,
+      url: request.url,
+      headers: Object.fromEntries(request.headers),
+      payload,
+    })
 
-          const responseHeaders = new Headers()
-          for (const [key, value] of Object.entries(result.headers)) {
-            if (value === undefined) {
-              continue
-            }
+    // light-my-request writes every header as a string or a list of them.
+    const responseHeaders = new Headers()
+    for (const [key, value] of Object.entries(result.headers)) {
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          responseHeaders.append(key, String(v))
+        }
+      } else {
+        responseHeaders.set(key, String(value))
+      }
+    }
 
-            if (Array.isArray(value)) {
-              for (const v of value) {
-                responseHeaders.append(key, String(v))
-              }
-            } else {
-              responseHeaders.set(key, String(value))
-            }
-          }
+    // Null-body statuses (204/205/304) must be constructed with a null body, otherwise the Response constructor
+    // throws "Invalid response status code". A 1xx status has no Response at all: the constructor's RangeError
+    // rejects the call.
+    const nullBody = result.statusCode === 204 || result.statusCode === 205 || result.statusCode === 304
 
-          // Null-body statuses (204/205/304, plus 1xx) must be constructed with a null body, otherwise
-          // the Response constructor throws "Invalid response status code".
-          const nullBody =
-            result.statusCode < 200 ||
-            result.statusCode === 204 ||
-            result.statusCode === 205 ||
-            result.statusCode === 304
-
-          resolve(
-            new Response(nullBody ? null : result.rawPayload, {
-              status: result.statusCode,
-              statusText: result.statusMessage,
-              headers: responseHeaders,
-            }),
-          )
-        },
-      )
+    return new Response(nullBody ? null : result.rawPayload, {
+      status: result.statusCode,
+      statusText: result.statusMessage,
+      headers: responseHeaders,
     })
   }
 }
@@ -684,7 +665,7 @@ async function installExtension(server: FastifyInstance, extension: unknown): Pr
  * on the plugin this hands back, not on what it was given.
  */
 function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPluginOptions } {
-  return Array.isArray(value) ? { plugin: value[0], options: value[1] ?? {} } : { plugin: value, options: {} }
+  return Array.isArray(value) ? { plugin: value[0], options: value[1] } : { plugin: value, options: {} }
 }
 
 /**
@@ -747,9 +728,7 @@ function assertRouteFeaturesInstalled(
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {
     for (const group of routeGroups) {
-      const cached = group.routes.some(
-        route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
-      )
+      const cached = group.routes.some(route => route.config.has('cache') || route.config.has('cacheInvalidate'))
       const installed = (group.scopes ?? []).some(scope =>
         extensions.of(scope.key).some(extension => {
           const { plugin } = resolveExtension(extension)
@@ -775,7 +754,7 @@ function assertRouteFeaturesInstalled(
 
   if (
     !server.hasPlugin(CONSTRAINTS_PLUGIN) &&
-    routeGroups.some(group => group.routes.some(route => route.config?.has(kRouteConstraints) === true))
+    routeGroups.some(group => group.routes.some(route => route.config.has(kRouteConstraints)))
   ) {
     throw new ErrConfiguration(
       errMessage('Cannot register constrained routes: the constraints plugin is not installed')

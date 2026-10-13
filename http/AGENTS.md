@@ -24,7 +24,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   callback and a kept context are refused. A controller's slot refuses `mount`.
 - A server's slot mounts onto that server: collected through `FluentRouteSource` once the slot closes, so a router
   mounted twice is served once, compiled through `serverCompiler` into that server's groups, out of
-  `app.routeGroups`. Its middleware joins `definition.middlewares`, after the application's own `.use(...)`.
+  `app.routeGroups`. A collected group whose router chain (its `scopes` keys) matches a group the server already
+  serves is skipped (`isServed`, `servers.ts`). Compare per group, never per root router: a router whose nested
+  router is bound elsewhere is split across servers. Its middleware joins `definition.middlewares`, after the
+  application's own `.use(...)`.
 - A router's slot nests what it mounts under the router through `ScopedPlugins`' side map (`childrenOf`), never the
   router state, so one router mounted into two applications starts from what it declared in both. A router's or a
   controller's middleware is resolved once, keyed by its state or class, and installed in each group context after
@@ -148,7 +151,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   first, so ops servers answer through the drain.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
   never filters or compiles them.
-- Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
+- Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's,
+  and a router nested in itself, by `.mount(...)` or by a router plugin's `context.app.mount(...)`: it checks the
+  routers on the current path only, so the same router under two parents stays served in each place.
 - `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
 - A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches an ops server
   only through that server's own `o.with(...)`, `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the

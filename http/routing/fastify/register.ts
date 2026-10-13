@@ -80,19 +80,15 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // Route Config
         // https://fastify.dev/docs/latest/Reference/Routes/#config
         const config: Record<string | symbol, unknown> = {}
-        if (route.config) {
-          for (const [k, v] of route.config) {
-            config[k] = v
-          }
+        for (const [k, v] of route.config) {
+          config[k] = v
         }
 
         // Route Options
         // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
         const options: Record<string | symbol, unknown> = {}
-        if (route.options) {
-          for (const [k, v] of route.options) {
-            options[k] = v
-          }
+        for (const [k, v] of route.options) {
+          options[k] = v
         }
 
         const status = route.statusCode!
@@ -100,10 +96,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         const contentType = route.contentType
         const hasContentType = typeof contentType === 'string' && contentType.length > 0
         const header = [] as Array<[string, string | string[]]>
-        if (route.header) {
-          for (const [k, v] of route.header) {
-            header.push([k, v])
-          }
+        for (const [k, v] of route.header) {
+          header.push([k, v])
         }
         const hasHeader = header.length > 0
 
@@ -298,7 +292,7 @@ function isHandlerTimeout(reason: unknown): boolean {
 /** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
 function joinPaths(base: string, path: string): string {
   const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined
 }
 
 /** The body as it is read, failed with a 413 once more than `limit` bytes have passed. */

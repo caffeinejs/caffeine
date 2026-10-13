@@ -104,13 +104,13 @@ export interface Route<R = FastifyRequest> {
   schema?: RouteValidationSchema
   bodyLimit?: number
   timeout?: number
-  header?: Map<string, string | string[]>
+  header: Map<string, string | string[]>
   hasHeader?: boolean
   statusCode?: number
   /** How the raw body reaches the handler. Set by `@BodyAsBuffer` / `@BodyAsStream`. */
   bodyAs?: BodyMode
-  config?: Map<string, unknown>
-  options?: Map<string, unknown>
+  config: Map<string, unknown>
+  options: Map<string, unknown>
   /**
    * What packages annotated this route with.
    *

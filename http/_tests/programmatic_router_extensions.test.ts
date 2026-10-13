@@ -112,6 +112,57 @@ describe('route extensions', () => {
 
       expect(seen).toEqual(['first', 'second', 'third'])
     })
+
+    it('should apply every group extension, the later winning where two write the same header', async () => {
+      const router = new Router('/group-ext').extend(
+        group => {
+          group.header('x-first', 'yes')
+          group.header('x-shared', 'first')
+        },
+        group => {
+          group.header('x-second', 'yes')
+          group.header('x-shared', 'second')
+        },
+      )
+      router.get('/').handler(() => ({ ok: true }))
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const res = await app.fetch('/group-ext')
+      expect(res.headers.get('x-first')).toBe('yes')
+      expect(res.headers.get('x-second')).toBe('yes')
+      expect(res.headers.get('x-shared')).toBe('second')
+
+      await app.close()
+    })
+  })
+
+  // Detail is what a reader of the routes, such as the OpenAPI generator, finds on each level: never merged down
+  // into a group's routes, but inherited by a group nested in it.
+  describe('given detail on a group and on a route', () => {
+    it('should keep each on its own level, and pass the group detail to a nested group', async () => {
+      const router = new Router('/detailed').detail('http', { internal: true })
+      router
+        .get('/')
+        .detail('testMark', 'route')
+        .handler(() => null)
+      router.group('/nested', nested => {
+        nested.get('/').handler(() => null)
+      })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const outer = app.routeGroups.find(group => group.path === '/detailed')!
+      const nested = app.routeGroups.find(group => group.path === '/detailed/nested')!
+      expect(outer.detail).toEqual({ http: { internal: true } })
+      expect(outer.routes[0].detail).toEqual({ testMark: 'route' })
+      expect(nested.detail).toEqual({ http: { internal: true } })
+      expect(nested.routes[0].detail).toBeUndefined()
+
+      await app.close()
+    })
   })
 
   describe('given a decorator and its extension', () => {

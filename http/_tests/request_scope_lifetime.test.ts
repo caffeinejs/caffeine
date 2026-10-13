@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { Router, createWebApplication } from '../index.js'
 
@@ -169,6 +169,56 @@ describe('request scope lifetime', () => {
     await teardown
 
     expect(teardowns).toEqual([1])
+
+    await app.close()
+  })
+
+  // The scope ends once the response is out, so a teardown that fails can no longer touch it: it is logged as an
+  // error, with every failure in it, and the client still has its answer.
+  it('logs a request scope that cannot be torn down, and still answers', async () => {
+    const logged: Array<Record<string, unknown>> = []
+    const logger = { level: 'error', stream: { write: (line: string) => void logged.push(JSON.parse(line)) } }
+
+    class Session {
+      readonly id = 1
+    }
+    const container = new CaffeineIoC()
+    container.bind(Session, t =>
+      t
+        .toSelf()
+        .lifetime(Scopes.REQUEST)
+        .preDestroy(() => {
+          throw new Error('cannot close the session')
+        }),
+    )
+
+    const router = new Router('/scope-teardown-fails')
+    router
+      .get('/')
+      .inject(i => ({ session: i.provide(Session) }))
+      .handler((_ctx, deps) => ({ id: deps.session.get().id }))
+
+    const app = createWebApplication({ container })
+      .server(() => ({ factory: { logger } }))
+      .mount(router)
+    await app.bootstrap()
+
+    const res = await app.fetch('/scope-teardown-fails')
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ id: 1 })
+    await vi.waitFor(() =>
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: 50,
+          msg: 'Cannot tear down the request scope',
+          err: expect.objectContaining({
+            type: 'AggregateError',
+            aggregateErrors: [expect.objectContaining({ message: 'cannot close the session' })],
+          }),
+        }),
+      ),
+    )
 
     await app.close()
   })

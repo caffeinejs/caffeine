@@ -57,6 +57,10 @@ export function fixtureRouter(
         dispatch: () => () => undefined,
         schema: route.schema,
         statusCode: route.statusCode,
+        // Empty, as on a compiled route that declares none: no response headers, no constraints.
+        header: new Map(),
+        config: new Map(),
+        options: new Map(),
         detail: route.detail,
         authorization: {
           hasProtection: authz !== undefined && !authz.allowAnonymous,

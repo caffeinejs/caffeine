@@ -18,7 +18,7 @@ import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
 import type { Router } from './routing/programmatic/router.js'
 import type { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
-import type { RouteGroup } from './routing/route.js'
+import type { RouteGroup, RouteGroupScope } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
 import type { RouteGroupSpec } from './routing/spec.js'
 import type { ServerDefinition } from './server_definition.js'
@@ -121,9 +121,10 @@ export class ServerSet<T extends AdapterTypes> {
     // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
     const root = await slot.during(() => registerPlugins<T>(definition.plugins, input.headSlots(), context))
 
-    // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups.
+    // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
+    // the application already serves on this server is served once, as a router mounted twice in one place is.
     await input.plugins.resolveRouters(slot.mounted, context)
-    entry.groups.push(...compileMounted<T['request']>(slot.mounted, input.plugins, context, compile))
+    entry.groups.push(...compileMounted<T['request']>(slot.mounted, entry.groups, input.plugins, context, compile))
 
     return adapter.setup({
       routeGroups: entry.groups,
@@ -175,8 +176,8 @@ export class ServerSet<T extends AdapterTypes> {
 
 /**
  * Folds every `.server(configure)` result into one, section by section: a section that is an object is
- * shallow-merged over the one before it, anything else replaces. Sections are copied, never aliased — a live
- * configuration node is read-only, and the adapter writes into what it is handed.
+ * shallow-merged over the one before it, anything else replaces it as given. An object section is copied, never
+ * aliased — a live configuration node is read-only, and the adapter writes into what it is handed.
  */
 async function resolveServerOptions<T extends AdapterTypes>(
   configurers: readonly ServerConfigurer<T>[],
@@ -242,19 +243,35 @@ async function registerPlugins<T extends AdapterTypes>(
   return root
 }
 
-/** What a server's plugins mounted, compiled as the application's own routers are and bound to that server. */
+/**
+ * What a server's plugins mounted, compiled as the application's own routers are and bound to that server, less the
+ * groups it already `served`.
+ */
 function compileMounted<R>(
   routers: readonly Router<any, any, any, any, any, any>[],
+  served: readonly RouteGroup<unknown>[],
   plugins: ScopedPlugins<AdapterTypes>,
   context: HTTPSetupContext,
   compile: RouteGroupCompiler,
 ): RouteGroup<R>[] {
-  return new FluentRouteSource<R>(routers, plugins.childrenOf).collect(context.container).map(declared => {
-    const group = compile(declared.spec, declared.meta())
-    // Always set: a programmatic group is installed under every router it is nested in.
-    group.scopes = declared.scopes
-    return group
-  })
+  return new FluentRouteSource<R>(routers, plugins.childrenOf)
+    .collect(context.container)
+    .filter(declared => !isServed(declared.scopes!, served))
+    .map(declared => {
+      const group = compile(declared.spec, declared.meta())
+      // Always set: a programmatic group is installed under every router it is nested in.
+      group.scopes = declared.scopes
+      return group
+    })
+}
+
+/** Whether `groups` already hold the group `scopes` describes: the same routers, nested the same way. */
+function isServed(scopes: readonly RouteGroupScope[], groups: readonly RouteGroup<unknown>[]): boolean {
+  // Per group, never per router: a router whose nested routers are bound elsewhere is split across servers, and a
+  // plugin mounting it on one of them still adds the groups that server lacks.
+  return groups.some(
+    group => group.scopes?.length === scopes.length && group.scopes.every((scope, at) => scope.key === scopes[at].key),
+  )
 }
 
 /**
