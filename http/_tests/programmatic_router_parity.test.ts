@@ -261,9 +261,9 @@ describe('programmatic router parity with the decorator feature set', () => {
 
   describe('given a version constraint', () => {
     it('should select a programmatic route by Accept-Version exactly as a decorated one', async () => {
-      const v1 = new Router('/pets').name('ParityPetsV1').with(version('1.0.0'))
+      const v1 = new Router('/pets').name('ParityPetsV1').extend(version('1.0.0'))
       v1.get('/').handler(() => ({ v: 1 }))
-      const v2 = new Router('/pets').name('ParityPetsV2').with(version('2.0.0'))
+      const v2 = new Router('/pets').name('ParityPetsV2').extend(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
       const app = createWebApplication()

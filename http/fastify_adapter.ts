@@ -40,14 +40,14 @@ import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { FastifyContext } from './fastify_context.js'
 import { installFormBodyParser } from './form/index.js'
-import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
-import { HTTPPlugin, pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
+import { installFastifyMiddlewares, rebaseMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
+import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
 import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
-import type { RouteCompilers, RouteGroup } from './routing/route.js'
+import type { RouteCompilers, RouteGroup, RouteGroupScope } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
 import {
   assertAuthenticationConfigured,
@@ -152,7 +152,7 @@ declare module 'fastify' {
      * Adds one more route group, served and protected like any other. For the body of a plugin registered with
      * `.with(...)`: the route table closes once those have installed.
      *
-     * @throws ErrConfiguration when called from anywhere else — a route group's plugin (`router.plugin(...)`,
+     * @throws ErrConfiguration when called from anywhere else — a route group's plugin (`router.with(...)`,
      * `@Use(...)`) or a hook — failing start-up, and at once when called after it.
      */
     $route(name: string, build: (router: RouteGroupBuilder) => void): void
@@ -383,7 +383,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
           )
             .solutions(
               'Register the plugin that adds the group with ".with(...)" on the application — not with ' +
-                '"router.plugin(...)" or "@Use(...)", which install it after the route table has closed',
+                '"router.with(...)" or "@Use(...)", which install it after the route table has closed',
             )
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),
@@ -436,10 +436,14 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     // The same for every group, so it is built once here rather than per registration.
     const registration = {
-      installScope: async (server: FastifyInstance, scope: object): Promise<void> => {
-        for (const extension of input.extensions.of(scope)) {
+      installScope: async (server: FastifyInstance, scope: RouteGroupScope): Promise<void> => {
+        for (const extension of input.extensions.of(scope.key)) {
           await installExtension(server, extension)
         }
+
+        // What the scope's plugins added with `context.app.use(...)`: in this group's context, so it covers the
+        // group's routes alone, after the scope's own plugins, its relative paths rebased under where it starts.
+        installFastifyMiddlewares(server, rebaseMiddlewares(scope.path, input.extensions.middlewaresOf(scope.key)))
       },
       compilers: this.#compilers,
       globalErrorHandler,
@@ -666,22 +670,6 @@ function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefin
  * The one path every plugin takes — the application's, a router's, a controller's — so each is refused the same way.
  */
 async function installExtension(server: FastifyInstance, extension: unknown): Promise<void> {
-  // The application's own were taken out before the adapter was built; one reaching here came from a route group.
-  if (extension instanceof HTTPPlugin) {
-    throw new ErrConfiguration(
-      errMessage(
-        'Cannot install an HTTPPlugin from "router.plugin(...)" or "@Use(...)": a route group takes Fastify ' +
-          'plugins only',
-      )
-        .solutions(
-          'Register its factory with ".with(...)" on the application, or "Ops(name, o => o.with(...))" on an ' +
-            'ops server',
-        )
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
-    )
-  }
-
   const { plugin, options } = resolveExtension(extension)
   assertFastifyPlugin(plugin)
   assertPluginNotRegistered(server, plugin)
@@ -763,7 +751,7 @@ function assertRouteFeaturesInstalled(
         route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
       )
       const installed = (group.scopes ?? []).some(scope =>
-        extensions.of(scope).some(extension => {
+        extensions.of(scope.key).some(extension => {
           const { plugin } = resolveExtension(extension)
           return typeof plugin === 'function' && pluginName(plugin as AnyFastifyPlugin) === CACHING_PLUGIN
         }),
@@ -776,7 +764,7 @@ function assertRouteFeaturesInstalled(
           )
             .solutions(
               'Add ".with(HTTPCaching(...))" to the application builder',
-              'Install it on the route group with ".plugin(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
+              'Install it on the route group with ".with(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
             )
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),

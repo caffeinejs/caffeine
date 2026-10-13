@@ -17,9 +17,17 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
   readonly name = 'programmatic'
 
   readonly #routers: readonly Router<any, any, any, any, any, any>[]
+  readonly #childrenOf: ((state: RouterState) => readonly RouterState[]) | undefined
 
-  constructor(routers: readonly Router<any, any, any, any, any, any>[]) {
+  /**
+   * @param childrenOf - A router's children as start-up sees them, when its plugins mounted more than it declared.
+   */
+  constructor(
+    routers: readonly Router<any, any, any, any, any, any>[],
+    childrenOf?: (state: RouterState) => readonly RouterState[],
+  ) {
     this.#routers = routers
+    this.#childrenOf = childrenOf
   }
 
   collect(container: Container): DeclaredRouteGroup<R>[] {
@@ -39,36 +47,11 @@ export class FluentRouteSource<R = unknown> implements RouteSource<R> {
 
       seen.add(state)
 
-      for (const flat of flattenRouter<R>(state, container)) {
+      for (const flat of flattenRouter<R>(state, container, this.#childrenOf)) {
         groups.push({ name: flat.name, spec: flat.spec, meta: () => ({ name: flat.name }), scopes: flat.scopes })
       }
     }
 
     return groups
   }
-}
-
-/** Every router state reachable from `routers`, parents before children, each one seen once. */
-export function routerStates(routers: readonly Router<any, any, any, any, any, any>[]): RouterState[] {
-  const out: RouterState[] = []
-  const seen = new Set<RouterState>()
-
-  const visit = (state: RouterState): void => {
-    if (seen.has(state)) {
-      return
-    }
-
-    seen.add(state)
-    out.push(state)
-
-    for (const child of state.children) {
-      visit(child)
-    }
-  }
-
-  for (const router of routers) {
-    visit(stateOf(router)!)
-  }
-
-  return out
 }

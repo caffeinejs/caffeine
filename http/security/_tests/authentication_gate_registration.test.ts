@@ -89,7 +89,7 @@ describe('gate registration', () => {
   it('refuses a default-label scoped gate under a root gate', async () => {
     const { a } = schemes()
     const guarded = newRouter('/dup-scoped')
-      .plugin(authentication())
+      .with(authentication())
       .get('/', () => ({ ok: true }))
 
     const app = createWebApplication()
@@ -107,7 +107,7 @@ describe('gate registration', () => {
     const { a, b } = schemes()
     const open = newRouter('/multi-root').get('/', () => ({ ok: true }))
     const admin = newRouter('/multi-admin')
-      .plugin(authentication(g => g.name('admin').defaultScheme('B')))
+      .with(authentication(g => g.name('admin').defaultScheme('B')))
       .get('/', () => ({ ok: true }))
 
     const app = createWebApplication()
@@ -146,7 +146,7 @@ describe('gate registration', () => {
     const { a } = schemes()
     const open = newRouter('/scoped-only-open').get('/', () => ({ ok: true }))
     const gated = newRouter('/scoped-only-gated')
-      .plugin(authentication())
+      .with(authentication())
       .authorize()
       .get('/', () => ({ ok: true }))
 

@@ -22,6 +22,7 @@ import type {
   AdapterTypes,
   AnyAdapterTypes,
   ContextPlatform,
+  HTTPSetupContext,
 } from '../adapter.js'
 import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
@@ -29,7 +30,13 @@ import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
 import { healthProbes } from '../index.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
 import type { ResolvedMiddleware } from '../middleware/pipeline.js'
-import { pluginName, type AnyFastifyPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory } from '../plugin.js'
+import {
+  HTTPPlugin,
+  pluginName,
+  type AnyFastifyPlugin,
+  type HTTPPluginConfigurer,
+  type HTTPPluginFactory,
+} from '../plugin.js'
 import { blend } from '../routing/programmatic/blend.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -229,14 +236,53 @@ describe('adapter types', () => {
   })
 
   it('lets only a router bound to an adapter take a plugin', () => {
-    // @ts-expect-error a router bound to no adapter has nothing to install
-    new Router('/unbound').plugin(() => noop)
+    // @ts-expect-error a router bound to no adapter takes no Fastify plugin
+    new Router('/unbound').with(() => noop)
 
     const bound = newRouter('/x')
-      .plugin(() => noop)
+      .with(() => noop)
       .get('/y', () => 1)
 
     expectTypeOf<RoutesOf<typeof bound>['path']>().toEqualTypeOf<'/x/y'>()
+  })
+
+  // What a plugin mounts reaches the adapter the application runs, so it must be a router that adapter can serve:
+  // one bound to no adapter from a plugin written for none, a Fastify-bound one only from a plugin written for Fastify.
+  it('keeps what a plugin mounts on the adapter the application runs', () => {
+    const fn: MiddlewareFn = (_ctx, next) => next()
+
+    class Agnostic extends HTTPPlugin {
+      register({ app }: HTTPSetupContext): void {
+        app.mount(new Router('/free').get('/', () => 1))
+        // @ts-expect-error a plugin written for no adapter mounts no Fastify-bound router
+        app.mount(newRouter('/bound'))
+        // @ts-expect-error a plugin written for no adapter names no hook
+        app.use(fn, { hook: 'preHandler' })
+      }
+    }
+
+    class OnFastify extends HTTPPlugin<FastifyRouterTypes> {
+      register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+        app.mount(newRouter('/bound')).use(fn, { hook: 'preHandler' })
+      }
+    }
+
+    onFake().with(() => new Agnostic())
+    onBare().with(() => new Agnostic())
+    createWebApplication().with(() => new OnFastify())
+    newRouter('/r').with(() => new OnFastify())
+    new Router('/u').with(() => new Agnostic())
+
+    // @ts-expect-error a plugin written for Fastify on an application that does not run Fastify
+    onFake().with(() => new OnFastify())
+    // @ts-expect-error a plugin written for Fastify on a router bound to no adapter
+    new Router('/u').with(() => new OnFastify())
+
+    onFake().with(({ app }) => {
+      // @ts-expect-error a Fastify-bound router mounted from a factory on an application that does not run Fastify
+      app.mount(newRouter('/x'))
+      return { unit: 'fake' }
+    })
   })
 
   it('keeps a router bound through everything that re-types it', () => {

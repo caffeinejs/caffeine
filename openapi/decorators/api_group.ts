@@ -8,7 +8,7 @@ import type { APIGroupDetail } from './detail.js'
  * what it is implemented with.
  *
  * ```ts
- * const pets = new Router('/pets').with(apiGroup({ name: 'Pets', description: 'Browse and manage pets' }))
+ * const pets = new Router('/pets').extend(apiGroup({ name: 'Pets', description: 'Browse and manage pets' }))
  * ```
  */
 export function apiGroup(detail: APIGroupDetail | string): RouteGroupExtension {

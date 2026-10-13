@@ -7,7 +7,7 @@ import { ErrConfiguration } from '../error/common.js'
 import { protocolOf } from '../protocol.js'
 import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
 import { rawContext } from './_raw_context.js'
-import type { Next } from './middleware.js'
+import type { MiddlewarePath, Next } from './middleware.js'
 import type { ResolvedMiddleware } from './pipeline.js'
 
 /**
@@ -99,6 +99,48 @@ export function installFastifyMiddlewares(server: FastifyInstance, resolved: rea
       })
     }
   }
+}
+
+/**
+ * A router's or a controller's middleware with each relative path rebased under `base`, that scope's full path:
+ * `/jobs` added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the
+ * scope already, and keeps none.
+ *
+ * A named parameter in `base` is kept and its regular expression dropped, which only widens a prefix the route
+ * itself still checks.
+ *
+ * @throws ErrConfiguration when a path would be rebased under a wildcard or an optional parameter: neither has a
+ *   prefix form.
+ */
+export function rebaseMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
+  return middlewares.map(middleware =>
+    middleware.path === undefined ? middleware : { ...middleware, path: rebase(base, middleware.path) },
+  )
+}
+
+function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
+  // `:name(regex)` reads as `:name` to the engine; nothing else in a Fastify path differs from it but these two.
+  const prefix = base.replace(/:(\w+)\([^/]*\)/g, ':$1')
+
+  if (/[*?]/.test(prefix)) {
+    throw new ErrConfiguration(
+      errMessage(
+        `Cannot add middleware "${String(path)}" under "${base}": a relative path cannot start from a wildcard or ` +
+          'an optional parameter',
+      )
+        .solutions(
+          'Leave the path out, so the middleware covers every route of the router',
+          'Or register it on the application with an absolute path, ".use(path, ...)"',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  // `use('/')` joins to `/admin/`, which the engine reads as `/admin`, as it reads a trailing slash on any prefix.
+  const join = (relative: string): string => `${prefix}${relative.startsWith('/') ? relative : `/${relative}`}`
+
+  return typeof path === 'string' ? join(path) : path.map(join)
 }
 
 function toHook(hook: string | undefined): FastifyMiddlewareHook {

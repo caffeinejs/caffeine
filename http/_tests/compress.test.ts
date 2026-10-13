@@ -156,7 +156,7 @@ describe('Compress', () => {
     })
 
     it('disables compression for every route of the group while global compression applies elsewhere', async () => {
-      const router = new Router('/ext-compress').with(compress(false))
+      const router = new Router('/ext-compress').extend(compress(false))
       router.get('/a').handler(() => ({ message: 'hello world'.repeat(100) }))
       router.get('/b').handler(() => ({ message: 'hello world'.repeat(100) }))
 

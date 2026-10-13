@@ -23,7 +23,7 @@ import {
 /**
  * Scenario: ops routers with middleware, guards and plugins.
  *
- * What a router asks for itself — `router.plugin(...)` and `router.guards(...)`, the counterparts of `@Use(...)` and
+ * What a router asks for itself — `router.with(...)` and `router.guards(...)`, the counterparts of `@Use(...)` and
  * `@UseGuards(...)` — follows the router to whichever server serves it, nested routers included. What a server
  * registers for itself is `plugins.test.ts`'s.
  */
@@ -91,8 +91,8 @@ describe('ops routers with middleware, guards and plugins', () => {
       .server(() => ({ listener }))
       .mount(
         newRouter('/jobs')
-          .with(bindTo('admin'))
-          .plugin(marking('x-router-plugin'))
+          .extend(bindTo('admin'))
+          .with(marking('x-router-plugin'))
           .get('/', () => ({ jobs: true })),
         newRouter('/api').get('/', () => ({ api: true })),
       ) as WebApplication
@@ -109,11 +109,11 @@ describe('ops routers with middleware, guards and plugins', () => {
       .install(Guards(g => g.global(TokenGuard)))
       .mount(
         newRouter('/denied')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .guards([DenyGuard])
           .get('/', () => ({ denied: false })),
         newRouter('/open')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/', () => ({ open: true })),
       ) as WebApplication
 
@@ -130,8 +130,8 @@ describe('ops routers with middleware, guards and plugins', () => {
       .server(() => ({ listener }))
       .mount(
         newRouter('/ops')
-          .with(bindTo('admin'))
-          .plugin(marking('x-parent-plugin'))
+          .extend(bindTo('admin'))
+          .with(marking('x-parent-plugin'))
           .guards([TokenGuard])
           .group('/child', child => child.get('/', () => ({ child: true }))),
       ) as WebApplication
@@ -208,7 +208,7 @@ describe('ops routers with middleware, guards and plugins', () => {
       .errorHandling(e => e.globalHandlers(TeapotHandler))
       .mount(
         newRouter('/failing')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/teapot', () => {
             throw new Teapot()
           })

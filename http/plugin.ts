@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyPluginCallback, FastifyPluginOptions } from 'fastify'
 
-import type { AdapterExtensionFactory, HTTPSetupContext } from './adapter.js'
+import type { AdapterExtensionFactory, AdapterTypes, HTTPSetupContext } from './adapter.js'
+import type { FastifyRouterTypes } from './fastify_adapter.js'
 
 /**
  * Any Fastify plugin, callback- or async-style — a bare third-party one (`@fastify/cors`, `@fastify/cookie`,
@@ -41,22 +42,31 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * A server plugin written against Caffeine alone: what a `.with(...)` factory returns when the plugin needs nothing
  * from Fastify.
  *
- * {@link install} does the work a Fastify plugin function would, in the `.with(...)` slot the factory was written
- * in, and is handed the same {@link HTTPSetupContext} the factory got: `context.app.mount(...)` serves routers on
- * the server the plugin installs on, `context.container` resolves, and `context.hasFeature(name)` lets a plugin
- * that depends on a feature refuse a missing one with `ErrFeatureNotInstalled`. It runs before the adapter builds
- * the server, so what it mounts registers with every other route group. Never deduplicated: two factories install
- * two plugins. A package exporting one types its factory `AdapterExtensionFactory<HTTPPlugin, C>`, which every
- * adapter's `.with(...)` takes.
+ * {@link register} does the work a Fastify plugin function would, handed the same {@link HTTPSetupContext} the
+ * factory got: `context.container` resolves, `context.hasFeature(name)` lets a plugin that depends on a feature
+ * refuse a missing one with `ErrFeatureNotInstalled`, and `context.app` mounts routers and adds middleware. Never
+ * deduplicated: two factories register two plugins. A package exporting one types its factory
+ * `AdapterExtensionFactory<HTTPPlugin, C>`.
  *
- * A plugin that also needs Fastify returns a Fastify plugin from its factory and mounts from the factory itself. A
- * route group takes Fastify plugins only: the adapter refuses one of these from `router.plugin(...)` or `@Use(...)`.
+ * Where it is registered decides what `context.app` reaches:
+ *
+ * - With `.with(...)` on the application, or `Ops(name, o => o.with(...))`, it registers in that slot, before the
+ *   adapter builds the server: what it mounts that server serves, and its middleware joins that server's pipeline.
+ * - With `router.with(...)`, it registers once during start-up, before routing is built: what it mounts nests under
+ *   the router, and its middleware runs in front of the router's routes, with paths relative to the router.
+ * - With `@Use(...)` on a controller, its middleware runs in front of the controller's routes, with paths relative
+ *   to the controller. It cannot mount: a class has no children to nest routers under.
+ *
+ * A plain `HTTPPlugin` is written for no adapter: it mounts only routers bound to none, `new Router(...)`, names no
+ * hook, and runs on any adapter. `HTTPPlugin<FastifyRouterTypes>` may mount `newRouter()` routers and name Fastify
+ * hooks, and only Fastify applications and routers take it. A plugin that needs Fastify itself returns a Fastify
+ * plugin from its factory, which may still mount and add middleware through the factory's own context.
  *
  * ```ts
  * class Metrics extends HTTPPlugin {
- *   install({ app, container }: HTTPSetupContext): void {
+ *   register({ app, container }: HTTPSetupContext): void {
  *     const registry = container.get(MetricsRegistry)
- *     app.mount(newRouter('/metrics').get('/', () => registry.render()))
+ *     app.mount(new Router('/metrics').get('/', () => registry.render()))
  *   }
  * }
  *
@@ -64,8 +74,11 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * app.install(Ops('admin', o => o.with(() => new Metrics())))
  * ```
  */
-export abstract class HTTPPlugin {
-  abstract install(context: HTTPSetupContext): void | Promise<void>
+export abstract class HTTPPlugin<T extends AdapterTypes = never> {
+  /** Phantom — names the adapter this plugin is written for, `never` for none. Never assigned, never read. */
+  declare readonly __adapter?: T
+
+  abstract register(context: HTTPSetupContext<unknown, T>): void | Promise<void>
 }
 
 /**
@@ -82,8 +95,9 @@ export abstract class HTTPPlugin {
  * callback-style or async, this package's own or a third party's untouched.
  *
  * `.with(...)` also takes a factory returning an {@link HTTPPlugin}, typed `AdapterExtensionFactory<HTTPPlugin, C>`,
- * when the plugin needs nothing from Fastify: its `install` runs in that slot. Either kind of factory's context
- * carries `app.mount(...)`, which serves routers on the server the `.with(...)` was written on.
+ * when the plugin needs nothing from Fastify: its `register` runs in that slot. Either kind of factory's context
+ * carries `app`, typed for Fastify here, which mounts routers and adds middleware where the `.with(...)` was
+ * written.
  *
  * Called once, after `container.init()`, so `container.get(...)` is legal here. Its slot is where the `.with(...)`
  * call was written, so an `await` inside the factory cannot reorder it relative to the plugins around it.
@@ -107,7 +121,7 @@ export abstract class HTTPPlugin {
  * .with(() => cors)
  * ```
  */
-export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExtension, C>
+export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExtension, C, FastifyRouterTypes>
 
 /**
  * Authors a plugin's options through its builder, handed the same {@link HTTPSetupContext} the factory that
@@ -122,7 +136,10 @@ export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExte
  * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))
  * ```
  */
-export type HTTPPluginConfigurer<B, C = unknown> = (builder: B, context: HTTPSetupContext<C>) => void
+export type HTTPPluginConfigurer<B, C = unknown> = (
+  builder: B,
+  context: HTTPSetupContext<C, FastifyRouterTypes>,
+) => void
 
 const kPluginMeta = Symbol.for('plugin-meta')
 

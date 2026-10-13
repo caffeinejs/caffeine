@@ -20,19 +20,19 @@ const PROJECTS = [
  */
 const projects = newRouter('/api/projects')
   .name('Projects')
-  .with(apiGroup({ name: 'Projects', description: 'The signed-in user’s projects.' }))
+  .extend(apiGroup({ name: 'Projects', description: 'The signed-in user’s projects.' }))
   // Bare, so it asks for the application's default policy — an authenticated caller.
   .authorize()
 
 export const projectsRouter = projects
   .get('/')
   .schema({ response: { 200: ProjectListSchema } })
-  .with(operation({ operationId: 'listProjects', summary: 'List every project' }))
+  .extend(operation({ operationId: 'listProjects', summary: 'List every project' }))
   .handler(() => ({ projects: PROJECTS.map(project => ({ ...project })) }))
 
   .get('/:id')
   .schema({ params: ProjectIdParamSchema, response: { 200: ProjectSchema } })
-  .with(operation({ operationId: 'getProject', summary: 'One project by id' }))
+  .extend(operation({ operationId: 'getProject', summary: 'One project by id' }))
   .handler(ctx => {
     const { id } = ctx.req.param()
     const project = PROJECTS.find(candidate => candidate.id === id)

@@ -11,7 +11,7 @@ import { brewer } from '../brewer.js'
 const listener = { host: '127.0.0.1', port: 0 }
 
 const metrics = new Router('/metrics')
-  .with(bindTo('admin'))
+  .extend(bindTo('admin'))
   .get('/')
   .handler(() => ({ up: true }))
 

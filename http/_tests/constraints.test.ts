@@ -28,12 +28,12 @@ describe('route constraints', () => {
     dish
       .get('/')
       .name('spicy')
-      .with(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
+      .extend(constraint('flavor', 'spicy', { header: 'X-Flavor' }))
       .handler(() => ({ flavor: 'spicy' }))
     dish
       .get('/')
       .name('mild')
-      .with(constraint('flavor', 'mild', { header: 'X-Flavor' }))
+      .extend(constraint('flavor', 'mild', { header: 'X-Flavor' }))
       .handler(() => ({ flavor: 'mild' }))
 
     const app = createWebApplication()
@@ -55,7 +55,7 @@ describe('route constraints', () => {
   it('fails at bootstrap() when a route is constrained and the constraints plugin is not installed', async () => {
     const r = new Router('/v')
     r.get('/')
-      .with(version('1.0.0'))
+      .extend(version('1.0.0'))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() }).mount(r)
 
@@ -65,7 +65,7 @@ describe('route constraints', () => {
   it('fails at bootstrap() when a route names a constraint no strategy is registered under', async () => {
     const r = new Router('/x')
     r.get('/')
-      .with(constraint('nope', 1))
+      .extend(constraint('nope', 1))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
@@ -79,7 +79,7 @@ describe('route constraints', () => {
   it('fails at bootstrap() when fst and version() both set the version constraint on one route', async () => {
     const r = new Router('/c')
     r.get('/')
-      .with(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
+      .extend(version('2.0.0'), fst({ constraints: { version: '1.0.0' } }))
       .handler(() => ({}))
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
@@ -92,7 +92,7 @@ describe('route constraints', () => {
     const r = new Router('/c')
     r.get('/')
       .name('coexist')
-      .with(version('1.0.0'), fst({ constraints: { host: 'api.example' } }))
+      .extend(version('1.0.0'), fst({ constraints: { host: 'api.example' } }))
       .handler(() => ({ ok: true }))
     const app = createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())

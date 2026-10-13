@@ -10,7 +10,7 @@ import { configureRouteGroup } from './registrar/registrar.js'
  * start-up, and so is a name no installed server has. Calling it twice on one router keeps the last name.
  *
  * ```ts
- * newRouter('/ops').with(bindTo('admin'))
+ * newRouter('/ops').extend(bindTo('admin'))
  * ```
  */
 export function bindTo(name: string): RouteGroupExtension {

@@ -18,7 +18,7 @@ const listener = { host: '127.0.0.1', port: 0 }
 
 const jobs = () =>
   newRouter('/jobs')
-    .with(bindTo('admin'))
+    .extend(bindTo('admin'))
     .get('/', () => ({ jobs: true }))
 
 describe('the lifecycle of an ops server', () => {
@@ -95,7 +95,7 @@ describe('the lifecycle of an ops server', () => {
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
       .mount(
         newRouter('/slow')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/', async () => {
             started()
             await held
@@ -123,7 +123,7 @@ describe('the lifecycle of an ops server', () => {
       .install(Ops('admin', o => o.server(() => ({ listener }))))
       .mount(
         newRouter('/jobs')
-          .with(bindTo('nowhere'))
+          .extend(bindTo('nowhere'))
           .get('/', () => ({})),
       ) as WebApplication
 
@@ -140,7 +140,7 @@ describe('the lifecycle of an ops server', () => {
   it('refuses a router bound to a name when no ops server is installed, offering only to install one', async () => {
     app = createWebApplication().mount(
       newRouter('/jobs')
-        .with(bindTo('nowhere'))
+        .extend(bindTo('nowhere'))
         .get('/', () => ({})),
     ) as WebApplication
 

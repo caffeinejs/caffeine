@@ -12,7 +12,7 @@ export interface CSRFRouteConfig {
  * site posts here. `csrfExempt(false)` puts one route of an exempt group back under it, and keeps a route protected
  * whose path is under `exclude(...)`: a route's own mark wins over a path.
  *
- * The programmatic form of `@CSRFExempt()`: `router.with(csrfExempt())`, or `router.post('/hook').with(csrfExempt())`.
+ * The programmatic form of `@CSRFExempt()`: `router.extend(csrfExempt())`, or `router.post('/hook').extend(csrfExempt())`.
  */
 export function csrfExempt(exempt = true): AnyRouteExtension {
   return (target: { config(key: string, value: unknown): unknown }) => {

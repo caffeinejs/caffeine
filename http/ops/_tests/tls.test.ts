@@ -81,7 +81,7 @@ describe('an ops server with TLS', () => {
     app = createWebApplication()
       .install(Ops('admin', o => o.server(() => ({ factory: { https: testTLS() }, listener }))))
       .server(() => ({ listener }))
-      .mount(echo('/ops').with(bindTo('admin')), echo('/api')) as WebApplication
+      .mount(echo('/ops').extend(bindTo('admin')), echo('/api')) as WebApplication
 
     await app.run()
 
@@ -100,7 +100,7 @@ describe('an ops server with TLS', () => {
     app = createWebApplication()
       .install(Ops('admin', o => o.server(() => ({ listener }))))
       .server(() => ({ factory: { https: testTLS() }, listener }))
-      .mount(echo('/ops').with(bindTo('admin')), echo('/api')) as WebApplication
+      .mount(echo('/ops').extend(bindTo('admin')), echo('/api')) as WebApplication
 
     await app.run()
 
@@ -118,7 +118,7 @@ describe('an ops server with TLS', () => {
   it('serves HTTP/2 over TLS on the ops server', async () => {
     app = createWebApplication()
       .install(Ops('admin', o => o.server(() => ({ factory: { http2: true, https: testTLS() }, listener }))))
-      .mount(echo('/ops').with(bindTo('admin'))) as WebApplication
+      .mount(echo('/ops').extend(bindTo('admin'))) as WebApplication
 
     await app.run()
 
@@ -141,7 +141,7 @@ describe('an ops server with TLS', () => {
       .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
       .mount(
         newRouter('/slow')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/', async () => {
             started()
             await held

@@ -85,7 +85,7 @@ function signedOver(body: Buffer, signature: string | undefined): boolean {
 function github(accepted: unknown[], router = newRouter('/webhooks')) {
   return router
     .post('/github')
-    .with(bodyAsBuffer())
+    .extend(bodyAsBuffer())
     .handler(ctx => {
       const body = ctx.req.body() as Buffer
       if (!signedOver(body, ctx.req.header('x-hub-signature-256'))) {
@@ -231,7 +231,8 @@ describe('csrf() in front of a webhook receiver', () => {
     [
       'csrfExempt() on its router',
       '/webhooks/partner',
-      () => createWebApplication().with(csrf()).mount(newRouter('/webhooks/partner').with(csrfExempt()).post('/', ok)),
+      () =>
+        createWebApplication().with(csrf()).mount(newRouter('/webhooks/partner').extend(csrfExempt()).post('/', ok)),
     ],
     [
       'exclude() of its path',
@@ -276,7 +277,9 @@ describe('csrf() in front of a webhook receiver', () => {
     await close?.()
 
     const exempt = await ready(
-      createWebApplication().with(csrf()).mount(newRouter('/payments').post('/return').with(csrfExempt()).handler(ok)),
+      createWebApplication()
+        .with(csrf())
+        .mount(newRouter('/payments').post('/return').extend(csrfExempt()).handler(ok)),
     )
 
     expect((await deliver(exempt, '/payments/return', payment, THREE_DS_RETURN)).status).toBe(200)
@@ -301,7 +304,7 @@ describe('csrf() in front of a webhook receiver', () => {
     const wide = await ready(
       createWebApplication()
         .with(csrf(c => c.exclude('/webhooks')))
-        .mount(github([]), settings(newRouter('/webhooks/settings').with(csrfExempt(false)))),
+        .mount(github([]), settings(newRouter('/webhooks/settings').extend(csrfExempt(false)))),
     )
 
     expect((await deliver(wide, '/webhooks/github', body, delivery)).status).toBe(200)

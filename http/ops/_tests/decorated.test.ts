@@ -20,7 +20,7 @@ import {
 } from '../../index.js'
 
 /**
- * A controller bound with `@BindTo(...)`: the controller counterpart of `router.with(bindTo(...))`, carrying its
+ * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its
  * own plugin, guards and `@Catch` methods to the ops server that serves it.
  *
  * Isolated: a `@Controller` registers into the process-wide registry, so every application in this file serves it

@@ -10,10 +10,10 @@ import { InventorySchema } from './inventories.schemas.js'
  */
 export const inventoriesRouter = new Router('/inventories')
   .name('Inventory')
-  .with(apiGroup({ name: 'Inventory', description: 'Aggregate counts of pets by status.' }))
+  .extend(apiGroup({ name: 'Inventory', description: 'Aggregate counts of pets by status.' }))
   .inject({ pets: PetsRepository })
   .authorize()
   .get('/')
   .schema({ response: { 200: InventorySchema } })
-  .with(operation({ operationId: 'getInventory', summary: 'Count pets by status' }))
+  .extend(operation({ operationId: 'getInventory', summary: 'Count pets by status' }))
   .handler((_ctx, deps) => deps.pets.countByStatus())

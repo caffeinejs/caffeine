@@ -123,7 +123,7 @@ describe('OIDC integration', () => {
 
     it('leaves them to a later gate when the root gate opts out', async () => {
       const scoped = newRouter('/oidc-claim-scoped')
-        .plugin(authentication(g => g.name('scoped')))
+        .with(authentication(g => g.name('scoped')))
         .get('/', () => ({ ok: true }))
 
       const app = makeOIDCApp(undefined, { gate: g => g.oidcRoutes(false) }).mount(scoped)

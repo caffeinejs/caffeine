@@ -194,7 +194,7 @@ class WebhooksController {
 }
 
 // On a controller, @CSRFExempt() exempts every method, one added later included; @CSRFExempt(false) keeps one checked
-newRouter('/hooks').with(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
+newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(false) puts one route back under it
 ```
 
 - `GET`, `HEAD`, `OPTIONS`, `TRACE` and `QUERY` are never checked: a safe method changes nothing, so an application
@@ -224,7 +224,7 @@ newRouter('/hooks').with(csrfExempt()) // the programmatic form; csrfExempt(fals
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
   is authenticated; behind it, an anonymous one meets the challenge first. An [ops server](#ops-servers) is covered
-  by its own `Ops('admin', o => o.with(csrf()))`, a route group alone by `router.plugin(csrf(c => c.name('admin')))`.
+  by its own `Ops('admin', o => o.with(csrf()))`, a route group alone by `router.with(csrf(c => c.name('admin')))`.
 - From the environment, under whatever prefix the block has in the application's schema: `CSRF__ENABLED`,
   `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing, and says so once, at `warn`,
   as the server starts.
@@ -346,7 +346,7 @@ app.mount(pets) // before app.bootstrap()
     .get('/:id', { params: $t.Object({ id: $t.Integer() }) }, (ctx, deps) => deps.svc.find(ctx.req.param().id))
   ```
 
-- An inline route is closed, so `.name()`, `.authorize()`, `.guards()`, `.with()` and `.inject()` are unreachable on
+- An inline route is closed, so `.name()`, `.authorize()`, `.guards()`, `.extend()` and `.inject()` are unreachable on
   it and its dependencies are the group's. A route needing any of those opens the chain and closes it with
   `.handler(fn)`.
 - `.inject()` takes a spec or a function handed `$i`, on both `Router` and the route chain — so `optional`, `allOf`,
@@ -359,14 +359,15 @@ app.mount(pets) // before app.bootstrap()
   mounted twice into one host is added once.
 - Route names default to method + path (`get_pets_id`) and are what the OpenAPI operationId is built from.
   `.name('find')` pins one.
-- `.with(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
+- `.extend(ext, ...)` applies extensions — how a package configures a route it does not own. http ships
   `bodyAsBuffer()`, `bodyAsStream()`, `fst(options)`, `compress(opts)` and `encoding(tokens)`; openapi ships
   `operation(detail)` and `apiGroup(detail)`. Each is the same implementation as its decorator.
-- `.plugin(factory)` registers a Fastify plugin in front of that router's routes and the groups nested under
-  it. Only a router bound to Fastify takes one, so it is created with `newRouter(path)` rather than
-  `new Router(path)` —
-  `newRouter('/pets').plugin(() => [fastifyCors, { origin: 'https://pets.example' }])`.
-  A router from `new Router(path)` is bound to no adapter and mounts on any application.
+- `.with(factory)` registers a plugin in front of that router's routes and the groups nested under it, taking what
+  the application's `.with(...)` takes. A Fastify plugin needs a router bound to Fastify, created with
+  `newRouter(path)` rather than `new Router(path)` —
+  `newRouter('/pets').with(() => [fastifyCors, { origin: 'https://pets.example' }])`.
+  A router from `new Router(path)` is bound to no adapter, mounts on any application, and takes only an
+  `HTTPPlugin` written for no adapter ([Plugins without Fastify](#plugins-without-fastify)).
   There is no `corsPlugin`/`compressPlugin` wrapper — register the third-party plugin directly, the same as any
   other Fastify plugin. A factory returns the plugin, or the plugin paired with the options to register it
   with; an official plugin already wraps itself in `fastify-plugin`, so a wrapper written only to carry its
@@ -385,11 +386,11 @@ app.mount(pets) // before app.bootstrap()
 
 ```ts
 export const pets = new Router('/pets')
-  .with(apiGroup({ name: 'Pets' }))
+  .extend(apiGroup({ name: 'Pets' }))
   .get('/')
   .handler(list)
   .get('/:id')
-  .with(operation({ operationId: 'getPet' }))
+  .extend(operation({ operationId: 'getPet' }))
   .handler(find)
 
 type API = RoutesOf<typeof pets> // { method: 'GET', path: '/pets', ... } | { method: 'GET', path: '/pets/:id', ... }
@@ -404,17 +405,18 @@ export const petsRouter = blend(all, one)
 
 ## Plugins without Fastify
 
-A `.with(...)` factory may return an `HTTPPlugin` instead of a Fastify plugin: a class whose `install(context)` does
-the work in that `.with(...)` slot, handed the same context the factory got. `context.app.mount(...)` serves routers
-on the server the plugin installs on, compiled exactly as `app.mount(...)` compiles them.
+A `.with(...)` factory may return an `HTTPPlugin` instead of a Fastify plugin: a class whose `register(context)`
+does the work, handed the same context the factory got. `context.app` is what it may do to the application:
+`mount(...routers)`, `use(...)` and `useFn(...)`, taking what `app.mount`, `app.use` and `app.useFn` take.
 
 ```ts
-import { HTTPPlugin, newRouter, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
+import { HTTPPlugin, Router, type AdapterExtensionFactory, type HTTPSetupContext } from '@caffeinejs/http'
 
 class Metrics extends HTTPPlugin {
-  install({ app, container }: HTTPSetupContext): void {
+  register({ app, container }: HTTPSetupContext): void {
     const registry = container.get(MetricsRegistry)
-    app.mount(newRouter('/metrics').get('/', () => registry.render()))
+    app.mount(new Router('/metrics').get('/', () => registry.render()))
+    app.use(countRequests)
   }
 }
 
@@ -422,22 +424,36 @@ export function metrics(): AdapterExtensionFactory<HTTPPlugin> {
   return () => new Metrics()
 }
 
-app.with(metrics()) // on the application's own server
-app.install(Ops('admin', o => o.with(metrics()))) // on the ops server alone
+app.with(metrics()) // the application's own server
+app.install(Ops('admin', o => o.with(metrics()))) // that ops server alone
+newRouter('/api').with(metrics()) // that router alone: /api/metrics
 ```
 
-- The server is the one the `.with(...)` was written on: `Ops(name, o => o.with(...))` for an ops server. A router
-  bound with `bindTo` to another server is refused at start-up.
-- Same compilation as a mounted router: guards, authorization and the fallback policy, CSRF marks,
-  `router.plugin(...)` and the start-up checks. Mark a group the application does not own
+Where it is registered decides what `context.app` reaches:
+
+- **On a server** (`.with(...)`, `o.with(...)`): the server serves what it mounts, and a router bound with `bindTo`
+  to another server is refused at start-up. Its middleware joins that server's pipeline after the application's own
+  `.use(...)` entries, and a path is the server's own.
+- **On a router** (`router.with(...)`): it registers once, before routing is built. What it mounts nests under the
+  router, starting from its path, binding, guards and plugins. Its middleware runs in front of the router's routes
+  alone, nested groups included, and a path is relative to the router: `use('/jobs', mw)` on a router at `/admin`
+  covers `/admin/jobs`, under every parent the router is nested in. A relative path under a router whose path holds
+  a wildcard or an optional parameter is refused at start-up.
+- **On a controller** (`@Use(...)`): its middleware runs in front of the controller's routes, a path relative to the
+  controller and its `@Prefix`. It cannot mount: a class has no children to nest routers under.
+
+- Mounted routes compile as `app.mount(...)` compiles them: guards, authorization and the fallback policy, CSRF
+  marks, routers' own `.with(...)` and the start-up checks. Mark a group the application does not own
   `detail('http', { internal: true })` so the OpenAPI document leaves it out. The groups stay out of
-  `app.routeGroups`, and the same router mounted twice on one server is served once.
-- A Fastify plugin's factory gets the same context, so it may mount routers too and still return its plugin:
-  `.with(({ app }) => { app.mount(router); return [fastifyCors, options] })`.
+  `app.routeGroups`, and a router mounted twice in one place is served once.
+- A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers, names no hook, and runs
+  on any adapter. `HTTPPlugin<FastifyRouterTypes>` may mount `newRouter()` routers and name Fastify hooks
+  (`use(mw, { hook: 'preHandler' })`); only Fastify applications and routers take it.
+- A Fastify plugin's factory gets the same context, so it may mount and add middleware too and still return its
+  plugin: `.with(({ app }) => { app.mount(router); return [fastifyCors, options] })`.
 - A plugin that depends on a feature asks `context.hasFeature(name)` and throws `ErrFeatureNotInstalled`.
-- `app.mount` is open only while the plugin installs: not from `router.plugin(...)`, `@Use(...)`, `useFn(...)` or a
-  Fastify plugin body, which adds a group with `instance.$route(...)` instead. A route group takes Fastify plugins
-  only, so `router.plugin(...)` and `@Use(...)` refuse an `HTTPPlugin`.
+- `context.app` is open only while the plugin registers. A middleware factory, a server callback, a context kept
+  past its slot and a Fastify plugin body are refused; a plugin body adds a group with `instance.$route(...)`.
 
 ## Authorization declarations
 
@@ -519,7 +535,7 @@ const app = createWebApplication({ config })
   .with(authentication())
   .mount(
     newRouter('/jobs')
-      .with(bindTo('admin'))
+      .extend(bindTo('admin'))
       .authorize({ schemes: ['ops'], roles: ['operator'] })
       .get('/', () => jobs.list()),
   )
@@ -532,17 +548,17 @@ await app.run()
 app.ops.get('admin')?.address // { host, port, origin }
 ```
 
-- **Binding is per router.** `@BindTo(name)` on a controller and `router.with(bindTo(name))` bind every route under
+- **Binding is per router.** `@BindTo(name)` on a controller and `router.extend(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
   start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
 - **What it gets.** The ops server is built through the same path as the application's own server: the same request
   context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
-  itself follows it: `router.plugin(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
+  itself follows it: `router.with(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
 - **Plugins and middleware are per server.** `o.with(...)`, `o.use(...)` and `o.useFn(...)` take what the
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
   head slots. Nothing registered on the application reaches an ops server, an authentication gate included, and
-  `.basePath(...)` and `.serverCallback(...)` never do. What a plugin mounts from `o.with(...)` with
-  `context.app.mount(...)` is served by that server alone.
+  `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `o.with(...)` mounts or adds
+  through `context.app` lands on that server alone.
 - **Settings.** `o.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
   switched by configuration there too.
 - **Authorization.** There is nothing ops-specific: a route on an ops server requires what its router or controller

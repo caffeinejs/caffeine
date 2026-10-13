@@ -9,7 +9,6 @@ import {
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import {
-  AdapterExtensions,
   type Adapter,
   type AdapterExtensionFactory,
   type AdapterFactory,
@@ -40,14 +39,16 @@ import type { OpsServer } from './ops/builder.js'
 import { opsServers } from './ops/servers.js'
 import { kServerExtension, type HTTPPlugin } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
+import { closedApplicationOps } from './plugin_slot.js'
 import { ControllerRouteSource } from './routing/decorated/source.js'
 import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
-import { FluentRouteSource, routerStates } from './routing/programmatic/source.js'
+import { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
+import { FluentRouteSource } from './routing/programmatic/source.js'
 import type { RouteGroup } from './routing/route.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
-import { closedApplicationOps, ServerSet } from './servers.js'
+import { ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
@@ -102,6 +103,8 @@ export class WebApplication<
   #routeGroups: RouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
   #built = false
+  /** What routers and controllers registered for themselves, resolved once during start-up. */
+  readonly #plugins = new ScopedPlugins<T>()
 
   // Held as fields: the instance that configured is the one whose head-slot plugin installs, and it holds
   // what its configure step bound.
@@ -269,15 +272,16 @@ export class WebApplication<
    * A factory is never deduplicated — two calls register two plugins. A `fastify-plugin` name already on that
    * instance is refused at register time. A factory producing another adapter's extension does not compile.
    *
-   * A factory may return an `HTTPPlugin` instead of a plugin, when it needs nothing from Fastify: its `install`
-   * runs in this slot. Either kind of factory may serve routers on this server with `context.app.mount(...)`.
+   * A factory may return an `HTTPPlugin` instead of a plugin, when it needs nothing from Fastify: its `register`
+   * runs in this slot. Either kind of factory may mount routers on this server and add middleware to its pipeline
+   * with `context.app`, which takes this application's adapter.
    *
    * A feature is not a plugin: install it with {@link Application.install}, at any position in the chain — a
    * feature binds into the container before any factory here runs, so only `.with(...)` order matters.
    *
    * @throws ErrApplicationStarted when {@link bootstrap} has already started.
    */
-  with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin, C>): this {
+  with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, C, T>): this {
     this.assertConfigurable()
     assertPluginFactory(factory)
 
@@ -421,38 +425,14 @@ export class WebApplication<
     ]
   }
 
-  /**
-   * Resolves the extensions a mounted router or a controller registered, each paired with what registered it.
-   *
-   * After the application's own: routing is what needs these, and by the time it is built the configuration has
-   * resolved and the container has initialized — so a factory here sees exactly what one passed to the
-   * application's `.with(...)` sees, but for its configuration's type.
-   */
-  async #scopedExtensions(context: HTTPSetupContext): Promise<AdapterExtensions<T['extension']>> {
-    const extensions = new AdapterExtensions<T['extension']>()
-    const register = async (scope: object, factories: readonly AdapterExtensionFactory<unknown>[]): Promise<void> => {
-      for (const factory of factories) {
-        // Unchecked: a router's binding was checked when it was mounted, but a controller's `@Use(...)` never
-        // meets the application's type. The adapter refuses what it cannot install.
-        extensions.add((await factory(context)) as T['extension'], scope)
-      }
-    }
-
-    for (const state of routerStates(this.#mounted)) {
-      await register(state, state.plugins)
-    }
-
-    // Registered when the container compiled, so every controller the application can resolve is already known
-    // here — long before routing is built.
+  /** Resolves what each controller's `@Use(...)` asked for, keyed by its class. */
+  async #controllerPlugins(context: HTTPSetupContext): Promise<void> {
+    // Registered when the container compiled, so every controller the application can resolve is already known here.
     for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
-      if (typeof key !== 'function') {
-        continue
+      if (typeof key === 'function') {
+        await this.#plugins.resolveController(key, controllerPlugins(key), context)
       }
-
-      await register(key, controllerPlugins(key))
     }
-
-    return extensions
   }
 
   /**
@@ -497,13 +477,28 @@ export class WebApplication<
     const sources: RouteSource<T['request']>[] = [new ControllerRouteSource<T['request']>()]
 
     if (this.#mounted.length > 0) {
-      sources.push(new FluentRouteSource<T['request']>(this.#mounted))
+      sources.push(new FluentRouteSource<T['request']>(this.#mounted, this.#plugins.childrenOf))
     }
 
     return sources
   }
 
   protected override async setup(): Promise<void> {
+    // One context for everything built from here on. `log` is the configured logger by now. Its `app` is closed:
+    // each plugin slot hands its plugins an `app` of its own.
+    const context: HTTPSetupContext = {
+      container: this.container,
+      config: this.configSnapshot,
+      store: this.configStore,
+      logger: this.log,
+      hasFeature: name => this.hasFeature(name),
+      app: closedApplicationOps(),
+    }
+
+    // Before routing is built: a router's plugins may nest the routers it is built from.
+    await this.#plugins.resolveRouters(this.#mounted, context)
+    await this.#controllerPlugins(context)
+
     const routing = buildRouting<T['request']>(this.routeSources(), this.container)
     const servers = new ServerSet<T>([
       this.#own as ServerDefinition<T>,
@@ -516,21 +511,10 @@ export class WebApplication<
     this.#routeGroups = servers.select(routing)
     this.#built = true
 
-    // One context for everything built from here on. `log` is the configured logger by now.
-    const context: HTTPSetupContext = {
-      container: this.container,
-      config: this.configSnapshot,
-      store: this.configStore,
-      logger: this.log,
-      hasFeature: name => this.hasFeature(name),
-      // Closed: only a server's own plugin slot mounts, and `ServerSet` hands each server an `app` of its own.
-      app: closedApplicationOps(),
-    }
-
     await servers.setup(this.#adapter, {
       context,
       headSlots: () => this.#headSlots(),
-      scopedExtensions: () => this.#scopedExtensions(context),
+      plugins: this.#plugins,
       compileRouteGroup: routing.compileRouteGroup,
     })
 

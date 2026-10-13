@@ -202,7 +202,7 @@ export class AuthenticationGateBuilder {
  *
  * Registered with `.with(authentication())`, the gate joins the application's own server and covers every route
  * it serves, wherever it sits among the plugins; registered with an ops server's `o.with(authentication())`, it
- * covers that server's routes the same way. With `router.plugin(authentication(g => g.name('admin')))` it joins
+ * covers that server's routes the same way. With `router.with(authentication(g => g.name('admin')))` it joins
  * that route group alone, covering exactly the group's routes. Each gate stamps the routes registered in its
  * context after it, and where several gates cover a route the last stamp — the innermost gate's, for a group's own
  * routes — decides which one authenticates and challenges it. A raw route registered straight on the server

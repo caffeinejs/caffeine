@@ -30,7 +30,7 @@ describe('route extensions', () => {
       const router = new Router('/ext-stream')
       router
         .post('/upload')
-        .with(bodyAsStream())
+        .extend(bodyAsStream())
         .handler(async ctx => {
           const stream = ctx.req.body() as ReadableStream
           const chunks: Uint8Array[] = []
@@ -73,7 +73,7 @@ describe('route extensions', () => {
       const router = new Router('/ext-buffer')
       router
         .post('/upload')
-        .with(bodyAsBuffer())
+        .extend(bodyAsBuffer())
         .handler(ctx => {
           const body = ctx.req.body() as Buffer
           return { isBuffer: Buffer.isBuffer(body), text: body.toString() }
@@ -107,7 +107,7 @@ describe('route extensions', () => {
       const router = new Router('/order')
       router
         .get('/')
-        .with(mark('first'), mark('second'), mark('third'))
+        .extend(mark('first'), mark('second'), mark('third'))
         .handler(() => null)
 
       expect(seen).toEqual(['first', 'second', 'third'])
@@ -135,7 +135,7 @@ describe('fst', () => {
       const router = new Router('/fst')
       router
         .get('/hooked')
-        .with(
+        .extend(
           fst({
             onRequest: (_req, _res, done) => {
               order.push('fst')
@@ -163,7 +163,7 @@ describe('fst', () => {
       const router = new Router('/fst-opts')
       router
         .get('/validated')
-        .with(fst({ attachValidation: true }))
+        .extend(fst({ attachValidation: true }))
         .schema({ querystring: $t.Object({ n: $t.Integer() }) })
         .handler(ctx => {
           const { validationError } = ctx.platform.request as { validationError?: unknown }

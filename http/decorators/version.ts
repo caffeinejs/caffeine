@@ -4,7 +4,7 @@ import { Constraint, constraint } from './constraint.js'
 
 /**
  * Route/group extension binding routes to an API version. One implementation behind {@link Version}, applied
- * with `.with(version(v))`.
+ * with `.extend(version(v))`.
  */
 export function version(version: string): AnyRouteExtension {
   return constraint(VERSION_CONSTRAINT, version, { header: kVersionHeader })

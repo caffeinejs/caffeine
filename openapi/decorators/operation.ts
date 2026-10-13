@@ -10,7 +10,7 @@ import type { OperationDetail } from './detail.js'
  * ```ts
  * pets
  *   .get('/:id')
- *   .with(operation({ summary: 'Get a pet by ID', operationId: 'getPet' }))
+ *   .extend(operation({ summary: 'Get a pet by ID', operationId: 'getPet' }))
  *   .schema({ params: petIdParamSchema, response: { 200: petSchema } })
  *   .handler(...)
  * ```

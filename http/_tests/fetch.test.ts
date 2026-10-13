@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Header, createWebApplication } from '../index.js'
+import { Controller, Get, Header, Router, createWebApplication } from '../index.js'
 
 describe('Fetch API Response Support', () => {
   it('maps status, headers, and body to fastify reply', async () => {
@@ -185,5 +185,25 @@ describe('Fetch API Response Support', () => {
 
       expect(res.headers.get('x-version')).toBe('response')
     })
+  })
+
+  // What a Fetch client holds is often a `Request` already: its method and headers reach the route as they are.
+  it('takes a Request object as well as a path', async () => {
+    const app = createWebApplication().mount(
+      new Router('/fetch-request').post('/', ctx => ({ probe: ctx.req.header('x-probe') })),
+    )
+
+    try {
+      await app.bootstrap()
+
+      const res = await app.fetch(
+        new Request('http://localhost/fetch-request', { method: 'POST', headers: { 'x-probe': 'yes' } }),
+      )
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ probe: 'yes' })
+    } finally {
+      await app.close()
+    }
   })
 })

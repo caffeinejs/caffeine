@@ -387,10 +387,10 @@ describe('csrf() at the edges', () => {
     // An exclusion belongs to the plugin it was given to. A route's own mark speaks to every plugin.
     it("keeps the root plugin's check on a path a route group's own plugin excludes", async () => {
       const admin = newRouter('/admin')
-        .plugin(csrf(c => c.name('admin').exclude('/admin/hooks')))
+        .with(csrf(c => c.name('admin').exclude('/admin/hooks')))
         .post('/hooks', ok)
         .post('/marked')
-        .with(csrfExempt())
+        .extend(csrfExempt())
         .handler(ok)
 
       const app = await ready(createWebApplication().with(csrf()).mount(admin))
@@ -405,7 +405,7 @@ describe('csrf() at the edges', () => {
           .install(Ops('admin', o => o.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks')))))
           .server(() => ({ listener }))
           .with(csrf())
-          .mount(newRouter('/hooks').with(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),
+          .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),
       )) as WebApplication
       const ops = app.ops.get('admin')!.address!.origin
 

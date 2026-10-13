@@ -58,13 +58,24 @@ export interface RouteGroup<R = FastifyRequest> {
   boundTo?: string
 
   /**
-   * What installed the features whose plugins register inside this group's context, outermost first.
+   * What registered plugins inside this group's context, each with the path it starts at, outermost first.
    *
-   * A programmatic group lists its own router and every router it is nested under, so a plugin extended on a
-   * parent reaches the groups below it the way `.with(...)` configuration does. A controller group lists the
-   * class. Undefined when nothing scoped anything here.
+   * A programmatic group lists its own router and every router it is nested under, so a plugin a parent registered
+   * with `router.with(...)` reaches the groups below it the way `router.extend(...)` configuration does. A
+   * controller group lists the class. Undefined when nothing scoped anything here.
    */
-  scopes?: readonly object[]
+  scopes?: readonly RouteGroupScope[]
+}
+
+/** One scope a group's routes are installed under: what registered plugins for them, and where it starts. */
+export interface RouteGroupScope {
+  /** The router (its state) or the controller class whose plugins and middleware install in front of the routes. */
+  readonly key: object
+  /**
+   * The scope's full path in this group, which a relative middleware path it added starts from. A router nested
+   * under two parents is one key with two paths.
+   */
+  readonly path: string
 }
 
 /**

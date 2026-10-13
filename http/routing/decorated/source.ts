@@ -5,6 +5,7 @@ import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { Keys } from '../../symbols.js'
+import { normalizeGroupPath } from '../builder.js'
 import type { RouteGroupMeta } from '../compile.js'
 import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from '../route.js'
 import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
@@ -53,7 +54,11 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             binding.scopeID === Scopes.SINGLETON,
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
-        scopes: controllerPlugins(key).length > 0 ? [key] : undefined,
+        // A controller's routes live under its Fastify prefix plus its path: its relative middleware paths start there.
+        scopes:
+          controllerPlugins(key).length > 0
+            ? [{ key, path: normalizeGroupPath(`${spec.prefix ?? ''}${spec.path}`) }]
+            : undefined,
       }
     })
   }

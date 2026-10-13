@@ -323,7 +323,7 @@ describe('scoped plugin registration', () => {
   // the same wrapped plugin covers that group's routes and no others when it is registered there.
   it('keeps a router-installed plugin inside that router', async () => {
     const pets = newRouter('/scoped-pets')
-      .plugin(stamping('pets-stamp', 'x-pets'))
+      .with(stamping('pets-stamp', 'x-pets'))
       .get('/', () => ({ ok: true }))
 
     // Bound to no adapter, and mounted next to a Fastify-bound router all the same.
@@ -338,10 +338,10 @@ describe('scoped plugin registration', () => {
   })
 
   // A nested group is flattened into its own context, so inheritance is carried rather than encapsulated —
-  // `.plugin(...)` reaches the groups below it the way `.with(...)` configuration does.
+  // `router.with(...)` reaches the groups below it the way `router.extend(...)` configuration does.
   it('reaches a nested group from the router that installed the plugin', async () => {
     const shop = newRouter('/scoped-shop')
-      .plugin(stamping('shop-stamp', 'x-shop'))
+      .with(stamping('shop-stamp', 'x-shop'))
       .get('/', () => ({ ok: true }))
 
     shop.group('/items', items => items.get('/', () => ({ ok: true })))
@@ -428,7 +428,7 @@ describe('scoped plugin registration', () => {
   it('refuses a router factory that produced something other than a plugin', async () => {
     // Cast: the factory's result is deliberately not a Fastify extension.
     const bad = newRouter('/bad-plugin')
-      .plugin((() => ({ origin: '*' })) as never)
+      .with((() => ({ origin: '*' })) as never)
       .get('/', () => ({ ok: true }))
 
     app = createWebApplication().mount(bad)
@@ -441,8 +441,8 @@ describe('scoped plugin registration', () => {
 
   it('refuses a second plugin a router installs under the same fastify-plugin name', async () => {
     const twice = newRouter('/twice-group')
-      .plugin(stamping('twice-group', 'x-twice'))
-      .plugin(stamping('twice-group', 'x-twice'))
+      .with(stamping('twice-group', 'x-twice'))
+      .with(stamping('twice-group', 'x-twice'))
       .get('/', () => ({ ok: true }))
 
     app = createWebApplication().mount(twice)
@@ -452,10 +452,10 @@ describe('scoped plugin registration', () => {
 
   it('keeps the plugins of two routers apart, one per group', async () => {
     const pets = newRouter('/inst-pets')
-      .plugin(stamping('inst', 'x-inst'))
+      .with(stamping('inst', 'x-inst'))
       .get('/', () => ({ ok: true }))
     const orders = newRouter('/inst-orders')
-      .plugin(stamping('inst-orders', 'x-inst-orders'))
+      .with(stamping('inst-orders', 'x-inst-orders'))
       .get('/', () => ({ ok: true }))
 
     app = createWebApplication().mount(pets, orders)
@@ -546,7 +546,7 @@ describe('a plugin registered with its options', () => {
 
   it('reaches only its own group when a router installed the pair', async () => {
     const pets = newRouter('/pair-scoped-pets')
-      .plugin(() => [fp(configurable('scoped'), { name: 'scoped' }), { header: 'x-scoped' }])
+      .with(() => [fp(configurable('scoped'), { name: 'scoped' }), { header: 'x-scoped' }])
       .get('/', () => ({ ok: true }))
     const orders = newRouter('/pair-scoped-orders').get('/', () => ({ ok: true }))
 

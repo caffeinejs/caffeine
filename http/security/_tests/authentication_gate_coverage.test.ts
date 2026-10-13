@@ -90,7 +90,7 @@ describe('routes no authentication gate covers', () => {
 
   // A scoped gate reaches its own router and nothing beside it.
   it('refuses a protected route outside the only gated router, naming that route alone', async () => {
-    const gated = newRouter('/sibling-gated').plugin(authentication()).authorize().get('/', ok)
+    const gated = newRouter('/sibling-gated').with(authentication()).authorize().get('/', ok)
     const bare = newRouter('/sibling-bare').authorize().get('/', ok)
 
     const err = await refusal(createWebApplication().install(header()).mount(gated, bare))
@@ -103,7 +103,7 @@ describe('routes no authentication gate covers', () => {
   // The fallback policy protects every route that declares nothing, so with every gate scoped, what lies outside
   // them would be served to anyone — a route compiled from a router and one registered straight on the server alike.
   it('refuses what the fallback policy protects outside every scoped gate', async () => {
-    const gated = newRouter('/fallback-gated').plugin(authentication()).get('/', ok)
+    const gated = newRouter('/fallback-gated').with(authentication()).get('/', ok)
     const open = newRouter('/fallback-open').get('/', ok)
 
     const app = createWebApplication()

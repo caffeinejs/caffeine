@@ -7,6 +7,7 @@ import { ErrConfiguration } from '../../error/index.js'
 import { normalizeGroupPath, normalizeRoutePath } from '../builder.js'
 import { inheritGroupSpec } from '../inherit.js'
 import { $p } from '../picker.js'
+import type { RouteGroupScope } from '../route.js'
 import type { RouteGroupSpec, RouteSpec } from '../spec.js'
 import type { RouterState, RouteState } from './_state.js'
 
@@ -14,8 +15,8 @@ import type { RouterState, RouteState } from './_state.js'
 export interface FlatRouteGroup<R> {
   spec: RouteGroupSpec<R>
   name: string
-  /** This router and every router it is nested under, outermost first. */
-  scopes: readonly RouterState[]
+  /** This router and every router it is nested under, outermost first, each with its full path here. */
+  scopes: readonly RouteGroupScope[]
 }
 
 /**
@@ -24,11 +25,25 @@ export interface FlatRouteGroup<R> {
  * Flat is what registration wants: a nested group is a group whose path and configuration start from its
  * parent's, not a structure the adapter has to walk. Nothing here mutates the router, so mounting the same one
  * into two applications — as tests do — builds it twice rather than accumulating.
+ *
+ * @param childrenOf - A router's children as start-up sees them: those it declared, by default, and for an
+ *   application also those its plugins mounted.
  */
-export function flattenRouter<R>(root: RouterState, container: Container): FlatRouteGroup<R>[] {
+export function flattenRouter<R>(
+  root: RouterState,
+  container: Container,
+  childrenOf: (state: RouterState) => readonly RouterState[] = state => state.children,
+): FlatRouteGroup<R>[] {
   const out: FlatRouteGroup<R>[] = []
-  walk<R>(root, '', undefined, undefined, [], container, out)
+  walk<R>(root, '', undefined, undefined, [], { container, childrenOf, out })
   return out
+}
+
+/** What every level of one walk shares. */
+interface Walk<R> {
+  readonly container: Container
+  readonly childrenOf: (state: RouterState) => readonly RouterState[]
+  readonly out: FlatRouteGroup<R>[]
 }
 
 /** The group a nested router starts from: its parent's spec, and the name the parent goes by. */
@@ -42,16 +57,15 @@ function walk<R>(
   parentPath: string,
   parent: Parent<R> | undefined,
   parentInjection: ObjectInjectionSpec | undefined,
-  parentScopes: readonly RouterState[],
-  container: Container,
-  out: FlatRouteGroup<R>[],
+  parentScopes: readonly RouteGroupScope[],
+  context: Walk<R>,
 ): void {
   const path = normalizeGroupPath(`${parentPath}${state.path}`)
   const injection = merge(parentInjection, state.injection)
 
   const own = state.builder.toRouteGroup<R>()
   own.path = path
-  own.routes = state.routes.map(route => compileRoute<R>(route, path, injection, container))
+  own.routes = state.routes.map(route => compileRoute<R>(route, path, injection, context.container))
 
   const name = state.name ?? defaultGroupName(path)
 
@@ -63,16 +77,17 @@ function walk<R>(
 
   assertUniqueRouteNames(spec.routes, name)
 
-  // A nested group is its own Fastify context, so what a parent router extended cannot reach it through
-  // encapsulation. Carrying the chain is what makes `.plugin(...)` inherit the way `.with(...)` does.
-  const scopes = [...parentScopes, state]
+  // A nested group is its own Fastify context, so what a parent router registered cannot reach it through
+  // encapsulation. Carrying the chain is what makes `router.with(...)` inherit the way `router.extend(...)` does,
+  // and the path is where a relative middleware path of that router starts in this group.
+  const scopes = [...parentScopes, { key: state, path }]
 
   if (spec.routes.length > 0) {
-    out.push({ spec, name, scopes })
+    context.out.push({ spec, name, scopes })
   }
 
-  for (const child of state.children) {
-    walk<R>(child, path, { spec, name }, injection, scopes, container, out)
+  for (const child of context.childrenOf(state)) {
+    walk<R>(child, path, { spec, name }, injection, scopes, context)
   }
 }
 

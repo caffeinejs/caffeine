@@ -33,7 +33,7 @@ import { ServerDefinition } from '../server_definition.js'
  * and start-up checks — and listens on it after its own, closing it after its own. Its plugins and middleware are
  * its own, registered here with `with(...)`, `use(...)` and `useFn(...)`: nothing the application registers on its
  * own server reaches it, an authentication gate included, and neither do the base path and the server callbacks. A
- * router's own plugins and guards, `router.plugin(...)` or `@Use(...)` and `router.guards(...)` or
+ * router's own plugins and guards, `router.with(...)` or `@Use(...)` and `router.guards(...)` or
  * `@UseGuards(...)`, go wherever the router does.
  *
  * What a route on it requires is what its router or controller declares, `router.authorize(...)` or
@@ -71,13 +71,14 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Registers a server plugin on this server from a factory, the way the application's `.with(...)` registers one on
    * its own: after the framework's head slots (error handling, cookies), in the order these calls are written. A
-   * factory may return an `HTTPPlugin`, and what either kind mounts with `context.app.mount(...)` is served here.
+   * factory may return an `HTTPPlugin`, and what either kind of factory mounts or adds with `context.app` lands on
+   * this server.
    *
    * ```ts
    * .install(Ops('admin', o => o.with(authentication()).with(healthProbes())))
    * ```
    */
-  with(factory: AdapterExtensionFactory<FastifyExtension | HTTPPlugin, C>): this {
+  with(factory: AdapterExtensionFactory<FastifyExtension | HTTPPlugin<FastifyTypes>, C, FastifyTypes>): this {
     assertPluginFactory(factory)
     this.#definition.plugins.push(factory)
     return this
@@ -160,7 +161,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
  * ```ts
  * createWebApplication()
  *   .install(Ops('admin', o => o.server(() => ({ listener: { port: 9464 } })).with(healthProbes())))
- *   .mount(newRouter('/metrics').with(bindTo('admin')).get('/', () => metrics()))
+ *   .mount(newRouter('/metrics').extend(bindTo('admin')).get('/', () => metrics()))
  * ```
  */
 export function Ops<C = unknown>(name: string, configure?: FeatureConfigurer<OpsBuilder<C>, C>): Feature<C> {

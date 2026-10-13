@@ -25,17 +25,17 @@ describe('openapi from a programmatic router', () => {
   it('documents a router through the apiGroup and operation extensions', async () => {
     const pets = new Router('/documented-pets')
       .name('DocumentedPets')
-      .with(apiGroup({ name: 'Documented', description: 'Browse documented pets' }))
+      .extend(apiGroup({ name: 'Documented', description: 'Browse documented pets' }))
 
     pets
       .get('/:id')
-      .with(operation({ summary: 'Get a pet by ID', operationId: 'getDocumentedPet' }))
+      .extend(operation({ summary: 'Get a pet by ID', operationId: 'getDocumentedPet' }))
       .schema({ params: $t.Object({ id: $t.String() }), response: { 200: petSchema } })
       .handler(ctx => ctx.body({ id: ctx.req.param().id, name: 'Rex' }))
 
     pets
       .get('/hidden')
-      .with(operation({ hidden: true }))
+      .extend(operation({ hidden: true }))
       .handler(() => ({}))
 
     app = createWebApplication({})
@@ -95,7 +95,7 @@ describe('openapi from a programmatic router', () => {
   })
 
   it('lists the Accept-Version header parameter for a versioned route, from the compiled constraint', async () => {
-    const pets = new Router('/versioned-pets').name('VersionedPets').with(version('1.0.0'))
+    const pets = new Router('/versioned-pets').name('VersionedPets').extend(version('1.0.0'))
     pets
       .get('/')
       .name('list')

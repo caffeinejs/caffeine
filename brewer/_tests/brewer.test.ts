@@ -24,7 +24,7 @@ const pets = new Router('/pets')
   .handler(ctx => ({ tags: ctx.req.queries('tag') ?? [], tenant: ctx.req.header('x-tenant') }))
   .post('/upload')
   // Any content type: what is under test is that the client did not re-encode the body or claim it was JSON.
-  .with(bodyAsBuffer())
+  .extend(bodyAsBuffer())
   .handler(ctx => ({ contentType: ctx.req.header('content-type')?.split(';')[0] }))
   .get('/slow')
   .handler(ctx => new Promise(resolve => setTimeout(() => resolve(ctx.body({ done: true })), 200)))

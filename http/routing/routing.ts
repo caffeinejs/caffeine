@@ -3,7 +3,7 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrConfiguration } from '../error/common.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
-import type { RouteGroup } from './route.js'
+import type { RouteGroup, RouteGroupScope } from './route.js'
 import type { RouteGroupSpec } from './spec.js'
 
 /**
@@ -35,7 +35,7 @@ export interface DeclaredRouteGroup<R> {
   meta(): RouteGroupMeta<R>
 
   /** What installs its plugins in front of the group's routes: the routers or the controller class, outermost first. */
-  readonly scopes?: readonly object[]
+  readonly scopes?: readonly RouteGroupScope[]
 }
 
 /** The labels a group carries, keyed by whoever reads them. Empty when nothing labelled the group. */
