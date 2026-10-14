@@ -12,7 +12,7 @@ api.get('/health', () => ({ ok: true }))
 
 const products = api.get('/api/products')
 if (cached) {
-  products.with(cacheControl({ ttl: TTL_SECONDS }))
+  products.extend(cacheControl({ ttl: TTL_SECONDS }))
 }
 products.handler(() => PRODUCTS)
 

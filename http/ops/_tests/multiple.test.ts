@@ -77,11 +77,11 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
     .server(() => ({ listener }))
     .mount(
       newRouter('/admin')
-        .with(bindTo('admin'))
+        .extend(bindTo('admin'))
         .authorize({ schemes: ['Ops'], roles: ['operator'] })
         .post('/echo', ctx => ({ received: ctx.req.body() })),
       newRouter('/metrics')
-        .with(bindTo('metrics'))
+        .extend(bindTo('metrics'))
         .get('/', () => ({ up: true })),
       newRouter('/api').post('/echo', ctx => ({ received: ctx.req.body() })),
     ) as WebApplication

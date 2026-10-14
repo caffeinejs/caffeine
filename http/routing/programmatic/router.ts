@@ -9,6 +9,8 @@ import {
 import type { AdapterExtensionFactory, AdapterTypes } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
+import type { HTTPPlugin } from '../../plugin.js'
+import { assertPluginFactory } from '../../plugin_factory.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteGroupExtension } from '../extension.js'
 import type { RouteAuthzOptions, RouteGroupDetail, RouteValidationSchema } from '../spec.js'
@@ -177,7 +179,8 @@ export class Router<
    * and configuration, inheriting this group's on top.
    *
    * Mounting the same router twice adds it once — which is what makes routes declared as separate statements
-   * mountable, since every value `.handler()` returns names the one router it was opened from.
+   * mountable, since every value `.handler()` returns names the one router it was opened from. A router nested in
+   * itself, directly or through the routers under it, is refused at start-up.
    *
    * A mounted router is bound to this one's adapter or to none: its plugins install on the server this router's
    * application runs.
@@ -337,7 +340,10 @@ export class Router<
     return this.#route(['QUERY'], path, schemaOrHandler, handler)
   }
 
-  /** Every method the adapter routes, for a path that answers all of them. */
+  /**
+   * GET, POST, PUT, PATCH, DELETE, HEAD and OPTIONS, for a path that answers all of them. QUERY is not among them:
+   * declare it with {@link query}.
+   */
   all<P extends string>(path: P): Chain<AllMethod, P, V, C, GD, GP, R, T>
   all<P extends string, O>(
     path: P,
@@ -436,22 +442,24 @@ export class Router<
   }
 
   /**
-   * Installs an extension of the adapter this router is bound to — under Fastify, a plugin — in front of this
-   * group's routes and the groups nested under it, and nowhere else.
+   * Registers a server plugin in front of this group's routes and the groups nested under it, and nowhere else: the
+   * router's own `.with(...)`, taking what the application's takes, in the order written.
    *
-   * The same call the application takes, scoped. The factory runs once during start-up, with the same context an
-   * application's `.with(...)` factory gets. A router is written without knowing which application it will be
-   * mounted into, so the configuration there is typed `unknown`. Routing is built during start-up, so this has to
-   * be called before the application is ready.
+   * A factory producing the adapter's plugin installs it in this group's context. A factory producing an
+   * `HTTPPlugin` has it register once during start-up, before routing is built, with `context.app` scoped to this
+   * router: `mount(...)` nests routers under it, and `use(...)` puts middleware in front of its routes, a path
+   * relative to the router. A router is written without knowing which application it will be mounted into, so the
+   * configuration there is typed `unknown`. Routing is built during start-up, so this has to be called before the
+   * application is ready.
    *
-   * Only a router bound to an adapter takes one, since what it installs is that adapter's: `newRouter()` for
-   * Fastify.
+   * A router bound to no adapter takes only an `HTTPPlugin` written for none; `newRouter()` binds one to Fastify.
    *
    * ```ts
-   * const pets = newRouter('/pets').plugin(() => corsPlugin({ origin: 'https://pets.example' }))
+   * const pets = newRouter('/pets').with(() => [fastifyCors, { origin: 'https://pets.example' }])
    * ```
    */
-  plugin(factory: AdapterExtensionFactory<T['extension']>): this {
+  with(factory: AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>): this {
+    assertPluginFactory(factory)
     this.#state.plugins.push(factory)
     return this
   }
@@ -460,10 +468,10 @@ export class Router<
    * Applies extensions to the group, in the order given. They reach every route under it, nested groups included.
    *
    * ```ts
-   * const pets = new Router('/pets').with(apiGroup({ name: 'Pets' }))
+   * const pets = new Router('/pets').extend(apiGroup({ name: 'Pets' }))
    * ```
    */
-  with(extension: RouteGroupExtension, ...rest: RouteGroupExtension[]): this {
+  extend(extension: RouteGroupExtension, ...rest: RouteGroupExtension[]): this {
     extension(this.#state.builder)
 
     for (const ext of rest) {

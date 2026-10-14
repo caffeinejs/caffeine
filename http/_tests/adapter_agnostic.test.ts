@@ -22,6 +22,7 @@ import type {
   AdapterTypes,
   AnyAdapterTypes,
   ContextPlatform,
+  HTTPSetupContext,
 } from '../adapter.js'
 import { createWebApplication } from '../application.js'
 import type { Context } from '../context.js'
@@ -29,7 +30,13 @@ import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
 import { healthProbes } from '../index.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
 import type { ResolvedMiddleware } from '../middleware/pipeline.js'
-import { pluginName, type AnyFastifyPlugin, type HTTPPluginConfigurer, type HTTPPluginFactory } from '../plugin.js'
+import {
+  HTTPPlugin,
+  pluginName,
+  type AnyFastifyPlugin,
+  type HTTPPluginConfigurer,
+  type HTTPPluginFactory,
+} from '../plugin.js'
 import { blend } from '../routing/programmatic/blend.js'
 import { newRouter } from '../routing/programmatic/new_router.js'
 import { Router } from '../routing/programmatic/router.js'
@@ -72,6 +79,15 @@ interface FakeTypes extends AdapterTypes {
 interface BareTypes extends FakeTypes {
   extension: never
   hook: never
+}
+
+/** A server whose settings are not all objects. */
+interface TunedTypes extends FakeTypes {
+  serverOptions: {
+    mode?: string | number
+    tags?: readonly string[]
+    limits?: { soft?: number; hard?: number } | null
+  }
 }
 
 /** Records what the application hands it. All this file needs is the contract, so it serves nothing. */
@@ -187,6 +203,48 @@ describe('an application on an adapter that is not Fastify', () => {
 
     await app.close()
   })
+
+  // An adapter factory is all an application needs: it makes its own container.
+  it('builds on a container of its own when handed an adapter factory alone', async () => {
+    const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter))
+
+    await app.bootstrap()
+
+    expect(app.container).toBeInstanceOf(CaffeineIoC)
+    expect(app.instance).toEqual({ fake: true })
+
+    await app.close()
+  })
+
+  // Only an object section merges over the one before it. Anything else replaces it as given: an array merged by
+  // index would keep stale entries.
+  it('replaces a server section that is not an object, and merges one that is', async () => {
+    const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ mode: 'fast', tags: ['a', 'b'], limits: { soft: 1 } }))
+      .server(() => ({ mode: 2, tags: ['c'], limits: { hard: 9 } }))
+
+    await app.bootstrap()
+
+    expect(adapter.input!.server).toEqual({ mode: 2, tags: ['c'], limits: { soft: 1, hard: 9 } })
+
+    await app.close()
+  })
+
+  // Only `undefined` leaves an earlier section in place: `null` is a value like any other.
+  it('takes null as a section that replaces the one before it', async () => {
+    const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
+    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+      .server(() => ({ limits: { soft: 1 } }))
+      .server(() => ({ limits: null }))
+
+    await app.bootstrap()
+
+    expect(adapter.input!.server).toEqual({ limits: null })
+
+    await app.close()
+  })
 })
 
 describe('adapter types', () => {
@@ -229,14 +287,53 @@ describe('adapter types', () => {
   })
 
   it('lets only a router bound to an adapter take a plugin', () => {
-    // @ts-expect-error a router bound to no adapter has nothing to install
-    new Router('/unbound').plugin(() => noop)
+    // @ts-expect-error a router bound to no adapter takes no Fastify plugin
+    new Router('/unbound').with(() => noop)
 
     const bound = newRouter('/x')
-      .plugin(() => noop)
+      .with(() => noop)
       .get('/y', () => 1)
 
     expectTypeOf<RoutesOf<typeof bound>['path']>().toEqualTypeOf<'/x/y'>()
+  })
+
+  // What a plugin mounts reaches the adapter the application runs, so it must be a router that adapter can serve:
+  // one bound to no adapter from a plugin written for none, a Fastify-bound one only from a plugin written for Fastify.
+  it('keeps what a plugin mounts on the adapter the application runs', () => {
+    const fn: MiddlewareFn = (_ctx, next) => next()
+
+    class Agnostic extends HTTPPlugin {
+      register({ app }: HTTPSetupContext): void {
+        app.mount(new Router('/free').get('/', () => 1))
+        // @ts-expect-error a plugin written for no adapter mounts no Fastify-bound router
+        app.mount(newRouter('/bound'))
+        // @ts-expect-error a plugin written for no adapter names no hook
+        app.use(fn, { hook: 'preHandler' })
+      }
+    }
+
+    class OnFastify extends HTTPPlugin<FastifyRouterTypes> {
+      register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+        app.mount(newRouter('/bound')).use(fn, { hook: 'preHandler' })
+      }
+    }
+
+    onFake().with(() => new Agnostic())
+    onBare().with(() => new Agnostic())
+    createWebApplication().with(() => new OnFastify())
+    newRouter('/r').with(() => new OnFastify())
+    new Router('/u').with(() => new Agnostic())
+
+    // @ts-expect-error a plugin written for Fastify on an application that does not run Fastify
+    onFake().with(() => new OnFastify())
+    // @ts-expect-error a plugin written for Fastify on a router bound to no adapter
+    new Router('/u').with(() => new OnFastify())
+
+    onFake().with(({ app }) => {
+      // @ts-expect-error a Fastify-bound router mounted from a factory on an application that does not run Fastify
+      app.mount(newRouter('/x'))
+      return { unit: 'fake' }
+    })
   })
 
   it('keeps a router bound through everything that re-types it', () => {

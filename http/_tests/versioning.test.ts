@@ -12,9 +12,9 @@ import { Router, constraints, createWebApplication, version, healthProbes } from
  */
 describe('API versioning', () => {
   const petsV1AndV2 = () => {
-    const v1 = new Router('/pets').name('PetsV1').with(version('1.0.0'))
+    const v1 = new Router('/pets').name('PetsV1').extend(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
-    const v2 = new Router('/pets').name('PetsV2').with(version('2.0.0'))
+    const v2 = new Router('/pets').name('PetsV2').extend(version('2.0.0'))
     v2.get('/').handler(() => ({ v: 2 }))
     return createWebApplication({ container: new CaffeineIoC() })
       .with(() => constraints())
@@ -59,7 +59,7 @@ describe('API versioning', () => {
   it('prefers the versioned twin when the header is present, the unversioned one when it is absent', async () => {
     const plain = new Router('/shop').name('ShopPlain')
     plain.get('/').handler(() => ({ kind: 'plain' }))
-    const versioned = new Router('/shop').name('ShopVersioned').with(version('1.0.0'))
+    const versioned = new Router('/shop').name('ShopVersioned').extend(version('1.0.0'))
     versioned.get('/').handler(() => ({ kind: 'versioned' }))
 
     const app = createWebApplication({ container: new CaffeineIoC() })
@@ -76,9 +76,9 @@ describe('API versioning', () => {
   })
 
   it('fails at bootstrap() when two routes share method, path and version', async () => {
-    const a = new Router('/dup').name('DupA').with(version('1.0.0'))
+    const a = new Router('/dup').name('DupA').extend(version('1.0.0'))
     a.get('/').handler(() => ({}))
-    const b = new Router('/dup').name('DupB').with(version('1.0.0'))
+    const b = new Router('/dup').name('DupB').extend(version('1.0.0'))
     b.get('/').handler(() => ({}))
 
     const app = createWebApplication({ container: new CaffeineIoC() })
@@ -90,7 +90,7 @@ describe('API versioning', () => {
   })
 
   it('leaves a server-owned path reachable without Accept-Version when routes are versioned', async () => {
-    const v1 = new Router('/inventory').name('InventoryV1').with(version('1.0.0'))
+    const v1 = new Router('/inventory').name('InventoryV1').extend(version('1.0.0'))
     v1.get('/').handler(() => ({ v: 1 }))
 
     const app = createWebApplication({ container: new CaffeineIoC() })

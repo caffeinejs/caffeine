@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../adapter.js'
 import type { Context } from '../context.js'
+import { closedApplicationOps } from '../plugin_slot.js'
 import { Keys } from '../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
 import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './fastify.js'
@@ -24,6 +25,7 @@ function setupContext(options: { config?: object; container?: Container } = {}):
     store: {} as ConfigStore<unknown>,
     logger: newNoopLogger(),
     hasFeature: () => false,
+    app: closedApplicationOps(),
   }
 }
 
@@ -266,6 +268,7 @@ describe('MiddlewarePipeline', () => {
         store: {} as ConfigStore<unknown>,
         logger,
         hasFeature: () => false,
+        app: closedApplicationOps(),
       },
     })
     const res = await server.inject('/echo')

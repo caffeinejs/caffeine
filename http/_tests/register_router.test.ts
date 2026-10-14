@@ -1,3 +1,4 @@
+import { token } from '@caffeinejs/di'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
@@ -144,5 +145,33 @@ describe('registerRouteGroup', () => {
       headers: { authorization: `Bearer ${withRole}` },
     })
     expect(allowed.status).toBe(200)
+  })
+
+  // Something bound under the controller label that is not a decorated class has no routes to give: start-up refuses
+  // it by name, and resolving its plugins first must not get in the way.
+  it('refuses a key labelled as a controller that is not a class', async () => {
+    const kNotAController = token<{ marker: boolean }>(Symbol('NotAController'))
+    app = createWebApplication()
+    app.container.bind(kNotAController, t => t.toValue({ marker: true }).labels(Keys.CONTROLLER))
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      code: 'ERR_HTTP_MISSING_ROUTER',
+      message: expect.stringMatching(
+        /^Cannot build router: no route definition found for router "Symbol\(NotAController\)"/,
+      ),
+    })
+  })
+
+  it('refuses a class labelled as a controller that declares no routes, naming the class', async () => {
+    class Unrouted {
+      readonly marker = true
+    }
+    app = createWebApplication()
+    app.container.bind(Unrouted, t => t.toSelf().labels(Keys.CONTROLLER))
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      code: 'ERR_HTTP_MISSING_ROUTER',
+      message: expect.stringMatching(/^Cannot build router: no route definition found for router "Unrouted"/),
+    })
   })
 })

@@ -40,14 +40,14 @@ import { ErrCaffeineWebApplication, ErrConfiguration } from './error/common.js'
 import { GlobalErrorHandlerRef } from './error/plugin.js'
 import { FastifyContext } from './fastify_context.js'
 import { installFormBodyParser } from './form/index.js'
-import { installFastifyMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
+import { installFastifyMiddlewares, rebaseMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
 import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
 import { RouteGroupBuilder } from './routing/builder.js'
 import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
 import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
-import type { RouteCompilers, RouteGroup } from './routing/route.js'
+import type { RouteCompilers, RouteGroup, RouteGroupScope } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
 import {
   assertAuthenticationConfigured,
@@ -152,7 +152,7 @@ declare module 'fastify' {
      * Adds one more route group, served and protected like any other. For the body of a plugin registered with
      * `.with(...)`: the route table closes once those have installed.
      *
-     * @throws ErrConfiguration when called from anywhere else — a route group's plugin (`router.plugin(...)`,
+     * @throws ErrConfiguration when called from anywhere else — a route group's plugin (`router.with(...)`,
      * `@Use(...)`) or a hook — failing start-up, and at once when called after it.
      */
     $route(name: string, build: (router: RouteGroupBuilder) => void): void
@@ -344,22 +344,21 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
       done()
     })
 
-    if (container.hasRequestScope) {
-      const man = container.requestScopeManager
-      fastify.addHook('onRequest', (req, reply, done) => {
-        this.#fastifyCtxAls.run(req.httpContext, () => {
-          man
-            .run(
-              () =>
-                new Promise<void>(resolve => {
-                  reply.raw.once('close', () => resolve())
-                  done()
-                }),
-            )
-            .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
-        })
+    // Always: the constructor binds `FastifyContext` request-scoped, so every application has a request scope.
+    const man = container.requestScopeManager
+    fastify.addHook('onRequest', (req, reply, done) => {
+      this.#fastifyCtxAls.run(req.httpContext, () => {
+        man
+          .run(
+            () =>
+              new Promise<void>(resolve => {
+                reply.raw.once('close', () => resolve())
+                done()
+              }),
+          )
+          .catch((err: unknown) => req.log.error({ err }, 'Cannot tear down the request scope'))
       })
-    }
+    })
 
     // Lets a plugin registered through the `.with(...)` loop right below add one more route, protectable the
     // same way any other route is. Compiled on the spot, through the exact compiler `buildRouting()` built
@@ -383,7 +382,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
           )
             .solutions(
               'Register the plugin that adds the group with ".with(...)" on the application — not with ' +
-                '"router.plugin(...)" or "@Use(...)", which install it after the route table has closed',
+                '"router.with(...)" or "@Use(...)", which install it after the route table has closed',
             )
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),
@@ -436,10 +435,14 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 
     // The same for every group, so it is built once here rather than per registration.
     const registration = {
-      installScope: async (server: FastifyInstance, scope: object): Promise<void> => {
-        for (const extension of input.extensions.of(scope)) {
+      installScope: async (server: FastifyInstance, scope: RouteGroupScope): Promise<void> => {
+        for (const extension of input.extensions.of(scope.key)) {
           await installExtension(server, extension)
         }
+
+        // What the scope's plugins added with `context.app.use(...)`: in this group's context, so it covers the
+        // group's routes alone, after the scope's own plugins, its relative paths rebased under where it starts.
+        installFastifyMiddlewares(server, rebaseMiddlewares(scope.path, input.extensions.middlewaresOf(scope.key)))
       },
       compilers: this.#compilers,
       globalErrorHandler,
@@ -548,52 +551,34 @@ class FastifyAdapterServer implements AdapterServer<FastifyTypes> {
     // passing the original value causes a mismatch
     request.headers.delete('content-length')
 
-    return new Promise<Response>((resolve, reject) => {
-      fastify.inject(
-        {
-          method: request.method as any,
-          url: request.url,
-          headers: Object.fromEntries(request.headers),
-          payload,
-        },
-        (err, result) => {
-          if (err || !result) {
-            reject(err ?? new Error('inject produced no result'))
-            return
-          }
+    const result = await fastify.inject({
+      method: request.method as any,
+      url: request.url,
+      headers: Object.fromEntries(request.headers),
+      payload,
+    })
 
-          const responseHeaders = new Headers()
-          for (const [key, value] of Object.entries(result.headers)) {
-            if (value === undefined) {
-              continue
-            }
+    // light-my-request writes every header as a string or a list of them.
+    const responseHeaders = new Headers()
+    for (const [key, value] of Object.entries(result.headers)) {
+      if (Array.isArray(value)) {
+        for (const v of value) {
+          responseHeaders.append(key, String(v))
+        }
+      } else {
+        responseHeaders.set(key, String(value))
+      }
+    }
 
-            if (Array.isArray(value)) {
-              for (const v of value) {
-                responseHeaders.append(key, String(v))
-              }
-            } else {
-              responseHeaders.set(key, String(value))
-            }
-          }
+    // Null-body statuses (204/205/304) must be constructed with a null body, otherwise the Response constructor
+    // throws "Invalid response status code". A 1xx status has no Response at all: the constructor's RangeError
+    // rejects the call.
+    const nullBody = result.statusCode === 204 || result.statusCode === 205 || result.statusCode === 304
 
-          // Null-body statuses (204/205/304, plus 1xx) must be constructed with a null body, otherwise
-          // the Response constructor throws "Invalid response status code".
-          const nullBody =
-            result.statusCode < 200 ||
-            result.statusCode === 204 ||
-            result.statusCode === 205 ||
-            result.statusCode === 304
-
-          resolve(
-            new Response(nullBody ? null : result.rawPayload, {
-              status: result.statusCode,
-              statusText: result.statusMessage,
-              headers: responseHeaders,
-            }),
-          )
-        },
-      )
+    return new Response(nullBody ? null : result.rawPayload, {
+      status: result.statusCode,
+      statusText: result.statusMessage,
+      headers: responseHeaders,
     })
   }
 }
@@ -680,7 +665,7 @@ async function installExtension(server: FastifyInstance, extension: unknown): Pr
  * on the plugin this hands back, not on what it was given.
  */
 function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPluginOptions } {
-  return Array.isArray(value) ? { plugin: value[0], options: value[1] ?? {} } : { plugin: value, options: {} }
+  return Array.isArray(value) ? { plugin: value[0], options: value[1] } : { plugin: value, options: {} }
 }
 
 /**
@@ -743,11 +728,9 @@ function assertRouteFeaturesInstalled(
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {
     for (const group of routeGroups) {
-      const cached = group.routes.some(
-        route => route.config?.has('cache') === true || route.config?.has('cacheInvalidate') === true,
-      )
+      const cached = group.routes.some(route => route.config.has('cache') || route.config.has('cacheInvalidate'))
       const installed = (group.scopes ?? []).some(scope =>
-        extensions.of(scope).some(extension => {
+        extensions.of(scope.key).some(extension => {
           const { plugin } = resolveExtension(extension)
           return typeof plugin === 'function' && pluginName(plugin as AnyFastifyPlugin) === CACHING_PLUGIN
         }),
@@ -760,7 +743,7 @@ function assertRouteFeaturesInstalled(
           )
             .solutions(
               'Add ".with(HTTPCaching(...))" to the application builder',
-              'Install it on the route group with ".plugin(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
+              'Install it on the route group with ".with(HTTPCaching(...))" or "@Use(HTTPCaching(...))"',
             )
             .reference('@caffeinejs/http', ErrConfiguration)
             .build(),
@@ -771,7 +754,7 @@ function assertRouteFeaturesInstalled(
 
   if (
     !server.hasPlugin(CONSTRAINTS_PLUGIN) &&
-    routeGroups.some(group => group.routes.some(route => route.config?.has(kRouteConstraints) === true))
+    routeGroups.some(group => group.routes.some(route => route.config.has(kRouteConstraints)))
   ) {
     throw new ErrConfiguration(
       errMessage('Cannot register constrained routes: the constraints plugin is not installed')

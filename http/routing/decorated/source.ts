@@ -5,6 +5,7 @@ import { getRouteGroup } from '../../decorators/registrar/registrar.js'
 import { controllerPlugins } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { Keys } from '../../symbols.js'
+import { normalizeGroupPath } from '../builder.js'
 import type { RouteGroupMeta } from '../compile.js'
 import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from '../route.js'
 import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
@@ -30,14 +31,13 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
   collect(container: Container): DeclaredRouteGroup<R>[] {
     return container.getBindingsByLabel(Keys.CONTROLLER).map(({ key, binding }) => {
       // `@Controller` registers a class's route definition under the class itself: any other key has none.
-      const rd = typeof key === 'function' ? getRouteGroup(key) : undefined
-      if (rd === undefined || typeof key !== 'function') {
-        throw new ErrCaffeineWebApplication(
-          errMessage(`Cannot build router: no route definition found for router "${String(key)}"`)
-            .reference('@caffeinejs/http', ErrCaffeineWebApplication)
-            .build(),
-          'ERR_HTTP_MISSING_ROUTER',
-        )
+      if (typeof key !== 'function') {
+        throw missingRouteDefinition(String(key))
+      }
+
+      const rd = getRouteGroup(key)
+      if (rd === undefined) {
+        throw missingRouteDefinition(key.name)
       }
 
       const spec = rd.toRouteGroup<R>()
@@ -53,20 +53,34 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             binding.scopeID === Scopes.SINGLETON,
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
-        scopes: controllerPlugins(key).length > 0 ? [key] : undefined,
+        // A controller's routes live under its Fastify prefix plus its path: its relative middleware paths start there.
+        scopes:
+          controllerPlugins(key).length > 0
+            ? [{ key, path: normalizeGroupPath(`${spec.prefix ?? ''}${spec.path}`) }]
+            : undefined,
       }
     })
   }
 }
 
+function missingRouteDefinition(name: string): ErrCaffeineWebApplication {
+  return new ErrCaffeineWebApplication(
+    errMessage(`Cannot build router: no route definition found for router "${name}"`)
+      .solutions('Decorate the class with "@Controller(...)", or bind it without the "Keys.CONTROLLER" label')
+      .reference('@caffeinejs/http', ErrCaffeineWebApplication)
+      .build(),
+    'ERR_HTTP_MISSING_ROUTER',
+  )
+}
+
 function controllerMeta<R>(
   spec: RouteGroupSpec<R>,
-  key: InjectionToken,
+  key: Function,
   isSingleton: boolean,
   provider: Provider<ControllerInstance>,
 ): RouteGroupMeta<R> {
-  const name = typeof key === 'function' ? key.name : String(key)
-  const errorHandlers = buildErrorHandlerMap(spec.errorHandlers, key, new Set(spec.routes.map(route => route.name)))
+  const name = key.name
+  const errorHandlers = buildErrorHandlerMap(spec.errorHandlers, name, new Set(spec.routes.map(route => route.name)))
 
   // The `@Catch` method form needs the controller instance that threw, so when it is in play the instance is
   // resolved once per request (inside the live request scope) and reused by the route dispatch — correct for
@@ -74,7 +88,7 @@ function controllerMeta<R>(
   if (errorHandlers === undefined) {
     return {
       name,
-      target: typeof key === 'function' ? key : undefined,
+      target: key,
       dispatch: route => directDispatch(route, isSingleton, provider),
     }
   }
@@ -83,7 +97,7 @@ function controllerMeta<R>(
 
   return {
     name,
-    target: typeof key === 'function' ? key : undefined,
+    target: key,
     onRequest: (req, _res, done) => {
       ;(req as RequestWithTarget).routeTarget = ref ?? provider.get()
       done()
@@ -155,7 +169,7 @@ function sharedTargetErrorHandler<R>(errorHandlers: Map<Ctor<Error>, string | sy
 // the same error type. Runs at build (app.bootstrap()), so the throw is observable, not an import crash.
 function buildErrorHandlerMap(
   handlers: Array<[Ctor<Error>, string | symbol]> | undefined,
-  controllerKey: unknown,
+  controller: string,
   routeHandlers: Set<string | symbol>,
 ): Map<Ctor<Error>, string | symbol> | undefined {
   if (!handlers?.length) {
@@ -166,9 +180,7 @@ function buildErrorHandlerMap(
   for (const [errorType, methodKey] of handlers) {
     if (routeHandlers.has(methodKey)) {
       throw new ErrConfiguration(
-        errMessage(
-          `Method "${String(methodKey)}" in "${String(controllerKey)}" cannot be both a route and an error handler`,
-        )
+        errMessage(`Method "${String(methodKey)}" in "${controller}" cannot be both a route and an error handler`)
           .solutions(`Move the "@Catch(${errorType.name})" handler to a method without a route verb decorator`)
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
@@ -178,7 +190,7 @@ function buildErrorHandlerMap(
     if (map.has(errorType)) {
       throw new ErrConfiguration(
         errMessage(
-          `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${String(controllerKey)}"`,
+          `Ambiguous controller error handler: multiple handlers registered for "${errorType.name}" in "${controller}"`,
         )
           .solutions(`Keep a single "@Catch(${errorType.name})" method per controller`)
           .reference('@caffeinejs/http', ErrConfiguration)

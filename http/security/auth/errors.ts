@@ -119,7 +119,7 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
             '".with(authentication())"',
           'Or, for a route an ops server serves, register one on that server: ' +
             '"Ops(name, o => o.with(authentication()))"',
-          'Or register one on the router holding the route: "router.plugin(authentication())"',
+          'Or register one on the router holding the route: "router.with(authentication())"',
           'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
             'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +
             'from an "onRoute" hook for a route another plugin registers',

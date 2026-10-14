@@ -45,7 +45,7 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * `lockTimeout`, for what it stores. The wait is in this process alone.
  *
  * Being a plain plugin factory rather than a feature, it installs once per context — the root, or one route
- * group with `router.plugin(...)` / `@Use(...)` — each with its own settings.
+ * group with `router.with(...)` / `@Use(...)` — each with its own settings.
  *
  * Per-route behavior is the `@CacheControl` / `@CacheInvalidate` decorators or the `cacheControl()` /
  * `cacheInvalidate()` route extensions. Install it after the authentication gate, `.with(authentication())`, and before a plugin that

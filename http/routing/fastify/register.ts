@@ -14,7 +14,7 @@ import {
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
 import { attachGuardHook } from '../../guards/fastify.js'
 import { Responder } from '../../response.js'
-import type { RouteCompilers, RouteGroup } from '../route.js'
+import type { RouteCompilers, RouteGroup, RouteGroupScope } from '../route.js'
 import { compileRouteSchema } from '../schema/compile_route_schema.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
@@ -25,10 +25,10 @@ type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error
 /** What is the same for every group on one server, resolved once before any of them registers. */
 export interface RouteGroupRegistration<REQ> {
   /**
-   * Installs what `scope` (a mounted router, or a controller class) asked for with `.plugin(...)` /
+   * Installs what `scope` (a mounted router, or a controller class) asked for with `router.with(...)` /
    * `@Use(...)` on the context it is handed, refusing what the root server would refuse.
    */
-  installScope: (server: FastifyInstance, scope: object) => Promise<void>
+  installScope: (server: FastifyInstance, scope: RouteGroupScope) => Promise<void>
   compilers: RouteCompilers<REQ>
   globalErrorHandler: GlobalErrorHandler
   /** The server's own `handlerTimeout`, when it set one. */
@@ -40,7 +40,7 @@ export interface RouteGroupRegistration<REQ> {
  * assembly, guard attachment, the `BodyAsBuffer`/`BodyAsStream` content-type-parser swap.
  *
  * Every route lands in the group's own `register()` context, so the group's error handler and the plugins a
- * `router.plugin(...)` / `@Use(...)` installed cover these routes and no others.
+ * `router.with(...)` / `@Use(...)` installed cover these routes and no others.
  */
 export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   instance: FastifyInstance,
@@ -55,7 +55,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
     async server => {
       installRouteGroupErrorHandler(server, router, globalErrorHandler)
 
-      // What a mounted router or a controller installed with `.plugin(...)` / `@Use(...)`. The same
+      // What a mounted router or a controller installed with `router.with(...)` / `@Use(...)`. The same
       // plugin as an application-level one, registered in this group's context instead of on the root
       // server — so a `fastify-plugin`-wrapped plugin covers this group's routes and no others.
       for (const scope of router.scopes ?? []) {
@@ -80,19 +80,15 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // Route Config
         // https://fastify.dev/docs/latest/Reference/Routes/#config
         const config: Record<string | symbol, unknown> = {}
-        if (route.config) {
-          for (const [k, v] of route.config) {
-            config[k] = v
-          }
+        for (const [k, v] of route.config) {
+          config[k] = v
         }
 
         // Route Options
         // https://fastify.dev/docs/latest/Reference/Routes/#routes-options
         const options: Record<string | symbol, unknown> = {}
-        if (route.options) {
-          for (const [k, v] of route.options) {
-            options[k] = v
-          }
+        for (const [k, v] of route.options) {
+          options[k] = v
         }
 
         const status = route.statusCode!
@@ -100,10 +96,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         const contentType = route.contentType
         const hasContentType = typeof contentType === 'string' && contentType.length > 0
         const header = [] as Array<[string, string | string[]]>
-        if (route.header) {
-          for (const [k, v] of route.header) {
-            header.push([k, v])
-          }
+        for (const [k, v] of route.header) {
+          header.push([k, v])
         }
         const hasHeader = header.length > 0
 
@@ -298,7 +292,7 @@ function isHandlerTimeout(reason: unknown): boolean {
 /** Joins a router base path and a route path, trimming a trailing slash (but never to empty). */
 function joinPaths(base: string, path: string): string {
   const joined = `${base}${path}`
-  return joined.length > 1 ? joined.replace(/\/$/, '') : joined || '/'
+  return joined.length > 1 ? joined.replace(/\/$/, '') : joined
 }
 
 /** The body as it is read, failed with a 413 once more than `limit` bytes have passed. */

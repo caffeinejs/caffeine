@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Header, createWebApplication } from '../index.js'
+import { Controller, Get, Header, Router, createWebApplication } from '../index.js'
 
 describe('Fetch API Response Support', () => {
   it('maps status, headers, and body to fastify reply', async () => {
@@ -185,5 +185,64 @@ describe('Fetch API Response Support', () => {
 
       expect(res.headers.get('x-version')).toBe('response')
     })
+  })
+
+  // What a Fetch client holds is often a `Request` already: its method and headers reach the route as they are.
+  it('takes a Request object as well as a path', async () => {
+    const app = createWebApplication().mount(
+      new Router('/fetch-request').post('/', ctx => ({ probe: ctx.req.header('x-probe') })),
+    )
+
+    try {
+      await app.bootstrap()
+
+      const res = await app.fetch(
+        new Request('http://localhost/fetch-request', { method: 'POST', headers: { 'x-probe': 'yes' } }),
+      )
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ probe: 'yes' })
+    } finally {
+      await app.close()
+    }
+  })
+
+  // An absolute URL, as a `URL` or as a string, reaches the route with the host and query it names.
+  it('takes a URL, or an absolute URL string, as well as a path', async () => {
+    const app = createWebApplication().mount(
+      new Router('/fetch-url').get('/', ctx => ({ host: ctx.req.host, q: ctx.req.query('q') })),
+    )
+
+    try {
+      await app.bootstrap()
+
+      expect(await (await app.fetch(new URL('http://api.example:8080/fetch-url?q=1'))).json()).toEqual({
+        host: 'api.example:8080',
+        q: '1',
+      })
+      expect(await (await app.fetch('http://api.example:8080/fetch-url?q=2')).json()).toEqual({
+        host: 'api.example:8080',
+        q: '2',
+      })
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A 1xx answer has no `Response` form. The call rejects rather than never settling.
+  it('rejects an informational answer it cannot hand back as a Response', async () => {
+    const app = createWebApplication().serverCallback((_context, instance) => {
+      instance.get('/fetch-early', (_request, reply) => {
+        void reply.code(101).send()
+      })
+    })
+
+    try {
+      await app.bootstrap()
+
+      await expect(app.fetch('/fetch-early')).rejects.toThrow(RangeError)
+    } finally {
+      await app.close()
+    }
   })
 })

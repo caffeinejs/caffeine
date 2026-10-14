@@ -75,13 +75,13 @@ const schemes = () =>
 
 const metrics = () =>
   newRouter('/metrics')
-    .with(bindTo('admin'))
+    .extend(bindTo('admin'))
     .get('/', () => ({ metrics: true }))
 
 /** `/metrics`, bound to `admin`, for an `Ops` operator alone. */
 const protectedMetrics = () =>
   newRouter('/metrics')
-    .with(bindTo('admin'))
+    .extend(bindTo('admin'))
     .authorize({ schemes: ['Ops'], roles: ['operator'] })
     .get('/', () => ({ metrics: true }))
 
@@ -286,7 +286,7 @@ describe('an ops server with authentication and authorization', () => {
         .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
         .mount(
           newRouter('/metrics')
-            .with(bindTo('admin'))
+            .extend(bindTo('admin'))
             .authorize({ schemes: ['Missing'] })
             .get('/', () => ({ metrics: true })),
         ) as WebApplication

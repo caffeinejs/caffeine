@@ -3,7 +3,7 @@ import { CONFIG_REFRESH_LABEL, type ConfigSource, type InferConfig } from '@caff
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { $t } from '@caffeinejs/std/schema'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Controller, Get, WebApplication, createWebApplication } from './index.js'
 
@@ -200,6 +200,35 @@ describe('the server .server(...) configures', () => {
     // Closing what never readied is fine: there is nothing to tear down.
     await app.close()
     app = undefined
+  })
+
+  // Like the server, the route table exists only once start-up has built it.
+  it('has no route table to read before bootstrap()', async () => {
+    app = createWebApplication()
+
+    expect(() => app!.routeGroups).toThrow(ErrApplicationNotReady)
+
+    await app.bootstrap()
+    expect(app.routeGroups.some(group => group.path === '/adapter-server')).toBe(true)
+  })
+
+  // The origin is what a client dials: a wildcard address becomes its loopback, an IPv6 host is bracketed, and a
+  // socket path has none. It is read from the bound address, so a stub stands in for an IPv6 bind a host may lack.
+  it('renders the origin from the address the server is bound to', async () => {
+    app = createWebApplication()
+    await app.bootstrap()
+    const address = vi.spyOn(app.instance.server, 'address')
+
+    address.mockReturnValue({ address: '::', family: 'IPv6', port: 8080 })
+    expect(app.address?.origin).toBe('http://[::1]:8080')
+
+    address.mockReturnValue({ address: 'fe80::1', family: 'IPv6', port: 8080 })
+    expect(app.address?.origin).toBe('http://[fe80::1]:8080')
+
+    address.mockReturnValue('/run/app.sock')
+    expect(app.address).toBeUndefined()
+
+    address.mockRestore()
   })
 
   it('rejects a node that is not listen options (compile-time)', () => {

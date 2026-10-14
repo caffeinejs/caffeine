@@ -15,9 +15,14 @@ class BothController {
 void [BothController]
 
 describe('route method used as an error handler', () => {
-  it('rejects a method that is both a route and a @Catch handler', async () => {
+  it('rejects a method that is both a route and a @Catch handler, naming the controller', async () => {
     const app = createWebApplication()
+    const started = app.bootstrap()
 
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+    await expect(started).rejects.toThrow(ErrConfiguration)
+    // By its name: the class itself would print its whole source.
+    await expect(started).rejects.toThrow(
+      /^Method "handle" in "BothController" cannot be both a route and an error handler/,
+    )
   })
 })

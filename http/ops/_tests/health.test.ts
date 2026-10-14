@@ -87,7 +87,7 @@ describe('health probes on an ops server', () => {
       )
       .mount(
         newRouter('/jobs')
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/', () => ({})),
       ) as WebApplication
 
@@ -115,7 +115,7 @@ describe('health probes on an ops server', () => {
       .install(Ops('admin', o => o.server(() => ({ listener })).with(healthProbes())))
       .mount(
         newRouter()
-          .with(bindTo('admin'))
+          .extend(bindTo('admin'))
           .get('/readyz', () => ({})),
       ) as WebApplication
 

@@ -18,7 +18,7 @@ import { CreateOrderSchema, OrderIdParamSchema, OrderSchema } from './orders.sch
  */
 const orders = new Router('/orders')
   .name('Orders')
-  .with(apiGroup({ name: 'Orders', description: 'Place and track adoption orders.' }))
+  .extend(apiGroup({ name: 'Orders', description: 'Place and track adoption orders.' }))
   .inject({ repository: OrdersRepository })
   // Bare, so every route asks for the application's default policy — an authenticated caller. The same thing
   // `@Authorize()` declares on a controller.
@@ -31,7 +31,7 @@ export const ordersRouter = orders
     body: CreateOrderSchema,
     response: { 201: OrderSchema, 404: APIErrorSchema, 422: APIErrorSchema },
   })
-  .with(
+  .extend(
     operation({
       operationId: 'createOrder',
       summary: 'Place an adoption order',
@@ -46,7 +46,7 @@ export const ordersRouter = orders
     params: OrderIdParamSchema,
     response: { 200: OrderSchema, 404: APIErrorSchema },
   })
-  .with(operation({ operationId: 'getOrder', summary: 'Get an order by ID' }))
+  .extend(operation({ operationId: 'getOrder', summary: 'Get an order by ID' }))
   .handler(async (ctx, deps) => {
     const order = await deps.repository.get(ctx.req.param().id)
     if (!order) {
@@ -59,7 +59,7 @@ export const ordersRouter = orders
   .delete('/:id')
   .status(204)
   .schema({ params: OrderIdParamSchema })
-  .with(operation({ operationId: 'deleteOrder', summary: 'Cancel an order' }))
+  .extend(operation({ operationId: 'deleteOrder', summary: 'Cancel an order' }))
   .handler(async (ctx, deps) => {
     await deps.repository.remove(ctx.req.param().id)
   })

@@ -36,12 +36,12 @@ function tagging(header: string) {
 
 const jobs = () =>
   newRouter('/jobs')
-    .with(bindTo('admin'))
+    .extend(bindTo('admin'))
     .get('/', () => ({ jobs: true }))
 
 const status = () =>
   newRouter('/status')
-    .with(bindTo('admin'))
+    .extend(bindTo('admin'))
     .get('/', () => ({ up: true }))
 
 const api = () => newRouter('/api').get('/', () => ({ api: true }))

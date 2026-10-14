@@ -1,8 +1,18 @@
 import type { Container } from '@caffeinejs/di'
 import type { BootstrapKit } from '@caffeinejs/std'
 
-import type { MiddlewarePipeline } from './middleware/pipeline.js'
+import type {
+  MiddlewareFactory,
+  MiddlewareFn,
+  MiddlewareOptions,
+  MiddlewarePath,
+  MiddlewareResolvable,
+  Next,
+  NodeMiddleware,
+} from './middleware/middleware.js'
+import type { MiddlewarePipeline, ResolvedMiddleware } from './middleware/pipeline.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
+import type { Router } from './routing/programmatic/router.js'
 import type { RouteGroup } from './routing/route.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
@@ -23,7 +33,7 @@ export interface AdapterTypes {
   /** The request routes are compiled against. */
   request: unknown
 
-  /** What `.with(factory)`, `router.plugin(...)` and `@Use(...)` install. `never` when the server takes none. */
+  /** What `.with(factory)`, `router.with(...)` and `@Use(...)` install. `never` when the server takes none. */
   extension: unknown
 
   /** The request-lifecycle points `app.use(..., { hook })` accepts. `never` when the server has none. */
@@ -180,13 +190,73 @@ export interface AdapterFactoryIn {
 export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) => Adapter<T>
 
 /**
+ * The application's operations a plugin may drive while it registers: what `context.app` is on an
+ * {@link HTTPSetupContext}. Scoped to the server the plugin is registered on, or, for a router's or a controller's
+ * plugin, to that router or controller.
+ *
+ * `T` is the adapter whose routers and hooks it takes. `never`, for code written without knowing its adapter, takes
+ * routers bound to no adapter and names no hook.
+ *
+ * Open only while the plugin's slot runs: its `.with(...)` factory and `HTTPPlugin.register`.
+ *
+ * @throws ErrConfiguration from every call made outside that slot, a context kept past it included.
+ */
+export interface WebApplicationOps<T extends AdapterTypes = never, C = unknown> {
+  /**
+   * Serves routers, compiled as `app.mount(...)` compiles them: the same guards, authorization, start-up checks and
+   * routers' own plugins, and listed in a generated OpenAPI document unless a group is marked
+   * `detail('http', { internal: true })`. The groups stay out of `app.routeGroups`, and a router mounted twice in
+   * one place, or one the application already serves on that server, is served once.
+   *
+   * On a server, the server serves them, and a router bound with `bindTo` to another server is refused at
+   * start-up. On a router, they nest under it, starting from its path, binding, guards and plugins. A controller's
+   * plugin cannot mount: a class has no children to nest routers under. A router nested in itself, through any of
+   * these mounts, is refused at start-up.
+   */
+  mount(...routers: Router<any, any, any, any, any, T>[]): this
+
+  /**
+   * Adds a middleware, taking what `app.use(...)` takes. On a server it joins that server's pipeline, after what the
+   * application's own `.use(...)` calls registered, and a path is the server's own. On a router or a controller it
+   * runs in front of that router's or controller's routes alone, after its plugins, and a path is relative to it:
+   * `use('/jobs', mw)` on a router at `/admin` covers `/admin/jobs`.
+   *
+   * @throws ErrConfiguration from start-up, for a relative path under a router whose path holds a wildcard or an
+   *   optional parameter: neither has a prefix to start from.
+   */
+  use<V = Record<never, never>, Conf = Record<never, never>>(
+    target: MiddlewareFn<V, Conf>,
+    options?: MiddlewareOptions<T['hook']>,
+  ): this
+  use(target: NodeMiddleware, options?: MiddlewareOptions<T['hook']>): this
+  use(target: (req: never, res: never, next: Next) => void, options?: MiddlewareOptions<T['hook']>): this
+  use(target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
+  use<V = Record<never, never>, Conf = Record<never, never>>(
+    path: MiddlewarePath,
+    target: MiddlewareFn<V, Conf>,
+    options?: MiddlewareOptions<T['hook']>,
+  ): this
+  use(path: MiddlewarePath, target: NodeMiddleware, options?: MiddlewareOptions<T['hook']>): this
+  use(
+    path: MiddlewarePath,
+    target: (req: never, res: never, next: Next) => void,
+    options?: MiddlewareOptions<T['hook']>,
+  ): this
+  use(path: MiddlewarePath, target: MiddlewareResolvable, options?: MiddlewareOptions<T['hook']>): this
+
+  /** Adds a factory that builds a middleware once at start-up, as `app.useFn(...)` does, where `use` would put it. */
+  useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+  useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
+}
+
+/**
  * What an HTTP application hands everything it builds at start-up: an extension factory, a middleware factory, a
  * feature's server hook.
  *
  * Built once the container has initialized, so `container.get(...)` is legal, and `logger` is the one the logger
  * feature configured.
  */
-export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
+export interface HTTPSetupContext<C = unknown, T extends AdapterTypes = never> extends BootstrapKit<C> {
   container: Container
 
   /**
@@ -195,16 +265,24 @@ export interface HTTPSetupContext<C = unknown> extends BootstrapKit<C> {
    * instance's `$hasFeature(...)` instead.
    */
   hasFeature(name: string): boolean
+
+  /**
+   * What a plugin may do to the application while it registers: mount routers and add middleware. Every call
+   * outside a plugin's slot throws.
+   */
+  app: WebApplicationOps<T, C>
 }
 
 /**
  * Produces what an adapter installs on its server from what the application resolved at start-up. Under the
  * Fastify adapter that is a plugin: see `HTTPPluginFactory`.
  *
- * What `.with(...)` takes, and what `router.plugin(...)` and `@Use(...)` take. Called once, after the container
+ * What `.with(...)` takes, and what `router.with(...)` and `@Use(...)` take. Called once, after the container
  * has initialized. Never deduplicated: two factories install two extensions.
  */
-export type AdapterExtensionFactory<X, C = unknown> = (context: HTTPSetupContext<C>) => X | Promise<X>
+export type AdapterExtensionFactory<X, C = unknown, T extends AdapterTypes = never> = (
+  context: HTTPSetupContext<C, T>,
+) => X | Promise<X>
 
 /**
  * What an application hands its adapter to install.
@@ -212,19 +290,15 @@ export type AdapterExtensionFactory<X, C = unknown> = (context: HTTPSetupContext
  * The root list is in the order the application wrote its `.with(...)` calls, after the framework's own head
  * slots, and that order is the whole ordering model: an adapter installs the extensions one at a time, each
  * finished before the next starts. What a router or a controller asked for is kept apart, per scope, for the
- * adapter to install in front of that scope's routes alone.
+ * adapter to install in front of that scope's routes alone: its plugins, then the middleware its plugins added.
  */
 export class AdapterExtensions<X> {
   readonly #root: X[] = []
   readonly #scoped = new Map<object, X[]>()
+  readonly #middlewares = new Map<object, readonly ResolvedMiddleware[]>()
 
-  /** Adds an extension to the root list, or, given a router or a controller class, to that scope's own. */
-  add(extension: X, scope?: object): void {
-    if (scope === undefined) {
-      this.#root.push(extension)
-      return
-    }
-
+  /** Adds an extension to the list of `scope`, a router or a controller class. */
+  add(extension: X, scope: object): void {
     let scoped = this.#scoped.get(scope)
     if (scoped === undefined) {
       scoped = []
@@ -245,6 +319,19 @@ export class AdapterExtensions<X> {
   }
 
   /**
+   * Records the middleware a router's or a controller's plugins added, run in front of its routes after its plugins.
+   * Paths are relative to it: the adapter rebases them under each group's `RouteGroupScope.path`.
+   */
+  addMiddlewares(scope: object, middlewares: readonly ResolvedMiddleware[]): void {
+    this.#middlewares.set(scope, middlewares)
+  }
+
+  /** What `scope` runs in front of its own routes. */
+  middlewaresOf(scope: object): readonly ResolvedMiddleware[] {
+    return this.#middlewares.get(scope) ?? []
+  }
+
+  /**
    * The scoped extensions registered so far, in front of another root list: what one more server installs when it
    * serves groups of the same routers and controllers.
    */
@@ -254,6 +341,10 @@ export class AdapterExtensions<X> {
 
     for (const [scope, scoped] of this.#scoped) {
       extensions.#scoped.set(scope, scoped)
+    }
+
+    for (const [scope, middlewares] of this.#middlewares) {
+      extensions.#middlewares.set(scope, middlewares)
     }
 
     return extensions

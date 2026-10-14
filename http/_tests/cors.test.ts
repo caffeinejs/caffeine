@@ -216,7 +216,7 @@ describe('CORS', () => {
       const specific = new Router('/cors-fluent-specific')
       specific
         .get('/data')
-        .with(cors({ origin: 'https://trusted.com' }))
+        .extend(cors({ origin: 'https://trusted.com' }))
         .handler(() => ({}))
 
       const fallback = new Router('/cors-fluent-default')

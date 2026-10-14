@@ -202,7 +202,7 @@ export class AuthenticationGateBuilder {
  *
  * Registered with `.with(authentication())`, the gate joins the application's own server and covers every route
  * it serves, wherever it sits among the plugins; registered with an ops server's `o.with(authentication())`, it
- * covers that server's routes the same way. With `router.plugin(authentication(g => g.name('admin')))` it joins
+ * covers that server's routes the same way. With `router.with(authentication(g => g.name('admin')))` it joins
  * that route group alone, covering exactly the group's routes. Each gate stamps the routes registered in its
  * context after it, and where several gates cover a route the last stamp — the innermost gate's, for a group's own
  * routes — decides which one authenticates and challenges it. A raw route registered straight on the server
@@ -355,7 +355,7 @@ function fallbackFor(container: Container): Fallback | undefined {
   }
   // A prefix is a run of whole segments, written with or without its trailing slash: the path itself, and what is
   // under it. Compared as plain text, `/assets` would open `/assets-old` as well.
-  const except = (options.fallbackExcept ?? []).map(prefix => {
+  const except = options.fallbackExcept.map(prefix => {
     const exact = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix
 
     return { exact, under: `${exact}/` }
@@ -374,7 +374,7 @@ function fallbackFor(container: Container): Fallback | undefined {
 
       // The path the route was registered under, not the URL that was requested: no spelling of a URL can then
       // borrow the exemption of a route it did not match.
-      return forPath(request.routeOptions.url ?? '')
+      return forPath(request.routeOptions.url!)
     },
     forPath,
   }

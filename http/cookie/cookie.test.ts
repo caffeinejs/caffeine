@@ -785,7 +785,7 @@ describe('servers', () => {
 
   it('serves cookies on an ops server, with the same settings', async () => {
     const admin = newRouter('/admin')
-      .with(bindTo('admin'))
+      .extend(bindTo('admin'))
       .get('/sign', ctx => {
         ctx.cookie('tok', 'value', { signed: true })
         return { ok: true }

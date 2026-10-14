@@ -477,7 +477,7 @@ describe('csrf()', () => {
     // A route's own mark is the more specific word: an application route under a prefix excluded for somebody
     // else's routes stays protected when it says so.
     it('keeps a route marked csrfExempt(false) protected under an excluded prefix', async () => {
-      const hooks = newRouter('/hooks').post('/provider', ok).post('/settings').with(csrfExempt(false)).handler(ok)
+      const hooks = newRouter('/hooks').post('/provider', ok).post('/settings').extend(csrfExempt(false)).handler(ok)
 
       const app = await ready(
         createWebApplication()
@@ -491,10 +491,10 @@ describe('csrf()', () => {
 
     it('takes csrfExempt() on a router, and csrfExempt(false) on one of its routes', async () => {
       const hooks = newRouter('/hooks')
-        .with(csrfExempt())
+        .extend(csrfExempt())
         .post('/open', ok)
         .post('/closed')
-        .with(csrfExempt(false))
+        .extend(csrfExempt(false))
         .handler(ok)
 
       const app = await ready(createWebApplication().with(csrf()).mount(hooks, echo()))
@@ -576,7 +576,7 @@ describe('csrf()', () => {
                 .allowSecFetchSite((_ctx, site) => asked.push(site) < 0),
             ),
           )
-          .mount(echo(), newRouter('/hooks').with(csrfExempt()).post('/', ok), newRouter('/excluded').post('/', ok)),
+          .mount(echo(), newRouter('/hooks').extend(csrfExempt()).post('/', ok), newRouter('/excluded').post('/', ok)),
       )
 
       expect((await post(app, '/echo', SAME_ORIGIN)).status).toBe(200)
@@ -816,7 +816,7 @@ describe('csrf()', () => {
     // A check widens the plugin it was given to, and no other: a route group's own plugin decides for itself.
     it('does not widen a route group plugin of its own', async () => {
       const admin = newRouter('/admin')
-        .plugin(csrf(c => c.name('admin')))
+        .with(csrf(c => c.name('admin')))
         .post('/', ok)
 
       const app = await ready(
@@ -940,9 +940,9 @@ describe('csrf()', () => {
       expect(seen).toEqual([false, true])
     })
 
-    it('covers one route group when registered with router.plugin(...)', async () => {
+    it('covers one route group when registered with router.with(...)', async () => {
       const admin = newRouter('/admin')
-        .plugin(csrf(c => c.name('admin')))
+        .with(csrf(c => c.name('admin')))
         .post('/', ok)
       const open = newRouter('/open').post('/', ok)
 
@@ -954,7 +954,7 @@ describe('csrf()', () => {
 
     // A plugin covers the server it was registered on, and only that one.
     it('covers an ops server through its own o.with(csrf()), and no other server', async () => {
-      const metrics = newRouter('/metrics').with(bindTo('admin')).post('/', ok)
+      const metrics = newRouter('/metrics').extend(bindTo('admin')).post('/', ok)
       const api = newRouter('/api').post('/', ok)
 
       const app = (await running(

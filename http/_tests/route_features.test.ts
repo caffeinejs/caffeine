@@ -39,7 +39,7 @@ describe('routes that declare caching', () => {
   const pets = () =>
     newRouter('/features-pets')
       .get('/')
-      .with(cached)
+      .extend(cached)
       .handler(() => ({ ok: true }))
 
   it('are refused when nothing installed the caching plugin', async () => {
@@ -67,9 +67,9 @@ describe('routes that declare caching', () => {
   it('start when their own group installed it, and a sibling without it is still refused', async () => {
     const served = () =>
       newRouter('/features-served')
-        .plugin(caching)
+        .with(caching)
         .get('/')
-        .with(cached)
+        .extend(cached)
         .handler(() => ({ ok: true }))
 
     app = createWebApplication().mount(served())
@@ -83,9 +83,9 @@ describe('routes that declare caching', () => {
 
   it('are refused when their group installed some other plugin', async () => {
     const other = newRouter('/features-other')
-      .plugin(named('something-else'))
+      .with(named('something-else'))
       .get('/')
-      .with(cached)
+      .extend(cached)
       .handler(() => ({ ok: true }))
 
     app = createWebApplication().mount(other)

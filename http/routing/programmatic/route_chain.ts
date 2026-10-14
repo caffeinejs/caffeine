@@ -161,10 +161,10 @@ export class RouteChain<
    * was declared.
    *
    * ```ts
-   * pets.get('/:id').with(operation({ summary: 'Get a pet' }), compress({ threshold: 1024 }))
+   * pets.get('/:id').extend(operation({ summary: 'Get a pet' }), compress({ threshold: 1024 }))
    * ```
    */
-  with(extension: RouteExtension, ...rest: RouteExtension[]): this {
+  extend(extension: RouteExtension, ...rest: RouteExtension[]): this {
     extension(this.#state.builder)
 
     for (const ext of rest) {

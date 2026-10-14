@@ -254,6 +254,37 @@ describe('programmatic router', () => {
       await app.close()
     })
 
+    // An empty spec injects nothing, so the handler sees what it sees with no spec at all.
+    it('should pass undefined when the injected spec is empty', async () => {
+      const router = new Router('/empty-inject')
+      router
+        .get('/')
+        .inject({})
+        .handler((_ctx, deps) => ({ deps: deps === undefined }))
+
+      const app = newApp().mount(router)
+      await app.bootstrap()
+
+      expect(await (await app.fetch('/empty-inject')).json()).toEqual({ deps: true })
+
+      await app.close()
+    })
+
+    // A spec keyed by symbols alone is not empty: its dependencies reach the handler under those symbols.
+    it('should hand over a dependency injected under a symbol key', async () => {
+      const kGreeter = Symbol('greeter')
+      const router = new Router('/symbol-greet')
+        .inject({ [kGreeter]: Greeter })
+        .get('/:name', (ctx, deps) => ctx.body({ message: deps[kGreeter].greet(ctx.req.param('name')!) }))
+
+      const app = newApp(c => c.bind(Greeter, t => t.toSelf())).mount(router)
+      await app.bootstrap()
+
+      expect(await (await app.fetch('/symbol-greet/ada')).json()).toEqual({ message: 'hello ada' })
+
+      await app.close()
+    })
+
     it('should resolve a request-scoped dependency once per request and a singleton once', async () => {
       Counter.created = 0
 

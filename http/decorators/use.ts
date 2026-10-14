@@ -1,12 +1,24 @@
-import type { AdapterExtensionFactory, AnyAdapterExtension } from '../adapter.js'
+import type { AdapterExtensionFactory, AnyAdapterExtension, AnyAdapterTypes } from '../adapter.js'
+import type { HTTPPlugin } from '../plugin.js'
 
-const PluginRegistry = new WeakMap<Function, AdapterExtensionFactory<AnyAdapterExtension>[]>()
+/** What `@Use(...)` takes: a factory for the adapter's plugin, or for an `HTTPPlugin`. */
+type ControllerPluginFactory = AdapterExtensionFactory<
+  AnyAdapterExtension | HTTPPlugin<AnyAdapterTypes>,
+  unknown,
+  AnyAdapterTypes
+>
+
+const PluginRegistry = new WeakMap<Function, ControllerPluginFactory[]>()
 
 /**
  * Installs an adapter extension — under Fastify, a plugin — in front of this controller's routes and nowhere else.
  *
- * The controller counterpart of `router.plugin(...)`. The factory is resolved once, during start-up, with the same
+ * The controller counterpart of `router.with(...)`. The factory is resolved once, during start-up, with the same
  * context the application's `.with(...)` factories get.
+ *
+ * A factory may return an `HTTPPlugin` instead: its middleware, added with `context.app.use(...)`, runs in front of
+ * this controller's routes, a path relative to the controller. It cannot mount routers: a class has no children to
+ * nest them under.
  *
  * A controller is declared without knowing which application it will be resolved into, so the configuration
  * there is typed `unknown`, and the factory may return what any registered adapter installs. Nothing checks
@@ -19,9 +31,7 @@ const PluginRegistry = new WeakMap<Function, AdapterExtensionFactory<AnyAdapterE
  * class AdminController {}
  * ```
  */
-export function Use(
-  factory: AdapterExtensionFactory<AnyAdapterExtension>,
-): (target: Function, context: ClassDecoratorContext) => void {
+export function Use(factory: ControllerPluginFactory): (target: Function, context: ClassDecoratorContext) => void {
   return function (target: Function): void {
     let plugins = PluginRegistry.get(target)
     if (plugins === undefined) {
@@ -36,6 +46,6 @@ export function Use(
 }
 
 /** What `@Use` recorded on `target`, in the order the decorators were written. */
-export function controllerPlugins(target: Function): readonly AdapterExtensionFactory<AnyAdapterExtension>[] {
+export function controllerPlugins(target: Function): readonly ControllerPluginFactory[] {
   return PluginRegistry.get(target) ?? []
 }

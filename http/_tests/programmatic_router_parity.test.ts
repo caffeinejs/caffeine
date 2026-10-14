@@ -189,6 +189,46 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       await app.close()
     })
+
+    it("should let a route's own handler win over the group's, and leave its siblings to the group's", async () => {
+      @Catch(ErrHTTPNotFound)
+      class GroupMissing implements ErrorHandler<ErrHTTPNotFound> {
+        handle(ctx: Context): ActionResult {
+          return ctx.status(404).body({ handled: 'by-group' })
+        }
+      }
+
+      @Catch(ErrHTTPNotFound)
+      class RouteMissing implements ErrorHandler<ErrHTTPNotFound> {
+        handle(ctx: Context): ActionResult {
+          return ctx.status(410).body({ handled: 'by-route' })
+        }
+      }
+
+      const router = new Router('/catching-route').catchBy([GroupMissing])
+      router
+        .get('/own')
+        .catchBy([RouteMissing])
+        .handler(() => {
+          throw new ErrHTTPNotFound('nope')
+        })
+      router.get('/sibling').handler(() => {
+        throw new ErrHTTPNotFound('nope')
+      })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const own = await app.fetch('/catching-route/own')
+      expect(own.status).toBe(410)
+      expect(await own.json()).toEqual({ handled: 'by-route' })
+
+      const sibling = await app.fetch('/catching-route/sibling')
+      expect(sibling.status).toBe(404)
+      expect(await sibling.json()).toEqual({ handled: 'by-group' })
+
+      await app.close()
+    })
   })
 
   describe('given response shaping declared on a group and a route', () => {
@@ -257,13 +297,176 @@ describe('programmatic router parity with the decorator feature set', () => {
 
       await app.close()
     })
+
+    it('should take one method as a string, in any case', async () => {
+      const router = new Router('/single').route('patch', '/lower', ctx => ({ method: ctx.req.method }))
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      expect(await (await app.fetch('/single/lower', { method: 'PATCH' })).json()).toEqual({ method: 'PATCH' })
+      expect((await app.fetch('/single/lower')).status).toBe(404)
+
+      await app.close()
+    })
+  })
+
+  describe('given the verb helpers past the common four', () => {
+    it('should answer HEAD alone on a head() route', async () => {
+      // No GET on this path: Fastify gives a GET route a HEAD twin, which a head() route on the same path would meet.
+      const router = new Router('/probe').head('/', ctx => {
+        ctx.header('x-probe', 'yes')
+        return { ok: true }
+      })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const head = await app.fetch('/probe', { method: 'HEAD' })
+      expect(head.status).toBe(200)
+      expect(head.headers.get('x-probe')).toBe('yes')
+      expect((await app.fetch('/probe')).status).toBe(404)
+
+      await app.close()
+    })
+
+    it('should answer OPTIONS alone on an options() route', async () => {
+      const router = new Router('/opts').options('/', ctx => {
+        ctx.header('allow', 'GET, OPTIONS')
+        return { methods: ['GET', 'OPTIONS'] }
+      })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const options = await app.fetch('/opts', { method: 'OPTIONS' })
+      expect(options.status).toBe(200)
+      expect(options.headers.get('allow')).toBe('GET, OPTIONS')
+      expect((await app.fetch('/opts')).status).toBe(404)
+
+      await app.close()
+    })
+
+    // all() names seven methods, not every one the adapter routes: QUERY is declared on its own.
+    it('should answer the seven methods all() names, and not QUERY', async () => {
+      const router = new Router('/any').all('/', ctx => ({ method: ctx.req.method }))
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']) {
+        expect(await (await app.fetch('/any', { method })).json()).toEqual({ method })
+      }
+      // A QUERY carries a body, and Fastify wants its content type before it finds there is no route.
+      const query = await app.fetch('/any', {
+        method: 'QUERY',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })
+      expect(query.status).toBe(404)
+
+      await app.close()
+    })
+  })
+
+  describe('given a body limit and a timeout on a group', () => {
+    it('should hold every route to the body limit, unless a route sets its own', async () => {
+      const router = new Router('/limited-group').bodyLimit(16)
+      router.post('/small').handler(ctx => ctx.body(ctx.req.body()))
+      router
+        .post('/large')
+        .bodyLimit(1024)
+        .handler(ctx => ctx.body(ctx.req.body()))
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const post = (path: string) =>
+        app.fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ padding: 'x'.repeat(64) }),
+        })
+
+      expect((await post('/limited-group/small')).status).toBe(413)
+      expect((await post('/limited-group/large')).status).toBe(200)
+
+      await app.close()
+    })
+
+    it('should time every route out, unless a route sets its own', async () => {
+      const slow = async () => {
+        await new Promise(resolve => setTimeout(resolve, 50))
+        return { ok: true }
+      }
+      const router = new Router('/timed-group').timeout(1)
+      router.get('/slow').handler(slow)
+      router.get('/patient').timeout(500).handler(slow)
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      expect((await app.fetch('/timed-group/slow')).status).toBe(503)
+      expect((await app.fetch('/timed-group/patient')).status).toBe(200)
+
+      await app.close()
+    })
+  })
+
+  describe('given adapter configuration on a group and a route', () => {
+    // What a feature reads per request, as `@Config` writes it. The more specific level wins a key outright.
+    it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
+      const read = (ctx: Context) => {
+        const config = ctx.routeConfig as Record<string, unknown>
+        return { feature: config.feature, other: config.other }
+      }
+      const router = new Router('/configured').config('feature', { level: 'group' }).config('other', 'kept')
+      router.get('/inherits').handler(read)
+      router.get('/overrides').config('feature', { tier: 'route' }).handler(read)
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      expect(await (await app.fetch('/configured/inherits')).json()).toEqual({
+        feature: { level: 'group' },
+        other: 'kept',
+      })
+      expect(await (await app.fetch('/configured/overrides')).json()).toEqual({
+        feature: { tier: 'route' },
+        other: 'kept',
+      })
+
+      await app.close()
+    })
+  })
+
+  describe('given media types a group and a route consume', () => {
+    // Nothing refuses a request by it: it is what a reader such as the OpenAPI generator documents.
+    it("should give a route the group's list unless it declares its own", async () => {
+      const router = new Router('/consuming').consumes('application/json')
+      router.post('/json').handler(() => ({ ok: true }))
+      router
+        .post('/form')
+        .consumes(['application/x-www-form-urlencoded', 'multipart/form-data'])
+        .handler(() => ({ ok: true }))
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const group = app.routeGroups.find(candidate => candidate.path === '/consuming')!
+      const accept = (path: string) => group.routes.find(route => route.path === path)!.accept
+      expect(accept('/json')).toEqual(['application/json'])
+      expect(accept('/form')).toEqual(['application/x-www-form-urlencoded', 'multipart/form-data'])
+
+      await app.close()
+    })
   })
 
   describe('given a version constraint', () => {
     it('should select a programmatic route by Accept-Version exactly as a decorated one', async () => {
-      const v1 = new Router('/pets').name('ParityPetsV1').with(version('1.0.0'))
+      const v1 = new Router('/pets').name('ParityPetsV1').extend(version('1.0.0'))
       v1.get('/').handler(() => ({ v: 1 }))
-      const v2 = new Router('/pets').name('ParityPetsV2').with(version('2.0.0'))
+      const v2 = new Router('/pets').name('ParityPetsV2').extend(version('2.0.0'))
       v2.get('/').handler(() => ({ v: 2 }))
 
       const app = createWebApplication()

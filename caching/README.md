@@ -59,11 +59,11 @@ import { cacheControl, cacheInvalidate } from '@caffeinejs/caching/http'
 const pets = new Router('/pets')
 pets
   .get('/')
-  .with(cacheControl({ ttl: '5m', tags: ['pets'] }))
+  .extend(cacheControl({ ttl: '5m', tags: ['pets'] }))
   .handler(() => petStore.all())
 pets
   .post('/')
-  .with(cacheInvalidate({ tags: ['pets'] }))
+  .extend(cacheInvalidate({ tags: ['pets'] }))
   .handler(() => ({ created: true }))
 ```
 
@@ -301,7 +301,7 @@ context, with the `container` and the application `logger`.
 `store`, `etagGenerator` and `observer` each take the value or a container token. A token bound to nothing fails
 at `app.bootstrap()`, and so does a missing `store`. Nothing is bound into the container for you.
 
-It installs on the whole application, or on one route group with `router.plugin(HTTPCaching(...))` or
+It installs on the whole application, or on one route group with `router.with(HTTPCaching(...))` or
 `@Use(HTTPCaching(...))`, each install with its own store and settings. A group that declares caching and
 installs nothing, under an application that installs nothing, fails at `app.bootstrap()`.
 

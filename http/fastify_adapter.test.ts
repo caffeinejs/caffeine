@@ -2,7 +2,7 @@ import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
 import type { FastifyInstance } from 'fastify'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Method, createWebApplication, Args } from './index.js'
+import { Controller, FastifyContext, Get, Method, Router, createWebApplication, Args } from './index.js'
 import { $p } from './routing/picker.js'
 
 describe('Fastify Adapter', () => {
@@ -228,6 +228,32 @@ describe('Fastify Adapter', () => {
       expect(r2.status).toBe(200)
       expect(await r1.json()).toEqual({ id: 1 })
       expect(await r2.json()).toEqual({ id: 2 })
+    })
+
+    // The request context is bound request-scoped: resolved from the container, it is the very one the handler is
+    // handed, and each of two requests in flight at once gets its own, across an await.
+    it('resolves the request context from the container as the one the handler got', async () => {
+      const router = new Router('/ctx-di')
+      router
+        .get('/')
+        .inject({ injected: FastifyContext })
+        .handler(async (ctx, deps) => {
+          const first = deps.injected
+          await new Promise(resolve => setTimeout(resolve, 5))
+          return { same: first === ctx && deps.injected === first, probe: first.req.header('x-probe') }
+        })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const [a, b] = await Promise.all([
+        app.fetch('/ctx-di', { headers: { 'x-probe': 'a' } }),
+        app.fetch('/ctx-di', { headers: { 'x-probe': 'b' } }),
+      ])
+      expect(await a.json()).toEqual({ same: true, probe: 'a' })
+      expect(await b.json()).toEqual({ same: true, probe: 'b' })
+
+      await app.close()
     })
   })
 })

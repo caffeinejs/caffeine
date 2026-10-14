@@ -28,9 +28,14 @@ class DupController {
 void [DupController]
 
 describe('duplicate controller error handler', () => {
-  it('rejects when two methods handle the same error type', async () => {
+  it('rejects when two methods handle the same error type, naming the controller', async () => {
     const app = createWebApplication()
+    const started = app.bootstrap()
 
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+    await expect(started).rejects.toThrow(ErrConfiguration)
+    // By its name: the class itself would print its whole source.
+    await expect(started).rejects.toThrow(
+      /^Ambiguous controller error handler: multiple handlers registered for "ErrHTTPNotFound" in "DupController"/,
+    )
   })
 })

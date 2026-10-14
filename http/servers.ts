@@ -2,7 +2,7 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type {
   Adapter,
-  AdapterExtensions,
+  AdapterExtensionFactory,
   AdapterServer,
   AdapterTypes,
   HTTPSetupContext,
@@ -12,8 +12,13 @@ import type {
 import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
 import { ErrConfiguration } from './error/common.js'
+import { HTTPPlugin } from './plugin.js'
+import { PluginSlot } from './plugin_slot.js'
 import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
-import type { RouteGroup } from './routing/route.js'
+import type { Router } from './routing/programmatic/router.js'
+import type { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
+import { FluentRouteSource } from './routing/programmatic/source.js'
+import type { RouteGroup, RouteGroupScope } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
 import type { RouteGroupSpec } from './routing/spec.js'
 import type { ServerDefinition } from './server_definition.js'
@@ -27,12 +32,18 @@ interface Entry<T extends AdapterTypes> {
 
 /** What every server is built with that is not its own. */
 export interface ServerSetupInput<T extends AdapterTypes> {
-  /** The application's: a named server's own is this one with a child logger. */
+  /**
+   * The application's, with a closed `app`: each server's own is this one with an `app` of its own and, for a named
+   * server, a child logger.
+   */
   readonly context: HTTPSetupContext
   /** The framework's head slots, built fresh for one server: error handling, then cookies. */
   headSlots(): T['extension'][]
-  /** What routers and controllers asked for, resolved once and installed in front of their groups on any server. */
-  scopedExtensions(): Promise<AdapterExtensions<T['extension']>>
+  /**
+   * What routers and controllers asked for, resolved and installed in front of their groups on any server. What a
+   * server's plugins mount is resolved into it too.
+   */
+  readonly plugins: ScopedPlugins<T>
   /** The compiler every group went through, for a group `$route` adds. */
   readonly compileRouteGroup: RouteGroupCompiler
 }
@@ -90,40 +101,41 @@ export class ServerSet<T extends AdapterTypes> {
 
   /** Builds every server through `adapter`, one after another, each from its own definition. */
   async setup(adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<void> {
-    let scoped: AdapterExtensions<T['extension']> | undefined
-
     for (const entry of this.#entries) {
-      const { definition } = entry
-      const context: HTTPSetupContext =
-        definition.name === undefined
-          ? input.context
-          : { ...input.context, logger: input.context.logger.child({ server: definition.name }) }
-
-      // The server's own settings first: they describe what everything below registers onto, and a callback that
-      // fails should do so before a factory with side effects has run.
-      const server = await resolveServerOptions(definition.server, context)
-      const basePath = normalizeBasePath(await definition.basePath?.(context))
-
-      // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
-      const root = input.headSlots()
-      for (const factory of definition.plugins) {
-        root.push(await factory(context))
-      }
-
-      // Once, after the first server's own: every server installs them in front of the groups it serves.
-      scoped ??= await input.scopedExtensions()
-
-      entry.server = await adapter.setup({
-        routeGroups: entry.groups,
-        compileRouteGroup: serverCompiler(input.compileRouteGroup, definition.name),
-        context,
-        middlewares: definition.middlewares,
-        extensions: scoped.withRoot(root),
-        server,
-        customize: foldCustomizers(definition.customizers),
-        basePath,
-      })
+      entry.server = await this.#build(entry, adapter, input)
     }
+  }
+
+  async #build(entry: Entry<T>, adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<AdapterServer<T>> {
+    const { definition } = entry
+    const compile = serverCompiler(input.compileRouteGroup, definition.name)
+    // What this server's plugins may do to the application: mount on it and add to its pipeline, while they register.
+    const slot = new PluginSlot(definition.middlewares)
+    const context = serverContext(input.context, definition.name, slot)
+
+    // The server's own settings first: they describe what everything below registers onto, and a callback that
+    // fails should do so before a factory with side effects has run.
+    const server = await resolveServerOptions(definition.server, context)
+    const basePath = normalizeBasePath(await definition.basePath?.(context))
+
+    // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
+    const root = await slot.during(() => registerPlugins<T>(definition.plugins, input.headSlots(), context))
+
+    // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
+    // the application already serves on this server is served once, as a router mounted twice in one place is.
+    await input.plugins.resolveRouters(slot.mounted, context)
+    entry.groups.push(...compileMounted<T['request']>(slot.mounted, entry.groups, input.plugins, context, compile))
+
+    return adapter.setup({
+      routeGroups: entry.groups,
+      compileRouteGroup: compile,
+      context,
+      middlewares: definition.middlewares,
+      extensions: input.plugins.extensions.withRoot(root),
+      server,
+      customize: foldCustomizers(definition.customizers),
+      basePath,
+    })
   }
 
   /**
@@ -164,8 +176,8 @@ export class ServerSet<T extends AdapterTypes> {
 
 /**
  * Folds every `.server(configure)` result into one, section by section: a section that is an object is
- * shallow-merged over the one before it, anything else replaces. Sections are copied, never aliased — a live
- * configuration node is read-only, and the adapter writes into what it is handed.
+ * shallow-merged over the one before it, anything else replaces it as given. An object section is copied, never
+ * aliased — a live configuration node is read-only, and the adapter writes into what it is handed.
  */
 async function resolveServerOptions<T extends AdapterTypes>(
   configurers: readonly ServerConfigurer<T>[],
@@ -204,9 +216,68 @@ function foldCustomizers<T extends AdapterTypes>(
   }
 }
 
+/** A server's own context: the application's, with this server's `app` and, for a named server, a child logger. */
+function serverContext(base: HTTPSetupContext, name: string | undefined, app: PluginSlot): HTTPSetupContext {
+  return { ...base, logger: name === undefined ? base.logger : base.logger.child({ server: name }), app }
+}
+
 /**
- * What `$route` compiles a group with on the server named `name`: a group bound to another server is refused, since
- * that server would never see it, and an unbound one is bound to this one, as every group it serves is.
+ * Runs a server's `.with(...)` factories in the order written: an `HTTPPlugin` registers in its slot, and anything
+ * else is the adapter's to install, after the head slots.
+ */
+async function registerPlugins<T extends AdapterTypes>(
+  factories: readonly AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>[],
+  root: T['extension'][],
+  context: HTTPSetupContext,
+): Promise<T['extension'][]> {
+  for (const factory of factories) {
+    const extension = await factory(context as HTTPSetupContext<unknown, T>)
+
+    if (extension instanceof HTTPPlugin) {
+      await extension.register(context)
+    } else {
+      root.push(extension)
+    }
+  }
+
+  return root
+}
+
+/**
+ * What a server's plugins mounted, compiled as the application's own routers are and bound to that server, less the
+ * groups it already `served`.
+ */
+function compileMounted<R>(
+  routers: readonly Router<any, any, any, any, any, any>[],
+  served: readonly RouteGroup<unknown>[],
+  plugins: ScopedPlugins<AdapterTypes>,
+  context: HTTPSetupContext,
+  compile: RouteGroupCompiler,
+): RouteGroup<R>[] {
+  return new FluentRouteSource<R>(routers, plugins.childrenOf)
+    .collect(context.container)
+    .filter(declared => !isServed(declared.scopes!, served))
+    .map(declared => {
+      const group = compile(declared.spec, declared.meta())
+      // Always set: a programmatic group is installed under every router it is nested in.
+      group.scopes = declared.scopes
+      return group
+    })
+}
+
+/** Whether `groups` already hold the group `scopes` describes: the same routers, nested the same way. */
+function isServed(scopes: readonly RouteGroupScope[], groups: readonly RouteGroup<unknown>[]): boolean {
+  // Per group, never per router: a router whose nested routers are bound elsewhere is split across servers, and a
+  // plugin mounting it on one of them still adds the groups that server lacks.
+  return groups.some(
+    group => group.scopes?.length === scopes.length && group.scopes.every((scope, at) => scope.key === scopes[at].key),
+  )
+}
+
+/**
+ * What `$route` and a plugin's `app.mount(...)` compile a group with on the server named `name`: a group bound to
+ * another server is refused, since that server would never see it, and an unbound one is bound to this one, as every
+ * group it serves is.
  */
 function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): RouteGroupCompiler {
   return <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> => {
@@ -217,7 +288,7 @@ function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): 
 
       throw new ErrConfiguration(
         errMessage(`Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"`)
-          .solutions('Drop the binding: "$route" adds the group to the server its plugin runs on')
+          .solutions('Drop the binding: a plugin adds its group to the server it is registered on')
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
       )

@@ -169,7 +169,7 @@ describe('$route', () => {
     it('refuses a group added by a plugin a router registered', async () => {
       app = createWebApplication().mount(
         newRouter('/owner')
-          .plugin(() => async (instance: FastifyInstance) => {
+          .with(() => async (instance: FastifyInstance) => {
             instance.$route('scoped', scoped)
           })
           .get('/', () => ({})),
@@ -193,7 +193,7 @@ describe('$route', () => {
 
       app = createWebApplication().mount(
         newRouter('/owner-callback')
-          .plugin(() => plugin)
+          .with(() => plugin)
           .get('/', () => ({})),
       ) as WebApplication
 

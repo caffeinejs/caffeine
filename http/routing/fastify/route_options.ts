@@ -91,7 +91,7 @@ export type FastifyRouteOptions = Omit<
  * ```ts
  * uploads
  *   .post('/')
- *   .with(fst({ attachValidation: true, logLevel: 'debug' }))
+ *   .extend(fst({ attachValidation: true, logLevel: 'debug' }))
  *   .handler(ctx => ...)
  * ```
  */

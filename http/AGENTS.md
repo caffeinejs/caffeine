@@ -15,6 +15,26 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   plugin has an order to get right; the gate refuses to start a cookie-based scheme on a server whose cookies are off
   (`ErrAuthenticationCookies`).
 - A plugin's per-request setting is a Fastify decoration read off `request.server`, as `@caffeinejs/html` does.
+- A factory may return an `HTTPPlugin` (`plugin.ts`), on `.with(...)`, `o.with(...)`, `router.with(...)` or
+  `@Use(...)`. The adapter never sees one: a server's register in `ServerSet.setup`, in their slot, before
+  `adapter.setup`; a router's and a controller's register in `ScopedPlugins` (`routing/programmatic/`), before
+  routing is built. `HTTPPluginFactory` stays Fastify-only; the plugin-taking sites widen to `| HTTPPlugin<T>`.
+- `context.app` is a `PluginSlot` (`plugin_slot.ts`), open only inside `during(...)`, which closes in `finally`.
+  The application-level context carries a closed one (`closedApplicationOps`), so a middleware factory, a server
+  callback and a kept context are refused. A controller's slot refuses `mount`.
+- A server's slot mounts onto that server: collected through `FluentRouteSource` once the slot closes, so a router
+  mounted twice is served once, compiled through `serverCompiler` into that server's groups, out of
+  `app.routeGroups`. A collected group whose router chain (its `scopes` keys) matches a group the server already
+  serves is skipped (`isServed`, `servers.ts`). Compare per group, never per root router: a router whose nested
+  router is bound elsewhere is split across servers. Its middleware joins `definition.middlewares`, after the
+  application's own `.use(...)`.
+- A router's slot nests what it mounts under the router through `ScopedPlugins`' side map (`childrenOf`), never the
+  router state, so one router mounted into two applications starts from what it declared in both. A router's or a
+  controller's middleware is resolved once, keyed by its state or class, and installed in each group context after
+  that scope's plugins, its relative paths rebased under the group's `RouteGroupScope.path` (`rebaseMiddlewares`,
+  `middleware/fastify.ts`), which refuses a wildcard or an optional parameter in the base.
+- A callback-style Fastify plugin body calling a kept `context.app` throws where avvio does not catch; a plugin body
+  adds a group with `$route`.
 
 ## Cookies
 
@@ -117,7 +137,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
   plugins, or an ops server's. A later call is recorded and thrown from `onReady`: avvio does not catch a
   callback-style plugin's throw. It adds the group to the server whose plugin calls it, and refuses a group bound to
-  another server.
+  another server. A plugin that needs nothing from the instance mounts from its factory or an `HTTPPlugin` instead,
+  whose method is `register`.
 
 ## Servers
 
@@ -130,7 +151,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   first, so ops servers answer through the drain.
 - Which server serves a router is decided once, in `buildRouting`, from its labels. A source declares groups; it
   never filters or compiles them.
-- Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's.
+- Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's,
+  and a router nested in itself, by `.mount(...)` or by a router plugin's `context.app.mount(...)`: it checks the
+  routers on the current path only, so the same router under two parents stays served in each place.
 - `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
 - A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches an ops server
   only through that server's own `o.with(...)`, `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the
@@ -149,7 +172,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `Router` as the compiled shape (`RouteGroup`).
 - Keep the verb overloads' order (schema before handler) and the `.inject()` spec overload first; inference
   depends on it. The inline forms call `RouteChain`; do not give them an options argument.
-- Write a route-level feature as a `RouteExtension` (`routing/extension.ts`); the decorator calls it.
+- Write a route-level feature as a `RouteExtension` (`routing/extension.ts`); the decorator calls it, and a router
+  or a route chain applies it with `.extend(...)`. `.with(...)` on a router registers plugins.
   `flatten.ts` overwrites `path`, `method`, `parameters` and the handler, so an extension leaves them alone.
 - `addRouteHook` replaces a hook slot's array and never mutates it, since Fastify shares it with a GET route's
   HEAD twin; a `RouteExtension` writing plain route config comes first.
