@@ -2,7 +2,7 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend } from './backend.js'
 import { FaultyBackend } from './backend.testkit.js'
@@ -34,6 +34,8 @@ const opened: Array<() => Promise<unknown>> = []
 const stops: Array<() => void> = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+
   for (const stop of stops.splice(0)) {
     stop()
   }
@@ -219,12 +221,14 @@ describe('distlock diagnostics channels', () => {
     const backend = new FaultyBackend()
     const { lock, log } = await newApp(backend)
     const published = record(lock)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
+    // A 60ms lease renews every 20ms: the first renewal extends it, the second finds it taken.
     const held = await lock.acquire('a', { ttl: 60, renew: true })
-    await until(() => ended(published, 'extend').length > 0)
+    await vi.advanceTimersByTimeAsync(20)
 
     backend.stolen = true
-    await until(() => messages(published, 'lost').length > 0)
+    await vi.advanceTimersByTimeAsync(20)
 
     const extends_ = ended<ExtendContext>(published, 'extend')
     const [lost] = messages<LostMessage>(published, 'lost')

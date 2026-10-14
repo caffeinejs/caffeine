@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
@@ -33,6 +33,7 @@ class RecordingBackend implements Backend {
 let close: (() => Promise<unknown>) | undefined
 
 afterEach(async () => {
+  vi.useRealTimers()
   await close?.()
   close = undefined
 })
@@ -153,9 +154,11 @@ describe('distributed lock', () => {
   // Renewal is the only thing standing between a long critical section and a lease that lapses under it.
   it('keeps the key past its original lease while renewal is on', async () => {
     const lock = await newLock()
+    // Renewals and the backend's expiry run on the fake clock, so a busy machine cannot make one late.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
     await lock.acquire('orders:rebuild', { ttl: 60, renew: true })
-    await sleep(150)
+    await vi.advanceTimersByTimeAsync(150)
 
     expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
   })
@@ -164,12 +167,13 @@ describe('distributed lock', () => {
   // new duration rather than reverting to whatever `acquire` was called with.
   it('renews on the duration an explicit extend asked for', async () => {
     const lock = await newLock()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
     const held = await lock.acquire('orders:rebuild', { ttl: 1_000, renew: true })
     expect(await held.extend(3_000)).toBe(true)
 
     // Past the first renewal, which was armed for a third of the original second.
-    await sleep(400)
+    await vi.advanceTimersByTimeAsync(400)
 
     expect(held.expiresAt - Date.now()).toBeGreaterThan(2_000)
   })

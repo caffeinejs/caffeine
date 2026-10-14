@@ -391,6 +391,18 @@ TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators"
 
 That rule holds for this repository without exception. An **application** that must use a library shipping only legacy decorators (TypeORM, class-validator) reaches for the library's decorator-free API, or compiles those files as a separate TypeScript project and consumes only its output — [`ai/docs/mixing-decorators.md`](ai/docs/mixing-decorators.md).
 
+## Time in tests
+
+A test that sleeps for something to happen fails once the machine is busy: a full run executes many files at once, and a timer can fire hundreds of milliseconds late. Wait on what the test asserts, never on a stretch of time standing in for it.
+
+- That something happened (a request reached its handler, a hook ran) is a latch: the code resolves `started` and awaits `held`, which the test releases at the end (`http/ops/_tests/lifecycle.test.ts`).
+- That time passed is a driven clock: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })`, with `'Date'` added when the code compares `Date.now()` with a deadline, then `await vi.advanceTimersByTimeAsync(ms)`. A test that also runs a server, a socket or a third-party SDK fakes that list and nothing else; `resilience/` uses its `useFakeClock()`.
+- Fake after `bootstrap()` or `run()`, and fake `setTimeout` only after the file's first global `fetch`: undici builds its own clock on first use, and one built fake never ticks again in that file.
+- `vi.useRealTimers()` drops every pending fake timer for good: advance past each one a close waits on before restoring. `afterEach` restores before it closes anything, and runs `await vi.runOnlyPendingTimersAsync()` first when its close could join one a failed test left waiting.
+- Where a timer must stay real, such as an SDK's export callback, freeze the clock instead: `toFake: ['Date']` alone, with the test's own deadlines on `performance.now()`. A frozen clock proves nothing about time passing: a claim that something lapses, or is kept from lapsing, drives the clock.
+- Never `vi.waitFor` or `expect.poll` with anything faked: every attempt moves the fake clock.
+- A wait no clock stands in for, such as a worker thread starting, gets a budget in seconds (`describe(name, { timeout: 30_000 }, ...)`) and fails as soon as the other side exits.
+
 ## Git discipline
 
 Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.

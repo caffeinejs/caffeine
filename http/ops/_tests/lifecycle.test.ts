@@ -4,7 +4,7 @@ import { ErrApplicationNotReady } from '@caffeinejs/std'
 import { ErrShutdownTimeout } from '@caffeinejs/std/shutdown'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Ops, bindTo, createWebApplication, healthProbes, newRouter, type WebApplication } from '../../index.js'
 
@@ -25,6 +25,13 @@ describe('the lifecycle of an ops server', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
+    // A test that failed mid-drain left the drain timer fake and pending: run it, or the close below joins a
+    // shutdown that never ends.
+    if (vi.isFakeTimers()) {
+      await vi.runOnlyPendingTimersAsync()
+    }
+    vi.useRealTimers()
+
     await app?.close().catch(() => undefined)
     app = undefined
   })
@@ -72,6 +79,9 @@ describe('the lifecycle of an ops server', () => {
 
     expect((await fetch(`${origin}/readyz`)).status).toBe(200)
 
+    // Only the drain timer is faked, so the delay cannot end before the checks below have run. The fetch above
+    // built undici's clock on real timers.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const closing = app.close()
 
     // No await in between: the flip has to be visible on the very next poll, over the ops server's own port.
@@ -79,6 +89,8 @@ describe('the lifecycle of an ops server', () => {
     expect((await fetch(`${origin}/livez`)).status).toBe(200)
     expect(ops.instance.server.listening).toBe(true)
 
+    await vi.advanceTimersByTimeAsync(300)
+    vi.useRealTimers()
     await closing
     expect(ops.instance.server.listening).toBe(false)
     app = undefined

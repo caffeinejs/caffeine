@@ -1,6 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createApplication } from '@caffeinejs/std'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
@@ -9,7 +9,7 @@ import { kDistLock } from './keys.js'
 import { DistributedLock } from './plugin.js'
 
 /**
- * Counts renewals and takes real time answering them, so an action that ends while one is on the wire — the
+ * Counts renewals and takes 50ms answering them, so an action that ends while one is on the wire — the
  * case a cleared timer cannot reach — is reproducible.
  */
 class SlowRenewalBackend implements Backend {
@@ -40,6 +40,8 @@ class SlowRenewalBackend implements Backend {
 const opened: Array<() => Promise<unknown>> = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+
   for (const close of opened.splice(0)) {
     await close()
   }
@@ -161,8 +163,10 @@ describe('once', () => {
 
   it('holds the window across an action that outlives it when renewal is on', async () => {
     const lock = await newLock()
+    // The action takes 90ms of the fake clock that renewals and the backend's expiry run on, so none can run late.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
-    await lock.once('nightly-report', () => sleep(90), { ttl: 40, renew: true })
+    await lock.once('nightly-report', () => vi.advanceTimersByTimeAsync(90), { ttl: 40, renew: true })
 
     await expect(lock.once('nightly-report', () => 'second', { ttl: 40 })).resolves.toEqual({ executed: false })
   })
@@ -174,10 +178,11 @@ describe('once', () => {
   it('stops renewing when the action ends mid-renewal, so the window still closes', async () => {
     const backend = new SlowRenewalBackend()
     const lock = await newLock(backend)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
 
-    // Renews at a third of the lease, so a renewal leaves at ~100ms and answers 50ms later; the action ends
-    // at ~120ms, between the two.
-    await lock.once('nightly-report', () => sleep(120), { ttl: 300, renew: true })
+    // Renews at a third of the lease, so a renewal leaves at 100ms and answers 50ms later; the action ends
+    // at 120ms, between the two.
+    await lock.once('nightly-report', () => vi.advanceTimersByTimeAsync(120), { ttl: 300, renew: true })
 
     // Precondition: the window was renewed, and that renewal is still unanswered. Without it this passes for
     // the wrong reason.
@@ -185,7 +190,7 @@ describe('once', () => {
     expect(backend.settled).toBe(0)
 
     const renewed = backend.extensions
-    await sleep(400)
+    await vi.advanceTimersByTimeAsync(400)
 
     expect(backend.extensions).toBe(renewed)
     await expect(lock.once('nightly-report', () => 'second', { ttl: 300 })).resolves.toEqual({

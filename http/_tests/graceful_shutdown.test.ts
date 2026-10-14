@@ -1,7 +1,7 @@
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
 import { ErrApplicationClosed, ErrApplicationRunning } from '@caffeinejs/std'
 import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std/shutdown'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import type { WebApplication } from '../application.js'
 import { Controller, Get, createWebApplication, healthProbes } from '../index.js'
@@ -11,6 +11,9 @@ const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(r
 // A container OnDestroy hook runs inside `container.dispose()`, which Application calls only after the
 // drain delay and after the server has stopped. `onDestroyHook` lets a test observe when that happens.
 let onDestroyHook: (() => void | Promise<void>) | undefined
+
+// `/drain/slow` answers once `slowHook` settles, so a test decides how long a request stays in flight.
+let slowHook: (() => Promise<void>) | undefined
 
 @Injectable()
 class ShutdownProbe implements OnDestroy {
@@ -23,6 +26,11 @@ void [ShutdownProbe]
 
 beforeEach(() => {
   onDestroyHook = undefined
+  slowHook = undefined
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 @Controller('/drain')
@@ -34,7 +42,7 @@ class DrainController {
 
   @Get('/slow')
   async slow() {
-    await sleep(3_000)
+    await slowHook?.()
     return { ok: true }
   }
 }
@@ -84,9 +92,14 @@ describe('graceful shutdown', () => {
     const app = await start(s => s.drainDelay(300))
     const port = portOf(app)
 
+    // On real timers: undici builds its clock on the first fetch, and a fake one would never tick again here.
+    expect((await fetch(`http://127.0.0.1:${port}/drain/fast`)).status).toBe(200)
+
+    // Only the drain timer is faked, so the delay cannot end before the request below is answered.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const closing = app.close()
 
-    await sleep(100)
+    await vi.advanceTimersByTimeAsync(100)
 
     // The routing table has not caught up yet, so requests are still arriving and must be answered.
     const response = await fetch(`http://127.0.0.1:${port}/drain/fast`)
@@ -94,6 +107,8 @@ describe('graceful shutdown', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ ok: true })
 
+    await vi.advanceTimersByTimeAsync(200)
+    vi.useRealTimers()
     await closing
   })
 
@@ -125,19 +140,29 @@ describe('graceful shutdown', () => {
 
   it('skips the wait when the drain delay is zero', async () => {
     const app = await start(s => s.drainDelay(0))
+    // The clock stands still, so a close that waited on a drain timer would never settle.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const startedAt = Date.now()
     await app.close()
 
-    expect(Date.now() - startedAt).toBeLessThan(250)
+    expect(app.instance.server.listening).toBe(false)
   })
 
   it('forces connections shut and reports a timeout when in-flight requests overrun the budget', async () => {
     const app = await start(s => s.drainDelay(0).shutdownTimeout(200))
     const port = portOf(app)
 
-    const inflight = fetch(`http://127.0.0.1:${port}/drain/slow`).catch(() => undefined)
-    await sleep(50)
+    let started!: () => void
+    const inFlight = new Promise<void>(resolve => (started = resolve))
+    let release!: () => void
+    const held = new Promise<void>(resolve => (release = resolve))
+    slowHook = () => {
+      started()
+      return held
+    }
+
+    const request = fetch(`http://127.0.0.1:${port}/drain/slow`).catch(() => undefined)
+    await inFlight
 
     const error = await app.close().catch((error: unknown) => error)
 
@@ -145,7 +170,8 @@ describe('graceful shutdown', () => {
     expect((error as AggregateError).errors[0]).toBeInstanceOf(ErrShutdownTimeout)
     expect(app.instance.server.listening).toBe(false)
 
-    await inflight
+    release()
+    await request
   })
 
   it('joins a second close instead of starting another one', async () => {

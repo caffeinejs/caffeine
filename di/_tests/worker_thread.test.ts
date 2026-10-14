@@ -7,12 +7,15 @@ function runWorker<T>(url: URL): Promise<T> {
     const w = new Worker(url)
     w.on('message', resolve)
     w.on('error', reject)
+    // A no-op once the result arrived: a worker's messages are delivered before its `exit`.
+    w.on('exit', code => reject(new Error(`Worker exited with code ${code} before posting a result`)))
   })
 }
 
 const workerURL = new URL('./_worker_di.mjs', import.meta.url)
 
-describe('CaffeineIoC in worker thread', function () {
+// Each worker compiles the container from source through tsx, which takes seconds on a busy machine.
+describe('CaffeineIoC in worker thread', { timeout: 30_000 }, function () {
   it('resolves a singleton to the same instance', async function () {
     const result = await runWorker<{ singletonIsSameInstance: boolean }>(workerURL)
     expect(result.singletonIsSameInstance).toBe(true)

@@ -17,7 +17,7 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics'
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { Backend } from '../../backend.js'
 import { FaultyBackend } from '../../backend.testkit.js'
@@ -41,6 +41,8 @@ afterAll(() => {
 const cleanups: Array<() => Promise<unknown> | void> = []
 
 afterEach(async () => {
+  vi.useRealTimers()
+
   for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup()
   }
@@ -95,9 +97,10 @@ function instrument(options: Omit<DistLockInstrumentationOptions, 'tracerProvide
 }
 
 async function until(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
-  const deadline = Date.now() + timeoutMs
+  // On `performance`, which keeps running in a test that freezes `Date`.
+  const deadline = performance.now() + timeoutMs
   while (!condition()) {
-    if (Date.now() > deadline) {
+    if (performance.now() > deadline) {
       throw new Error('condition not met in time')
     }
     await new Promise(resolve => setTimeout(resolve, 5))
@@ -170,6 +173,9 @@ describe('instrumentDistLock spans', () => {
     const otel = instrument()
     const lock = await newLock()
     const request = otel.tracer.startSpan('request')
+    // The clock is frozen, not driven: the SDK's own timers stay real. A renewal that fires late on a busy machine
+    // still finds its lease.
+    vi.useFakeTimers({ toFake: ['Date'] })
 
     await context.with(trace.setSpan(context.active(), request), () => lock.acquire('a', { ttl: 60, renew: true }))
     request.end()
@@ -239,6 +245,9 @@ describe('instrumentDistLock metrics', () => {
     const otel = instrument()
     const backend = new FaultyBackend()
     const lock = await newLock(backend)
+    // Frozen as above, so the lease cannot lapse by the clock: `held.lost` turns true only once the failed renewal
+    // marks it.
+    vi.useFakeTimers({ toFake: ['Date'] })
 
     const held = await lock.acquire('a', { ttl: 60, renew: true })
     backend.failExtend = true
