@@ -20,7 +20,7 @@ RUN npm run build
 #
 # The whole /app is carried over rather than re-copied from context because .caffeinerc.ts imports
 # '@caffeinejs/cli', which resolves through the workspace symlinks that `npm ci` created above.
-FROM oven/bun:1@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS codegen
+FROM oven/bun:1@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 AS codegen
 WORKDIR /app
 COPY --from=base /app /app
 WORKDIR /app/examples/03-petstore
