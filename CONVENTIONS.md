@@ -105,7 +105,6 @@ Group all imports from the same module into a single import statement. Enforced 
 ```ts
 // correct
 import { Binder, BindTo } from './Binder.js'
-
 // wrong
 import { Binder } from './Binder.js'
 import { BindTo } from './Binder.js'
@@ -114,11 +113,10 @@ import { BindTo } from './Binder.js'
 All imports must include the `.js` extension, including TypeScript source files.
 
 ```ts
-// correct
-import { CaffeineIoC } from './container.js'
-
 // wrong
 import { CaffeineIoC } from './container'
+// correct
+import { CaffeineIoC } from './container.js'
 ```
 
 Never use inline dynamic-import syntax as a type reference. Declare a top-level `import type` and use the name.
@@ -137,11 +135,10 @@ async upload(stream: import('node:stream').Readable) { ... }
 Files prefixed with `_` (e.g. `_noop.ts`) are private to their directory. Do not import them from a different directory. Enforced by `no-restricted-imports`.
 
 ```ts
-// correct — same directory
-import { noop } from './_noop.js'
-
 // wrong
 import { noop } from '../_noop.js'
+// correct — same directory
+import { noop } from './_noop.js'
 ```
 
 ## Re-exports
@@ -154,6 +151,7 @@ export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 
 // correct
 import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
+
 import type { ThingConfig } from './config.js'
 ```
 

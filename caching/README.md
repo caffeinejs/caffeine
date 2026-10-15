@@ -21,9 +21,9 @@ Two halves: install the plugin once, then say which routes cache. Decorating rou
 plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 
 ```ts
-import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
+import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
 
 @Controller('/pets')
 class PetsController {
@@ -53,8 +53,8 @@ requests for a response that is not stored yet run the handler once, not once ea
 decorators, as route extensions:
 
 ```ts
-import { Router } from '@caffeinejs/http'
 import { cacheControl, cacheInvalidate } from '@caffeinejs/caching/http'
+import { Router } from '@caffeinejs/http'
 
 const pets = new Router('/pets')
 pets
@@ -334,8 +334,8 @@ every write, which shows as a store failure in the log and a cache that never fi
 optional peer that is loaded only when you import this path.
 
 ```ts
-import { createClient } from '@redis/client'
 import { RedisHTTPCacheStore } from '@caffeinejs/caching/store/redis'
+import { createClient } from '@redis/client'
 
 const client = createClient({ url: process.env.REDIS_URL })
 await client.connect()
@@ -365,8 +365,8 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 so the only thing you supply is the cache:
 
 ```ts
-import { createCache } from 'cache-manager'
 import { KeyValueHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+import { createCache } from 'cache-manager'
 
 const store = new KeyValueHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
 ```

@@ -76,9 +76,9 @@ dropped. Resolve it any earlier and a handler that streams, or a body still bein
 piped, outlives the scope it depends on.
 
 ```ts
+import type { Container } from '@caffeinejs/di'
 // src/app.ts
 import fastify from 'fastify'
-import type { Container } from '@caffeinejs/di'
 
 export async function buildServer(container: Container) {
   const server = fastify({ logger: true })
@@ -117,6 +117,7 @@ on each call.
 // src/cats.service.ts
 import { provide, type Provider } from '@caffeinejs/di'
 import { Injectable } from '@caffeinejs/di'
+
 import { RequestContext } from './request.context.js'
 
 @Injectable([provide(RequestContext)])
@@ -140,6 +141,7 @@ returns the instance that belongs to the current request.
 ```ts
 // src/index.ts
 import { CaffeineIoC } from '@caffeinejs/di'
+
 import { buildServer } from './app.js'
 import { CatsService } from './cats.service.js'
 
