@@ -8,6 +8,7 @@ import {
   ErrHTTPNotFound,
   Get,
   createWebApplication,
+  type ActionResult,
 } from '../../index.js'
 
 // Isolated: two controller methods handling the same error type. buildRouting rejects at bootstrap(),
@@ -15,7 +16,7 @@ import {
 @Controller('/dup')
 class DupController {
   @Get('/')
-  get(): unknown {
+  get(): ActionResult {
     throw new ErrHTTPNotFound('x')
   }
 

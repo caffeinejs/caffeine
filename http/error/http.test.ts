@@ -13,6 +13,7 @@ import {
   Post,
   Schema,
   createWebApplication,
+  type ActionResult,
 } from '../index.js'
 
 interface LogEntry {
@@ -36,17 +37,17 @@ async function bodyOf(response: Response): Promise<HTTPErrorBody> {
 @Controller('/http-err')
 class HTTPErrController {
   @Get('/conflict')
-  conflict(): unknown {
+  conflict(): ActionResult {
     throw new ErrHTTPConflict('nope')
   }
 
   @Get('/zero-body')
-  zero(): unknown {
+  zero(): ActionResult {
     throw new ErrHTTPBadRequest('bad', { body: 0 })
   }
 
   @Get('/with-headers')
-  headers(): unknown {
+  headers(): ActionResult {
     throw new ErrHTTPBadRequest('bad', { headers: { 'x-detail': 'why' } })
   }
 }
@@ -55,22 +56,22 @@ void [HTTPErrController]
 @Controller('/unexpected')
 class UnexpectedController {
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('relation "customers" does not exist')
   }
 
   @Get('/wrapped')
-  wrapped(): unknown {
+  wrapped(): ActionResult {
     throw new Error('fetch failed', { cause: new Error('connect ECONNREFUSED 10.0.0.7:8443') })
   }
 
   @Get('/unavailable')
-  unavailable(): unknown {
+  unavailable(): ActionResult {
     throw Object.assign(new Error('pool exhausted at 10.0.0.5:5432'), { statusCode: 503 })
   }
 
   @Get('/upstream')
-  upstream(): unknown {
+  upstream(): ActionResult {
     throw Object.assign(new Error('issuer https://idp.internal did not answer'), {
       statusCode: 502,
       code: 'ERR_UPSTREAM',
@@ -80,7 +81,7 @@ class UnexpectedController {
 
   @Post('/validated')
   @Schema({ body: $t.Object({ name: $t.String({ minLength: 1 }) }) })
-  validated(): unknown {
+  validated(): ActionResult {
     return { ok: true }
   }
 }

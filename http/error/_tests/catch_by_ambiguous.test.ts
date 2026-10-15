@@ -9,6 +9,7 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
+  type ActionResult,
 } from '../../index.js'
 
 // Both handlers cover ErrAmbiguous, and one @CatchWith names them both.
@@ -29,7 +30,7 @@ void [FirstHandler, SecondHandler]
 @Controller('/ambiguous')
 class AmbiguousController {
   @Get('/')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new ErrAmbiguous('boom')
   }
 }

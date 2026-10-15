@@ -1,4 +1,4 @@
-import { $p, Args, Controller, Get, type IContext } from '@caffeinejs/http'
+import { $p, Args, Controller, Get, type IContext, type ActionResult } from '@caffeinejs/http'
 import { APIGroup } from '@caffeinejs/openapi'
 
 /**
@@ -15,7 +15,7 @@ import { APIGroup } from '@caffeinejs/openapi'
 export class ProfileController {
   @Get('/')
   @Args([$p.context()])
-  me(ctx: IContext): unknown {
+  me(ctx: IContext): ActionResult {
     return {
       sub: ctx.user.findFirst('sub')?.value ?? null,
       name: ctx.user.findFirst('name')?.value ?? null,

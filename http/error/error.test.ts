@@ -18,6 +18,7 @@ import {
   Schema,
   createWebApplication,
   $p,
+  type ActionResult,
 } from '../index.js'
 import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 
@@ -124,7 +125,7 @@ void [Greeter]
 class PetsController {
   @Get('/:id')
   @Args([$p.param('id')])
-  get(id: string): unknown {
+  get(id: string): ActionResult {
     throw new ErrHTTPNotFound(`Pet "${id}" not found`)
   }
 }
@@ -132,7 +133,7 @@ class PetsController {
 @Controller('/boom')
 class BoomController {
   @Get('/')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('kaboom')
   }
 }
@@ -171,7 +172,7 @@ describe('error handler dispatch', () => {
 class ShopController {
   @Get('/:id')
   @Args([$p.param('id')])
-  get(id: string): unknown {
+  get(id: string): ActionResult {
     throw new ErrHTTPNotFound(`item ${id}`)
   }
 
@@ -185,7 +186,7 @@ class ShopController {
 @Controller('/widgets')
 class WidgetsController {
   @Get('/conflict')
-  conflict(): unknown {
+  conflict(): ActionResult {
     throw new ErrHTTPConflict('dup')
   }
 
@@ -199,7 +200,7 @@ class WidgetsController {
 @Controller('/mixed')
 class MixedController {
   @Get('/other')
-  other(): unknown {
+  other(): ActionResult {
     throw new Error('plain')
   }
 
@@ -216,7 +217,7 @@ class ScopedController {
   marker = 'init'
 
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     this.marker = 'touched'
     throw new ErrHTTPNotFound('x')
   }
@@ -235,7 +236,7 @@ class TxController {
   marker = 'init'
 
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     this.marker = 'touched'
     throw new ErrHTTPNotFound('x')
   }
@@ -252,7 +253,7 @@ class ValidatedController {
   @Post('/')
   @Schema({ body: $t.Object({ name: $t.String() }) })
   @Args([$p.body()])
-  create(body: unknown): unknown {
+  create(body: unknown): ActionResult {
     return { created: body }
   }
 
@@ -419,17 +420,17 @@ void [ValidationHandler, DeltaFallbackHandler, DeltaPrimaryHandler]
 @Controller('/multi')
 class MultiTypeController {
   @Get('/alpha')
-  alpha(): unknown {
+  alpha(): ActionResult {
     throw new ErrAlpha('alpha')
   }
 
   @Get('/gamma')
-  gamma(): unknown {
+  gamma(): ActionResult {
     throw new ErrGamma('gamma')
   }
 
   @Get('/beta')
-  beta(): unknown {
+  beta(): ActionResult {
     throw new ErrBeta('beta')
   }
 }
@@ -440,18 +441,18 @@ class MultiTypeController {
 @Controller('/cb-shop')
 class CatchByShopController {
   @Get('/alpha')
-  alpha(): unknown {
+  alpha(): ActionResult {
     throw new ErrAlpha('shop alpha')
   }
 
   @Get('/override')
   @CatchWith(RouteAlphaHandler)
-  override(): unknown {
+  override(): ActionResult {
     throw new ErrAlpha('shop override')
   }
 
   @Get('/gamma')
-  gamma(): unknown {
+  gamma(): ActionResult {
     throw new ErrGamma('shop gamma')
   }
 
@@ -466,7 +467,7 @@ class CatchByShopController {
 @Controller('/cb-priority')
 class CatchByPriorityController {
   @Get('/alpha')
-  alpha(): unknown {
+  alpha(): ActionResult {
     throw new ErrAlpha('priority alpha')
   }
 
@@ -480,7 +481,7 @@ class CatchByPriorityController {
 @Controller('/cb-named')
 class CatchByNamedController {
   @Get('/delta')
-  delta(): unknown {
+  delta(): ActionResult {
     throw new ErrDelta('delta')
   }
 }
@@ -493,7 +494,7 @@ class CatchByValidatedController {
   @CatchWith(ValidationHandler)
   @Schema({ body: $t.Object({ name: $t.String() }) })
   @Args([$p.body()])
-  create(body: unknown): unknown {
+  create(body: unknown): ActionResult {
     return { created: body }
   }
 }
@@ -502,7 +503,7 @@ class CatchByValidatedController {
 @Controller('/cb-orphan')
 class CatchByOrphanController {
   @Get('/delta')
-  delta(): unknown {
+  delta(): ActionResult {
     throw new ErrDelta('orphan delta')
   }
 }

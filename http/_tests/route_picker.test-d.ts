@@ -1,4 +1,4 @@
-import { Controller, Get, Args, $p, type IContext } from '../index.js'
+import { Controller, Get, Args, $p, type IContext, type ActionResult } from '../index.js'
 
 /**
  * A picker whose function annotates the request it reads is the only way to reach something the built-ins do
@@ -16,34 +16,34 @@ class CallersController {
   // The reported case.
   @Get('/annotated')
   @Args([$p.pick((req: WithContext) => req.httpContext.user)])
-  annotated(_user: unknown): unknown {
+  annotated(_user: unknown): ActionResult {
     return null
   }
 
   // An annotated pick sits alongside the built-ins in the same list.
   @Get('/mixed')
   @Args([$p.pick((req: WithContext) => req.httpContext.user), $p.param('id'), $p.body()])
-  mixed(_user: unknown, _id: unknown, _body: unknown): unknown {
+  mixed(_user: unknown, _id: unknown, _body: unknown): ActionResult {
     return null
   }
 
   // The unannotated form, which always worked.
   @Get('/inferred')
   @Args([$p.pick(req => (req as WithContext).httpContext.user)])
-  inferred(_user: unknown): unknown {
+  inferred(_user: unknown): ActionResult {
     return null
   }
 
   // A built-in wrapped in `map` — its declared request type must stay assignable too.
   @Get('/mapped')
   @Args([$p.map($p.context(), (ctx: IContext) => ctx.user)])
-  mapped(_user: unknown): unknown {
+  mapped(_user: unknown): ActionResult {
     return null
   }
 
   @Get('/user')
   @Args([$p.user()])
-  user(_user: unknown): unknown {
+  user(_user: unknown): ActionResult {
     return null
   }
 }

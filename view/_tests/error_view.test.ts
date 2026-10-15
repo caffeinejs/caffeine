@@ -32,7 +32,7 @@ class ReturnViewHandler implements ErrorHandler<ErrReturnView> {
 @Controller('/err-return-view')
 class ErrReturnController {
   @Get('/view')
-  view(): unknown {
+  view(): ActionResult {
     throw new ErrReturnView('as html')
   }
 }

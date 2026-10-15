@@ -54,12 +54,12 @@ class TokenGuard implements Guard {
 @Controller('/decorated')
 class DecoratedController {
   @Get('/')
-  get(): unknown {
+  get(): ActionResult {
     return { decorated: true }
   }
 
   @Get('/teapot')
-  teapot(): unknown {
+  teapot(): ActionResult {
     throw new Teapot()
   }
 

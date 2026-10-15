@@ -34,12 +34,12 @@ class ReturnVoidHandler implements ErrorHandler<ErrReturnVoid> {
 @Controller('/err-return')
 class ErrReturnController {
   @Get('/json')
-  json(): unknown {
+  json(): ActionResult {
     throw new ErrReturnJson('as json')
   }
 
   @Get('/void')
-  void(): unknown {
+  void(): ActionResult {
     throw new ErrReturnVoid('via ctx')
   }
 }

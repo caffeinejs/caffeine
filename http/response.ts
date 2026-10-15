@@ -5,6 +5,9 @@ import { type IContext } from './context.js'
 export type ActionResultTypes =
   | void
   | string
+  | number
+  | boolean
+  | null
   | Buffer
   | Response
   | Readable

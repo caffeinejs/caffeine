@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 
 import {
   Catch,
@@ -37,22 +37,22 @@ class CustomErrorHandler implements ErrorHandler<ErrCustom> {
 @Controller('/custom')
 class CustomController {
   @Get('/sync')
-  sync(): unknown {
+  sync(): ActionResult {
     return new TextResult('hello sync')
   }
 
   @Get('/async')
-  async async(): Promise<unknown> {
+  async async(): Promise<ActionResult> {
     return new TextResult('hello async')
   }
 
   @Get('/json')
-  json(): unknown {
+  json(): ActionResult {
     return { ok: true }
   }
 
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new ErrCustom('kaboom')
   }
 }
@@ -113,5 +113,95 @@ describe('custom ResponseResult dispatch', () => {
     expect(await res.text()).toBe('caught: kaboom')
 
     await app.close()
+  })
+})
+
+describe('number, boolean and null results', () => {
+  @Controller('/scalar')
+  class ScalarController {
+    @Get('/sync/0')
+    syncZero(): number {
+      return 0
+    }
+
+    @Get('/sync/1')
+    syncOne(): number {
+      return 1
+    }
+
+    @Get('/sync/true')
+    syncTrue(): boolean {
+      return true
+    }
+
+    @Get('/sync/false')
+    syncFalse(): boolean {
+      return false
+    }
+
+    @Get('/sync/null')
+    syncNull(): null {
+      return null
+    }
+
+    @Get('/sync/undefined')
+    syncUndefined(): undefined {
+      return undefined
+    }
+
+    @Get('/async/0')
+    async asyncZero(): Promise<number> {
+      return 0
+    }
+
+    @Get('/async/1')
+    async asyncOne(): Promise<number> {
+      return 1
+    }
+
+    @Get('/async/true')
+    async asyncTrue(): Promise<boolean> {
+      return true
+    }
+
+    @Get('/async/false')
+    async asyncFalse(): Promise<boolean> {
+      return false
+    }
+
+    @Get('/async/null')
+    async asyncNull(): Promise<null> {
+      return null
+    }
+  }
+
+  void [ScalarController]
+
+  const app = createWebApplication()
+
+  beforeAll(async () => {
+    await app.bootstrap()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  describe.each(['sync', 'async'])('%s handler', handler => {
+    // Each path names what its handler returns, written as the JSON text the body must be.
+    it.each(['0', '1', 'true', 'false', 'null'])('sends %s as a JSON body', async json => {
+      const res = await app.fetch(`/scalar/${handler}/${json}`)
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toMatch(/^application\/json/)
+      expect(await res.text()).toBe(json)
+    })
+  })
+
+  it('still sends an empty body for undefined', async () => {
+    const res = await app.fetch('/scalar/sync/undefined')
+
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
   })
 })

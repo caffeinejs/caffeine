@@ -107,7 +107,7 @@ class RenderHTMLHandler implements ErrorHandler<ErrRenderHTML> {
 @Controller('/html-error')
 class HTMLErrorController {
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new ErrRenderHTML('missing')
   }
 }

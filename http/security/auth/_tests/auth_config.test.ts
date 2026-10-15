@@ -22,6 +22,7 @@ import {
   createWebApplication,
   Authentication,
   authentication,
+  type ActionResult,
 } from '../../../index.js'
 import type { AuthSchemeDescriptor } from '../descriptor.js'
 import { kAuthSchemeDescriptors } from '../keys.js'
@@ -61,7 +62,7 @@ const env = (values: Record<string, string>) => new EnvConfigSource({ env: value
 @Controller('/protected')
 class ProtectedController {
   @Get('/')
-  list(): unknown {
+  list(): ActionResult {
     return { ok: true }
   }
 }
@@ -70,7 +71,7 @@ class ProtectedController {
 class OpenController {
   @Get('/')
   @AllowAnonymous()
-  list(): unknown {
+  list(): ActionResult {
     return { ok: true }
   }
 }

@@ -1,7 +1,15 @@
 import { Injectable, Named, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { CatchWith, Controller, ErrConfiguration, ErrorHandler, Get, createWebApplication } from '../../index.js'
+import {
+  CatchWith,
+  Controller,
+  ErrConfiguration,
+  ErrorHandler,
+  Get,
+  createWebApplication,
+  type ActionResult,
+} from '../../index.js'
 
 // Isolated: the invalid reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file. Referencing by name is the only way to reach this check —
@@ -15,7 +23,7 @@ void [NotAHandler]
 @Controller('/undeclared')
 class UndeclaredController {
   @Get('/')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('boom')
   }
 }

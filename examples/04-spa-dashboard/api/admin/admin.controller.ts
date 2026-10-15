@@ -1,4 +1,4 @@
-import { Authorize, Controller, Get } from '@caffeinejs/http'
+import { Authorize, Controller, Get, type ActionResult } from '@caffeinejs/http'
 import { APIGroup } from '@caffeinejs/openapi'
 
 import { Users } from '../auth/users.js'
@@ -15,7 +15,7 @@ import { Users } from '../auth/users.js'
 @Controller('/api/admin')
 export class AdminController {
   @Get('/users')
-  users(): unknown {
+  users(): ActionResult {
     return { users: Users.directory() }
   }
 }

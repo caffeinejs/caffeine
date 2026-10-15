@@ -1,7 +1,7 @@
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, createWebApplication, newRouter, type WebApplication } from '../index.js'
+import { Controller, Get, createWebApplication, newRouter, type WebApplication, type ActionResult } from '../index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.
@@ -81,7 +81,7 @@ describe('a group prefix and a route at "/"', () => {
     @Controller('/ctrl')
     class RootController {
       @Get('/')
-      root(): unknown {
+      root(): ActionResult {
         return { ok: true }
       }
     }

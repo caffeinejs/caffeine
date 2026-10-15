@@ -1,8 +1,9 @@
+import type { ActionResult } from '../response.js'
 import type { HTTPPickers } from '../routing/picker.js'
 import { type Picks, resolveParams } from './_params.js'
 import { configureRoute } from './registrar/registrar.js'
 
-type MethodDecorator = (target: Function, context: ClassMethodDecoratorContext) => void
+type MethodDecorator = (target: (...args: any[]) => ActionResult, context: ClassMethodDecoratorContext) => void
 
 function createMethodDecorator(method: string) {
   function decorator(path: string): MethodDecorator
@@ -11,7 +12,7 @@ function createMethodDecorator(method: string) {
   function decorator(path: string, arg?: Picks | ((p: HTTPPickers) => Picks)): MethodDecorator {
     const params = arg === undefined ? undefined : resolveParams(arg)
 
-    return function (_target: Function, context: ClassMethodDecoratorContext): void {
+    return function (_target: (...args: any[]) => ActionResult, context: ClassMethodDecoratorContext): void {
       configureMethod(context, path, method, params)
     }
   }
@@ -30,7 +31,7 @@ export const Trace = createMethodDecorator('trace')
 export const Query = createMethodDecorator('query')
 
 export function Method(method: string | string[]) {
-  return function (_target: Function, context: ClassMethodDecoratorContext): void {
+  return function (_target: (...args: any[]) => ActionResult, context: ClassMethodDecoratorContext): void {
     configureRoute(context, spec => spec.method(method))
   }
 }

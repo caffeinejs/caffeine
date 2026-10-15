@@ -17,6 +17,7 @@ import {
   authentication,
   Authorization,
   healthProbes,
+  type ActionResult,
 } from '@caffeinejs/http'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -30,13 +31,13 @@ const SECRET = 'app-scenario-session-secret-of-at-least-32-bytes'
 @Controller('/api/pets')
 class PetsController {
   @Get('/')
-  list(): unknown {
+  list(): ActionResult {
     return { pets: [] }
   }
 
   @Get('/:id')
   @Args(p => [p.param('id')])
-  byID(id: string): unknown {
+  byID(id: string): ActionResult {
     return { id }
   }
 }
@@ -44,7 +45,7 @@ class PetsController {
 @Controller('/api/orders')
 class OrdersController {
   @Get('/')
-  list(): unknown {
+  list(): ActionResult {
     return { orders: [] }
   }
 }
@@ -53,7 +54,7 @@ class OrdersController {
 class UsersController {
   @Get('/me')
   @Args([$p.context()])
-  me(ctx: IContext): unknown {
+  me(ctx: IContext): ActionResult {
     return { sub: ctx.user.findFirst('sub')?.value }
   }
 }

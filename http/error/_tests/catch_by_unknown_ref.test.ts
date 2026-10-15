@@ -8,6 +8,7 @@ import {
   ErrorHandler,
   Get,
   createWebApplication,
+  type ActionResult,
 } from '../../index.js'
 
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
@@ -20,7 +21,7 @@ class UnboundHandler implements ErrorHandler<Error> {
 @Controller('/unknown')
 class UnknownRefController {
   @Get('/')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('boom')
   }
 }

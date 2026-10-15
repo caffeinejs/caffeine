@@ -12,6 +12,7 @@ import {
   Args,
   Post,
   Schema,
+  type ActionResult,
 } from '../../../index.js'
 import { compileRouteSchema } from '../compile_route_schema.js'
 
@@ -39,7 +40,7 @@ class PetsController {
   @AllowAnonymous()
   @Schema({ querystring: ListPetsQuery, response: { 200: $t.Object({ page: $t.Integer() }) } })
   @Args([$p.query()])
-  list(query: unknown): unknown {
+  list(query: object): ActionResult {
     return query
   }
 
@@ -47,35 +48,35 @@ class PetsController {
   @AllowAnonymous()
   @Schema({ querystring: FilterQuery })
   @Args([$p.query()])
-  filter(query: unknown): unknown {
+  filter(query: object): ActionResult {
     return query
   }
 
   @Post('/')
   @Schema({ body: CreatePet })
   @Args([$p.body()])
-  create(body: unknown): unknown {
+  create(body: unknown): ActionResult {
     return { created: body }
   }
 
   @Post('/zod')
   @Schema({ body: ZodBody })
   @Args([$p.body()])
-  createFromZod(body: unknown): unknown {
+  createFromZod(body: unknown): ActionResult {
     return { created: body }
   }
 
   @Get('/nullable-response')
   @AllowAnonymous()
   @Schema({ response: { 200: $t.Object({ note: $t.Nullable($t.String()) }) } })
-  nullableResponse(): unknown {
+  nullableResponse(): ActionResult {
     return { note: null }
   }
 
   @Get('/headers')
   @Schema({ headers: $t.Object({ 'x-tenant': $t.String() }) })
   @Args([$p.context()])
-  headers(ctx: FastifyContext): unknown {
+  headers(ctx: FastifyContext): ActionResult {
     return { hasHost: ctx.req.hasHeader('host'), tenant: ctx.req.header('x-tenant') }
   }
 }

@@ -65,7 +65,7 @@ class PetsController {
   @Roles('write:pets')
   @Schema({ body: petSchema })
   @Args([$p.body()])
-  create(body: unknown) {
+  create(body: object) {
     return body
   }
 

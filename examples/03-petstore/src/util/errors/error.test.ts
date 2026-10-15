@@ -11,6 +11,7 @@ import {
   Post,
   Schema,
   createWebApplication,
+  type ActionResult,
 } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
@@ -22,28 +23,28 @@ import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.
 class ThingsController {
   @Get('/', p => [p.query()])
   @Schema({ querystring: $t.Object({ n: $t.Optional($t.Integer()) }) })
-  list(query: unknown): unknown {
+  list(query: object): ActionResult {
     return query
   }
 
   @Post('/', p => [p.body()])
   @Schema({ body: $t.Object({ name: $t.String() }) })
-  create(body: unknown): unknown {
+  create(body: object): ActionResult {
     return body
   }
 
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('kaboom')
   }
 
   @Get('/denied')
-  denied(): unknown {
+  denied(): ActionResult {
     throw new ErrHTTPUnauthorized('Invalid credentials')
   }
 
   @Get('/:id', p => [p.param('id')])
-  get(id: string): unknown {
+  get(id: string): ActionResult {
     throw new ErrHTTPNotFound(`The requested thing with ID "${id}" was not found`)
   }
 }
@@ -64,12 +65,12 @@ void [SilentNotFoundHandler]
 @Controller('/gadgets')
 class GadgetsController {
   @Get('/:id', p => [p.param('id')])
-  get(id: string): unknown {
+  get(id: string): ActionResult {
     throw new ErrHTTPNotFound(`No gadget "${id}"`)
   }
 
   @Get('/boom')
-  boom(): unknown {
+  boom(): ActionResult {
     throw new Error('kaboom')
   }
 }

@@ -1,17 +1,17 @@
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, ErrHTTPNotFound, Get, createWebApplication } from '../index.js'
+import { Controller, ErrHTTPNotFound, Get, createWebApplication, type ActionResult } from '../index.js'
 
 @Controller('/pets')
 class PetsController {
   @Get('/:id')
-  byID(): unknown {
+  byID(): ActionResult {
     throw new ErrHTTPNotFound('Pet not found')
   }
 
   @Get('/ok')
-  ok(): unknown {
+  ok(): ActionResult {
     return { ok: true }
   }
 }

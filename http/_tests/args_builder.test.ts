@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-import { $p, Controller, Get, Args, createWebApplication } from '../index.js'
+import { $p, Controller, Get, Args, createWebApplication, type ActionResult } from '../index.js'
 
 // @Args accepts either an array of `$p` pickers or a builder function that receives the builtin pickers.
 // Both must resolve handler arguments identically.
@@ -8,13 +8,13 @@ import { $p, Controller, Get, Args, createWebApplication } from '../index.js'
 class ParamsBuilderController {
   @Get('/fn/:id')
   @Args(p => [p.param('id'), p.query('q')])
-  fn(id: string, q: string): unknown {
+  fn(id: string, q: string): ActionResult {
     return { id, q }
   }
 
   @Get('/arr/:id')
   @Args([$p.param('id'), $p.query('q')])
-  arr(id: string, q: string): unknown {
+  arr(id: string, q: string): ActionResult {
     return { id, q }
   }
 }

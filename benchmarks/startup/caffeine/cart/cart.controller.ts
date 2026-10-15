@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Args, Post, $p } from '@caffeinejs/http'
+import { Controller, Delete, Get, Args, Post, $p, type ActionResult } from '@caffeinejs/http'
 
 import { CartService } from './cart.service.js'
 
@@ -13,14 +13,14 @@ export class CartController {
 
   @Get('/:id')
   @Args([$p.param('id')])
-  findOne(id: string): unknown {
-    return this.service.findById(id)
+  findOne(id: string): ActionResult {
+    return this.service.findById(id) as ActionResult
   }
 
   @Post('/')
   @Args([$p.body()])
-  create(body: unknown): unknown {
-    return this.service.create(body)
+  create(body: unknown): ActionResult {
+    return this.service.create(body) as ActionResult
   }
 
   @Delete('/:id')

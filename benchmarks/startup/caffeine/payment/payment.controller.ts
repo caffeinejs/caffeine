@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Args, Post, $p } from '@caffeinejs/http'
+import { Controller, Delete, Get, Args, Post, $p, type ActionResult } from '@caffeinejs/http'
 
 import { PaymentService } from './payment.service.js'
 
@@ -13,14 +13,14 @@ export class PaymentController {
 
   @Get('/:id')
   @Args([$p.param('id')])
-  findOne(id: string): unknown {
-    return this.service.findById(id)
+  findOne(id: string): ActionResult {
+    return this.service.findById(id) as ActionResult
   }
 
   @Post('/')
   @Args([$p.body()])
-  process(body: unknown): unknown {
-    return this.service.process(body)
+  process(body: unknown): ActionResult {
+    return this.service.process(body) as ActionResult
   }
 
   @Delete('/:id')
