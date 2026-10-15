@@ -6,7 +6,7 @@ import { ServerDefinition } from './server_definition.js'
 import { ServerSet } from './servers.js'
 
 describe('ServerSet', () => {
-  // `named` feeds `app.ops`, read once every server is built: a partial map would hand out servers that are not.
+  // `named` feeds `app.listeners`, read once every server is built: a partial map would hand out servers that are not.
   it('hands out no named servers until every server is built', () => {
     const servers = new ServerSet([new ServerDefinition(), new ServerDefinition('admin')])
 

@@ -14,6 +14,7 @@ import type { MiddlewarePipeline, ResolvedMiddleware } from './middleware/pipeli
 import type { RouteGroupCompiler } from './routing/compile.js'
 import type { Router } from './routing/programmatic/router.js'
 import type { IRouteGroup } from './routing/route.js'
+import type { IServer } from './server.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
 export interface IContextPlatform {
@@ -159,19 +160,13 @@ export interface IAdapter<T extends IAdapterTypes> {
   setup(input: AdapterIn<T>): Promise<IAdapterServer<T>>
 }
 
-/** A server an {@link IAdapter} built. Whoever asked for it runs it and tears it down. */
-export interface IAdapterServer<T extends IAdapterTypes> {
-  get instance(): T['instance']
-
-  /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
-  get address(): ServerAddress | undefined
-
+/** A server an {@link IAdapter} built, lifecycle included: whoever asked for it runs it and tears it down. */
+export interface IAdapterServer<T extends IAdapterTypes> extends IServer<T> {
   /**
    * Starts listening on the settings the server was built with. The application hands its own server what
    * {@link WebApplication.run} was given, untouched, and any other server nothing.
    */
   run(...args: T['runArgs']): Promise<void>
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 
   teardown(): Promise<void>
 

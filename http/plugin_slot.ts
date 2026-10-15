@@ -47,7 +47,7 @@ export class PluginSlot implements WebApplicationOps<any, any> {
         errMessage('Cannot call "app.mount" from a controller\'s plugin: routers nest only under a router')
           .solutions(
             'Mount them from a router\'s plugin, registered with "router.with(...)"',
-            'Or from a plugin registered with ".with(...)" on the application or an ops server',
+            'Or from a plugin registered with ".with(...)" on the application or a listener',
           )
           .reference('@caffeinejs/http', ErrConfiguration)
           .build(),
@@ -89,7 +89,7 @@ function slotClosed(operation: Operation): ErrConfiguration {
     `Cannot call "app.${operation}" here: the application's operations are open only to a plugin while it ` +
       'registers',
   ).solutions(
-    'Call it from a ".with(...)" factory or from "HTTPPlugin.register", on the application, an ops server or a ' +
+    'Call it from a ".with(...)" factory or from "HTTPPlugin.register", on the application, a listener or a ' +
       'router',
   )
 

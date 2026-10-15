@@ -14,8 +14,8 @@ import {
   Guards,
   HTTPPlugin,
   type HTTPSetupContext,
+  Listener,
   type MiddlewareFn,
-  Ops,
   Router,
   bindTo,
   createWebApplication,
@@ -301,27 +301,27 @@ describe('HTTPPlugin', () => {
 
     const typed = createWebApplication()
       .with(factory)
-      .install(Ops('admin', o => o.with(factory)))
+      .install(Listener('admin', l => l.with(factory)))
     new Router('/typed').with(factory)
     newRouter('/typed-bound').with(factory)
 
     expect(typeof typed.bootstrap).toBe('function')
   })
 
-  describe('on an ops server', () => {
-    it('serves on the ops server whose o.with(...) installed it, and nowhere else', async () => {
-      app = createWebApplication().install(Ops('admin', o => o.with(() => new Metrics())))
+  describe('on a listener', () => {
+    it('serves on the listener whose l.with(...) installed it, and nowhere else', async () => {
+      app = createWebApplication().install(Listener('admin', l => l.with(() => new Metrics())))
       await app.bootstrap()
 
-      const admin = await app.ops.get('admin')!.fetch('/metrics')
+      const admin = await app.listeners.get('admin')!.fetch('/metrics')
       expect(admin.status).toBe(200)
       expect(await admin.json()).toEqual({ metrics: true })
       expect((await app.fetch('/metrics')).status).toBe(404)
     })
 
-    it("refuses a router bound to an ops server from the application's own server", async () => {
+    it("refuses a router bound to a listener from the application's own server", async () => {
       app = createWebApplication()
-        .install(Ops('admin'))
+        .install(Listener('admin'))
         .with(() => new Bound('admin'))
 
       await expect(app.bootstrap()).rejects.toThrow(
@@ -330,24 +330,24 @@ describe('HTTPPlugin', () => {
       app = undefined
     })
 
-    it('refuses a router bound to another server from an ops server', async () => {
-      app = createWebApplication().install(Ops('admin', o => o.with(() => new Bound('metrics'))))
+    it('refuses a router bound to another server from a listener', async () => {
+      app = createWebApplication().install(Listener('admin', l => l.with(() => new Bound('metrics'))))
 
       await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "Metrics" to ops server "admin": it is bound to "metrics"/,
+        /^Cannot add route group "Metrics" to listener "admin": it is bound to "metrics"/,
       )
       app = undefined
     })
 
-    it('serves a router once on the ops server the application and its plugin both put it on', async () => {
+    it('serves a router once on the listener the application and its plugin both put it on', async () => {
       const shared = new Router('/shared-admin').extend(bindTo('admin')).get('/', () => ({ shared: true }))
 
       app = createWebApplication()
-        .install(Ops('admin', o => o.with(() => new Mounter(shared))))
+        .install(Listener('admin', l => l.with(() => new Mounter(shared))))
         .mount(shared) as WebApplication
       await app.bootstrap()
 
-      expect((await app.ops.get('admin')!.fetch('/shared-admin')).status).toBe(200)
+      expect((await app.listeners.get('admin')!.fetch('/shared-admin')).status).toBe(200)
       expect((await app.fetch('/shared-admin')).status).toBe(404)
     })
 
@@ -359,11 +359,11 @@ describe('HTTPPlugin', () => {
         .mount(new Router('/child').extend(bindTo('admin')).get('/', () => ({ child: true })))
 
       app = createWebApplication()
-        .install(Ops('admin', o => o.with(() => new Mounter(split))))
+        .install(Listener('admin', l => l.with(() => new Mounter(split))))
         .mount(split) as WebApplication
       await app.bootstrap()
 
-      const admin = app.ops.get('admin')!
+      const admin = app.listeners.get('admin')!
       expect((await admin.fetch('/split')).status).toBe(200)
       expect((await admin.fetch('/split/child')).status).toBe(200)
       expect((await app.fetch('/split')).status).toBe(200)
@@ -397,14 +397,14 @@ describe('HTTPPlugin', () => {
 
     it('stays on the server it was registered on', async () => {
       app = createWebApplication()
-        .install(Ops('admin', o => o.with(() => new Stamping('x-admin'))))
+        .install(Listener('admin', l => l.with(() => new Stamping('x-admin'))))
         .mount(
           new Router('/own').get('/', () => ({})),
           new Router('/ops').extend(bindTo('admin')).get('/', () => ({})),
         ) as WebApplication
       await app.bootstrap()
 
-      expect((await app.ops.get('admin')!.fetch('/ops')).headers.get('x-admin')).toBe('yes')
+      expect((await app.listeners.get('admin')!.fetch('/ops')).headers.get('x-admin')).toBe('yes')
       expect((await app.fetch('/own')).headers.get('x-admin')).toBeNull()
     })
 
@@ -508,10 +508,10 @@ describe('HTTPPlugin', () => {
         .with(() => new Nester())
         .get('/', () => ({}))
 
-      app = createWebApplication().install(Ops('admin')).mount(bound) as WebApplication
+      app = createWebApplication().install(Listener('admin')).mount(bound) as WebApplication
       await app.bootstrap()
 
-      expect((await app.ops.get('admin')!.fetch('/admin-ops/jobs')).status).toBe(200)
+      expect((await app.listeners.get('admin')!.fetch('/admin-ops/jobs')).status).toBe(200)
       expect((await app.fetch('/admin-ops/jobs')).status).toBe(404)
     })
 
@@ -808,12 +808,12 @@ describe('HTTPPlugin', () => {
       }
 
       app = createWebApplication()
-        .install(Ops('admin', o => o.with(() => new Sharing())))
+        .install(Listener('admin', l => l.with(() => new Sharing())))
         .mount(shared) as WebApplication
       await app.bootstrap()
 
       expect(resolved).toBe(1)
-      expect((await app.ops.get('admin')!.fetch('/shared')).headers.get('x-shared')).toBe('yes')
+      expect((await app.listeners.get('admin')!.fetch('/shared')).headers.get('x-shared')).toBe('yes')
       expect((await app.fetch('/shared')).headers.get('x-shared')).toBe('yes')
     })
 

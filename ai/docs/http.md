@@ -97,7 +97,7 @@ the gateway's job or authorization's.
 
 ## Cookies
 
-Every application has cookies, on its own server and on every ops server; there is nothing to register. A request's
+Every application has cookies, on its own server and on every listener; there is nothing to register. A request's
 cookies are parsed when first read, so a hook or a plugin reads them wherever it sits.
 
 ```ts
@@ -223,8 +223,8 @@ newRouter('/hooks').extend(csrfExempt()) // the programmatic form; csrfExempt(fa
   `c.exclude('/')`, which would cover every route, is refused at start-up; `c.enabled(false)` turns the check off.
 - The check is a root `onRequest` hook of the server it is registered on, ahead of body parsing, in the slot
   `.with(csrf())` was written in: ahead of `.with(authentication())`, a cross-origin request is refused before anyone
-  is authenticated; behind it, an anonymous one meets the challenge first. An [ops server](#ops-servers) is covered
-  by its own `Ops('admin', o => o.with(csrf()))`, a route group alone by `router.with(csrf(c => c.name('admin')))`.
+  is authenticated; behind it, an anonymous one meets the challenge first. A [listener](#listeners) is covered by its
+  own `Listener('admin', l => l.with(csrf()))`, a route group alone by `router.with(csrf(c => c.name('admin')))`.
 - From the environment, under whatever prefix the block has in the application's schema: `CSRF__ENABLED`,
   `CSRF__TRUSTED_ORIGINS__0`, `CSRF__EXCLUDE__0`. `c.enabled(false)` registers nothing, and says so once, at `warn`,
   as the server starts.
@@ -426,13 +426,13 @@ export function metrics(): AdapterExtensionFactory<HTTPPlugin> {
 }
 
 app.with(metrics()) // the application's own server
-app.install(Ops('admin', o => o.with(metrics()))) // that ops server alone
+app.install(Listener('admin', l => l.with(metrics()))) // that listener alone
 newRouter('/api').with(metrics()) // that router alone: /api/metrics
 ```
 
 Where it is registered decides what `context.app` reaches:
 
-- **On a server** (`.with(...)`, `o.with(...)`): the server serves what it mounts, and a router bound with `bindTo`
+- **On a server** (`.with(...)`, `l.with(...)`): the server serves what it mounts, and a router bound with `bindTo`
   to another server is refused at start-up. Its middleware joins that server's pipeline after the application's own
   `.use(...)` entries, and a path is the server's own.
 - **On a router** (`router.with(...)`): it registers once, before routing is built. What it mounts nests under the
@@ -506,13 +506,13 @@ const readiness = await app.health.readiness() // { ok, checks, outcomes }
   mounted or not. Without `Health()`, `ApplicationHealth` runs on 2 s, 3 s and 1 s.
 - Readiness and startup fail until `run()` marks the application started. Under Watt, answer its checks from
   `app.health` as [docs/watt.md](../../docs/watt.md) shows.
-- To serve the probes on an [ops server](#ops-servers), register the plugin there:
-  `Ops('admin', o => o.with(healthProbes()))`. They stay exempt from authentication there, and the application's own
-  server serves them only if its `.with(...)` registers them too.
+- To serve the probes on a [listener](#listeners), register the plugin there:
+  `Listener('admin', l => l.with(healthProbes()))`. They stay exempt from authentication there, and the
+  application's own server serves them only if its `.with(...)` registers them too.
 
-## Ops servers
+## Listeners
 
-An ops server is one more port, serving only the routers bound to it: metrics, probes or an admin API kept off the
+A listener is one more port, serving only the routers bound to it: metrics, probes or an admin API kept off the
 public one. Each is named, and an application may install several.
 
 ```ts
@@ -526,8 +526,8 @@ const app = createWebApplication({ config })
     ),
   )
   .install(
-    Ops('admin', (o, { config }) =>
-      o
+    Listener('admin', (l, { config }) =>
+      l
         .server(() => ({ listener: config.app.admin }))
         .with(authentication())
         .with(healthProbes())
@@ -547,39 +547,40 @@ const app = createWebApplication({ config })
 export class MetricsController {}
 
 await app.run()
-app.ops.get('admin')?.address // { host, port, origin }
+app.listeners.get('admin')?.address // { host, port, origin }
 ```
 
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.extend(bindTo(name))` bind every route under
   it. A router nested in a bound one is served where its parent is: binding it to another server is refused at
   start-up, and so is a name no installed server has. `group.boundTo` on `app.routeGroups` names the server.
-- **What it gets.** The ops server is built through the same path as the application's own server: the same request
+- **What it gets.** A listener is built through the same path as the application's own server: the same request
   context, error handlers, not-found envelope, cookies, global guards and start-up checks. What a router asks for
   itself follows it: `router.with(...)` or `@Use(...)`, and `router.guards(...)` or `@UseGuards(...)`.
-- **Plugins and middleware are per server.** `o.with(...)`, `o.use(...)` and `o.useFn(...)` take what the
+- **Plugins and middleware are per server.** `l.with(...)`, `l.use(...)` and `l.useFn(...)` take what the
   application's `.with(...)`, `.use(...)` and `.useFn(...)` take, and install on that server alone, after the same
-  head slots. Nothing registered on the application reaches an ops server, an authentication gate included, and
-  `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `o.with(...)` mounts or adds
+  head slots. Nothing registered on the application reaches a listener, an authentication gate included, and
+  `.basePath(...)` and `.serverCallback(...)` never do. What a plugin registered with `l.with(...)` mounts or adds
   through `context.app` lands on that server alone.
-- **Settings.** `o.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
+- **Settings.** `l.server(...)` takes what `.server(...)` takes, `{ factory, listener }`, so TLS and HTTP/2 are
   switched by configuration there too.
-- **Authorization.** There is nothing ops-specific: a route on an ops server requires what its router or controller
+- **Authorization.** There is nothing listener-specific: a route on a listener requires what its router or controller
   declares, `router.authorize(...)` or `@Authorize(...)`, and an undeclared one, or one a plugin registers straight
   on the server, answers to the application's fallback policy, exactly as on the application's own server. Health
   probes stay exempt.
 
-  Authenticating on an ops server takes a gate registered there, `o.with(authentication())`: the application's gate
+  Authenticating on a listener takes a gate registered there, `l.with(authentication())`: the application's gate
   does not cover it, and start-up refuses a protected route no gate covers. The OIDC login routes go to the first
   gate to install. The application's own server is built first, so its gate takes them when it has one;
-  `authentication(g => g.oidcRoutes(false))` keeps them off an ops server's gate.
+  `authentication(g => g.oidcRoutes(false))` keeps them off a listener's gate.
 
-- **Lifecycle.** `run()` listens on the application's own server first, then on each ops server on its own
-  `listener`; what `run(...)` is given does not reach them. `close()` closes the application's own server first, so
-  probes and metrics answer through the drain.
-- **Clients and tests.** A typed client reaches ops routes given that server's origin:
-  `brewer<App>(app.ops.get('admin')!.address!.origin)`. A test injects with `app.ops.get('admin')!.fetch('/jobs')`;
-  `app.fetch(...)` reaches the application's own server only.
-- **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to an ops server are
+- **Lifecycle.** `run()` starts the application's own server first, then each listener, with the listen settings of
+  its own `l.server(...)`; what `run(...)` is given does not reach them. `close()` closes the application's own
+  server first, so probes and metrics answer through the drain.
+- **Clients and tests.** A typed client reaches a listener's routes given its origin:
+  `brewer<App>(app.listeners.get('admin')!.address!.origin)`. A test injects with
+  `app.listeners.get('admin')!.fetch('/jobs')`; `app.fetch(...)` reaches the application's own server only. Each
+  listener is an `IServer`, as the application is for its own server.
+- **OpenAPI.** `@caffeinejs/openapi` documents the server it is registered on, so routes bound to a listener are
   left out of the main document.
 
 ## Typed client — `@caffeinejs/brewer`

@@ -12,7 +12,7 @@ import {
   type Guard,
   type GuardInput,
   Guards,
-  Ops,
+  Listener,
   RouteBuilder,
   bindTo,
   createWebApplication,
@@ -21,7 +21,7 @@ import {
 } from '../../index.js'
 
 /**
- * Scenario: ops routers with middleware, guards and plugins.
+ * Scenario: routers on a listener with middleware, guards and plugins.
  *
  * What a router asks for itself — `router.with(...)` and `router.guards(...)`, the counterparts of `@Use(...)` and
  * `@UseGuards(...)` — follows the router to whichever server serves it, nested routers included. What a server
@@ -70,7 +70,7 @@ class TeapotHandler implements ErrorHandler<Teapot> {
 
 void [DenyGuard, TokenGuard, TeapotHandler]
 
-describe('ops routers with middleware, guards and plugins', () => {
+describe('routers on a listener with middleware, guards and plugins', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -78,16 +78,16 @@ describe('ops routers with middleware, guards and plugins', () => {
     app = undefined
   })
 
-  const ops = () => Ops('admin', o => o.server(() => ({ listener })))
+  const admin = () => Listener('admin', l => l.server(() => ({ listener })))
 
   function at(server: 'main' | 'admin', path: string, headers?: Record<string, string>): Promise<Response> {
-    const origin = server === 'main' ? app!.address!.origin : app!.ops.get('admin')!.address!.origin
+    const origin = server === 'main' ? app!.address!.origin : app!.listeners.get('admin')!.address!.origin
     return fetch(`${origin}${path}`, { headers })
   }
 
-  it("runs a router's own plugin on what it serves on the ops server, and nowhere else", async () => {
+  it("runs a router's own plugin on what it serves on the listener, and nowhere else", async () => {
     app = createWebApplication()
-      .install(ops())
+      .install(admin())
       .server(() => ({ listener }))
       .mount(
         newRouter('/jobs')
@@ -103,9 +103,9 @@ describe('ops routers with middleware, guards and plugins', () => {
     expect((await at('main', '/api')).headers.get('x-router-plugin')).toBeNull()
   })
 
-  it("denies with the router's own guards on the ops server, and runs the global guards there too", async () => {
+  it("denies with the router's own guards on the listener, and runs the global guards there too", async () => {
     app = createWebApplication()
-      .install(ops())
+      .install(admin())
       .install(Guards(g => g.global(TokenGuard)))
       .mount(
         newRouter('/denied')
@@ -126,7 +126,7 @@ describe('ops routers with middleware, guards and plugins', () => {
 
   it('carries the binding, the plugin and the guards of a router down to the routers nested in it', async () => {
     app = createWebApplication()
-      .install(ops())
+      .install(admin())
       .server(() => ({ listener }))
       .mount(
         newRouter('/ops')
@@ -163,11 +163,11 @@ describe('ops routers with middleware, guards and plugins', () => {
       })
     }
 
-    it('adds the group to the ops server whose plugin calls it', async () => {
+    it('adds the group to the listener whose plugin calls it', async () => {
       app = createWebApplication()
         .install(
-          Ops('admin', o =>
-            o.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra()(instance)),
+          Listener('admin', l =>
+            l.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra()(instance)),
           ),
         )
         .server(() => ({ listener })) as WebApplication
@@ -178,9 +178,9 @@ describe('ops routers with middleware, guards and plugins', () => {
       expect((await at('main', '/extra')).status).toBe(404)
     })
 
-    it("refuses a group bound to an ops server from the application's own server", async () => {
+    it("refuses a group bound to a listener from the application's own server", async () => {
       app = createWebApplication()
-        .install(ops())
+        .install(admin())
         .with(() => async (instance: FastifyInstance) => extra('admin')(instance)) as WebApplication
 
       await expect(app.bootstrap()).rejects.toThrow(
@@ -188,22 +188,22 @@ describe('ops routers with middleware, guards and plugins', () => {
       )
     })
 
-    it('refuses a group bound to another server from an ops server', async () => {
+    it('refuses a group bound to another server from a listener', async () => {
       app = createWebApplication().install(
-        Ops('admin', o =>
-          o.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra('metrics')(instance)),
+        Listener('admin', l =>
+          l.server(() => ({ listener })).with(() => async (instance: FastifyInstance) => extra('metrics')(instance)),
         ),
       ) as WebApplication
 
       await expect(app.bootstrap()).rejects.toThrow(
-        /^Cannot add route group "extra" to ops server "admin": it is bound to "metrics"/,
+        /^Cannot add route group "extra" to listener "admin": it is bound to "metrics"/,
       )
     })
   })
 
-  it("answers on the ops server with the application's error handlers and its not-found envelope", async () => {
+  it("answers on the listener with the application's error handlers and its not-found envelope", async () => {
     app = createWebApplication()
-      .install(ops())
+      .install(admin())
       .server(() => ({ listener }))
       .errorHandling(e => e.globalHandlers(TeapotHandler))
       .mount(

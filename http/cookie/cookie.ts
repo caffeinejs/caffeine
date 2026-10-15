@@ -25,7 +25,7 @@ export interface CookieOptions {
  * Configures the cookies every application gets.
  *
  * The feature is registered unconditionally and installs ahead of everything `.with(...)` registers, on the
- * application's server and on every ops server, each with a signer of its own resolved once as the server starts.
+ * application's server and on every listener, each with a signer of its own resolved once as the server starts.
  * Cookies are parsed when first read, so no plugin reading one — the authentication gate included — has an order to
  * get right. The `Set-Cookie` writer runs ahead of every later plugin's `onSend` hook.
  *

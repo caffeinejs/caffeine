@@ -24,6 +24,7 @@ import { getRouteGroup } from './decorators/registrar/registrar.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
+import { listenerServers } from './listener/servers.js'
 import {
   type MiddlewareFactory,
   type MiddlewareFn,
@@ -35,8 +36,6 @@ import {
   type NodeMiddleware,
 } from './middleware/index.js'
 import { parseUse } from './middleware/middleware.js'
-import type { OpsServer } from './ops/builder.js'
-import { opsServers } from './ops/servers.js'
 import { kServerExtension, type HTTPPlugin } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
 import { closedApplicationOps } from './plugin_slot.js'
@@ -47,6 +46,7 @@ import { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
 import type { IRouteGroup } from './routing/route.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
+import type { IServer } from './server.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
 import { ServerSet } from './servers.js'
 import { Keys } from './symbols.js'
@@ -80,12 +80,10 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  *   .server(() => ({ listener: { port: 3000 } }))
  * ```
  */
-export class WebApplication<
-  T extends IAdapterTypes = FastifyTypes,
-  ROUTES = never,
-  DEPS = never,
-  C = unknown,
-> extends Application<C> {
+export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = never, DEPS = never, C = unknown>
+  extends Application<C>
+  implements IServer<T>
+{
   /** Phantom — names the routes mounted on this application, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: ROUTES
 
@@ -97,8 +95,8 @@ export class WebApplication<
   readonly #own = new ServerDefinition<T, C>()
   /** Every server, the application's own first, once {@link setup} has read them. */
   #servers: ServerSet<T> | undefined
-  /** The ops servers `Ops(...)` installed, once {@link setup} has built them. */
-  #ops: ReadonlyMap<string, OpsServer<T>> | undefined
+  /** The listeners `Listener(...)` installed, once {@link setup} has built them. */
+  #listeners: ReadonlyMap<string, IServer<T>> | undefined
   #runArgs: T['runArgs'] | undefined
   #routeGroups: IRouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
@@ -144,17 +142,17 @@ export class WebApplication<
   }
 
   /**
-   * The ops servers `Ops(...)` installed, by name and in install order: empty when none was. Each one's `address` is
-   * where to point a client at the routes bound to it.
+   * The listeners `Listener(...)` installed, by name and in install order: empty when none was. Each one's `address`
+   * is where to point a client at the routes bound to it.
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
-  get ops(): ReadonlyMap<string, OpsServer<T>> {
-    if (this.#ops === undefined) {
-      throw new ErrApplicationNotReady('reach the ops servers')
+  get listeners(): ReadonlyMap<string, IServer<T>> {
+    if (this.#listeners === undefined) {
+      throw new ErrApplicationNotReady('reach the listeners')
     }
 
-    return this.#ops
+    return this.#listeners
   }
 
   /**
@@ -196,8 +194,8 @@ export class WebApplication<
    * A middleware naming the variables it writes is taken at its word: the routers it ends up in front of are
    * declared elsewhere, so nothing here checks that they declare the same ones.
    *
-   * The pipeline runs on the application's own server alone. An ops server has its own:
-   * `Ops(name, o => o.use(...))`.
+   * The pipeline runs on the application's own server alone. A listener has its own:
+   * `Listener(name, l => l.use(...))`.
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
     target: MiddlewareFn<V, Conf>,
@@ -242,7 +240,7 @@ export class WebApplication<
    * app.useFn('*', ({ config }) => rateLimit(config.limits))
    * ```
    *
-   * Like {@link use}, it reaches the application's own server and no ops server.
+   * Like {@link use}, it reaches the application's own server and no listener.
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
   useFn(path: MiddlewarePath, target: MiddlewareFactory<C>, options?: MiddlewareOptions<T['hook']>): this
@@ -268,7 +266,7 @@ export class WebApplication<
    *   .with(HTTPCaching(cache => cache.statusHeader('X-Edge')))
    * ```
    *
-   * An ops server installs none of them. It has its own: `Ops(name, o => o.with(...))`.
+   * A listener installs none of them. It has its own: `Listener(name, l => l.with(...))`.
    *
    * A factory needing to configure its plugin hands the plugin back together with its options, rather than
    * wrapping it in one that closes over them: an official plugin already wraps itself in `fastify-plugin`, so
@@ -307,8 +305,8 @@ export class WebApplication<
   }
 
   /**
-   * Configures the server the adapter builds at {@link ready}: the application's own. An ops server takes its
-   * settings from `Ops(name, o => o.server(...))`.
+   * Configures the server the adapter builds at {@link ready}: the application's own. A listener takes its
+   * settings from `Listener(name, l => l.server(...))`.
    *
    * `configure` resolves against the same context a plugin factory gets and returns the adapter's own settings —
    * under Fastify `{ factory, listener }`, the constructor options and the listen options. To reach the server
@@ -332,7 +330,7 @@ export class WebApplication<
   /**
    * Hands `callback` the setup context and then the server the adapter builds at {@link bootstrap}, right after it
    * is constructed and before the adapter decorates or registers anything on it: a plugin registered here loads
-   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept. An ops server is
+   * ahead of every head slot and `.with(...)` plugin, and a not-found handler set here is kept. A listener is
    * never handed over.
    *
    * Calls accumulate and run in call order.
@@ -351,7 +349,7 @@ export class WebApplication<
 
   /**
    * Serves the whole application under `basePath`, for one placed behind a gateway or a proxy that forwards a
-   * path prefix with the request. An ops server is served from its root.
+   * path prefix with the request. A listener is served from its root.
    *
    * The server takes the base off a request's path before routing, so everything the application declares stays
    * written as if it were served from the root: routes from any source, plugin routes such as the health probes,
@@ -524,7 +522,7 @@ export class WebApplication<
       compileRouteGroup: routing.compileRouteGroup,
     })
 
-    this.#ops = opsServers(servers.named!)
+    this.#listeners = listenerServers(servers.named!)
   }
 
   protected override async start(): Promise<void> {
@@ -539,8 +537,8 @@ export class WebApplication<
 
   /**
    * Readies the application if needed and starts the server with what the adapter's `run` takes — under Fastify,
-   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key. Each ops
-   * server listens after it, on its own settings alone.
+   * listen options merged over the `listener` that `.server(...)` returned, these winning key by key. Each
+   * listener starts after it, on its own settings alone.
    *
    * Runs once: a second call is refused rather than joined, since it would otherwise lose its listen options.
    *
@@ -556,7 +554,7 @@ export class WebApplication<
 
   // Tolerates a server that was never built: `close()` runs `stop()` whether or not `bootstrap()` got that far.
   protected override async stop(): Promise<void> {
-    // The application's own server first, so probes and metrics on an ops server answer throughout its drain.
+    // The application's own server first, so probes and metrics on a listener answer throughout its drain.
     const failures = (await this.#servers?.teardown()) ?? []
 
     if (failures.length === 1) {

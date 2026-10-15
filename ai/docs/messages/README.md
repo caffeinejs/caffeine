@@ -9,7 +9,7 @@ This slice has a single example. Add files as codes become worth documenting.
 ```text
 Cannot serve router "admin": it is bound to "ops", and no installed server has that name
 Possible Solutions:
-  - Install it: ".install(Ops('ops', ...))"
+  - Install it: ".install(Listener('ops', ...))"
   - Or bind to an installed server: "main"
 ```
 

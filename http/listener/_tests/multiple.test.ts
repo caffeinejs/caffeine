@@ -13,7 +13,7 @@ import {
   type IContext,
   type HTTPPluginFactory,
   Identity,
-  Ops,
+  Listener,
   Principal,
   authentication,
   bindTo,
@@ -24,7 +24,7 @@ import {
 } from '../../index.js'
 
 /**
- * Scenario: several ops servers with different settings.
+ * Scenario: several listeners with different settings.
  *
  * Each server is built from its own settings and serves the routers bound to it and nothing else: one server's
  * authorization, factory options and plugins never reach another, nor the application's own server.
@@ -56,23 +56,23 @@ class OpsScheme extends BaseAuthenticationHandler<object> {
 const operator = { 'x-ops': 'alice:operator' }
 
 /**
- * Two ops servers: `admin`, its router authorized behind a gate of its own and with a small body limit, and `metrics`, open and
+ * Two listeners: `admin`, its router authorized behind a gate of its own and with a small body limit, and `metrics`, open and
  * serving the probes. `adminPlugin` is one more plugin on `admin`.
  */
 function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; adminPlugin?: HTTPPluginFactory } = {}) {
   return createWebApplication()
     .install(Authentication(a => a.addStrategy('Ops', new OpsScheme()).default('Ops')))
     .install(
-      Ops('admin', o => {
-        o.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
+      Listener('admin', l => {
+        l.server(() => ({ factory: { bodyLimit: 64 }, listener })).with(authentication())
 
         if (adminPlugin !== undefined) {
-          o.with(adminPlugin)
+          l.with(adminPlugin)
         }
       }),
     )
     .install(
-      Ops('metrics', o => o.server(() => ({ listener: { ...listener, port: metricsPort } })).with(healthProbes())),
+      Listener('metrics', l => l.server(() => ({ listener: { ...listener, port: metricsPort } })).with(healthProbes())),
     )
     .server(() => ({ listener }))
     .mount(
@@ -87,7 +87,7 @@ function twoServers({ metricsPort = 0, adminPlugin }: { metricsPort?: number; ad
     ) as WebApplication
 }
 
-describe('several ops servers with different settings', () => {
+describe('several listeners with different settings', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -98,8 +98,8 @@ describe('several ops servers with different settings', () => {
   function origins(): { main: string; admin: string; metrics: string } {
     return {
       main: app!.address!.origin,
-      admin: app!.ops.get('admin')!.address!.origin,
-      metrics: app!.ops.get('metrics')!.address!.origin,
+      admin: app!.listeners.get('admin')!.address!.origin,
+      metrics: app!.listeners.get('metrics')!.address!.origin,
     }
   }
 
@@ -143,13 +143,13 @@ describe('several ops servers with different settings', () => {
     expect(await status(`${main}/api/echo`, post(large))).toBe(200)
   })
 
-  it('lists every ops server by name, in install order, each at an address of its own', async () => {
+  it('lists every listener by name, in install order, each at an address of its own', async () => {
     app = twoServers()
     await app.run()
 
-    expect([...app.ops.keys()]).toEqual(['admin', 'metrics'])
+    expect([...app.listeners.keys()]).toEqual(['admin', 'metrics'])
 
-    const ports = [app.address!.port, ...[...app.ops.values()].map(server => server.address!.port)]
+    const ports = [app.address!.port, ...[...app.listeners.values()].map(server => server.address!.port)]
     expect(new Set(ports).size).toBe(3)
   })
 
@@ -174,14 +174,14 @@ describe('several ops servers with different settings', () => {
       ['Admin', 'admin'],
       ['Metrics', 'metrics'],
     ])
-    // What a plugin's `onRoute` hook on the ops server sees, a GET route's HEAD twin aside.
+    // What a plugin's `onRoute` hook on the listener sees, a GET route's HEAD twin aside.
     expect([...new Set(seen)]).toEqual(['admin'])
   })
 
   it('stops every server on close', async () => {
     app = twoServers()
     await app.run()
-    const servers = [app.instance, ...[...app.ops.values()].map(server => server.instance)]
+    const servers = [app.instance, ...[...app.listeners.values()].map(server => server.instance)]
 
     await app.close()
 
@@ -189,7 +189,7 @@ describe('several ops servers with different settings', () => {
     app = undefined
   })
 
-  it('rejects run() when an ops server cannot bind, and leaves nothing listening once closed', async () => {
+  it('rejects run() when a listener cannot bind, and leaves nothing listening once closed', async () => {
     const taken: Server = await new Promise(resolve => {
       const server = createServer()
       server.listen(0, '127.0.0.1', () => resolve(server))
@@ -200,7 +200,7 @@ describe('several ops servers with different settings', () => {
       app = twoServers({ metricsPort: port })
 
       await expect(app.run()).rejects.toMatchObject({ code: 'EADDRINUSE' })
-      const servers = [app.instance, ...[...app.ops.values()].map(server => server.instance)]
+      const servers = [app.instance, ...[...app.listeners.values()].map(server => server.instance)]
 
       await app.close()
 
@@ -211,9 +211,9 @@ describe('several ops servers with different settings', () => {
     }
   })
 
-  it('refuses two ops servers of one name', () => {
-    expect(() => createWebApplication().install(Ops('admin')).install(Ops('admin'))).toThrow(
-      /Cannot install feature "ops:admin": it is already installed/,
+  it('refuses two listeners of one name', () => {
+    expect(() => createWebApplication().install(Listener('admin')).install(Listener('admin'))).toThrow(
+      /Cannot install feature "listener:admin": it is already installed/,
     )
   })
 })

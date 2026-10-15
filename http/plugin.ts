@@ -50,7 +50,7 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  *
  * Where it is registered decides what `context.app` reaches:
  *
- * - With `.with(...)` on the application, or `Ops(name, o => o.with(...))`, it registers in that slot, before the
+ * - With `.with(...)` on the application, or `Listener(name, l => l.with(...))`, it registers in that slot, before the
  *   adapter builds the server: what it mounts that server serves, and its middleware joins that server's pipeline.
  * - With `router.with(...)`, it registers once during start-up, before routing is built: what it mounts nests under
  *   the router, and its middleware runs in front of the router's routes, with paths relative to the router.
@@ -71,7 +71,7 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * }
  *
  * app.with(() => new Metrics())
- * app.install(Ops('admin', o => o.with(() => new Metrics())))
+ * app.install(Listener('admin', l => l.with(() => new Metrics())))
  * ```
  */
 export abstract class HTTPPlugin<T extends IAdapterTypes = never> {

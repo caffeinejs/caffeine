@@ -284,7 +284,7 @@ function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): 
     const bound = boundTo(spec.labels)
 
     if (bound !== undefined && bound !== name) {
-      const server = name === undefined ? "the application's own server" : `ops server "${name}"`
+      const server = name === undefined ? "the application's own server" : `listener "${name}"`
 
       throw new ErrConfiguration(
         errMessage(`Cannot add route group "${meta.name}" to ${server}: it is bound to "${bound}"`)
@@ -314,7 +314,7 @@ function assertEveryRouterServed<R>(routing: Routing<R>, installed: readonly str
   }
 
   const name = String(boundTo(unserved.spec.labels))
-  const fixes = [`Install it: ".install(Ops('${name}', ...))"`]
+  const fixes = [`Install it: ".install(Listener('${name}', ...))"`]
 
   if (installed.length > 0) {
     const names = installed.map(candidate => `"${candidate}"`).join(', ')

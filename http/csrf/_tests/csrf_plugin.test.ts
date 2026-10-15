@@ -17,7 +17,7 @@ import {
   CSRFExempt,
   ErrCSRFCrossOrigin,
   Identity,
-  Ops,
+  Listener,
   Post,
   Principal,
   authentication,
@@ -953,20 +953,20 @@ describe('csrf()', () => {
     })
 
     // A plugin covers the server it was registered on, and only that one.
-    it('covers an ops server through its own o.with(csrf()), and no other server', async () => {
+    it('covers a listener through its own l.with(csrf()), and no other server', async () => {
       const metrics = newRouter('/metrics').extend(bindTo('admin')).post('/', ok)
       const api = newRouter('/api').post('/', ok)
 
       const app = (await running(
         createWebApplication()
-          .install(Ops('admin', o => o.server(() => ({ listener })).with(csrf())))
+          .install(Listener('admin', l => l.server(() => ({ listener })).with(csrf())))
           .server(() => ({ listener }))
           .mount(metrics, api),
       )) as WebApplication
-      const ops = app.ops.get('admin')!.address!.origin
+      const admin = app.listeners.get('admin')!.address!.origin
 
-      expect((await fetch(`${ops}/metrics`, { method: 'POST', headers: CROSS_SITE })).status).toBe(403)
-      expect((await fetch(`${ops}/metrics`, { method: 'POST', headers: SAME_ORIGIN })).status).toBe(200)
+      expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: CROSS_SITE })).status).toBe(403)
+      expect((await fetch(`${admin}/metrics`, { method: 'POST', headers: SAME_ORIGIN })).status).toBe(200)
       expect((await fetch(`${app.address!.origin}/api`, { method: 'POST', headers: CROSS_SITE })).status).toBe(200)
     })
 

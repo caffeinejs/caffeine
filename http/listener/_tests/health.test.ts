@@ -5,7 +5,7 @@ import {
   Authentication,
   Authorization,
   BaseAuthenticationHandler,
-  Ops,
+  Listener,
   authentication,
   bindTo,
   createWebApplication,
@@ -15,7 +15,7 @@ import {
 } from '../../index.js'
 
 /**
- * Health probes on an ops server. The probes know nothing about servers: registered on one with `o.with(...)`, they
+ * Health probes on a listener. The probes know nothing about servers: registered on one with `l.with(...)`, they
  * are raw routes there, exempt from authentication, and a server that did not register them does not serve them.
  */
 
@@ -32,7 +32,7 @@ class NobodyScheme extends BaseAuthenticationHandler<object> {
   }
 }
 
-describe('health probes on an ops server', () => {
+describe('health probes on a listener', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -46,30 +46,30 @@ describe('health probes on an ops server', () => {
 
   it("serves the three probes on the server that registered them, and not on the application's own", async () => {
     app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(healthProbes())))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
       .server(() => ({ listener })) as WebApplication
 
     await app.run()
-    const ops = app.ops.get('admin')!.address!.origin
+    const admin = app.listeners.get('admin')!.address!.origin
 
     for (const probe of ['/livez', '/readyz', '/startupz']) {
-      expect(await status(ops, probe)).toBe(200)
+      expect(await status(admin, probe)).toBe(200)
       expect(await status(app.address!.origin, probe)).toBe(404)
     }
   })
 
-  // One factory, called once per server: registering it on an ops server takes nothing from the application's own.
+  // One factory, called once per server: registering it on a listener takes nothing from the application's own.
   it('serves them on both servers when both registered them', async () => {
     const probes = healthProbes()
 
     app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(probes)))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(probes)))
       .with(probes)
       .server(() => ({ listener })) as WebApplication
 
     await app.run()
 
-    expect(await status(app.ops.get('admin')!.address!.origin, '/readyz')).toBe(200)
+    expect(await status(app.listeners.get('admin')!.address!.origin, '/readyz')).toBe(200)
     expect(await status(app.address!.origin, '/readyz')).toBe(200)
   })
 
@@ -78,8 +78,8 @@ describe('health probes on an ops server', () => {
       .install(Authentication(a => a.addStrategy('Nobody', new NobodyScheme()).default('Nobody')))
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .install(
-        Ops('admin', o =>
-          o
+        Listener('admin', l =>
+          l
             .server(() => ({ listener }))
             .with(authentication())
             .with(healthProbes()),
@@ -92,27 +92,27 @@ describe('health probes on an ops server', () => {
       ) as WebApplication
 
     await app.run()
-    const ops = app.ops.get('admin')!.address!.origin
+    const admin = app.listeners.get('admin')!.address!.origin
 
-    expect(await status(ops, '/readyz')).toBe(200)
-    expect(await status(ops, '/jobs')).toBe(401)
+    expect(await status(admin, '/readyz')).toBe(200)
+    expect(await status(admin, '/jobs')).toBe(401)
   })
 
   it('checks probe paths only against the routes of the server serving them', async () => {
     app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(healthProbes())))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
       .server(() => ({ listener }))
       .mount(newRouter().get('/livez', () => ({ mine: true }))) as WebApplication
 
     await app.run()
 
     expect(await (await fetch(`${app.address!.origin}/livez`)).json()).toEqual({ mine: true })
-    expect(await status(app.ops.get('admin')!.address!.origin, '/livez')).toBe(200)
+    expect(await status(app.listeners.get('admin')!.address!.origin, '/livez')).toBe(200)
   })
 
   it('refuses a route of the server serving the probes that takes a probe path', async () => {
     app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(healthProbes())))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(healthProbes())))
       .mount(
         newRouter()
           .extend(bindTo('admin'))

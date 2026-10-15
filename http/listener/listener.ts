@@ -7,7 +7,7 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 
-import type { AdapterExtensionFactory, IAdapterTypes, ServerAddress, ServerConfigurer } from '../adapter.js'
+import type { AdapterExtensionFactory, ServerConfigurer } from '../adapter.js'
 import type { FastifyTypes } from '../fastify_adapter.js'
 import type { FastifyMiddlewareHook } from '../middleware/fastify.js'
 import {
@@ -26,11 +26,11 @@ import { assertPluginFactory } from '../plugin_factory.js'
 import { ServerDefinition } from '../server_definition.js'
 
 /**
- * Fluently builds one ops server: a server of its own, on its own port, serving the routers bound to it with
+ * Fluently builds one listener: a server of its own, on its own port, serving the routers bound to it with
  * `bindTo(name)` or `@BindTo(name)` and nothing else.
  *
  * The application builds it the way it builds its own server — the same request context, error handling, cookies
- * and start-up checks — and listens on it after its own, closing it after its own. Its plugins and middleware are
+ * and start-up checks — and starts it after its own, closing it after its own. Its plugins and middleware are
  * its own, registered here with `with(...)`, `use(...)` and `useFn(...)`: nothing the application registers on its
  * own server reaches it, an authentication gate included, and neither do the base path and the server callbacks. A
  * router's own plugins and guards, `router.with(...)` or `@Use(...)` and `router.guards(...)` or
@@ -40,15 +40,15 @@ import { ServerDefinition } from '../server_definition.js'
  * `@Authorize(...)`, exactly as on the application's own server. Authenticating takes a gate registered here,
  * `with(authentication())`.
  */
-export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
+export class ListenerBuilder<C = unknown> extends FeatureBuilder<C> {
   get [kFeatureName](): string {
-    return `ops:${this.#name}`
+    return `listener:${this.#name}`
   }
 
   readonly #name: string
   readonly #definition: ServerDefinition<FastifyTypes, C>
 
-  constructor(name: string, configure?: FeatureConfigurer<OpsBuilder<C>, C>) {
+  constructor(name: string, configure?: FeatureConfigurer<ListenerBuilder<C>, C>) {
     super(configure as FeatureConfigurer<never, C> | undefined)
     this.#name = name
     this.#definition = new ServerDefinition<FastifyTypes, C>(name)
@@ -60,7 +60,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    * factory gets; several calls shallow-merge section by section, in call order.
    *
    * ```ts
-   * .install(Ops('admin', (o, { config }) => o.server(() => ({ listener: config.app.admin }))))
+   * .install(Listener('admin', (l, { config }) => l.server(() => ({ listener: config.app.admin }))))
    * ```
    */
   server(configure: ServerConfigurer<FastifyTypes, C>): this {
@@ -75,7 +75,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    * this server.
    *
    * ```ts
-   * .install(Ops('admin', o => o.with(authentication()).with(healthProbes())))
+   * .install(Listener('admin', l => l.with(authentication()).with(healthProbes())))
    * ```
    */
   with(factory: AdapterExtensionFactory<FastifyExtension | HTTPPlugin<FastifyTypes>, C, FastifyTypes>): this {
@@ -87,10 +87,10 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
   /**
    * Adds a middleware to this server's request pipeline. It takes what `app.use(...)` takes, a path or none, the
    * middleware, then `{ hook }`, and runs in the order these calls are written in, within a hook. A path is the
-   * server's own: an ops server has no base path.
+   * server's own: a listener has no base path.
    *
    * ```ts
-   * .install(Ops('admin', o => o.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' })))
+   * .install(Listener('admin', l => l.use(AuditLog).use('/jobs', kRateLimiter, { hook: 'preHandler' })))
    * ```
    */
   use<V = Record<never, never>, Conf = Record<never, never>>(
@@ -130,7 +130,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
    * adds one to the application's own.
    *
    * ```ts
-   * .install(Ops('admin', o => o.useFn(({ config }) => rateLimit(config.app.adminLimits))))
+   * .install(Listener('admin', l => l.useFn(({ config }) => rateLimit(config.app.adminLimits))))
    * ```
    */
   useFn(target: MiddlewareFactory<C>, options?: MiddlewareOptions<FastifyMiddlewareHook>): this
@@ -146,7 +146,7 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
   }
 
   protected override configure(kit: FeatureConfigureKit<C>): void {
-    kit.container.bind(token<ServerDefinition>(Symbol.for(`@caffeinejs/http:ops:${this.#name}`)), t =>
+    kit.container.bind(token<ServerDefinition>(Symbol.for(`@caffeinejs/http:listener:${this.#name}`)), t =>
       t
         .toValue(this.#definition as unknown as ServerDefinition)
         .extends(ServerDefinition)
@@ -156,23 +156,14 @@ export class OpsBuilder<C = unknown> extends FeatureBuilder<C> {
 }
 
 /**
- * Installs an ops server named `name`: one more port, serving only the routers bound to it.
+ * Installs a listener named `name`: one more port, serving only the routers bound to it.
  *
  * ```ts
  * createWebApplication()
- *   .install(Ops('admin', o => o.server(() => ({ listener: { port: 9464 } })).with(healthProbes())))
+ *   .install(Listener('admin', l => l.server(() => ({ listener: { port: 9464 } })).with(healthProbes())))
  *   .mount(newRouter('/metrics').extend(bindTo('admin')).get('/', () => metrics()))
  * ```
  */
-export function Ops<C = unknown>(name: string, configure?: FeatureConfigurer<OpsBuilder<C>, C>): Feature<C> {
-  return new OpsBuilder<C>(name, configure)
-}
-
-/** One ops server, as `app.ops` hands it out: what it is and where it listens, but not its lifecycle. */
-export interface OpsServer<T extends IAdapterTypes = FastifyTypes> {
-  readonly name: string
-  readonly instance: T['instance']
-  /** Where it listens, or `undefined` until the application runs. */
-  readonly address: ServerAddress | undefined
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
+export function Listener<C = unknown>(name: string, configure?: FeatureConfigurer<ListenerBuilder<C>, C>): Feature<C> {
+  return new ListenerBuilder<C>(name, configure)
 }

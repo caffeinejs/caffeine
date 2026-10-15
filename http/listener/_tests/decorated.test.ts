@@ -12,7 +12,7 @@ import {
   Get,
   type Guard,
   type GuardInput,
-  Ops,
+  Listener,
   Use,
   UseGuards,
   createWebApplication,
@@ -21,7 +21,7 @@ import {
 
 /**
  * A controller bound with `@BindTo(...)`: the controller counterpart of `router.extend(bindTo(...))`, carrying its
- * own plugin, guards and `@Catch` methods to the ops server that serves it.
+ * own plugin, guards and `@Catch` methods to the listener that serves it.
  *
  * Isolated: a `@Controller` registers into the process-wide registry, so every application in this file serves it
  * and must install the server it is bound to.
@@ -81,12 +81,12 @@ describe('a controller bound with @BindTo', () => {
 
   async function started(): Promise<{ main: string; admin: string }> {
     app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener }))))
+      .install(Listener('admin', l => l.server(() => ({ listener }))))
       .server(() => ({ listener }))
 
     await app.run()
 
-    return { main: app.address!.origin, admin: app.ops.get('admin')!.address!.origin }
+    return { main: app.address!.origin, admin: app.listeners.get('admin')!.address!.origin }
   }
 
   it('is served only on its server, behind its own plugin and guard', async () => {
@@ -102,7 +102,7 @@ describe('a controller bound with @BindTo', () => {
     expect((await fetch(`${main}/decorated`, { headers: { 'x-token': 'ok' } })).status).toBe(404)
   })
 
-  it('answers through its own @Catch method on the ops server', async () => {
+  it('answers through its own @Catch method on the listener', async () => {
     const { admin } = await started()
 
     const res = await fetch(`${admin}/decorated/teapot`, { headers: { 'x-token': 'ok' } })

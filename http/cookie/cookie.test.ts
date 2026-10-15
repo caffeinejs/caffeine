@@ -19,7 +19,7 @@ import {
   Get,
   HMACCookieSigner,
   newRouter,
-  Ops,
+  Listener,
   type IContext,
   type CookieSecret,
   type CookieUnsignResult,
@@ -783,7 +783,7 @@ describe('a signer that fails', () => {
 describe('servers', () => {
   const listener = { host: '127.0.0.1', port: 0 }
 
-  it('serves cookies on an ops server, with the same settings', async () => {
+  it('serves cookies on a listener, with the same settings', async () => {
     const admin = newRouter('/admin')
       .extend(bindTo('admin'))
       .get('/sign', ctx => {
@@ -793,14 +793,14 @@ describe('servers', () => {
       .get('/read', async ctx => ({ tok: await ctx.req.signedCookie('tok') }))
 
     const app = createWebApplication()
-      .install(Ops('admin', o => o.server(() => ({ listener }))))
+      .install(Listener('admin', l => l.server(() => ({ listener }))))
       .server(() => ({ listener }))
       .cookie(k => k.secret(SECRET))
       .mount(admin)
     close = () => app.close()
 
     await app.run()
-    const origin = app.ops.get('admin')!.address!.origin
+    const origin = app.listeners.get('admin')!.address!.origin
 
     const tok = cookieValue(await fetch(`${origin}/admin/sign`), 'tok')!
     expect(tok).toBe(sign('value', SECRET))

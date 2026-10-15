@@ -10,7 +10,7 @@ import {
   Claim,
   type IContext,
   Identity,
-  Ops,
+  Listener,
   Principal,
   authentication,
   bindTo,
@@ -21,9 +21,9 @@ import {
 } from '../../index.js'
 
 /**
- * Scenario: an ops server with authentication and authorization.
+ * Scenario: a listener with authentication and authorization.
  *
- * What a route on an ops server requires is what its router declares, exactly as on the application's own server,
+ * What a route on a listener requires is what its router declares, exactly as on the application's own server,
  * and only a gate registered on that server authenticates it: the application's own server neither protects its
  * routes nor exposes them. Every request goes over a real socket, to the port the server it targets listens on.
  */
@@ -87,7 +87,7 @@ const protectedMetrics = () =>
 
 const api = () => newRouter('/api').get('/', () => ({ api: true }))
 
-describe('an ops server with authentication and authorization', () => {
+describe('a listener with authentication and authorization', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -99,44 +99,44 @@ describe('an ops server with authentication and authorization', () => {
     return (await fetch(`${origin}${path}`, { headers })).status
   }
 
-  function opsOrigin(name = 'admin'): string {
-    return app!.ops.get(name)!.address!.origin
+  function listenerOrigin(name = 'admin'): string {
+    return app!.listeners.get(name)!.address!.origin
   }
 
   it("answers 401, 403 and 200 under its router's scheme and roles, while the application server stays open", async () => {
     app = createWebApplication()
       .install(schemes())
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
       .server(() => ({ listener }))
       .mount(protectedMetrics(), api()) as WebApplication
 
     await app.run()
 
-    expect(await status(opsOrigin(), '/metrics')).toBe(401)
-    expect(await status(opsOrigin(), '/metrics', { 'x-ops': 'bob:viewer' })).toBe(403)
-    expect(await status(opsOrigin(), '/metrics', { 'x-ops': 'alice:operator' })).toBe(200)
+    expect(await status(listenerOrigin(), '/metrics')).toBe(401)
+    expect(await status(listenerOrigin(), '/metrics', { 'x-ops': 'bob:viewer' })).toBe(403)
+    expect(await status(listenerOrigin(), '/metrics', { 'x-ops': 'alice:operator' })).toBe(200)
     // The router names its scheme, so the application default authenticates nobody there.
-    expect(await status(opsOrigin(), '/metrics', { 'x-app': 'alice:operator' })).toBe(401)
+    expect(await status(listenerOrigin(), '/metrics', { 'x-app': 'alice:operator' })).toBe(401)
 
     // Neither server serves the other's routes, and the application's own needs nothing.
     expect(await status(app.address!.origin, '/api')).toBe(200)
     expect(await status(app.address!.origin, '/metrics')).toBe(404)
-    expect(await status(opsOrigin(), '/api', { 'x-ops': 'alice:operator' })).toBe(404)
+    expect(await status(listenerOrigin(), '/api', { 'x-ops': 'alice:operator' })).toBe(404)
   })
 
-  it("reaches undeclared ops routes with the application's fallback policy", async () => {
+  it("reaches a listener's undeclared routes with the application's fallback policy", async () => {
     app = createWebApplication()
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
-      .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+      .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
       .with(authentication())
       .server(() => ({ listener }))
       .mount(metrics(), api()) as WebApplication
 
     await app.run()
 
-    expect(await status(opsOrigin(), '/metrics')).toBe(401)
-    expect(await status(opsOrigin(), '/metrics', { 'x-app': 'alice' })).toBe(200)
+    expect(await status(listenerOrigin(), '/metrics')).toBe(401)
+    expect(await status(listenerOrigin(), '/metrics', { 'x-app': 'alice' })).toBe(200)
     expect(await status(app.address!.origin, '/api')).toBe(401)
   })
 
@@ -151,8 +151,8 @@ describe('an ops server with authentication and authorization', () => {
       .install(schemes())
       .install(Authorization(z => z.requireAuthenticatedByDefault()))
       .install(
-        Ops('admin', o =>
-          o
+        Listener('admin', l =>
+          l
             .server(() => ({ listener }))
             .with(authentication())
             .with(healthProbes())
@@ -162,9 +162,9 @@ describe('an ops server with authentication and authorization', () => {
 
     await app.run()
 
-    expect(await status(opsOrigin(), '/raw')).toBe(401)
-    expect(await status(opsOrigin(), '/raw', { 'x-app': 'alice' })).toBe(200)
-    expect(await status(opsOrigin(), '/livez')).toBe(200)
+    expect(await status(listenerOrigin(), '/raw')).toBe(401)
+    expect(await status(listenerOrigin(), '/raw', { 'x-app': 'alice' })).toBe(200)
+    expect(await status(listenerOrigin(), '/livez')).toBe(200)
   })
 
   // A gate covers the routes of the server it was registered on, and only those.
@@ -172,20 +172,20 @@ describe('an ops server with authentication and authorization', () => {
     it('refuses a protected route at start-up, naming the route and the fix', async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Ops('admin', o => o.server(() => ({ listener }))))
+        .install(Listener('admin', l => l.server(() => ({ listener }))))
         .mount(protectedMetrics(), api()) as WebApplication
 
       const error = await app.bootstrap().catch((error: unknown) => error)
 
       expect(error).toMatchObject({ code: 'ERR_AUTHENTICATION_GATE_REQUIRED' })
       expect((error as Error).message).toContain('/metrics')
-      expect((error as Error).message).toContain('Ops(name, o => o.with(authentication()))')
+      expect((error as Error).message).toContain('Listener(name, l => l.with(authentication()))')
     })
 
     it("refuses it with the application's own server gated", async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Ops('admin', o => o.server(() => ({ listener }))))
+        .install(Listener('admin', l => l.server(() => ({ listener }))))
         .with(authentication())
         .mount(protectedMetrics(), api()) as WebApplication
 
@@ -196,7 +196,7 @@ describe('an ops server with authentication and authorization', () => {
       app = createWebApplication()
         .install(schemes())
         .install(Authorization(z => z.requireAuthenticatedByDefault()))
-        .install(Ops('admin', o => o.server(() => ({ listener }))))
+        .install(Listener('admin', l => l.server(() => ({ listener }))))
         .with(authentication())
         .mount(metrics(), api()) as WebApplication
 
@@ -221,10 +221,10 @@ describe('an ops server with authentication and authorization', () => {
       )
 
     // The routes register once, on the first gate to install, and the application's own server is built first.
-    it("serves the login callback from the application's own gate, and not from the ops server's", async () => {
+    it("serves the login callback from the application's own gate, and not from the listener's", async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
         .with(authentication())
         .server(() => ({ listener }))
         .mount(metrics()) as WebApplication
@@ -232,38 +232,38 @@ describe('an ops server with authentication and authorization', () => {
       await app.run()
 
       expect(await status(app.address!.origin, '/oidc/callback')).not.toBe(404)
-      expect(await status(opsOrigin(), '/oidc/callback')).toBe(404)
+      expect(await status(listenerOrigin(), '/oidc/callback')).toBe(404)
     })
 
-    it("serves the login callback from an ops server's gate when it is the only one", async () => {
+    it("serves the login callback from a listener's gate when it is the only one", async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
         .server(() => ({ listener }))
         .mount(metrics()) as WebApplication
 
       await app.run()
 
-      expect(await status(opsOrigin(), '/oidc/callback')).not.toBe(404)
+      expect(await status(listenerOrigin(), '/oidc/callback')).not.toBe(404)
       expect(await status(app.address!.origin, '/oidc/callback')).toBe(404)
     })
 
-    it('keeps the login callback off an ops server whose gate turns the OIDC routes off', async () => {
+    it('keeps the login callback off a listener whose gate turns the OIDC routes off', async () => {
       app = createWebApplication()
         .install(oidc())
-        .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication(g => g.oidcRoutes(false)))))
+        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication(g => g.oidcRoutes(false)))))
         .mount(metrics()) as WebApplication
 
       await app.run()
 
-      expect(await status(opsOrigin(), '/oidc/callback')).toBe(404)
+      expect(await status(listenerOrigin(), '/oidc/callback')).toBe(404)
     })
   })
 
   describe('refusals at start-up', () => {
     it('refuses a protected route with authentication never installed', async () => {
       app = createWebApplication()
-        .install(Ops('admin', o => o.server(() => ({ listener }))))
+        .install(Listener('admin', l => l.server(() => ({ listener }))))
         .mount(protectedMetrics()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_AUTHENTICATION_REQUIRED' })
@@ -271,7 +271,7 @@ describe('an ops server with authentication and authorization', () => {
 
     it('refuses a gate on a server with authentication never installed', async () => {
       app = createWebApplication()
-        .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
         .mount(metrics()) as WebApplication
 
       await expect(app.bootstrap()).rejects.toMatchObject({
@@ -283,7 +283,7 @@ describe('an ops server with authentication and authorization', () => {
     it('refuses a route naming a scheme nothing registered', async () => {
       app = createWebApplication()
         .install(schemes())
-        .install(Ops('admin', o => o.server(() => ({ listener })).with(authentication())))
+        .install(Listener('admin', l => l.server(() => ({ listener })).with(authentication())))
         .mount(
           newRouter('/metrics')
             .extend(bindTo('admin'))

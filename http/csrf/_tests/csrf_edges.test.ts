@@ -8,7 +8,7 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
-  Ops,
+  Listener,
   bindTo,
   createWebApplication,
   csrf,
@@ -399,17 +399,17 @@ describe('csrf() at the edges', () => {
       expect((await post(app, '/admin/marked', CROSS_SITE)).status).toBe(200)
     })
 
-    it("leaves the application server's paths to its own plugin, whatever an ops server excludes", async () => {
+    it("leaves the application server's paths to its own plugin, whatever a listener excludes", async () => {
       const app = (await running(
         createWebApplication()
-          .install(Ops('admin', o => o.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks')))))
+          .install(Listener('admin', l => l.server(() => ({ listener })).with(csrf(c => c.exclude('/hooks')))))
           .server(() => ({ listener }))
           .with(csrf())
           .mount(newRouter('/hooks').extend(bindTo('admin')).post('/', ok), newRouter('/hooks').post('/', ok)),
       )) as WebApplication
-      const ops = app.ops.get('admin')!.address!.origin
+      const admin = app.listeners.get('admin')!.address!.origin
 
-      expect((await fetch(`${ops}/hooks`, { method: 'POST', headers: CROSS_SITE })).status).toBe(200)
+      expect((await fetch(`${admin}/hooks`, { method: 'POST', headers: CROSS_SITE })).status).toBe(200)
       expect((await fetch(`${app.address!.origin}/hooks`, { method: 'POST', headers: CROSS_SITE })).status).toBe(403)
     })
   })

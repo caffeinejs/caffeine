@@ -96,7 +96,7 @@ export class ErrAuthenticationCookies extends ErrCaffeineWebApplication {
  *
  * Installing `Authentication(...)` binds what a gate runs on, but only a gate authenticates a request: one
  * registered with `.with(authentication())` covers every route of the application's own server, one registered on
- * an ops server with `o.with(authentication())` covers every route of that server, and one registered on a router
+ * a listener with `l.with(authentication())` covers every route of that listener, and one registered on a router
  * covers that router's routes. Served with none, a protected route would answer anyone, so the application does not
  * start.
  */
@@ -117,8 +117,8 @@ export class ErrAuthenticationGateRequired extends ErrCaffeineWebApplication {
         .solutions(
           'Register the gate on the application, where it covers every route of its own server: ' +
             '".with(authentication())"',
-          'Or, for a route an ops server serves, register one on that server: ' +
-            '"Ops(name, o => o.with(authentication()))"',
+          'Or, for a route a listener serves, register one on that listener: ' +
+            '"Listener(name, l => l.with(authentication()))"',
           'Or register one on the router holding the route: "router.with(authentication())"',
           'Or open the route to anyone: "@AllowAnonymous()" or ".authorize({ allowAnonymous: true })" where it ' +
             'is declared, "authenticationExempt()" as a raw route\'s config, or "exemptFromAuthentication(route)" ' +
