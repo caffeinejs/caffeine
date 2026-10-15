@@ -83,6 +83,7 @@ startup check:
 
 ```ts
 import { writeFileSync } from 'node:fs'
+
 import { CaffeineIoC } from '@caffeinejs/di'
 import { graphToMermaid } from '@caffeinejs/di/graph'
 

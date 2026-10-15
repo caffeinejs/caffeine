@@ -46,6 +46,7 @@ App:
 
 ```ts
 import { createWebApplication } from '@caffeinejs/http'
+
 import './presentation/example.controller.js'
 
 const app = createWebApplication()

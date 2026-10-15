@@ -314,8 +314,8 @@ handling — with the configuration written as a chain instead of decorators.
 
 ```ts
 import { $i } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std/schema'
 import { Router } from '@caffeinejs/http'
+import { $t } from '@caffeinejs/std/schema'
 
 const pets = new Router('/pets')
   .inject({ svc: PetService }) // every route of the group, and of groups nested in it
@@ -588,6 +588,7 @@ The front-end half of the same types. No codegen, no schema file: the server's t
 
 ```ts
 import { brewer } from '@caffeinejs/brewer'
+
 import type { App } from './server/app.js' // export type App = typeof app
 
 const client = brewer<App>('http://localhost:3000')

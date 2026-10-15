@@ -252,9 +252,10 @@ container and hand it to `buildApp()` — the app's lifecycle hooks take care of
 init and dispose.
 
 ```ts
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import type { FastifyInstance } from 'fastify'
 import { TestContainer } from '@caffeinejs/testing'
+import type { FastifyInstance } from 'fastify'
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
+
 import { appContainer } from '../app.container.js'
 import { buildApp } from '../app.js'
 
@@ -359,9 +360,9 @@ Or, delegate these to the entry point. It is a matter of preference.
 See the example below with [Fastify](https://fastify.dev/):
 
 ```ts
+import type { Container } from '@caffeinejs/di'
 // app.ts
 import Fastify from 'fastify'
-import type { Container } from '@caffeinejs/di'
 
 export function buildApp(container: Container) {
   const app = Fastify()
