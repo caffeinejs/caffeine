@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
-  type Context,
+  type IContext,
   Controller,
   ErrHTTPBadRequest,
   ErrHTTPConflict,
@@ -90,7 +90,7 @@ void [UnexpectedController]
 // class nobody enrols renders nothing, so it cannot reach the applications built below.
 @Catch(ErrHTTPConflict)
 class NeverEnrolledHandler implements ErrorHandler<ErrHTTPConflict> {
-  async handle(ctx: Context, _error: ErrHTTPConflict): Promise<void> {
+  async handle(ctx: IContext, _error: ErrHTTPConflict): Promise<void> {
     ctx.status(418).body({ enrolled: true })
   }
 }

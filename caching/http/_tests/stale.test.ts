@@ -1,4 +1,4 @@
-import { $p, Args, Controller, Get, Header, createWebApplication, type Context } from '@caffeinejs/http'
+import { $p, Args, Controller, Get, Header, createWebApplication, type IContext } from '@caffeinejs/http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -490,7 +490,7 @@ describe('stale-if-error, served by the store', () => {
     @CacheControl({ ttl: 60, staleIfError: 300 })
     @Get('/gateway')
     @Args([$p.context()])
-    gateway(ctx: Context) {
+    gateway(ctx: IContext) {
       if (failing) {
         ctx.status(503)
         ctx.header('Retry-After', '30')
@@ -503,7 +503,7 @@ describe('stale-if-error, served by the store', () => {
     @CacheControl({ ttl: 60, staleIfError: 300 })
     @Get('/missing')
     @Args([$p.context()])
-    missing(ctx: Context) {
+    missing(ctx: IContext) {
       if (failing) {
         ctx.status(404)
         return { error: 'gone' }

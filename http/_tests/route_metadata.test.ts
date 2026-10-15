@@ -11,8 +11,8 @@ import {
   createWebApplication,
   type CaffeineRouteConfig,
   type HTTPPluginFactory,
-  type Route,
-  type RouteGroup,
+  type IRoute,
+  type IRouteGroup,
   type WebApplication,
 } from '../index.js'
 
@@ -35,8 +35,8 @@ interface Seen {
   /** The route's methods joined with `|`: the adapter hands Fastify an array, its HEAD twin a string. */
   method: string
   url: string
-  route: Route | undefined
-  group: RouteGroup | undefined
+  route: IRoute | undefined
+  group: IRouteGroup | undefined
   /** The whole stamp, so a route carrying none is told from one carrying a stamp without compiled metadata. */
   stamp: CaffeineRouteConfig | undefined
 }
@@ -148,7 +148,7 @@ describe('route metadata on config.$caffeine', () => {
   })
 
   it('collectRouteGroups regroups what registered and counts the HEAD twin once', async () => {
-    let groups: RouteGroup[] = []
+    let groups: IRouteGroup[] = []
     app = createWebApplication()
       .with(() =>
         fp(

@@ -1,4 +1,4 @@
-import { Context } from '../../context.js'
+import { IContext } from '../../context.js'
 import type { Principal } from '../index.js'
 import { AuthzPolicy, type AuthzRequirement } from './policy.js'
 import type {
@@ -33,12 +33,12 @@ export class PolicyBuilder {
     return this
   }
 
-  assert(pred: (ctx: Context) => boolean | Promise<boolean>): this {
+  assert(pred: (ctx: IContext) => boolean | Promise<boolean>): this {
     this.#requirements.push({ kind: 'assertion', assertion: pred } as AssertionRequirement)
     return this
   }
 
-  resource<R = unknown>(authorize: (user: Principal, resource: R, ctx: Context) => boolean | Promise<boolean>): this {
+  resource<R = unknown>(authorize: (user: Principal, resource: R, ctx: IContext) => boolean | Promise<boolean>): this {
     this.#requirements.push({ kind: 'resource', authorize } as ResourceRequirement)
     return this
   }

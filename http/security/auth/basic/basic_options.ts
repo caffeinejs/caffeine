@@ -1,12 +1,12 @@
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { Principal } from '../../index.js'
 
 export interface BasicAuthenticationOptions {
   realm?: string
-  validate: (ctx: Context, username: string, password: string) => Promise<Principal | null> | Principal | null
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  validate: (ctx: IContext, username: string, password: string) => Promise<Principal | null> | Principal | null
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  onChallenge?: (ctx: IContext) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
 }
 
 export class BasicAuthenticationOptionsBuilder {

@@ -27,16 +27,16 @@ drops the value lets the adapter send an empty body over it: the caller sees a 2
 ```ts
 import { resolve } from 'node:path'
 
-import { ErrHTTPNotFound, newRouter, type Context } from '@caffeinejs/http'
+import { ErrHTTPNotFound, newRouter, type IContext } from '@caffeinejs/http'
 import { immutableAssets, isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')
 
-const shellDocument = (ctx: Context) => sendFile(ctx, 'index.html', DIST)
-const notFound = (ctx: Context): never => {
+const shellDocument = (ctx: IContext) => sendFile(ctx, 'index.html', DIST)
+const notFound = (ctx: IContext): never => {
   throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }
-const clientRoute = (ctx: Context) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
+const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 const pages = newRouter()
   .detail('http', { internal: true }) // @caffeinejs/openapi does not describe client routes
@@ -122,7 +122,7 @@ policy. Serving them from a compiled route puts every byte behind the same `auth
 
 ```ts
 const ADMIN = resolve('admin/dist')
-const adminDocument = (ctx: Context) => sendFile(ctx, 'index.html', ADMIN)
+const adminDocument = (ctx: IContext) => sendFile(ctx, 'index.html', ADMIN)
 
 const admin = newRouter()
   .detail('http', { internal: true })

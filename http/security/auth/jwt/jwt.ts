@@ -1,6 +1,6 @@
 import { errors, type JWTPayload } from 'jose'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
@@ -26,7 +26,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
     return this.#jwt
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const token = parseAuthorizationHeader(ctx.req.header('authorization'), 'Bearer')
     if (token === undefined) {
       return AuthenticateResult.none()
@@ -64,7 +64,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
    * could not be fetched, a claim mapper that threw — is answered `invalid_token` with no description.
    */
   override async challenge(
-    ctx: Context,
+    ctx: IContext,
     _properties?: AuthenticationProperties,
     previous?: AuthenticateResult,
   ): Promise<void> {
@@ -88,7 +88,7 @@ export class JWTAuthenticationHandler extends BaseAuthenticationHandler<JWTAuthe
   }
 
   /** Answers 403 with RFC 6750 §3.1 `insufficient_scope`: the token was good, and it is not enough. */
-  override async forbid(ctx: Context): Promise<void> {
+  override async forbid(ctx: IContext): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }

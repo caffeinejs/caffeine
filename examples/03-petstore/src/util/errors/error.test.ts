@@ -2,7 +2,7 @@ import { html } from '@caffeinejs/html'
 import {
   Catch,
   CatchWith,
-  type Context,
+  type IContext,
   Controller,
   ErrHTTPNotFound,
   ErrHTTPUnauthorized,
@@ -54,7 +54,7 @@ void [ThingsController]
 // precedence over the enrolled handler for this controller alone.
 @Catch(ErrHTTPNotFound)
 class SilentNotFoundHandler implements ErrorHandler<ErrHTTPNotFound> {
-  async handle(ctx: Context, _err: ErrHTTPNotFound): Promise<void> {
+  async handle(ctx: IContext, _err: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ found: false })
   }
 }

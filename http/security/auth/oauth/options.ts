@@ -1,6 +1,6 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { CookiePriority } from '../../../cookie/options.js'
 import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../index.js'
@@ -136,7 +136,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
 
   ticketStore?: RemoteAuthenticationTicketStore
   onTokenValidated?: (
-    ctx: Context,
+    ctx: IContext,
     userInfo: Record<string, unknown>,
     tokens: RemoteAuthenticationTokens,
   ) => Promise<void> | void
@@ -146,7 +146,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
   /**
    * Shapes the challenge response, and receives where the browser should go next.
    *
@@ -156,8 +156,8 @@ export interface ResolvedOAuth2AuthenticationOptions {
    * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
    * URL in a shape of your own.
    */
-  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  onChallenge?: (ctx: IContext, redirectTo: string) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
   /** Full override of claim construction. `claimActions.remove` still applies afterwards. */
   claimMapper?: (userInfo: Record<string, unknown>) => Claim[]
 }

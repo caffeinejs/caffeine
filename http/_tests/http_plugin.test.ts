@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import {
   type AdapterExtensionFactory,
-  type Context,
+  type IContext,
   ErrAuthenticationRequired,
   type FastifyRouterTypes,
   type Guard,
@@ -469,7 +469,7 @@ describe('HTTPPlugin', () => {
     it('refuses it from a middleware factory', async () => {
       app = createWebApplication().useFn(context => {
         context.app.mount(late())
-        return (_ctx: Context, next: () => void) => next()
+        return (_ctx: IContext, next: () => void) => next()
       })
 
       await expect(app.bootstrap()).rejects.toThrow(/^Cannot call "app\.mount" here/)

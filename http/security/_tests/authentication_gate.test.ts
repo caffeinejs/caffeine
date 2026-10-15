@@ -8,7 +8,7 @@ import {
   Authorize,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Identity,
@@ -39,7 +39,7 @@ class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const user = ctx.req.header(this.header)
     if (user === undefined) {
       return AuthenticateResult.none()
@@ -52,12 +52,12 @@ class HeaderSchemeHandler extends BaseAuthenticationHandler<object> {
     return AuthenticateResult.success(new AuthenticationTicket(principal, this.scheme))
   }
 
-  override async challenge(ctx: Context): Promise<void> {
+  override async challenge(ctx: IContext): Promise<void> {
     this.challenges++
     ctx.status(401).header('x-challenged-by', this.scheme)
   }
 
-  override async forbid(ctx: Context): Promise<void> {
+  override async forbid(ctx: IContext): Promise<void> {
     this.forbids++
     ctx.status(403).header('x-forbidden-by', this.scheme)
   }

@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Responder, createWebApplication, newRouter, type Context } from '../index.js'
+import { Responder, createWebApplication, newRouter, type IContext } from '../index.js'
 
 /**
  * A handler that answered the request itself and then returned — the shape of a sign-out: `ctx.redirect(...)`,
@@ -291,7 +291,7 @@ describe('under an onSend hook that awaits', () => {
     let responded = false
 
     class Late extends Responder {
-      respond(ctx: Context) {
+      respond(ctx: IContext) {
         responded = true
         return ctx.body('second')
       }

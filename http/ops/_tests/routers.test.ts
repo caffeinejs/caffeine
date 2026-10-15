@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   type ActionResult,
   Catch,
-  type Context,
+  type IContext,
   ErrHTTPBadRequest,
   type ErrorHandler,
   type Guard,
@@ -63,7 +63,7 @@ class Teapot extends Error {}
 
 @Catch(Teapot)
 class TeapotHandler implements ErrorHandler<Teapot> {
-  handle(ctx: Context): ActionResult {
+  handle(ctx: IContext): ActionResult {
     return ctx.status(418).body({ teapot: true })
   }
 }

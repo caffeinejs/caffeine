@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Catch, Controller, Get, createWebApplication, type Context } from '../index.js'
+import { Catch, Controller, Get, createWebApplication, type IContext } from '../index.js'
 
 /**
  * The global error handler is asynchronous and, on the default path, sends the reply itself. An `onSend` hook
@@ -90,7 +90,7 @@ describe('the global error handler under an asynchronous onSend hook', () => {
       }
 
       @Catch(Error)
-      async onError(ctx: Context): Promise<void> {
+      async onError(ctx: IContext): Promise<void> {
         ctx.redirect('/oops', 303)
       }
     }

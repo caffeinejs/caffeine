@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import type { CredentialUser } from '../credentials/index.js'
 import { UserProvider } from '../credentials/index.js'
@@ -67,7 +67,7 @@ function makeCtx(initial: Record<string, string> = {}, basePath = '') {
     deleteCookie,
     status,
     header,
-  } as unknown as Context
+  } as unknown as IContext
   return { ctx, jar, setCookie, deleteCookie }
 }
 

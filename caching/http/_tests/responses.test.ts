@@ -9,7 +9,7 @@ import {
   Principal,
   Status,
   createWebApplication,
-  type Context,
+  type IContext,
 } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -273,7 +273,7 @@ describe('what the cache says about a response', () => {
       @CacheControl({ ttl: 60 })
       @Get('/start')
       @Args([$p.context()])
-      start(ctx: Context) {
+      start(ctx: IContext) {
         ctx.cookie('session', String(++calls))
         return { n: calls }
       }

@@ -8,7 +8,7 @@ import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../adapter.js'
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import { closedApplicationOps } from '../plugin_slot.js'
 import { Keys } from '../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
@@ -33,7 +33,7 @@ function install(pipeline: MiddlewarePipeline, server: FastifyInstance, context 
   installFastifyMiddlewares(server, pipeline.resolve(context))
 }
 
-function contextStub(reply: FastifyReply): Context {
+function contextStub(reply: FastifyReply): IContext {
   const ctx = {
     header(key: string, value: string) {
       reply.header(key, value)
@@ -48,7 +48,7 @@ function contextStub(reply: FastifyReply): Context {
       return ctx
     },
   }
-  return ctx as unknown as Context
+  return ctx as unknown as IContext
 }
 
 function attachContext(server: FastifyInstance): void {
@@ -125,7 +125,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       undefined,
-      (_ctx: Context, next: Next) => {
+      (_ctx: IContext, next: Next) => {
         order.push('first')
         next()
       },
@@ -133,7 +133,7 @@ describe('MiddlewarePipeline', () => {
     )
     pipeline.add(
       undefined,
-      (_ctx: Context, next: Next) => {
+      (_ctx: IContext, next: Next) => {
         order.push('second')
         next()
       },
@@ -151,7 +151,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       '/api',
-      (_ctx: Context, next: Next) => {
+      (_ctx: IContext, next: Next) => {
         seen.push('api')
         next()
       },
@@ -170,7 +170,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       '*',
-      (_ctx: Context, next: Next) => {
+      (_ctx: IContext, next: Next) => {
         seen.push('all')
         next()
       },
@@ -187,9 +187,9 @@ describe('MiddlewarePipeline', () => {
   it('installs each non-empty hook once', () => {
     const added: string[] = []
     const pipeline = new MiddlewarePipeline()
-    pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')
-    pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')
-    pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'preHandler')
+    pipeline.add(undefined, (_ctx: IContext, next: Next) => next(), 'onRequest')
+    pipeline.add(undefined, (_ctx: IContext, next: Next) => next(), 'onRequest')
+    pipeline.add(undefined, (_ctx: IContext, next: Next) => next(), 'preHandler')
     install(pipeline, stubServer(added))
 
     expect(added).toEqual(['onRequest', 'preHandler'])
@@ -223,7 +223,7 @@ describe('MiddlewarePipeline', () => {
       undefined,
       ({ config: c }: HTTPSetupContext<{ origin: string }>) => {
         factoryRuns += 1
-        return (_ctx: Context, next: Next) => {
+        return (_ctx: IContext, next: Next) => {
           _ctx.header('x-origin', c.origin)
           next()
         }
@@ -280,7 +280,7 @@ describe('MiddlewarePipeline', () => {
 
   it('resolves a middleware class from the container', async () => {
     class Tagger implements Middleware {
-      handle(ctx: Context, next: Next): void {
+      handle(ctx: IContext, next: Next): void {
         ctx.header('x-tag', 'class')
         next()
       }
@@ -301,7 +301,7 @@ describe('MiddlewarePipeline', () => {
 
   it('resolves a middleware registered by container key', async () => {
     class Tagger implements Middleware {
-      handle(ctx: Context, next: Next): void {
+      handle(ctx: IContext, next: Next): void {
         ctx.header('x-tag', 'key')
         next()
       }
@@ -326,7 +326,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       undefined,
-      (_ctx: Context, next: Next) => {
+      (_ctx: IContext, next: Next) => {
         next()
         try {
           next()
@@ -388,7 +388,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     pipeline.add(
       undefined,
-      (ctx: Context, _next: Next) => {
+      (ctx: IContext, _next: Next) => {
         ctx.status(418).body({ answered: 'directly' })
       },
       'onRequest',
@@ -405,7 +405,7 @@ describe('MiddlewarePipeline', () => {
     const pipeline = new MiddlewarePipeline()
     install(pipeline, stubServer([]))
 
-    expect(() => pipeline.add(undefined, (_ctx: Context, next: Next) => next(), 'onRequest')).toThrow(
+    expect(() => pipeline.add(undefined, (_ctx: IContext, next: Next) => next(), 'onRequest')).toThrow(
       'the application is already started',
     )
   })
@@ -416,7 +416,7 @@ describe('MiddlewarePipeline', () => {
         return 'preHandler'
       }
 
-      handle(_c: Context, next: Next): void {
+      handle(_c: IContext, next: Next): void {
         next()
       }
     }
@@ -439,7 +439,7 @@ describe('MiddlewarePipeline', () => {
         return 'preHandler'
       }
 
-      handle(_c: Context, next: Next): void {
+      handle(_c: IContext, next: Next): void {
         next()
       }
     }
@@ -474,7 +474,7 @@ describe('MiddlewarePipeline', () => {
         return 'preHandler'
       }
 
-      handle(_c: Context, next: Next): void {
+      handle(_c: IContext, next: Next): void {
         next()
       }
     }
@@ -505,7 +505,7 @@ describe('MiddlewarePipeline', () => {
         return 'nope' as FastifyMiddlewareHook
       }
 
-      handle(_c: Context, next: Next): void {
+      handle(_c: IContext, next: Next): void {
         next()
       }
     }
@@ -526,7 +526,7 @@ describe('MiddlewarePipeline', () => {
         return 'preHandler'
       }
 
-      handle(_c: Context, next: Next): void {
+      handle(_c: IContext, next: Next): void {
         next()
       }
     }

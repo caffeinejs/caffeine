@@ -14,18 +14,18 @@ import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
-  Adapter,
+  IAdapter,
   AdapterExtensionFactory,
   AdapterFactory,
   AdapterIn,
-  AdapterServer,
-  AdapterTypes,
+  IAdapterServer,
+  IAdapterTypes,
   AnyAdapterTypes,
-  ContextPlatform,
+  IContextPlatform,
   HTTPSetupContext,
 } from '../adapter.js'
 import { createWebApplication } from '../application.js'
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
 import { healthProbes } from '../index.js'
 import type { MiddlewareFn } from '../middleware/middleware.js'
@@ -59,12 +59,12 @@ interface FakeUnit {
   readonly unit: string
 }
 
-interface FakePlatform extends ContextPlatform {
+interface FakePlatform extends IContextPlatform {
   readonly name: 'fake'
   readonly raw: string
 }
 
-interface FakeTypes extends AdapterTypes {
+interface FakeTypes extends IAdapterTypes {
   instance: FakeServer
   request: { readonly fake: true }
   extension: FakeUnit
@@ -91,13 +91,13 @@ interface TunedTypes extends FakeTypes {
 }
 
 /** Records what the application hands it. All this file needs is the contract, so it serves nothing. */
-class RecordingAdapter<T extends AdapterTypes> implements Adapter<T> {
+class RecordingAdapter<T extends IAdapterTypes> implements IAdapter<T> {
   input: AdapterIn<T> | undefined
   middlewares: ResolvedMiddleware[] = []
 
   constructor(readonly instance: T['instance']) {}
 
-  async setup(input: AdapterIn<T>): Promise<AdapterServer<T>> {
+  async setup(input: AdapterIn<T>): Promise<IAdapterServer<T>> {
     this.input = input
     this.middlewares = input.middlewares.resolve(input.context)
 
@@ -106,7 +106,7 @@ class RecordingAdapter<T extends AdapterTypes> implements Adapter<T> {
 }
 
 /** The server {@link RecordingAdapter} hands back: it never listens and answers nothing. */
-class RecordingServer<T extends AdapterTypes> implements AdapterServer<T> {
+class RecordingServer<T extends IAdapterTypes> implements IAdapterServer<T> {
   constructor(readonly instance: T['instance']) {}
 
   get address(): undefined {
@@ -126,7 +126,7 @@ class RecordingServer<T extends AdapterTypes> implements AdapterServer<T> {
   }
 }
 
-function recording<T extends AdapterTypes>(adapter: RecordingAdapter<T>): AdapterFactory<T> {
+function recording<T extends IAdapterTypes>(adapter: RecordingAdapter<T>): AdapterFactory<T> {
   return () => adapter
 }
 
@@ -370,7 +370,7 @@ describe('adapter types', () => {
   })
 
   it('types ctx.platform wherever a context is read', () => {
-    const fromContext = (ctx: Context) => ctx.platform.reply
+    const fromContext = (ctx: IContext) => ctx.platform.reply
     const fromUnbound = new Router('/u').get('/', ctx => ctx.platform.reply.statusCode)
     const fromBound = newRouter('/b').get('/', ctx => ctx.platform.reply.statusCode)
 
@@ -384,7 +384,7 @@ describe('adapter types', () => {
   it('makes a reader narrow on the platform name once a second adapter is registered', () => {
     type Both = FastifyTypes | FakeTypes
 
-    const read = (ctx: Context<Record<never, never>, Record<never, never>, Both>) => {
+    const read = (ctx: IContext<Record<never, never>, Record<never, never>, Both>) => {
       // @ts-expect-error the fake platform has no reply
       void ctx.platform.reply
 

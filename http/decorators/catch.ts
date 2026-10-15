@@ -37,7 +37,7 @@ type CatchClassDecorator<A extends unknown[]> = (target: Ctor<unknown, A>, conte
  * @Controller('/pets')
  * class PetsController {
  *   @Catch(ErrHTTPNotFound)
- *   async handleNotFound(ctx: Context, error: ErrHTTPNotFound) { ctx.status(404).body({ error: error.message }) }
+ *   async handleNotFound(ctx: IContext, error: ErrHTTPNotFound) { ctx.status(404).body({ error: error.message }) }
  * }
  * ```
  */

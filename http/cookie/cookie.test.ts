@@ -20,7 +20,7 @@ import {
   HMACCookieSigner,
   newRouter,
   Ops,
-  type Context,
+  type IContext,
   type CookieSecret,
   type CookieUnsignResult,
 } from '../index.js'
@@ -75,7 +75,7 @@ async function ready<A extends { bootstrap(): Promise<unknown>; close(): Promise
 
 const page = () => newRouter('/page').get('/', ctx => ({ session: ctx.req.cookie('session') ?? null }))
 
-const signing = (options?: Parameters<Context['cookie']>[2]) =>
+const signing = (options?: Parameters<IContext['cookie']>[2]) =>
   newRouter('/sign').get('/', ctx => {
     ctx.cookie('tok', 'value', { signed: true, ...options })
     return { ok: true }
@@ -743,20 +743,20 @@ describe('a signer that fails', () => {
     class SignInController {
       @Get('/value')
       @Args([$p.context()])
-      value(ctx: Context) {
+      value(ctx: IContext) {
         ctx.cookie('session', 'v', { signed: true })
         ctx.redirect('/home')
       }
 
       @Get('/context')
       @Args([$p.context()])
-      context(ctx: Context) {
+      context(ctx: IContext) {
         ctx.cookie('session', 'v', { signed: true })
         ctx.redirect('/home')
       }
 
       @Catch(Error)
-      caught(ctx: Context) {
+      caught(ctx: IContext) {
         if (ctx.req.url.endsWith('/context')) {
           ctx.status(503).body({ caught: 'context' })
           return

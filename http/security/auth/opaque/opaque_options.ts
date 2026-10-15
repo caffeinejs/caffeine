@@ -1,6 +1,6 @@
 import type { InjectionToken } from '@caffeinejs/di'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { OpaqueTokenStore } from './opaque_token_store.js'
 
 export interface OpaqueTokenAuthenticationOptions {
@@ -12,9 +12,9 @@ export interface OpaqueTokenAuthenticationOptions {
   /** HTTP authentication scheme keyword expected in the `Authorization` header. Defaults to `Bearer`. */
   scheme?: string
   realm?: string
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  onChallenge?: (ctx: IContext) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
 }
 
 export class OpaqueTokenAuthenticationOptionsBuilder {

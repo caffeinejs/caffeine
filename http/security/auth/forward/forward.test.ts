@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Identity, Principal } from '../../index.js'
 import { ErrAuthSchemeNotFound } from '../errors.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
@@ -9,10 +9,10 @@ import { AuthenticateResult, AuthenticationTicket } from '../ticket.js'
 import { ForwardAuthenticationHandler } from './forward.js'
 
 // One per test: what a scheme decided is remembered on the request.
-let ctx: Context
+let ctx: IContext
 
 beforeEach(() => {
-  ctx = {} as unknown as Context
+  ctx = {} as unknown as IContext
 })
 
 function makeDelegate() {
@@ -35,7 +35,7 @@ function makeProvider(defaultScheme: string, handler?: ReturnType<typeof makeDel
 }
 
 function setup(
-  selector: (ctx: Context, scheme: string) => string | Promise<string>,
+  selector: (ctx: IContext, scheme: string) => string | Promise<string>,
   defaultScheme = 'Bearer',
   handler = makeDelegate(),
 ) {
@@ -162,7 +162,7 @@ describe('ForwardAuthenticationHandler', () => {
   // Reading a credential can spend it — a remember-me token rotates when it is read — so the scheme that was
   // picked runs once for a request, however the request reaches it.
   describe('the scheme it picked, within one request', () => {
-    function application(mapper?: (ctx: Context, principal: Principal) => Principal) {
+    function application(mapper?: (ctx: IContext, principal: Principal) => Principal) {
       const target = makeDelegate()
       target.authenticate.mockImplementation(async () =>
         AuthenticateResult.success(
@@ -205,7 +205,7 @@ describe('ForwardAuthenticationHandler', () => {
 
     // The forward hands back what the scheme it picked decided, which has been through the mapper once already.
     it('maps the principal once', async () => {
-      const mapper = vi.fn((_ctx: Context, principal: Principal) => principal)
+      const mapper = vi.fn((_ctx: IContext, principal: Principal) => principal)
       const { service } = application(mapper)
 
       await service.authenticate(ctx, 'Forward')

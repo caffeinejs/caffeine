@@ -11,7 +11,7 @@ import {
   createWebApplication,
   newRouter,
   $p,
-  type Context,
+  type IContext,
   type WebApplication,
   Authentication,
   authentication,
@@ -53,7 +53,7 @@ class OrdersController {
 class UsersController {
   @Get('/me')
   @Args([$p.context()])
-  me(ctx: Context): unknown {
+  me(ctx: IContext): unknown {
     return { sub: ctx.user.findFirst('sub')?.value }
   }
 }
@@ -61,13 +61,13 @@ class UsersController {
 void [PetsController, OrdersController, UsersController]
 
 // ── everything the single-page application adds ─────────────────────────────────────────────────────────
-const shellDocument = (ctx: Context) => sendFile(ctx, 'index.html')
-const notFound = (ctx: Context): never => {
+const shellDocument = (ctx: IContext) => sendFile(ctx, 'index.html')
+const notFound = (ctx: IContext): never => {
   throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }
 // A path the application declared answers any client; a wildcard is a fallback, so it answers only a
 // document request and a missing asset stays a 404.
-const clientRoute = (ctx: Context) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
+const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 const publicPages = () =>
   newRouter()

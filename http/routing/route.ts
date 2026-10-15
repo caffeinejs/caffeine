@@ -2,7 +2,7 @@ import { Ctor, Provider } from '@caffeinejs/di'
 import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/std/framework'
 import { FastifyRequest } from 'fastify'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import type { ErrorHandler } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import { AuthzRouteService } from '../security/authz/index.js'
@@ -24,7 +24,7 @@ export type CatchByMap = Map<Ctor<Error>, Provider<ErrorHandler<Error>>>
  * Nothing here says where the routes came from. A controller class, a programmatic registration and — later — a
  * functional route definition all produce this same shape, and the adapter cannot tell them apart.
  */
-export interface RouteGroup<R = FastifyRequest> {
+export interface IRouteGroup<R = FastifyRequest> {
   path: string
   prefix?: string
   /** The controller's class name, or the name the group was given. Used for diagnostics and documentation. */
@@ -34,7 +34,7 @@ export interface RouteGroup<R = FastifyRequest> {
    * generator names operations after it. A group with no class leaves it undefined.
    */
   target?: Function
-  routes: Route<R>[]
+  routes: IRoute<R>[]
   /**
    * A hook covering every route of the group, registered by the adapter exactly as given.
    *
@@ -84,14 +84,14 @@ export interface RouteGroupScope {
  */
 export type RouteGroupErrorHandler<R = FastifyRequest> = (
   req: R,
-  ctx: Context,
+  ctx: IContext,
   err: Error,
 ) => unknown | Promise<unknown>
 
 /** Returned by a {@link RouteGroupErrorHandler} that does not handle the error. */
 export const kErrorUnhandled: unique symbol = Symbol('caffeine.http.errorUnhandled')
 
-export interface Route<R = FastifyRequest> {
+export interface IRoute<R = FastifyRequest> {
   path: string
   method: string[]
   accept: string[]
@@ -146,7 +146,7 @@ export interface RouteAuthorization {
  * The parameter compilers the adapter owns, handed to a route source so it can build its own dispatch without
  * knowing how arguments are picked out of a request.
  */
-export interface RouteCompilers<REQ = unknown, RES = unknown> {
+export interface IRouteCompilers<REQ = unknown, RES = unknown> {
   /** Compiles the pickers around `fn`, returning the function the adapter installs as the route handler. */
   handler(parameters: ParameterPickOptions<REQ>[], fn: RouteInvoker): (req: REQ, res: RES) => unknown
 
@@ -162,7 +162,7 @@ export interface RouteCompilers<REQ = unknown, RES = unknown> {
  * path never branches on which source declared the route.
  */
 export type RouteDispatch<REQ = unknown, RES = unknown> = (
-  compilers: RouteCompilers<REQ, RES>,
+  compilers: IRouteCompilers<REQ, RES>,
 ) => (req: REQ, res: RES) => unknown
 
 /**

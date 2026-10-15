@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Args,
   Catch,
-  type Context,
+  type IContext,
   Controller,
   ContextState,
   Get,
@@ -26,25 +26,25 @@ class ErrBoom extends Error {}
 class StateController {
   @Get('/read')
   @Args([$p.context()])
-  read(ctx: Context<Vars>) {
+  read(ctx: IContext<Vars>) {
     return { tenant: ctx.state.get('tenant') ?? null }
   }
 
   @Get('/missing')
   @Args([$p.context()])
-  missing(ctx: Context<Vars>) {
+  missing(ctx: IContext<Vars>) {
     return { tenant: ctx.state.get('tenant') ?? null }
   }
 
   @Get('/identity')
   @Args([$p.context()])
-  identity(ctx: Context<Vars>) {
+  identity(ctx: IContext<Vars>) {
     return { same: ctx.state === ctx.state }
   }
 
   @Get('/slow')
   @Args([$p.context()])
-  async slow(ctx: Context<Vars>) {
+  async slow(ctx: IContext<Vars>) {
     await new Promise(resolve => setTimeout(resolve, 20))
     return { tenant: ctx.state.get('tenant') ?? null }
   }
@@ -55,7 +55,7 @@ class StateController {
   }
 
   @Catch(ErrBoom)
-  onBoom(ctx: Context<Vars>) {
+  onBoom(ctx: IContext<Vars>) {
     ctx.status(500).body({ tenant: ctx.state.get('tenant') ?? null })
   }
 }

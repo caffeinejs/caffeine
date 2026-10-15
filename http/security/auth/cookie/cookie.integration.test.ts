@@ -6,7 +6,7 @@ import {
   AuthenticationService,
   AuthenticationTicket,
   Claim,
-  type Context,
+  type IContext,
   Controller,
   type CookieAuthenticationOptionsBuilder,
   type CookieBuilder,
@@ -96,7 +96,7 @@ class SessionController {
 
   @Args([$p.body(), $p.context()])
   @Post('/login')
-  async login(dto: LoginDto, ctx: Context) {
+  async login(dto: LoginDto, ctx: IContext) {
     const user = await this.creds.attempt(dto.email, dto.password)
     if (!user) {
       ctx.status(401)
@@ -108,7 +108,7 @@ class SessionController {
 
   @Args([$p.context()])
   @Post('/logout')
-  async logout(ctx: Context) {
+  async logout(ctx: IContext) {
     await this.auth.revoke(ctx, 'Cookie')
     return { ok: true }
   }
@@ -119,7 +119,7 @@ class SessionController {
 class MeController {
   @Args([$p.context()])
   @Get('/')
-  me(ctx: Context) {
+  me(ctx: IContext) {
     return { sub: ctx.user.findFirst('sub')?.value, admin: ctx.user.isInRole('admin') }
   }
 }
@@ -132,7 +132,7 @@ class MeController {
 class SchemeScopedMeController {
   @Args([$p.context()])
   @Get('/')
-  me(ctx: Context) {
+  me(ctx: IContext) {
     return { sub: ctx.user.findFirst('sub')?.value }
   }
 }

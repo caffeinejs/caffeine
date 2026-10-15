@@ -19,7 +19,7 @@ import {
   createWebApplication,
   type ActionResult,
   GuardResult,
-  type Context,
+  type IContext,
   type WebApplication,
   Guards,
 } from '../index.js'
@@ -522,7 +522,7 @@ describe('denial', () => {
 
   @Catch(ErrHTTPUnauthorized)
   class UnauthorizedCatch implements ErrorHandler<ErrHTTPUnauthorized> {
-    handle(ctx: Context, error: ErrHTTPUnauthorized): ActionResult {
+    handle(ctx: IContext, error: ErrHTTPUnauthorized): ActionResult {
       ctx.status(401)
       return { caught: true, message: error.message }
     }

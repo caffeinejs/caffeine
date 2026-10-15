@@ -9,11 +9,11 @@ import {
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import {
-  type Adapter,
+  type IAdapter,
   type AdapterExtensionFactory,
   type AdapterFactory,
-  type AdapterServer,
-  type AdapterTypes,
+  type IAdapterServer,
+  type IAdapterTypes,
   type HTTPSetupContext,
   type ServerAddress,
   type ServerConfigurer,
@@ -45,7 +45,7 @@ import { buildRouting, type RouteSource } from './routing/index.js'
 import type { Router } from './routing/programmatic/router.js'
 import { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
-import type { RouteGroup } from './routing/route.js'
+import type { IRouteGroup } from './routing/route.js'
 import { AuthorizationBuilder } from './security/authz/index.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
 import { ServerSet } from './servers.js'
@@ -64,7 +64,7 @@ export interface WebRunInfo extends RunInfo {
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
 
 /**
- * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link Adapter}, Fastify's unless
+ * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}, Fastify's unless
  * another is given. `setup()` builds routing and sets the adapter up; `start()` runs it;
  * `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
  *
@@ -81,7 +81,7 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  * ```
  */
 export class WebApplication<
-  T extends AdapterTypes = FastifyTypes,
+  T extends IAdapterTypes = FastifyTypes,
   ROUTES = never,
   DEPS = never,
   C = unknown,
@@ -92,7 +92,7 @@ export class WebApplication<
   /** Phantom — names what the mounted routers injected, for `DepsOf`. Never assigned, never read. */
   declare readonly __deps?: DEPS
 
-  readonly #adapter: Adapter<T>
+  readonly #adapter: IAdapter<T>
   /** What the application's own server is built from: what its fluent methods registered. */
   readonly #own = new ServerDefinition<T, C>()
   /** Every server, the application's own first, once {@link setup} has read them. */
@@ -100,7 +100,7 @@ export class WebApplication<
   /** The ops servers `Ops(...)` installed, once {@link setup} has built them. */
   #ops: ReadonlyMap<string, OpsServer<T>> | undefined
   #runArgs: T['runArgs'] | undefined
-  #routeGroups: RouteGroup<T['request']>[] = []
+  #routeGroups: IRouteGroup<T['request']>[] = []
   #mounted: Router<any, any, any, any, any, any>[] = []
   #built = false
   /** What routers and controllers registered for themselves, resolved once during start-up. */
@@ -163,7 +163,7 @@ export class WebApplication<
    *
    * @throws ErrApplicationNotReady before {@link ready} has built them.
    */
-  get routeGroups(): RouteGroup<T['request']>[] {
+  get routeGroups(): IRouteGroup<T['request']>[] {
     if (!this.started) {
       throw new ErrApplicationNotReady('read the route groups')
     }
@@ -573,7 +573,7 @@ export class WebApplication<
   }
 
   /** @throws ErrApplicationNotReady before {@link setup} has built the server. */
-  #ownServer(): AdapterServer<T> {
+  #ownServer(): IAdapterServer<T> {
     const server = this.#servers?.own
 
     if (server === undefined) {
@@ -602,7 +602,7 @@ export function createWebApplication<TConfig = unknown>(
   options?: WebApplicationOptions<TConfig>,
 ): WebApplication<FastifyTypes, never, never, TConfig>
 // Explicit adapter factory — another adapter altogether.
-export function createWebApplication<T extends AdapterTypes, TConfig = unknown>(
+export function createWebApplication<T extends IAdapterTypes, TConfig = unknown>(
   adapterFactory: AdapterFactory<T>,
   options?: WebApplicationOptions<TConfig>,
 ): WebApplication<T, never, never, TConfig>

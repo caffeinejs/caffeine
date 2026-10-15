@@ -11,7 +11,7 @@ import {
   Get,
   authentication,
   createWebApplication,
-  type Context,
+  type IContext,
   type HTTPPluginFactory,
 } from '../../index.js'
 
@@ -34,7 +34,7 @@ class NeverAuthenticates extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(_ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(_ctx: IContext): Promise<AuthenticateResult> {
     return AuthenticateResult.none()
   }
 }

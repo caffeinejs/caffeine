@@ -7,7 +7,7 @@ import {
   type ActionResult,
   BindTo,
   Catch,
-  type Context,
+  type IContext,
   Controller,
   Get,
   type Guard,
@@ -64,7 +64,7 @@ class DecoratedController {
   }
 
   @Catch(Teapot)
-  caught(ctx: Context): ActionResult {
+  caught(ctx: IContext): ActionResult {
     return ctx.status(418).body({ caughtBy: 'controller' })
   }
 }

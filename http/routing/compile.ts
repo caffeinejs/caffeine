@@ -18,7 +18,7 @@ import {
   PolicyEvaluator,
 } from '../security/authz/index.js'
 import { mergeAuthz } from './inherit.js'
-import { Route, RouteGroup, RouteGroupErrorHandler, type RouteDispatch, type RouteGroupHook } from './route.js'
+import { IRoute, IRouteGroup, RouteGroupErrorHandler, type RouteDispatch, type RouteGroupHook } from './route.js'
 import type { RouteAuthz, RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** What a route source contributes on top of the spec: identity, and how the routes are invoked. */
@@ -36,8 +36,8 @@ export interface RouteGroupMeta<R> {
   dispatch?(route: RouteSpec<R>): RouteDispatch<R, unknown>
 }
 
-/** Compiles a spec into a registrable {@link RouteGroup}. See {@link createRouteGroupCompiler}. */
-export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>) => RouteGroup<R>
+/** Compiles a spec into a registrable {@link IRouteGroup}. See {@link createRouteGroupCompiler}. */
+export type RouteGroupCompiler = <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>) => IRouteGroup<R>
 
 /**
  * Builds the compiler every route source shares.
@@ -66,8 +66,8 @@ export function createRouteGroupCompiler(container: Container): RouteGroupCompil
   // its own with none.
   const defaultScheme = container.getOptional(AuthenticationSchemeProvider)?.defaultAuthenticateScheme
 
-  return function compileRouteGroup<R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> {
-    const compileRoute = (route: RouteSpec<R>): Route<R> => {
+  return function compileRouteGroup<R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): IRouteGroup<R> {
+    const compileRoute = (route: RouteSpec<R>): IRoute<R> => {
       const config = new Map<string, unknown>()
       if (spec.config) {
         for (const [k, v] of spec.config) {

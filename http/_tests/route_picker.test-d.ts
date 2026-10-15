@@ -1,4 +1,4 @@
-import { Controller, Get, Args, $p, type Context } from '../index.js'
+import { Controller, Get, Args, $p, type IContext } from '../index.js'
 
 /**
  * A picker whose function annotates the request it reads is the only way to reach something the built-ins do
@@ -8,7 +8,7 @@ import { Controller, Get, Args, $p, type Context } from '../index.js'
  */
 
 interface WithContext {
-  httpContext: Context
+  httpContext: IContext
 }
 
 @Controller('/callers')
@@ -36,7 +36,7 @@ class CallersController {
 
   // A built-in wrapped in `map` — its declared request type must stay assignable too.
   @Get('/mapped')
-  @Args([$p.map($p.context(), (ctx: Context) => ctx.user)])
+  @Args([$p.map($p.context(), (ctx: IContext) => ctx.user)])
   mapped(_user: unknown): unknown {
     return null
   }

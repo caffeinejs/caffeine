@@ -7,7 +7,7 @@ import {
   type FeatureConfigurer,
 } from '@caffeinejs/std'
 
-import type { AdapterExtensionFactory, AdapterTypes, ServerAddress, ServerConfigurer } from '../adapter.js'
+import type { AdapterExtensionFactory, IAdapterTypes, ServerAddress, ServerConfigurer } from '../adapter.js'
 import type { FastifyTypes } from '../fastify_adapter.js'
 import type { FastifyMiddlewareHook } from '../middleware/fastify.js'
 import {
@@ -169,7 +169,7 @@ export function Ops<C = unknown>(name: string, configure?: FeatureConfigurer<Ops
 }
 
 /** One ops server, as `app.ops` hands it out: what it is and where it listens, but not its lifecycle. */
-export interface OpsServer<T extends AdapterTypes = FastifyTypes> {
+export interface OpsServer<T extends IAdapterTypes = FastifyTypes> {
   readonly name: string
   readonly instance: T['instance']
   /** Where it listens, or `undefined` until the application runs. */

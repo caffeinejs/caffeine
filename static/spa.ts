@@ -4,7 +4,7 @@ import { isNavigation } from '@caffeinejs/http'
 
 import type { StaticMount } from './config.js'
 
-/** The slice of a `Context` {@link isDocumentRequest} reads. */
+/** The slice of an `IContext` {@link isDocumentRequest} reads. */
 export interface DocumentRequestContext {
   readonly req: {
     readonly url: string

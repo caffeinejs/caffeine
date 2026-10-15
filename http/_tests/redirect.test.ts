@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { type Context, Controller, Get, Header, createWebApplication, Args, Post } from '../index.js'
+import { type IContext, Controller, Get, Header, createWebApplication, Args, Post } from '../index.js'
 import { $p } from '../routing/picker.js'
 
 describe('Redirect', () => {
@@ -9,7 +9,7 @@ describe('Redirect', () => {
     class RedirectController {
       @Get('/')
       @Args([$p.context()])
-      get(ctx: Context) {
+      get(ctx: IContext) {
         ctx.redirect('/foo')
       }
 

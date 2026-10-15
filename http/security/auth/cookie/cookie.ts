@@ -1,6 +1,6 @@
 import type { Provider } from '@caffeinejs/di'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { CookieSerializeOptions } from '../../../cookie/options.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { buildCredentialPrincipal, type UserProvider } from '../credentials/index.js'
@@ -90,7 +90,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     return this.options.rememberMe === true && this.#rememberStore !== undefined && this.#userProvider !== undefined
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const raw = ctx.req.cookie(this.options.cookieName!)
     let unreadable: Error | undefined
 
@@ -145,12 +145,12 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * Returning a principal replaces the one from the cookie, so the hook doubles as the refresh path for a
    * session whose claims have gone stale. Returning `null` rejects it.
    */
-  async #validate(ctx: Context, principal: Principal): Promise<Principal | null> {
+  async #validate(ctx: IContext, principal: Principal): Promise<Principal | null> {
     const validate = this.options.validatePrincipal
     return validate === undefined ? principal : validate(ctx, principal)
   }
 
-  override async persist(ctx: Context, ticket: AuthenticationTicket): Promise<void> {
+  override async persist(ctx: IContext, ticket: AuthenticationTicket): Promise<void> {
     // `isPersistent` is the only name for this flag: keeping a `rememberMe` alias that the type
     // rejects but the runtime honours would mean the compiler and the behaviour disagree.
     const rememberMe = ticket.properties?.isPersistent === true
@@ -169,7 +169,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     await this.#writeSessionCookie(ctx, ticket.principal, ttl, rememberMe)
   }
 
-  override async revoke(ctx: Context): Promise<void> {
+  override async revoke(ctx: IContext): Promise<void> {
     this.#clearSessionCookie(ctx)
 
     if (this.#durable()) {
@@ -190,7 +190,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * signed in — it just gets a document where it expected JSON. Fetch Metadata is the answer to that
    * question.
    */
-  override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+  override async challenge(ctx: IContext, properties?: AuthenticationProperties): Promise<void> {
     // Built ahead of the hook, which is handed it: a hook still sending the browser to sign in need not rebuild
     // the base path and the return URL.
     const location = this.options.loginPath === undefined ? undefined : this.#loginLocation(ctx, properties)
@@ -233,7 +233,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * this value ends up in a `Location` after login, so an unchecked one is an open redirect, and the
    * caller-supplied case is not more trustworthy than the request-derived one.
    */
-  #loginLocation(ctx: Context, properties?: AuthenticationProperties): string {
+  #loginLocation(ctx: IContext, properties?: AuthenticationProperties): string {
     const loginPath = withBasePath(ctx, this.options.loginPath!)
 
     // Fails closed to the bare login path: an off-origin or unparseable target is dropped rather than
@@ -260,7 +260,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * browser wants the access-denied page, while `fetch` wants the status — redirecting it would hand the
    * caller a 200 and the page's HTML in place of the 403 it has to act on.
    */
-  override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
+  override async forbid(ctx: IContext, _properties?: AuthenticationProperties): Promise<void> {
     const location =
       this.options.accessDeniedPath === undefined ? undefined : withBasePath(ctx, this.options.accessDeniedPath)
 
@@ -289,7 +289,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     return { principal: new Principal(true, identity), session }
   }
 
-  async #writeSessionCookie(ctx: Context, principal: Principal, ttl: number, persistent: boolean): Promise<void> {
+  async #writeSessionCookie(ctx: IContext, principal: Principal, ttl: number, persistent: boolean): Promise<void> {
     const payload: SessionPayload = {
       scheme: this.#name,
       claims: principal.claims().map(c => ({ type: c.type, value: c.value, issuer: c.issuer })),
@@ -307,7 +307,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * A session sealed before its persistence was recorded is left as it is: whether its cookie outlives the browser
    * cannot be told from its lifetime once `maxAge` may have changed. It opens with the older secret until it expires.
    */
-  async #resealSession(ctx: Context, session: OpenedJWT<SessionPayload>): Promise<void> {
+  async #resealSession(ctx: IContext, session: OpenedJWT<SessionPayload>): Promise<void> {
     const { scheme, claims, roleClaimType, persistent } = session.claims
     const ttl = session.exp - Math.floor(Date.now() / 1000)
 
@@ -318,7 +318,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     await this.#writeSealed(ctx, { scheme, claims, roleClaimType, persistent }, ttl)
   }
 
-  async #writeSealed(ctx: Context, payload: SessionPayload, ttl: number): Promise<void> {
+  async #writeSealed(ctx: IContext, payload: SessionPayload, ttl: number): Promise<void> {
     const sealed = await sealSession(payload as unknown as Record<string, unknown>, this.#secrets, this.#name, ttl)
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
@@ -332,7 +332,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   // --- durable remember-me --------------------------------------------------
 
-  async #issueRemember(ctx: Context, principal: Principal): Promise<void> {
+  async #issueRemember(ctx: IContext, principal: Principal): Promise<void> {
     // Coercing a missing `sub` to '' would mint a record no `findById` could ever resolve, and whose
     // `removeBySubject('')` would either revoke nothing or revoke every other subjectless record.
     const sub = principal.findFirst('sub')?.value
@@ -353,7 +353,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * without a token of its own; the sibling's response carries the new one. Outside the window the same token was
    * spent twice, which is what a stolen copy looks like: the series is revoked and everyone signs in again.
    */
-  async #refreshFromRemember(ctx: Context): Promise<AuthenticateResult> {
+  async #refreshFromRemember(ctx: IContext): Promise<AuthenticateResult> {
     const presented = ctx.req.cookie(this.options.rememberMeCookieName!)
     if (!presented) {
       return AuthenticateResult.none()
@@ -402,7 +402,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     return AuthenticateResult.success(new AuthenticationTicket(principal, this.#name))
   }
 
-  async #rememberRefused(ctx: Context, reason: string): Promise<AuthenticateResult> {
+  async #rememberRefused(ctx: IContext, reason: string): Promise<AuthenticateResult> {
     this.#clearRememberCookie(ctx)
 
     const error = new Error(`Remember-me credential refused: ${reason}`)
@@ -419,7 +419,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     }
   }
 
-  #setRememberCookie(ctx: Context, token: string): void {
+  #setRememberCookie(ctx: IContext, token: string): void {
     ctx.cookie(
       this.options.rememberMeCookieName!,
       token,
@@ -430,12 +430,12 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   // A cookie is cleared with the attributes it was set with. A browser refuses a `__Host-` or `__Secure-` cookie
   // that arrives without `Secure` — the clearing one included, so signing out would leave it in place.
-  #clearSessionCookie(ctx: Context): void {
+  #clearSessionCookie(ctx: IContext): void {
     ctx.deleteCookie(this.options.cookieName!, this.#cookieOpts(ctx, this.options.cookieName!))
     noStore(ctx)
   }
 
-  #clearRememberCookie(ctx: Context): void {
+  #clearRememberCookie(ctx: IContext): void {
     ctx.deleteCookie(this.options.rememberMeCookieName!, this.#cookieOpts(ctx, this.options.rememberMeCookieName!))
     noStore(ctx)
   }
@@ -443,7 +443,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   // Every attribute is the scheme's own, one it leaves unset written as `undefined`: that clears whatever the
   // server's `parseOptions` default, so an application-wide domain or `signed` never reaches a session cookie.
   // `encode` stays the server's: every read decodes with the server's `decode`, and the two have to match.
-  #cookieOpts(ctx: Context, name: string, maxAge?: number): CookieSerializeOptions {
+  #cookieOpts(ctx: IContext, name: string, maxAge?: number): CookieSerializeOptions {
     return {
       httpOnly: true,
       secure: this.options.secure,
@@ -463,7 +463,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    * without it — so applications sharing an origin under different bases keep their sessions apart. A `__Host-`
    * cookie stays at `/`: a browser refuses one set anywhere else, and matches the prefix in any case.
    */
-  #cookiePath(ctx: Context, name: string): string {
+  #cookiePath(ctx: IContext, name: string): string {
     if (this.options.path !== undefined) {
       return this.options.path
     }
@@ -476,6 +476,6 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
  * A path on this origin, as the application declared it, with the request's base path put back in front — the
  * browser is sent there. Anything else, such as a login page on another origin, is left as it was configured.
  */
-function withBasePath(ctx: Context, path: string): string {
+function withBasePath(ctx: IContext, path: string): string {
   return isSafeReturnPath(path) ? ctx.req.basePath + path : path
 }

@@ -19,7 +19,7 @@ import {
   csrf,
   csrfExempt,
   newRouter,
-  type Context,
+  type IContext,
 } from '../../index.js'
 
 /**
@@ -334,7 +334,7 @@ describe('csrf() in front of a webhook receiver', () => {
       return AuthenticateResult.none()
     }
 
-    override async challenge(ctx: Context): Promise<void> {
+    override async challenge(ctx: IContext): Promise<void> {
       ctx.status(401)
     }
   }

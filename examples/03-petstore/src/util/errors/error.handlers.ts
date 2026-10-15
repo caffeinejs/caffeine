@@ -1,5 +1,5 @@
 import { HTML } from '@caffeinejs/html'
-import { Catch, type ActionResult, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { Catch, type ActionResult, type IContext, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
 import { $t } from '@caffeinejs/std/schema'
 
 import { ErrorPage } from './html/ErrorPage.js'
@@ -55,13 +55,13 @@ function codeFor(status: number): string {
 
 // Browser requests (Accept: text/html) get an HTML error page; API clients get JSON. Content negotiation
 // lives here in the app, not the framework — the framework just renders whatever the handler returns.
-function wantsHTML(ctx: Context): boolean {
+function wantsHTML(ctx: IContext): boolean {
   return ctx.req.header('accept')?.includes('text/html') ?? false
 }
 
 // Returns the JSON body, or a rendered error page when the client asked for HTML. `ctx.status(...)` sets
 // the response code either way; the returned value is finalized by the framework (JSON or HTML).
-function respond(ctx: Context, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof HTML> {
+function respond(ctx: IContext, status: number, body: ErrorBody): ErrorBody | ReturnType<typeof HTML> {
   ctx.status(status)
   return wantsHTML(ctx) ? HTML(ErrorPage({ ...body, status })) : body
 }
@@ -92,7 +92,7 @@ function fieldErrors(err: ValidationError): FieldError[] {
 // page for browser requests.
 @Catch(ErrHTTP)
 export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
-  async handle(ctx: Context, err: ErrHTTP): Promise<ActionResult> {
+  async handle(ctx: IContext, err: ErrHTTP): Promise<ActionResult> {
     return respond(ctx, err.statusCode, {
       code: codeFor(err.statusCode),
       message: err.message,
@@ -104,7 +104,7 @@ export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
 // anything else is an unexpected 500.
 @Catch(Error)
 export class FallbackErrorHandler implements ErrorHandler<Error> {
-  async handle(ctx: Context, err: Error): Promise<ActionResult> {
+  async handle(ctx: IContext, err: Error): Promise<ActionResult> {
     if (isValidationError(err)) {
       if (err.validationContext === 'body') {
         return respond(ctx, 422, {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
-  type Context,
+  type IContext,
   ErrConfiguration,
   ErrHTTPNotFound,
   ErrorHandler,
@@ -13,12 +13,12 @@ import {
 // cannot mean, because nothing then decides which one renders an ErrHTTPNotFound.
 @Catch(ErrHTTPNotFound)
 class FirstHandler implements ErrorHandler<ErrHTTPNotFound> {
-  async handle(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
+  async handle(_ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {}
 }
 
 @Catch(ErrHTTPNotFound)
 class SecondHandler implements ErrorHandler<ErrHTTPNotFound> {
-  async handle(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
+  async handle(_ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {}
 }
 
 describe('ambiguous error handler', () => {

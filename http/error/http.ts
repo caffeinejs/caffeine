@@ -115,7 +115,7 @@ export function httpErrorBody(err: ErrHTTP): HTTPErrorBody {
 }
 
 /**
- * Renders the default body for a bare status code, for the response shorthands on `Context` that never build
+ * Renders the default body for a bare status code, for the response shorthands on `IContext` that never build
  * an error object.
  */
 export function statusErrorBody(statusCode: number, code: string, message?: string): HTTPErrorBody {

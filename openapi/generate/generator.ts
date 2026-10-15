@@ -1,4 +1,4 @@
-import type { AuthSchemeDescriptor, Route, RouteGroup } from '@caffeinejs/http'
+import type { AuthSchemeDescriptor, IRoute, IRouteGroup } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type { APIGroupDetail, OperationDetail } from '../decorators/detail.js'
@@ -28,7 +28,7 @@ import { authorizationNote, buildSecuritySchemes, deriveSecurity } from './secur
 const FIXED_METHODS = new Set<string>(['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'])
 
 export interface GenerateInput {
-  routeGroups: Array<RouteGroup<unknown>>
+  routeGroups: Array<IRouteGroup<unknown>>
   options: OpenAPIOptions
   /** How each registered authentication scheme expects credentials, when the application configured any. */
   schemes?: Map<string, AuthSchemeDescriptor>
@@ -39,7 +39,7 @@ export interface GenerateInput {
 /**
  * Builds the OpenAPI document from the routes the application already declared.
  *
- * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `RouteGroup[]` fixtures and
+ * Pure: no Fastify, no container, no I/O. That keeps it testable against hand-built `IRouteGroup[]` fixtures and
  * leaves the door open for a CLI that emits the document without starting a server.
  *
  * The package's own document-serving routes reach `routeGroups` like any other registered route; their group
@@ -95,8 +95,8 @@ export function generateDocument(input: GenerateInput): OpenAPIDocument {
 }
 
 interface AddRouteInput {
-  router: RouteGroup<unknown>
-  route: Route<unknown>
+  router: IRouteGroup<unknown>
+  route: IRoute<unknown>
   group: APIGroupDetail | undefined
   detail: OperationDetail | undefined
   tagName: string
@@ -195,7 +195,7 @@ function addRoute(ctx: AddRouteInput): void {
 }
 
 /** The operation's description, with the authorization note appended when the route requires more than auth. */
-function describe(detail: OperationDetail | undefined, route: Route<unknown>): string | undefined {
+function describe(detail: OperationDetail | undefined, route: IRoute<unknown>): string | undefined {
   const note = authorizationNote(route)
   const described = detail?.description
 

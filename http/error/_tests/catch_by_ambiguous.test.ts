@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Catch,
   CatchWith,
-  type Context,
+  type IContext,
   Controller,
   ErrConfiguration,
   ErrorHandler,
@@ -16,12 +16,12 @@ class ErrAmbiguous extends Error {}
 
 @Catch(ErrAmbiguous)
 class FirstHandler implements ErrorHandler<ErrAmbiguous> {
-  async handle(_ctx: Context, _error: ErrAmbiguous): Promise<void> {}
+  async handle(_ctx: IContext, _error: ErrAmbiguous): Promise<void> {}
 }
 
 @Catch(ErrAmbiguous)
 class SecondHandler implements ErrorHandler<ErrAmbiguous> {
-  async handle(_ctx: Context, _error: ErrAmbiguous): Promise<void> {}
+  async handle(_ctx: IContext, _error: ErrAmbiguous): Promise<void> {}
 }
 void [FirstHandler, SecondHandler]
 

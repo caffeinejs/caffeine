@@ -1,13 +1,13 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import { createWebApplication, type WebApplication } from '../index.js'
 import { Responder, type ActionResult } from '../response.js'
 import { Router } from '../routing/programmatic/router.js'
 
-/** What a reader holding only a `Context` finds on `ctx.platform`, as plain values a response can carry. */
-function describePlatform(ctx: Context): { name: string; ownRequest: boolean; ownReply: boolean } {
+/** What a reader holding only an `IContext` finds on `ctx.platform`, as plain values a response can carry. */
+function describePlatform(ctx: IContext): { name: string; ownRequest: boolean; ownReply: boolean } {
   return {
     name: ctx.platform.name,
     ownRequest: ctx.platform.request.raw === ctx.req.raw,
@@ -16,7 +16,7 @@ function describePlatform(ctx: Context): { name: string; ownRequest: boolean; ow
 }
 
 class PlatformResponder extends Responder {
-  respond(ctx: Context): ActionResult {
+  respond(ctx: IContext): ActionResult {
     return describePlatform(ctx)
   }
 }
@@ -29,7 +29,7 @@ describe('ctx.platform', () => {
     app = undefined
   })
 
-  // The escape hatch is for code that holds only a `Context` and needs what Fastify, or a Fastify plugin, added. So
+  // The escape hatch is for code that holds only an `IContext` and needs what Fastify, or a Fastify plugin, added. So
   // it is read from each place such code lives — a handler, a middleware, a `Responder` — and must be the request
   // and reply Fastify is serving there, not some other pair.
   it('is the request and reply Fastify is serving, wherever a context is read', async () => {

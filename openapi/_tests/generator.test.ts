@@ -1,4 +1,4 @@
-import { $p, type Route } from '@caffeinejs/http'
+import { $p, type IRoute } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
@@ -426,7 +426,7 @@ describe('security', () => {
           schemes: ['OAuth'],
           options: { allowAnonymous: false, defaultPolicy: false, policies: [], roleGroups: [[]] },
         },
-      } as unknown as Route<unknown>
+      } as unknown as IRoute<unknown>
 
       expect(deriveSecurity(route, { OAuth: { type: 'oauth2', flows: {} } })).toEqual([{ OAuth: [] }])
     })

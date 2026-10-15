@@ -1,4 +1,4 @@
-import type { Route, RouteGroup } from '@caffeinejs/http'
+import type { IRoute, IRouteGroup } from '@caffeinejs/http'
 
 /**
  * A route group's base name: its name with a trailing `Controller` removed.
@@ -6,7 +6,7 @@ import type { Route, RouteGroup } from '@caffeinejs/http'
  * `PetsController` becomes `Pets`, which is both the default tag and the first half of the default
  * operationId. The suffix carries no information a reader of the document needs.
  */
-export function routerBaseName(router: RouteGroup<unknown>): string {
+export function routerBaseName(router: IRouteGroup<unknown>): string {
   return router.name.replace(/Controller$/, '') || router.name
 }
 
@@ -18,11 +18,11 @@ export function routerBaseName(router: RouteGroup<unknown>): string {
  * the published contract once a client has been generated from it, so `@Operation({ operationId })` is how a
  * route pins a name that outlives a class rename.
  */
-export function defaultOperationId(router: RouteGroup<unknown>, route: Route<unknown>): string {
+export function defaultOperationId(router: IRouteGroup<unknown>, route: IRoute<unknown>): string {
   return `${routerBaseName(router)}_${String(route.name)}`
 }
 
 /** Where an operation is defined, for error messages: `PetsController.list`. */
-export function operationSite(router: RouteGroup<unknown>, route: Route<unknown>): string {
+export function operationSite(router: IRouteGroup<unknown>, route: IRoute<unknown>): string {
   return `${router.name}.${String(route.name)}`
 }

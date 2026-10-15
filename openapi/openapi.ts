@@ -11,7 +11,7 @@ import {
   type HTTPPluginConfigurer,
   type HTTPPluginFactory,
   type RouteAuthzOptions,
-  type RouteGroup,
+  type IRouteGroup,
 } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
@@ -84,7 +84,7 @@ function openapiPlugin(options: OpenAPIOptions): FastifyPluginAsync {
       const generated =
         options.source === undefined
           ? generateDocument({
-              routeGroups: routeGroups() as Array<RouteGroup<unknown>>,
+              routeGroups: routeGroups() as Array<IRouteGroup<unknown>>,
               options: withBasePathServer(options, instance.$basePath),
               schemes: descriptors,
               onWarning: message => warnings.push(message),

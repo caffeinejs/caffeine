@@ -1,6 +1,6 @@
 import type { FastifyPluginAsync, FastifyPluginCallback, FastifyPluginOptions } from 'fastify'
 
-import type { AdapterExtensionFactory, AdapterTypes, HTTPSetupContext } from './adapter.js'
+import type { AdapterExtensionFactory, IAdapterTypes, HTTPSetupContext } from './adapter.js'
 import type { FastifyRouterTypes } from './fastify_adapter.js'
 
 /**
@@ -74,7 +74,7 @@ export const kServerExtension = Symbol('caffeine.http.server.extension')
  * app.install(Ops('admin', o => o.with(() => new Metrics())))
  * ```
  */
-export abstract class HTTPPlugin<T extends AdapterTypes = never> {
+export abstract class HTTPPlugin<T extends IAdapterTypes = never> {
   /** Phantom — names the adapter this plugin is written for, `never` for none. Never assigned, never read. */
   declare readonly __adapter?: T
 

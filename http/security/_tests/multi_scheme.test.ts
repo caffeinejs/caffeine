@@ -7,7 +7,7 @@ import {
   Authorize,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Identity,
@@ -45,7 +45,7 @@ class DefaultSchemeHandler extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const user = ctx.req.header('x-default-user')
     if (user === undefined) {
       return AuthenticateResult.none()
@@ -98,7 +98,7 @@ describe('per-route authentication schemes', () => {
       @Get('/')
       @Authorize({ schemes: ['Basic'] })
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
@@ -162,7 +162,7 @@ describe('per-route authentication schemes', () => {
       @Get('/')
       @Authorize({ schemes: ['Basic', 'Default'] })
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
@@ -187,7 +187,7 @@ describe('per-route authentication schemes', () => {
       @Get('/')
       @Authorize()
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
@@ -210,7 +210,7 @@ describe('per-route authentication schemes', () => {
       @AllowAnonymous()
       @Authorize({ schemes: ['Basic'] })
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value ?? null }
       }
     }
@@ -229,14 +229,14 @@ describe('per-route authentication schemes', () => {
 
   // Guards the effective-authz merge in buildRouting: only the route's own options used to be surfaced, so a
   // controller-level scheme reached compileRoutePolicy but was invisible to everything reading
-  // Route.authorization.options — this hook among them.
+  // IRoute.authorization.options — this hook among them.
   it('honours schemes declared on the controller', async () => {
     @Authorize({ schemes: ['Basic'] })
     @Controller('/class-scheme')
     class ClassSchemeController {
       @Get('/')
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
@@ -260,7 +260,7 @@ describe('per-route authentication schemes', () => {
     class BothSchemesController {
       @Get('/')
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { types: ctx.user.identities.map(i => i.authenticationType) }
       }
     }
@@ -287,7 +287,7 @@ describe('per-route authentication schemes', () => {
     class EitherSchemeController {
       @Get('/')
       @Args([$p.context()])
-      read(ctx: Context) {
+      read(ctx: IContext) {
         return { types: ctx.user.identities.map(i => i.authenticationType) }
       }
     }

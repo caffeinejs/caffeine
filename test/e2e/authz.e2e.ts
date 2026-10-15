@@ -4,7 +4,7 @@ import {
   Args,
   AuthorizationService,
   Authorize,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Roles,
@@ -131,7 +131,7 @@ class DocsController {
 
   @Get('/:id')
   @Args([$p.context()])
-  async get(ctx: Context) {
+  async get(ctx: IContext) {
     const doc = DOCS.get(ctx.req.param('id')!)!
 
     // The decision needs the document, so it is taken here, once it is loaded.

@@ -7,7 +7,7 @@ import {
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   Identity,
   Principal,
   createWebApplication,
@@ -33,7 +33,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const user = ctx.req.header('x-user')
     if (user === undefined) {
       return AuthenticateResult.none()

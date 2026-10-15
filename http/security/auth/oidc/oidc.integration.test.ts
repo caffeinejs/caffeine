@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   AllowAnonymous,
   Authorize,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Claim,
@@ -360,7 +360,7 @@ describe('OIDC integration', () => {
     class OIDCIntSessionController {
       @Args([$p.context()])
       @Get('/')
-      index(ctx: Context) {
+      index(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }

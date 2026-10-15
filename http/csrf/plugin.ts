@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { protocolOf } from '../protocol.js'
 import { ErrCSRFCrossOrigin } from './errors.js'
@@ -233,7 +233,7 @@ export function csrf<C = unknown>(configure?: HTTPPluginConfigurer<CSRFBuilder, 
 type Question = () => boolean | PromiseLike<boolean>
 
 // Origin checks first, then site checks, each in the order written; every one is handed its own URL.
-function questionsOf(ctx: Context, askable: OriginCheckAskable, options: CSRFOptions): Question[] {
+function questionsOf(ctx: IContext, askable: OriginCheckAskable, options: CSRFOptions): Question[] {
   const questions: Question[] = options.originChecks.map(check => () => check(ctx, new URL(askable.origin)))
 
   const site = askable.site

@@ -1,12 +1,12 @@
 import { Injectable } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import { type Context, ErrConfiguration, ErrorHandler, createWebApplication } from '../../index.js'
+import { type IContext, ErrConfiguration, ErrorHandler, createWebApplication } from '../../index.js'
 
 // Bound, and shaped like a handler, but it never declared which errors it renders.
 @Injectable()
 class UntaggedHandler implements ErrorHandler<Error> {
-  async handle(_ctx: Context, _error: Error): Promise<void> {}
+  async handle(_ctx: IContext, _error: Error): Promise<void> {}
 }
 
 describe('untagged error handler', () => {

@@ -1,4 +1,4 @@
-import type { AuthSchemeDescriptor, Route } from '@caffeinejs/http'
+import type { AuthSchemeDescriptor, IRoute } from '@caffeinejs/http'
 
 import type { OpenAPIOptions } from '../options.js'
 import type { SecurityRequirementObject, SecuritySchemeObject } from '../spec/spec.js'
@@ -135,7 +135,7 @@ function obtainedBy(descriptor: AuthSchemeDescriptor): string | undefined {
  * repeating themselves.
  */
 export function deriveSecurity(
-  route: Route<unknown>,
+  route: IRoute<unknown>,
   schemes: Record<string, SecuritySchemeObject> | undefined,
 ): SecurityRequirementObject[] | undefined {
   const authz = route.authorization
@@ -219,7 +219,7 @@ function roleAlternatives(groups: ReadonlyArray<readonly string[]>): string[][] 
  * Roles and policies have no OpenAPI representation on most scheme types, and silently dropping them would
  * describe a route as merely "authenticated" when it is not.
  */
-export function authorizationNote(route: Route<unknown>): string | undefined {
+export function authorizationNote(route: IRoute<unknown>): string | undefined {
   const options = route.authorization.options
   if (options === undefined || options.allowAnonymous === true) {
     return undefined

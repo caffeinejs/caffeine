@@ -14,7 +14,7 @@ import {
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../../error/plugin.js'
 import { attachGuardHook } from '../../guards/fastify.js'
 import { Responder } from '../../response.js'
-import type { RouteCompilers, RouteGroup, RouteGroupScope } from '../route.js'
+import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../route.js'
 import { compileRouteSchema } from '../schema/compile_route_schema.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
@@ -29,14 +29,14 @@ export interface RouteGroupRegistration<REQ> {
    * `@Use(...)` on the context it is handed, refusing what the root server would refuse.
    */
   installScope: (server: FastifyInstance, scope: RouteGroupScope) => Promise<void>
-  compilers: RouteCompilers<REQ>
+  compilers: IRouteCompilers<REQ>
   globalErrorHandler: GlobalErrorHandler
   /** The server's own `handlerTimeout`, when it set one. */
   handlerTimeout?: number
 }
 
 /**
- * Turns one compiled {@link RouteGroup} into real Fastify routes: schema compilation, per-route config
+ * Turns one compiled {@link IRouteGroup} into real Fastify routes: schema compilation, per-route config
  * assembly, guard attachment, the `BodyAsBuffer`/`BodyAsStream` content-type-parser swap.
  *
  * Every route lands in the group's own `register()` context, so the group's error handler and the plugins a
@@ -44,7 +44,7 @@ export interface RouteGroupRegistration<REQ> {
  */
 export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   instance: FastifyInstance,
-  router: RouteGroup<REQ>,
+  router: IRouteGroup<REQ>,
   registration: RouteGroupRegistration<REQ>,
 ): void {
   const { installScope, compilers, globalErrorHandler, handlerTimeout } = registration

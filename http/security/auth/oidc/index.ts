@@ -10,7 +10,7 @@ export {
 } from './options.js'
 export { GOOGLE_ISSUER, googleOIDCPreset } from './provider/google.js'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 
 /**
  * The callback surface the adapter needs, satisfied by every OAuth-family handler.
@@ -24,8 +24,8 @@ export interface OAuthCallbackHandler {
   readonly schemeName: string
   readonly sessionCookieName: string
   readonly stateCookieName: string
-  processCallback(ctx: Context): Promise<void>
-  startSignIn(ctx: Context): Promise<void>
+  processCallback(ctx: IContext): Promise<void>
+  startSignIn(ctx: IContext): Promise<void>
 }
 
 export interface OIDCHandlerEntry {

@@ -1,7 +1,7 @@
 import { Container, Ctor, InjectionToken, Provider } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import { Context } from '../context.js'
+import { IContext } from '../context.js'
 import { ActionResult } from '../response.js'
 import type { CatchByMap } from '../routing/route.js'
 import { ErrConfiguration } from './common.js'
@@ -53,7 +53,7 @@ export function resolveByErrorChain<T>(map: Map<Ctor<Error>, T>, error: Error): 
 export interface ErrorHandler<E extends Error> {
   // A method rather than a property of function type: a method's parameter is compared bivariantly, which is what
   // keeps an `ErrorHandler<ErrHTTPNotFound>` assignable to the `ErrorHandler<Error>` every map here holds.
-  handle(ctx: Context, error: E): Promise<ActionResult> | ActionResult
+  handle(ctx: IContext, error: E): Promise<ActionResult> | ActionResult
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { BaseAuthenticationHandler } from '../handler.js'
 import { challenge } from '../internal/challenge.js'
@@ -13,7 +13,7 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
     this.#name = name
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const encoded = parseAuthorizationHeader(ctx.req.header('authorization'), 'Basic')
     if (encoded === undefined) {
       return AuthenticateResult.none()
@@ -48,7 +48,7 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
     return AuthenticateResult.fail(failure)
   }
 
-  override async challenge(ctx: Context): Promise<void> {
+  override async challenge(ctx: IContext): Promise<void> {
     if (this.options.onChallenge) {
       return this.options.onChallenge(ctx)
     }
@@ -60,7 +60,7 @@ export class BasicAuthenticationHandler extends BaseAuthenticationHandler<BasicA
       .appendHeader('WWW-Authenticate', challenge('Basic', { realm: this.options.realm ?? '', charset: 'UTF-8' }))
   }
 
-  override async forbid(ctx: Context): Promise<void> {
+  override async forbid(ctx: IContext): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }

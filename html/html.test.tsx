@@ -8,7 +8,7 @@ import {
   Produces,
   createWebApplication,
   type ActionResult,
-  type Context,
+  type IContext,
 } from '@caffeinejs/http'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
@@ -88,7 +88,7 @@ class HTMLController {
 
   @Get('/header-set')
   @Args([$p.context()])
-  headerSet(ctx: Context) {
+  headerSet(ctx: IContext) {
     ctx.header('content-type', 'application/xhtml+xml')
     return HTML(<Document title="hello" />)
   }
@@ -98,7 +98,7 @@ class ErrRenderHTML extends Error {}
 
 @Catch(ErrRenderHTML)
 class RenderHTMLHandler implements ErrorHandler<ErrRenderHTML> {
-  handle(ctx: Context, error: ErrRenderHTML): ActionResult {
+  handle(ctx: IContext, error: ErrRenderHTML): ActionResult {
     ctx.status(404)
     return HTML(<Snippet title={error.message} />)
   }

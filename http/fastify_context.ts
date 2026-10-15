@@ -4,33 +4,25 @@ import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { kRawBasePath, resolveAppURL, type BasePathCarrier } from './base_path.js'
-import {
-  ContextState,
-  type Context,
-  type InferBody,
-  type InferHeaders,
-  type InferParams,
-  type InferQuery,
-  type Req,
-  type UnsignedCookie,
-} from './context.js'
+import { ContextState, type IContext } from './context.js'
 import type { CookieSerializeOptions } from './cookie/options.js'
 import { reopenCookieFlush, serverCookies } from './cookie/plugin.js'
 import type { CookieSecret, CookieUnsignResult } from './cookie/signer.js'
 import { statusErrorBody } from './error/http.js'
 import type { FastifyPlatform, FastifyTypes } from './fastify_adapter.js'
 import { protocolOf } from './protocol.js'
+import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, UnsignedCookie } from './request.js'
 import type { RouteValidationSchema } from './routing/spec.js'
 import type { AuthenticationState } from './security/auth/authentication_state.js'
 import { type Principal } from './security/index.js'
 
-/** The {@link Context} the Fastify adapter builds for every request, over Fastify's own request and reply. */
+/** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class FastifyContext<
   V = Record<never, never>,
   SCHEMA extends RouteValidationSchema = RouteValidationSchema,
   C = Record<never, never>,
   REPLY extends FastifyReply = FastifyReply,
-> implements Context<
+> implements IContext<
   V,
   C,
   FastifyTypes<FastifyInstance, FastifyRequest, REPLY>,
@@ -39,7 +31,7 @@ export class FastifyContext<
   InferHeaders<SCHEMA>,
   InferBody<SCHEMA>
 > {
-  /** @see {@link Context.auth} */
+  /** @see {@link IContext.auth} */
   auth?: AuthenticationState
 
   #req!: FastifyContextRequest<SCHEMA>
@@ -66,7 +58,7 @@ export class FastifyContext<
     return (this.#req ??= new FastifyContextRequest<SCHEMA>(this.#fastifyRequest))
   }
 
-  /** The Fastify request and reply behind this context. See {@link Context.platform}. */
+  /** The Fastify request and reply behind this context. See {@link IContext.platform}. */
   get platform(): FastifyPlatform<REPLY> {
     return (this.#platform ??= { name: 'fastify', request: this.#fastifyRequest, reply: this.#reply })
   }
@@ -93,7 +85,7 @@ export class FastifyContext<
     this.#fastifyRequest.user = user
   }
 
-  /** @see {@link Context.sent} */
+  /** @see {@link IContext.sent} */
   get sent(): boolean {
     return this.#answered || this.#reply.sent
   }
@@ -205,7 +197,7 @@ export class FastifyContext<
   }
 }
 
-export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteValidationSchema> implements Req<
+export class FastifyContextRequest<SCHEMA extends RouteValidationSchema = RouteValidationSchema> implements IRequest<
   IncomingMessage,
   InferParams<SCHEMA>,
   InferQuery<SCHEMA>,

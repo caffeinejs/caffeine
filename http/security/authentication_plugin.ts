@@ -3,11 +3,11 @@ import { ErrFeatureNotInstalled } from '@caffeinejs/std'
 import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import { hasServerCookies } from '../cookie/plugin.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { type GatedRoute } from '../routing/fastify/route_config.js'
-import type { RouteGroup } from '../routing/route.js'
+import type { IRouteGroup } from '../routing/route.js'
 import {
   ErrAuthenticationCookies,
   ErrAuthenticationGateRequired,
@@ -32,7 +32,7 @@ import { anonymousUser, mergePrincipals, type Principal } from './index.js'
  *
  * @throws ErrAuthenticationRequired when a route declares protection and nothing can authenticate a caller.
  */
-export function assertAuthenticationConfigured(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+export function assertAuthenticationConfigured(container: Container, routeGroups: readonly IRouteGroup<any>[]): void {
   if (container.getOptional(AuthenticationService) !== undefined) {
     return
   }
@@ -53,7 +53,7 @@ export function assertAuthenticationConfigured(container: Container, routeGroups
  *
  * @throws ErrAuthSchemeNotFound when a compiled route names a scheme no `addX(...)` registered.
  */
-export function assertRouteSchemesResolve(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+export function assertRouteSchemesResolve(container: Container, routeGroups: readonly IRouteGroup<any>[]): void {
   const schemeProvider = container.getOptional(AuthenticationSchemeProvider)
   if (schemeProvider === undefined) {
     return
@@ -388,7 +388,7 @@ function fallbackFor(container: Container): Fallback | undefined {
  * that authenticates a route is also the one whose scheme answers it.
  */
 async function authenticateAndAuthorize(
-  ctx: Context,
+  ctx: IContext,
   service: AuthenticationService,
   defaultScheme: string,
   route: GatedRoute | undefined,
@@ -439,7 +439,7 @@ async function authenticateAndAuthorize(
 }
 
 async function authenticateDefault(
-  ctx: Context,
+  ctx: IContext,
   service: AuthenticationService,
   defaultScheme: string,
 ): Promise<Principal> {
@@ -462,7 +462,7 @@ async function authenticateDefault(
  * not have one silently discarded because of decorator ordering.
  */
 async function authenticateNamed(
-  ctx: Context,
+  ctx: IContext,
   service: AuthenticationService,
   schemes: readonly string[],
 ): Promise<Principal> {

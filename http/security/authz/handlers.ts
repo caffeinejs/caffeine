@@ -1,4 +1,4 @@
-import { Context } from '../../context.js'
+import { IContext } from '../../context.js'
 import { Principal } from '../index.js'
 import { AuthzPolicyResult, AuthzRequirementHandler } from './policy.js'
 import type {
@@ -14,7 +14,7 @@ export class AuthenticatedUserHandler extends AuthzRequirementHandler<Authentica
     return 'authenticated'
   }
 
-  handle(ctx: Context, user: Principal): AuthzPolicyResult {
+  handle(ctx: IContext, user: Principal): AuthzPolicyResult {
     if (user.authenticated) {
       return { ok: true }
     }
@@ -37,7 +37,7 @@ export class RoleHandler extends AuthzRequirementHandler<RoleRequirement> {
     return 'role'
   }
 
-  handle(ctx: Context, user: Principal, requirement: RoleRequirement): AuthzPolicyResult {
+  handle(ctx: IContext, user: Principal, requirement: RoleRequirement): AuthzPolicyResult {
     if (requirement.roles.some(role => user.isInRole(role))) {
       return { ok: true }
     }
@@ -51,7 +51,7 @@ export class ClaimHandler extends AuthzRequirementHandler<ClaimRequirement> {
     return 'claim'
   }
 
-  handle(ctx: Context, user: Principal, requirement: ClaimRequirement): AuthzPolicyResult {
+  handle(ctx: IContext, user: Principal, requirement: ClaimRequirement): AuthzPolicyResult {
     if (requirement.claimValues.length === 0 && user.hasClaim(requirement.claim)) {
       return { ok: true }
     }
@@ -69,7 +69,7 @@ export class AssertionHandler extends AuthzRequirementHandler<AssertionRequireme
     return 'assertion'
   }
 
-  async handle(ctx: Context, user: Principal, requirement: AssertionRequirement): Promise<AuthzPolicyResult> {
+  async handle(ctx: IContext, user: Principal, requirement: AssertionRequirement): Promise<AuthzPolicyResult> {
     const passed = await requirement.assertion(ctx)
     if (passed) {
       return { ok: true }
@@ -84,7 +84,7 @@ export class ResourceHandler extends AuthzRequirementHandler<ResourceRequirement
   }
 
   async handle(
-    ctx: Context,
+    ctx: IContext,
     user: Principal,
     requirement: ResourceRequirement,
     resource?: unknown,

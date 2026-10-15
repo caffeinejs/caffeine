@@ -8,7 +8,7 @@ import {
   Authorization,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   Identity,
   Ops,
   Principal,
@@ -39,7 +39,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const value = ctx.req.header(this.header)
     if (value === undefined) {
       return AuthenticateResult.none()
@@ -59,7 +59,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
     )
   }
 
-  override async challenge(ctx: Context): Promise<void> {
+  override async challenge(ctx: IContext): Promise<void> {
     ctx.status(401).header('x-challenged-by', this.scheme)
   }
 }

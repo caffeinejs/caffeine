@@ -2,7 +2,7 @@ import { newConfiguration } from '@caffeinejs/std'
 import { $t } from '@caffeinejs/std/schema'
 import { expectTypeOf } from 'vitest'
 
-import { createWebApplication, type Context } from '../index.js'
+import { createWebApplication, type IContext } from '../index.js'
 
 /**
  * What `.basePath(...)` accepts, and what a handler reads back. Nothing at run time fails when a callback stops
@@ -28,5 +28,5 @@ app.basePath(({ config }) => config.app.port)
 app.basePath(({ config }) => config.app.missing)
 
 // Every context carries it, whatever the adapter behind it.
-declare const ctx: Context
+declare const ctx: IContext
 expectTypeOf(ctx.req.basePath).toEqualTypeOf<string>()

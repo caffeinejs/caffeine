@@ -7,7 +7,7 @@ import { $p, type HTTPPickers } from '../routing/picker.js'
  *
  * `never` rather than `unknown` because `ParameterPickOptions` holds `R` in a parameter position and is
  * therefore contravariant in it: `never` is the end that accepts, so a pick whose function annotated its
- * request — `p.pick((req: { httpContext: Context }) => …)` — is assignable here alongside every built-in.
+ * request — `p.pick((req: { httpContext: IContext }) => …)` — is assignable here alongside every built-in.
  * With `unknown` the annotated one fails overload resolution with `TS2769`.
  */
 export type Picks = ParameterPickOptions<never>[]

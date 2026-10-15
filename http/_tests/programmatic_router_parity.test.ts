@@ -7,7 +7,7 @@ import {
   BaseAuthenticationHandler,
   Catch,
   Claim,
-  Context,
+  IContext,
   ErrHTTPNotFound,
   ErrorHandler,
   Guard,
@@ -31,7 +31,7 @@ class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
     super({})
   }
 
-  async authenticate(_ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(_ctx: IContext): Promise<AuthenticateResult> {
     return this.result
   }
 }
@@ -170,7 +170,7 @@ describe('programmatic router parity with the decorator feature set', () => {
     it('should render errors thrown by its routes', async () => {
       @Catch(ErrHTTPNotFound)
       class MissingHandler implements ErrorHandler<ErrHTTPNotFound> {
-        handle(ctx: Context): ActionResult {
+        handle(ctx: IContext): ActionResult {
           return ctx.status(404).body({ handled: 'by-group' })
         }
       }
@@ -193,14 +193,14 @@ describe('programmatic router parity with the decorator feature set', () => {
     it("should let a route's own handler win over the group's, and leave its siblings to the group's", async () => {
       @Catch(ErrHTTPNotFound)
       class GroupMissing implements ErrorHandler<ErrHTTPNotFound> {
-        handle(ctx: Context): ActionResult {
+        handle(ctx: IContext): ActionResult {
           return ctx.status(404).body({ handled: 'by-group' })
         }
       }
 
       @Catch(ErrHTTPNotFound)
       class RouteMissing implements ErrorHandler<ErrHTTPNotFound> {
-        handle(ctx: Context): ActionResult {
+        handle(ctx: IContext): ActionResult {
           return ctx.status(410).body({ handled: 'by-route' })
         }
       }
@@ -416,7 +416,7 @@ describe('programmatic router parity with the decorator feature set', () => {
   describe('given adapter configuration on a group and a route', () => {
     // What a feature reads per request, as `@Config` writes it. The more specific level wins a key outright.
     it("should give every route the group's entries, a route's own replacing the group's for its key", async () => {
-      const read = (ctx: Context) => {
+      const read = (ctx: IContext) => {
         const config = ctx.routeConfig as Record<string, unknown>
         return { feature: config.feature, other: config.other }
       }

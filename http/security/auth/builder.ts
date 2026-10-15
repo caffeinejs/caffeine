@@ -2,7 +2,7 @@ import { isValidKey, Provider, type InjectionToken, type NamedToken } from '@caf
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import { Context } from '../../context.js'
+import { IContext } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import { BasicAuthenticationHandler } from './basic/basic.js'
 import { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
@@ -432,7 +432,7 @@ export class AuthenticationBuilder<C = unknown> extends FeatureBuilder<C> {
     )
   }
 
-  forward(name: string, selector: (ctx: Context) => string | Promise<string>): this {
+  forward(name: string, selector: (ctx: IContext) => string | Promise<string>): this {
     const handler = new ForwardAuthenticationHandler(selector)
     return this.addStrategy(name, handler)
   }

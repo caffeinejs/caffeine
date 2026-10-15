@@ -9,7 +9,7 @@ import type { Guard } from '../guards/guard.js'
 /**
  * A group of routes, as authored. Inert: it describes routes, it does not know how any of them is called.
  * Whatever produced it — the `@Controller` decorators, a programmatic registration — compiles it into a
- * {@link ./route.js#RouteGroup} through `compileRouteGroup`.
+ * {@link ./route.js#IRouteGroup} through `compileRouteGroup`.
  */
 export interface RouteGroupSpec<R> {
   path: string

@@ -1,4 +1,4 @@
-import { kRouteConstraints, type ResolvedRouteConstraint, type Route } from '@caffeinejs/http'
+import { kRouteConstraints, type ResolvedRouteConstraint, type IRoute } from '@caffeinejs/http'
 import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type { ParameterLocation, ParameterObject, SchemaObject } from '../spec/spec.js'
@@ -30,7 +30,7 @@ const CREDENTIAL_HEADERS = new Set(['authorization', 'cookie'])
  * Parameter Object makes the document invalid.
  */
 export function deriveParameters(
-  route: Route<unknown>,
+  route: IRoute<unknown>,
   pathParams: PathParameter[],
   registry: ComponentRegistry,
   context: string,
@@ -135,7 +135,7 @@ function fromObjectSchema(
  * though nobody wrote a schema for it. Only the named pickers are usable: `$p.query()` with no name hands the
  * handler the whole query object and says nothing about its shape.
  */
-function fromPickers(route: Route<unknown>): ParameterObject[] {
+function fromPickers(route: IRoute<unknown>): ParameterObject[] {
   const parameters: ParameterObject[] = []
 
   for (const picker of route.parameters) {
@@ -163,7 +163,7 @@ function fromPickers(route: Route<unknown>): ParameterObject[] {
  * A required header parameter for each route-selection constraint that reads one — `Accept-Version` on a
  * versioned route. The value the route requires is not the request's, so the schema stays an open string.
  */
-function fromConstraints(route: Route<unknown>): ParameterObject[] {
+function fromConstraints(route: IRoute<unknown>): ParameterObject[] {
   const constraints = route.config?.get(kRouteConstraints) as Map<string, ResolvedRouteConstraint> | undefined
   if (constraints === undefined) {
     return []

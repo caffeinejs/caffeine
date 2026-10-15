@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim, Identity, Principal } from '../../index.js'
 import { AuthenticationTicket } from '../ticket.js'
 import { openSession, sealSession } from './_session_cookie.js'
@@ -45,7 +45,7 @@ function makeCtx(cookieValue?: string, url?: string, headers: Record<string, str
     status,
     header,
     body,
-  } as unknown as Context
+  } as unknown as IContext
   return { ctx, setCookie, deleteCookie, status, header, body }
 }
 
@@ -405,7 +405,7 @@ describe('CookieAuthenticationHandler', () => {
     })
 
     it('still runs a hook written to take the context alone', async () => {
-      const seen: Context[] = []
+      const seen: IContext[] = []
       const { ctx } = makeNavCtx('/reports', '/api')
       await makeHandler(o => o.loginPath('/login').onChallenge(c => void seen.push(c))).challenge(ctx)
       expect(seen).toEqual([ctx])

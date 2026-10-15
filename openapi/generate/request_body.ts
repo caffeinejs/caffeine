@@ -1,4 +1,4 @@
-import type { Route } from '@caffeinejs/http'
+import type { IRoute } from '@caffeinejs/http'
 import { hasFileSchema } from '@caffeinejs/std/schema'
 
 import type { RequestBodyObject, SchemaObject } from '../spec/spec.js'
@@ -34,7 +34,7 @@ const NAMED_FILE_PICKERS = new Set(['multipart:file', 'multipart:streamfile', 'm
  * handler that takes no pickers: it is documented as `multipart/form-data` from the schema alone.
  */
 export function deriveRequestBody(
-  route: Route<unknown>,
+  route: IRoute<unknown>,
   registry: ComponentRegistry,
   context: string,
 ): RequestBodyObject | undefined {
@@ -80,7 +80,7 @@ export function deriveRequestBody(
  * All of them, not just the first — `@Consumes('application/json', 'application/xml')` means the route really
  * does accept both, and documenting one silently narrows the published contract.
  */
-function requestMediaTypes(route: Route<unknown>, multipart: boolean): string[] {
+function requestMediaTypes(route: IRoute<unknown>, multipart: boolean): string[] {
   const declared = route.accept.filter(value => value !== '')
   if (declared.length > 0) {
     return [...new Set(declared)]
@@ -96,7 +96,7 @@ function requestMediaTypes(route: Route<unknown>, multipart: boolean): string[] 
  * a file picker rather than a text box. An unnamed picker (`$p.files()`, `$p.formData()`) contributes an
  * open-ended object instead, because the handler reads whatever was sent and no field name is knowable.
  */
-function multipartSchema(route: Route<unknown>): SchemaObject {
+function multipartSchema(route: IRoute<unknown>): SchemaObject {
   const properties: Record<string, SchemaObject> = {}
   let open = false
 

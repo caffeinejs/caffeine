@@ -1,6 +1,6 @@
 import type {
   AdapterExtensionFactory,
-  AdapterTypes,
+  IAdapterTypes,
   HTTPSetupContext,
   ServerConfigurer,
   ServerCustomizer,
@@ -19,7 +19,7 @@ export type BasePathConfigurer<C> = (context: HTTPSetupContext<C>) => string | u
  * An `Ops(...)` server's is bound under a key of its own, extending this class, and the application collects them
  * all with `container.getManyOptional(ServerDefinition)`.
  */
-export class ServerDefinition<T extends AdapterTypes = AdapterTypes, C = unknown> {
+export class ServerDefinition<T extends IAdapterTypes = IAdapterTypes, C = unknown> {
   /** What its `.server(...)` calls return, in call order. */
   readonly server: ServerConfigurer<T, C>[] = []
   /** Its `.with(...)` factories, in call order. */

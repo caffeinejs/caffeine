@@ -4,7 +4,7 @@ import { Server as HTTPSServer } from 'node:https'
 import type { FastifyInstance } from 'fastify'
 import { expectTypeOf } from 'vitest'
 
-import { createWebApplication, type Context } from '../index.js'
+import { createWebApplication, type IContext } from '../index.js'
 
 /**
  * What `.server(...)` accepts for TLS and HTTP/2, and what the instance is typed as once it is built. The server
@@ -46,7 +46,7 @@ app.serverCallback((_context, instance) => {
 })
 
 // Under HTTP/2 the raw request is typed as its HTTP/1 counterpart; what only HTTP/2 has is one narrowing away.
-declare const ctx: Context
+declare const ctx: IContext
 if (ctx.req.raw instanceof Http2ServerRequest) {
   expectTypeOf(ctx.req.raw.stream.id).toEqualTypeOf<number | undefined>()
 }

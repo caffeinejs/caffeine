@@ -1,4 +1,4 @@
-import type { Route, RouteGroup } from '@caffeinejs/http'
+import type { IRoute, IRouteGroup } from '@caffeinejs/http'
 import type { AnySchema } from '@caffeinejs/std/schema'
 
 import {
@@ -210,13 +210,13 @@ export class OpenAPIOptionsBuilder {
   }
 
   /** Overrides the derived `operationId`. */
-  operationId(fn: (router: RouteGroup<unknown>, route: Route<unknown>) => string): this {
+  operationId(fn: (router: IRouteGroup<unknown>, route: IRoute<unknown>) => string): this {
     this.#options.operationId = fn
     return this
   }
 
   /** Overrides the derived tag for a controller. */
-  tagFor(fn: (router: RouteGroup<unknown>) => string): this {
+  tagFor(fn: (router: IRouteGroup<unknown>) => string): this {
     this.#options.tagFor = fn
     return this
   }

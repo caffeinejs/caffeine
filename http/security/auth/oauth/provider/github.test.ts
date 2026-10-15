@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
-import type { Context } from '../../../../context.js'
+import type { IContext } from '../../../../context.js'
 import { Claim } from '../../../index.js'
 import { AuthenticationBuilder } from '../../builder.js'
 import { encodeSession, claimsToSession } from '../../internal/remote/session_store.js'
@@ -52,7 +52,7 @@ function makeCtx(
     redirect,
     header,
     status: vi.fn(() => ctx),
-  } as unknown as Context
+  } as unknown as IContext
 
   return { ctx, cookie, deleteCookie, redirect, header }
 }

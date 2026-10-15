@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   AllowAnonymous,
   Authorize,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Args,
@@ -223,7 +223,7 @@ describe('JWTBearerHandler', () => {
     class JWTSubClaimController {
       @Args([$p.context()])
       @Get('/')
-      list(ctx: Context) {
+      list(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }

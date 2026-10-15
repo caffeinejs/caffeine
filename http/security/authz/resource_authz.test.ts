@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
 import { Claim, Identity, Principal, anonymousUser } from '../index.js'
 import { AuthenticatedUserHandler, ResourceHandler } from './handlers.js'
@@ -17,8 +17,8 @@ function makeUser(sub: string): Principal {
   return new Principal(true, new Identity('jwt', true, [new Claim('sub', sub, '')]))
 }
 
-function ctxFor(user: Principal): Context {
-  return { user } as unknown as Context
+function ctxFor(user: Principal): IContext {
+  return { user } as unknown as IContext
 }
 
 function serviceWith(policyName: string, build: (b: PolicyBuilder) => void): AuthorizationService {

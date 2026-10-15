@@ -3,7 +3,7 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { ErrConfiguration } from '../error/common.js'
 import { createRouteGroupCompiler, type RouteGroupCompiler, type RouteGroupMeta } from './compile.js'
-import type { RouteGroup, RouteGroupScope } from './route.js'
+import type { IRouteGroup, RouteGroupScope } from './route.js'
 import type { RouteGroupSpec } from './spec.js'
 
 /**
@@ -48,7 +48,7 @@ export interface Routing<R> {
    *
    * @throws ErrConfiguration when `accept` takes a group an earlier call already selected: two servers would serve it.
    */
-  select(accept: (labels: RouteGroupLabels) => boolean): RouteGroup<R>[]
+  select(accept: (labels: RouteGroupLabels) => boolean): IRouteGroup<R>[]
 
   /** The declared groups no {@link select} call has taken yet. */
   unselected(): readonly DeclaredRouteGroup<R>[]
@@ -80,7 +80,7 @@ export function buildRouting<R>(sources: readonly RouteSource<R>[], container: C
     compileRouteGroup,
 
     select(accept) {
-      const groups: RouteGroup<R>[] = []
+      const groups: IRouteGroup<R>[] = []
 
       for (const group of declared) {
         if (!accept(group.spec.labels ?? kNoLabels)) {

@@ -2,7 +2,7 @@ import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../adapter.js'
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { AuthenticationBuilder } from '../builder.js'
 import { ForwardAuthenticationHandler } from '../forward/forward.js'
@@ -41,7 +41,7 @@ function makeCtx(cookies: Record<string, string> = {}) {
     deleteCookie: vi.fn().mockReturnThis(),
     redirect: vi.fn().mockReturnThis(),
     status: vi.fn().mockReturnThis(),
-  } as unknown as Context
+  } as unknown as IContext
 }
 
 /** Minimal kit double — configure touches bind/wrap. What it binds is captured, keyed by the binding key. */

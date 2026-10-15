@@ -6,7 +6,7 @@ import {
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
 
-import type { AdapterExtensionFactory, AdapterTypes } from '../../adapter.js'
+import type { AdapterExtensionFactory, IAdapterTypes } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import type { HTTPPlugin } from '../../plugin.js'
@@ -51,7 +51,7 @@ export class Router<
   GD = undefined,
   GP extends string = '',
   R = never,
-  T extends AdapterTypes = never,
+  T extends IAdapterTypes = never,
 > {
   /** Phantom — names the routes this router declares, for `RoutesOf`. Never assigned, never read. */
   declare readonly __routes?: R
@@ -527,7 +527,7 @@ type AnyRouteChain = RouteChain<any, any, any, any, any, any, any, any, any, any
 type AnyRouteHandler = RouteHandler<any, any, any, any, any, any, any>
 
 /** What a verb answers when it was given no handler: the route, still open for configuration. */
-type Chain<M extends string, P extends string, V, C, GD, GP extends string, R, T extends AdapterTypes> = RouteChain<
+type Chain<M extends string, P extends string, V, C, GD, GP extends string, R, T extends IAdapterTypes> = RouteChain<
   Empty,
   P,
   GD,
@@ -551,7 +551,7 @@ type Closed<
   GD,
   GP extends string,
   R,
-  T extends AdapterTypes,
+  T extends IAdapterTypes,
 > = Router<V, C, GD, GP, R | DeclaredRoute<M, JoinPath<GP, P>, S, O>, T>
 
 /** A handler written inline on a verb, typed against the route's schema and its full path. */
@@ -563,5 +563,5 @@ type Handler<
   GD,
   GP extends string,
   O,
-  T extends AdapterTypes,
+  T extends IAdapterTypes,
 > = RouteHandler<S, JoinPath<GP, P>, V, C, GD, O, T>

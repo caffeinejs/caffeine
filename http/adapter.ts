@@ -13,10 +13,10 @@ import type {
 import type { MiddlewarePipeline, ResolvedMiddleware } from './middleware/pipeline.js'
 import type { RouteGroupCompiler } from './routing/compile.js'
 import type { Router } from './routing/programmatic/router.js'
-import type { RouteGroup } from './routing/route.js'
+import type { IRouteGroup } from './routing/route.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
-export interface ContextPlatform {
+export interface IContextPlatform {
   readonly name: string
 }
 
@@ -26,7 +26,7 @@ export interface ContextPlatform {
  * An adapter declares one of these. The application, its routers and each request's context read their
  * server-specific types off it, so a new one is a new member here rather than a new type parameter everywhere.
  */
-export interface AdapterTypes {
+export interface IAdapterTypes {
   /** The server the adapter drives, which is what the application's `instance` is. */
   instance: unknown
 
@@ -49,7 +49,7 @@ export interface AdapterTypes {
   asyncCookies: boolean
 
   /** What `ctx.platform` is. */
-  platform: ContextPlatform
+  platform: IContextPlatform
 
   /**
    * What `.server(configure)` resolves to: the server's construction and listen settings, in the sections the
@@ -57,7 +57,7 @@ export interface AdapterTypes {
    */
   serverOptions: object
 
-  /** What `app.run(...)` takes and hands `Adapter.run(...)` untouched. `[]` when the server takes nothing. */
+  /** What `app.run(...)` takes and hands `IAdapterServer.run(...)` untouched. `[]` when the server takes nothing. */
   runArgs: readonly unknown[]
 }
 
@@ -73,7 +73,7 @@ export interface AdapterTypes {
  * ```
  *
  * Code written without knowing its adapter is typed against every entry at once: `@Use(...)` takes any registered
- * extension, and `ctx.platform` on a plain `Context` is any registered platform. With more than one entry, a
+ * extension, and `ctx.platform` on a plain `IContext` is any registered platform. With more than one entry, a
  * reader narrows on `ctx.platform.name` first. The Fastify entry is declared by this package's root entry point.
  */
 export interface AdapterRegistry {}
@@ -106,7 +106,7 @@ export interface ServerAddress {
  * factory gets, so `config` is the resolved tree and the container resolves. Returns the adapter's own shape —
  * under Fastify, `{ factory, listener }`.
  */
-export type ServerConfigurer<T extends AdapterTypes, C = unknown> = (
+export type ServerConfigurer<T extends IAdapterTypes, C = unknown> = (
   context: HTTPSetupContext<C>,
 ) => T['serverOptions'] | Promise<T['serverOptions']>
 
@@ -114,14 +114,14 @@ export type ServerConfigurer<T extends AdapterTypes, C = unknown> = (
  * The callback `.serverCallback(...)` takes: handed the same context a plugin factory gets, then the server right
  * after the adapter constructs it, before anything is decorated or registered on it.
  */
-export type ServerCustomizer<T extends AdapterTypes, C = unknown> = (
+export type ServerCustomizer<T extends IAdapterTypes, C = unknown> = (
   context: HTTPSetupContext<C>,
   instance: T['instance'],
 ) => void | Promise<void>
 
 /** What an application hands its adapter to set one server up with. */
-export interface AdapterIn<T extends AdapterTypes> {
-  routeGroups: RouteGroup<T['request']>[]
+export interface AdapterIn<T extends IAdapterTypes> {
+  routeGroups: IRouteGroup<T['request']>[]
   /**
    * What `$route` compiles a late group with: the compiler {@link buildRouting} built the groups above with, applied
    * the way this server applies it to every group it serves.
@@ -148,7 +148,7 @@ export interface AdapterIn<T extends AdapterTypes> {
  * Builds the servers behind a {@link WebApplication}. `T` names every type that belongs to the server library, and is
  * what the application, its routers and each request's context are typed with.
  */
-export interface Adapter<T extends AdapterTypes> {
+export interface IAdapter<T extends IAdapterTypes> {
   /**
    * Builds one server from `input.server`, hands it to `input.customize`, then wires everything else onto it. The
    * server comes back ready and not listening.
@@ -156,11 +156,11 @@ export interface Adapter<T extends AdapterTypes> {
    * Each call builds a server of its own, sharing nothing with another but the adapter's request context: the
    * application calls it for its own server, and once more for every other server it runs.
    */
-  setup(input: AdapterIn<T>): Promise<AdapterServer<T>>
+  setup(input: AdapterIn<T>): Promise<IAdapterServer<T>>
 }
 
-/** A server an {@link Adapter} built. Whoever asked for it runs it and tears it down. */
-export interface AdapterServer<T extends AdapterTypes> {
+/** A server an {@link IAdapter} built. Whoever asked for it runs it and tears it down. */
+export interface IAdapterServer<T extends IAdapterTypes> {
   get instance(): T['instance']
 
   /** Where the server is listening, or `undefined` before {@link run} and after {@link teardown}. */
@@ -187,7 +187,7 @@ export interface AdapterFactoryIn {
   container: Container
 }
 
-export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) => Adapter<T>
+export type AdapterFactory<T extends IAdapterTypes> = (input: AdapterFactoryIn) => IAdapter<T>
 
 /**
  * The application's operations a plugin may drive while it registers: what `context.app` is on an
@@ -201,7 +201,7 @@ export type AdapterFactory<T extends AdapterTypes> = (input: AdapterFactoryIn) =
  *
  * @throws ErrConfiguration from every call made outside that slot, a context kept past it included.
  */
-export interface WebApplicationOps<T extends AdapterTypes = never, C = unknown> {
+export interface WebApplicationOps<T extends IAdapterTypes = never, C = unknown> {
   /**
    * Serves routers, compiled as `app.mount(...)` compiles them: the same guards, authorization, start-up checks and
    * routers' own plugins, and listed in a generated OpenAPI document unless a group is marked
@@ -256,7 +256,7 @@ export interface WebApplicationOps<T extends AdapterTypes = never, C = unknown> 
  * Built once the container has initialized, so `container.get(...)` is legal, and `logger` is the one the logger
  * feature configured.
  */
-export interface HTTPSetupContext<C = unknown, T extends AdapterTypes = never> extends BootstrapKit<C> {
+export interface HTTPSetupContext<C = unknown, T extends IAdapterTypes = never> extends BootstrapKit<C> {
   container: Container
 
   /**
@@ -280,7 +280,7 @@ export interface HTTPSetupContext<C = unknown, T extends AdapterTypes = never> e
  * What `.with(...)` takes, and what `router.with(...)` and `@Use(...)` take. Called once, after the container
  * has initialized. Never deduplicated: two factories install two extensions.
  */
-export type AdapterExtensionFactory<X, C = unknown, T extends AdapterTypes = never> = (
+export type AdapterExtensionFactory<X, C = unknown, T extends IAdapterTypes = never> = (
   context: HTTPSetupContext<C, T>,
 ) => X | Promise<X>
 

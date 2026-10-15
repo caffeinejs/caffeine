@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
-  type Context,
+  type IContext,
   Controller,
   ErrConfiguration,
   ErrHTTPNotFound,
@@ -20,10 +20,10 @@ class DupController {
   }
 
   @Catch(ErrHTTPNotFound)
-  async first(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
+  async first(_ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {}
 
   @Catch(ErrHTTPNotFound)
-  async second(_ctx: Context, _error: ErrHTTPNotFound): Promise<void> {}
+  async second(_ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {}
 }
 void [DupController]
 

@@ -4,7 +4,7 @@ import {
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   Identity,
   Principal,
   newRouter,
@@ -29,7 +29,7 @@ class APIKeyHandler extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const key = ctx.req.header('x-api-key')
     if (key === undefined) {
       return AuthenticateResult.none()
@@ -55,7 +55,7 @@ describe('routes that name their authentication schemes', () => {
   const get = (path: string, headers: Record<string, string> = {}): Promise<BrowserResponse> =>
     new Browser().xhr(`${running.origin}${path}`, { headers })
 
-  const identities = (ctx: Context) => ({
+  const identities = (ctx: IContext) => ({
     identities: ctx.user.identities.map(identity => identity.authenticationType),
     subjects: ctx.user.findAll('sub').map(claim => claim.value),
   })
@@ -170,7 +170,7 @@ describe('a default scheme that forwards to the one a request calls for', () => 
   class CountingAPIKeyHandler extends APIKeyHandler {
     runs = 0
 
-    override authenticate(ctx: Context): Promise<AuthenticateResult> {
+    override authenticate(ctx: IContext): Promise<AuthenticateResult> {
       this.runs++
       return super.authenticate(ctx)
     }
@@ -182,7 +182,7 @@ describe('a default scheme that forwards to the one a request calls for', () => 
   const get = (path: string, headers: Record<string, string> = {}): Promise<BrowserResponse> =>
     new Browser().xhr(`${running.origin}${path}`, { headers })
 
-  const subject = (ctx: Context) => ({ sub: ctx.user.findFirst('sub')?.value })
+  const subject = (ctx: IContext) => ({ sub: ctx.user.findFirst('sub')?.value })
 
   beforeAll(async () => {
     running = await startApp(app =>

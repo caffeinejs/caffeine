@@ -10,7 +10,7 @@ import {
   ErrHTTPNotFound,
   Identity,
   Principal,
-  type Context,
+  type IContext,
 } from '@caffeinejs/http'
 
 import { isDocumentRequest, sendFile } from '../../index.js'
@@ -105,7 +105,7 @@ export class HeaderAuthenticationHandler extends BaseAuthenticationHandler<{}> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const user = ctx.req.header('x-user')
     if (user === undefined) {
       return AuthenticateResult.none()
@@ -138,18 +138,18 @@ export async function expectNotFoundJSON(res: Response): Promise<void> {
 // the part under test — rather than repeating the handlers.
 
 /** Refuses a request the way a handler does, so the miss renders through the error pipeline. */
-export function notFound(ctx: Context): never {
+export function notFound(ctx: IContext): never {
   throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }
 
 /** Sends `root`'s shell document. For a path the application declared, which answers any client. */
 export function shellOf(root: string) {
-  return (ctx: Context) => sendFile(ctx, 'index.html', root)
+  return (ctx: IContext) => sendFile(ctx, 'index.html', root)
 }
 
 /** Sends `root`'s shell document to a document request, and refuses anything else. For a wildcard. */
 export function clientRouteOf(root: string) {
   const shell = shellOf(root)
 
-  return (ctx: Context) => (isDocumentRequest(ctx) ? shell(ctx) : notFound(ctx))
+  return (ctx: IContext) => (isDocumentRequest(ctx) ? shell(ctx) : notFound(ctx))
 }

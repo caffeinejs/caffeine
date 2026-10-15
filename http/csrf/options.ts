@@ -1,14 +1,14 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import { ErrCSRFConfiguration } from './errors.js'
 import { normalizeTrustedOrigin } from './origin.js'
 
 /** The application's word on the origin of a request the check refused: `true` lets it through. */
-export type OriginPredicate = (ctx: Context, origin: URL) => boolean | PromiseLike<boolean>
+export type OriginPredicate = (ctx: IContext, origin: URL) => boolean | PromiseLike<boolean>
 
 /** The application's word on a request refused for its `Sec-Fetch-Site`: `true` lets it through. */
-export type SecFetchSitePredicate = (ctx: Context, site: 'same-site' | 'cross-site') => boolean | PromiseLike<boolean>
+export type SecFetchSitePredicate = (ctx: IContext, site: 'same-site' | 'cross-site') => boolean | PromiseLike<boolean>
 
 /**
  * The `csrf` block of the configuration tree, handed over with `c.config(config.app.csrf)`.

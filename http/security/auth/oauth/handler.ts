@@ -1,6 +1,6 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { basicAuthHeader } from '../internal/remote/client_auth.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
@@ -56,7 +56,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
   }
 
   protected override async exchangeAndBuildIdentity(
-    ctx: Context,
+    ctx: IContext,
     code: string,
     stored: RemoteAuthenticationState,
   ): Promise<RemoteAuthenticationIdentity> {

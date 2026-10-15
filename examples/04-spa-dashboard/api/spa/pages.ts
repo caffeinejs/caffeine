@@ -1,13 +1,13 @@
-import { ErrHTTPNotFound, newRouter, type Context } from '@caffeinejs/http'
+import { ErrHTTPNotFound, newRouter, type IContext } from '@caffeinejs/http'
 import { isDocumentRequest, sendFile } from '@caffeinejs/static'
 
 import { SITE } from './site.js'
 
 /** The shell. One document, one `ETag`, whatever client route asked for it. */
-const shellDocument = (ctx: Context) => sendFile(ctx, 'index.html', SITE)
+const shellDocument = (ctx: IContext) => sendFile(ctx, 'index.html', SITE)
 
 /** A miss the application refuses itself, so it renders through the error pipeline like any thrown error. */
-const notFound = (ctx: Context): never => {
+const notFound = (ctx: IContext): never => {
   throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }
 
@@ -18,7 +18,7 @@ const notFound = (ctx: Context): never => {
  * That is what keeps a missing `/assets/app-HASH.js` a real 404 instead of HTML under a JavaScript content
  * type, and what keeps `curl` from being handed a page it cannot use.
  */
-const clientRoute = (ctx: Context) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
+const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 /**
  * Public pages. `/login` and `/forbidden` must stay anonymous: gating the sign-in page loops it through

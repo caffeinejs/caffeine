@@ -1,4 +1,4 @@
-import { $p, Args, Controller, Get, createWebApplication, type Context, type WebApplication } from '@caffeinejs/http'
+import { $p, Args, Controller, Get, createWebApplication, type IContext, type WebApplication } from '@caffeinejs/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -15,7 +15,7 @@ class BasedController {
   @CacheControl({ ttl: 60 })
   @Get('/page')
   @Args([$p.context()])
-  page(ctx: Context) {
+  page(ctx: IContext) {
     return { next: `${ctx.req.basePath}/next` }
   }
 }

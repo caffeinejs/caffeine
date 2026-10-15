@@ -1,7 +1,7 @@
 import type { Provider } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'
 import { ErrAuthConfiguration } from '../errors.js'
 import { BaseAuthenticationHandler } from '../handler.js'
@@ -47,7 +47,7 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
     this.#store = store
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const token = parseAuthorizationHeader(ctx.req.header('authorization'), this.#scheme)
     if (token === undefined) {
       return AuthenticateResult.none()
@@ -79,7 +79,7 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
    * has no registered parameter to say it with.
    */
   override async challenge(
-    ctx: Context,
+    ctx: IContext,
     _properties?: AuthenticationProperties,
     previous?: AuthenticateResult,
   ): Promise<void> {
@@ -93,7 +93,7 @@ export class OpaqueTokenAuthenticationHandler extends BaseAuthenticationHandler<
   }
 
   /** Answers 403, under the `Bearer` keyword with RFC 6750 §3.1 `insufficient_scope`: a good token, not enough. */
-  override async forbid(ctx: Context): Promise<void> {
+  override async forbid(ctx: IContext): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }

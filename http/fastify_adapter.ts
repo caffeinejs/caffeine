@@ -23,14 +23,14 @@ import Fastify, {
 } from 'fastify'
 
 import type {
-  Adapter,
+  IAdapter,
   AdapterExtensions,
   AdapterFactory,
   AdapterFactoryIn,
   AdapterIn,
-  AdapterServer,
-  AdapterTypes,
-  ContextPlatform,
+  IAdapterServer,
+  IAdapterTypes,
+  IContextPlatform,
   ServerAddress,
 } from './adapter.js'
 import { kRawBasePath, stripBasePath, type BasePathCarrier } from './base_path.js'
@@ -47,7 +47,7 @@ import { installNotFoundHandler } from './routing/fastify/not_found.js'
 import { compileArgs, compileHandler } from './routing/fastify/parameters.js'
 import { registerCompiledRouteGroup } from './routing/fastify/register.js'
 import type { CaffeineRouteConfig } from './routing/fastify/route_config.js'
-import type { RouteCompilers, RouteGroup, RouteGroupScope } from './routing/route.js'
+import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from './routing/route.js'
 import { assertAuthorizationConfigured } from './security/authz/index.js'
 import {
   assertAuthenticationConfigured,
@@ -63,7 +63,7 @@ import { Keys } from './symbols.js'
  *
  * The way to reach what Fastify or one of its plugins added, such as `reply.view` or `request.parts()`.
  */
-export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extends ContextPlatform {
+export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extends IContextPlatform {
   readonly name: 'fastify'
   readonly request: FastifyRequest
   readonly reply: RES
@@ -108,12 +108,12 @@ type FastifyFactoryOptions = FastifyServerOptions<Server> & {
   http2SessionTimeout?: number
 }
 
-/** The Fastify adapter's {@link AdapterTypes}. */
+/** The Fastify adapter's {@link IAdapterTypes}. */
 export interface FastifyTypes<
   S extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
-> extends AdapterTypes {
+> extends IAdapterTypes {
   instance: S
   request: REQ
   extension: FastifyExtension
@@ -195,12 +195,12 @@ declare module 'fastify' {
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
-export class FastifyAdapter implements Adapter<FastifyTypes> {
+export class FastifyAdapter implements IAdapter<FastifyTypes> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
    * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
    */
-  readonly #compilers: RouteCompilers<FastifyRequest> = {
+  readonly #compilers: IRouteCompilers<FastifyRequest> = {
     handler: (parameters, fn) =>
       compileHandler<FastifyRequest, FastifyReply>(parameters, fn) as (req: FastifyRequest, res: unknown) => unknown,
     args: parameters =>
@@ -231,7 +231,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
    * A build that fails closes what it had built before rethrowing: the caller never receives that server to close,
    * and a plugin that loaded before the failure still gets its `onClose`.
    */
-  async setup(input: AdapterIn<FastifyTypes>): Promise<AdapterServer<FastifyTypes>> {
+  async setup(input: AdapterIn<FastifyTypes>): Promise<IAdapterServer<FastifyTypes>> {
     // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
@@ -458,7 +458,7 @@ export class FastifyAdapter implements Adapter<FastifyTypes> {
 }
 
 /** One server {@link FastifyAdapter} built. */
-class FastifyAdapterServer implements AdapterServer<FastifyTypes> {
+class FastifyAdapterServer implements IAdapterServer<FastifyTypes> {
   readonly #fastify: FastifyInstance
   /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
   readonly #listener: FastifyListenOptions | undefined
@@ -723,7 +723,7 @@ function assertPluginNotRegistered(
  */
 function assertRouteFeaturesInstalled(
   server: FastifyInstance,
-  routeGroups: readonly RouteGroup<any>[],
+  routeGroups: readonly IRouteGroup<any>[],
   extensions: Pick<AdapterExtensions<FastifyExtension>, 'of'>,
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {

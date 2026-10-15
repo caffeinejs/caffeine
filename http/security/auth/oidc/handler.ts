@@ -2,7 +2,7 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { JWTVerifyGetKey } from 'jose'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { basicAuthHeader, type TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
@@ -104,7 +104,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   }
 
   protected override async exchangeAndBuildIdentity(
-    ctx: Context,
+    ctx: IContext,
     code: string,
     stored: RemoteAuthenticationState,
   ): Promise<RemoteAuthenticationIdentity> {
@@ -240,7 +240,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
    * @throws ErrOIDCConfiguration when no end-session endpoint is configured and the provider advertises none. The
    * session here is gone by then.
    */
-  override async signOut(ctx: Context): Promise<void> {
+  override async signOut(ctx: IContext): Promise<void> {
     // Read the id_token before revoking — revocation is what makes the ticket unreachable.
     const idToken = (await this.currentTicket(ctx))?.tokens?.idToken
 

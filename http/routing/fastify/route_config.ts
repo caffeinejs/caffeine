@@ -1,7 +1,7 @@
 import { type FastifyInstance, type FastifyRequest, type RouteOptions } from 'fastify'
 
 import { type AuthzRouteService } from '../../security/authz/route_service.js'
-import { type CatchByMap, type Route, type RouteGroup } from '../route.js'
+import { type CatchByMap, type IRoute, type IRouteGroup } from '../route.js'
 
 /** What the authentication gate has to know about the route a request matched. */
 export interface GatedRoute {
@@ -16,9 +16,9 @@ export interface CompiledRouteMetadata<R = FastifyRequest> {
    * The compiled route: schema, authorization, constraints, detail. A GET route's automatic HEAD twin
    * carries the same object, so an enrichment written to `detail` is observed by both spellings.
    */
-  route: Route<R>
+  route: IRoute<R>
   /** The group the route was compiled in: its path, prefix, name, target and detail. */
-  group: RouteGroup<R>
+  group: IRouteGroup<R>
   hasStatus: boolean
   status: number
   hasContentType: boolean
@@ -114,8 +114,8 @@ export function exemptFromAuthentication(route: RouteOptions): void {
  * function is complete once routes have registered: call it from `onReady` or later. A group holds only the routes that registered, in registration
  * order, and a GET route's automatic HEAD twin is counted once.
  */
-export function collectRouteGroups(instance: FastifyInstance): () => RouteGroup<FastifyRequest>[] {
-  const groups = new Map<RouteGroup<FastifyRequest>, Set<Route<FastifyRequest>>>()
+export function collectRouteGroups(instance: FastifyInstance): () => IRouteGroup<FastifyRequest>[] {
+  const groups = new Map<IRouteGroup<FastifyRequest>, Set<IRoute<FastifyRequest>>>()
 
   instance.addHook('onRoute', options => {
     const meta = options.config?.$caffeine?.compiled

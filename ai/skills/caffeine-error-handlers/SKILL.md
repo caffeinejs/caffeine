@@ -26,11 +26,11 @@ An application that never calls `.errorHandling(...)` still renders a thrown `Er
 ## Shape
 
 ```ts
-import { Catch, type Context, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
+import { Catch, ErrHTTP, ErrorHandler, type IContext } from '@caffeinejs/http'
 
 @Catch(ErrHTTP)
 export class HTTPErrorHandler implements ErrorHandler<ErrHTTP> {
-  async handle(ctx: Context, err: ErrHTTP) {
+  async handle(ctx: IContext, err: ErrHTTP) {
     ctx.status(err.statusCode)
     return { code: err.code, message: err.message }
   }

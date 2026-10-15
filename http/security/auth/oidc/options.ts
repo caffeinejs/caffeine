@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 import type { JWTVerifyGetKey } from 'jose'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { CookiePriority } from '../../../cookie/options.js'
 import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../index.js'
@@ -238,7 +238,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    * configuration, not here) and the guarded protocol parameters (`client_id`, `redirect_uri`,
    * `state`, `nonce`, `code_challenge` and the rest), which are always taken from the handler.
    */
-  onRedirectToProvider?: (ctx: Context, url: URL) => Promise<void> | void
+  onRedirectToProvider?: (ctx: IContext, url: URL) => Promise<void> | void
 
   /**
    * Holds sessions server-side; the cookie then carries only an opaque key.
@@ -257,14 +257,18 @@ export interface ResolvedOIDCAuthenticationOptions {
    * long-lived, high-value credentials and the cookie is client-side and size-capped.
    * Store them server-side here if the application needs them.
    */
-  onTokenValidated?: (ctx: Context, idTokenPayload: Record<string, unknown>, tokens: OIDCTokens) => Promise<void> | void
+  onTokenValidated?: (
+    ctx: IContext,
+    idTokenPayload: Record<string, unknown>,
+    tokens: OIDCTokens,
+  ) => Promise<void> | void
   /**
    * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
    *
    * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
   /**
    * Shapes the challenge response, and receives where the browser should go next.
    *
@@ -274,8 +278,8 @@ export interface ResolvedOIDCAuthenticationOptions {
    * provider, and the flow begins when a browser goes to the login path. Use it to answer `401` with that
    * URL in a shape of your own.
    */
-  onChallenge?: (ctx: Context, redirectTo: string) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  onChallenge?: (ctx: IContext, redirectTo: string) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
   claimMapper?: (idTokenPayload: Record<string, unknown>) => Claim[]
 
   jwksResolver?: (jwksURI: string) => JWTVerifyGetKey

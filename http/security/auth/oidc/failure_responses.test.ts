@@ -4,7 +4,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createWebApplication, newRouter, type Context, Authentication, authentication } from '../../../index.js'
+import { createWebApplication, newRouter, type IContext, Authentication, authentication } from '../../../index.js'
 import { ErrOAuthCallback } from '../internal/remote/errors.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
@@ -29,7 +29,7 @@ function pinoTo(logged: LogEntry[], level = 'warn') {
   return { level, stream: { write: (line: string) => void logged.push(JSON.parse(line) as LogEntry) } }
 }
 
-function application(onFail?: (ctx: Context, error: Error) => void, logged: LogEntry[] = []) {
+function application(onFail?: (ctx: IContext, error: Error) => void, logged: LogEntry[] = []) {
   return createWebApplication()
     .server(() => ({ factory: { logger: pinoTo(logged) } }))
     .install(

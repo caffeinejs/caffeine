@@ -1,4 +1,4 @@
-import { Responder, ActionResult, type Context, ErrConfiguration } from '@caffeinejs/http'
+import { Responder, ActionResult, type IContext, ErrConfiguration } from '@caffeinejs/http'
 import { errMessage } from '@caffeinejs/std/framework/err'
 import { type FastifyViewOptions } from '@fastify/view'
 
@@ -77,7 +77,7 @@ class ViewResult extends Responder {
     super()
   }
 
-  respond(ctx: Context): ActionResult {
+  respond(ctx: IContext): ActionResult {
     return renderView(this, ctx.platform.reply as ViewCapableReply)
   }
 }

@@ -6,7 +6,7 @@ import { $t } from '@caffeinejs/std/schema'
 import { SignJWT } from 'jose'
 import { describe, expect, it } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import {
   AllowAnonymous,
   AuthenticationSchemeProvider,
@@ -368,7 +368,7 @@ describe('authentication configuration', () => {
         cookie: (_name: string, value: string) => void (sealed = value),
         header: () => issued,
         req: { basePath: '' },
-      } as unknown as Context
+      } as unknown as IContext
       const ada = new Principal(true, new Identity('cookie', true, [new Claim('sub', 'ada', '')]))
       await new CookieAuthenticationHandler(
         'cookie',

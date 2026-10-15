@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   Catch,
-  type Context,
+  type IContext,
   Controller,
   ErrorHandler,
   Get,
@@ -19,7 +19,7 @@ class TextResult extends Responder {
     super()
   }
 
-  respond(ctx: Context): ActionResult {
+  respond(ctx: IContext): ActionResult {
     ctx.header('x-render', 'custom').header('content-type', 'text/plain').body(this.body)
   }
 }
@@ -28,7 +28,7 @@ class ErrCustom extends Error {}
 
 @Catch(ErrCustom)
 class CustomErrorHandler implements ErrorHandler<ErrCustom> {
-  handle(ctx: Context, error: ErrCustom): ActionResult {
+  handle(ctx: IContext, error: ErrCustom): ActionResult {
     ctx.status(422)
     return new TextResult(`caught: ${error.message}`)
   }

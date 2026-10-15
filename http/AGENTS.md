@@ -130,8 +130,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   (`_tests/handler_timeout.test.ts`).
 - `ctx.sent` is asked before every send on somebody else's behalf, and by the route handler before every branch,
   not only `undefined` (`_tests/handler_answered.test.ts`).
-- A newly found server-library type becomes a member of `AdapterTypes` (`adapter.ts`), never another type
+- A newly found server-library type becomes a member of `IAdapterTypes` (`adapter.ts`), never another type
   parameter.
+- A core interface that an adapter implements or extends is named `I` plus its full, unabbreviated name
+  (`IContext`, `IRequest`, `IRouteGroup`, `IAdapterTypes`), leaving the plain name to the adapter's own type. No
+  other interface takes the prefix.
 - No server decoration holds the route table; a plugin needing routes adds an `onRoute` hook
   (`collectRouteGroups(instance)`), not a scan in the adapter.
 - `$route` is fire-once, not get-or-create, and open only while the server's root loop installs: the `.with(...)`
@@ -142,7 +145,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Servers
 
-- The adapter is a server factory. Every `setup(input)` builds one independent `AdapterServer`, sharing only the
+- The adapter is a server factory. Every `setup(input)` builds one independent `IAdapterServer`, sharing only the
   request context binding and the parameter compilers.
 - Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
   `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Ops(...)` binds one per
@@ -154,7 +157,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Labels merge outer-first. The flatten walk refuses a nested router bound to a server other than its parent's,
   and a router nested in itself, by `.mount(...)` or by a router plugin's `context.app.mount(...)`: it checks the
   routers on the current path only, so the same router under two parents stays served in each place.
-- `RouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
+- `IRouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
 - A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches an ops server
   only through that server's own `o.with(...)`, `o.use(...)` or `o.useFn(...)`. Only `WebApplication` and the
   package barrel import `ops/`.
@@ -169,7 +172,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 ## Routes
 
 - Outside the `routing/index.ts` barrel, nothing in `routing/` imports `routing/fastify/`. Do not reintroduce
-  `Router` as the compiled shape (`RouteGroup`).
+  `Router` as the compiled shape (`IRouteGroup`).
 - Keep the verb overloads' order (schema before handler) and the `.inject()` spec overload first; inference
   depends on it. The inline forms call `RouteChain`; do not give them an options argument.
 - Write a route-level feature as a `RouteExtension` (`routing/extension.ts`); the decorator calls it, and a router
@@ -214,7 +217,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   else, or two contexts disagree on the same request.
 - `ctx.state` is application space; a first-party value gets a dedicated member, as `ctx.user`, or the route
   config.
-- Do not add a Fastify-named member to `Context` or cast one to `FastifyContext`; `ctx.platform` is the escape
+- Do not add a Fastify-named member to `IContext` or cast one to `FastifyContext`; `ctx.platform` is the escape
   hatch.
 - Do not invent a second "stream scope"; fix how the adapter awaits the request.
 - `Responder` is special-cased; a Fetch `Response` on `ActionResult` is passed to Fastify `send()` unwrapped, so

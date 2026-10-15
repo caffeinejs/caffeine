@@ -13,7 +13,7 @@ import { ErrSendFileUnavailable } from './errors.js'
 export type DownloadOptions = SendOptions & { root?: string }
 
 /**
- * The slice of a `Context` {@link sendFile} and {@link download} reach through.
+ * The slice of an `IContext` {@link sendFile} and {@link download} reach through.
  *
  * A structural slice rather than `FastifyContext` from `@caffeinejs/http`: every instantiation of that class
  * fits without variance trouble, and a context built by another adapter does not compile.
@@ -24,7 +24,7 @@ export interface StaticContext {
 }
 
 /**
- * Sends a file the way `reply.sendFile` does, from a handler that holds a `Context`.
+ * Sends a file the way `reply.sendFile` does, from a handler that holds an `IContext`.
  *
  * The handler must **return** what this returns. `@fastify/static` pumps the file asynchronously without
  * awaiting it, so the context does not yet know it answered, and a handler returning `undefined` would be
@@ -58,7 +58,7 @@ export function sendFile(
 }
 
 /**
- * Sends a file as an attachment the way `reply.download` does, from a handler that holds a `Context`.
+ * Sends a file as an attachment the way `reply.download` does, from a handler that holds an `IContext`.
  *
  * `filename` names the file the browser saves, defaulting to `filepath`. Everything {@link sendFile} says
  * about returning the reply and about whose options apply holds here too, with one difference worth knowing:

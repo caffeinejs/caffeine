@@ -28,7 +28,7 @@ import {
   csrfExemptConfig,
   newRouter,
   type ActionResult,
-  type Context,
+  type IContext,
   type CSRFBuilder,
   type ErrorHandler,
   type OriginPredicate,
@@ -834,7 +834,7 @@ describe('csrf()', () => {
     it('hands a refusal to an enrolled @Catch(ErrCSRFCrossOrigin) handler', async () => {
       @Catch(ErrCSRFCrossOrigin)
       class CrossOriginHandler implements ErrorHandler<ErrCSRFCrossOrigin> {
-        handle(ctx: Context, error: ErrCSRFCrossOrigin): ActionResult {
+        handle(ctx: IContext, error: ErrCSRFCrossOrigin): ActionResult {
           return ctx.status(403).body({ caught: error.reason })
         }
       }
@@ -880,7 +880,7 @@ describe('csrf()', () => {
         super({})
       }
 
-      async authenticate(ctx: Context): Promise<AuthenticateResult> {
+      async authenticate(ctx: IContext): Promise<AuthenticateResult> {
         const user = ctx.req.header('x-user')
         if (user === undefined) {
           return AuthenticateResult.none()
@@ -891,7 +891,7 @@ describe('csrf()', () => {
         return AuthenticateResult.success(new AuthenticationTicket(new Principal(true, [identity]), 'Header'))
       }
 
-      override async challenge(ctx: Context): Promise<void> {
+      override async challenge(ctx: IContext): Promise<void> {
         ctx.status(401)
       }
     }

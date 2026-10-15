@@ -2,7 +2,7 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import type { Adapter, AdapterIn, AdapterServer, HTTPSetupContext } from '../../adapter.js'
+import type { IAdapter, AdapterIn, IAdapterServer, HTTPSetupContext } from '../../adapter.js'
 import { createWebApplication } from '../../application.js'
 import type { FastifyTypes } from '../../fastify_adapter.js'
 import { Ops } from '../../index.js'
@@ -15,18 +15,18 @@ import { pluginName, type AnyFastifyPlugin } from '../../plugin.js'
  */
 
 /** Records what every server is set up with, and builds none: the contract is all this file needs. */
-class RecordingAdapter implements Adapter<FastifyTypes> {
+class RecordingAdapter implements IAdapter<FastifyTypes> {
   /** In call order: the application's own server first. */
   readonly inputs: AdapterIn<FastifyTypes>[] = []
 
-  async setup(input: AdapterIn<FastifyTypes>): Promise<AdapterServer<FastifyTypes>> {
+  async setup(input: AdapterIn<FastifyTypes>): Promise<IAdapterServer<FastifyTypes>> {
     this.inputs.push(input)
     return new IdleServer()
   }
 }
 
 /** What {@link RecordingAdapter} hands back: nothing was built, so it never listens and answers nothing. */
-class IdleServer implements AdapterServer<FastifyTypes> {
+class IdleServer implements IAdapterServer<FastifyTypes> {
   get instance(): never {
     throw new Error('No server was built')
   }

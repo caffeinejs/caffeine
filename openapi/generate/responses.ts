@@ -1,4 +1,4 @@
-import type { Route } from '@caffeinejs/http'
+import type { IRoute } from '@caffeinejs/http'
 
 import type { ResponseDetail } from '../decorators/detail.js'
 import type { OpenAPIOptions } from '../options.js'
@@ -48,7 +48,7 @@ const REASONS: Record<string, string> = {
  * the authorization pipeline protects. Anything declared explicitly always wins over an inferred entry.
  */
 export function deriveResponses(
-  route: Route<unknown>,
+  route: IRoute<unknown>,
   options: OpenAPIOptions,
   registry: ComponentRegistry,
   context: string,
@@ -165,10 +165,10 @@ function contentTypesFor(status: string, successStatus: string, successTypes: st
 /**
  * The media types a route produces: everything `@Produces` declared, else JSON.
  *
- * `Route.contentType` is a single value today, so this is a list of one until the router carries more — but
+ * `IRoute.contentType` is a single value today, so this is a list of one until the router carries more — but
  * the response shape is built from a list so that adding it later is not a rewrite.
  */
-function responseMediaTypes(route: Route<unknown>): string[] {
+function responseMediaTypes(route: IRoute<unknown>): string[] {
   return route.contentType !== '' ? [route.contentType] : ['application/json']
 }
 
@@ -183,7 +183,7 @@ function emptyContent(types: string[]): Record<string, Record<string, never>> {
  * `cache-control` or an `x-request-id` documented nothing about it. The value is not published — a header's
  * value is a runtime detail — only that the response carries it.
  */
-function deriveHeaders(route: Route<unknown>): Record<string, HeaderObject> | undefined {
+function deriveHeaders(route: IRoute<unknown>): Record<string, HeaderObject> | undefined {
   if (route.header === undefined || route.header.size === 0) {
     return undefined
   }
@@ -205,7 +205,7 @@ function normalizeStatus(status: string): string {
   return /^[1-5]xx$/i.test(status) ? status.toUpperCase() : status
 }
 
-function hasRequestSchema(route: Route<unknown>): boolean {
+function hasRequestSchema(route: IRoute<unknown>): boolean {
   const schema = route.schema
   if (schema === undefined) {
     return false

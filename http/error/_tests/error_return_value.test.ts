@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Catch,
   type ActionResult,
-  type Context,
+  type IContext,
   Controller,
   ErrorHandler,
   Get,
@@ -18,7 +18,7 @@ class ErrReturnVoid extends Error {}
 
 @Catch(ErrReturnJson)
 class ReturnJsonHandler implements ErrorHandler<ErrReturnJson> {
-  handle(ctx: Context, error: ErrReturnJson): ActionResult {
+  handle(ctx: IContext, error: ErrReturnJson): ActionResult {
     ctx.status(418)
     return { code: 'TEAPOT', message: error.message }
   }
@@ -26,7 +26,7 @@ class ReturnJsonHandler implements ErrorHandler<ErrReturnJson> {
 
 @Catch(ErrReturnVoid)
 class ReturnVoidHandler implements ErrorHandler<ErrReturnVoid> {
-  async handle(ctx: Context, error: ErrReturnVoid): Promise<void> {
+  async handle(ctx: IContext, error: ErrReturnVoid): Promise<void> {
     ctx.status(500).body({ viaCtx: error.message })
   }
 }

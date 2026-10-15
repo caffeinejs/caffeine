@@ -206,9 +206,7 @@ help:: ## show help
 	@printf "\033[36m%-20s\033[0m %s\n" "build:cli" "build the caffeine CLI binary and link node_modules/.bin/caffeine"
 	@printf "\033[36m%-20s\033[0m %s\n" "test:<package>" "run the test suite of a single package (e.g. test:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "lint:<package>" "lint a single package and fix errors (e.g. lint:http)"
-	@printf "\033[36m%-20s\033[0m %s\n" "lint-check:<package>" "lint a single package without fixing (e.g. lint-check:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "fmt:<package>" "format a single package (e.g. fmt:http)"
-	@printf "\033[36m%-20s\033[0m %s\n" "fmt-check:<package>" "check formatting of a single package (e.g. fmt-check:http)"
 	@printf "\033[36m%-20s\033[0m %s\n" "bench:<type>" "build and run a benchmark (e.g. bench:helloworld)"
 
 include examples/Makefile

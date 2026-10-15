@@ -1,7 +1,7 @@
 import {
   AdapterExtensions,
   type AdapterExtensionFactory,
-  type AdapterTypes,
+  type IAdapterTypes,
   type HTTPSetupContext,
 } from '../../adapter.js'
 import { MiddlewarePipeline } from '../../middleware/pipeline.js'
@@ -22,7 +22,7 @@ type ScopeFactory = AdapterExtensionFactory<unknown, unknown, any>
  * relative to it, and what a router's plugin mounts nests under the router. What it mounts is kept here, never
  * written into the router, so the same router mounted into two applications starts from what it declared in both.
  */
-export class ScopedPlugins<T extends AdapterTypes> {
+export class ScopedPlugins<T extends IAdapterTypes> {
   /** Per router or controller: the adapter's plugins, and the middleware its plugins added. */
   readonly extensions = new AdapterExtensions<T['extension']>()
 

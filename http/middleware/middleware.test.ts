@@ -12,7 +12,7 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, it, expect } from 'vitest'
 
 import {
-  type Context,
+  type IContext,
   Controller,
   ErrHTTPForbidden,
   ErrPipelineSealed,
@@ -48,7 +48,7 @@ class Tag {
 class Tagger implements Middleware {
   constructor(private readonly tag: Tag) {}
 
-  handle(ctx: Context, next: Next): void {
+  handle(ctx: IContext, next: Next): void {
     ctx.header('x-tag', this.tag.value)
     next()
   }
@@ -59,7 +59,7 @@ let counterInstances = 0
 class Counter implements Middleware {
   readonly id = ++counterInstances
 
-  handle(ctx: Context, next: Next): void {
+  handle(ctx: IContext, next: Next): void {
     ctx.header('x-instance', String(this.id))
     next()
   }
@@ -327,7 +327,7 @@ describe('middleware pipeline', () => {
         return 'preHandler'
       }
 
-      handle(_ctx: Context, next: Next): void {
+      handle(_ctx: IContext, next: Next): void {
         order.push('hinted')
         next()
       }
@@ -357,7 +357,7 @@ describe('middleware pipeline', () => {
         return 'preHandler'
       }
 
-      handle(_ctx: Context, next: Next): void {
+      handle(_ctx: IContext, next: Next): void {
         order.push('hinted')
         next()
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import { Claim, Identity, Principal, anonymousUser } from '../identity.js'
 import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import type {
@@ -17,7 +17,7 @@ import type {
  * and `ClaimHandler`'s deny, presence-only and multi-value branches were equally untouched.
  */
 
-const ctx = {} as Context
+const ctx = {} as IContext
 
 function user(claims: Array<[string, unknown]>, roleClaimType = 'roles'): Principal {
   return new Principal(true, [

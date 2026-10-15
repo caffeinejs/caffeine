@@ -1,4 +1,4 @@
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { Principal } from '../../index.js'
 
 /**
@@ -22,5 +22,5 @@ import type { Principal } from '../../index.js'
  * `Identity`/`Claim`/`Principal` API.
  */
 export abstract class OpaqueTokenStore {
-  abstract validate(token: string, ctx: Context): Promise<Principal | null> | Principal | null
+  abstract validate(token: string, ctx: IContext): Promise<Principal | null> | Principal | null
 }

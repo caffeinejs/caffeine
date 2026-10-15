@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Authorize,
   Claim,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Identity,
@@ -105,7 +105,7 @@ class AuthController {
 class MeController {
   @Args([$p.context()])
   @Get('/')
-  me(ctx: Context) {
+  me(ctx: IContext) {
     return { sub: ctx.user.findFirst('sub')?.value, admin: ctx.user.isInRole('admin') }
   }
 }

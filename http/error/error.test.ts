@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Catch,
   CatchWith,
-  type Context,
+  type IContext,
   Controller,
   ErrHTTPNotFound,
   ErrorHandler,
@@ -28,7 +28,7 @@ import { ErrHTTPBadRequest, ErrHTTPConflict, ErrHTTP } from './http.js'
 class Recorder implements ErrorHandler<Error> {
   constructor(readonly label: string) {}
 
-  async handle(_ctx: Context, _error: Error): Promise<void> {}
+  async handle(_ctx: IContext, _error: Error): Promise<void> {}
 }
 
 function providerOf(label: string): Provider<ErrorHandler<Error>> {
@@ -106,14 +106,14 @@ class Greeter {
 class NotFoundHandler implements ErrorHandler<ErrHTTPNotFound> {
   constructor(private readonly greeter: Greeter) {}
 
-  async handle(ctx: Context, error: ErrHTTPNotFound): Promise<void> {
+  async handle(ctx: IContext, error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ error: error.message, via: this.greeter.greet() })
   }
 }
 
 @Catch(Error)
 class CatchAllHandler implements ErrorHandler<Error> {
-  async handle(ctx: Context, error: Error): Promise<void> {
+  async handle(ctx: IContext, error: Error): Promise<void> {
     ctx.status(500).body({ caught: error.message })
   }
 }
@@ -176,7 +176,7 @@ class ShopController {
   }
 
   @Catch(ErrHTTPNotFound)
-  async onNotFound(ctx: Context, error: ErrHTTPNotFound): Promise<void> {
+  async onNotFound(ctx: IContext, error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ scoped: true, error: error.message })
   }
 }
@@ -190,7 +190,7 @@ class WidgetsController {
   }
 
   @Catch(ErrHTTP)
-  async onHttp(ctx: Context, error: ErrHTTP): Promise<void> {
+  async onHttp(ctx: IContext, error: ErrHTTP): Promise<void> {
     ctx.status(error.statusCode).body({ http: error.message })
   }
 }
@@ -204,7 +204,7 @@ class MixedController {
   }
 
   @Catch(ErrHTTPNotFound)
-  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
+  async onNotFound(ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ nf: true })
   }
 }
@@ -222,7 +222,7 @@ class ScopedController {
   }
 
   @Catch(ErrHTTPNotFound)
-  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
+  async onNotFound(ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ marker: this.marker })
   }
 }
@@ -241,7 +241,7 @@ class TxController {
   }
 
   @Catch(ErrHTTPNotFound)
-  async onNotFound(ctx: Context, _error: ErrHTTPNotFound): Promise<void> {
+  async onNotFound(ctx: IContext, _error: ErrHTTPNotFound): Promise<void> {
     ctx.status(404).body({ marker: this.marker })
   }
 }
@@ -257,7 +257,7 @@ class ValidatedController {
   }
 
   @Catch(Error)
-  async onError(ctx: Context, _error: Error): Promise<void> {
+  async onError(ctx: IContext, _error: Error): Promise<void> {
     ctx.status(400).body({ handledByController: true })
   }
 }
@@ -365,7 +365,7 @@ class Marker {
 // A single class declaring several error types, and the one of the three ErrAlpha handlers enrolled.
 @Catch([ErrAlpha, ErrGamma])
 class AlphaGammaHandler implements ErrorHandler<ErrAlpha | ErrGamma> {
-  async handle(ctx: Context, error: ErrAlpha | ErrGamma): Promise<void> {
+  async handle(ctx: IContext, error: ErrAlpha | ErrGamma): Promise<void> {
     ctx.status(500).body({ by: 'global', error: error.message })
   }
 }
@@ -376,21 +376,21 @@ class AlphaGammaHandler implements ErrorHandler<ErrAlpha | ErrGamma> {
 class ControllerAlphaHandler implements ErrorHandler<ErrAlpha> {
   constructor(private readonly marker: Marker) {}
 
-  async handle(ctx: Context, error: ErrAlpha): Promise<void> {
+  async handle(ctx: IContext, error: ErrAlpha): Promise<void> {
     ctx.status(400).body({ by: 'controller', via: this.marker.value(), error: error.message })
   }
 }
 
 @Catch(ErrAlpha)
 class RouteAlphaHandler implements ErrorHandler<ErrAlpha> {
-  async handle(ctx: Context, error: ErrAlpha): Promise<void> {
+  async handle(ctx: IContext, error: ErrAlpha): Promise<void> {
     ctx.status(402).body({ by: 'route', error: error.message })
   }
 }
 
 @Catch(Error)
 class ValidationHandler implements ErrorHandler<Error> {
-  async handle(ctx: Context, _error: Error): Promise<void> {
+  async handle(ctx: IContext, _error: Error): Promise<void> {
     ctx.status(422).body({ by: 'route-validation' })
   }
 }
@@ -399,7 +399,7 @@ class ValidationHandler implements ErrorHandler<Error> {
 @Named('deltaHandler')
 @Catch(ErrDelta)
 class DeltaFallbackHandler implements ErrorHandler<ErrDelta> {
-  async handle(ctx: Context, _error: ErrDelta): Promise<void> {
+  async handle(ctx: IContext, _error: ErrDelta): Promise<void> {
     ctx.status(500).body({ by: 'fallback' })
   }
 }
@@ -408,7 +408,7 @@ class DeltaFallbackHandler implements ErrorHandler<ErrDelta> {
 @Named('deltaHandler')
 @Catch(ErrDelta)
 class DeltaPrimaryHandler implements ErrorHandler<ErrDelta> {
-  async handle(ctx: Context, _error: ErrDelta): Promise<void> {
+  async handle(ctx: IContext, _error: ErrDelta): Promise<void> {
     ctx.status(409).body({ by: 'primary' })
   }
 }
@@ -456,7 +456,7 @@ class CatchByShopController {
   }
 
   @Catch(ErrGamma)
-  async onGamma(ctx: Context, error: ErrGamma): Promise<void> {
+  async onGamma(ctx: IContext, error: ErrGamma): Promise<void> {
     ctx.status(404).body({ by: 'method', error: error.message })
   }
 }
@@ -471,7 +471,7 @@ class CatchByPriorityController {
   }
 
   @Catch(ErrAlpha)
-  async onAlpha(ctx: Context, _error: ErrAlpha): Promise<void> {
+  async onAlpha(ctx: IContext, _error: ErrAlpha): Promise<void> {
     ctx.status(404).body({ by: 'method' })
   }
 }

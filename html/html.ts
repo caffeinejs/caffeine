@@ -1,4 +1,4 @@
-import { Responder, type ActionResult, type Context } from '@caffeinejs/http'
+import { Responder, type ActionResult, type IContext } from '@caffeinejs/http'
 
 import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
 
@@ -68,7 +68,7 @@ function applyDoctype(markup: string, autoDoctype: boolean): string {
  * Read off `req.server` rather than the root instance, so a plugin registered inside one route group applies
  * to that group's responses and no others.
  */
-function defaultsOf(ctx: Context): HTMLDefaults {
+function defaultsOf(ctx: IContext): HTMLDefaults {
   // The plugin decorates a Fastify instance, so a request another adapter serves renders on the defaults.
   if (ctx.platform.name !== 'fastify') {
     return HTML_DEFAULTS
@@ -93,7 +93,7 @@ class HTMLResult extends Responder {
     super()
   }
 
-  respond(ctx: Context): ActionResult {
+  respond(ctx: IContext): ActionResult {
     const autoDoctype = this.options?.doctype ?? defaultsOf(ctx).autoDoctype
 
     // Leave whatever Content-Type the reply already carries — from `@Produces`, which runs before the

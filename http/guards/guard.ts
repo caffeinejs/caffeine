@@ -1,7 +1,7 @@
 import { Ctor } from '@caffeinejs/di'
 import type { BaseGuard, GuardDenial, GuardOutcome } from '@caffeinejs/std/framework'
 
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 import { ErrHTTPForbidden, ErrHTTPUnauthorized } from '../error/http.js'
 
 export class GuardResult implements GuardOutcome {
@@ -27,7 +27,7 @@ export class GuardResult implements GuardOutcome {
 
 export type GuardReturn = boolean | GuardResult | Promise<boolean | GuardResult>
 
-export type GuardContext<C extends Context = Context> = Omit<C, 'req'> & {
+export type GuardContext<C extends IContext = IContext> = Omit<C, 'req'> & {
   readonly req: Omit<C['req'], 'body'>
 }
 

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { type ActionResult, Catch, Context, ErrHTTPNotFound, ErrorHandler, createWebApplication } from '../index.js'
+import { type ActionResult, Catch, IContext, ErrHTTPNotFound, ErrorHandler, createWebApplication } from '../index.js'
 
 @Catch(ErrHTTPNotFound)
 class GlobalNotFound implements ErrorHandler<ErrHTTPNotFound> {
-  handle(ctx: Context, error: ErrHTTPNotFound): ActionResult {
+  handle(ctx: IContext, error: ErrHTTPNotFound): ActionResult {
     return ctx.status(404).body({ caught: true, message: error.message })
   }
 }

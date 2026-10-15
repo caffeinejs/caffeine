@@ -6,7 +6,7 @@ import {
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
 
-import type { AdapterTypes } from '../../adapter.js'
+import type { IAdapterTypes } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
 import type { Guard } from '../../guards/guard.js'
 import type { RouteExtension } from '../extension.js'
@@ -32,7 +32,7 @@ export class RouteChain<
   GP extends string,
   M extends string,
   R,
-  T extends AdapterTypes = never,
+  T extends IAdapterTypes = never,
 > {
   readonly #owner: Router<V, C, GD, GP, R, T>
   readonly #state: RouteState

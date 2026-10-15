@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import {
   ErrHTTPNotFound,
   newRouter,
-  type Context,
+  type IContext,
   Authentication,
   authentication,
   Authorization,
@@ -23,11 +23,11 @@ const dist = fileURLToPath(new URL('../../static/_tests/_testdata/spa', import.m
 
 const SCRIPT = { accept: '*/*', 'sec-fetch-mode': 'no-cors', 'sec-fetch-dest': 'script' }
 
-const shellDocument = (ctx: Context) => sendFile(ctx, 'index.html', dist)
-const notFound = (ctx: Context): never => {
+const shellDocument = (ctx: IContext) => sendFile(ctx, 'index.html', dist)
+const notFound = (ctx: IContext): never => {
   throw new ErrHTTPNotFound(`Route ${ctx.req.method}:${ctx.req.url} not found`)
 }
-const clientRoute = (ctx: Context) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
+const clientRoute = (ctx: IContext) => (isDocumentRequest(ctx) ? shellDocument(ctx) : notFound(ctx))
 
 /** The client routes, public or behind the provider, which is one `authorize` and nothing else. */
 function pages(gated: boolean) {

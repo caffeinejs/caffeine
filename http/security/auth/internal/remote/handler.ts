@@ -3,7 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { resolveAppURL } from '../../../../base_path.js'
-import type { Context } from '../../../../context.js'
+import type { IContext } from '../../../../context.js'
 import type { CookiePriority, CookieSerializeOptions } from '../../../../cookie/options.js'
 import type { CookieSecret } from '../../../../cookie/signer.js'
 import { Claim, Identity, Principal } from '../../../index.js'
@@ -117,11 +117,11 @@ export interface RemoteAuthenticationOptions {
    * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
    * what goes out. Left unanswered, the callback responds `400` with a generic body.
    */
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context, authorizationURL: string) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  onChallenge?: (ctx: IContext, authorizationURL: string) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
   /** Adjusts the authorization URL before the redirect. Guarded parameters are re-asserted. */
-  onRedirectToProvider?: (ctx: Context, url: URL) => Promise<void> | void
+  onRedirectToProvider?: (ctx: IContext, url: URL) => Promise<void> | void
 }
 
 /**
@@ -197,7 +197,7 @@ export abstract class RemoteAuthenticationHandler<
 
   /** Exchanges the code, then turns the response into claims. Protocol-specific throughout. */
   protected abstract exchangeAndBuildIdentity(
-    ctx: Context,
+    ctx: IContext,
     code: string,
     stored: RemoteAuthenticationState,
   ): Promise<RemoteAuthenticationIdentity>
@@ -228,7 +228,7 @@ export abstract class RemoteAuthenticationHandler<
 
   // ---------------------------------------------------------------- shared behaviour
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const cookie = ctx.req.cookie(this.options.sessionCookieName)
     if (!cookie) {
       return AuthenticateResult.none()
@@ -319,7 +319,7 @@ export abstract class RemoteAuthenticationHandler<
    * carries it, begin when a browser actually goes there. A page that polls while signed out is therefore
    * challenged as often as it likes at no cost, and without the provider being asked anything.
    */
-  override async challenge(ctx: Context, properties?: AuthenticationProperties): Promise<void> {
+  override async challenge(ctx: IContext, properties?: AuthenticationProperties): Promise<void> {
     // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
     // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
     // re-validated by `isSafeReturnPath` on the callback before anything is redirected to. Either is kept as the
@@ -367,7 +367,7 @@ export abstract class RemoteAuthenticationHandler<
    * `~/` resolves against the base path, as it does in `redirectURI`. It is anybody's to write, so one that would
    * leave this origin is dropped in favour of `defaultRedirectPath`.
    */
-  async startSignIn(ctx: Context): Promise<void> {
+  async startSignIn(ctx: IContext): Promise<void> {
     // Checked for a string, not for `undefined`: a parameter given twice arrives as an array.
     const requested = ctx.req.query('returnTo')
     const target = typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : undefined
@@ -389,7 +389,7 @@ export abstract class RemoteAuthenticationHandler<
   }
 
   /** Mints the state of a new authorization round trip, sets the cookie that carries it, and builds the URL it rides in. */
-  async #startFlow(ctx: Context, returnTo: string): Promise<string> {
+  async #startFlow(ctx: IContext, returnTo: string): Promise<string> {
     const [issuer, endpoint, pkceMethod] = await Promise.all([
       this.resolveIssuer(),
       this.resolveAuthorizationEndpoint(),
@@ -459,7 +459,7 @@ export abstract class RemoteAuthenticationHandler<
    * Only names this handler could have minted: a cookie planted under the prefix — from a sibling subdomain — with
    * a name a header cannot carry is not one of its flows, and deleting it would fail the sign-in.
    */
-  #stateCookieNames(ctx: Context): string[] {
+  #stateCookieNames(ctx: IContext): string[] {
     const prefix = `${this.options.stateCookieName}.`
 
     return Object.keys(ctx.req.cookie()).filter(
@@ -481,7 +481,7 @@ export abstract class RemoteAuthenticationHandler<
   }
 
   /** Whether this request should be redirected into the provider rather than answered 401. */
-  #redirects(ctx: Context): boolean {
+  #redirects(ctx: IContext): boolean {
     return shouldRedirectChallenge(this.options.challengeMode, challengeHeaders(ctx))
   }
 
@@ -512,7 +512,7 @@ export abstract class RemoteAuthenticationHandler<
    * - The guarded parameters. Their values are taken from this handler after the hook runs, so
    *   a stray `delete('code_challenge')` or a replaced `redirect_uri` cannot survive.
    */
-  async #applyRedirectHook(ctx: Context, url: URL): Promise<void> {
+  async #applyRedirectHook(ctx: IContext, url: URL): Promise<void> {
     if (!this.options.onRedirectToProvider) {
       return
     }
@@ -543,7 +543,7 @@ export abstract class RemoteAuthenticationHandler<
     url.search = merged.toString()
   }
 
-  override async forbid(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
+  override async forbid(ctx: IContext, _properties?: AuthenticationProperties): Promise<void> {
     if (this.options.onForbid) {
       return this.options.onForbid(ctx)
     }
@@ -565,7 +565,7 @@ export abstract class RemoteAuthenticationHandler<
    * holding something that still looks like a session. The store failure is propagated, since
    * a sign-out that did not actually revoke must not report success.
    */
-  override async revoke(ctx: Context, _properties?: AuthenticationProperties): Promise<void> {
+  override async revoke(ctx: IContext, _properties?: AuthenticationProperties): Promise<void> {
     try {
       const key = await this.ticketKey(ctx)
       if (key) {
@@ -584,7 +584,7 @@ export abstract class RemoteAuthenticationHandler<
    * store that throws, on the other hand, is propagated — a sign-out that did not actually
    * revoke must not report success.
    */
-  protected async ticketKey(ctx: Context): Promise<string | undefined> {
+  protected async ticketKey(ctx: IContext): Promise<string | undefined> {
     const cookie = ctx.req.cookie(this.options.sessionCookieName)
     if (!this.options.ticketStore || !cookie) {
       return undefined
@@ -604,7 +604,7 @@ export abstract class RemoteAuthenticationHandler<
    * material *about* a session they have already been granted — the saved tokens for a logout
    * redirect — rather than to decide whether to grant one.
    */
-  protected async currentTicket(ctx: Context): Promise<RemoteAuthenticationTicket | undefined> {
+  protected async currentTicket(ctx: IContext): Promise<RemoteAuthenticationTicket | undefined> {
     const key = await this.ticketKey(ctx)
     if (!key) {
       return undefined
@@ -617,7 +617,7 @@ export abstract class RemoteAuthenticationHandler<
     }
   }
 
-  async processCallback(ctx: Context): Promise<void> {
+  async processCallback(ctx: IContext): Promise<void> {
     try {
       await this.#processCallback(ctx)
     } catch (e) {
@@ -626,7 +626,7 @@ export abstract class RemoteAuthenticationHandler<
     }
   }
 
-  async #processCallback(ctx: Context): Promise<void> {
+  async #processCallback(ctx: IContext): Promise<void> {
     const code = ctx.req.query('code')
     const stateParam = ctx.req.query('state')
 
@@ -698,7 +698,7 @@ export abstract class RemoteAuthenticationHandler<
     }
   }
 
-  async #completeCallback(ctx: Context, code: string, stored: RemoteAuthenticationState): Promise<void> {
+  async #completeCallback(ctx: IContext, code: string, stored: RemoteAuthenticationState): Promise<void> {
     // The provider the state was minted against must still be the one we would use now. A
     // mismatch means the strategy was reconfigured — or two configurations are running — between
     // the challenge and this callback, and the authorization code must not be exchanged against
@@ -733,7 +733,7 @@ export abstract class RemoteAuthenticationHandler<
    * Persists the principal: a server-side ticket when a store is configured, otherwise a
    * self-contained sealed cookie.
    */
-  protected async writeSession(ctx: Context, identity: RemoteAuthenticationIdentity): Promise<void> {
+  protected async writeSession(ctx: IContext, identity: RemoteAuthenticationIdentity): Promise<void> {
     const ttl = this.options.sessionCookieTtlSeconds
     const session = claimsToSession(identity.claims, this.name)
     const store = this.options.ticketStore

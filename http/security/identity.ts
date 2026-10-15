@@ -1,4 +1,4 @@
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 
 /**
  * One set of claims about a caller, as one scheme established them.
@@ -76,7 +76,7 @@ export class Claim {
   }
 }
 
-export type PrincipalMapper = (ctx: Context, principal: Principal) => Promise<Principal> | Principal
+export type PrincipalMapper = (ctx: IContext, principal: Principal) => Promise<Principal> | Principal
 
 /**
  * Who is asking: the identities every scheme that accepted the caller established.

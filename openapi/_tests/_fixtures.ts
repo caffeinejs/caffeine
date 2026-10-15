@@ -1,13 +1,13 @@
-import { mergeAuthz, RouteBuilder, type Route, type RouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
+import { mergeAuthz, RouteBuilder, type IRoute, type IRouteGroup, type RouteGroupBuilder } from '@caffeinejs/http'
 import { getRouteGroup, registerRouteGroup } from '@caffeinejs/http/decorators/registrar'
 
 import type { OpenAPIOptions } from '../options.js'
 import { defaultOpenAPIOptions } from '../options.js'
 
 /**
- * Builds a `RouteGroup` the way `buildRouting` would, without a container or a running application.
+ * Builds an `IRouteGroup` the way `buildRouting` would, without a container or a running application.
  *
- * The generator only ever reads `RouteGroup`/`Route`, so a fixture producing that shape exercises it honestly and
+ * The generator only ever reads `IRouteGroup`/`IRoute`, so a fixture producing that shape exercises it honestly and
  * keeps a unit test to milliseconds. The integration tests drive a real application instead, which is what
  * proves the fixture and the real thing agree.
  */
@@ -15,7 +15,7 @@ export function fixtureRouter(
   path: string,
   configure: (router: RouteGroupBuilder) => void,
   options: { prefix?: string; name?: string; defaultScheme?: string } = {},
-): RouteGroup<unknown> {
+): IRouteGroup<unknown> {
   // A fresh class per call: `registerRouteGroup` is get-or-create and `routes()` appends, so a shared key would
   // accumulate the routes of every previous fixture.
   const name = options.name ?? 'FixtureController'
@@ -34,7 +34,7 @@ export function fixtureRouter(
     name: name,
     target: key,
     detail: spec.detail,
-    routes: spec.routes.map((route): Route<unknown> => {
+    routes: spec.routes.map((route): IRoute<unknown> => {
       // Mirrors buildRouting: anything declared at either level is protection unless the result is public.
       const authz = mergeAuthz(spec.authz, route.authz)
       // Also mirrors buildRouting: the effective schemes are folded while the route compiles, so a route

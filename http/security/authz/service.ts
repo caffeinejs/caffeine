@@ -1,4 +1,4 @@
-import { Context } from '../../context.js'
+import { IContext } from '../../context.js'
 import { ErrHTTPForbidden } from '../../error/http.js'
 import type { Principal } from '../index.js'
 import { ErrAuthzPolicyNotFound } from './errors.js'
@@ -15,7 +15,7 @@ export class AuthorizationService {
    * Evaluates a named policy against a principal and an optional resource, returning the raw result.
    * Use {@link authorize} for the throwing, controller-facing variant.
    */
-  async check(ctx: Context, user: Principal, policyName: string, resource?: unknown): Promise<AuthzResult> {
+  async check(ctx: IContext, user: Principal, policyName: string, resource?: unknown): Promise<AuthzResult> {
     const evaluator = this.#evaluators.get(policyName)
     if (!evaluator) {
       throw new ErrAuthzPolicyNotFound(policyName, [...this.#evaluators.keys()])
@@ -31,7 +31,7 @@ export class AuthorizationService {
    * @throws ErrHTTPForbidden when the policy denies. What the client is told is "Forbidden" and no more: which
    * policy refused, and why, would tell a caller how the rules are laid out. Both are on the error's `cause`.
    */
-  async authorize(ctx: Context, policyName: string, resource?: unknown): Promise<void> {
+  async authorize(ctx: IContext, policyName: string, resource?: unknown): Promise<void> {
     const result = await this.check(ctx, ctx.user, policyName, resource)
     if (!result.ok) {
       const reason = typeof result.reason === 'string' ? result.reason : result.reason?.message
@@ -43,11 +43,11 @@ export class AuthorizationService {
     }
   }
 
-  async allows(ctx: Context, policyName: string, resource?: unknown): Promise<boolean> {
+  async allows(ctx: IContext, policyName: string, resource?: unknown): Promise<boolean> {
     return (await this.check(ctx, ctx.user, policyName, resource)).ok
   }
 
-  async denies(ctx: Context, policyName: string, resource?: unknown): Promise<boolean> {
+  async denies(ctx: IContext, policyName: string, resource?: unknown): Promise<boolean> {
     return !(await this.allows(ctx, policyName, resource))
   }
 }

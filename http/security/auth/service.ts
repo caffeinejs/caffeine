@@ -1,6 +1,6 @@
 import type { Provider } from '@caffeinejs/di'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import type { PrincipalMapper } from '../index.js'
 import { AuthenticationState, type SchemeAuthentication } from './authentication_state.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
@@ -34,12 +34,12 @@ export class AuthenticationService {
    * coalesce onto a single in-flight verification instead of racing. A rejection is kept with the same
    * reasoning: a failing scheme must fail identically for every caller in the request.
    */
-  authenticate(ctx: Context, scheme: string): Promise<AuthenticateResult> {
+  authenticate(ctx: IContext, scheme: string): Promise<AuthenticateResult> {
     const entry = (ctx.auth ??= new AuthenticationState()).for(scheme)
     return (entry.pending ??= this.#authenticate(ctx, scheme, entry))
   }
 
-  async #authenticate(ctx: Context, scheme: string, entry: SchemeAuthentication): Promise<AuthenticateResult> {
+  async #authenticate(ctx: IContext, scheme: string, entry: SchemeAuthentication): Promise<AuthenticateResult> {
     // An unregistered name used to come back as `none()` — indistinguishable from "the caller presented no
     // credential". A typo in a route's `schemes` therefore produced a blanket 401 with nothing to point at,
     // and on a route whose policy does not demand an identity it admitted the caller anonymously instead.
@@ -70,12 +70,12 @@ export class AuthenticationService {
    * returned, not in state the scheme keeps for itself. Nothing is authenticated here: a scheme that has not
    * run is challenged with nothing to fault.
    */
-  challenge(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
+  challenge(ctx: IContext, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultChallengeScheme
     return this.#handlerFor(name).get().challenge(ctx, properties, this.resultFor(ctx, name))
   }
 
-  forbid(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
+  forbid(ctx: IContext, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultForbidScheme
     return this.#handlerFor(name).get().forbid(ctx, properties)
   }
@@ -83,13 +83,13 @@ export class AuthenticationService {
   // `schemeName` is optional so the documented fallback to the default authenticate scheme is reachable:
   // it was declared required while the body already coalesced it, making the `??` dead and the default
   // unusable without passing `undefined` past a type that forbade it. `challenge`/`forbid` had it right.
-  persist(ctx: Context, schemeName: string | undefined, ticket: AuthenticationTicket): Promise<void> {
+  persist(ctx: IContext, schemeName: string | undefined, ticket: AuthenticationTicket): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     return this.#handlerFor(name).get().persist(ctx, ticket)
   }
 
   /** Ends the session the scheme keeps here, and nothing else. The request is left for the caller to answer. */
-  revoke(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
+  revoke(ctx: IContext, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     return this.#handlerFor(name).get().revoke(ctx, properties)
   }
@@ -102,7 +102,7 @@ export class AuthenticationService {
    * next sign-in goes through without a prompt. A scheme with nowhere else to sign out of only revokes, and the
    * request is still the caller's to answer.
    */
-  signOut(ctx: Context, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
+  signOut(ctx: IContext, schemeName?: string, properties?: AuthenticationProperties): Promise<void> {
     const name = schemeName ?? this.#schemeProvider.defaultAuthenticateScheme
     return this.#handlerFor(name).get().signOut(ctx, properties)
   }
@@ -113,7 +113,7 @@ export class AuthenticationService {
    * Readable without awaiting, and never starts an authentication of its own — so a caller deciding how
    * to respond to a failure can consult what already happened rather than re-running it.
    */
-  resultFor(ctx: Context, scheme: string): AuthenticateResult | undefined {
+  resultFor(ctx: IContext, scheme: string): AuthenticateResult | undefined {
     return ctx.auth?.find(scheme)?.result
   }
 

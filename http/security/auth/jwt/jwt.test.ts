@@ -1,7 +1,7 @@
 import { SignJWT } from 'jose'
 import { describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { AuthenticationSchemeProvider } from '../scheme_provider.js'
 import { AuthenticationService } from '../service.js'
 import { JWTAuthenticationHandler } from './jwt.js'
@@ -18,7 +18,7 @@ function makeCtx(authHeader?: string) {
     req: { header: (name: string) => (name === 'authorization' ? authHeader : undefined) },
     status,
     appendHeader: header,
-  } as unknown as Context
+  } as unknown as IContext
   return { ctx, status, header }
 }
 

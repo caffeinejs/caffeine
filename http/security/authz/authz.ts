@@ -2,7 +2,7 @@ import type { Container } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
 import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
-import type { RouteGroup } from '../../routing/route.js'
+import type { IRouteGroup } from '../../routing/route.js'
 import {
   ErrAuthorizationRequired,
   ErrAuthzFallbackExcept,
@@ -236,7 +236,7 @@ function requirements(policy: AuthzPolicy, name: string): AuthzPolicy {
  *
  * @throws ErrAuthorizationRequired when a route declares protection and authorization was never installed.
  */
-export function assertAuthorizationConfigured(container: Container, routeGroups: readonly RouteGroup<any>[]): void {
+export function assertAuthorizationConfigured(container: Container, routeGroups: readonly IRouteGroup<any>[]): void {
   if (container.getOptional(kAuthzOpts) !== undefined) {
     return
   }

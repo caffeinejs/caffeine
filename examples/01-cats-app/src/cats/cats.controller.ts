@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Args, Post, Put, Status, $p, ErrHTTPNotFound, Context } from '@caffeinejs/http'
+import { Controller, Delete, Get, Args, Post, Put, Status, $p, ErrHTTPNotFound, IContext } from '@caffeinejs/http'
 
 import type { CreateCatDTO, UpdateCatDTO } from './cat.js'
 import { CatsService } from './cats.service.js'
@@ -26,7 +26,7 @@ export class CatsController {
   @Post('/')
   @Status(201)
   @Args([$p.context(), $p.body()])
-  create(ctx: Context, dto: CreateCatDTO) {
+  create(ctx: IContext, dto: CreateCatDTO) {
     const cat = this.cats.create(dto)
     ctx.header('Location', `/cats/${cat.id}`)
 

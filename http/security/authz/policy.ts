@@ -1,4 +1,4 @@
-import { Context } from '../../context.js'
+import { IContext } from '../../context.js'
 import type { RouteAuthz } from '../../routing/spec.js'
 import { Principal } from '../index.js'
 import { AuthorizationOptions } from './authz.js'
@@ -19,7 +19,7 @@ export abstract class AuthzRequirementHandler<R extends AuthzRequirement> {
   abstract get kind(): string
 
   abstract handle(
-    ctx: Context,
+    ctx: IContext,
     user: Principal,
     requirement: R,
     resource?: unknown,
@@ -38,7 +38,7 @@ export interface AuthzPolicyResult {
   reason?: Error | string
 }
 
-export type PolicyEvaluator = (ctx: Context, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzResult>
+export type PolicyEvaluator = (ctx: IContext, user: Principal, resource?: unknown) => AuthzResult | Promise<AuthzResult>
 
 export function newPolicyEvaluator(
   policy: AuthzPolicy,
@@ -66,7 +66,7 @@ export function newPolicyEvaluator(
   // Fail-fast: the first requirement that is not met ends the evaluation. Most requirements answer at once, so
   // the evaluation only becomes a promise at the first one that does not.
   const evaluate = (
-    ctx: Context,
+    ctx: IContext,
     user: Principal,
     resource: unknown,
     from: number,

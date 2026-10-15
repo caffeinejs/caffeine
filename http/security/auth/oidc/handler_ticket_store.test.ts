@@ -2,7 +2,7 @@ import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { claimsToSession, encodeSession, encodeTicketRef, openTicketRef } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
@@ -96,7 +96,7 @@ function makeCtx(
     redirect,
     status,
     header,
-  } as unknown as Context
+  } as unknown as IContext
 
   return { ctx, cookie, deleteCookie, redirect, status, header }
 }

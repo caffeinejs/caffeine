@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import {
   Catch,
   type ActionResult,
-  type Context,
+  type IContext,
   Controller,
   ErrorHandler,
   Get,
@@ -23,7 +23,7 @@ class ErrReturnView extends Error {}
 
 @Catch(ErrReturnView)
 class ReturnViewHandler implements ErrorHandler<ErrReturnView> {
-  handle(ctx: Context, error: ErrReturnView): ActionResult {
+  handle(ctx: IContext, error: ErrReturnView): ActionResult {
     ctx.status(404)
     return View('message', { message: error.message })
   }

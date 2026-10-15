@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { type Context, Ops, bindTo, createWebApplication, newRouter, type WebApplication } from '../../index.js'
+import { type IContext, Ops, bindTo, createWebApplication, newRouter, type WebApplication } from '../../index.js'
 
 /**
  * An ops server's own plugins and middleware: registered on its builder, `o.with(...)`, `o.use(...)` and
@@ -28,7 +28,7 @@ function marking(header: string, value = 'yes') {
 
 /** A middleware marking every response it runs for with `header`. */
 function tagging(header: string) {
-  return (ctx: Context, next: () => void) => {
+  return (ctx: IContext, next: () => void) => {
     ctx.header(header, 'yes')
     next()
   }

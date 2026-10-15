@@ -1,6 +1,6 @@
 import { JWTPayload, JWTVerifyOptions, type CryptoKey } from 'jose'
 
-import { Context } from '../../../context.js'
+import { IContext } from '../../../context.js'
 import { Claim } from '../../index.js'
 import { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
 
@@ -19,10 +19,10 @@ export interface JWTAuthenticationOptions {
    */
   includeErrorDetails?: boolean
   claimMapper?: (payload: JWTPayload) => Claim[]
-  onTokenValidated?: (ctx: Context, payload: Record<string, unknown>) => Promise<void> | void
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
-  onChallenge?: (ctx: Context) => Promise<void> | void
-  onForbid?: (ctx: Context) => Promise<void> | void
+  onTokenValidated?: (ctx: IContext, payload: Record<string, unknown>) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  onChallenge?: (ctx: IContext) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
   // The full sign+verify service configuration. When present the scheme's JWTService is built from
   // this and shared (verify + sign) — and DI-bound so a controller can inject the same signer.
   serviceOptions?: JWTServiceOptions
@@ -125,22 +125,22 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
-  onTokenValidated(onTokenValidated: (ctx: Context, payload: Record<string, unknown>) => Promise<void> | void): this {
+  onTokenValidated(onTokenValidated: (ctx: IContext, payload: Record<string, unknown>) => Promise<void> | void): this {
     this.#options.onTokenValidated = onTokenValidated
     return this
   }
 
-  onFail(onFail: (ctx: Context, error: Error) => Promise<void> | void): this {
+  onFail(onFail: (ctx: IContext, error: Error) => Promise<void> | void): this {
     this.#options.onFail = onFail
     return this
   }
 
-  onChallenge(onChallenge: (ctx: Context) => Promise<void> | void): this {
+  onChallenge(onChallenge: (ctx: IContext) => Promise<void> | void): this {
     this.#options.onChallenge = onChallenge
     return this
   }
 
-  onForbid(onForbid: (ctx: Context) => Promise<void> | void): this {
+  onForbid(onForbid: (ctx: IContext) => Promise<void> | void): this {
     this.#options.onForbid = onForbid
     return this
   }

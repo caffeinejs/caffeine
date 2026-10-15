@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import { Claim, Identity, Principal } from '../identity.js'
 import { AssertionHandler, AuthenticatedUserHandler, ClaimHandler, ResourceHandler, RoleHandler } from './handlers.js'
 import { type AuthzRequirement, type AuthzRequirementHandler, newPolicyEvaluator } from './policy.js'
@@ -12,7 +12,7 @@ import { AuthzRouteService } from './route_service.js'
  * promise only from the first requirement that has to wait, and it stops at the first one that is not met either way.
  */
 
-const ctx = {} as Context
+const ctx = {} as IContext
 
 const handlers = new Map(
   (

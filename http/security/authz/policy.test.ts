@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import { foldAuthz, mergeAuthz } from '../../routing/inherit.js'
 import type { RouteAuthz, RouteAuthzOptions } from '../../routing/spec.js'
 import { Claim, Identity, Principal, anonymousUser } from '../identity.js'
@@ -23,7 +23,7 @@ import { PolicyBuilder } from './policy_builder.js'
  * "the rule happened to produce the same status".
  */
 
-const ctx = {} as Context
+const ctx = {} as IContext
 
 function handlers(): Map<string, AuthzRequirementHandler<AuthzRequirement>> {
   const list = [

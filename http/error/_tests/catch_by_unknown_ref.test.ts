@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 
 import {
   CatchWith,
-  type Context,
+  type IContext,
   Controller,
   ErrConfiguration,
   ErrorHandler,
@@ -13,7 +13,7 @@ import {
 // Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
 // error-handler concern in this file.
 class UnboundHandler implements ErrorHandler<Error> {
-  async handle(_ctx: Context, _error: Error): Promise<void> {}
+  async handle(_ctx: IContext, _error: Error): Promise<void> {}
 }
 
 @CatchWith(UnboundHandler)

@@ -1,10 +1,10 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type {
-  Adapter,
+  IAdapter,
   AdapterExtensionFactory,
-  AdapterServer,
-  AdapterTypes,
+  IAdapterServer,
+  IAdapterTypes,
   HTTPSetupContext,
   ServerConfigurer,
   ServerCustomizer,
@@ -18,20 +18,20 @@ import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
 import type { Router } from './routing/programmatic/router.js'
 import type { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './routing/programmatic/source.js'
-import type { RouteGroup, RouteGroupScope } from './routing/route.js'
+import type { IRouteGroup, RouteGroupScope } from './routing/route.js'
 import type { Routing } from './routing/routing.js'
 import type { RouteGroupSpec } from './routing/spec.js'
 import type { ServerDefinition } from './server_definition.js'
 
 /** One server: the definition it is built from, the routers selected for it, and what the adapter built. */
-interface Entry<T extends AdapterTypes> {
+interface Entry<T extends IAdapterTypes> {
   readonly definition: ServerDefinition<T>
-  groups: RouteGroup<T['request']>[]
-  server?: AdapterServer<T>
+  groups: IRouteGroup<T['request']>[]
+  server?: IAdapterServer<T>
 }
 
 /** What every server is built with that is not its own. */
-export interface ServerSetupInput<T extends AdapterTypes> {
+export interface ServerSetupInput<T extends IAdapterTypes> {
   /**
    * The application's, with a closed `app`: each server's own is this one with an `app` of its own and, for a named
    * server, a child logger.
@@ -52,7 +52,7 @@ export interface ServerSetupInput<T extends AdapterTypes> {
  * Every server an application runs, built one after another from its {@link ServerDefinition}, in order: the
  * application's own first, so it is the first to listen and the first to close.
  */
-export class ServerSet<T extends AdapterTypes> {
+export class ServerSet<T extends IAdapterTypes> {
   readonly #entries: Entry<T>[]
 
   /** @param definitions - The application's own first, then the named ones in install order. */
@@ -66,12 +66,12 @@ export class ServerSet<T extends AdapterTypes> {
   }
 
   /** The first server, the application's own, once {@link setup} has built it. */
-  get own(): AdapterServer<T> | undefined {
+  get own(): IAdapterServer<T> | undefined {
     return this.#entries[0]?.server
   }
 
   /** The named servers, once {@link setup} has built them. */
-  get named(): ReadonlyMap<string, AdapterServer<T>> | undefined {
+  get named(): ReadonlyMap<string, IAdapterServer<T>> | undefined {
     if (this.#entries.some(entry => entry.server === undefined)) {
       return undefined
     }
@@ -85,8 +85,8 @@ export class ServerSet<T extends AdapterTypes> {
    *
    * @throws ErrConfiguration for a router bound to a name no server has.
    */
-  select(routing: Routing<T['request']>): RouteGroup<T['request']>[] {
-    const compiled: RouteGroup<T['request']>[] = []
+  select(routing: Routing<T['request']>): IRouteGroup<T['request']>[] {
+    const compiled: IRouteGroup<T['request']>[] = []
 
     for (const entry of this.#entries) {
       const name = entry.definition.name
@@ -100,13 +100,13 @@ export class ServerSet<T extends AdapterTypes> {
   }
 
   /** Builds every server through `adapter`, one after another, each from its own definition. */
-  async setup(adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<void> {
+  async setup(adapter: IAdapter<T>, input: ServerSetupInput<T>): Promise<void> {
     for (const entry of this.#entries) {
       entry.server = await this.#build(entry, adapter, input)
     }
   }
 
-  async #build(entry: Entry<T>, adapter: Adapter<T>, input: ServerSetupInput<T>): Promise<AdapterServer<T>> {
+  async #build(entry: Entry<T>, adapter: IAdapter<T>, input: ServerSetupInput<T>): Promise<IAdapterServer<T>> {
     const { definition } = entry
     const compile = serverCompiler(input.compileRouteGroup, definition.name)
     // What this server's plugins may do to the application: mount on it and add to its pipeline, while they register.
@@ -179,7 +179,7 @@ export class ServerSet<T extends AdapterTypes> {
  * shallow-merged over the one before it, anything else replaces it as given. An object section is copied, never
  * aliased — a live configuration node is read-only, and the adapter writes into what it is handed.
  */
-async function resolveServerOptions<T extends AdapterTypes>(
+async function resolveServerOptions<T extends IAdapterTypes>(
   configurers: readonly ServerConfigurer<T>[],
   context: HTTPSetupContext,
 ): Promise<T['serverOptions']> {
@@ -200,7 +200,7 @@ async function resolveServerOptions<T extends AdapterTypes>(
 }
 
 /** Every `.serverCallback(...)` callback as one, run in call order; `undefined` when there is none. */
-function foldCustomizers<T extends AdapterTypes>(
+function foldCustomizers<T extends IAdapterTypes>(
   customizers: readonly ServerCustomizer<T>[],
 ): ServerCustomizer<T> | undefined {
   if (customizers.length === 0) {
@@ -225,7 +225,7 @@ function serverContext(base: HTTPSetupContext, name: string | undefined, app: Pl
  * Runs a server's `.with(...)` factories in the order written: an `HTTPPlugin` registers in its slot, and anything
  * else is the adapter's to install, after the head slots.
  */
-async function registerPlugins<T extends AdapterTypes>(
+async function registerPlugins<T extends IAdapterTypes>(
   factories: readonly AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>[],
   root: T['extension'][],
   context: HTTPSetupContext,
@@ -249,11 +249,11 @@ async function registerPlugins<T extends AdapterTypes>(
  */
 function compileMounted<R>(
   routers: readonly Router<any, any, any, any, any, any>[],
-  served: readonly RouteGroup<unknown>[],
-  plugins: ScopedPlugins<AdapterTypes>,
+  served: readonly IRouteGroup<unknown>[],
+  plugins: ScopedPlugins<IAdapterTypes>,
   context: HTTPSetupContext,
   compile: RouteGroupCompiler,
-): RouteGroup<R>[] {
+): IRouteGroup<R>[] {
   return new FluentRouteSource<R>(routers, plugins.childrenOf)
     .collect(context.container)
     .filter(declared => !isServed(declared.scopes!, served))
@@ -266,7 +266,7 @@ function compileMounted<R>(
 }
 
 /** Whether `groups` already hold the group `scopes` describes: the same routers, nested the same way. */
-function isServed(scopes: readonly RouteGroupScope[], groups: readonly RouteGroup<unknown>[]): boolean {
+function isServed(scopes: readonly RouteGroupScope[], groups: readonly IRouteGroup<unknown>[]): boolean {
   // Per group, never per router: a router whose nested routers are bound elsewhere is split across servers, and a
   // plugin mounting it on one of them still adds the groups that server lacks.
   return groups.some(
@@ -280,7 +280,7 @@ function isServed(scopes: readonly RouteGroupScope[], groups: readonly RouteGrou
  * group it serves is.
  */
 function serverCompiler(compile: RouteGroupCompiler, name: string | undefined): RouteGroupCompiler {
-  return <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): RouteGroup<R> => {
+  return <R>(spec: RouteGroupSpec<R>, meta: RouteGroupMeta<R>): IRouteGroup<R> => {
     const bound = boundTo(spec.labels)
 
     if (bound !== undefined && bound !== name) {

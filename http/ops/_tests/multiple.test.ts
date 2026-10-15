@@ -10,7 +10,7 @@ import {
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
-  type Context,
+  type IContext,
   type HTTPPluginFactory,
   Identity,
   Ops,
@@ -38,7 +38,7 @@ class OpsScheme extends BaseAuthenticationHandler<object> {
     super({})
   }
 
-  async authenticate(ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
     const value = ctx.req.header('x-ops')
     if (value === undefined) {
       return AuthenticateResult.none()

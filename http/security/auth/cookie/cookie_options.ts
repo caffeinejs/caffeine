@@ -1,6 +1,6 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import type { Context } from '../../../context.js'
+import type { IContext } from '../../../context.js'
 import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
 import { cookieRuleViolation } from '../../../cookie/rules.js'
 import type { Principal } from '../../index.js'
@@ -78,20 +78,20 @@ export interface CookieAuthenticationOptions {
    * It runs on every authenticated request, so it should be cheap: a version/stamp comparison, not a full
    * user load.
    */
-  validatePrincipal?: (ctx: Context, principal: Principal) => Promise<Principal | null> | Principal | null
+  validatePrincipal?: (ctx: IContext, principal: Principal) => Promise<Principal | null> | Principal | null
   /**
    * Overrides the default 403 on an authorization failure. Takes precedence over {@link accessDeniedPath}.
    *
    * Handed the URL a navigation would have been sent to — {@link accessDeniedPath} with the base path in front —
    * or `undefined` when none is configured.
    */
-  onForbid?: (ctx: Context, accessDeniedURL: string | undefined) => Promise<void> | void
+  onForbid?: (ctx: IContext, accessDeniedURL: string | undefined) => Promise<void> | void
   /**
    * Told about a session cookie that was presented and could not be read — expired, tampered with, sealed under
    * another secret — and about a remember-me credential that was refused. The request goes on unauthenticated
    * either way; this is what makes it observable.
    */
-  onFail?: (ctx: Context, error: Error) => Promise<void> | void
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
   /** Absolute session lifetime, in seconds, for a non-persistent (session) cookie. Default 8 hours. */
   maxAge?: number
   /**
@@ -130,7 +130,7 @@ export interface CookieAuthenticationOptions {
    * Handed the URL a navigation would have been sent to — {@link loginPath} with the base path in front and the
    * return URL on it — or `undefined` when no `loginPath` is configured.
    */
-  onChallenge?: (ctx: Context, loginURL: string | undefined) => Promise<void> | void
+  onChallenge?: (ctx: IContext, loginURL: string | undefined) => Promise<void> | void
 }
 
 const EIGHT_HOURS = 8 * 60 * 60

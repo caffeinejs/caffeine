@@ -1,6 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest'
 
-import type { Context } from '../../context.js'
+import type { IContext } from '../../context.js'
 import { Claim, Identity, Principal } from '../index.js'
 import { ErrAuthSchemeNotFound } from './errors.js'
 import { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
@@ -10,10 +10,10 @@ import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket
 
 // A fresh one per test: the per-request authentication record lives on the context now, so a context
 // shared between tests would carry one test's memoised result into the next.
-let ctx: Context
+let ctx: IContext
 
 beforeEach(() => {
-  ctx = {} as unknown as Context
+  ctx = {} as unknown as IContext
 })
 
 function makeProvider(
@@ -188,7 +188,7 @@ describe('AuthenticationCoordinator', () => {
     it('does not carry the result of one request into the next', async () => {
       const handler = makeHandler(AuthenticateResult.success(new AuthenticationTicket(makePrincipal(), 'Bearer')))
       const coordinator = new AuthenticationService(makeProvider({ Bearer: handler }))
-      const other = {} as unknown as Context
+      const other = {} as unknown as IContext
 
       await coordinator.authenticate(ctx, 'Bearer')
       await coordinator.authenticate(other, 'Bearer')
@@ -386,7 +386,7 @@ describe('AuthenticationCoordinator', () => {
 
         authenticate = () => Promise.resolve(AuthenticateResult.none())
 
-        override revoke(context: Context, properties?: AuthenticationProperties): Promise<void> {
+        override revoke(context: IContext, properties?: AuthenticationProperties): Promise<void> {
           this.revoked(context, properties)
           return Promise.resolve()
         }

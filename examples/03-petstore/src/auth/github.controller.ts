@@ -1,5 +1,13 @@
 import { HTML } from '@caffeinejs/html'
-import { AllowAnonymous, AuthenticationService, Authorize, type Context, Controller, Get, Post } from '@caffeinejs/http'
+import {
+  AllowAnonymous,
+  AuthenticationService,
+  Authorize,
+  type IContext,
+  Controller,
+  Get,
+  Post,
+} from '@caffeinejs/http'
 import { APIGroup } from '@caffeinejs/openapi'
 
 import { Dashboard } from './html/Dashboard.js'
@@ -18,7 +26,7 @@ export class GithubAuthController {
   // `safe`, because nothing in a GitHub profile is this application's text.
   @Get('/dashboard', p => [p.context()])
   @Authorize()
-  dashboard(ctx: Context) {
+  dashboard(ctx: IContext) {
     const user = ctx.user
     const name = String(user.findFirst('name')?.value ?? user.findFirst('login')?.value ?? 'there')
     const sub = user.findFirst('sub')?.value
@@ -50,7 +58,7 @@ export class GithubAuthController {
   // same call would send the browser to the provider, and the redirect below would go.
   @Post('/logout', p => [p.context()])
   @AllowAnonymous()
-  async logout(ctx: Context) {
+  async logout(ctx: IContext) {
     if (ctx.user.authenticated) {
       await this.auth.signOut(ctx, 'GitHub')
     }
@@ -62,7 +70,7 @@ export class GithubAuthController {
   // Machine-readable principal for API clients. Accepts either scheme.
   @Get('/me', p => [p.context()])
   @Authorize()
-  me(ctx: Context) {
+  me(ctx: IContext) {
     const user = ctx.user
     return {
       authenticated: user.authenticated,

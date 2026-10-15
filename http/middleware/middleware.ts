@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 
 import type { HTTPSetupContext } from '../adapter.js'
-import type { Context } from '../context.js'
+import type { IContext } from '../context.js'
 
 /**
  * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the
@@ -63,7 +63,7 @@ export interface MiddlewareOptions<H extends string = string> {
  *
  * To run at a later hook, set {@link kMiddlewareHook} on the function. `{ hook }` on `use()` overrides it.
  */
-export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (ctx: Context<V, C>, next: Next) => void
+export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (ctx: IContext<V, C>, next: Next) => void
 
 /**
  * The class form of a middleware, which is what a middleware with dependencies should be: bind it in the
@@ -75,7 +75,7 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  *     return 'preHandler'
  *   }
  *
- *   handle(ctx: Context, next: Next) {
+ *   handle(ctx: IContext, next: Next) {
  *     ctx.header('x-tag', '1')
  *     next()
  *   }
@@ -88,7 +88,7 @@ export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (
  * `{ hook }` on `use()` overrides {@link kMiddlewareHook}.
  */
 export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
-  handle(ctx: Context<V, C>, next: Next): void
+  handle(ctx: IContext<V, C>, next: Next): void
 }
 
 /** Anything `use()` accepts as its middleware argument. */

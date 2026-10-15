@@ -1,6 +1,6 @@
 import { type Readable } from 'node:stream'
 
-import { type Context } from './context.js'
+import { type IContext } from './context.js'
 
 export type ActionResultTypes =
   | void
@@ -17,5 +17,5 @@ export type ActionResultTypes =
 export type ActionResult = ActionResultTypes | PromiseLike<ActionResultTypes>
 
 export abstract class Responder {
-  abstract respond(ctx: Context): ActionResult
+  abstract respond(ctx: IContext): ActionResult
 }

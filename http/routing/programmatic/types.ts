@@ -1,7 +1,8 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std/schema'
 
-import type { AdapterTypes, AnyAdapterTypes } from '../../adapter.js'
-import type { Context, InferBody, InferHeaders, InferParams, InferQuery } from '../../context.js'
+import type { IAdapterTypes, AnyAdapterTypes } from '../../adapter.js'
+import type { IContext } from '../../context.js'
+import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
@@ -42,18 +43,18 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
  * The same object a decorated handler gets from `$p.context()`, with the request slots narrowed to what this route
- * declared. `T` is the adapter the router is bound to; a router bound to none types it as a plain `Context` would.
+ * declared. `T` is the adapter the router is bound to; a router bound to none types it as a plain `IContext` would.
  */
 export type RouteContext<
   S extends RouteValidationSchema,
   P extends string,
   V,
   C,
-  T extends AdapterTypes = never,
-> = Context<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
+  T extends IAdapterTypes = never,
+> = IContext<V, C, ContextTypesOf<T>, ParamsOf<S, P>, InferQuery<S>, InferHeaders<S>, InferBody<S>>
 
 /** The adapter types a context is typed with: the router's own, or any registered adapter's when it has none. */
-type ContextTypesOf<T extends AdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
+type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterTypes : T
 
 /**
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
@@ -70,7 +71,7 @@ export type RouteHandler<
   C,
   D,
   O = unknown,
-  T extends AdapterTypes = never,
+  T extends IAdapterTypes = never,
 > = (ctx: RouteContext<S, P, V, C, T>, deps: D) => O
 
 /**
@@ -193,7 +194,7 @@ export type RoutesOf<T> = T extends { readonly __routes?: infer R } ? NonNullabl
  * The adapter a `Router` is bound to, read back the same way {@link RoutesOf} reads routes: `never` for a router
  * bound to none.
  */
-export type AdapterOf<T> = T extends { readonly __adapter?: infer A } ? Extract<NonNullable<A>, AdapterTypes> : never
+export type AdapterOf<T> = T extends { readonly __adapter?: infer A } ? Extract<NonNullable<A>, IAdapterTypes> : never
 
 /**
  * What `ctx.state` carries under a `Router`, as the router declared it.

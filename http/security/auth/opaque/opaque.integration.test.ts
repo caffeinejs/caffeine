@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 import {
   Authorize,
   Claim,
-  type Context,
+  type IContext,
   Controller,
   Get,
   Identity,
@@ -57,7 +57,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     class OpaqueOkController {
       @Args([$p.context()])
       @Get('/')
-      list(ctx: Context) {
+      list(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value, scope: ctx.user.findFirst('scope')?.value }
       }
     }

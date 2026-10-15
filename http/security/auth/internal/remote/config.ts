@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { resolveAppURL } from '../../../../base_path.js'
-import type { Context } from '../../../../context.js'
+import type { IContext } from '../../../../context.js'
 import { cookieRuleViolation } from '../../../../cookie/rules.js'
 import { MIN_COOKIE_SECRET_LENGTH } from '../../../../cookie/signer.js'
 import { isNavigation } from '../../../../navigation.js'
@@ -157,7 +157,7 @@ export function isSafeReturnPath(path: string): boolean {
  * `redirectURI`, with a `~/` resolved against the base path, or else the URL the challenge interrupted, base path
  * included. Not yet checked — the caller still owes it {@link isSafeReturnPath}.
  */
-export function returnTargetOf(ctx: Context, properties: AuthenticationProperties | undefined): string {
+export function returnTargetOf(ctx: IContext, properties: AuthenticationProperties | undefined): string {
   const requested = properties?.redirectURI
   if (requested === undefined) {
     return ctx.req.basePath + ctx.req.url

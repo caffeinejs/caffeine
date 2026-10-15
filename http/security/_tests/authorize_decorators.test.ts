@@ -5,7 +5,7 @@ import {
   Authorize,
   AuthenticateResult,
   AuthenticationTicket,
-  type Context,
+  type IContext,
   Controller,
   Get,
   BaseAuthenticationHandler,
@@ -32,7 +32,7 @@ class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
     super({})
   }
 
-  async authenticate(_ctx: Context): Promise<AuthenticateResult> {
+  async authenticate(_ctx: IContext): Promise<AuthenticateResult> {
     return this.result
   }
 }
@@ -329,11 +329,11 @@ describe('auth configurer (fake handler)', () => {
         super({})
       }
 
-      async authenticate(_ctx: Context): Promise<AuthenticateResult> {
+      async authenticate(_ctx: IContext): Promise<AuthenticateResult> {
         return AuthenticateResult.none()
       }
 
-      override async challenge(ctx: Context): Promise<void> {
+      override async challenge(ctx: IContext): Promise<void> {
         ctx.status(401).header('X-Auth-Realm', 'my-realm')
       }
     }
@@ -366,11 +366,11 @@ describe('auth configurer (fake handler)', () => {
         super({})
       }
 
-      async authenticate(_ctx: Context): Promise<AuthenticateResult> {
+      async authenticate(_ctx: IContext): Promise<AuthenticateResult> {
         return successTicket([{ type: 'roles', value: 'viewer' }])
       }
 
-      override async forbid(ctx: Context): Promise<void> {
+      override async forbid(ctx: IContext): Promise<void> {
         ctx.status(403).header('X-Forbidden-Reason', 'insufficient-role')
       }
     }
@@ -403,7 +403,7 @@ describe('auth configurer (fake handler)', () => {
     class CtxUserController {
       @Args([$p.context()])
       @Get('/')
-      list(ctx: Context) {
+      list(ctx: IContext) {
         return { sub: ctx.user.findFirst('sub')?.value }
       }
     }
