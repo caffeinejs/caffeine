@@ -26,7 +26,7 @@
   "devDependencies": {
     "@caffeinejs/cli": "*",
     "@caffeinejs/testing": "*",
-    "@types/node": "^26.6.3",
+    "@types/node": "^26.6.4",
     "esbuild": "^0.28.2",
     "tsx": "^4.23.15"
   }
