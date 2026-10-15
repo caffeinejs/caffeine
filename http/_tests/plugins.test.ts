@@ -381,6 +381,33 @@ describe('scoped plugin registration', () => {
     expect((await app.fetch('/scoped-public')).headers.get('x-admin')).toBeNull()
   })
 
+  // Decorators apply bottom-up, so the `@Use` below `@Controller` is recorded first. A plugin may rely on what an
+  // earlier one registered, so a reader must be able to trust the order the decorators are written in.
+  it("installs a controller's @Use plugins in the order written, on either side of @Controller", async () => {
+    const log: string[] = []
+
+    @Use(stamping('stacked-above', 'x-above', log))
+    @Controller('/scoped-stacked')
+    @Use(stamping('stacked-below', 'x-below', log))
+    class StackedController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void StackedController
+
+    app = createWebApplication()
+
+    await app.bootstrap()
+
+    const res = await app.fetch('/scoped-stacked')
+
+    expect(res.headers.get('x-above')).toBe('yes')
+    expect(res.headers.get('x-below')).toBe('yes')
+    expect(log).toEqual(['stacked-above', 'stacked-below'])
+  })
+
   // A plugin has no name a caller chose, so registering the same factory twice registers the plugin twice —
   // nothing dedupes on the factory's identity the way a feature dedupes on `kFeatureName`. Deliberately not
   // `fastify-plugin`-wrapped: with no name, there is nothing for the guard below to collide on.

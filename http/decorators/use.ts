@@ -1,5 +1,6 @@
 import type { AdapterExtensionFactory, AnyAdapterExtension, AnyAdapterTypes } from '../adapter.js'
 import type { HTTPPlugin } from '../plugin.js'
+import { configureRouteGroup } from './registrar/registrar.js'
 
 /** What `@Use(...)` takes: a factory for the adapter's plugin, or for an `HTTPPlugin`. */
 type ControllerPluginFactory = AdapterExtensionFactory<
@@ -7,8 +8,6 @@ type ControllerPluginFactory = AdapterExtensionFactory<
   unknown,
   AnyAdapterTypes
 >
-
-const PluginRegistry = new WeakMap<Function, ControllerPluginFactory[]>()
 
 /**
  * Installs an adapter extension — under Fastify, a plugin — in front of this controller's routes and nowhere else.
@@ -32,20 +31,7 @@ const PluginRegistry = new WeakMap<Function, ControllerPluginFactory[]>()
  * ```
  */
 export function Use(factory: ControllerPluginFactory): (target: Function, context: ClassDecoratorContext) => void {
-  return function (target: Function): void {
-    let plugins = PluginRegistry.get(target)
-    if (plugins === undefined) {
-      plugins = []
-      PluginRegistry.set(target, plugins)
-    }
-
-    // Decorators apply bottom-up, so the list comes out in the order a reader sees the decorators only if it
-    // is reversed. Prepending keeps the written order.
-    plugins.unshift(factory)
+  return function (target: Function, context: ClassDecoratorContext): void {
+    configureRouteGroup(context, target, spec => spec.plugin(factory))
   }
-}
-
-/** What `@Use` recorded on `target`, in the order the decorators were written. */
-export function controllerPlugins(target: Function): readonly ControllerPluginFactory[] {
-  return PluginRegistry.get(target) ?? []
 }

@@ -2,7 +2,6 @@ import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/d
 import { errMessage } from '@caffeinejs/std/framework/err'
 
 import { getRouteGroup } from '../../decorators/registrar/registrar.js'
-import { controllerPlugins } from '../../decorators/use.js'
 import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
 import { Keys } from '../../symbols.js'
 import { normalizeGroupPath } from '../builder.js'
@@ -54,10 +53,9 @@ export class ControllerRouteSource<R = unknown> implements RouteSource<R> {
             container.wrap(key as InjectionToken<ControllerInstance>),
           ),
         // A controller's routes live under its Fastify prefix plus its path: its relative middleware paths start there.
-        scopes:
-          controllerPlugins(key).length > 0
-            ? [{ key, path: normalizeGroupPath(`${spec.prefix ?? ''}${spec.path}`) }]
-            : undefined,
+        scopes: spec.plugins?.length
+          ? [{ key, path: normalizeGroupPath(`${spec.prefix ?? ''}${spec.path}`) }]
+          : undefined,
       }
     })
   }

@@ -20,7 +20,7 @@ import {
   type ServerCustomizer,
 } from './adapter.js'
 import { CookieBuilder } from './cookie/cookie.js'
-import { controllerPlugins } from './decorators/use.js'
+import { getRouteGroup } from './decorators/registrar/registrar.js'
 import { ErrorHandlingBuilder } from './error/builder.js'
 import { ErrConfiguration } from './error/common.js'
 import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
@@ -436,7 +436,7 @@ export class WebApplication<
     // Registered when the container compiled, so every controller the application can resolve is already known here.
     for (const { key } of this.container.getBindingsByLabel(Keys.CONTROLLER)) {
       if (typeof key === 'function') {
-        await this.#plugins.resolveController(key, controllerPlugins(key), context)
+        await this.#plugins.resolveController(key, getRouteGroup(key)?.toRouteGroup().plugins ?? [], context)
       }
     }
   }

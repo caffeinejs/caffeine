@@ -1,6 +1,7 @@
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 
+import type { AdapterExtensionFactory } from '../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 import { mergeValue } from './_merge.js'
@@ -33,6 +34,7 @@ export class RouteGroupBuilder {
   #errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   #catchBy?: ErrorHandlerRef[]
   #guards?: InjectionToken<Guard>[]
+  #plugins?: AdapterExtensionFactory<unknown>[]
   #labels?: Map<symbol, unknown>
 
   path(path: string) {
@@ -101,6 +103,18 @@ export class RouteGroupBuilder {
     return this
   }
 
+  /**
+   * Puts a plugin factory ahead of those already added. Only a controller's group reads it; a router takes plugins
+   * with `router.with(...)`.
+   */
+  plugin(factory: AdapterExtensionFactory<unknown>): this {
+    // Decorators apply bottom-up, so the list comes out in the order a reader sees the decorators only if it
+    // is reversed. Prepending keeps the written order.
+    this.#plugins ??= []
+    this.#plugins.unshift(factory)
+    return this
+  }
+
   config<K extends string>(key: K, value: unknown): this
   config<K extends string>(config: Map<K, unknown>): this
   config<K extends string>(keyOrConfig: K | Map<K, unknown>, value?: unknown): this {
@@ -163,6 +177,7 @@ export class RouteGroupBuilder {
       errorHandlers: this.#errorHandlers,
       catchBy: this.#catchBy,
       guards: this.#guards,
+      plugins: this.#plugins,
       labels: this.#labels,
     }
   }

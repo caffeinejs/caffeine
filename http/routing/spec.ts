@@ -2,6 +2,7 @@ import type { Ctor, InjectionToken } from '@caffeinejs/di'
 import type { ParameterPickOptions } from '@caffeinejs/std/framework'
 import type { AnySchema } from '@caffeinejs/std/schema'
 
+import type { AdapterExtensionFactory } from '../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
 import type { Guard } from '../guards/guard.js'
 
@@ -26,6 +27,8 @@ export interface RouteGroupSpec<R> {
   errorHandlers?: Array<[Ctor<Error>, string | symbol]>
   catchBy?: ErrorHandlerRef[]
   guards?: InjectionToken<Guard>[]
+  /** A controller's `@Use(...)` factories, in the order written. */
+  plugins?: AdapterExtensionFactory<unknown>[]
   /** What labelled the group, keyed by whoever reads it: which server serves it, for one. */
   labels?: Map<symbol, unknown>
 }
