@@ -229,6 +229,23 @@ describe('the init argument', () => {
     })
   })
 
+  it('takes headers the route did not declare beside the ones it did', () => {
+    typeOnly(() => {
+      const counted = new Router('/counted')
+        .get('/')
+        .schema({ headers: $t.Object({ 'x-count': $t.Integer() }) })
+        .handler(() => ({ counted: true }))
+      const countedClient = brewer<typeof counted>('http://localhost')
+
+      // Called directly rather than through `toBeCallableWith`, which infers its argument and so never checks a
+      // literal for properties the parameter does not have.
+      void client.pets.search.get({ query: { q: 'rex' }, headers: { 'x-tenant': 't1', authorization: 'Bearer abc' } })
+      void countedClient.counted.get({ headers: { 'x-count': 5, authorization: 'Bearer abc' } })
+      // @ts-expect-error -- the declared x-tenant is still required
+      void client.pets.search.get({ query: { q: 'rex' }, headers: { authorization: 'Bearer abc' } })
+    })
+  })
+
   it('takes RequestInit fields alongside', () => {
     typeOnly(() => {
       expectTypeOf(client.pets.get).toBeCallableWith({ signal: new AbortController().signal })

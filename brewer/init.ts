@@ -33,17 +33,24 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * declared" — which also means a route whose querystring schema is genuinely an open record is treated as
  * declaring none. It errs toward optional, which is the harmless direction. `query` and `headers` may also be left
  * out when every field they declare is optional; a declared body may not, since the server checks a missing one
- * against its schema.
+ * against its schema. Declared headers take others beside them.
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */
 export type CallInit<R extends RouteContract> = Omit<RequestInit, 'method' | 'body' | 'headers'> &
   Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], MayOmit<R['query']>> &
-  Slot<'headers', IsOpenRecord<R['headers']> extends true ? OpenHeaders : R['headers'], MayOmit<R['headers']>> &
+  Slot<'headers', HeadersArg<R['headers']>, MayOmit<R['headers']>> &
   Slot<'body', R['body'], IsUnknown<R['body']>>
 
 /** Whether a query or headers slot may be left out: nothing is declared for it, or nothing declared is required. */
 type MayOmit<T> = IsOpenRecord<T> extends true ? true : AllOptional<T>
+
+/**
+ * The headers a call sends: the ones the route declares, and others beside them, since a server keeps the headers no
+ * schema names. The others take the declared value types too, or a numeric declared header would leave its own
+ * value no type to have.
+ */
+type HeadersArg<H> = IsOpenRecord<H> extends true ? OpenHeaders : H & Record<string, H[keyof H] | string | undefined>
 
 /** Whether every slot of an init is optional, and so whether the argument may be left out entirely. */
 type AllOptional<T> = Partial<T> extends T ? true : false

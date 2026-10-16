@@ -404,6 +404,17 @@ describe('brewer against an application in process', () => {
     })
   })
 
+  // A server keeps the headers no schema names, so declaring one never stops a call sending another.
+  describe('given a route that declares some of its headers', () => {
+    it('should send the others beside them', async () => {
+      const client = brewer(app)
+
+      const res = await client.pets.tenant.get({ headers: { 'x-tenant': 't1', authorization: 'Bearer per-call' } })
+
+      expect(await res.json()).toEqual({ tenant: 't1', ifMatch: null, authorization: 'Bearer per-call' })
+    })
+  })
+
   describe('given a fetch supplied alongside the application', () => {
     it('should call the supplied one, so a transport can still be swapped out', async () => {
       const calls: string[] = []
