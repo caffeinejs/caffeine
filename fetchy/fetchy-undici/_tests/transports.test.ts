@@ -219,6 +219,12 @@ class ItemsAPI {
   raw!: (id: string) => Promise<FetchyResponse>
 }
 
+@API('/')
+class RootAPI {
+  @GET('/users')
+  users!: () => Promise<Echo>
+}
+
 @API('/headers')
 @HeaderMap({ 'X-Client': 'fetchy-tests' })
 @Accept('application/json')
@@ -251,6 +257,15 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       await clientOver(factory()).create(ItemsAPI).search(['math', 'history'], 0, false, '')
 
       expect(received[0].url).toBe('/items?tag=math&tag=history&page=0&draft=false&q=')
+    })
+
+    // A server tells `//users` from `/users`, or answers it with 404.
+    it("joins a base URL's path, a class path of '/' and an operation path with single slashes", async () => {
+      await clientOver(factory(), builder => builder.baseURL(`${baseURL}/v1`))
+        .create(RootAPI)
+        .users()
+
+      expect(received[0].url).toBe('/v1/users')
     })
   })
 

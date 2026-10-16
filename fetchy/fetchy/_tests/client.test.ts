@@ -625,6 +625,24 @@ describe('the URL an operation calls', () => {
     call!: () => Promise<unknown>
   }
 
+  @API('/')
+  class RootUsers {
+    @GET('/users')
+    call!: () => Promise<unknown>
+  }
+
+  @API('/')
+  class RootSlash {
+    @GET('/')
+    call!: () => Promise<unknown>
+  }
+
+  @API('/')
+  class RootBare {
+    @GET()
+    call!: () => Promise<unknown>
+  }
+
   it('is the base URL as written when neither the class nor the operation adds a path', async () => {
     expect(await urlOf('http://example.test/v1', Bare)).toBe('http://example.test/v1')
   })
@@ -639,6 +657,27 @@ describe('the URL an operation calls', () => {
 
   it("puts the class's path after the base URL's own", async () => {
     expect(await urlOf('http://example.test/v1', Users)).toBe('http://example.test/v1/users')
+  })
+
+  // `@API('/')` names the root, as `@API('')` does. Joined as written, its slash and the operation's made `//users`, a
+  // path many servers route apart from `/users` or answer with 404.
+  it.each([
+    ['joins an operation path with one slash', 'http://example.test', RootUsers, 'http://example.test/users'],
+    ["keeps the operation's own slash alone", 'http://example.test', RootSlash, 'http://example.test/'],
+    [
+      "puts an operation path after the base URL's own",
+      'http://example.test/v1',
+      RootUsers,
+      'http://example.test/v1/users',
+    ],
+    [
+      'calls the base URL as written for an operation with no path',
+      'http://example.test/v1',
+      RootBare,
+      'http://example.test/v1',
+    ],
+  ])("%s under a class path of '/'", async (_case, baseURL, TargetAPI, expected) => {
+    expect(await urlOf(baseURL, TargetAPI)).toBe(expected)
   })
 })
 

@@ -6,8 +6,8 @@ import { configureClass } from './registrar/registrar.js'
  * that extends one that does. The other class decorators may be listed above or below it.
  *
  * `path`, when given, prefixes the path of every operation the client serves, inherited ones
- * included. A subclass's `@API(path)` replaces the path its base classes set: `@API('')` removes
- * it, and `@API()` keeps it.
+ * included. A subclass's `@API(path)` replaces the path its base classes set: `@API('')` or
+ * `@API('/')` removes it, and `@API()` keeps it.
  */
 export function API(path?: string) {
   return function (_target: Function, context: ClassDecoratorContext): void {
