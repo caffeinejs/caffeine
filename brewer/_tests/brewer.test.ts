@@ -4,7 +4,7 @@ import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
-import { ErrBrewPathParam } from '../errors.js'
+import { ErrBrew, ErrBrewPathParam } from '../errors.js'
 import { fillPath, joinURL } from '../url.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -55,7 +55,9 @@ const pets = new Router('/pets')
 
 const files = new Router('/files').get('/*').handler(ctx => ({ rest: ctx.req.param()['*'] }))
 
-const app = createWebApplication().mount(pets, files)
+const tags = new Router('/tags').get('/:name?').handler(ctx => ({ name: ctx.req.param().name ?? null }))
+
+const app = createWebApplication().mount(pets, files, tags)
 
 let origin: string
 
@@ -269,6 +271,22 @@ describe('brewer against an application in process', () => {
     })
   })
 
+  describe('given an optional path parameter', () => {
+    it('should add no segment when it is left out, as the escape hatch does', async () => {
+      const client = brewer(app)
+
+      expect(await (await client.tags({}).get()).json()).toEqual({ name: null })
+      expect(await (await client.tags({ name: undefined }).get()).json()).toEqual({ name: null })
+      expect(await (await client.$request('GET', '/tags/:name?', { params: {} })).json()).toEqual({ name: null })
+    })
+
+    it('should place it when it is given', async () => {
+      const client = brewer(app)
+
+      expect(await (await client.tags({ name: 'cute' }).get()).json()).toEqual({ name: 'cute' })
+    })
+  })
+
   describe('given a fetch supplied alongside the application', () => {
     it('should call the supplied one, so a transport can still be swapped out', async () => {
       const calls: string[] = []
@@ -335,10 +353,24 @@ describe('fillPath', () => {
   })
 
   describe('given a path parameter with no value', () => {
-    it('should say which one, and where', async () => {
-      const client = brewer<typeof app>(origin)
+    it('should reject, naming the parameter and the path, and send nothing', async () => {
+      const sent: string[] = []
+      const client = brewer(app, {
+        fetch: (input, init) => {
+          sent.push(String(input))
+          return app.fetch(input as string, init)
+        },
+      })
 
-      expect(() => client.$request('GET', '/pets/:id', { params: {} as never })).toThrow(ErrBrewPathParam)
+      const pending = client.$request('GET', '/pets/:id', { params: {} as never })
+
+      await expect(pending).rejects.toBeInstanceOf(ErrBrewPathParam)
+      await expect(pending).rejects.toBeInstanceOf(ErrBrew)
+      await expect(pending).rejects.toMatchObject({
+        code: 'ERR_BREW_PATH_PARAM',
+        message: expect.stringContaining('Cannot build a request for "/pets/:id": no value for path parameter "id"'),
+      })
+      expect(sent).toEqual([])
     })
   })
 })

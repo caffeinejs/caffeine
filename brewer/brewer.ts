@@ -80,20 +80,31 @@ export function brewer<T>(target: string | Fetchable, options: BrewOptions = {})
   return node(IN_PROCESS_ORIGIN, resolved, [], undefined) as BrewClient<T>
 }
 
+/** A segment the proxy walked: a name as written, or a path parameter, encoded when the request is sent. */
+type Segment = string | { readonly name: string; readonly value: unknown }
+
 // A node of the proxy: the segments walked so far, and the method once a verb has been read. Its target is the call
 // itself — to supply a parameter, or to send the request — so one object can be both called and indexed.
-function node(baseURL: string, options: BrewOptions, segments: readonly string[], method: string | undefined): unknown {
+function node(
+  baseURL: string,
+  options: BrewOptions,
+  segments: readonly Segment[],
+  method: string | undefined,
+): unknown {
   const call = (init: Record<string, unknown> = {}): unknown => {
     if (method !== undefined) {
-      return send(baseURL, options, `/${segments.join('/')}`, method, init)
+      return send(baseURL, options, () => pathOf(segments), method, init)
     }
 
     // A parameter segment binds exactly one name, so the single value is unambiguous — which is what lets the
-    // runtime stay this small: it never has to know the path shape the types know.
-    const [name, value] = Object.entries(init)[0] ?? ['', '']
-    const encoded = name === '*' ? String(value) : encodeURIComponent(String(value))
+    // runtime stay this small: it never has to know the path shape the types know. An optional parameter given
+    // no value adds no segment, as `fillPath` leaves it out.
+    const [name, value] = Object.entries(init)[0] ?? ['', undefined]
+    if (value === undefined || value === null) {
+      return node(baseURL, options, segments, method)
+    }
 
-    return node(baseURL, options, [...segments, encoded], method)
+    return node(baseURL, options, [...segments, { name, value }], method)
   }
 
   return new Proxy(call, {
@@ -107,7 +118,7 @@ function node(baseURL: string, options: BrewOptions, segments: readonly string[]
       // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
       if (prop === '$request' && segments.length === 0) {
         return (verb: string, path: string, init: RequestArgs = {}) =>
-          send(baseURL, options, fillPath(path, init.params), verb, init)
+          send(baseURL, options, () => fillPath(path, init.params), verb, init)
       }
 
       if (method === undefined && isVerb(prop)) {
@@ -119,15 +130,29 @@ function node(baseURL: string, options: BrewOptions, segments: readonly string[]
   })
 }
 
+/** The path the segments spell, each parameter encoded. */
+function pathOf(segments: readonly Segment[]): string {
+  const parts = segments.map(segment => {
+    if (typeof segment === 'string') {
+      return segment
+    }
+
+    return segment.name === '*' ? String(segment.value) : encodeURIComponent(String(segment.value))
+  })
+
+  return `/${parts.join('/')}`
+}
+
+// The path is built here, inside the promise, so a path the call cannot fill rejects like any other failure.
 async function send(
   baseURL: string,
   options: BrewOptions,
-  path: string,
+  path: () => string,
   method: string,
   init: RequestArgs,
 ): Promise<Response> {
   const { params: _params, query, body, headers, ...rest } = init
-  const url = `${joinURL(baseURL, path)}${buildQuery(query)}`
+  const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
 
   const merged = new Headers(await resolveHeaders(options.headers))
   for (const [key, value] of new Headers(headers).entries()) {
