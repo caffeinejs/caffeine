@@ -4,7 +4,7 @@ import type { WebApplicationOps } from './adapter.js'
 import { ErrConfiguration } from './core/error/common.js'
 import { parseUse } from './core/middleware/middleware.js'
 import { MiddlewarePipeline } from './core/middleware/pipeline.js'
-import type { Router } from './core/routing/programmatic/router.js'
+import type { Router } from './core/routing/programmatic/programmatic.js'
 
 type AnyRouter = Router<any, any, any, any, any, any>
 type Operation = 'mount' | 'use' | 'useFn'

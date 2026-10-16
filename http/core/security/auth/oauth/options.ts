@@ -15,7 +15,7 @@ import {
   sessionSecretViolation,
 } from '../internal/remote/config.js'
 import { ErrOAuthConfiguration } from '../internal/remote/errors.js'
-import type { RemoteAuthenticationTokens, RemoteChallengeMode } from '../internal/remote/handler.js'
+import type { RemoteAuthenticationTokens, RemoteChallengeMode } from '../internal/remote/remote.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 
 type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>

@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { $p, AllowAnonymous, Controller, Get, Args, Post, Schema, type ActionResult } from '../../../../../index.js'
-import { createWebApplication, type FastifyContext } from '../../../index.js'
-import { compileRouteSchema } from '../compile_route_schema.js'
+import { createWebApplication, type Context } from '../../../index.js'
+import { compileRouteSchema } from '../schema.js'
 
 const CreatePet = $t.Object({
   name: $t.String({ minLength: 1 }),
@@ -66,7 +66,7 @@ class PetsController {
   @Get('/headers')
   @Schema({ headers: $t.Object({ 'x-tenant': $t.String() }) })
   @Args([$p.context()])
-  headers(ctx: FastifyContext): ActionResult {
+  headers(ctx: Context): ActionResult {
     return { hasHost: ctx.req.hasHeader('host'), tenant: ctx.req.header('x-tenant') }
   }
 }

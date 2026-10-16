@@ -15,7 +15,7 @@ export type DownloadOptions = SendOptions & { root?: string }
 /**
  * The slice of an `IContext` {@link sendFile} and {@link download} reach through.
  *
- * A structural slice rather than `FastifyContext` from `@caffeinejs/http`: every instantiation of that class
+ * A structural slice rather than `Context` from `@caffeinejs/http/fastify`: every instantiation of that class
  * fits without variance trouble, and a context built by another adapter does not compile.
  */
 export interface StaticContext {

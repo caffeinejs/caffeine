@@ -3,7 +3,7 @@ import type { Container } from '@caffeinejs/di'
 import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
 import { stateOf, type RouterState } from './_state.js'
 import { flattenRouter } from './flatten.js'
-import type { Router } from './router.js'
+import type { Router } from './programmatic.js'
 
 /**
  * The routes declared with {@link Router} and mounted into the application.

@@ -13,11 +13,11 @@ import {
 
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
 import { Responder } from '../../../response.js'
-import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/plugin.js'
-import { attachGuardHook } from '../guards/fastify.js'
+import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
+import { attachGuardHook } from '../guards/guards.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
-import { compileRouteSchema } from './schema/compile_route_schema.js'
+import { compileRouteSchema } from './schema/schema.js'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void

@@ -1,4 +1,4 @@
-export { OAuth2AuthenticationHandler } from './handler.js'
+export { OAuth2AuthenticationHandler } from './oauth.js'
 export {
   type OAuth2AuthenticationOptions,
   OAuth2AuthenticationOptionsBuilder,

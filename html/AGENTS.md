@@ -12,7 +12,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `text/html; charset=utf-8` only when the reply carries no Content-Type; a route's `@Produces` or a handler's
   `ctx.header('content-type', ...)` are the only overrides. Do not add either back.
 - `respond` returns the markup; it does not call `ctx.body(...)`, so the same result is correct on the adapter and
-  in `http/platform/fastify/error/plugin.ts`. Never return another `Responder` from `respond`: the adapter unwraps
+  in `http/platform/fastify/error/error.ts`. Never return another `Responder` from `respond`: the adapter unwraps
   exactly once.
 - There is no `@HTML` decorator and no `html()` route extension; `@Produces` already sets a route's Content-Type.
   If one is ever added, write the `RouteExtension` first — see [`http/AGENTS.md`](../http/AGENTS.md).

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import { Claim } from '../../index.js'
-import { CredentialsService } from './credentials_service.js'
+import { CredentialsService } from './credentials.js'
 import type { PasswordHasher } from './password_hasher.js'
 import { ScryptPasswordHasher } from './password_hasher.js'
 import type { CredentialUser, UserProvider } from './user_provider.js'

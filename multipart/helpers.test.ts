@@ -1,6 +1,6 @@
 import { $p, Args, Controller, Post, Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { FastifyContext } from '@caffeinejs/http/fastify'
+import type { Context } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
@@ -381,7 +381,7 @@ describe('multipart(ctx) on a decorated route', () => {
     class DecoratedUploadController {
       @Post('/upload')
       @Args([$p.context()])
-      async upload(ctx: FastifyContext) {
+      async upload(ctx: Context) {
         received = await multipart(ctx).file('avatar')
         return {}
       }

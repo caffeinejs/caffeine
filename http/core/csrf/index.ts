@@ -11,5 +11,5 @@ export {
   type OriginReason,
   type OriginVerdict,
 } from './origin.js'
-export { CSRFBuilder } from './builder.js'
+export { CSRFBuilder } from './csrf.js'
 export { csrfExempt, csrfExemptConfig, kCSRFRoute, type CSRFRouteConfig } from './route.js'
