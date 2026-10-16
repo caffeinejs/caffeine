@@ -1,4 +1,4 @@
-import { Router } from './router.js'
+import { Router } from './programmatic.js'
 import type { AdapterOf, ConfigOf, DepsOf, RoutesOf, VarsOf } from './types.js'
 
 /**

@@ -2,7 +2,7 @@ import { ErrSchemaConversion, $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { compileRouteSchema } from '../compile_route_schema.js'
+import { compileRouteSchema } from '../schema.js'
 
 describe('compileRouteSchema', () => {
   it('returns undefined for a route without a schema', () => {

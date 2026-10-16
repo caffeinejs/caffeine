@@ -8,7 +8,7 @@ import { HTTPPlugin } from '../../../plugin.js'
 import { PluginSlot } from '../../../plugin_slot.js'
 import { MiddlewarePipeline } from '../../middleware/pipeline.js'
 import { stateOf, type RouterState } from './_state.js'
-import type { Router } from './router.js'
+import type { Router } from './programmatic.js'
 
 type AnyRouter = Router<any, any, any, any, any, any>
 type ScopeFactory = AdapterExtensionFactory<unknown, unknown, any>

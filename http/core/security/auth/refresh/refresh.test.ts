@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { Claim, Identity, Principal } from '../../index.js'
 import { parseToken, type SeriesTokenRecord, type SeriesTokenRotation } from '../internal/series_token.js'
 import { JWTService } from '../jwt/jwt_service.js'
+import { ErrRefreshTokenRejected, RefreshTokenService } from './refresh.js'
 import type { RefreshPrincipalResolver } from './refresh_options.js'
-import { ErrRefreshTokenRejected, RefreshTokenService } from './refresh_token_service.js'
 import { RefreshTokenStore } from './refresh_token_store.js'
 
 const jwt = new JWTService({ secret: 'a-very-long-test-secret-key-32-bytes!', issuer: 'test' })

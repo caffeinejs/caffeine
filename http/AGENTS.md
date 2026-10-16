@@ -11,6 +11,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `http/` is the base: the application, the adapter contract, the request context, servers, plugins and
   `decorators/`. `core/<dir>/` holds what runs on any adapter: routing, middleware, errors and every built-in
   feature. `platform/fastify/` holds the Fastify adapter and each directory's Fastify half, at the same path.
+- Every directory with source files has a main file named after it (`csrf/csrf.ts`, `routing/routing.ts`) and an
+  `index.ts` that only re-exports. A directory of independent files with no main one (`decorators/`, `internal/`,
+  `provider/`) has the barrel alone. The entry roots `http/` and `platform/fastify/`, `_tests/` and `_spectypes/`
+  are exempt. A barrel publishes what its package offers; a helper only the adapter uses is imported by its path.
+- Under `platform/fastify/`, no file is named `fastify_*` and no declaration carries `Fastify`: the directory says
+  it. A file takes its core twin's name (`context.ts`, `adapter.ts`) and a type the plain name of the `I*`
+  interface it implements (`Context`, `ContextRequest`, `AdapterTypes`). Fastify's own types and `fst` keep theirs.
 - Nothing outside `platform/` imports `fastify`, `fastify-plugin`, `@fastify/*` or `platform/`, directly or through
   another module; a test may. The `http/**` override in `.oxlintrc.json` refuses the direct imports. Root and core
   may import each other.
@@ -47,7 +54,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   router state, so one router mounted into two applications starts from what it declared in both. A router's or a
   controller's middleware is resolved once, keyed by its state or class, and installed in each group context after
   that scope's plugins, its relative paths rebased under the group's `RouteGroupScope.path` (`rebaseMiddlewares`,
-  `platform/fastify/middleware/fastify.ts`), which refuses a wildcard or an optional parameter in the base.
+  `platform/fastify/middleware/middleware.ts`), which refuses a wildcard or an optional parameter in the base.
 - A callback-style Fastify plugin body calling a kept `context.app` throws where avvio does not catch; a plugin body
   adds a group with `$route`.
 
@@ -55,7 +62,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - `http/core/cookie/` is the cookie implementation (`signer.ts`, `options.ts`, `rules.ts`, `serialize.ts`). It
   imports nothing from Fastify, `node:crypto` or `Buffer`: signing is Web Crypto, so `ctx.req.signedCookie()` is
-  async. `platform/fastify/cookie/plugin.ts` is the glue, built once per server by the cookie head slot.
+  async. `platform/fastify/cookie/cookie.ts` is the glue, built once per server by the cookie head slot.
 - Nothing here reads `request.cookies` or calls `reply.setCookie`/`clearCookie`. Cookies go through `ctx.req.cookie()`
   and `ctx.cookie()`, or `request.httpContext` from a raw hook. An application may register `@fastify/cookie` for an
   ecosystem plugin; the two coexist.
@@ -67,13 +74,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - The authentication schemes write every attribute of their cookies, an unset one as `undefined`, so the server's
   `parseOptions` defaults never reach them; they pin `signed: false`. Their values keep the server's `encode`: every
   read decodes with the server's `decode`, so clearing one without the other breaks sign-in.
-- `respond()` (`platform/fastify/error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send
+- `respond()` (`platform/fastify/error/error.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send
   that died writing its cookies left `ctx.sent` true with nothing in flight.
 
 ## CSRF
 
 - `http/core/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
-  `origin.ts` is the check, pure, and `platform/fastify/csrf/plugin.ts` the only file that knows Fastify; another
+  `origin.ts` is the check, pure, and `platform/fastify/csrf/csrf.ts` the only file that knows Fastify; another
   adapter re-implements that file alone.
 - `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
   proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
@@ -202,7 +209,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   HEAD twin; a `RouteExtension` writing plain route config comes first.
 - Both raw-body parsers are handed the route's `bodyLimit`, but Fastify enforces a limit only on a body it reads itself.
   `bodyAsBuffer()` reads through `parseAs: 'buffer'`, so Fastify holds it to the limit; `bodyAsStream()` holds its
-  stream to `request.routeOptions.bodyLimit` itself (`limited()` in `platform/fastify/routing/register.ts`). A new
+  stream to `request.routeOptions.bodyLimit` itself (`limited()` in `platform/fastify/routing/routing.ts`). A new
   parser reading the payload stream must do the same, and must not `pipeline` it: that destroys the request, and its
   socket, before the 413 is sent.
 - `fst({ … })` (`platform/fastify/routing/route_options.ts`) is the only Fastify escape hatch on a route. Do not widen
@@ -231,13 +238,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 | what the route declared                                   | the route config                            | `ctx.routeConfig`           |
 | the application configuration                             | a snapshot on the context                   | `ctx.config`                |
 
-- Only the adapter builds a request context: `FastifyContext` once per request in `platform/fastify/fastify_adapter.ts`,
-  stored as `request.httpContext`, and `FastifyContextRequest` lazily by its `req` getter. Code holding a raw
+- Only the adapter builds a request context: `Context` once per request in `platform/fastify/adapter.ts`,
+  stored as `request.httpContext`, and `ContextRequest` lazily by its `req` getter. Code holding a raw
   `FastifyRequest` reads `request.httpContext` (or `request.httpContext.req`); never construct either anywhere else, or
   two contexts disagree on the same request.
 - `ctx.state` is application space; a first-party value gets a dedicated member, as `ctx.user`, or the route
   config.
-- Do not add a Fastify-named member to `IContext` or cast one to `FastifyContext`; `ctx.platform` is the escape
+- Do not add a Fastify-named member to `IContext` or cast one to `Context`; `ctx.platform` is the escape
   hatch.
 - Do not invent a second "stream scope"; fix how the adapter awaits the request.
 - `Responder` is special-cased; a Fetch `Response` on `ActionResult` is passed to Fastify `send()` unwrapped, so

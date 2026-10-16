@@ -2,7 +2,7 @@ import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { compileRouteSchema } from '../compile_route_schema.js'
+import { compileRouteSchema } from '../schema.js'
 
 const bodyOf = (schema: Parameters<typeof compileRouteSchema>[0]) =>
   JSON.parse(JSON.stringify(compileRouteSchema(schema, 'POST /pets')?.body))

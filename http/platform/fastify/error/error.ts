@@ -2,14 +2,14 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyError, FastifyInstance, FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
-import type { GlobalErrorHandlerOptions } from '../../../core/error/builder.js'
 import { ErrCaffeineWebApplication } from '../../../core/error/common.js'
+import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from '../../../core/error/http.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
 import { Responder } from '../../../response.js'
-import { cookieFlushFailed } from '../cookie/plugin.js'
-import type { FastifyContext } from '../fastify_context.js'
+import type { Context } from '../context.js'
+import { cookieFlushFailed } from '../cookie/cookie.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
@@ -234,7 +234,7 @@ function sectionOf(err: Error): string {
   return err.stack ?? `${err.name}: ${err.message}`
 }
 
-function respond(ctx: FastifyContext, result: unknown): unknown {
+function respond(ctx: Context, result: unknown): unknown {
   const reply = ctx.platform.reply
 
   // The handler answered from the context. Handed the reply back, the runner waits for that send out rather

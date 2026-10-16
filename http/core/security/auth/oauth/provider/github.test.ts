@@ -5,7 +5,7 @@ import { Claim } from '../../../index.js'
 import { AuthenticationBuilder } from '../../builder.js'
 import { encodeSession, claimsToSession } from '../../internal/remote/session_store.js'
 import { encodeState } from '../../internal/remote/state_store.js'
-import { OAuth2AuthenticationHandler } from '../handler.js'
+import { OAuth2AuthenticationHandler } from '../oauth.js'
 import { GITHUB_ENDPOINTS, githubOAuth2Preset } from './github.js'
 
 const SESSION_SECRET = 'github-test-secret-at-least-32-chars!!'
@@ -33,7 +33,7 @@ function makeCtx(
   const cookies = overrides.cookies ?? {}
   const query = overrides.query ?? {}
   // A browser navigation by default: a GitHub sign-in is one, and it is the branch of `challenge()` these
-  // tests are about. The 401 branch has its own coverage in oidc/handler.test.ts.
+  // tests are about. The 401 branch has its own coverage in oidc/oidc.test.ts.
   const headers = overrides.headers ?? { 'sec-fetch-mode': 'navigate' }
   const cookie = vi.fn().mockReturnThis()
   const deleteCookie = vi.fn().mockReturnThis()

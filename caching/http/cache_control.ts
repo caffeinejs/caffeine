@@ -4,7 +4,7 @@ import {
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
-  type FastifyContextRequest,
+  type ContextRequest,
 } from '@caffeinejs/http/fastify'
 import type { Duration } from '@caffeinejs/std/duration'
 import type { FastifyRequest } from 'fastify'
@@ -135,7 +135,7 @@ export interface CacheControlOptions {
    *
    * `req` is the request of the handler's own context, so it needs a server the application's adapter drives.
    */
-  key?: (req: FastifyContextRequest) => string
+  key?: (req: ContextRequest) => string
   /**
    * Hashes the payload into the `ETag`, instead of the one given to `HTTPCaching`. The default tag is strong and
    * computed before any content-coding.

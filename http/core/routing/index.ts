@@ -1,6 +1,6 @@
 export * from './builder.js'
 export * from './compile.js'
-export * from './decorated/source.js'
+export * from './decorated/index.js'
 export type * from './extension.js'
 export * from './inherit.js'
 export * from './picker.js'

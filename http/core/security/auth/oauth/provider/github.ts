@@ -1,5 +1,5 @@
 import { DEFAULT_HTTP_TIMEOUT_MS } from '../../internal/remote/config.js'
-import type { RemoteAuthenticationTokens } from '../../internal/remote/handler.js'
+import type { RemoteAuthenticationTokens } from '../../internal/remote/remote.js'
 import type { OAuth2AuthenticationOptions } from '../options.js'
 
 export const GITHUB_ENDPOINTS = {

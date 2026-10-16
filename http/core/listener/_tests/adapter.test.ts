@@ -5,8 +5,8 @@ import { describe, expect, it } from 'vitest'
 import type { IAdapter, AdapterIn, IAdapterServer, HTTPSetupContext } from '../../../adapter.js'
 import { WebApplication } from '../../../application.js'
 import { Listener } from '../../../index.js'
-import type { FastifyTypes } from '../../../platform/fastify/fastify_adapter.js'
-import { pluginName, type AnyFastifyPlugin } from '../../../platform/fastify/plugin.js'
+import type { AdapterTypes } from '../../../platform/fastify/adapter.js'
+import { pluginName, type AnyPlugin } from '../../../platform/fastify/plugin.js'
 
 /**
  * A listener goes through the adapter call the application's own server goes through, with an input of its own:
@@ -15,18 +15,18 @@ import { pluginName, type AnyFastifyPlugin } from '../../../platform/fastify/plu
  */
 
 /** Records what every server is set up with, and builds none: the contract is all this file needs. */
-class RecordingAdapter implements IAdapter<FastifyTypes> {
+class RecordingAdapter implements IAdapter<AdapterTypes> {
   /** In call order: the application's own server first. */
-  readonly inputs: AdapterIn<FastifyTypes>[] = []
+  readonly inputs: AdapterIn<AdapterTypes>[] = []
 
-  async setup(input: AdapterIn<FastifyTypes>): Promise<IAdapterServer<FastifyTypes>> {
+  async setup(input: AdapterIn<AdapterTypes>): Promise<IAdapterServer<AdapterTypes>> {
     this.inputs.push(input)
     return new IdleServer()
   }
 }
 
 /** What {@link RecordingAdapter} hands back: nothing was built, so it never listens and answers nothing. */
-class IdleServer implements IAdapterServer<FastifyTypes> {
+class IdleServer implements IAdapterServer<AdapterTypes> {
   get instance(): never {
     throw new Error('No server was built')
   }
@@ -78,8 +78,8 @@ describe('a listener, as its adapter is handed it', () => {
 
     await app.bootstrap()
 
-    const names = (input: AdapterIn<FastifyTypes>) =>
-      input.extensions.root().map(entry => pluginName(entry as AnyFastifyPlugin))
+    const names = (input: AdapterIn<AdapterTypes>) =>
+      input.extensions.root().map(entry => pluginName(entry as AnyPlugin))
     const [own, admin] = adapter.inputs
 
     expect(adapter.inputs).toHaveLength(2)

@@ -12,7 +12,7 @@ import type { Guard } from '../../guards/guard.js'
 import type { RouteExtension } from '../extension.js'
 import type { RouteAuthzOptions, RouteDetail, RouteValidationSchema } from '../spec.js'
 import type { RouteState } from './_state.js'
-import type { Router } from './router.js'
+import type { Router } from './programmatic.js'
 import type { DeclaredRoute, JoinPath, MergeDeps, RouteHandler } from './types.js'
 
 /**

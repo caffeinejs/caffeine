@@ -11,7 +11,7 @@ import {
   type Guard,
   type GuardInput,
 } from '@caffeinejs/http'
-import { createWebApplication, FastifyContext } from '@caffeinejs/http/fastify'
+import { createWebApplication, Context } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 
 const PORT = parseInt(process.env.PORT ?? '3030', 10)
@@ -85,7 +85,7 @@ class AppController {
   @UseGuards(APIKeyGuard)
   @Args([$p.param(), $p.query(), $p.body(), $p.header(), $p.context()])
   @Schema({ params: schema, querystring: schema, body: schema, headers: schema, response: responseSchema })
-  test(params: DataSchema, q: DataSchema, b: DataSchema, h: DataSchema, ctx: FastifyContext) {
+  test(params: DataSchema, q: DataSchema, b: DataSchema, h: DataSchema, ctx: Context) {
     this.logger.get().log('request')
 
     ctx.header('text', h.text)

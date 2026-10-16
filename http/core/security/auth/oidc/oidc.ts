@@ -5,10 +5,10 @@ import type { JWTVerifyGetKey } from 'jose'
 import type { IContext } from '../../../../context.js'
 import { Claim } from '../../identity.js'
 import { basicAuthHeader, type TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
-import { RemoteAuthenticationHandler } from '../internal/remote/handler.js'
-import type { RemoteAuthenticationIdentity } from '../internal/remote/handler.js'
 import { redactPii, redactPiiList } from '../internal/remote/pii.js'
 import { selectPKCEMethod } from '../internal/remote/pkce.js'
+import { RemoteAuthenticationHandler } from '../internal/remote/remote.js'
+import type { RemoteAuthenticationIdentity } from '../internal/remote/remote.js'
 import type { RemoteAuthenticationState } from '../internal/remote/state_store.js'
 import { fetchUserInfo } from '../internal/remote/userinfo.js'
 import { REGISTERED_CLAIMS } from '../registered_claims.js'
@@ -18,6 +18,39 @@ import type { OIDCDiscoveryDocument } from './discovery.js'
 import { ErrOIDCCallback, ErrOIDCConfiguration, ErrOIDCDiscovery, ErrOIDCSession } from './errors.js'
 import { resolveOIDCOptions } from './options.js'
 import type { OIDCAuthenticationOptions, OIDCTokens, ResolvedOIDCAuthenticationOptions } from './options.js'
+
+/**
+ * The callback surface the adapter needs, satisfied by every OAuth-family handler.
+ *
+ * Structural rather than a concrete class so the OpenID Connect and plain OAuth 2.0 handlers
+ * register their callback routes and pass startup uniqueness checks through one path.
+ */
+export interface OAuthCallbackHandler {
+  readonly callbackPath: string
+  readonly loginPath: string
+  readonly schemeName: string
+  readonly sessionCookieName: string
+  readonly stateCookieName: string
+  processCallback(ctx: IContext): Promise<void>
+  startSignIn(ctx: IContext): Promise<void>
+}
+
+export interface OIDCHandlerEntry {
+  callbackPath: string
+  handler: OAuthCallbackHandler
+}
+
+export interface OIDCMeta {
+  handlers: OIDCHandlerEntry[]
+  /**
+   * OAuth strategies that no request can reach unless a route names them.
+   *
+   * The builder can tell which strategies are neither the default nor selectable through a Forward
+   * default, but not which routes name schemes — only the router phase sees those. So it reports the
+   * candidates and the configurer, which does see the routes, decides whether any are genuinely dead.
+   */
+  unreachableCandidates: string[]
+}
 
 /**
  * id_tokens are signed with the provider's asymmetric key — never accept a symmetric alg.

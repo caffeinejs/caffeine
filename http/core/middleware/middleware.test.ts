@@ -26,7 +26,7 @@ import {
   Router,
   kMiddlewareHook,
 } from '../../index.js'
-import { type FastifyMiddlewareHook, createWebApplication } from '../../platform/fastify/index.js'
+import { type MiddlewareHook, createWebApplication } from '../../platform/fastify/index.js'
 
 @Controller('/mw')
 class MiddlewareController {
@@ -322,7 +322,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 
@@ -352,7 +352,7 @@ describe('middleware pipeline', () => {
     const order: string[] = []
 
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 

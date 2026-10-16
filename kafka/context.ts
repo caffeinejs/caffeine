@@ -26,7 +26,7 @@ export interface KafkaContextInit {
 
 /**
  * Per-message operations handed to a `@KafkaListener` via the `$k.context()` picker — the Kafka counterpart of
- * the HTTP `FastifyContext`. Exposes the record's metadata, manual acknowledgement (`ack`/`nack`), and
+ * the HTTP `Context`. Exposes the record's metadata, manual acknowledgement (`ack`/`nack`), and
  * producing (`send`). One instance per delivery; reused across retry attempts (its `attempt` advances).
  */
 export class KafkaContext<Value = unknown> {

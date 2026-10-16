@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 import type { IContext } from '../../../context.js'
-import { CSRFBuilder, kBuild } from '../../../core/csrf/builder.js'
+import { CSRFBuilder, kBuild } from '../../../core/csrf/csrf.js'
 import { ErrCSRFCrossOrigin } from '../../../core/csrf/errors.js'
 import { isExcluded, type CSRFOptions } from '../../../core/csrf/options.js'
 import { checkOrigin, SAFE_METHODS, type OriginCheckAskable, type OriginCheckInput } from '../../../core/csrf/origin.js'
