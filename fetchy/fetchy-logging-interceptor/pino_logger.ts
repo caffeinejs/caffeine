@@ -1,7 +1,13 @@
-import pino, { type LoggerOptions } from 'pino'
+import pino, { type Logger as PinoInstance, type LoggerOptions } from 'pino'
 
 import type { Logger } from './logger.js'
 
+/**
+ * A {@link Logger} backed by pino.
+ *
+ * Takes the options pino is built with, or an instance built elsewhere, such as the application's own: a destination,
+ * serializers and redaction are configured on pino, not here.
+ */
 export class PinoLogger implements Logger {
   static readonly DEFAULT_OPTIONS: LoggerOptions = {
     level: 'info',
@@ -17,10 +23,10 @@ export class PinoLogger implements Logger {
     },
   }
 
-  private readonly pino: pino.Logger
+  private readonly pino: PinoInstance
 
-  constructor(options: LoggerOptions = PinoLogger.DEFAULT_OPTIONS) {
-    this.pino = pino(options)
+  constructor(options: LoggerOptions | PinoInstance = PinoLogger.DEFAULT_OPTIONS) {
+    this.pino = isPinoInstance(options) ? options : pino(options)
   }
 
   info(message: string): void {
@@ -30,4 +36,8 @@ export class PinoLogger implements Logger {
   error(message: string): void {
     this.pino.error(message)
   }
+}
+
+function isPinoInstance(options: LoggerOptions | PinoInstance): options is PinoInstance {
+  return typeof (options as PinoInstance).child === 'function'
 }

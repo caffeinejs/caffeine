@@ -1,4 +1,5 @@
 import { ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import pino from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from '../errors.js'
@@ -24,6 +25,19 @@ class SpyLogger implements Logger {
 }
 
 const ORIGIN = 'http://example.test'
+
+interface LogLine {
+  level: number
+  msg: string
+  err?: { type: string; message: string; stack: string; code?: string }
+}
+
+// A pino destination that keeps every line pino writes to it, parsed. pino writes to it synchronously.
+function sink(): { lines: LogLine[]; destination: { write(line: string): void } } {
+  const lines: LogLine[] = []
+
+  return { lines, destination: { write: line => void lines.push(JSON.parse(line) as LogLine) } }
+}
 
 function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
   return new Response(JSON.stringify(body), { status, statusText, headers: { 'content-type': 'application/json' } })
@@ -287,6 +301,16 @@ describe('PinoLogger', () => {
       [30, '--> GET http://example.test/users'],
       [50, '<-- HTTP Failed: network down'],
     ])
+  })
+
+  // An application with a pino logger of its own, writing where its logs go, hands it over rather than build another.
+  it('writes through a pino instance it is given', () => {
+    const { lines, destination } = sink()
+    const logger = new PinoLogger(pino({ level: 'info' }, destination))
+
+    logger.info('--> GET http://example.test/users')
+
+    expect(lines).toEqual([expect.objectContaining({ level: 30, msg: '--> GET http://example.test/users' })])
   })
 })
 
