@@ -276,9 +276,9 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       expect(received[0].url).toBe('/items/a%20b%2Fc%3Fd%23e%25%C3%A7')
     })
 
-    // `0`, `false` and `''` are values a filter means, unlike an argument left out.
-    it('repeats an array in the query and keeps 0, false and an empty string', async () => {
-      await clientOver(factory()).create(ItemsAPI).search(['math', 'history'], 0, false, '')
+    // `0`, `false` and `''` are values a filter means, unlike an argument left out, alone or in a list.
+    it('repeats an array in the query, keeps 0, false and an empty string, and leaves out null and undefined', async () => {
+      await clientOver(factory()).create(ItemsAPI).search(['math', null, 'history', undefined], 0, false, '')
 
       expect(received[0].url).toBe('/items?tag=math&tag=history&page=0&draft=false&q=')
     })

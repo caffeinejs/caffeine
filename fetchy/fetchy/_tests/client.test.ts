@@ -663,6 +663,26 @@ describe('the request an operation builds', () => {
 
     expect(transport.lastRequest!.path).toBe(path)
   })
+
+  @API('/search')
+  class TagsAPI {
+    @GET('')
+    @Params([Query('tag')])
+    tagged!: (tags: (string | null | undefined)[]) => Promise<unknown>
+  }
+
+  // A value left out of a list is not sent, as a lone one is not, and as Part() leaves it out: never as the text
+  // "null" or "undefined", which a server would filter by.
+  it.each([
+    ['between values', ['math', null, undefined, 'history'], '/search?tag=math&tag=history'],
+    ['when the list holds nothing else', [null, undefined], '/search'],
+  ])('leaves null and undefined out of a query array %s', async (_case, tags, path) => {
+    const { api, transport } = clientOf(TagsAPI)
+
+    await api.tagged(tags)
+
+    expect(transport.lastRequest!.path).toBe(path)
+  })
 })
 
 // A base URL may carry a path of its own: a versioned API, or a service mounted under a prefix. An operation that adds

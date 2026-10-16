@@ -42,7 +42,9 @@ function appendQueryEntry(query: string, key: string, value: unknown): string {
 
   if (Array.isArray(value)) {
     for (const element of value) {
-      query += `${query === '' ? '?' : '&'}${key}${encodeURIComponent(String(element))}`
+      if (element !== undefined && element !== null) {
+        query += `${query === '' ? '?' : '&'}${key}${encodeURIComponent(String(element))}`
+      }
     }
     return query
   }
