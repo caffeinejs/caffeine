@@ -45,9 +45,13 @@ type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends stri
  */
 export type Node<E extends AnyEntry> = Terminal<E> & StaticChildren<E> & ParamChild<E>
 
-/** The verbs answered by the routes whose path ends at this node. */
+/**
+ * The verbs answered by the routes whose path ends at this node.
+ *
+ * Only methods the proxy has a verb for: it would read any other name as a segment. `$request` sends those.
+ */
 type Terminal<E extends AnyEntry> = {
-  [R in Extract<E, { segs: readonly [] }>['route'] as Lowercase<R['method']>]: VerbCall<R>
+  [R in Extract<E, { segs: readonly [] }>['route'] as Extract<Lowercase<R['method']>, Verb>]: VerbCall<R>
 }
 
 /**
@@ -102,8 +106,8 @@ type AdvanceAny<E extends AnyEntry> = E extends {
 /**
  * The escape hatch: a route addressed by method and path.
  *
- * There for what the proxy cannot serve — a path segment named after a verb or `then`, and a path decided at run
- * time — and deliberately for nothing else.
+ * There for what the proxy cannot serve — a path segment named after a verb or `then`, a method it has no verb
+ * for, and a path decided at run time — and deliberately for nothing else.
  */
 export interface RawCall<R extends RouteContract> {
   $request<M extends R['method'], P extends Extract<R, { method: M }>['path']>(

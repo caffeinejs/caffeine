@@ -150,6 +150,34 @@ describe('the tree', () => {
     })
   })
 
+  it('offers QUERY as a verb, and hides a segment named query', () => {
+    typeOnly(async () => {
+      const logs = new Router('/logs')
+        .query('/')
+        .schema({ body: $t.Object({ term: $t.String() }) })
+        .handler(() => [] as string[])
+        .get('/query')
+        .handler(() => ({ saved: true }))
+      const client = brewer<typeof logs>('http://localhost')
+
+      expectTypeOf(await (await client.logs.query({ body: { term: 'error' } })).json()).toEqualTypeOf<string[]>()
+      // @ts-expect-error -- `query` is a verb, so the segment named after it is reached through `$request`
+      void client.logs.query.get()
+      expectTypeOf(await (await client.$request('GET', '/logs/query')).json()).toEqualTypeOf<{ saved: boolean }>()
+    })
+  })
+
+  it('offers only the methods the proxy has a verb for', () => {
+    typeOnly(async () => {
+      const dav = new Router('/dav').route('PROPFIND', '/').handler(() => ({ props: true }))
+      const client = brewer<typeof dav>('http://localhost')
+
+      // @ts-expect-error -- the proxy would read `propfind` as a segment; `$request` sends the method
+      void client.dav.propfind()
+      expectTypeOf(await (await client.$request('PROPFIND', '/dav')).json()).toEqualTypeOf<{ props: boolean }>()
+    })
+  })
+
   it('rejects a verb the path does not answer', () => {
     typeOnly(() => {
       // @ts-expect-error -- /pets/:id answers GET only

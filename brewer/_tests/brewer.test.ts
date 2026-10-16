@@ -52,6 +52,11 @@ const pets = new Router('/pets')
   .handler(() => ({ literalVerbSegment: true }))
   .get('/then')
   .handler(() => ({ literalThenSegment: true }))
+  .query('/find')
+  .schema({ body: $t.Object({ name: $t.String() }) })
+  .handler(ctx => ({ found: [ctx.req.body().name] }))
+  .get('/query')
+  .handler(() => ({ literalQuerySegment: true }))
   .get('/tenant')
   .schema({ headers: $t.Object({ 'x-tenant': $t.String(), 'if-match': $t.Optional($t.String()) }) })
   .handler(ctx => ({
@@ -209,6 +214,22 @@ describe('brewer against a running server', () => {
   })
 
   // fetch upper-cases only the six methods the standard names, and a server refuses `patch` in lower case.
+  describe('given a route declared with QUERY', () => {
+    it('should send QUERY, the body carrying the search', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const res = await client.pets.find.query({ body: { name: 'Rex' } })
+
+      expect(await res.json()).toEqual({ found: ['Rex'] })
+    })
+
+    it('should reach a segment named query through the escape hatch', async () => {
+      const client = brewer<typeof app>(origin)
+
+      expect(await (await client.$request('GET', '/pets/query')).json()).toEqual({ literalQuerySegment: true })
+    })
+  })
+
   describe('given a method declared in lower case', () => {
     it('should send it upper-cased through the escape hatch', async () => {
       const client = brewer<typeof app>(origin)
