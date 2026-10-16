@@ -116,6 +116,20 @@ describe('the tree', () => {
     })
   })
 
+  it('lets an optional path parameter be left out, and takes a wildcard as one string', () => {
+    typeOnly(async () => {
+      const tags = new Router('/tags').get('/:name?').handler(() => ({ tagged: true }))
+      const files = new Router('/files').get('/*').handler(() => ({ file: true }))
+      const client = brewer<typeof tags | typeof files>('http://localhost')
+
+      expectTypeOf(client.tags).toBeCallableWith({})
+      expectTypeOf(client.tags).toBeCallableWith({ name: 'cute' })
+      expectTypeOf(await (await client.files({ '*': 'docs/a.pdf' }).get()).json()).toEqualTypeOf<{ file: boolean }>()
+      // @ts-expect-error -- a wildcard is one string, slashes and all
+      void client.files({ '*': ['docs', 'a.pdf'] })
+    })
+  })
+
   it('chains nested parameters, each typed on its own', () => {
     typeOnly(async () => {
       const res = await client.pets({ petID: 1 }).orders({ orderID: 'a' }).get()
@@ -161,6 +175,9 @@ describe('the tree', () => {
       const client = brewer<typeof logs>('http://localhost')
 
       expectTypeOf(await (await client.logs.query({ body: { term: 'error' } })).json()).toEqualTypeOf<string[]>()
+      expectTypeOf(await (await client.$request('QUERY', '/logs', { body: { term: 'error' } })).json()).toEqualTypeOf<
+        string[]
+      >()
       // @ts-expect-error -- `query` is a verb, so the segment named after it is reached through `$request`
       void client.logs.query.get()
       expectTypeOf(await (await client.$request('GET', '/logs/query')).json()).toEqualTypeOf<{ saved: boolean }>()
