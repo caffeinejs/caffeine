@@ -291,34 +291,47 @@ export class ErrFetchyInvalidPathArgument extends ErrFetchy {
   }
 }
 
+// Names what a form cannot be made of, and what to pass instead.
+function formMessage(problem: 'pairs' | 'form-data' | 'value' | 'fields', value: unknown): ErrMessageBuilder {
+  switch (problem) {
+    case 'pairs':
+      return errMessage(
+        'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
+      )
+    case 'value':
+      return errMessage(
+        `Cannot convert the @Body() value to application/x-www-form-urlencoded: expected an object, an array of [key, value] pairs or an encoded string, got ${typeName(value)}`,
+      ).solutions(
+        'Pass the value as a field of an object: { name: value }',
+        'Bind the value with Field(name) in place of Body()',
+      )
+    case 'fields':
+      return errMessage(
+        `Cannot convert the @Body() value to application/x-www-form-urlencoded: a ${typeName(value)} has no fields to encode`,
+      ).solutions('Pass the values as fields of a plain object: { name: value }')
+    case 'form-data':
+      return errMessage(
+        'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
+      ).solutions('Use @Multipart() instead of @FormURLEncoded() or FormRequestBodyConverter')
+  }
+}
+
 /**
  * Thrown by `FormRequestBodyConverter` when given a flat (non-2D) array, since it only accepts an
- * array of `[key, value]` pairs, a `FormData`, which `@Multipart()` sends, or a number, boolean,
- * bigint, symbol or function, which is no form. Nothing is sent. The message names the value's
- * type, never the value.
+ * array of `[key, value]` pairs, a `FormData` of any implementation, which `@Multipart()` sends, a
+ * number, boolean, bigint, symbol or function, which is no form, or an object that is not plain and
+ * has no field of its own, such as a `Date` or a `Set`. Nothing is sent. The message names the
+ * value's type, never the value.
  */
 export class ErrFetchyInvalidFormBody extends ErrFetchy {
   /**
-   * @param value - The `@Body()` value, for the `'value'` problem
+   * @param value - The `@Body()` value, for the `'value'` and `'fields'` problems
    */
-  constructor(problem: 'pairs' | 'form-data' | 'value', value?: unknown) {
-    const message =
-      problem === 'pairs'
-        ? errMessage(
-            'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
-          )
-        : problem === 'value'
-          ? errMessage(
-              `Cannot convert the @Body() value to application/x-www-form-urlencoded: expected an object, an array of [key, value] pairs or an encoded string, got ${typeName(value)}`,
-            ).solutions(
-              'Pass the value as a field of an object: { name: value }',
-              'Bind the value with Field(name) in place of Body()',
-            )
-          : errMessage(
-              'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
-            ).solutions('Use @Multipart() instead of @FormURLEncoded() or FormRequestBodyConverter')
-
-    super(message.reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody).build(), 'ERR_FETCHY_INVALID_FORM_BODY')
+  constructor(problem: 'pairs' | 'form-data' | 'value' | 'fields', value?: unknown) {
+    super(
+      formMessage(problem, value).reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody).build(),
+      'ERR_FETCHY_INVALID_FORM_BODY',
+    )
     this.name = 'ErrFetchyInvalidFormBody'
   }
 }

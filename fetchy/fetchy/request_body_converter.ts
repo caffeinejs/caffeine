@@ -93,13 +93,14 @@ function appendFormValue(params: URLSearchParams, key: string, value: unknown): 
 }
 
 /**
- * Converts a plain object, a `URLSearchParams` instance, or a 2D array of `[key, value]` pairs
- * into an `application/x-www-form-urlencoded` string, leaving out `undefined` and `null` values,
- * as `@Field()` does. A string, a `Blob`, an `ArrayBuffer`, a typed array or a `ReadableStream`
- * is already encoded and passes through untouched.
+ * Converts an object's own fields, a `Map`, a `URLSearchParams` instance, or a 2D array of
+ * `[key, value]` pairs into an `application/x-www-form-urlencoded` string, leaving out `undefined`
+ * and `null` values, as `@Field()` does. A string, a `Blob`, an `ArrayBuffer`, a typed array or a
+ * `ReadableStream` is already encoded and passes through untouched.
  *
  * @throws {@link ErrFetchyInvalidFormBody} for a flat array, a `FormData` of any implementation, which `@Multipart()`
- * sends, or a number, boolean, bigint, symbol or function, which is no form.
+ * sends, a number, boolean, bigint, symbol or function, which is no form, or an object that is not plain and has no
+ * field of its own, such as a `Date` or a `Set`.
  */
 export const FormRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -145,7 +146,24 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
       return params.toString()
     }
 
-    for (const [key, val] of Object.entries(value)) {
+    // A Map holds its pairs where `Object.entries` cannot see them.
+    if (value instanceof Map) {
+      for (const [key, val] of value as Map<unknown, unknown>) {
+        appendFormValue(params, String(key), val)
+      }
+
+      return params.toString()
+    }
+
+    const entries = Object.entries(value)
+
+    // Only a plain object may have no field at all. A Date, a Set or a class that keeps its values behind getters gives
+    // `Object.entries` nothing, and would go out as an empty form.
+    if (entries.length === 0 && !isPlainObject(value)) {
+      throw new ErrFetchyInvalidFormBody('fields', value)
+    }
+
+    for (const [key, val] of entries) {
       appendFormValue(params, key, val)
     }
 

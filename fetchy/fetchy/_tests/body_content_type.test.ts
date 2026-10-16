@@ -309,6 +309,70 @@ describe('a @Body() under @FormURLEncoded()', () => {
     expect(request.body).toBe('grant_type=client_credentials&scope=read')
   })
 
+  // A Map holds name and value pairs, as an array of pairs does. Read field by field it gave nothing, and an empty form
+  // went out in place of the credentials.
+  it('encodes a Map entry by entry, leaving out null and undefined', async () => {
+    const request = await send(FormBodyAPI, api =>
+      api.token(
+        new Map<string, unknown>([
+          ['grant_type', 'client_credentials'],
+          ['scope', 'a b'],
+          ['audience', null],
+        ]),
+      ),
+    )
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials&scope=a+b')
+  })
+
+  // A class instance whose values are fields of its own is a form as a plain object is, even with none of them set.
+  it('encodes a class instance by its own fields, even when none is set', async () => {
+    class TokenRequest {
+      grant_type: string | undefined = 'client_credentials'
+      scope: string | undefined = undefined
+    }
+
+    const set = await send(FormBodyAPI, api => api.token(new TokenRequest()))
+    const unset = await send(FormBodyAPI, api =>
+      api.token(Object.assign(new TokenRequest(), { grant_type: undefined })),
+    )
+
+    expect(set.body).toBe('grant_type=client_credentials')
+    expect(unset.body).toBe('')
+  })
+
+  // A Date, a Set or a class that keeps its values behind getters has no field of its own: read field by field each
+  // gave nothing, and an empty form went out. Refused before anything is sent, the error names the type.
+  it.each([
+    ['a Date', new Date(0), 'Date'],
+    ['a Set', new Set(['client_credentials']), 'Set'],
+    [
+      'an object with only getters',
+      new (class Credentials {
+        get grantType(): string {
+          return 'client_credentials'
+        }
+      })(),
+      'Credentials',
+    ],
+  ])('rejects %s, which has no fields, and sends nothing', async (_kind, value, type) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(value).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      `Cannot convert the @Body() value to application/x-www-form-urlencoded: a ${type} has no fields to encode`,
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
+  })
+
   // A FormData is multipart material, of any implementation. Read field by field, undici's gave nothing, and an empty
   // form went out in its place.
   it('rejects a FormData of another implementation and sends nothing', async () => {
