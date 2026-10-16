@@ -615,7 +615,7 @@ await client.pets.post({ body: { name: 'Rex' } })
   against.
 - Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
-  URL is written. The application must be `bootstrap()` first, or every call answers 404:
+  URL is written. The application must be `bootstrap()` first, or every call rejects with `ErrApplicationNotReady`:
 
   ```ts
   await app.bootstrap()
@@ -628,8 +628,14 @@ await client.pets.post({ body: { name: 'Rex' } })
   The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
   wins over it.
 
+- Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
+  `FormData`, which `fetch` encodes as multipart; a declared object goes as JSON, or as a `URLSearchParams` form.
+  A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is, a form always under
+  the content type the platform writes for it.
+- `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
+  it as a step along the path and reach another route.
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
-- Escape hatch for a path built at run time, or a segment named after a verb:
+- Escape hatch for a path built at run time, a segment named after a verb or `then`, or a method with no verb:
   `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
 - Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`. That serves files. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.

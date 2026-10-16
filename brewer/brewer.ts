@@ -64,8 +64,8 @@ interface RequestArgs {
  * const client = brewer(app)
  * ```
  *
- * The application has to be ready first: an application that has not been set up has registered no routes, so
- * every call comes back 404.
+ * The application has to be ready first: before `bootstrap()` or `run()`, every call rejects with
+ * `ErrApplicationNotReady`.
  *
  * @param options - `fetch` overrides the transport, an application target included.
  */
