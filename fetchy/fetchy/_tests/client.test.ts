@@ -17,7 +17,7 @@ import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
-import { DELETE, GET, POST } from '../decorators/verbs.js'
+import { DELETE, GET, HTTP, POST } from '../decorators/verbs.js'
 import {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
@@ -232,6 +232,42 @@ describe('FetchyClient end-to-end (fake TransportFactory)', () => {
     expect(() => client.create(Invalid)).toThrow(
       'Invalid route configuration for method "Invalid.bad": @Field() requires @FormURLEncoded() on the method or class',
     )
+  })
+
+  // A form field is a body like any other: fetch refuses a GET that has one, and undici sends it where most servers
+  // ignore it. Refused when the client is built, as a @Body() or a Part() is, rather than on every call.
+  it.each(['GET', 'HEAD', 'OPTIONS'])('throws ErrFetchyInvalidRoute for a @Field() on %s', verb => {
+    @API('/search')
+    class SearchAPI {
+      @HTTP(verb)
+      @FormURLEncoded()
+      @Params([Field('q')])
+      search!: (q: string) => Promise<unknown>
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(SearchAPI)).toThrow(
+      `Invalid route configuration for method "SearchAPI.search": ${verb} requests cannot have a body`,
+    )
+  })
+
+  // A class-level @FormURLEncoded() reaches every operation, a bodiless GET included, which sends no form.
+  it('builds a GET without fields under a class-level @FormURLEncoded()', async () => {
+    @API('/users')
+    @FormURLEncoded()
+    class UsersAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      get!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.get('1')).resolves.toEqual({ id: '1' })
+    expect(transportFactory.transports[0].lastRequest?.body).toBeNull()
   })
 
   it('throws ErrFetchyInvalidRoute for a @Param() the path has no placeholder for', () => {
