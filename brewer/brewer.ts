@@ -98,7 +98,9 @@ function node(baseURL: string, options: BrewOptions, segments: readonly string[]
 
   return new Proxy(call, {
     get(_target, prop) {
-      if (typeof prop !== 'string') {
+      // Nor `then`: whatever is awaited is asked for it, and a node answering it would be taken for a promise that
+      // never settles.
+      if (typeof prop !== 'string' || prop === 'then') {
         return undefined
       }
 

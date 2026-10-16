@@ -14,5 +14,6 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   carry the answer.
 - The open member of `BrewResponseOf` stays `BrewResponse<never>`: give it a body and every declared member stops
   narrowing. A wildcard response key (`'4xx'`, `'5xx'`, `'default'`) is not read.
-- Do not widen the `Verb` exclusion in `StaticChildren`; `Verb` is the runtime's list, and hiding more would hide
-  segments the proxy can reach.
+- `StaticChildren` hides exactly the names the proxy answers itself: a verb (`Verb`, the runtime's list) and `then`,
+  which it never answers so that a client is not taken for a promise. Hiding more would hide segments the proxy can
+  reach.

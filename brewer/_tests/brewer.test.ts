@@ -50,6 +50,8 @@ const pets = new Router('/pets')
   .handler(ctx => ctx.notFound({ detail: 'no pet answers to that name' }))
   .get('/get')
   .handler(() => ({ literalVerbSegment: true }))
+  .get('/then')
+  .handler(() => ({ literalThenSegment: true }))
 
 const files = new Router('/files').get('/*').handler(ctx => ({ rest: ctx.req.param()['*'] }))
 
@@ -231,6 +233,39 @@ describe('brewer against an application in process', () => {
       const client = brewer(app)
 
       expect(await (await client.$request('GET', '/pets/get')).json()).toEqual({ literalVerbSegment: true })
+    })
+  })
+
+  // Anything awaited is asked for `then`, and a node that answered it would be taken for a promise that never settles.
+  describe('given code that probes the client for a protocol', () => {
+    it('should settle when the client is returned from an async function, and still send', async () => {
+      const ready = async () => brewer(app)
+
+      const client = await ready()
+
+      expect(await (await client.pets({ id: 7 }).get()).json()).toEqual({ id: 7, name: 'Rex' })
+    })
+
+    it('should answer then with nothing at any depth, so a node awaited is the node itself', async () => {
+      const client = brewer(app)
+
+      expect(Reflect.get(client, 'then')).toBeUndefined()
+      expect(Reflect.get(client.pets({ id: 7 }), 'then')).toBeUndefined()
+
+      const pets = await Promise.resolve(client.pets)
+      expect(await (await pets.get()).json()).toEqual([{ id: 1, name: 'Rex' }])
+    })
+
+    it('should reach a segment named then through the escape hatch', async () => {
+      const client = brewer(app)
+
+      expect(await (await client.$request('GET', '/pets/then')).json()).toEqual({ literalThenSegment: true })
+    })
+
+    it('should not answer a symbol, so the client is not taken for an iterable', () => {
+      const client = brewer(app)
+
+      expect(() => [...(client as unknown as Iterable<unknown>)]).toThrow(TypeError)
     })
   })
 

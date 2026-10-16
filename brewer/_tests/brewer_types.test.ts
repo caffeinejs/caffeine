@@ -139,6 +139,17 @@ describe('the tree', () => {
     })
   })
 
+  it('hides a segment named then, which the proxy never answers', () => {
+    typeOnly(async () => {
+      const flows = new Router('/flows').get('/then').handler(() => ({ next: true }))
+      const client = brewer<typeof flows>('http://localhost')
+
+      // @ts-expect-error -- a node answering `then` would be taken for a promise; `$request` reaches the segment
+      void client.flows.then.get()
+      expectTypeOf(await (await client.$request('GET', '/flows/then')).json()).toEqualTypeOf<{ next: boolean }>()
+    })
+  })
+
   it('rejects a verb the path does not answer', () => {
     typeOnly(() => {
       // @ts-expect-error -- /pets/:id answers GET only

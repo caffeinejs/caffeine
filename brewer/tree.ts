@@ -54,10 +54,11 @@ type Terminal<E extends AnyEntry> = {
  * The named segments continuing from here.
  *
  * A segment named after a verb is left out: the proxy reads a verb first, so offering it would promise something
- * the runtime cannot deliver. `$request` reaches those.
+ * the runtime cannot deliver. So is one named `then`, which the proxy never answers, so that a client is never
+ * taken for a promise. `$request` reaches both.
  */
 type StaticChildren<E extends AnyEntry> = {
-  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb>]: Node<Advance<E, K>>
+  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then'>]: Node<Advance<E, K>>
 }
 
 type Advance<E extends AnyEntry, K extends string> = E extends {
@@ -101,7 +102,7 @@ type AdvanceAny<E extends AnyEntry> = E extends {
 /**
  * The escape hatch: a route addressed by method and path.
  *
- * There for the two cases the proxy cannot serve — a path segment named after a verb, and a path decided at run
+ * There for what the proxy cannot serve — a path segment named after a verb or `then`, and a path decided at run
  * time — and deliberately for nothing else.
  */
 export interface RawCall<R extends RouteContract> {
