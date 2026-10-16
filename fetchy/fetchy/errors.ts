@@ -255,6 +255,42 @@ export class ErrFetchyMissingPathArgument extends ErrFetchy {
   }
 }
 
+// What a server ends up doing with a path segment of nothing, a dot or two dots, written as such or as `%2e`.
+function segmentEffect(segment: string): string {
+  if (segment === '') {
+    return 'leaves the path segment empty, which many servers drop'
+  }
+
+  return segment.replace(/%2e/gi, '.') === '.'
+    ? `makes the path segment "${segment}", which a URL parser drops`
+    : `makes the path segment "${segment}", which a URL parser removes along with the segment before it`
+}
+
+/**
+ * Thrown when an operation is called with a path parameter argument that would send the call to another path: one that
+ * makes its segment empty, `"."` or `".."`, alone or with the text the path writes around its placeholder. Nothing is
+ * sent. Encoding keeps such an argument in its segment, but a URL parser drops a `"."` segment and resolves a `".."` one
+ * against the segment before it, and many servers merge the slashes around an empty one.
+ */
+export class ErrFetchyInvalidPathArgument extends ErrFetchy {
+  /**
+   * @param segment - The path segment the argument makes, as it would be sent
+   */
+  constructor(method: string, path: string, key: string, segment: string) {
+    super(
+      errMessage(`Cannot build request "${method} ${path}": the argument for "{${key}}" ${segmentEffect(segment)}`)
+        .solutions(
+          'Refuse an argument of "", "." or ".." before the call',
+          'Send a value that can be one of these with Query(name) or in the body',
+        )
+        .reference('@caffeinejs/fetchy', ErrFetchyInvalidPathArgument)
+        .build(),
+      'ERR_FETCHY_INVALID_PATH_ARGUMENT',
+    )
+    this.name = 'ErrFetchyInvalidPathArgument'
+  }
+}
+
 /**
  * Thrown by `FormRequestBodyConverter` when given a flat (non-2D) array, since it only accepts an
  * array of `[key, value]` pairs, a `FormData`, which `@Multipart()` sends, or a number, boolean,

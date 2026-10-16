@@ -22,6 +22,7 @@ import {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
   ErrFetchyHTTP,
+  ErrFetchyInvalidPathArgument,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingPathArgument,
@@ -773,6 +774,124 @@ describe('the URL an operation calls', () => {
     ],
   ])("%s under a class path of '/'", async (_case, baseURL, TargetAPI, expected) => {
     expect(await urlOf(baseURL, TargetAPI)).toBe(expected)
+  })
+})
+
+// A path argument is encoded to stay one segment, but encoding leaves a dot alone. A URL parser drops a "." segment and
+// resolves ".." against the segment before it, and many servers merge the slashes around an empty one, so an argument
+// taken from a request, as a backend for a frontend passes one on, would pick the endpoint the call reaches.
+describe('a path argument that would send the call to another path', () => {
+  @API('/users')
+  class UsersAPI {
+    @DELETE('/{id}/sessions')
+    @Params([Param('id')])
+    revokeSessions!: (id: string) => Promise<unknown>
+
+    @DELETE('/{id}')
+    @Params([Param('id')])
+    remove!: (id: string) => Promise<unknown>
+  }
+
+  @API('/files')
+  class FilesAPI {
+    @GET('/{name}.{ext}')
+    @Params([Param('name'), Param('ext')])
+    named!: (name: string, ext: string) => Promise<unknown>
+
+    @GET('/{name}.pdf')
+    @Params([Param('name')])
+    pdf!: (name: string) => Promise<unknown>
+
+    @GET('/%2e{name}')
+    @Params([Param('name')])
+    hidden!: (name: string) => Promise<unknown>
+
+    @GET('/v{version}/latest')
+    @Params([Param('version')])
+    versioned!: (version: string) => Promise<unknown>
+
+    @GET('/search?under=/{dir}')
+    @Params([Param('dir')])
+    search!: (dir: string) => Promise<unknown>
+  }
+
+  async function callOn<T extends object>(TargetAPI: new () => T, call: (api: T) => Promise<unknown>) {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(TargetAPI)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(200, {}))
+
+    const error = await call(api).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    return { error, transport }
+  }
+
+  it.each([
+    [
+      '".." in a segment of its own',
+      () => callOn(UsersAPI, api => api.revokeSessions('..')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" makes the path segment "..", which a URL parser removes along with the segment before it',
+    ],
+    [
+      '"." in a segment of its own',
+      () => callOn(UsersAPI, api => api.revokeSessions('.')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" makes the path segment ".", which a URL parser drops',
+    ],
+    [
+      'an empty segment',
+      () => callOn(UsersAPI, api => api.revokeSessions('')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" leaves the path segment empty, which many servers drop',
+    ],
+    // `/users/` is the collection, not one of its users.
+    [
+      'an empty last segment',
+      () => callOn(UsersAPI, api => api.remove('')),
+      'Cannot build request "DELETE /users/{id}": the argument for "{id}" leaves the path segment empty, which many servers drop',
+    ],
+    // Placeholders that share a segment make a dot segment together, with the dot the path writes between them.
+    [
+      'empty arguments beside a dot',
+      () => callOn(FilesAPI, api => api.named('', '')),
+      'Cannot build request "GET /files/{name}.{ext}": the argument for "{name}" makes the path segment ".", which a URL parser drops',
+    ],
+    [
+      'a dot and an empty argument beside a dot',
+      () => callOn(FilesAPI, api => api.named('.', '')),
+      'Cannot build request "GET /files/{name}.{ext}": the argument for "{name}" makes the path segment "..", which a URL parser removes along with the segment before it',
+    ],
+    // A URL parser reads `%2e` as a dot.
+    [
+      'an empty argument beside a %2e',
+      () => callOn(FilesAPI, api => api.hidden('')),
+      'Cannot build request "GET /files/%2e{name}": the argument for "{name}" makes the path segment "%2e", which a URL parser drops',
+    ],
+  ])('refuses %s, and sends nothing', async (_case, call, firstLine) => {
+    const { error, transport } = await call()
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidPathArgument)
+    expect((error as Error).message.split('\n')[0]).toBe(firstLine)
+    expect(transport.sendCount).toBe(0)
+  })
+
+  // Only a whole segment of dots, or none at all, moves the call: refusing more would fail calls to the path they name.
+  it.each([
+    ['three dots', () => callOn(UsersAPI, api => api.revokeSessions('...')), '/users/.../sessions'],
+    [
+      'an encoded dot, encoded again',
+      () => callOn(UsersAPI, api => api.revokeSessions('%2e')),
+      '/users/%252e/sessions',
+    ],
+    ['an empty argument beside text', () => callOn(FilesAPI, api => api.pdf('')), '/files/.pdf'],
+    ['a dot beside text', () => callOn(FilesAPI, api => api.versioned('.')), '/files/v./latest'],
+    ['dots in a query the path writes', () => callOn(FilesAPI, api => api.search('..')), '/files/search?under=/..'],
+  ])('sends %s as it is', async (_case, call, path) => {
+    const { error, transport } = await call()
+
+    expect(error).toBeUndefined()
+    expect(transport.lastRequest?.path).toBe(path)
   })
 })
 

@@ -9,6 +9,7 @@ import {
   Body,
   ErrFetchyHTTP,
   ErrFetchyInvalidFormBody,
+  ErrFetchyInvalidPathArgument,
   type FetchyBuilder,
   type FetchyClient,
   type FetchyResponse,
@@ -274,6 +275,14 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       await clientOver(factory()).create(ItemsAPI).get('a b/c?d#e%ç')
 
       expect(received[0].url).toBe('/items/a%20b%2Fc%3Fd%23e%25%C3%A7')
+    })
+
+    // Encoding leaves a dot alone: fetch resolved `/items/..` to `/` and undici sent it as written, so the argument
+    // picked the endpoint, and differently on each transport. An empty one called the collection.
+    it.each(['..', '.', ''])('refuses a path argument of %j, and sends nothing', async id => {
+      await expect(clientOver(factory()).create(ItemsAPI).get(id)).rejects.toBeInstanceOf(ErrFetchyInvalidPathArgument)
+
+      expect(received).toEqual([])
     })
 
     // `0`, `false` and `''` are values a filter means, unlike an argument left out, alone or in a list.

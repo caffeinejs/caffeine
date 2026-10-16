@@ -11,6 +11,7 @@ import {
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidFormBody,
   ErrFetchyInvalidMultipartBody,
+  ErrFetchyInvalidPathArgument,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingCallbackArgument,
@@ -47,6 +48,11 @@ describe('errors', () => {
       'ErrFetchyMissingPathArgument',
       () => new ErrFetchyMissingPathArgument('GET', '/users/{id}', 'id', undefined),
       'ERR_FETCHY_MISSING_PATH_ARGUMENT',
+    ],
+    [
+      'ErrFetchyInvalidPathArgument',
+      () => new ErrFetchyInvalidPathArgument('DELETE', '/users/{id}/sessions', 'id', '..'),
+      'ERR_FETCHY_INVALID_PATH_ARGUMENT',
     ],
     [
       'ErrFetchyTooManyAuthenticationAttempts',
