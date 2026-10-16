@@ -329,7 +329,7 @@ describe('brewer against an application in process', () => {
 
       expect(await (await client.tags({}).get()).json()).toEqual({ name: null })
       expect(await (await client.tags({ name: undefined }).get()).json()).toEqual({ name: null })
-      expect(await (await client.$request('GET', '/tags/:name?', { params: {} })).json()).toEqual({ name: null })
+      expect(await (await client.$request('GET', '/tags/:name?')).json()).toEqual({ name: null })
     })
 
     it('should place it when it is given', async () => {

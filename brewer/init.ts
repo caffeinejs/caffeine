@@ -28,17 +28,22 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
 /**
  * What a call takes: the request slots the route declared, plus anything `RequestInit` accepts.
  *
- * A slot is required only when the route actually declares one. `query` and `headers` fall back to an open record
- * when there is no schema, and `body` to `unknown`, so those are the shapes that read as "not declared" — which
- * also means a route whose querystring schema is genuinely an open record is treated as declaring none. It errs
- * toward optional, which is the harmless direction.
+ * A slot is required only when the route declares something required in it. `query` and `headers` fall back to an
+ * open record when there is no schema, and `body` to `unknown`, so those are the shapes that read as "not
+ * declared" — which also means a route whose querystring schema is genuinely an open record is treated as
+ * declaring none. It errs toward optional, which is the harmless direction. `query` and `headers` may also be left
+ * out when every field they declare is optional; a declared body may not, since the server checks a missing one
+ * against its schema.
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */
 export type CallInit<R extends RouteContract> = Omit<RequestInit, 'method' | 'body' | 'headers'> &
-  Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], IsOpenRecord<R['query']>> &
-  Slot<'headers', IsOpenRecord<R['headers']> extends true ? OpenHeaders : R['headers'], IsOpenRecord<R['headers']>> &
+  Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], MayOmit<R['query']>> &
+  Slot<'headers', IsOpenRecord<R['headers']> extends true ? OpenHeaders : R['headers'], MayOmit<R['headers']>> &
   Slot<'body', R['body'], IsUnknown<R['body']>>
+
+/** Whether a query or headers slot may be left out: nothing is declared for it, or nothing declared is required. */
+type MayOmit<T> = IsOpenRecord<T> extends true ? true : AllOptional<T>
 
 /** Whether every slot of an init is optional, and so whether the argument may be left out entirely. */
 type AllOptional<T> = Partial<T> extends T ? true : false

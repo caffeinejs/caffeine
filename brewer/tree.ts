@@ -120,8 +120,13 @@ export interface RawCall<R extends RouteContract> {
 type RawArgs<R extends RouteContract> =
   Partial<RawInit<R>> extends RawInit<R> ? [init?: RawInit<R>] : [init: RawInit<R>]
 
+// A path whose every parameter is optional may be addressed with no params at all.
 type RawInit<R extends RouteContract> = CallInit<R> &
-  ([keyof R['params']] extends [never] ? { params?: undefined } : { params: R['params'] })
+  ([keyof R['params']] extends [never]
+    ? { params?: undefined }
+    : Partial<R['params']> extends R['params']
+      ? { params?: R['params'] }
+      : { params: R['params'] })
 
 /** The client: the route tree, plus the escape hatch. */
 export type BrewClient<T> = Node<EntriesOf<Routes<T>>> & RawCall<Routes<T>>

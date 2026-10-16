@@ -210,6 +210,25 @@ describe('the init argument', () => {
     })
   })
 
+  it('may be left out when nothing the query or the headers declare is required', () => {
+    typeOnly(() => {
+      const list = new Router('/list')
+        .get('/')
+        .schema({ querystring: $t.Object({ limit: $t.Optional($t.Integer()), cursor: $t.Optional($t.String()) }) })
+        .handler(() => [] as string[])
+        .get('/fresh')
+        .schema({ headers: $t.Object({ 'if-none-match': $t.Optional($t.String()) }) })
+        .handler(() => ({ fresh: true }))
+      const client = brewer<typeof list>('http://localhost')
+
+      expectTypeOf(client.list.get).toBeCallableWith()
+      expectTypeOf(client.list.get).toBeCallableWith({ query: { limit: 10 } })
+      expectTypeOf(client.list.fresh.get).toBeCallableWith()
+      // @ts-expect-error -- the querystring schema says limit is an integer
+      void client.list.get({ query: { limit: 'ten' } })
+    })
+  })
+
   it('takes RequestInit fields alongside', () => {
     typeOnly(() => {
       expectTypeOf(client.pets.get).toBeCallableWith({ signal: new AbortController().signal })
@@ -223,6 +242,18 @@ describe('the escape hatch', () => {
       const res = await client.$request('GET', '/pets/:id', { params: { id: 1 } })
 
       expectTypeOf(await res.json()).toEqualTypeOf<Pet>()
+    })
+  })
+
+  it('lets an optional path parameter be left out, and takes no params for a path without any', () => {
+    typeOnly(() => {
+      const tags = new Router('/tags').get('/:name?').handler(() => [] as string[])
+      const tagged = brewer<typeof tags>('http://localhost')
+
+      void tagged.$request('GET', '/tags/:name?')
+      void tagged.$request('GET', '/tags/:name?', { params: { name: 'cute' } })
+      // @ts-expect-error -- /pets declares no path parameter
+      void client.$request('GET', '/pets', { params: { id: 1 } })
     })
   })
 
