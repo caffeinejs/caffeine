@@ -1,3 +1,4 @@
+import { encodeParam } from './_path.js'
 import type { HeaderValues, RawBody } from './platform.js'
 import type { BrewClient } from './tree.js'
 import { buildQuery, fillPath, joinURL } from './url.js'
@@ -137,7 +138,7 @@ function pathOf(segments: readonly Segment[]): string {
       return segment
     }
 
-    return segment.name === '*' ? String(segment.value) : encodeURIComponent(String(segment.value))
+    return encodeParam(segment.name, segment.value)
   })
 
   return `/${parts.join('/')}`

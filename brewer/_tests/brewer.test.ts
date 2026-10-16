@@ -90,12 +90,22 @@ describe('brewer against a running server', () => {
       expect(await res.json()).toEqual({ petID: 'a b/c', orderID: 'ø' })
     })
 
-    it('should leave a wildcard un-encoded, so it can carry slashes', async () => {
+    it('should keep the slashes of a wildcard, so it can carry a nested path', async () => {
       const client = brewer<typeof app>(origin)
 
       const res = await client.files({ '*': 'a/b/c.txt' }).get()
 
       expect(await res.json()).toEqual({ rest: 'a/b/c.txt' })
+    })
+
+    // A file name is anything a person typed: a `?` or `#` left as it is would end the path, a `%` would be read as
+    // an escape.
+    it('should encode everything between the slashes of a wildcard', async () => {
+      const client = brewer<typeof app>(origin)
+      const rest = 'docs/2026 Q1 report?final#2 100%.pdf'
+
+      expect(await (await client.files({ '*': rest }).get()).json()).toEqual({ rest })
+      expect(await (await client.$request('GET', '/files/*', { params: { '*': rest } })).json()).toEqual({ rest })
     })
   })
 
@@ -350,6 +360,11 @@ describe('fillPath', () => {
     expect(fillPath('/:id(^\\d+$)', { id: 42 })).toBe('/42')
     expect(fillPath('/pets/:id?', {})).toBe('/pets')
     expect(fillPath('/assets/*', { '*': 'a/b' })).toBe('/assets/a/b')
+  })
+
+  it('requires a wildcard like any other parameter', () => {
+    expect(fillPath('/assets/*', { '*': '' })).toBe('/assets/')
+    expect(() => fillPath('/assets/*', {})).toThrow(ErrBrewPathParam)
   })
 
   describe('given a path parameter with no value', () => {
