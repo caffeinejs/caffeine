@@ -57,7 +57,10 @@ const files = new Router('/files').get('/*').handler(ctx => ({ rest: ctx.req.par
 
 const tags = new Router('/tags').get('/:name?').handler(ctx => ({ name: ctx.req.param().name ?? null }))
 
-const app = createWebApplication().mount(pets, files, tags)
+// Declared in lower case, which `.route(...)` takes and the route's type keeps.
+const legacy = new Router('/legacy').route('patch', '/lower').handler(ctx => ({ method: ctx.req.method }))
+
+const app = createWebApplication().mount(pets, files, tags, legacy)
 
 let origin: string
 
@@ -195,6 +198,17 @@ describe('brewer against a running server', () => {
       const res = await client.$request('GET', '/pets/get')
 
       expect(await res.json()).toEqual({ literalVerbSegment: true })
+    })
+  })
+
+  // fetch upper-cases only the six methods the standard names, and a server refuses `patch` in lower case.
+  describe('given a method declared in lower case', () => {
+    it('should send it upper-cased through the escape hatch', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const res = await client.$request('patch', '/legacy/lower')
+
+      expect(await res.json()).toEqual({ method: 'PATCH' })
     })
   })
 

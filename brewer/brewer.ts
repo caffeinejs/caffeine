@@ -117,9 +117,11 @@ function node(
       }
 
       // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
+      // Upper-cased because `fetch` normalises only the six methods the standard names, and a route may be declared
+      // in lower case.
       if (prop === '$request' && segments.length === 0) {
         return (verb: string, path: string, init: RequestArgs = {}) =>
-          send(baseURL, options, () => fillPath(path, init.params), verb, init)
+          send(baseURL, options, () => fillPath(path, init.params), verb.toUpperCase(), init)
       }
 
       if (method === undefined && isVerb(prop)) {
