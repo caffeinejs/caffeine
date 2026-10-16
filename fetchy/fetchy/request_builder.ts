@@ -65,6 +65,9 @@ export class RequestBuilder {
   private readonly headers: Record<string, string> = {}
   private readonly bodyConverter: RequestBodyConverter
   private readonly origin: string = ''
+  // What opens the query the parameters add: `?`, or `&` after a query the path writes, as in
+  // `@GET('/search?type=user')`, and nothing after one it leaves open, as in `@GET('/search?')`.
+  private readonly querySeparator: string
 
   constructor(
     baseURL: string,
@@ -97,6 +100,8 @@ export class RequestBuilder {
     if (this.slots.length === 0 && this.segments[0] === '') {
       this.segments[0] = '/'
     }
+
+    this.querySeparator = !meta.path.includes('?') ? '?' : /[?&]$/.test(meta.path) ? '' : '&'
 
     for (const param of meta.params) {
       if (param.kind !== 'path') {
@@ -207,6 +212,11 @@ export class RequestBuilder {
     // undici cannot send a URLSearchParams, and fetch would only stringify it the same way.
     if (body instanceof URLSearchParams) {
       body = body.toString()
+    }
+
+    // The query was built to open the URL's. After a query the path writes, it continues that one instead.
+    if (query !== '' && this.querySeparator !== '?') {
+      query = this.querySeparator + query.slice(1)
     }
 
     return new FetchyRequest(this.meta.httpMethod, this.origin, path + query, headers, body, signal)

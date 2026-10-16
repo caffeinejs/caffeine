@@ -624,6 +624,45 @@ describe('the request an operation builds', () => {
     expect(users.transport.lastRequest!.url).toBe('http://example.test/users/active')
     expect(root.transport.lastRequest!.url).toBe('http://example.test/')
   })
+
+  @API()
+  class StaticQueryAPI {
+    @GET('/search?type=user')
+    @Params([Query('q')])
+    search!: (q: string | null) => Promise<unknown>
+
+    @GET('/search?type=user')
+    @Params([QueryName()])
+    flagged!: (flag: string) => Promise<unknown>
+
+    @GET('/search?')
+    @Params([Query('q')])
+    open!: (q: string) => Promise<unknown>
+
+    @GET('/users/{id}?expand=true')
+    @Params([Param('id'), Query('fields')])
+    user!: (id: string, fields: string) => Promise<unknown>
+  }
+
+  // A path may write a query string of its own, as `@GET('/search?type=user')`. The parameters continue it: a second
+  // `?` would reach the server as part of the last value, `type` = `user?q=ada`.
+  it.each([
+    ['continues a query string the path writes', (api: StaticQueryAPI) => api.search('ada'), '/search?type=user&q=ada'],
+    ['continues it with a query name', (api: StaticQueryAPI) => api.flagged('exact'), '/search?type=user&exact'],
+    ['leaves it as written with no argument to add', (api: StaticQueryAPI) => api.search(null), '/search?type=user'],
+    ['adds no separator to a query the path leaves open', (api: StaticQueryAPI) => api.open('ada'), '/search?q=ada'],
+    [
+      'continues it after a path placeholder',
+      (api: StaticQueryAPI) => api.user('1', 'name'),
+      '/users/1?expand=true&fields=name',
+    ],
+  ])('%s', async (_case, call, path) => {
+    const { api, transport } = clientOf(StaticQueryAPI)
+
+    await call(api)
+
+    expect(transport.lastRequest!.path).toBe(path)
+  })
 })
 
 // A base URL may carry a path of its own: a versioned API, or a service mounted under a prefix. An operation that adds

@@ -200,6 +200,10 @@ class ItemsAPI {
   @Params([Query('tag'), Query('page'), Query('draft'), Query('q'), Query('x')])
   search!: (tags: unknown[], page: number, draft: boolean, q: string, x?: string) => Promise<Echo>
 
+  @GET('/search?type=user')
+  @Params([Query('q')])
+  searchUsers!: (q: string) => Promise<Echo>
+
   @POST('')
   @Params([Body()])
   create!: (body: unknown) => Promise<unknown>
@@ -277,6 +281,16 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       await clientOver(factory()).create(ItemsAPI).search(['math', 'history'], 0, false, '')
 
       expect(received[0].url).toBe('/items?tag=math&tag=history&page=0&draft=false&q=')
+    })
+
+    // A query the path writes and a parameter after it reach the server as two parameters, not one value.
+    it('continues a query string the operation path writes', async () => {
+      await clientOver(factory()).create(ItemsAPI).searchUsers('ada')
+
+      expect([...new URL(received[0].url, baseURL).searchParams]).toEqual([
+        ['type', 'user'],
+        ['q', 'ada'],
+      ])
     })
 
     // A server tells `//users` from `/users`, or answers it with 404.
