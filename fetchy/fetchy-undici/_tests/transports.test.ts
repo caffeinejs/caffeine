@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto'
-import { createServer, type IncomingHttpHeaders, type Server, type ServerResponse } from 'node:http'
+import {
+  createServer,
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+} from 'node:http'
 import type { AddressInfo } from 'node:net'
 
 import {
@@ -37,9 +43,10 @@ import {
 } from '@caffeinejs/fetchy'
 import { FetchTransportFactory } from '@caffeinejs/fetchy/fetch'
 import { RetryInterceptor } from '@caffeinejs/fetchy/retry'
-import { FormData as UndiciFormData } from 'undici'
+import { Client, FormData as UndiciFormData } from 'undici'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { PoolOptionsBuilder } from '../pool_options_builder.js'
 import { UndiciTransportFactory } from '../undici_transport_factory.js'
 
 /**
@@ -49,6 +56,11 @@ import { UndiciTransportFactory } from '../undici_transport_factory.js'
  * - a network failure: fetch rejects with a `TypeError` whose `cause` carries the code, undici with the coded error;
  * - `@RawResponse()`: fetch returns its native `Response`, undici an `UndiciResponse`, not an `instanceof Response`;
  * - fetch adds request headers of its own (`accept`, `user-agent`, ...), so a case asserts only the headers it is about.
+ *
+ * Both follow redirects, but each fails its own way on one it does not follow: past 20 redirects, or on a 307 or 308
+ * whose body was a stream, fetch rejects with a `TypeError` and undici hands the 3xx back as `ErrFetchyHTTP`. On an
+ * upload answered 307 or 308, fetch sends the parts again under a boundary of its own, while the content-type keeps the
+ * first one: no server can parse that request, so only undici's is asserted.
  */
 
 interface Received {
@@ -79,6 +91,9 @@ interface Echo {
 
 let server: Server
 let baseURL: string
+// A second origin, answering as the first does: where a redirect to another origin lands.
+let otherServer: Server
+let otherURL: string
 const received: Received[] = []
 const replies: Reply[] = []
 const latches: Latch[] = []
@@ -98,45 +113,61 @@ function answer(res: ServerResponse, reply: Answer): void {
   res.end(reply.body)
 }
 
-beforeAll(async () => {
-  server = createServer((req, res) => {
-    const chunks: Buffer[] = []
+// Records the request whole, then answers it with the next queued reply, or its own request line.
+function record(req: IncomingMessage, res: ServerResponse): void {
+  const chunks: Buffer[] = []
 
-    req.on('data', (chunk: Buffer) => chunks.push(chunk))
-    req.on('end', () => {
-      received.push({
-        method: req.method!,
-        url: req.url!,
-        headers: req.headers,
-        headersDistinct: req.headersDistinct,
-        body: Buffer.concat(chunks),
-      })
-
-      const reply = replies.shift() ?? echo(req)
-
-      if ('drop' in reply) {
-        req.socket.destroy()
-      } else if ('hold' in reply) {
-        reply.hold.started.resolve()
-        // The client may have given up on the request meanwhile, and its socket with it.
-        void reply.hold.released.promise.then(() => {
-          if (!res.destroyed) {
-            answer(res, echo(req))
-          }
-        })
-      } else {
-        answer(res, reply)
-      }
+  req.on('data', (chunk: Buffer) => chunks.push(chunk))
+  req.on('end', () => {
+    received.push({
+      method: req.method!,
+      url: req.url!,
+      headers: req.headers,
+      headersDistinct: req.headersDistinct,
+      body: Buffer.concat(chunks),
     })
-  })
 
-  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
-  baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+    const reply = replies.shift() ?? echo(req)
+
+    if ('drop' in reply) {
+      req.socket.destroy()
+    } else if ('hold' in reply) {
+      reply.hold.started.resolve()
+      // The client may have given up on the request meanwhile, and its socket with it.
+      void reply.hold.released.promise.then(() => {
+        if (!res.destroyed) {
+          answer(res, echo(req))
+        }
+      })
+    } else {
+      answer(res, reply)
+    }
+  })
+}
+
+async function listen(): Promise<{ server: Server; url: string }> {
+  const listening = createServer(record)
+
+  await new Promise<void>(resolve => listening.listen(0, '127.0.0.1', resolve))
+
+  return { server: listening, url: `http://127.0.0.1:${(listening.address() as AddressInfo).port}` }
+}
+
+beforeAll(async () => {
+  const first = await listen()
+  const other = await listen()
+
+  server = first.server
+  baseURL = first.url
+  otherServer = other.server
+  otherURL = other.url
 })
 
 afterAll(async () => {
-  server.closeAllConnections()
-  await new Promise(resolve => server.close(resolve))
+  for (const listening of [server, otherServer]) {
+    listening.closeAllConnections()
+    await new Promise(resolve => listening.close(resolve))
+  }
 })
 
 beforeEach(() => {
@@ -273,6 +304,24 @@ class DocumentsAPI {
   @UseRequestBodyConverter(RawRequestBodyConverter)
   @Params([Param('id'), Body()])
   replace!: (id: string, form: unknown) => Promise<unknown>
+}
+
+// Every request carries credentials, which a redirect to another origin must not hand on.
+@API('/redirects')
+@HeaderMap({ Authorization: 'Bearer declared', Cookie: 'session=1' })
+class RedirectsAPI {
+  @GET('/{id}')
+  @Params([Param('id')])
+  get!: (id: string) => Promise<Echo>
+
+  @POST('/{id}')
+  @Params([Param('id'), Body()])
+  post!: (id: string, body: unknown) => Promise<Echo>
+
+  @POST('/{id}/upload')
+  @Multipart()
+  @Params([Param('id'), Body()])
+  upload!: (id: string, form: unknown) => Promise<Echo>
 }
 
 @API('/headers')
@@ -636,9 +685,127 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
 
     expect(echoes.map(answered => answered.url)).toEqual(ids.map(id => `/items/${id}`))
   })
+
+  // A server moves a resource, adds a trailing slash or sends a client to sign-in with a redirect. fetch follows one and
+  // undici did not, so the same call resolved over one transport and rejected over the other.
+  describe('a redirect', () => {
+    function redirect(status: number, location: string): void {
+      replies.push({ status, headers: { location } })
+    }
+
+    it('is followed to the path it names', async () => {
+      redirect(302, '/redirects/2')
+
+      await expect(clientOver(factory()).create(RedirectsAPI).get('1')).resolves.toEqual({
+        method: 'GET',
+        url: '/redirects/2',
+      })
+      expect(received.map(request => request.url)).toEqual(['/redirects/1', '/redirects/2'])
+    })
+
+    // Credentials are for the origin they were given to: another one must not receive them.
+    it('is followed to another origin, without the credentials of the first', async () => {
+      redirect(302, `${otherURL}/redirects/2`)
+
+      await expect(clientOver(factory()).create(RedirectsAPI).get('1')).resolves.toEqual({
+        method: 'GET',
+        url: '/redirects/2',
+      })
+      expect(received[0].headers).toMatchObject({ authorization: 'Bearer declared', cookie: 'session=1' })
+      expect(received[1].headers.host).toBe(new URL(otherURL).host)
+      expect(received[1].headers).not.toHaveProperty('authorization')
+      expect(received[1].headers).not.toHaveProperty('cookie')
+    })
+
+    // A 303 sends the client to see the result elsewhere: it reads it, and sends the body nowhere else.
+    it('after a POST answered 303 is a GET, without the body', async () => {
+      redirect(303, '/redirects/2')
+
+      await clientOver(factory()).create(RedirectsAPI).post('1', { name: 'Ada' })
+
+      expect(received[0]).toMatchObject({ method: 'POST', url: '/redirects/1' })
+      expect(received[1]).toMatchObject({ method: 'GET', url: '/redirects/2' })
+      expect(received[1].body.length).toBe(0)
+      expect(received[1].headers).not.toHaveProperty('content-type')
+    })
+
+    // A 307 or a 308 asks for the same request elsewhere: method and body both.
+    it('after a POST answered 307 is the same POST, body included', async () => {
+      redirect(307, '/redirects/2')
+
+      await clientOver(factory()).create(RedirectsAPI).post('1', { name: 'Ada' })
+
+      expect(received[1]).toMatchObject({ method: 'POST', url: '/redirects/2' })
+      expect(received[1].body.toString()).toBe('{"name":"Ada"}')
+    })
+
+    // A stream is read once. Sent again after a 307, it would arrive empty and the call would succeed: it fails instead,
+    // and nothing more is sent.
+    it('after a stream body answered 307 fails the call, and sends nothing more', async () => {
+      redirect(307, '/redirects/2')
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"name":"Ada"}'))
+          controller.close()
+        },
+      })
+
+      await expect(clientOver(factory()).create(RedirectsAPI).post('1', body)).rejects.toThrow()
+      expect(received.map(request => request.url)).toEqual(['/redirects/1'])
+    })
+
+    // A chain of redirects ends, as fetch ends one: after the twentieth.
+    it('is followed 20 times, and the call fails at the 21st', async () => {
+      for (let hop = 1; hop <= 21; hop++) {
+        redirect(302, `/redirects/hop-${hop}`)
+      }
+
+      await expect(clientOver(factory()).create(RedirectsAPI).get('0')).rejects.toThrow()
+      expect(received).toHaveLength(21)
+    })
+  })
 })
 
 describe('a call over UndiciTransport', () => {
+  // An upload is read part by part as it is sent, and a 307 needs every part again. Its first send used to leave nothing
+  // to read: undici sent the second empty, and the call failed.
+  it('sends every part of an upload again after a 307', async () => {
+    replies.push({ status: 307, headers: { location: '/redirects/2/upload' } })
+    const form = new FormData()
+    form.append('title', 'Q3 report')
+    form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
+
+    await clientOver(new UndiciTransportFactory()).create(RedirectsAPI).upload('1', form)
+
+    expect(received[1].url).toBe('/redirects/2/upload')
+    await expectReportParts(received[1])
+  })
+
+  // PoolOptionsBuilder.factory() builds the connections of a pool, as a Pool's own factory does. Two calls held at the
+  // server at once take two connections, each built by it.
+  it('builds each connection with the factory the options name', async () => {
+    const built: string[] = []
+    const options = PoolOptionsBuilder.newBuilder()
+      .connections(2)
+      .factory((origin, opts) => {
+        built.push(String(origin))
+        return new Client(origin, opts)
+      })
+      .build()
+    const first = holdNext()
+    const second = holdNext()
+    const api = clientOver(new UndiciTransportFactory(options)).create(ItemsAPI)
+
+    const calls = [api.get('1'), api.get('2')]
+    await first.started
+    await second.started
+    first.release()
+    second.release()
+
+    await expect(Promise.all(calls)).resolves.toHaveLength(2)
+    expect(built).toHaveLength(2)
+  })
+
   // With one connection, the 503 holds it until its body is read or let go, and a retry behind an unread body would
   // wait for that connection forever. The body is more than the socket buffers hold, so undici cannot finish it alone.
   it('lets go of a retried response, so the retry gets the connection', async () => {

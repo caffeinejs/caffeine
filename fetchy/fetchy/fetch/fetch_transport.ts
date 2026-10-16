@@ -32,6 +32,10 @@ function toGlobalFormData(form: FormData): FormData {
  * one, which `fetch` alone encodes. A part that is a `Blob` or `File` of another implementation fails
  * the call with `ErrFetchyInvalidMultipartBody`.
  *
+ * Redirects are followed, as `fetch` follows them. On Node, `fetch` sends a `FormData` body answered
+ * 307 or 308 again under a new boundary, while its `content-type` keeps the first: a server cannot
+ * parse it. The transport of `@caffeinejs/fetchy-undici` sends every part again under one boundary.
+ *
  * A `ReadableStream` body is sent as it is read. Browsers send one only over HTTP/2 or later, and
  * Firefox and Safari not at all.
  */

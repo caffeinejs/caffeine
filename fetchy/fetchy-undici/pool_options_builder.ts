@@ -72,6 +72,9 @@ export class PoolOptionsBuilder {
     return this
   }
 
+  /**
+   * Builds each connection of an origin's pool, as the `factory` of a `Pool` does.
+   */
   factory(f: (origin: URL, opts: object) => Dispatcher): this {
     this._factory = f
     return this

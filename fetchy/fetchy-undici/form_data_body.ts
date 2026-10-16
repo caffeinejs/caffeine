@@ -109,5 +109,10 @@ export function encodeFormData(form: FormData, signal?: AbortSignal): FormDataBo
   chunks.push(close)
   length += close.byteLength
 
-  return { contentType: `multipart/form-data; boundary=${boundary}`, length, body: streamParts(chunks, signal) }
+  return {
+    contentType: `multipart/form-data; boundary=${boundary}`,
+    length,
+    // Iterable again, where a generator is not: undici's redirect handling sends every part again on a 307 or a 308.
+    body: { [Symbol.asyncIterator]: () => streamParts(chunks, signal) },
+  }
 }
