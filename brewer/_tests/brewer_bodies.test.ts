@@ -1,4 +1,4 @@
-import { Router, bodyAsBuffer } from '@caffeinejs/http'
+import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { multipart, multipartPlugin } from '@caffeinejs/multipart'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -13,6 +13,9 @@ import { brewer } from '../index.js'
  */
 
 type Part = { field: string; value: string } | { field: string; name: string; type: string; bytes: number[] }
+
+// Resolved by the streaming route as the first chunk of a body reaches it.
+let firstChunk: (() => void) | undefined
 
 // What a multipart request carried, part by part, in order.
 async function partsOf(form: FormData): Promise<Part[]> {
@@ -38,6 +41,17 @@ const echo = new Router('/echo')
   }))
   .post('/parsed')
   .handler(ctx => ({ type: ctx.req.header('content-type') ?? null, body: ctx.req.body() }))
+  .post('/stream')
+  .extend(bodyAsStream())
+  .handler(async ctx => {
+    let size = 0
+    for await (const chunk of ctx.req.body() as ReadableStream<Uint8Array>) {
+      size += chunk.byteLength
+      firstChunk?.()
+    }
+
+    return { size }
+  })
 
 const uploads = new Router('/uploads').post('/form').handler(async ctx => ({
   type: ctx.req.header('content-type') ?? null,
@@ -48,8 +62,11 @@ const app = createWebApplication()
   .with(() => multipartPlugin())
   .mount(echo, uploads)
 
+let origin: string
+
 beforeAll(async () => {
-  await app.bootstrap()
+  await app.run()
+  origin = app.address!.origin
 })
 
 afterAll(async () => {
@@ -110,6 +127,54 @@ describe('brewer sending a body', () => {
         type: 'application/x-www-form-urlencoded;charset=UTF-8',
         body: { name: 'Rex' },
       })
+    })
+  })
+
+  describe('given a ReadableStream', () => {
+    const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array([250, 251, 252, 253])]
+
+    it('should send every chunk, in order', async () => {
+      const client = brewer(app)
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          chunks.forEach(chunk => controller.enqueue(chunk))
+          controller.close()
+        },
+      })
+
+      const res = await client.echo.raw.post({ body, headers: { 'content-type': 'application/octet-stream' } })
+
+      expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: [1, 2, 3, 250, 251, 252, 253] })
+    })
+
+    // The second chunk is only produced once the server has read the first: a client that read the whole stream
+    // before sending would wait on it forever.
+    it('should send it as it is read, so the server reads the start before the end exists', async () => {
+      const client = brewer<typeof app>(origin)
+      const seen = Promise.withResolvers<void>()
+      firstChunk = seen.resolve
+      let pulls = 0
+      const body = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          pulls++
+          if (pulls === 1) {
+            controller.enqueue(new Uint8Array(1024).fill(1))
+          } else if (pulls === 2) {
+            await seen.promise
+            controller.enqueue(new Uint8Array(1024).fill(2))
+          } else {
+            controller.close()
+          }
+        },
+      })
+
+      try {
+        const res = await client.echo.stream.post({ body })
+
+        expect(await res.json()).toEqual({ size: 2048 })
+      } finally {
+        firstChunk = undefined
+      }
     })
   })
 })

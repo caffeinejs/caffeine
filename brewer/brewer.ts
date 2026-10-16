@@ -188,13 +188,21 @@ async function send(
 
   const { headers: _clientHeaders, fetch: fetchImpl, ...clientRest } = options
 
-  return (fetchImpl ?? globalThis.fetch)(url, {
+  // `duplex` is not in the DOM lib's `RequestInit`, so the init is typed with it rather than passed as a literal.
+  const request: RequestInit & { duplex?: 'half' } = {
     ...clientRest,
     ...rest,
     method,
     headers: merged,
     body: payload as RequestInit['body'],
-  })
+  }
+
+  // A stream is sent as it is read, which fetch does only for a request it is told is half duplex.
+  if (payload instanceof ReadableStream) {
+    request.duplex = 'half'
+  }
+
+  return (fetchImpl ?? globalThis.fetch)(url, request)
 }
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {
