@@ -2,8 +2,8 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 
+import type { ConstraintStrategy } from '../../../core/constraints/constraints.js'
 import { kRouteConstraints, type ResolvedRouteConstraint } from '../../../core/constraints/keys.js'
-import type { ConstraintStrategy } from '../../../core/constraints/strategy.js'
 import { ErrConfiguration } from '../../../core/error/index.js'
 import { appendVary } from '../../../vary.js'
 

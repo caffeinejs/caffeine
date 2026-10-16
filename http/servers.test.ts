@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { Router } from './core/routing/programmatic/router.js'
+import { Router } from './core/routing/programmatic/programmatic.js'
 import { createWebApplication } from './platform/fastify/application.js'
 import { ServerDefinition } from './server_definition.js'
 import { ServerSet } from './servers.js'

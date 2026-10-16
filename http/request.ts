@@ -122,7 +122,7 @@ export interface IRequest<
  * const PetRoute = { params: $t.Object({ id: $t.Integer() }) }
  *
  * // ctx.req.param() is { id: number }
- * handler(ctx: FastifyContext<Vars, typeof PetRoute>) { ... }
+ * handler(ctx: Context<Vars, typeof PetRoute>) { ... }
  * ```
  *
  * Inference reads the *authored* schema, so it reflects what the author wrote — not the per-slot strictness

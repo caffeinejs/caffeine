@@ -17,7 +17,7 @@ import { type Engine, type NormalizationOptions, createEngine } from './_engine.
  * probe routes which have no context and are skipped. Use a later hook when the middleware must see a parsed
  * or validated body.
  */
-export type FastifyMiddlewareHook =
+export type MiddlewareHook =
   | 'onRequest'
   | 'preParsing'
   | 'preValidation'
@@ -28,7 +28,7 @@ export type FastifyMiddlewareHook =
   | 'onError'
   | 'onTimeout'
 
-const FASTIFY_MIDDLEWARE_HOOKS: readonly FastifyMiddlewareHook[] = [
+const MIDDLEWARE_HOOKS: readonly MiddlewareHook[] = [
   'onRequest',
   'preParsing',
   'preValidation',
@@ -40,12 +40,7 @@ const FASTIFY_MIDDLEWARE_HOOKS: readonly FastifyMiddlewareHook[] = [
   'onTimeout',
 ]
 
-const HOOKS_WITH_PAYLOAD: ReadonlySet<FastifyMiddlewareHook> = new Set([
-  'onError',
-  'onSend',
-  'preParsing',
-  'preSerialization',
-])
+const HOOKS_WITH_PAYLOAD: ReadonlySet<MiddlewareHook> = new Set(['onError', 'onSend', 'preParsing', 'preSerialization'])
 
 /**
  * Installs resolved middleware on a Fastify server: one Fastify hook per hook that has entries.
@@ -58,9 +53,9 @@ const HOOKS_WITH_PAYLOAD: ReadonlySet<FastifyMiddlewareHook> = new Set([
  *
  * @throws ErrConfiguration when a middleware names a hook Fastify does not have.
  */
-export function installFastifyMiddlewares(server: FastifyInstance, resolved: readonly ResolvedMiddleware[]): void {
+export function installMiddlewares(server: FastifyInstance, resolved: readonly ResolvedMiddleware[]): void {
   const options = normalizationOptions(server)
-  const engines = new Map<FastifyMiddlewareHook, Engine>()
+  const engines = new Map<MiddlewareHook, Engine>()
 
   for (const middleware of resolved) {
     const hook = toHook(middleware.hook)
@@ -73,7 +68,7 @@ export function installFastifyMiddlewares(server: FastifyInstance, resolved: rea
     engine.use(middleware.path, middleware.fn)
   }
 
-  for (const hook of FASTIFY_MIDDLEWARE_HOOKS) {
+  for (const hook of MIDDLEWARE_HOOKS) {
     const engine = engines.get(hook)
     if (engine === undefined) {
       continue
@@ -146,13 +141,13 @@ function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
   return typeof path === 'string' ? join(path) : path.map(join)
 }
 
-function toHook(hook: string | undefined): FastifyMiddlewareHook {
+function toHook(hook: string | undefined): MiddlewareHook {
   if (hook === undefined) {
     return 'onRequest'
   }
 
-  if ((FASTIFY_MIDDLEWARE_HOOKS as readonly string[]).includes(hook)) {
-    return hook as FastifyMiddlewareHook
+  if ((MIDDLEWARE_HOOKS as readonly string[]).includes(hook)) {
+    return hook as MiddlewareHook
   }
 
   throw new ErrConfiguration(

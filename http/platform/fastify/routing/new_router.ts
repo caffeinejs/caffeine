@@ -1,5 +1,5 @@
-import { Router } from '../../../core/routing/programmatic/router.js'
-import type { FastifyRouterTypes } from '../fastify_adapter.js'
+import { Router } from '../../../core/routing/programmatic/programmatic.js'
+import type { RouterTypes } from '../adapter.js'
 
 /**
  * A {@link Router} bound to the Fastify adapter: its `.with(...)` takes a Fastify plugin factory as well as an
@@ -14,6 +14,6 @@ import type { FastifyRouterTypes } from '../fastify_adapter.js'
  */
 export function newRouter<GP extends string = ''>(
   path?: GP,
-): Router<Record<never, never>, Record<never, never>, undefined, GP, never, FastifyRouterTypes> {
-  return new Router<Record<never, never>, Record<never, never>, undefined, GP, never, FastifyRouterTypes>(path)
+): Router<Record<never, never>, Record<never, never>, undefined, GP, never, RouterTypes> {
+  return new Router<Record<never, never>, Record<never, never>, undefined, GP, never, RouterTypes>(path)
 }

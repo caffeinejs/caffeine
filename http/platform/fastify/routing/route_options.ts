@@ -76,7 +76,7 @@ export function addRouteHook<K extends RouteHookKey>(
  * carries what the request handler reads to apply the route's status, content type, headers and authentication.
  * `handler` is written after these options are applied and could never take effect.
  */
-export type FastifyRouteOptions = Omit<
+export type FSTOptions = Omit<
   AdapterRouteOptions,
   'method' | 'url' | 'handler' | 'schema' | 'config' | 'bodyLimit' | 'handlerTimeout'
 >
@@ -95,7 +95,7 @@ export type FastifyRouteOptions = Omit<
  *   .handler(ctx => ...)
  * ```
  */
-export function fst(options: FastifyRouteOptions): AnyRouteExtension {
+export function fst(options: FSTOptions): AnyRouteExtension {
   const entries = Object.entries(options)
 
   return (target: { options(key: string, value: unknown): unknown }) => {

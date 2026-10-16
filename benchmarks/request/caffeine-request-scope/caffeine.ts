@@ -11,7 +11,7 @@ import {
   type Guard,
   type GuardInput,
 } from '@caffeinejs/http'
-import { createWebApplication, FastifyContext } from '@caffeinejs/http/fastify'
+import { createWebApplication, Context } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
@@ -70,13 +70,7 @@ class AppController {
   @UseGuards(APIKeyGuard)
   @Args([$p.context(), $p.param(), $p.query(), $p.body(), $p.header()])
   @Schema({ params: schema, querystring: schema, body: schema, response: responseSchema })
-  helloWorld(
-    ctx: FastifyContext,
-    params: DataSchema,
-    query: DataSchema,
-    body: DataSchema,
-    header: Record<string, string>,
-  ) {
+  helloWorld(ctx: Context, params: DataSchema, query: DataSchema, body: DataSchema, header: Record<string, string>) {
     // Resolve the request-scoped instance so the per-request scope is actually created.
     this.requestScoped.get().touch()
 

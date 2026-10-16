@@ -1,5 +1,5 @@
 import { Responder, type ActionResult, type IContext } from '@caffeinejs/http'
-import type { FastifyPlatform } from '@caffeinejs/http/fastify'
+import type { ContextPlatform } from '@caffeinejs/http/fastify'
 
 import { HTML_DEFAULTS, kHTMLOptions, type HTMLDefaults } from './config.js'
 
@@ -75,7 +75,7 @@ function defaultsOf(ctx: IContext): HTMLDefaults {
     return HTML_DEFAULTS
   }
 
-  const { request }: FastifyPlatform = ctx.platform
+  const { request }: ContextPlatform = ctx.platform
   const server = request.server as unknown as Record<symbol, HTMLDefaults | undefined>
 
   return server[kHTMLOptions] ?? HTML_DEFAULTS

@@ -7,7 +7,7 @@ import { Claim } from '../../index.js'
 import { claimsToSession, encodeSession, encodeTicketRef, openTicketRef } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
-import { OIDCAuthenticationHandler } from './handler.js'
+import { OIDCAuthenticationHandler } from './oidc.js'
 import type { OIDCAuthenticationOptions } from './options.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */

@@ -15,7 +15,7 @@ import {
   remoteCookieViolation,
   sessionSecretViolation,
 } from '../internal/remote/config.js'
-import type { RemoteChallengeMode } from '../internal/remote/handler.js'
+import type { RemoteChallengeMode } from '../internal/remote/remote.js'
 import type { RemoteAuthenticationTicketStore } from '../internal/remote/ticket_store.js'
 import { ErrOIDCConfiguration } from './errors.js'
 

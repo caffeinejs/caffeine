@@ -21,8 +21,8 @@ import {
   type ServerCustomizer,
 } from './adapter.js'
 import { CookieBuilder } from './core/cookie/cookie.js'
-import { ErrorHandlingBuilder } from './core/error/builder.js'
 import { ErrConfiguration } from './core/error/common.js'
+import { ErrorHandlingBuilder } from './core/error/error.js'
 import { listenerServers } from './core/listener/servers.js'
 import {
   type MiddlewareFactory,
@@ -35,9 +35,9 @@ import {
   type NodeMiddleware,
 } from './core/middleware/index.js'
 import { parseUse } from './core/middleware/middleware.js'
-import { ControllerRouteSource } from './core/routing/decorated/source.js'
+import { ControllerRouteSource } from './core/routing/decorated/decorated.js'
 import { buildRouting, type RouteSource } from './core/routing/index.js'
-import type { Router } from './core/routing/programmatic/router.js'
+import type { Router } from './core/routing/programmatic/programmatic.js'
 import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
 import { FluentRouteSource } from './core/routing/programmatic/source.js'
 import type { IRouteGroup } from './core/routing/route.js'
@@ -182,7 +182,7 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
    * be a Node `(req, res, next)` function, a Caffeine `(ctx, next)` function, an instance, a class, or a
    * container key.
    *
-   * Which hooks exist is the adapter's: under Fastify, a `FastifyMiddlewareHook`, defaulting to `onRequest`. A
+   * Which hooks exist is the adapter's: under Fastify, a `MiddlewareHook`, defaulting to `onRequest`. A
    * Caffeine middleware may hint a different hook with {@link kMiddlewareHook}; `{ hook }` on this call
    * overrides that hint. Answer the request with `ctx.body()` and do not call `next`.
    *

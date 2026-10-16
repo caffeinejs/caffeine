@@ -1,4 +1,4 @@
-import type { RemoteAuthenticationTokens } from './handler.js'
+import type { RemoteAuthenticationTokens } from './remote.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
 
 /**

@@ -41,29 +41,29 @@ import { ErrCaffeineWebApplication, ErrConfiguration } from '../../core/error/co
 import { kErrorHandlingOptions } from '../../core/error/keys.js'
 import { RouteGroupBuilder } from '../../core/routing/builder.js'
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../core/routing/route.js'
-import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../../core/security/authentication_gate.js'
 import { assertAuthorizationConfigured } from '../../core/security/authz/index.js'
 import type { Principal } from '../../core/security/identity.js'
+import { assertAuthenticationConfigured, assertRouteSchemesResolve } from '../../core/security/security.js'
 import { Keys } from '../../symbols.js'
 import { CONSTRAINTS_PLUGIN } from './constraints/constraints.js'
-import { cookiePlugin } from './cookie/plugin.js'
-import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/plugin.js'
-import { FastifyContext } from './fastify_context.js'
+import { Context } from './context.js'
+import { cookiePlugin } from './cookie/cookie.js'
+import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
 import { installFormBodyParser } from './form/index.js'
-import { installFastifyMiddlewares, rebaseMiddlewares, type FastifyMiddlewareHook } from './middleware/fastify.js'
-import { pluginName, type AnyFastifyPlugin, type FastifyExtension } from './plugin.js'
+import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
+import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
 import { installNotFoundHandler } from './routing/not_found.js'
 import { compileArgs, compileHandler } from './routing/parameters.js'
-import { registerCompiledRouteGroup } from './routing/register.js'
 import type { CaffeineRouteConfig } from './routing/route_config.js'
-import { assertRoutesGated, type RegisteredRoute } from './security/authentication_plugin.js'
+import { registerCompiledRouteGroup } from './routing/routing.js'
+import { assertRoutesGated, type RegisteredRoute } from './security/security.js'
 
 /**
  * What `ctx.platform` is under the Fastify adapter: the request and the reply Fastify is serving.
  *
  * The way to reach what Fastify or one of its plugins added, such as `reply.view` or `request.parts()`.
  */
-export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extends IContextPlatform {
+export interface ContextPlatform<RES extends FastifyReply = FastifyReply> extends IContextPlatform {
   readonly name: 'fastify'
   readonly request: FastifyRequest
   readonly reply: RES
@@ -76,7 +76,7 @@ export interface FastifyPlatform<RES extends FastifyReply = FastifyReply> extend
  * .server(({ config }) => ({ factory: { bodyLimit: 1_048_576 }, listener: config.app.server }))
  * ```
  */
-export interface FastifyServerSettings {
+export interface ServerSettings {
   /**
    * What `Fastify(...)` is constructed with. The application's configured logger is the server's, with request
    * logging off, unless `logger` or `loggerInstance` is set here.
@@ -87,7 +87,7 @@ export interface FastifyServerSettings {
    * HTTP/2 the raw request and response are Node's `Http2ServerRequest` and `Http2ServerResponse`, still typed as
    * their HTTP/1 counterparts; narrow them with `instanceof` for what only HTTP/2 has, such as `stream`.
    */
-  factory?: FastifyFactoryOptions
+  factory?: FactoryOptions
 
   /**
    * What `listen()` is called with. What `run(options)` is given is merged over it, key by key. With neither,
@@ -101,7 +101,7 @@ export interface FastifyServerSettings {
  * Fastify's constructor options with every server it can build: HTTP/1, HTTPS and HTTP/2. Fastify types each apart
  * by the server it returns, and the adapter's instance is one type whatever the server.
  */
-type FastifyFactoryOptions = FastifyServerOptions<Server> & {
+type FactoryOptions = FastifyServerOptions<Server> & {
   http?: ServerOptions | null
   https?: HTTPSServerOptions | SecureServerOptions | null
   http2?: boolean
@@ -109,20 +109,20 @@ type FastifyFactoryOptions = FastifyServerOptions<Server> & {
 }
 
 /** The Fastify adapter's {@link IAdapterTypes}. */
-export interface FastifyTypes<
+export interface AdapterTypes<
   S extends FastifyInstance = FastifyInstance,
   REQ extends FastifyRequest = FastifyRequest,
   RES extends FastifyReply = FastifyReply,
 > extends IAdapterTypes {
   instance: S
   request: REQ
-  extension: FastifyExtension
-  hook: FastifyMiddlewareHook
+  extension: Extension
+  hook: MiddlewareHook
   raw: IncomingMessage
   cookieOptions: CookieSerializeOptions
   asyncCookies: true
-  platform: FastifyPlatform<RES>
-  serverOptions: FastifyServerSettings
+  platform: ContextPlatform<RES>
+  serverOptions: ServerSettings
   runArgs: [options?: FastifyListenOptions]
 }
 
@@ -132,11 +132,11 @@ export interface FastifyTypes<
  * A router depends on neither the server instance nor the request type, so both are left open, and a router bound
  * to this mounts on any Fastify application, including one built around its own instance. `newRouter()` returns one.
  */
-export type FastifyRouterTypes = FastifyTypes<never, never>
+export type RouterTypes = AdapterTypes<never, never>
 
 declare module '../../adapter.js' {
   interface AdapterRegistry {
-    fastify: FastifyTypes
+    fastify: AdapterTypes
   }
 }
 
@@ -165,13 +165,13 @@ declare module 'fastify' {
   }
 
   interface FastifyRequest {
-    httpContext: FastifyContext
+    httpContext: Context
     routeTarget: Record<string | symbol, (...args: unknown[]) => unknown> | null
     user: Principal
   }
 
   interface RawRequest {
-    [Keys.CONTEXT]: FastifyContext
+    [Keys.CONTEXT]: Context
   }
 
   interface FastifyContextConfig {
@@ -195,7 +195,7 @@ declare module 'fastify' {
  */
 const CACHING_PLUGIN = '@caffeinejs/caching'
 
-export class FastifyAdapter implements IAdapter<FastifyTypes> {
+export class Adapter implements IAdapter<AdapterTypes> {
   /**
    * The parameter compilers handed to every route's dispatch, built once for the whole server. The reply type
    * a source sees is opaque, so the two are re-typed here rather than in the neutral contract.
@@ -211,11 +211,11 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
   }
 
   readonly #container: Container
-  readonly #fastifyCtxAls = new AsyncLocalStorage<FastifyContext>()
+  readonly #fastifyCtxAls = new AsyncLocalStorage<Context>()
 
   constructor(kit: AdapterFactoryIn) {
     this.#container = kit.container
-    this.#container.bind(FastifyContext, t =>
+    this.#container.bind(Context, t =>
       t
         .toFactory(() => this.#fastifyCtxAls.getStore()!)
         .lifetime(Scopes.REQUEST)
@@ -231,7 +231,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
    * A build that fails closes what it had built before rethrowing: the caller never receives that server to close,
    * and a plugin that loaded before the failure still gets its `onClose`.
    */
-  async setup(input: AdapterIn<FastifyTypes>): Promise<IAdapterServer<FastifyTypes>> {
+  async setup(input: AdapterIn<AdapterTypes>): Promise<IAdapterServer<AdapterTypes>> {
     // Built here and not when the adapter was: Fastify reads its logger while it constructs and exposes no setter
     // afterwards, and the configured logger exists only once every feature has configured.
     const { factory = {}, listener } = input.server
@@ -256,7 +256,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
     }
 
     // Copied and read once: `listen()` writes into what it is handed, and a frozen configuration node refuses that.
-    const server = new FastifyAdapterServer(fastify, listener === undefined ? undefined : { ...listener }, sockets)
+    const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, sockets)
 
     try {
       await this.#wire(fastify, input)
@@ -269,7 +269,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
   }
 
   /** Everything {@link setup} does to a server once it is constructed: decorations, hooks, plugins, routes, `ready()`. */
-  async #wire(fastify: FastifyInstance, input: AdapterIn<FastifyTypes>): Promise<void> {
+  async #wire(fastify: FastifyInstance, input: AdapterIn<AdapterTypes>): Promise<void> {
     const container = this.#container
     // Copied, not aliased: `$route` appends to this, and `input.routeGroups` is the very array
     // `WebApplication.routeGroups` hands out — a push would publish a plugin's route as the application's.
@@ -327,13 +327,13 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
     // Decorating the request
     fastify.decorateRequest<Principal | null>('user', null)
     fastify.decorateRequest('routeTarget', null)
-    fastify.decorateRequest('httpContext', null as unknown as FastifyContext)
+    fastify.decorateRequest('httpContext', null as unknown as Context)
 
     // One lookup for the whole server: each context takes its own snapshot off the store, on first read.
     const store = container.get(ConfigStore)
 
     fastify.addHook('onRequest', (req, reply, done) => {
-      req.httpContext = new FastifyContext(req, reply, store)
+      req.httpContext = new Context(req, reply, store)
 
       Object.defineProperty(req.raw, Keys.CONTEXT, {
         value: req.httpContext,
@@ -344,7 +344,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
       done()
     })
 
-    // Always: the constructor binds `FastifyContext` request-scoped, so every application has a request scope.
+    // Always: the constructor binds `Context` request-scoped, so every application has a request scope.
     const man = container.requestScopeManager
     fastify.addHook('onRequest', (req, reply, done) => {
       this.#fastifyCtxAls.run(req.httpContext, () => {
@@ -429,7 +429,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
     const globalErrorHandler = errorHandler.handler
 
     // Installed after the plugins so the hooks run inside a server that already has its error handler.
-    installFastifyMiddlewares(fastify, input.middlewares.resolve(input.context))
+    installMiddlewares(fastify, input.middlewares.resolve(input.context))
 
     // Every plugin has had its turn, so whatever `$route` compiled is in `routeGroups` and the two scans see
     // the same table the registration loop below reads.
@@ -447,7 +447,7 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
 
         // What the scope's plugins added with `context.app.use(...)`: in this group's context, so it covers the
         // group's routes alone, after the scope's own plugins, its relative paths rebased under where it starts.
-        installFastifyMiddlewares(server, rebaseMiddlewares(scope.path, input.extensions.middlewaresOf(scope.key)))
+        installMiddlewares(server, rebaseMiddlewares(scope.path, input.extensions.middlewaresOf(scope.key)))
       },
       compilers: this.#compilers,
       globalErrorHandler,
@@ -462,8 +462,8 @@ export class FastifyAdapter implements IAdapter<FastifyTypes> {
   }
 }
 
-/** One server {@link FastifyAdapter} built. */
-class FastifyAdapterServer implements IAdapterServer<FastifyTypes> {
+/** One server {@link Adapter} built. */
+class AdapterServer implements IAdapterServer<AdapterTypes> {
   readonly #fastify: FastifyInstance
   /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
   readonly #listener: FastifyListenOptions | undefined
@@ -592,8 +592,8 @@ class FastifyAdapterServer implements IAdapterServer<FastifyTypes> {
  * The Fastify adapter, which builds its own instance at `bootstrap()` from what `.server(...)` returned. It is what
  * `createWebApplication()` runs on when no adapter is named.
  */
-export function fastifyAdapterFactory(): AdapterFactory<FastifyTypes> {
-  return kit => new FastifyAdapter(kit)
+export function adapterFactory(): AdapterFactory<AdapterTypes> {
+  return kit => new Adapter(kit)
 }
 
 /**
@@ -605,7 +605,7 @@ export function fastifyAdapterFactory(): AdapterFactory<FastifyTypes> {
  * Annotated rather than inferred on purpose: `loggerInstance` typed as the application's logger would make
  * `Fastify()` infer its logger parameter from it, and the instance would no longer be a plain `FastifyInstance`.
  */
-function withApplicationLogger(factory: FastifyFactoryOptions, logger: Logger): FastifyFactoryOptions {
+function withApplicationLogger(factory: FactoryOptions, logger: Logger): FactoryOptions {
   if (factory.logger !== undefined || factory.loggerInstance !== undefined) {
     return factory
   }
@@ -625,7 +625,7 @@ function withApplicationLogger(factory: FastifyFactoryOptions, logger: Logger): 
  * request. Fastify has saved the full URL in `request.originalUrl` before this runs, and a `rewriteUrl` the
  * application set itself runs after it, on the path the application sees.
  */
-function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefined): FastifyFactoryOptions {
+function withBasePath(factory: FactoryOptions, basePath: string | undefined): FactoryOptions {
   if (basePath === undefined) {
     return factory
   }
@@ -657,7 +657,7 @@ function withBasePath(factory: FastifyFactoryOptions, basePath: string | undefin
  */
 async function installExtension(server: FastifyInstance, extension: unknown): Promise<void> {
   const { plugin, options } = resolveExtension(extension)
-  assertFastifyPlugin(plugin)
+  assertPlugin(plugin)
   assertPluginNotRegistered(server, plugin)
   await server.register(plugin, options)
 }
@@ -679,7 +679,7 @@ function resolveExtension(value: unknown): { plugin: unknown; options: FastifyPl
  * What reaches here from a controller's `@Use(...)` was never checked against the application's adapter, since a
  * decorator never meets the application's type.
  */
-function assertFastifyPlugin(value: unknown): asserts value is AnyFastifyPlugin {
+function assertPlugin(value: unknown): asserts value is AnyPlugin {
   if (typeof value !== 'function') {
     throw new ErrCaffeineWebApplication(
       errMessage(`Cannot register an HTTP extension: expected a Fastify plugin, got ${typeof value}`)
@@ -729,7 +729,7 @@ function assertPluginNotRegistered(
 function assertRouteFeaturesInstalled(
   server: FastifyInstance,
   routeGroups: readonly IRouteGroup<any>[],
-  extensions: Pick<AdapterExtensions<FastifyExtension>, 'of'>,
+  extensions: Pick<AdapterExtensions<Extension>, 'of'>,
 ): void {
   if (!server.hasPlugin(CACHING_PLUGIN)) {
     for (const group of routeGroups) {
@@ -737,7 +737,7 @@ function assertRouteFeaturesInstalled(
       const installed = (group.scopes ?? []).some(scope =>
         extensions.of(scope.key).some(extension => {
           const { plugin } = resolveExtension(extension)
-          return typeof plugin === 'function' && pluginName(plugin as AnyFastifyPlugin) === CACHING_PLUGIN
+          return typeof plugin === 'function' && pluginName(plugin as AnyPlugin) === CACHING_PLUGIN
         }),
       )
 

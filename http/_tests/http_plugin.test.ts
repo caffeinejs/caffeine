@@ -19,7 +19,7 @@ import {
   bindTo,
   type WebApplication,
 } from '../index.js'
-import { type FastifyRouterTypes, createWebApplication, newRouter } from '../platform/fastify/index.js'
+import { type RouterTypes, createWebApplication, newRouter } from '../platform/fastify/index.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and
@@ -407,8 +407,8 @@ describe('HTTPPlugin', () => {
     })
 
     it("matches a path of the server's own and takes the adapter's hook", async () => {
-      class Hooked extends HTTPPlugin<FastifyRouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+      class Hooked extends HTTPPlugin<RouterTypes> {
+        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
           app.use('/only', stamp('x-hooked'), { hook: 'preHandler' })
         }
       }
@@ -770,8 +770,8 @@ describe('HTTPPlugin', () => {
     })
 
     it("installs a mounted router's own plugin in front of its routes only", async () => {
-      class Stamped extends HTTPPlugin<FastifyRouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+      class Stamped extends HTTPPlugin<RouterTypes> {
+        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
           app.mount(
             newRouter('/stamped')
               .with(marking('x-router-plugin'))
@@ -799,8 +799,8 @@ describe('HTTPPlugin', () => {
         })
         .get('/', () => ({ shared: true }))
 
-      class Sharing extends HTTPPlugin<FastifyRouterTypes> {
-        register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+      class Sharing extends HTTPPlugin<RouterTypes> {
+        register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
           app.mount(shared)
         }
       }

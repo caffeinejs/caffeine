@@ -5,7 +5,7 @@ import { boundTo } from '../../../binding.js'
 import { bindTo } from '../../../decorators/bind_to.js'
 import { stateOf, type RouterState } from './_state.js'
 import { flattenRouter } from './flatten.js'
-import { Router } from './router.js'
+import { Router } from './programmatic.js'
 
 describe('default route names', () => {
   it('ignores long malformed constraints without retrying at every parenthesis', () => {
