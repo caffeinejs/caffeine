@@ -133,15 +133,17 @@ function node(
 
 /** The path the segments spell, each parameter encoded. */
 function pathOf(segments: readonly Segment[]): string {
-  const parts = segments.map(segment => {
-    if (typeof segment === 'string') {
-      return segment
-    }
-
-    return encodeParam(segment.name, segment.value)
-  })
+  // How the route reads — `/users/:id` — named by a value the path refuses to carry.
+  const route = `/${segments.map(segment => (typeof segment === 'string' ? segment : marker(segment.name))).join('/')}`
+  const parts = segments.map(segment =>
+    typeof segment === 'string' ? segment : encodeParam(route, segment.name, segment.value),
+  )
 
   return `/${parts.join('/')}`
+}
+
+function marker(name: string): string {
+  return name === '*' ? '*' : `:${name}`
 }
 
 // The path is built here, inside the promise, so a path the call cannot fill rejects like any other failure.

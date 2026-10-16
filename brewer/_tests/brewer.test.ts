@@ -4,7 +4,7 @@ import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
-import { ErrBrew, ErrBrewPathParam } from '../errors.js'
+import { ErrBrew, ErrBrewPathParam, ErrBrewPathValue } from '../errors.js'
 import { fillPath, joinURL } from '../url.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -294,6 +294,57 @@ describe('brewer against an application in process', () => {
       const client = brewer(app)
 
       expect(await (await client.tags({ name: 'cute' }).get()).json()).toEqual({ name: 'cute' })
+    })
+  })
+
+  // The URL standard resolves `.` and `..` as steps along the path, percent-encoded or not: `/pets/../orders/o1` is
+  // `/orders/o1`. A value from a link or a form must never choose which route a call reaches.
+  describe('given a path value that a URL would resolve as a step along the path', () => {
+    function spied() {
+      const sent: string[] = []
+      const client = brewer(app, {
+        fetch: (input, init) => {
+          sent.push(String(input))
+          return app.fetch(input as string, init)
+        },
+      })
+
+      return { client, sent }
+    }
+
+    it('should reject a parameter of . or .., naming it and the route, and send nothing', async () => {
+      const { client, sent } = spied()
+
+      await expect(client.pets({ petID: '..' }).orders({ orderID: 'o1' }).get()).rejects.toMatchObject({
+        name: 'ErrBrewPathValue',
+        code: 'ERR_BREW_PATH_VALUE',
+        message: expect.stringContaining(
+          'Cannot build a request for "/pets/:petID/orders/:orderID": path parameter "petID" is ".."',
+        ),
+      })
+      await expect(client.pets({ petID: 'p1' }).orders({ orderID: '.' }).get()).rejects.toBeInstanceOf(ErrBrewPathValue)
+      expect(sent).toEqual([])
+    })
+
+    it('should reject a wildcard with a . or .. part, through the proxy and the escape hatch', async () => {
+      const { client, sent } = spied()
+
+      await expect(client.files({ '*': '../admin/users' }).get()).rejects.toBeInstanceOf(ErrBrewPathValue)
+      await expect(client.files({ '*': 'a/./b' }).get()).rejects.toBeInstanceOf(ErrBrewPathValue)
+      await expect(client.$request('GET', '/files/*', { params: { '*': 'docs/..' } })).rejects.toMatchObject({
+        message: expect.stringContaining('Cannot build a request for "/files/*": path parameter "*" is "docs/.."'),
+      })
+      expect(sent).toEqual([])
+    })
+
+    it('should send a value that merely holds dots', async () => {
+      const client = brewer(app)
+
+      for (const value of ['...', '..x', 'a..b', '.hidden']) {
+        const res = await client.pets({ petID: value }).orders({ orderID: value }).get()
+        expect(await res.json()).toEqual({ petID: value, orderID: value })
+      }
+      expect(await (await client.files({ '*': '.config/x..y/...' }).get()).json()).toEqual({ rest: '.config/x..y/...' })
     })
   })
 

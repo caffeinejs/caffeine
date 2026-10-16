@@ -9,6 +9,7 @@ import { ErrBrewPathParam } from './errors.js'
  * value.
  *
  * @throws ErrBrewPathParam - A parameter the path requires, a wildcard included, has no value.
+ * @throws ErrBrewPathValue - A value is `.` or `..`, or a wildcard holds one as a part.
  */
 export function fillPath(path: string, params: Record<string, unknown> | undefined): string {
   if (!path.includes(':') && !path.includes('*')) {
@@ -36,7 +37,7 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
         throw new ErrBrewPathParam(path, name)
       }
 
-      return encodeParam(name, value)
+      return encodeParam(path, name, value)
     })
     .filter(segment => segment !== undefined)
     .join('/')
