@@ -1,13 +1,13 @@
 import type { FastifyPluginAsync, FastifyPluginCallback, FastifyPluginOptions } from 'fastify'
 
 import type { AdapterExtensionFactory, HTTPSetupContext } from '../../adapter.js'
-import type { FastifyRouterTypes } from './fastify_adapter.js'
+import type { RouterTypes } from './adapter.js'
 
 /**
  * Any Fastify plugin, callback- or async-style — a bare third-party one (`@fastify/cors`, `@fastify/cookie`,
  * …) as much as one this package or a feature authors. What the Fastify adapter installs.
  */
-export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
+export type AnyPlugin = FastifyPluginCallback | FastifyPluginAsync
 
 /**
  * A plugin and the options to register it with, handed back together by the factory that built them.
@@ -20,16 +20,16 @@ export type AnyFastifyPlugin = FastifyPluginCallback | FastifyPluginAsync
  * The plugin's own options type is not carried across to `options`, since `.with(...)` is not generic in it and
  * making it so would decide the application's configuration type from the wrong argument. Write
  * `options satisfies FastifyStaticOptions` where the exact shape matters. This is also the only form that takes
- * a plugin whose options are *required*, such as `@fastify/static` and its `root`: {@link AnyFastifyPlugin}
+ * a plugin whose options are *required*, such as `@fastify/static` and its `root`: {@link AnyPlugin}
  * describes one that can be registered with none.
  */
-export type FastifyPluginWithOptions = readonly [
+export type PluginWithOptions = readonly [
   plugin: FastifyPluginCallback<any> | FastifyPluginAsync<any>,
   options: FastifyPluginOptions,
 ]
 
 /** What the Fastify adapter installs: a plugin, or a plugin together with the options to register it with. */
-export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
+export type Extension = AnyPlugin | PluginWithOptions
 
 /**
  * Produces a Fastify plugin from what the application resolved at start-up: its configuration, its container and
@@ -71,7 +71,7 @@ export type FastifyExtension = AnyFastifyPlugin | FastifyPluginWithOptions
  * .with(() => cors)
  * ```
  */
-export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExtension, C, FastifyRouterTypes>
+export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<Extension, C, RouterTypes>
 
 /**
  * Authors a plugin's options through its builder, handed the same {@link HTTPSetupContext} the factory that
@@ -86,14 +86,11 @@ export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<FastifyExte
  * .with(HTTPCaching((b, { container }) => b.store(container.get(RedisCache))))
  * ```
  */
-export type HTTPPluginConfigurer<B, C = unknown> = (
-  builder: B,
-  context: HTTPSetupContext<C, FastifyRouterTypes>,
-) => void
+export type HTTPPluginConfigurer<B, C = unknown> = (builder: B, context: HTTPSetupContext<C, RouterTypes>) => void
 
 const kPluginMeta = Symbol.for('plugin-meta')
 
 /** The name `fastify-plugin` stamped on `plugin`, or `undefined` for one that was never wrapped with it. */
-export function pluginName(plugin: AnyFastifyPlugin): string | undefined {
+export function pluginName(plugin: AnyPlugin): string | undefined {
   return (plugin as unknown as Record<symbol, { name?: string } | undefined>)[kPluginMeta]?.name
 }

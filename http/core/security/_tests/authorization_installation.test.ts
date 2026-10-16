@@ -76,7 +76,7 @@ describe('authorization installation', () => {
     expect(res.status).toBe(200)
   })
 
-  // Authentication is checked first (see `fastify_adapter.ts`), so a protected route with neither feature configured
+  // Authentication is checked first (see `platform/fastify/adapter.ts`), so a protected route with neither feature configured
   // is refused with the authentication-specific error — calling `.install(Authentication(...)).with(authentication())` would also auto-install
   // authorization, so that is the one actionable fix. This is unaffected by the authorization changes; it is
   // asserted here as a regression guard alongside the narrower authorization-only case below.

@@ -7,7 +7,7 @@ import { Claim } from '../../index.js'
 import { decodeSession, encodeSession, claimsToSession, openSessionCookie } from '../internal/remote/session_store.js'
 import { encodeState } from '../internal/remote/state_store.js'
 import { accessTokenHash } from './_at_hash.js'
-import { OIDCAuthenticationHandler } from './handler.js'
+import { OIDCAuthenticationHandler } from './oidc.js'
 import type { OIDCAuthenticationOptions } from './options.js'
 
 /** The strategy name these handlers are registered under; cookies are sealed per scheme. */

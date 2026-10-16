@@ -29,10 +29,10 @@ import type { IContext } from '../context.js'
 import type { MiddlewareFn } from '../core/middleware/middleware.js'
 import type { ResolvedMiddleware } from '../core/middleware/pipeline.js'
 import { blend } from '../core/routing/programmatic/blend.js'
-import { Router } from '../core/routing/programmatic/router.js'
+import { Router } from '../core/routing/programmatic/programmatic.js'
 import type { AdapterOf, RoutesOf } from '../core/routing/programmatic/types.js'
+import type { RouterTypes, AdapterTypes } from '../platform/fastify/adapter.js'
 import { createWebApplication } from '../platform/fastify/application.js'
-import type { FastifyRouterTypes, FastifyTypes } from '../platform/fastify/fastify_adapter.js'
 import { healthProbes } from '../platform/fastify/index.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../platform/fastify/plugin.js'
 import { newRouter } from '../platform/fastify/routing/new_router.js'
@@ -241,7 +241,7 @@ describe('an application on an adapter that is not Fastify', () => {
 
 describe('adapter types', () => {
   it('registers the Fastify adapter through the registry', () => {
-    expectTypeOf<AnyAdapterTypes>().toEqualTypeOf<FastifyTypes>()
+    expectTypeOf<AnyAdapterTypes>().toEqualTypeOf<AdapterTypes>()
   })
 
   it('refuses what another adapter installs, and takes a feature on any adapter', () => {
@@ -304,8 +304,8 @@ describe('adapter types', () => {
       }
     }
 
-    class OnFastify extends HTTPPlugin<FastifyRouterTypes> {
-      register({ app }: HTTPSetupContext<unknown, FastifyRouterTypes>): void {
+    class OnFastify extends HTTPPlugin<RouterTypes> {
+      register({ app }: HTTPSetupContext<unknown, RouterTypes>): void {
         app.mount(newRouter('/bound')).use(fn, { hook: 'preHandler' })
       }
     }
@@ -339,13 +339,13 @@ describe('adapter types', () => {
     const mounted = routed.mount(new Router('/child').get('/', () => 2))
     const blended = blend(mounted, newRouter('/other'))
 
-    expectTypeOf<AdapterOf<typeof base>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof vars>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof configured>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof injected>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof routed>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof mounted>>().toEqualTypeOf<FastifyRouterTypes>()
-    expectTypeOf<AdapterOf<typeof blended>>().toEqualTypeOf<FastifyRouterTypes>()
+    expectTypeOf<AdapterOf<typeof base>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof vars>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof configured>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof injected>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof routed>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof mounted>>().toEqualTypeOf<RouterTypes>()
+    expectTypeOf<AdapterOf<typeof blended>>().toEqualTypeOf<RouterTypes>()
   })
 
   it('mounts a router bound to no adapter anywhere, and a bound one only where it belongs', () => {
@@ -374,7 +374,7 @@ describe('adapter types', () => {
   // What a second registered adapter does to code written without knowing its adapter. Augmenting the registry
   // here would reach every file this check project compiles, so the union it would produce is spelled out instead.
   it('makes a reader narrow on the platform name once a second adapter is registered', () => {
-    type Both = FastifyTypes | FakeTypes
+    type Both = AdapterTypes | FakeTypes
 
     const read = (ctx: IContext<Record<never, never>, Record<never, never>, Both>) => {
       // @ts-expect-error the fake platform has no reply

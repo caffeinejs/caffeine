@@ -15,15 +15,15 @@ import { kAuthSchemeDescriptors } from '../../../core/security/auth/keys.js'
 import { OIDCRoutesRef } from '../../../core/security/auth/oidc/oidc_routes_ref.js'
 import { AuthenticationSchemeProvider } from '../../../core/security/auth/scheme_provider.js'
 import { AuthenticationService } from '../../../core/security/auth/service.js'
-import { AuthenticationGateBuilder, kGateOptions } from '../../../core/security/authentication_gate.js'
 import { kAuthzHandlers, kAuthzOpts } from '../../../core/security/authz/keys.js'
 import { newPolicyEvaluator } from '../../../core/security/authz/policy.js'
 import { AuthzRouteService } from '../../../core/security/authz/route_service.js'
 import { anonymousUser, mergePrincipals, type Principal } from '../../../core/security/identity.js'
-import { hasServerCookies } from '../cookie/plugin.js'
+import { AuthenticationGateBuilder, kGateOptions } from '../../../core/security/security.js'
+import { hasServerCookies } from '../cookie/cookie.js'
 import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../plugin.js'
 import { type GatedRoute } from '../routing/route_config.js'
-import { oidcRoutesPlugin } from './auth/oidc/oidc_routes.js'
+import { oidcRoutesPlugin } from './auth/oidc/oidc.js'
 
 /** A route as it registered: its options, and the server context it registered on. */
 export interface RegisteredRoute {

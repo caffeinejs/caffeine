@@ -1,1 +1,1 @@
-export * from './compile_route_schema.js'
+export * from './schema.js'

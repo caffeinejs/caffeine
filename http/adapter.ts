@@ -12,7 +12,7 @@ import type {
 } from './core/middleware/middleware.js'
 import type { MiddlewarePipeline, ResolvedMiddleware } from './core/middleware/pipeline.js'
 import type { RouteGroupCompiler } from './core/routing/compile.js'
-import type { Router } from './core/routing/programmatic/router.js'
+import type { Router } from './core/routing/programmatic/programmatic.js'
 import type { IRouteGroup } from './core/routing/route.js'
 import type { IServer } from './server.js'
 

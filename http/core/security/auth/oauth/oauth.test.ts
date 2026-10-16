@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
 import { decodeState, encodeState, type RemoteAuthenticationState } from '../internal/remote/state_store.js'
-import { OAuth2AuthenticationHandler } from './handler.js'
+import { OAuth2AuthenticationHandler } from './oauth.js'
 import type { OAuth2AuthenticationOptions } from './options.js'
 
 const SESSION_SECRET = 'oauth2-test-secret-at-least-32-chars!!'

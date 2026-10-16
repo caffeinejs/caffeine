@@ -1,5 +1,5 @@
 import { WebApplication, type WebApplicationOptions } from '../../application.js'
-import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
+import { adapterFactory, type AdapterTypes } from './adapter.js'
 
 /**
  * Creates a web application served by Fastify.
@@ -16,6 +16,6 @@ import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
  */
 export function createWebApplication<TConfig = unknown>(
   options?: WebApplicationOptions<TConfig>,
-): WebApplication<FastifyTypes, never, never, TConfig> {
-  return new WebApplication(fastifyAdapterFactory(), options)
+): WebApplication<AdapterTypes, never, never, TConfig> {
+  return new WebApplication(adapterFactory(), options)
 }

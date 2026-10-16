@@ -452,7 +452,7 @@ Where it is registered decides what `context.app` reaches:
   `app.routeGroups`, and a router mounted twice in one place, or one the application already serves on that server,
   is served once.
 - A plain `HTTPPlugin` is written for no adapter: it mounts only `new Router(...)` routers, names no hook, and runs
-  on any adapter. `HTTPPlugin<FastifyRouterTypes>` may mount `newRouter()` routers and name Fastify hooks
+  on any adapter. `HTTPPlugin<RouterTypes>` may mount `newRouter()` routers and name Fastify hooks
   (`use(mw, { hook: 'preHandler' })`); only Fastify applications and routers take it.
 - A Fastify plugin's factory gets the same context, so it may mount and add middleware too and still return its
   plugin: `.with(({ app }) => { app.mount(router); return [fastifyCors, options] })`.

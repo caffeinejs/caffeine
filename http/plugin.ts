@@ -20,7 +20,7 @@ import type { IAdapterTypes, HTTPSetupContext } from './adapter.js'
  *   to the controller. It cannot mount: a class has no children to nest routers under.
  *
  * A plain `HTTPPlugin` is written for no adapter: it mounts only routers bound to none, `new Router(...)`, names no
- * hook, and runs on any adapter. `HTTPPlugin<FastifyRouterTypes>` may mount `newRouter()` routers and name Fastify
+ * hook, and runs on any adapter. `HTTPPlugin<RouterTypes>` may mount `newRouter()` routers and name Fastify
  * hooks, and only Fastify applications and routers take it. A plugin that needs Fastify itself returns a Fastify
  * plugin from its factory, which may still mount and add middleware through the factory's own context.
  *

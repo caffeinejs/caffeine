@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest'
 
 import { $p } from '../../core/routing/picker.js'
 import { Controller, Get, Method, Router, Args } from '../../index.js'
-import { FastifyContext, createWebApplication } from './index.js'
+import { Context, createWebApplication } from './index.js'
 
 describe('Fastify Adapter', () => {
   // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under
@@ -237,7 +237,7 @@ describe('Fastify Adapter', () => {
       const router = new Router('/ctx-di')
       router
         .get('/')
-        .inject({ injected: FastifyContext })
+        .inject({ injected: Context })
         .handler(async (ctx, deps) => {
           const first = deps.injected
           await new Promise(resolve => setTimeout(resolve, 5))

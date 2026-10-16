@@ -28,7 +28,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - What goes out in `Cache-Control` is floored, never rounded.
 - `buildCacheKey` in `_util.ts` is the one key derivation. Nothing else rebuilds a key.
 - Eviction is by tag only. Do not add eviction by path or by key.
-- Never build a `FastifyContextRequest` in this package; a `key` function gets `request.httpContext.req`.
+- Never build a `ContextRequest` in this package; a `key` function gets `request.httpContext.req`.
 
 ## Store calls
 

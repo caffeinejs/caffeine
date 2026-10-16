@@ -4,7 +4,7 @@ export {
   type BasicAuthenticationOptions,
   BasicAuthenticationOptionsBuilder,
 } from './basic/index.js'
-export { Authentication } from './authentication.js'
+export { Authentication } from './auth.js'
 export { AuthenticationBuilder } from './builder.js'
 export type {
   AuthConfig,
@@ -45,7 +45,7 @@ export {
 } from './errors.js'
 export { type AuthenticationHandler, BaseAuthenticationHandler } from './handler.js'
 export { isSafeReturnPath } from './internal/remote/config.js'
-export type { RemoteChallengeMode } from './internal/remote/handler.js'
+export type { RemoteChallengeMode } from './internal/remote/remote.js'
 export type { RemoteAuthenticationSession } from './internal/remote/session_store.js'
 export type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from './internal/remote/ticket_store.js'
 export {

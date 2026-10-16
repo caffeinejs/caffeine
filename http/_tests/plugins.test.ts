@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../adapter.js'
 import { ErrHTTPBadRequest } from '../core/error/http.js'
-import { Router } from '../core/routing/programmatic/router.js'
+import { Router } from '../core/routing/programmatic/programmatic.js'
 import { Controller, Get, Use } from '../decorators/index.js'
 import { type WebApplication } from '../index.js'
 import { createWebApplication, healthProbes } from '../platform/fastify/index.js'

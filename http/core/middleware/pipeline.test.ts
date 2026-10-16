@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../../adapter.js'
 import type { IContext } from '../../context.js'
-import { installFastifyMiddlewares, type FastifyMiddlewareHook } from '../../platform/fastify/middleware/fastify.js'
+import { installMiddlewares, type MiddlewareHook } from '../../platform/fastify/middleware/middleware.js'
 import { closedApplicationOps } from '../../plugin_slot.js'
 import { Keys } from '../../symbols.js'
 import { ErrNextCalledTwice } from './errors.js'
@@ -30,7 +30,7 @@ function setupContext(options: { config?: object; container?: Container } = {}):
 }
 
 function install(pipeline: MiddlewarePipeline, server: FastifyInstance, context = setupContext()): void {
-  installFastifyMiddlewares(server, pipeline.resolve(context))
+  installMiddlewares(server, pipeline.resolve(context))
 }
 
 function contextStub(reply: FastifyReply): IContext {
@@ -412,7 +412,7 @@ describe('MiddlewarePipeline', () => {
 
   it('uses a class static hook hint when none is passed', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 
@@ -435,7 +435,7 @@ describe('MiddlewarePipeline', () => {
 
   it('lets { hook } override a class static hook hint', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 
@@ -470,7 +470,7 @@ describe('MiddlewarePipeline', () => {
 
   it('reads a class hook hint from an instance constructor', () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 
@@ -501,8 +501,8 @@ describe('MiddlewarePipeline', () => {
 
   it('throws at install when a hook hint is not a middleware hook', async () => {
     class Bad implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
-        return 'nope' as FastifyMiddlewareHook
+      static get [kMiddlewareHook](): MiddlewareHook {
+        return 'nope' as MiddlewareHook
       }
 
       handle(_c: IContext, next: Next): void {
@@ -522,7 +522,7 @@ describe('MiddlewarePipeline', () => {
 
   it('picks up a class hook hint from a container token', async () => {
     class Hinted implements Middleware {
-      static get [kMiddlewareHook](): FastifyMiddlewareHook {
+      static get [kMiddlewareHook](): MiddlewareHook {
         return 'preHandler'
       }
 

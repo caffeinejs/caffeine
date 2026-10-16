@@ -21,7 +21,7 @@ import {
   type CookieSecret,
   type CookieUnsignResult,
 } from '../../index.js'
-import { createWebApplication, FastifyContext, newRouter } from '../../platform/fastify/index.js'
+import { createWebApplication, Context, newRouter } from '../../platform/fastify/index.js'
 
 const SECRET = 'a-cookie-secret-of-at-least-32-characters'
 const OLDER = 'an-older-cookie-secret-of-32-characters-or-more'
@@ -988,7 +988,7 @@ describe('the cookie pickers', () => {
     class SetCookieController {
       @Get('/set')
       @Args([$p.context()])
-      get(ctx: FastifyContext) {
+      get(ctx: Context) {
         ctx.cookie('session', 'hello', { httpOnly: true, path: '/' })
         return { ok: true }
       }
@@ -1007,7 +1007,7 @@ describe('the cookie pickers', () => {
     class ReqSignedCookieController {
       @Get('/read')
       @Args([$p.context()])
-      async read(ctx: FastifyContext) {
+      async read(ctx: Context) {
         return { value: await ctx.req.signedCookie('tok') }
       }
     }
@@ -1025,7 +1025,7 @@ describe('the cookie pickers', () => {
     class DeleteCookieController {
       @Get('/delete')
       @Args([$p.context()])
-      get(ctx: FastifyContext) {
+      get(ctx: Context) {
         ctx.deleteCookie('session')
         return { ok: true }
       }
