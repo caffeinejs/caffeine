@@ -17,7 +17,7 @@ import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
-import { DELETE, GET, HTTP, POST } from '../decorators/verbs.js'
+import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
@@ -773,6 +773,56 @@ describe('the URL an operation calls', () => {
     ],
   ])("%s under a class path of '/'", async (_case, baseURL, TargetAPI, expected) => {
     expect(await urlOf(baseURL, TargetAPI)).toBe(expected)
+  })
+})
+
+// The verb is what a server routes on first: each decorator sends its own, and HTTP() any other, as servers spell it.
+describe('the method an operation sends', () => {
+  @API('/resources')
+  class ResourcesAPI {
+    @PATCH('/{id}')
+    @Params([Param('id')])
+    patch!: (id: string) => Promise<unknown>
+
+    @PUT('/{id}')
+    @Params([Param('id')])
+    put!: (id: string) => Promise<unknown>
+
+    @DELETE('/{id}')
+    @Params([Param('id')])
+    remove!: (id: string) => Promise<unknown>
+
+    @OPTIONS()
+    options!: () => Promise<unknown>
+
+    @HEAD('/{id}')
+    @Params([Param('id')])
+    head!: (id: string) => Promise<unknown>
+
+    @HTTP('purge', '/{id}')
+    @Params([Param('id')])
+    purge!: (id: string) => Promise<unknown>
+  }
+
+  it.each([
+    ['@PATCH()', 'PATCH', (api: ResourcesAPI) => api.patch('1')],
+    ['@PUT()', 'PUT', (api: ResourcesAPI) => api.put('1')],
+    ['@DELETE()', 'DELETE', (api: ResourcesAPI) => api.remove('1')],
+    ['@OPTIONS()', 'OPTIONS', (api: ResourcesAPI) => api.options()],
+    ['@HEAD()', 'HEAD', (api: ResourcesAPI) => api.head('1')],
+    ["@HTTP('purge')", 'PURGE', (api: ResourcesAPI) => api.purge('1')],
+  ])('%s sends %s', async (_decorator, method, call) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(ResourcesAPI)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 204 }))
+
+    await call(api)
+
+    expect(transportFactory.transports[0].lastRequest?.method).toBe(method)
   })
 })
 

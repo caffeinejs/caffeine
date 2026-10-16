@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
@@ -454,5 +454,92 @@ describe('RetryInterceptor on a body that can be read only once', () => {
     await expect(api.upload('1', content)).resolves.toEqual({ id: '1' })
     expect(transport.sendCount).toBe(2)
     expect(transport.lastRequest?.body).toBe(content)
+  })
+})
+
+@API('/users')
+class AttemptsAPI {
+  @GET('/{id}')
+  @Retry({ delay: 1_000 })
+  @Params([Param('id')])
+  getUser!: (id: string) => Promise<User>
+
+  @GET('/{id}')
+  @Retry({ limit: 2, delay: 1 })
+  @Params([Param('id')])
+  getUserTwice!: (id: string) => Promise<User>
+
+  @POST('/')
+  @Retry({ delay: 1 })
+  @Params([Body()])
+  createUser!: (user: unknown) => Promise<User>
+}
+
+describe('RetryInterceptor on the attempts it makes', () => {
+  // The delay spaces attempts out so that a struggling server can recover: the retry does not go out a moment sooner.
+  it('sends the next attempt once the delay has elapsed, not before', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    try {
+      const transportFactory = new TestTransportFactory()
+      const api = buildClient(AttemptsAPI, transportFactory)
+      const transport = transportFactory.transports[0]
+      transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+      const call = api.getUser('1')
+
+      await vi.advanceTimersByTimeAsync(999)
+      expect(transport.sendCount).toBe(1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(call).resolves.toEqual({ id: '1' })
+      expect(transport.sendCount).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // Past the limit the call fails with the answer to its last attempt, so the caller sees what the server said.
+  it('gives up after the attempt limit on a status, with the last response', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(AttemptsAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport
+      .willRespond(fakeJSONResponse(503, { attempt: 1 }))
+      .willRespond(fakeJSONResponse(503, { attempt: 2 }))
+      .willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserTwice('1')).rejects.toMatchObject({
+      name: 'ErrFetchyHTTP',
+      status: 503,
+      body: { attempt: 2 },
+    })
+    expect(transport.sendCount).toBe(2)
+  })
+
+  // A POST may have been applied before its 503, and sending it again could apply it twice.
+  it('does not retry a POST answered with a retryable status', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(AttemptsAPI, transportFactory)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(201, { id: '1' }))
+
+    await expect(api.createUser({ name: 'Ada' })).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 503 })
+    expect(transport.sendCount).toBe(1)
+  })
+
+  // @Retry() only declares the policy. RetryInterceptor, added to the client, is what carries it out.
+  it('makes one attempt on a client without RetryInterceptor', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(AttemptsAPI)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(503, {})).willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUserTwice('1')).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 503 })
+    expect(transport.sendCount).toBe(1)
   })
 })

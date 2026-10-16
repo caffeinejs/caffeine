@@ -12,6 +12,8 @@ import {
   ErrFetchyInvalidFormBody,
   ErrFetchyInvalidMultipartBody,
   ErrFetchyInvalidRoute,
+  ErrFetchyMissingAPIDecorator,
+  ErrFetchyMissingCallbackArgument,
   ErrFetchyMissingPathArgument,
   ErrFetchyTooManyAuthenticationAttempts,
 } from '../errors.js'
@@ -30,6 +32,16 @@ describe('errors', () => {
       'ERR_FETCHY_INVALID_ROUTE',
     ],
     ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersAPI'), 'ERR_FETCHY_EMPTY_CLIENT'],
+    [
+      'ErrFetchyMissingAPIDecorator',
+      () => new ErrFetchyMissingAPIDecorator('UsersAPI'),
+      'ERR_FETCHY_MISSING_API_DECORATOR',
+    ],
+    [
+      'ErrFetchyMissingCallbackArgument',
+      () => new ErrFetchyMissingCallbackArgument(),
+      'ERR_FETCHY_MISSING_CALLBACK_ARGUMENT',
+    ],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
     [
       'ErrFetchyMissingPathArgument',

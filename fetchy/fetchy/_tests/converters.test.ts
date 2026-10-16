@@ -407,4 +407,49 @@ describe('response handling', () => {
     expect(error).toBeInstanceOf(ErrFetchyHTTP)
     expect((error as ErrFetchyHTTP).body).toBe('quota exceeded')
   })
+
+  // A 205 tells the client to reset its view, and carries no body to parse.
+  it('resolves a 205 with undefined', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 205 }))
+
+    await expect(api.createUser({ name: 'Ada' })).resolves.toBeUndefined()
+  })
+
+  // Only a 2xx is a success. A 304 answers a conditional request, and the caller holding the copy it validated acts on
+  // the status, as on any other.
+  it('rejects a 304 with ErrFetchyHTTP', async () => {
+    @API('/users')
+    class ConditionalAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      getUser!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConditionalAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 304 }))
+
+    await expect(api.getUser('1')).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 304 })
+  })
+
+  // A handler that refuses a response, one whose signature does not verify say, fails the call with its own error.
+  it('rejects the call with the error a response handler throws', async () => {
+    const refusal = new Error('signature mismatch')
+
+    @API('/users')
+    class VerifiedAPI {
+      @GET('/{id}')
+      @UseResponseHandler({ handle: () => Promise.reject(refusal) })
+      @Params([Param('id')])
+      getUser!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(VerifiedAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).rejects.toBe(refusal)
+  })
 })
