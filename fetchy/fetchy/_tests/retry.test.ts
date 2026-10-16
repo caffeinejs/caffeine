@@ -415,6 +415,14 @@ describe('RetryInterceptor on a body that can be read only once', () => {
           yield content
         })(),
     ],
+    // The form-data package's streams carry the FormData tag without being one: a FormData's methods tell them apart.
+    [
+      "a stream that calls itself FormData, as the form-data package's do",
+      (): unknown =>
+        Object.assign(Object.defineProperty(Readable.from([content]), Symbol.toStringTag, { value: 'FormData' }), {
+          append(): void {},
+        }),
+    ],
   ])('does not retry a network failure when the body is %s', async (_kind, body) => {
     const transportFactory = new TestTransportFactory()
     const api = buildClient(UploadAPI, transportFactory)

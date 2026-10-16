@@ -10,11 +10,16 @@ function requestLabel(request: FetchyRequest): string {
   return `${request.method} ${request.origin}${path}`
 }
 
-// Names what a value is without showing it, since a part may carry a secret.
+// Names what a value is without showing it, since a part may carry a secret. A generator object's constructor has no
+// name, so its tag names it: `AsyncGenerator`.
 function typeName(value: unknown): string {
-  return typeof value === 'object' && value !== null
-    ? (Object.getPrototypeOf(value)?.constructor?.name ?? 'Object')
-    : typeof value
+  if (typeof value !== 'object' || value === null) {
+    return typeof value
+  }
+
+  const name: unknown = Object.getPrototypeOf(value)?.constructor?.name
+
+  return typeof name === 'string' && name !== '' ? name : Object.prototype.toString.call(value).slice(8, -1)
 }
 
 // The fix for a part value that cannot be sent, by what the value most likely is. Bytes come first: a typed array is
@@ -193,10 +198,12 @@ export class ErrFetchyTooManyAuthenticationAttempts extends ErrFetchy {
 /**
  * Thrown when fetchy refuses to send the follow-up an `Authenticator` returned: it targets another origin than the
  * call's, or its body is a stream or an iterator the first send may have read. The message names the request without
- * its query string, which often carries credentials.
+ * its query string, which often carries credentials, and the body's type, never the body.
  */
 export class ErrFetchyFollowUpNotSent extends ErrFetchy {
-  constructor(request: FetchyRequest, problem: 'origin' | 'body') {
+  constructor(request: FetchyRequest, problem: 'origin')
+  constructor(request: FetchyRequest, problem: 'body', body: unknown)
+  constructor(request: FetchyRequest, problem: 'origin' | 'body', body?: unknown) {
     const first = `Cannot send the authentication follow-up of "${requestLabel(request)}"`
     // Names the call's own origin only: the one the authenticator built may carry anything.
     const message =
@@ -204,7 +211,9 @@ export class ErrFetchyFollowUpNotSent extends ErrFetchy {
         ? errMessage(`${first}: it does not target "${request.origin}"`).solutions(
             'Build the follow-up with request.clone(), which keeps the origin',
           )
-        : errMessage(`${first}: its body is a stream or an iterator, which the first send may have read`).solutions(
+        : errMessage(
+            `${first}: its body is a stream or an iterator (${typeName(body)}), which the first send may have read`,
+          ).solutions(
             'Add the credentials with an interceptor, before the first send, so a streamed body needs no follow-up',
             'Send the body as a string, bytes or a Blob, which fetchy can send again',
           )

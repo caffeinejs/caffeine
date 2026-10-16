@@ -244,6 +244,8 @@ describe('@Multipart() with Part() arguments', () => {
     ['an object with no prototype', Object.assign(Object.create(null) as object, { pages: 12 }), 'Object'],
     // Passed where a value belongs, a callback would go out as its own source code.
     ['a function', () => 'Q3 report', 'function'],
+    // A generator's constructor has no name: the message named nothing, and ended "got ".
+    ['an async generator', (async function* () {})(), 'AsyncGenerator'],
   ])('rejects %s and sends nothing', async (_kind, value, type) => {
     const { api, transport } = clientOf(DocumentsAPI)
 

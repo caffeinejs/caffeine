@@ -22,16 +22,20 @@ import {
   Param,
   Params,
   POST,
+  PUT,
   Query,
+  RawRequestBodyConverter,
   RawResponse,
   Retry,
   SignalParam,
   TextResponseConverter,
   type TransportFactory,
+  UseRequestBodyConverter,
   UseResponseConverter,
 } from '@caffeinejs/fetchy'
 import { FetchTransportFactory } from '@caffeinejs/fetchy/fetch'
 import { RetryInterceptor } from '@caffeinejs/fetchy/retry'
+import { FormData as UndiciFormData } from 'undici'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { UndiciTransportFactory } from '../undici_transport_factory.js'
@@ -166,6 +170,11 @@ function holdNext(): { started: Promise<void>; release: () => void } {
   return { started: latch.started.promise, release: () => latch.released.resolve() }
 }
 
+// Parses a recorded request as a server does: by the boundary its content-type names.
+function partsOf(request: Received) {
+  return new Response(request.body, { headers: { 'content-type': request.headers['content-type']! } }).formData()
+}
+
 function sha256(bytes: ArrayBuffer | Uint8Array): string {
   return createHash('sha256').update(new Uint8Array(bytes)).digest('hex')
 }
@@ -224,6 +233,16 @@ class ItemsAPI {
 class RootAPI {
   @GET('/users')
   users!: () => Promise<Echo>
+}
+
+// The issue's own declaration: a FormData built by the caller, sent untouched.
+@API('/documents')
+class DocumentsAPI {
+  @PUT('/{id}')
+  @Retry({ delay: 1 })
+  @UseRequestBodyConverter(RawRequestBodyConverter)
+  @Params([Param('id'), Body()])
+  replace!: (id: string, form: unknown) => Promise<unknown>
 }
 
 @API('/headers')
@@ -557,6 +576,24 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
 })
 
 describe('a call over UndiciTransport', () => {
+  const report = '%PDF-1.7 Q3 report'
+
+  function reportForm(): UndiciFormData {
+    const form = new UndiciFormData()
+    form.append('title', 'Q3 report')
+    form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
+    return form
+  }
+
+  async function expectReportParts(request: Received): Promise<void> {
+    const parts = await partsOf(request)
+    const file = parts.get('file') as File
+
+    expect(parts.get('title')).toBe('Q3 report')
+    expect(file.name).toBe('report.pdf')
+    expect(await file.text()).toBe(report)
+  }
+
   // With one connection, the 503 holds it until its body is read or let go, and a retry behind an unread body would
   // wait for that connection forever. The body is more than the socket buffers hold, so undici cannot finish it alone.
   it('lets go of a retried response, so the retry gets the connection', async () => {
@@ -571,6 +608,44 @@ describe('a call over UndiciTransport', () => {
 
     await expect(api.getWithRetry('1')).resolves.toEqual({ method: 'GET', url: '/items/1' })
     expect(received).toHaveLength(2)
+  })
+
+  // undici exports a FormData of its own, which is not an instance of the global one, and the transport encodes every
+  // implementation again on each send. Taken for a stream, it was never retried, and a 503 failed the upload at once.
+  it("resends every part of undici's own FormData on a retry", async () => {
+    replies.push({ status: 503, headers: { 'content-type': 'application/json' }, body: '{"error":"busy"}' })
+    const api = clientOver(new UndiciTransportFactory(), builder =>
+      builder.addInterceptor(RetryInterceptor.INSTANCE),
+    ).create(DocumentsAPI)
+
+    await expect(api.replace('1', reportForm())).resolves.toEqual({ method: 'PUT', url: '/documents/1' })
+    expect(received).toHaveLength(2)
+
+    for (const attempt of received) {
+      await expectReportParts(attempt)
+    }
+  })
+
+  // The same form was refused for the follow-up, with an error that took it for a stream the first send had read.
+  it("resends every part of undici's own FormData on an authentication follow-up", async () => {
+    replies.push({ status: 401, headers: { 'www-authenticate': 'Bearer' } })
+    const authenticator: Authenticator = {
+      authenticate(request) {
+        const followUp = request.clone()
+        followUp.headers.set('authorization', 'Bearer fresh')
+        return Promise.resolve(followUp)
+      },
+    }
+    const api = clientOver(new UndiciTransportFactory(), builder => builder.authenticator(authenticator)).create(
+      DocumentsAPI,
+    )
+
+    await expect(api.replace('1', reportForm())).resolves.toEqual({ method: 'PUT', url: '/documents/1' })
+    expect(received.map(request => request.headers.authorization)).toEqual([undefined, 'Bearer fresh'])
+
+    for (const attempt of received) {
+      await expectReportParts(attempt)
+    }
   })
 
   // Closing a client lets go of its connections, but not under a call that is still being answered.

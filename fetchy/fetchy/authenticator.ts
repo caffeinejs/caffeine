@@ -82,7 +82,7 @@ export class AuthenticatingTransport implements Transport {
       }
 
       if (!isReplayable(next.body)) {
-        throw new ErrFetchyFollowUpNotSent(request, 'body')
+        throw new ErrFetchyFollowUpNotSent(request, 'body', next.body)
       }
     } catch (error) {
       await discard(response)
