@@ -313,10 +313,23 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       expect(received[0].body.toString()).toBe('already encoded')
     })
 
-    // Bytes go out as they are: through JSON they would become an object of indexes.
+    // Bytes go out as they are: through JSON a typed array would become an object of indexes, and an ArrayBuffer or a
+    // stream the text `{}`. Over fetch, a stream also needs `duplex`.
     it.each([
       ['a Uint8Array', (bytes: Uint8Array): unknown => bytes],
       ['a DataView', (bytes: Uint8Array): unknown => new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)],
+      ['an ArrayBuffer', (bytes: Uint8Array): unknown => bytes.slice().buffer],
+      [
+        'a ReadableStream',
+        (bytes: Uint8Array): unknown =>
+          new ReadableStream({
+            start(controller) {
+              controller.enqueue(bytes.slice(0, 100))
+              controller.enqueue(bytes.slice(100))
+              controller.close()
+            },
+          }),
+      ],
     ])('sends %s byte for byte, with no label', async (_kind, wrap) => {
       const bytes = Uint8Array.from({ length: 256 }, (_, byte) => byte)
 

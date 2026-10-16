@@ -113,6 +113,24 @@ describe('the content-type of a converted body', () => {
     expect(await contentTypeOf(api => api.create(new FormData()))).toBeNull()
   })
 
+  // `JSON.stringify` reads an ArrayBuffer and a stream as empty objects, so both went out as `{}` labelled JSON and
+  // their bytes never left. Like a typed array or a Blob, each is a body fetch sends as it is.
+  it.each([
+    ['an ArrayBuffer', (): unknown => new TextEncoder().encode('%PDF-1.7').buffer],
+    ['a ReadableStream', (): unknown => new ReadableStream()],
+  ])('hands %s to the transport as it is, unlabelled', async (_kind, make) => {
+    const body = make()
+    const transportFactory = new TestTransportFactory()
+    const api = build(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.create(body)
+
+    const request = transportFactory.transports[0].lastRequest!
+    expect(request.body).toBe(body)
+    expect(request.headers.get('content-type')).toBeNull()
+  })
+
   it('does not overwrite a content-type the declaration already set', async () => {
     expect(await contentTypeOf(api => api.createDeclared({ name: 'Ada' }))).toBe('application/vnd.acme+json')
   })
@@ -254,6 +272,15 @@ describe('a @Body() under @FormURLEncoded()', () => {
     const request = await send(FormBodyAPI, api => api.tokenMarked({ grant_type: 'client_credentials' }))
 
     expect(request.body).toBe('marked')
+  })
+
+  // Bytes are a form already encoded, as a typed array's are. Read as an object, an ArrayBuffer went out as an empty form.
+  it('hands an ArrayBuffer on as the encoded form it already is', async () => {
+    const bytes = new TextEncoder().encode('grant_type=client_credentials').buffer
+    const request = await send(FormBodyAPI, api => api.token(bytes))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe(bytes)
   })
 
   // A string is the form already encoded, as a caller who built it by hand sends it.

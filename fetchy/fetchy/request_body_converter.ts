@@ -30,13 +30,17 @@ function isNativeBody(value: unknown): boolean {
     value instanceof Blob ||
     value instanceof URLSearchParams ||
     ArrayBuffer.isView(value) ||
-    isFormData(value)
+    isFormData(value) ||
+    value instanceof ArrayBuffer ||
+    // A runtime without web streams has no global to test against, and every JSON body is tested.
+    (typeof ReadableStream === 'function' && value instanceof ReadableStream)
   )
 }
 
 /**
  * Default request body converter: passes through values that are already valid fetch body types
- * (string, `Blob`, `URLSearchParams`, typed arrays, `FormData`), JSON-stringifies everything else.
+ * (string, `Blob`, `URLSearchParams`, `ArrayBuffer`, typed arrays, `ReadableStream`, `FormData`),
+ * JSON-stringifies everything else.
  */
 export const JSONRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -81,8 +85,8 @@ function appendFormValue(params: URLSearchParams, key: string, value: unknown): 
 /**
  * Converts a plain object, a `URLSearchParams` instance, or a 2D array of `[key, value]` pairs
  * into an `application/x-www-form-urlencoded` string, leaving out `undefined` and `null` values,
- * as `@Field()` does. A string, a `Blob` or a typed array is already encoded and passes through
- * untouched.
+ * as `@Field()` does. A string, a `Blob`, an `ArrayBuffer`, a typed array or a `ReadableStream`
+ * is already encoded and passes through untouched.
  *
  * @throws {@link ErrFetchyInvalidFormBody} for a flat array, a `FormData`, which `@Multipart()` sends, or a number,
  * boolean, bigint, symbol or function, which is no form.

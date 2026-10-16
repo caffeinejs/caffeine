@@ -10,6 +10,9 @@ import type { Transport } from '../transport.js'
  * ahead of the server. A file it cannot read, deleted or changed since `fs.openAsBlob()`, raises an
  * unhandled rejection and leaves the call pending, on a retry as well. The transport of
  * `@caffeinejs/fetchy-undici` streams each part and fails the call instead.
+ *
+ * A `ReadableStream` body is sent as it is read. Browsers send one only over HTTP/2 or later, and
+ * Firefox and Safari not at all.
  */
 export class FetchTransport implements Transport {
   send(request: FetchyRequest): Promise<FetchyResponse> {
@@ -35,6 +38,8 @@ export class FetchTransport implements Transport {
       headers,
       body,
       signal: request.signal,
+      // fetch refuses a stream body without it, and ignores it on any other.
+      duplex: 'half',
     })
   }
 }
