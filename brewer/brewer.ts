@@ -8,7 +8,8 @@ import { isVerb } from './verbs.js'
 export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'headers'> {
   /**
    * Headers sent with every request. A function is called per request — sync or async — so a token can be read
-   * when it is needed rather than captured when the client was made.
+   * when it is needed rather than captured when the client was made. A name given `undefined` is left out, so a
+   * token not known yet sends no header at all.
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
@@ -159,8 +160,8 @@ async function send(
   const { params: _params, query, body, headers, ...rest } = init
   const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
 
-  const merged = new Headers(await resolveHeaders(options.headers))
-  for (const [key, value] of new Headers(headers).entries()) {
+  const merged = headersOf(await resolveHeaders(options.headers))
+  for (const [key, value] of headersOf(headers)) {
     merged.set(key, value)
   }
 
@@ -191,6 +192,22 @@ async function send(
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {
   return typeof headers === 'function' ? headers() : headers
+}
+
+/** Headers from any shape a client or a call gives them in, a name given no value left out, as the query does. */
+function headersOf(values: HeaderValues | undefined): Headers {
+  if (values === undefined || values instanceof Headers || Array.isArray(values)) {
+    return new Headers(values)
+  }
+
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null) {
+      headers.append(name, value)
+    }
+  }
+
+  return headers
 }
 
 function isRawBody(body: unknown): body is RawBody {

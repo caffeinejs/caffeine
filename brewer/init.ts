@@ -18,6 +18,9 @@ export type OpenQuery = Record<
   string | number | boolean | null | undefined | ReadonlyArray<string | number | boolean>
 >
 
+/** What headers may hold when the route declares no schema for them. A name given `undefined` is left out. */
+export type OpenHeaders = Record<string, string | undefined>
+
 type Slot<Name extends string, T, Optional extends boolean> = Optional extends true
   ? { [K in Name]?: T }
   : { [K in Name]: T }
@@ -34,7 +37,7 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  */
 export type CallInit<R extends RouteContract> = Omit<RequestInit, 'method' | 'body' | 'headers'> &
   Slot<'query', IsOpenRecord<R['query']> extends true ? OpenQuery : R['query'], IsOpenRecord<R['query']>> &
-  Slot<'headers', R['headers'], IsOpenRecord<R['headers']>> &
+  Slot<'headers', IsOpenRecord<R['headers']> extends true ? OpenHeaders : R['headers'], IsOpenRecord<R['headers']>> &
   Slot<'body', R['body'], IsUnknown<R['body']>>
 
 /** Whether every slot of an init is optional, and so whether the argument may be left out entirely. */

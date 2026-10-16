@@ -52,6 +52,13 @@ const pets = new Router('/pets')
   .handler(() => ({ literalVerbSegment: true }))
   .get('/then')
   .handler(() => ({ literalThenSegment: true }))
+  .get('/tenant')
+  .schema({ headers: $t.Object({ 'x-tenant': $t.String(), 'if-match': $t.Optional($t.String()) }) })
+  .handler(ctx => ({
+    tenant: ctx.req.header('x-tenant'),
+    ifMatch: ctx.req.header('if-match') ?? null,
+    authorization: ctx.req.header('authorization') ?? null,
+  }))
 
 const files = new Router('/files').get('/*').handler(ctx => ({ rest: ctx.req.param()['*'] }))
 
@@ -359,6 +366,20 @@ describe('brewer against an application in process', () => {
         expect(await res.json()).toEqual({ petID: value, orderID: value })
       }
       expect(await (await client.files({ '*': '.config/x..y/...' }).get()).json()).toEqual({ rest: '.config/x..y/...' })
+    })
+  })
+
+  describe('given a header with no value', () => {
+    it('should leave it out rather than send the word undefined', async () => {
+      let token: string | undefined
+      const client = brewer(app, { headers: () => ({ authorization: token }) })
+
+      const anonymous = await client.pets.tenant.get({ headers: { 'x-tenant': 't1', 'if-match': undefined } })
+      expect(await anonymous.json()).toEqual({ tenant: 't1', ifMatch: null, authorization: null })
+
+      token = 'Bearer abc'
+      const signedIn = await client.pets.tenant.get({ headers: { 'x-tenant': 't1' } })
+      expect(await signedIn.json()).toEqual({ tenant: 't1', ifMatch: null, authorization: 'Bearer abc' })
     })
   })
 
