@@ -13,6 +13,7 @@ import {
   type Authenticator,
   Body,
   ContentType,
+  ErrFetchyInvalidMultipartBody,
   GET,
   Multipart,
   newClient,
@@ -22,10 +23,13 @@ import {
   Part,
   POST,
   PUT,
+  RawRequestBodyConverter,
   Retry,
   SignalParam,
+  UseRequestBodyConverter,
 } from '../index.js'
 import { RetryInterceptor } from '../retry/index.js'
+import { OtherFile, OtherFormData } from './other_form_data.js'
 
 /**
  * The default transport, `fetch`, against a server that records every request it reads. Each request is read whole
@@ -113,6 +117,15 @@ class DocumentsAPI {
   }
 }
 
+// The body as the caller built it, converted by nothing: what reaches the transport is the caller's own FormData.
+@API('/documents')
+class RawDocumentsAPI {
+  @PUT('/{id}')
+  @UseRequestBodyConverter(RawRequestBodyConverter)
+  @Params([Param('id'), Body()])
+  replace!: (id: string, body: unknown) => Promise<unknown>
+}
+
 @API('/documents')
 @ContentType('application/json')
 class JSONByDefaultAPI {
@@ -188,6 +201,40 @@ describe('FetchTransport on a multipart upload', () => {
     expect(received[0].headers['content-type']).toMatch(/^multipart\/form-data; boundary=/)
     expect(Number(received[0].headers['content-length'])).toBe(received[0].body.length)
     expect((await partsOf(received[0])).get('title')).toBe('Q3 report')
+  })
+
+  // Node's fetch encodes a FormData of its own class only, and sent undici's as the text "[object FormData]". Copied
+  // part by part into one fetch encodes, every part arrives.
+  it('sends every part of a FormData of another implementation', async () => {
+    const form = new OtherFormData()
+    form.append('title', 'Q3 report')
+    form.append('file', new File(['%PDF-1.7'], 'report.pdf', { type: 'application/pdf' }))
+    const api = newClient().baseURL(baseURL).build().create(RawDocumentsAPI)
+
+    await api.replace('1', form)
+
+    const parts = await partsOf(received[0])
+    const file = parts.get('file') as File
+
+    expect(parts.get('title')).toBe('Q3 report')
+    expect(file.name).toBe('report.pdf')
+    expect(file.type).toBe('application/pdf')
+    expect(await file.text()).toBe('%PDF-1.7')
+  })
+
+  // A copy holds a File of another implementation as the text "[object File]", which a server stores without complaint.
+  it('rejects a FormData of another implementation holding a File of another, and sends nothing', async () => {
+    const form = new OtherFormData()
+    form.append('file', new OtherFile('report.pdf'))
+    const api = newClient().baseURL(baseURL).build().create(RawDocumentsAPI)
+
+    const error = await api.replace('1', form).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidMultipartBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot add part "file" to the multipart body: it is a File of another implementation, which the global FormData holds as text',
+    )
+    expect(received).toEqual([])
   })
 
   it('sends a FormData a server can parse though the class declares JSON', async () => {

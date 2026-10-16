@@ -1,4 +1,4 @@
-import { errMessage } from './_err_message.gen.js'
+import { errMessage, type ErrMessageBuilder } from './_err_message.gen.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 
@@ -323,29 +323,49 @@ export class ErrFetchyInvalidFormBody extends ErrFetchy {
   }
 }
 
+// Names a value the multipart body cannot take, by what it most likely is: a part, or the whole `@Body()` value.
+function multipartMessage(value: unknown, part: string | undefined): ErrMessageBuilder {
+  const tag = Object.prototype.toString.call(value).slice(8, -1)
+
+  if (part === undefined) {
+    return tag === 'FormData'
+      ? errMessage(
+          'Cannot convert the @Body() value to multipart/form-data: it calls itself a FormData without being one, as a stream of the form-data package does',
+        ).solutions('Build the body with the global FormData')
+      : errMessage(
+          `Cannot convert the @Body() value to multipart/form-data: expected a FormData or a plain object, got ${typeName(value)}`,
+        ).solutions('Pass a FormData, or a plain object with one property per part')
+  }
+
+  // formdata-node's File, say, is no Blob to the global FormData.
+  if ((tag === 'Blob' || tag === 'File') && !(value instanceof Blob)) {
+    return errMessage(
+      `Cannot add part "${part}" to the multipart body: it is a ${tag} of another implementation, which the global FormData holds as text`,
+    ).solutions(
+      tag === 'File'
+        ? 'Copy it into a global File: new File([await part.arrayBuffer()], part.name, { type: part.type })'
+        : 'Copy it into a global Blob: new Blob([await part.arrayBuffer()], { type: part.type })',
+    )
+  }
+
+  return errMessage(
+    `Cannot add part "${part}" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${typeName(value)}`,
+  ).solutions(...partSolutions(value))
+}
+
 /**
  * Thrown when an operation under `@Multipart()` is called with a body fetchy cannot encode: a part
  * value that is not a string, number, boolean, bigint, `Blob` or `File`, or a `@Body()` value that
- * is neither the global `FormData` nor a plain object. Nothing is sent. The message names the
- * value's type, never the value.
+ * is neither a `FormData`, of any implementation, nor a plain object. `FetchTransport` throws it too
+ * for a part of a `FormData` of another implementation that is no `Blob` of the global class.
+ * Nothing is sent. The message names the value's type, never the value.
  */
 export class ErrFetchyInvalidMultipartBody extends ErrFetchy {
   /**
    * @param part - The part the value was given for, or `undefined` for a `@Body()` value
    */
   constructor(value: unknown, part?: string) {
-    const message =
-      part !== undefined
-        ? errMessage(
-            `Cannot add part "${part}" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${typeName(value)}`,
-          ).solutions(...partSolutions(value))
-        : Object.prototype.toString.call(value) === '[object FormData]'
-          ? errMessage(
-              'Cannot convert the @Body() value to multipart/form-data: it is a FormData from another implementation, such as the one undici exports',
-            ).solutions('Build the body with the global FormData')
-          : errMessage(
-              `Cannot convert the @Body() value to multipart/form-data: expected a FormData or a plain object, got ${typeName(value)}`,
-            ).solutions('Pass a FormData, or a plain object with one property per part')
+    const message = multipartMessage(value, part)
 
     super(
       message.reference('@caffeinejs/fetchy', ErrFetchyInvalidMultipartBody).build(),

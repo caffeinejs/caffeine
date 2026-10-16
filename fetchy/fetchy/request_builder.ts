@@ -1,7 +1,7 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
 import { ErrFetchyInvalidPathArgument, ErrFetchyMissingPathArgument } from './errors.js'
 import { FetchyHeaders } from './headers.js'
-import { isFormData } from './internal/form_data.js'
+import { isFormData, isFormDataLike } from './internal/form_data.js'
 import type { ParamDescriptor } from './internal/param_descriptor.js'
 import { FetchyRequest } from './request.js'
 import { appendPart, JSONRequestBodyConverter, type RequestBodyConverter } from './request_body_converter.js'
@@ -213,9 +213,9 @@ export class RequestBuilder {
     // sits. Without a label a JSON-stringified body reaches the server as `text/plain`, which a strict one answers
     // with 415.
     if (body !== null && body !== undefined) {
-      // Except over a FormData: fetch and undici write its boundary only into a request that has no content-type, so
-      // any type set here would name no boundary, and the server would find no part.
-      if (typeof body === 'object' && isFormData(body)) {
+      // Except over a FormData, of any implementation: fetch and undici write its boundary only into a request that has
+      // no content-type, so any type set here would name no boundary, and the server would find no part.
+      if (typeof body === 'object' && (isFormData(body) || isFormDataLike(body))) {
         headers.delete('content-type')
       } else if (!headers.has('content-type')) {
         const mediaType =

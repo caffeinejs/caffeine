@@ -20,6 +20,7 @@ import {
 } from '../request_body_converter.js'
 import { JSONResponseConverter, TextResponseConverter } from '../response_converter.js'
 import { DefaultResponseHandler, NoopResponseHandler } from '../response_handler.js'
+import { OtherFormData } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 @API('/users')
@@ -166,17 +167,26 @@ describe('converters', () => {
     expect([...(MultipartRequestBodyConverter.convert(parts) as FormData).entries()]).toEqual([['title', 'Q3 report']])
   })
 
-  // undici exports a FormData of its own, which `instanceof FormData` does not recognize. Refused as "not a FormData",
-  // it would leave the caller puzzled; it has to be named for what it is.
-  it('MultipartRequestBodyConverter names a FormData from another implementation', () => {
-    class OtherFormData {
+  // undici exports a FormData of its own, which `instanceof FormData` does not recognize. It is a FormData all the same,
+  // and the transport encodes it as it does the global one.
+  it('MultipartRequestBodyConverter hands a FormData of another implementation on as it is', () => {
+    const form = new OtherFormData()
+    form.append('title', 'Q3 report')
+
+    expect(MultipartRequestBodyConverter.convert(form)).toBe(form)
+  })
+
+  // A stream of the form-data package calls itself a FormData, but has not the methods of one. Refused as "not a
+  // FormData", it would leave the caller puzzled; it has to be named for what it is.
+  it('MultipartRequestBodyConverter names an object that only calls itself a FormData', () => {
+    class Impostor {
       get [Symbol.toStringTag](): string {
         return 'FormData'
       }
     }
 
-    expect(() => MultipartRequestBodyConverter.convert(new OtherFormData())).toThrow(
-      'Cannot convert the @Body() value to multipart/form-data: it is a FormData from another implementation, such as the one undici exports',
+    expect(() => MultipartRequestBodyConverter.convert(new Impostor())).toThrow(
+      'Cannot convert the @Body() value to multipart/form-data: it calls itself a FormData without being one, as a stream of the form-data package does',
     )
   })
 

@@ -19,6 +19,7 @@ import {
   RawRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
+import { OtherFormData } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
@@ -128,6 +129,23 @@ describe('the content-type of a converted body', () => {
 
     const request = transportFactory.transports[0].lastRequest!
     expect(request.body).toBe(body)
+    expect(request.headers.get('content-type')).toBeNull()
+  })
+
+  // undici's FormData, or one built before `undici.install()` replaced the global, is no instance of the global class,
+  // and `JSON.stringify` reads it as `{}`: that text went out labelled JSON, and the parts never left. Handed on as a
+  // FormData is, the transport encodes it under the boundary it generates.
+  it('hands a FormData of another implementation to the transport as it is, unlabelled', async () => {
+    const form = new OtherFormData()
+    form.append('title', 'Q3 report')
+    const transportFactory = new TestTransportFactory()
+    const api = build(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.create(form)
+
+    const request = transportFactory.transports[0].lastRequest!
+    expect(request.body).toBe(form)
     expect(request.headers.get('content-type')).toBeNull()
   })
 
@@ -289,6 +307,27 @@ describe('a @Body() under @FormURLEncoded()', () => {
 
     expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
     expect(request.body).toBe('grant_type=client_credentials&scope=read')
+  })
+
+  // A FormData is multipart material, of any implementation. Read field by field, undici's gave nothing, and an empty
+  // form went out in its place.
+  it('rejects a FormData of another implementation and sends nothing', async () => {
+    const form = new OtherFormData()
+    form.append('grant_type', 'client_credentials')
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(form).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
   })
 
   // A form is name and value pairs, and a lone value is neither. fetch sent a number as the text `42` under the form

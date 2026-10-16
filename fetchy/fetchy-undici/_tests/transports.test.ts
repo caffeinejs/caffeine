@@ -19,6 +19,7 @@ import {
   HEAD,
   Header,
   HeaderMap,
+  Multipart,
   newClient,
   Param,
   Params,
@@ -180,6 +181,25 @@ function sha256(bytes: ArrayBuffer | Uint8Array): string {
   return createHash('sha256').update(new Uint8Array(bytes)).digest('hex')
 }
 
+const report = '%PDF-1.7 Q3 report'
+
+// A FormData of undici's own, which is no instance of the global class, holding a text part and a file part.
+function reportForm(): UndiciFormData {
+  const form = new UndiciFormData()
+  form.append('title', 'Q3 report')
+  form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
+  return form
+}
+
+async function expectReportParts(request: Received): Promise<void> {
+  const parts = await partsOf(request)
+  const file = parts.get('file') as File
+
+  expect(parts.get('title')).toBe('Q3 report')
+  expect(file.name).toBe('report.pdf')
+  expect(await file.text()).toBe(report)
+}
+
 // Where RetryInterceptor looks for the code it matches against `errorCodes`.
 function codeOf(error: unknown): unknown {
   const failure = error as { code?: unknown; cause?: { code?: unknown } } | null
@@ -208,6 +228,11 @@ class ItemsAPI {
   @POST('')
   @Params([Body()])
   create!: (body: unknown) => Promise<unknown>
+
+  @POST('/uploads')
+  @Multipart()
+  @Params([Body()])
+  upload!: (form: unknown) => Promise<unknown>
 
   @POST('/token')
   @FormURLEncoded()
@@ -420,6 +445,21 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
     })
 
     // An optional body left out is no body, not the text "null" under a JSON label.
+    // undici's FormData is no instance of the global class: the JSON converter sent it as `{}`, @Multipart() refused it,
+    // and fetch sent it as the text "[object FormData]". Its parts reach the server whichever converter takes it.
+    it.each([
+      ['the JSON converter', (client: FetchyClient, form: UndiciFormData) => client.create(ItemsAPI).create(form)],
+      ['@Multipart()', (client: FetchyClient, form: UndiciFormData) => client.create(ItemsAPI).upload(form)],
+      [
+        'RawRequestBodyConverter',
+        (client: FetchyClient, form: UndiciFormData) => client.create(DocumentsAPI).replace('1', form),
+      ],
+    ])("sends every part of undici's own FormData under %s", async (_converter, send) => {
+      await send(clientOver(factory()), reportForm())
+
+      await expectReportParts(received[0])
+    })
+
     it('sends no body and no content-type for an absent @Body()', async () => {
       await clientOver(factory()).create(ItemsAPI).create(undefined)
 
@@ -599,24 +639,6 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
 })
 
 describe('a call over UndiciTransport', () => {
-  const report = '%PDF-1.7 Q3 report'
-
-  function reportForm(): UndiciFormData {
-    const form = new UndiciFormData()
-    form.append('title', 'Q3 report')
-    form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
-    return form
-  }
-
-  async function expectReportParts(request: Received): Promise<void> {
-    const parts = await partsOf(request)
-    const file = parts.get('file') as File
-
-    expect(parts.get('title')).toBe('Q3 report')
-    expect(file.name).toBe('report.pdf')
-    expect(await file.text()).toBe(report)
-  }
-
   // With one connection, the 503 holds it until its body is read or let go, and a retry behind an unread body would
   // wait for that connection forever. The body is more than the socket buffers hold, so undici cannot finish it alone.
   it('lets go of a retried response, so the retry gets the connection', async () => {
