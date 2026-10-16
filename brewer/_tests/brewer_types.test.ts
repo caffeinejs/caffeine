@@ -50,10 +50,9 @@ function typeOnly(_assertions: () => unknown): void {}
 
 describe('the route contract', () => {
   it('is the shape the server describes a route with', () => {
-    // The guard that makes the structural copy safe: if either side changes, this stops compiling.
-    expectTypeOf<
-      RouteDef<'GET', '/pets', unknown, unknown, unknown, unknown, unknown, unknown>
-    >().toExtend<RouteContract>()
+    // The guard that makes the structural copy safe: a field added to, or removed from, either side stops this
+    // compiling.
+    expectTypeOf<RouteDef>().toEqualTypeOf<RouteContract>()
   })
 })
 

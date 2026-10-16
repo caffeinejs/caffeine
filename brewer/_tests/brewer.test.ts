@@ -8,6 +8,18 @@ import { ErrBrewPathParam } from '../errors.js'
 import { fillPath, joinURL } from '../url.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
+const problemSchema = $t.Object({ detail: $t.String() })
+
+// Holds a request in its handler until the test lets it go, so an abort lands while the server is still working.
+let latch: { started: () => void; held: Promise<void> } | undefined
+
+function hold(): { started: Promise<void>; release: () => void } {
+  const started = Promise.withResolvers<void>()
+  const held = Promise.withResolvers<void>()
+  latch = { started: started.resolve, held: held.promise }
+
+  return { started: started.promise, release: held.resolve }
+}
 
 const pets = new Router('/pets')
   .get('/')
@@ -27,8 +39,15 @@ const pets = new Router('/pets')
   // Any content type: what is under test is that the client did not re-encode the body or claim it was JSON.
   .extend(bodyAsBuffer())
   .handler(ctx => ({ contentType: ctx.req.header('content-type')?.split(';')[0] }))
-  .get('/slow')
-  .handler(ctx => new Promise(resolve => setTimeout(() => resolve(ctx.body({ done: true })), 200)))
+  .get('/held')
+  .handler(async () => {
+    latch?.started()
+    await latch?.held
+    return { done: true }
+  })
+  .get('/lost')
+  .schema({ response: { 200: petSchema, 404: problemSchema } })
+  .handler(ctx => ctx.notFound({ detail: 'no pet answers to that name' }))
   .get('/get')
   .handler(() => ({ literalVerbSegment: true }))
 
@@ -101,7 +120,7 @@ describe('brewer against a running server', () => {
       const form = new FormData()
       form.set('file', 'contents')
 
-      const res = await client.pets.upload.post({ body: form as never })
+      const res = await client.pets.upload.post({ body: form })
 
       expect(await res.json()).toEqual({ contentType: 'multipart/form-data' })
     })
@@ -126,28 +145,32 @@ describe('brewer against a running server', () => {
   })
 
   describe('given a route that answers with an error status', () => {
-    it('should report it rather than throw', async () => {
+    it('should resolve with it, the body still readable, rather than throw', async () => {
       const client = brewer<typeof app>(origin)
 
-      const res = await client.$request('GET', '/pets/:id', { params: { id: 1 } })
-      expect(res.ok).toBe(true)
+      const res = await client.pets.lost.get()
 
-      const missing = await fetch(`${origin}/nothing-here`)
-      expect(missing.ok).toBe(false)
-      expect(missing.status).toBe(404)
-      expect(await missing.json()).toMatchObject({ statusCode: 404 })
+      expect(res.ok).toBe(false)
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ detail: 'no pet answers to that name' })
     })
   })
 
-  describe('given an aborted request', () => {
-    it('should reject rather than resolve', async () => {
+  describe('given a request aborted while the server is still working on it', () => {
+    it('should reject with the abort', async () => {
       const client = brewer<typeof app>(origin)
       const controller = new AbortController()
+      const { started, release } = hold()
 
-      const pending = client.pets.slow.get({ signal: controller.signal })
-      controller.abort()
+      try {
+        const pending = client.pets.held.get({ signal: controller.signal })
+        await started
+        controller.abort()
 
-      await expect(pending).rejects.toThrow()
+        await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+      } finally {
+        release()
+      }
     })
   })
 
