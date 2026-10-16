@@ -1,6 +1,7 @@
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { multipart, multipartPlugin } from '@caffeinejs/multipart'
+import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
@@ -53,14 +54,26 @@ const echo = new Router('/echo')
     return { size }
   })
 
-const uploads = new Router('/uploads').post('/form').handler(async ctx => ({
-  type: ctx.req.header('content-type') ?? null,
-  parts: await partsOf(await multipart(ctx).formData()),
-}))
+const uploads = new Router('/uploads')
+  .post('/form')
+  .handler(async ctx => ({
+    type: ctx.req.header('content-type') ?? null,
+    parts: await partsOf(await multipart(ctx).formData()),
+  }))
+  .post('/profile')
+  .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
+  .handler(async ctx => ({ parts: await partsOf(await multipart(ctx).formData()) }))
+
+const adoptions = new Router('/adoptions')
+  .post('/')
+  .schema({
+    body: $t.Object({ name: $t.String(), age: $t.Integer(), tags: $t.Array($t.String()), vaccinated: $t.Boolean() }),
+  })
+  .handler(ctx => ({ type: ctx.req.header('content-type') ?? null, body: ctx.req.body() }))
 
 const app = createWebApplication()
   .with(() => multipartPlugin())
-  .mount(echo, uploads)
+  .mount(echo, uploads, adoptions)
 
 let origin: string
 
@@ -175,6 +188,63 @@ describe('brewer sending a body', () => {
       } finally {
         firstChunk = undefined
       }
+    })
+  })
+
+  describe.each([
+    ['in process', () => brewer(app)],
+    ['over a socket', () => brewer<typeof app>(origin)],
+  ] as const)('given a route that declares its upload, %s', (_transport, connect) => {
+    it('should deliver the caption and every file, each with its name, type and bytes', async () => {
+      const client = connect()
+      const form = new FormData()
+      form.set('caption', 'Rex at the beach')
+      form.set('avatar', new File(['avatar'], 'rex.jpg', { type: 'image/jpeg' }))
+      form.append('photos', new File(['one'], 'one.png', { type: 'image/png' }))
+      form.append('photos', new File(['two'], 'two.png', { type: 'image/png' }))
+      const bytes = (text: string) => Array.from(new TextEncoder().encode(text))
+
+      const res = await client.uploads.profile.post({ body: form })
+
+      expect(await res.json()).toEqual({
+        parts: [
+          { field: 'caption', value: 'Rex at the beach' },
+          { field: 'avatar', name: 'rex.jpg', type: 'image/jpeg', bytes: bytes('avatar') },
+          { field: 'photos', name: 'one.png', type: 'image/png', bytes: bytes('one') },
+          { field: 'photos', name: 'two.png', type: 'image/png', bytes: bytes('two') },
+        ],
+      })
+    })
+  })
+
+  // Every server parses a classic form, and validates it against the same schema as JSON, coercing as it goes.
+  describe('given a URLSearchParams for a route that declares an object', () => {
+    it('should send a form the server reads as the declared types', async () => {
+      const client = brewer(app)
+      const form = new URLSearchParams([
+        ['name', 'Rex'],
+        ['age', '3'],
+        ['tags', 'calm'],
+        ['tags', 'small'],
+        ['vaccinated', 'true'],
+      ])
+
+      const res = await client.adoptions.post({ body: form })
+
+      expect(await res.json()).toEqual({
+        type: 'application/x-www-form-urlencoded;charset=UTF-8',
+        body: { name: 'Rex', age: 3, tags: ['calm', 'small'], vaccinated: true },
+      })
+    })
+
+    it('should read a lone value as a list where the schema declares one', async () => {
+      const client = brewer(app)
+
+      const res = await client.adoptions.post({
+        body: new URLSearchParams({ name: 'Rex', age: '3', tags: 'calm', vaccinated: 'false' }),
+      })
+
+      expect(await res.json()).toMatchObject({ body: { tags: ['calm'], vaccinated: false } })
     })
   })
 })

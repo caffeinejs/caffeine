@@ -17,3 +17,5 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `StaticChildren` hides exactly the names the proxy answers itself: a verb (`Verb`, the runtime's list) and `then`,
   which it never answers so that a client is not taken for a promise. Hiding more would hide segments the proxy can
   reach.
+- `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`std/schema/t.ts`) does: the body itself, or one
+  level of its properties. Change them together.

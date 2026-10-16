@@ -253,6 +253,93 @@ describe('the init argument', () => {
   })
 })
 
+describe('the body', () => {
+  const uploads = new Router('/uploads')
+    .post('/profile')
+    .schema({ body: $t.Object({ caption: $t.String(), avatar: $t.File(), photos: $t.Optional($t.Files()) }) })
+    .handler(() => ({ saved: true }))
+    .post('/album')
+    .schema({ body: $t.Object({ photos: $t.Files() }) })
+    .handler(() => ({ saved: true }))
+    .post('/single')
+    .schema({ body: $t.File() })
+    .handler(() => ({ saved: true }))
+    .post('/batch')
+    .schema({ body: $t.Files() })
+    .handler(() => ({ saved: true }))
+  const forms = new Router('/forms')
+    .post('/adoptions')
+    .schema({ body: $t.Object({ name: $t.String(), age: $t.Integer() }) })
+    .handler(() => ({ adopted: true }))
+    .post('/litter')
+    .schema({ body: $t.Array(petSchema) })
+    .handler(() => ({ adopted: true }))
+    .post('/notes')
+    .schema({ body: $t.Object({ meta: $t.Any() }) })
+    .handler(() => ({ noted: true }))
+    .post('/anything')
+    .handler(() => ({ taken: true }))
+  const bodies = blend(uploads, forms)
+  const client = brewer<typeof bodies>('http://localhost')
+
+  it('takes a FormData for a body that is a file or holds one, and nothing else', () => {
+    typeOnly(() => {
+      const avatar = new File(['jpeg'], 'rex.jpg', { type: 'image/jpeg' })
+
+      void client.uploads.profile.post({ body: new FormData() })
+      void client.uploads.album.post({ body: new FormData() })
+      void client.uploads.single.post({ body: new FormData() })
+      void client.uploads.batch.post({ body: new FormData() })
+      // @ts-expect-error -- an object goes as JSON, where a file arrives as {}
+      void client.uploads.profile.post({ body: { caption: 'Rex', avatar } })
+      // @ts-expect-error -- the server reads a file body as a multipart form, so a bare file is not one
+      void client.uploads.single.post({ body: avatar })
+    })
+  })
+
+  it('takes the declared object, or a URLSearchParams sent as a form, for a plain-object body', () => {
+    typeOnly(() => {
+      void client.forms.adoptions.post({ body: { name: 'Rex', age: 3 } })
+      void client.forms.adoptions.post({ body: new URLSearchParams({ name: 'Rex', age: '3' }) })
+      // @ts-expect-error -- the server reads no multipart form into a declared body
+      void client.forms.adoptions.post({ body: new FormData() })
+      // @ts-expect-error -- the schema says age is an integer
+      void client.forms.adoptions.post({ body: { name: 'Rex', age: 'three' } })
+    })
+  })
+
+  it('keeps an array body as declared, since a form cannot carry one', () => {
+    typeOnly(() => {
+      void client.forms.litter.post({ body: [{ id: 1, name: 'Rex' }] })
+      // @ts-expect-error -- a form has no way to carry a list of objects
+      void client.forms.litter.post({ body: new URLSearchParams() })
+    })
+  })
+
+  it('reads a field typed any as no file, so the route keeps taking JSON', () => {
+    typeOnly(() => {
+      void client.forms.notes.post({ body: { meta: { tags: ['a'] } } })
+    })
+  })
+
+  it('leaves an undeclared body optional, and takes anything for it', () => {
+    typeOnly(() => {
+      expectTypeOf(client.forms.anything.post).toBeCallableWith()
+      void client.forms.anything.post({ body: new Blob(['x']) })
+      void client.forms.anything.post({ body: { any: 'thing' } })
+    })
+  })
+
+  it('applies the same rules through the escape hatch', () => {
+    typeOnly(() => {
+      void client.$request('POST', '/uploads/profile', { body: new FormData() })
+      void client.$request('POST', '/forms/adoptions', { body: new URLSearchParams({ name: 'Rex', age: '3' }) })
+      // @ts-expect-error -- an object goes as JSON, where a file arrives as {}
+      void client.$request('POST', '/uploads/profile', { body: { caption: 'Rex' } })
+    })
+  })
+})
+
 describe('the escape hatch', () => {
   it('addresses a route by method and path, params included', () => {
     typeOnly(async () => {
