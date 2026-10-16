@@ -80,10 +80,23 @@ export function brewer<T>(target: string | Fetchable, options: BrewOptions = {})
   return node(IN_PROCESS_ORIGIN, resolved, [], undefined) as BrewClient<T>
 }
 
-// A node of the proxy: the segments walked so far, and the method once a verb has been read. Built over a function
-// target so one object can be both called — to supply a parameter, or to send the request — and indexed.
+// A node of the proxy: the segments walked so far, and the method once a verb has been read. Its target is the call
+// itself — to supply a parameter, or to send the request — so one object can be both called and indexed.
 function node(baseURL: string, options: BrewOptions, segments: readonly string[], method: string | undefined): unknown {
-  return new Proxy(target, {
+  const call = (init: Record<string, unknown> = {}): unknown => {
+    if (method !== undefined) {
+      return send(baseURL, options, `/${segments.join('/')}`, method, init)
+    }
+
+    // A parameter segment binds exactly one name, so the single value is unambiguous — which is what lets the
+    // runtime stay this small: it never has to know the path shape the types know.
+    const [name, value] = Object.entries(init)[0] ?? ['', '']
+    const encoded = name === '*' ? String(value) : encodeURIComponent(String(value))
+
+    return node(baseURL, options, [...segments, encoded], method)
+  }
+
+  return new Proxy(call, {
     get(_target, prop) {
       if (typeof prop !== 'string') {
         return undefined
@@ -100,19 +113,6 @@ function node(baseURL: string, options: BrewOptions, segments: readonly string[]
       }
 
       return node(baseURL, options, [...segments, prop], method)
-    },
-
-    apply(_target, _thisArg, args: unknown[]) {
-      if (method !== undefined) {
-        return send(baseURL, options, `/${segments.join('/')}`, method, (args[0] ?? {}) as RequestArgs)
-      }
-
-      // A parameter segment binds exactly one name, so the single value is unambiguous — which is what lets the
-      // runtime stay this small: it never has to know the path shape the types know.
-      const [name, value] = Object.entries((args[0] ?? {}) as Record<string, unknown>)[0] ?? ['', '']
-      const encoded = name === '*' ? String(value) : encodeURIComponent(String(value))
-
-      return node(baseURL, options, [...segments, encoded], method)
     },
   })
 }
@@ -171,14 +171,4 @@ function isRawBody(body: unknown): body is RawBody {
     body instanceof ReadableStream ||
     ArrayBuffer.isView(body)
   )
-}
-
-/**
- * The proxy's target, and never called.
- *
- * A function rather than an object so one node can be both indexed — for a static segment — and called, either to
- * supply a path parameter or to send the request. Every operation is trapped; nothing reaches this.
- */
-function target(): void {
-  return undefined
 }
