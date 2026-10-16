@@ -84,7 +84,8 @@ function appendFormValue(params: URLSearchParams, key: string, value: unknown): 
  * as `@Field()` does. A string, a `Blob` or a typed array is already encoded and passes through
  * untouched.
  *
- * @throws {@link ErrFetchyInvalidFormBody} for a flat array, or a `FormData`, which `@Multipart()` sends.
+ * @throws {@link ErrFetchyInvalidFormBody} for a flat array, a `FormData`, which `@Multipart()` sends, or a number,
+ * boolean, bigint, symbol or function, which is no form.
  */
 export const FormRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -96,7 +97,15 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
       return value.toString()
     }
 
-    if (typeof value !== 'object' || isNativeBody(value)) {
+    if (typeof value === 'string') {
+      return value
+    }
+
+    if (typeof value !== 'object') {
+      throw new ErrFetchyInvalidFormBody('value', value)
+    }
+
+    if (isNativeBody(value)) {
       if (isFormData(value)) {
         throw new ErrFetchyInvalidFormBody('form-data')
       }

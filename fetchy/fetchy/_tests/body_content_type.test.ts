@@ -10,6 +10,7 @@ import { Field } from '../decorators/params/field.js'
 import { Header } from '../decorators/params/header.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { POST } from '../decorators/verbs.js'
+import { ErrFetchyInvalidFormBody } from '../errors.js'
 import { MediaTypes } from '../media_types.js'
 import { noop } from '../noop.js'
 import type { FetchyRequest } from '../request.js'
@@ -253,5 +254,39 @@ describe('a @Body() under @FormURLEncoded()', () => {
     const request = await send(FormBodyAPI, api => api.tokenMarked({ grant_type: 'client_credentials' }))
 
     expect(request.body).toBe('marked')
+  })
+
+  // A string is the form already encoded, as a caller who built it by hand sends it.
+  it('sends a string as the encoded form it already is', async () => {
+    const request = await send(FormBodyAPI, api => api.token('grant_type=client_credentials&scope=read'))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials&scope=read')
+  })
+
+  // A form is name and value pairs, and a lone value is neither. fetch sent a number as the text `42` under the form
+  // label, and undici refused it with an error that named no fetchy API. Refused before anything is sent, the error
+  // names the value's type and the fix.
+  it.each([
+    ['a number', 42, 'number'],
+    ['a boolean', true, 'boolean'],
+    ['a bigint', 42n, 'bigint'],
+    ['a symbol', Symbol('q'), 'symbol'],
+    ['a function', () => 'q', 'function'],
+  ])('rejects %s and sends nothing', async (_kind, value, type) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(value).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      `Cannot convert the @Body() value to application/x-www-form-urlencoded: expected an object, an array of [key, value] pairs or an encoded string, got ${type}`,
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
   })
 })

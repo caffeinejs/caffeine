@@ -8,6 +8,7 @@ import {
   type Authenticator,
   Body,
   ErrFetchyHTTP,
+  ErrFetchyInvalidFormBody,
   type FetchyBuilder,
   type FetchyClient,
   type FetchyResponse,
@@ -354,6 +355,13 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
         ['application/x-www-form-urlencoded', 'grant_type=client_credentials&scope=read'],
         ['application/x-www-form-urlencoded', 'name=Ada&role=admin'],
       ])
+    })
+
+    // A lone number is not a form. fetch sent it as text and undici threw an error of its own; refused before anything
+    // is sent, it now fails the same way on both.
+    it('refuses a @Body() under @FormURLEncoded() that is not a form, and sends nothing', async () => {
+      await expect(clientOver(factory()).create(ItemsAPI).token(42)).rejects.toBeInstanceOf(ErrFetchyInvalidFormBody)
+      expect(received).toHaveLength(0)
     })
 
     // An optional body left out is no body, not the text "null" under a JSON label.

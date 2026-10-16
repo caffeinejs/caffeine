@@ -7,6 +7,7 @@ import {
   ErrFetchyFollowUpNotSent,
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
+  ErrFetchyInvalidFormBody,
   ErrFetchyInvalidMultipartBody,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingPathArgument,
@@ -48,6 +49,7 @@ describe('errors', () => {
       () => new ErrFetchyInvalidMultipartBody({ pages: 12 }, 'meta'),
       'ERR_FETCHY_INVALID_MULTIPART_BODY',
     ],
+    ['ErrFetchyInvalidFormBody', () => new ErrFetchyInvalidFormBody('value', 42), 'ERR_FETCHY_INVALID_FORM_BODY'],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
 
