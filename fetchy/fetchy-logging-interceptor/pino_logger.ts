@@ -33,8 +33,17 @@ export class PinoLogger implements Logger {
     this.pino.info(message)
   }
 
-  error(message: string): void {
-    this.pino.error(message)
+  /**
+   * Logs `error`, when given, under `err`, where pino's standard serializer writes its type, message, stack, cause
+   * and own properties, such as `code`.
+   */
+  error(message: string, error?: Error): void {
+    if (error === undefined) {
+      this.pino.error(message)
+      return
+    }
+
+    this.pino.error({ err: error }, message)
   }
 }
 

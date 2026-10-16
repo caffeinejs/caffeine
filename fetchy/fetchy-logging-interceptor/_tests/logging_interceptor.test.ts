@@ -312,6 +312,55 @@ describe('PinoLogger', () => {
 
     expect(lines).toEqual([expect.objectContaining({ level: 30, msg: '--> GET http://example.test/users' })])
   })
+
+  // A failure's type, code, stack and cause are what a reader of the log acts on. The error used to be dropped, so
+  // none of them reached the log; under `err`, pino's standard serializer writes them all.
+  it('writes the error it is given, with its type, code, stack and cause', () => {
+    const { lines, destination } = sink()
+    const logger = new PinoLogger(pino({ level: 'info' }, destination))
+    const error = Object.assign(new Error('other side closed', { cause: new Error('socket hang up') }), {
+      code: 'UND_ERR_SOCKET',
+    })
+
+    logger.error('<-- HTTP Failed: other side closed', error)
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({
+      level: 50,
+      msg: '<-- HTTP Failed: other side closed',
+      err: { type: 'Error', code: 'UND_ERR_SOCKET' },
+    })
+    expect(lines[0].err?.message).toContain('other side closed')
+    expect(lines[0].err?.message).toContain('socket hang up')
+    expect(lines[0].err?.stack).toContain('other side closed')
+    expect(lines[0].err?.stack).toContain('socket hang up')
+  })
+
+  it('writes no error for a line logged without one', () => {
+    const { lines, destination } = sink()
+
+    new PinoLogger(pino({ level: 'info' }, destination)).error('Took: 3ms')
+
+    expect(lines).toEqual([expect.objectContaining({ level: 50, msg: 'Took: 3ms' })])
+    expect(lines[0]).not.toHaveProperty('err')
+  })
+
+  // What the issue saw: a call that failed was logged by its message alone.
+  it('logs the error that failed a call through LoggingInterceptor', async () => {
+    const { lines, destination } = sink()
+    const interceptor = new LoggingInterceptor({ logger: new PinoLogger(pino({ level: 'info' }, destination)) })
+    const failure = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+    const chain = fakeChain(new FetchyRequest('GET', ORIGIN, '/users'), () => Promise.reject(failure))
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(failure)
+
+    const failed = lines.find(line => line.msg === '<-- HTTP Failed: other side closed')
+    expect(failed).toMatchObject({
+      level: 50,
+      err: { type: 'Error', message: 'other side closed', code: 'UND_ERR_SOCKET' },
+    })
+    expect(failed?.err?.stack).toContain('other side closed')
+  })
 })
 
 describe('ConsoleLogger', () => {
