@@ -1,6 +1,6 @@
 import pino, { type Logger as PinoInstance, type LoggerOptions } from 'pino'
 
-import type { Logger } from './logger.js'
+import type { Logger } from '../logger.js'
 
 /**
  * A {@link Logger} backed by pino.

@@ -3,10 +3,11 @@ import pino from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from '../errors.js'
-import { ConsoleLogger, PinoLogger } from '../index.js'
+import { ConsoleLogger } from '../index.js'
 import { Level } from '../level.js'
 import type { Logger } from '../logger.js'
 import { LoggingInterceptor } from '../logging_interceptor.js'
+import { PinoLogger } from '../pino/index.js'
 import { fakeChain } from './fake_chain.js'
 
 class SpyLogger implements Logger {
@@ -44,13 +45,20 @@ function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response 
 }
 
 describe('LoggingInterceptor', () => {
-  it('LoggingInterceptor.DEFAULT logs without throwing and passes the response through', async () => {
+  // Given no logger of its own, an interceptor writes to the console, which needs nothing installed and starts nothing.
+  it('LoggingInterceptor.DEFAULT writes through the console and passes the response through', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const request = new FetchyRequest('GET', ORIGIN, '/users/1')
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
-    const response = await LoggingInterceptor.DEFAULT.intercept(chain)
+    try {
+      const response = await LoggingInterceptor.DEFAULT.intercept(chain)
 
-    expect(response.status).toBe(200)
+      expect(response.status).toBe(200)
+      expect(info).toHaveBeenCalledWith('--> GET http://example.test/users/1')
+    } finally {
+      info.mockRestore()
+    }
   })
 
   it('logs request/response headers and body at Level.BODY', async () => {

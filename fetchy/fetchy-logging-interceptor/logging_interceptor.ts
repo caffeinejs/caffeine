@@ -7,14 +7,18 @@ import {
   MediaTypes,
 } from '@caffeinejs/fetchy'
 
+import { ConsoleLogger } from './console_logger.js'
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from './errors.js'
 import { Level } from './level.js'
 import type { Logger } from './logger.js'
-import { PinoLogger } from './pino_logger.js'
 
 export interface LoggingInterceptorInit {
   level?: Level
   headersToRedact?: Set<string>
+  /**
+   * Where the lines go: a {@link ConsoleLogger} unless given. `PinoLogger`, from
+   * `@caffeinejs/fetchy-logging-interceptor/pino`, writes them through pino.
+   */
   logger?: Logger
 }
 
@@ -42,7 +46,7 @@ export class LoggingInterceptor implements Interceptor {
   constructor(init: LoggingInterceptorInit = {}) {
     this.level = init.level ?? Level.BASIC
     this.headersToRedact = init.headersToRedact ?? new Set()
-    this.logger = init.logger ?? new PinoLogger(PinoLogger.DEFAULT_OPTIONS)
+    this.logger = init.logger ?? new ConsoleLogger()
   }
 
   setLevel(level: Level): void {
