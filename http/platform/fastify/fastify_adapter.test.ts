@@ -1,0 +1,260 @@
+import { Scopes, Injectable, Lifetime } from '@caffeinejs/di'
+import type { FastifyInstance } from 'fastify'
+import { describe, it, expect } from 'vitest'
+
+import { $p } from '../../core/routing/picker.js'
+import { Controller, Get, Method, Router, Args } from '../../index.js'
+import { FastifyContext, createWebApplication } from './index.js'
+
+describe('Fastify Adapter', () => {
+  // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under
+  // parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without making it
+  // flaky.
+  it('binds a real listener and serves it over the network', { retry: 2 }, async () => {
+    let seen: FastifyInstance | undefined
+    const app = createWebApplication().serverCallback((_context, server) => {
+      seen = server
+      server.get('/', () => ({ ok: true }))
+    })
+    await app.run()
+
+    try {
+      expect(app.instance).toBe(seen)
+      expect(app.address!.port).toBeGreaterThan(0)
+
+      // Native fetch, not app.fetch(): the point is that traffic reaches the process through a socket.
+      const res = await fetch(`${app.address!.origin}/`)
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true })
+    } finally {
+      await app.close()
+    }
+  })
+
+  it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
+    const app = createWebApplication().serverCallback((_context, server) => {
+      server.get('/', () => ({ ok: true }))
+    })
+    await app.bootstrap()
+
+    const result = await app.fetch('/')
+
+    expect(await result.json()).toEqual({ ok: true })
+  })
+
+  describe('when a controller is decorated with @Get', () => {
+    it('should register the route in the fastify instance', async () => {
+      @Controller('/users')
+      class TestController {
+        @Get('/:id')
+        @Args([$p.param('id'), $p.query('filter'), $p.header('x-test')])
+        async get(id: string, filter: string, test: string) {
+          return { ok: true, id, filter, test }
+        }
+      }
+
+      void [TestController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true, id: '1', filter: 'test', test: 'test' })
+    })
+  })
+
+  describe('Parameter Pickers', () => {
+    it('injects parameters into the handler based on the configured pickers', async () => {
+      @Controller('/test')
+      class PickersController {
+        @Get('/pickers')
+        @Args([$p.url(), $p.path(), $p.signal(), $p.port(), $p.address()])
+        get(u: string, p: string, sig: AbortSignal, po: number | null, addr: string | undefined) {
+          return {
+            url: u,
+            path: p,
+            hasSignal: sig instanceof AbortSignal,
+            port: po,
+            address: addr,
+          }
+        }
+      }
+
+      void [PickersController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const res = await app.fetch('/test/pickers?foo=bar')
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({
+        url: '/test/pickers?foo=bar',
+        path: '/test/pickers',
+        hasSignal: true,
+        port: expect.any(Number),
+        address: expect.any(String),
+      })
+    })
+
+    it('resolves an async custom picker before calling the handler', async () => {
+      @Controller('/async-pick')
+      class AsyncPickController {
+        @Get('/value')
+        @Args([$p.pick(req => Promise.resolve((req as { url: string }).url.toUpperCase()), { async: true })])
+        get(uppercased: string) {
+          return { value: uppercased }
+        }
+      }
+
+      void [AsyncPickController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const res = await app.fetch('/async-pick/value')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
+    })
+
+    it('resolves mixed sync and async pickers on the same route', async () => {
+      @Controller('/mixed-pick')
+      class MixedPickController {
+        @Get('/:id')
+        @Args([
+          $p.param('id'),
+          $p.pick(req => Promise.resolve(`async:${(req as { url: string }).url}`), { async: true }),
+        ])
+        get(id: string, asyncVal: string) {
+          return { id, asyncVal }
+        }
+      }
+
+      void [MixedPickController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const res = await app.fetch('/mixed-pick/42')
+      expect(res.status).toBe(200)
+      expect(await res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
+    })
+
+    it('injects the HTTP method string into the handler', async () => {
+      const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'] as const
+
+      @Controller('/method-test')
+      class MethodController {
+        @Method([...methods])
+        @Get('/action')
+        @Args([$p.method()])
+        action(m: string) {
+          return { method: m }
+        }
+      }
+
+      void [MethodController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      for (const m of methods) {
+        const res = await app.fetch('/method-test/action', { method: m })
+        expect(await res.json()).toEqual({ method: m })
+      }
+    })
+  })
+
+  describe('Mixing Scopes', () => {
+    it('creates a new controller instance per request when request-scoped', async () => {
+      let instanceCounter = 0
+
+      @Lifetime(Scopes.REQUEST)
+      @Controller('/req-ctrl')
+      class RequestScopedController {
+        readonly id = ++instanceCounter
+
+        @Get('/id')
+        get() {
+          return { id: this.id }
+        }
+      }
+
+      void [RequestScopedController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const r1 = await app.fetch('/req-ctrl/id')
+      const r2 = await app.fetch('/req-ctrl/id')
+
+      expect(r1.status).toBe(200)
+      expect(r2.status).toBe(200)
+      expect(await r1.json()).toEqual({ id: 1 })
+      expect(await r2.json()).toEqual({ id: 2 })
+    })
+
+    it('gives a fresh request-scoped service instance per request when injected into a transient controller', async () => {
+      let serviceCounter = 0
+
+      @Lifetime(Scopes.REQUEST)
+      @Injectable()
+      class RequestScopedService {
+        readonly id = ++serviceCounter
+      }
+
+      @Lifetime(Scopes.TRANSIENT)
+      @Controller('/transient-ctrl', [RequestScopedService])
+      class TransientController {
+        constructor(private readonly svc: RequestScopedService) {}
+
+        @Get('/svc-id')
+        get() {
+          return { id: this.svc.id }
+        }
+      }
+
+      void [TransientController]
+
+      const app = createWebApplication()
+      await app.bootstrap()
+
+      const r1 = await app.fetch('/transient-ctrl/svc-id')
+      const r2 = await app.fetch('/transient-ctrl/svc-id')
+
+      expect(r1.status).toBe(200)
+      expect(r2.status).toBe(200)
+      expect(await r1.json()).toEqual({ id: 1 })
+      expect(await r2.json()).toEqual({ id: 2 })
+    })
+
+    // The request context is bound request-scoped: resolved from the container, it is the very one the handler is
+    // handed, and each of two requests in flight at once gets its own, across an await.
+    it('resolves the request context from the container as the one the handler got', async () => {
+      const router = new Router('/ctx-di')
+      router
+        .get('/')
+        .inject({ injected: FastifyContext })
+        .handler(async (ctx, deps) => {
+          const first = deps.injected
+          await new Promise(resolve => setTimeout(resolve, 5))
+          return { same: first === ctx && deps.injected === first, probe: first.req.header('x-probe') }
+        })
+
+      const app = createWebApplication().mount(router)
+      await app.bootstrap()
+
+      const [a, b] = await Promise.all([
+        app.fetch('/ctx-di', { headers: { 'x-probe': 'a' } }),
+        app.fetch('/ctx-di', { headers: { 'x-probe': 'b' } }),
+      ])
+      expect(await a.json()).toEqual({ same: true, probe: 'a' })
+      expect(await b.json()).toEqual({ same: true, probe: 'b' })
+
+      await app.close()
+    })
+  })
+})

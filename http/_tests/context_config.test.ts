@@ -5,7 +5,8 @@ import { InlineConfigSource } from '@caffeinejs/std/config/inline'
 import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
-import { type MiddlewareFn, Router, createWebApplication } from '../index.js'
+import { type MiddlewareFn, Router } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 const schema = $t.Object({
   catalog: $t.Object({ pageSize: $t.Number() }),

@@ -1,13 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import {
-  ErrHTTPNotFound,
-  newRouter,
-  type IContext,
-  Authentication,
-  authentication,
-  Authorization,
-} from '@caffeinejs/http'
+import { ErrHTTPNotFound, type IContext, Authentication, Authorization } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

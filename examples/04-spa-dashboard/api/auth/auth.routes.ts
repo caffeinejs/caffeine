@@ -3,9 +3,9 @@ import {
   AuthenticationTicket,
   CredentialsService,
   ErrHTTPBadRequest,
-  newRouter,
   type Principal,
 } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/fastify'
 
 /** The scheme's registered name. `addCookie(...)` with no name uses this one. */
 const SCHEME = 'Cookie'

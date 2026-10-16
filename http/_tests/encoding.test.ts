@@ -6,7 +6,8 @@ import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
-import { Encoding, encoding, Controller, Post, RouteBuilder, createWebApplication } from '../index.js'
+import { Controller, Post, RouteBuilder } from '../index.js'
+import { Encoding, encoding, createWebApplication } from '../platform/fastify/index.js'
 
 function encodingApp() {
   const plugin: FastifyPluginAsync = async instance => {

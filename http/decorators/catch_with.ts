@@ -1,4 +1,4 @@
-import type { ErrorHandlerRef } from '../error/index.js'
+import type { ErrorHandlerRef } from '../core/error/index.js'
 import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 /**

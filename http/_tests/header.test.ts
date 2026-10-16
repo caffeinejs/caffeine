@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Header, MediaType, createWebApplication } from '../index.js'
+import { Controller, Get, Header, MediaType } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('Header', () => {
   it('applies class-level header to all routes', async () => {

@@ -1,16 +1,5 @@
-import {
-  $p,
-  Args,
-  Controller,
-  Get,
-  Head,
-  Header,
-  Post,
-  Principal,
-  Status,
-  createWebApplication,
-  type IContext,
-} from '@caffeinejs/http'
+import { $p, Args, Controller, Get, Head, Header, Post, Principal, Status, type IContext } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'

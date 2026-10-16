@@ -1,7 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, Prefix, createWebApplication } from '../index.js'
+import { Controller, Get, Prefix } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * Kept in its own file: `@Controller` registers into a module-global registry that every later

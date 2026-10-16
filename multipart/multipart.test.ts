@@ -1,6 +1,7 @@
 import type { Readable } from 'node:stream'
 
-import { Controller, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
+import { Controller, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { describe, it, expect } from 'vitest'
 
 import { $multipart, multipartPlugin } from './index.js'

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication, BodyAsBuffer, BodyLimit } from '../index.js'
-import { $p } from '../routing/picker.js'
+import { $p } from '../core/routing/picker.js'
+import { Controller, Post, Args, BodyAsBuffer, BodyLimit } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('BodyAsBuffer', () => {
   it('delivers the body as a Buffer regardless of content-type', async () => {

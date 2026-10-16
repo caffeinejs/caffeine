@@ -3,17 +3,8 @@ import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Compress,
-  compress,
-  Controller,
-  Get,
-  Router,
-  RouteBuilder,
-  RouteGroupBuilder,
-  createWebApplication,
-  type CompressOptions,
-} from '../index.js'
+import { Controller, Get, Router, RouteBuilder, RouteGroupBuilder } from '../index.js'
+import { Compress, compress, createWebApplication, type CompressOptions } from '../platform/fastify/index.js'
 
 function compressApp(options: CompressOptions = {}) {
   const plugin: FastifyPluginAsync = async instance => {

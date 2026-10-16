@@ -6,12 +6,12 @@ import {
   AuthenticationTicket,
   BaseAuthenticationHandler,
   Claim,
-  createWebApplication,
   ErrHTTPNotFound,
   Identity,
   Principal,
   type IContext,
 } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import { isDocumentRequest, sendFile } from '../../index.js'
 

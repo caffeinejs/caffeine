@@ -12,7 +12,8 @@ import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
-import { ErrConfiguration, createWebApplication } from './index.js'
+import { ErrConfiguration } from './index.js'
+import { createWebApplication } from './platform/fastify/index.js'
 
 // A sentinel the feature's configurer binds into the container so a test can prove the feature rode
 // the same `bootstrap()` path as the built-in auth/authz services.

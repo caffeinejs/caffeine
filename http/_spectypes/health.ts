@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { HealthConfig } from '../health/options.js'
+import type { HealthConfig } from '../core/health/options.js'
 
 /**
  * The schema of the health configuration block, satisfying {@link HealthConfig}. Hand the node to

@@ -1,7 +1,8 @@
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
-import { Controller, Get, type WebApplication, createWebApplication } from '../index.js'
+import { Controller, Get, type WebApplication } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * What a route costs when it uses none of the features that attach hooks.

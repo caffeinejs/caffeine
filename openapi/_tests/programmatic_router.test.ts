@@ -1,4 +1,5 @@
-import { Router, WebApplication, constraints, createWebApplication, version } from '@caffeinejs/http'
+import { Router, WebApplication, version } from '@caffeinejs/http'
+import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 

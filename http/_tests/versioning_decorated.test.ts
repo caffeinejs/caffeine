@@ -1,7 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, Version, constraints, createWebApplication } from '../index.js'
+import { Controller, Get, Version } from '../index.js'
+import { constraints, createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * `@Version` on a decorated controller must compile to the same Fastify `version` constraint a programmatic

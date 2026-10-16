@@ -7,10 +7,9 @@ import {
   type IContext,
   Identity,
   Principal,
-  newRouter,
   Authentication,
-  authentication,
 } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

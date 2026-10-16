@@ -1,7 +1,8 @@
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, ErrHTTPNotFound, Get, createWebApplication, type ActionResult } from '../index.js'
+import { Controller, ErrHTTPNotFound, Get, type ActionResult } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 @Controller('/pets')
 class PetsController {

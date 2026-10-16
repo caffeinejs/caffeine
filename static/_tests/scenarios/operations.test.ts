@@ -1,14 +1,7 @@
 import { gunzipSync } from 'node:zlib'
 
-import {
-  authenticationExempt,
-  newRouter,
-  type WebApplication,
-  Authentication,
-  authentication,
-  Authorization,
-  healthProbes,
-} from '@caffeinejs/http'
+import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
+import { authenticationExempt, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import fastifyCompress from '@fastify/compress'
 import fastifyCors from '@fastify/cors'
 import fastifyStatic from '@fastify/static'

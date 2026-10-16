@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { CookieOptions } from '../cookie/cookie.js'
+import type { CookieOptions } from '../core/cookie/cookie.js'
 
 /**
  * The schema of the cookie configuration block, satisfying {@link CookieOptions}. Hand the node to

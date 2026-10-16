@@ -1,4 +1,5 @@
-import { Router, blend, createWebApplication, type RouteDef, type RoutesOf } from '@caffeinejs/http'
+import { Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 

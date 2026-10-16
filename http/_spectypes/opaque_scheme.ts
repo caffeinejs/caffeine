@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { OpaqueSchemeConfig } from '../security/auth/config.js'
+import type { OpaqueSchemeConfig } from '../core/security/auth/config.js'
 
 /** An opaque-token scheme's block. */
 export const OpaqueSchemeConfigSchema = $t.Object({

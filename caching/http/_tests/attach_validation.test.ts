@@ -1,13 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import {
-  ErrConfiguration,
-  Router,
-  constraint,
-  constraints,
-  createWebApplication,
-  version,
-  type ConstraintStrategy,
-} from '@caffeinejs/http'
+import { ErrConfiguration, Router, constraint, version, type ConstraintStrategy } from '@caffeinejs/http'
+import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'

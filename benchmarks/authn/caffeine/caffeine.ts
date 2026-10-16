@@ -1,14 +1,5 @@
-import {
-  Authorize,
-  Controller,
-  Get,
-  JWTService,
-  Post,
-  Status,
-  createWebApplication,
-  Authentication,
-  authentication,
-} from '@caffeinejs/http'
+import { Authorize, Controller, Get, JWTService, Post, Status, Authentication } from '@caffeinejs/http'
+import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
 

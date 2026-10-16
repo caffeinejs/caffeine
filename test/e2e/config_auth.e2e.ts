@@ -1,4 +1,5 @@
-import { newRouter, Authentication, authentication } from '@caffeinejs/http'
+import { Authentication } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { newConfiguration } from '@caffeinejs/std'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'
 import { $t } from '@caffeinejs/std/schema'

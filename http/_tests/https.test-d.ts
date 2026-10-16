@@ -4,7 +4,8 @@ import { Server as HTTPSServer } from 'node:https'
 import type { FastifyInstance } from 'fastify'
 import { expectTypeOf } from 'vitest'
 
-import { createWebApplication, type IContext } from '../index.js'
+import { type IContext } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * What `.server(...)` accepts for TLS and HTTP/2, and what the instance is typed as once it is built. The server

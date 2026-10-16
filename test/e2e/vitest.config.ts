@@ -26,7 +26,8 @@ export default defineConfig({
   oxc: false,
   resolve: {
     alias: {
-      // Test the working-tree source, not a built dist.
+      // Test the working-tree source, not a built dist. A string alias matches by prefix, so the subpath goes first.
+      '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
       '@caffeinejs/distlock/backend/redis': fileURLToPath(
         new URL('../../distlock/backend/redis/index.ts', import.meta.url),

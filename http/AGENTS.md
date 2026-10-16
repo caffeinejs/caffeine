@@ -6,6 +6,21 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - An `ErrHTTP` message is the response body a client reads: never give one, or a subclass, solutions or a
   reference.
 
+## Layout
+
+- `http/` is the base: the application, the adapter contract, the request context, servers, plugins and
+  `decorators/`. `core/<dir>/` holds what runs on any adapter: routing, middleware, errors and every built-in
+  feature. `platform/fastify/` holds the Fastify adapter and each directory's Fastify half, at the same path.
+- Nothing outside `platform/` imports `fastify`, `fastify-plugin`, `@fastify/*` or `platform/`, directly or through
+  another module; a test may. The `http/**` override in `.oxlintrc.json` refuses the direct imports. Root and core
+  may import each other.
+- A feature's builder, options, keys and checks live in `core/`, its plugin and hooks in `platform/fastify/`, so
+  another adapter re-implements the platform half alone.
+- Subpaths drop `core/` and `platform/`: `@caffeinejs/http/cookie`, `@caffeinejs/http/fastify`. The bare entry
+  exports the base and every core directory; a Fastify-side name comes from `@caffeinejs/http/fastify` alone.
+- The error-handling and cookie features bind their settings (`core/error/keys.ts`, `core/cookie/keys.ts`); the
+  Fastify adapter builds both head slots from them, on every server it builds.
+
 ## Plugins
 
 - Hand a `@fastify/*` plugin back with its options, `[plugin, options]`, unwrapped; a wrapper with its own body
@@ -17,7 +32,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A plugin's per-request setting is a Fastify decoration read off `request.server`, as `@caffeinejs/html` does.
 - A factory may return an `HTTPPlugin` (`plugin.ts`), on `.with(...)`, `l.with(...)`, `router.with(...)` or
   `@Use(...)`. The adapter never sees one: a server's register in `ServerSet.setup`, in their slot, before
-  `adapter.setup`; a router's and a controller's register in `ScopedPlugins` (`routing/programmatic/`), before
+  `adapter.setup`; a router's and a controller's register in `ScopedPlugins` (`core/routing/programmatic/`), before
   routing is built. `HTTPPluginFactory` stays Fastify-only; the plugin-taking sites widen to `| HTTPPlugin<T>`.
 - `context.app` is a `PluginSlot` (`plugin_slot.ts`), open only inside `during(...)`, which closes in `finally`.
   The application-level context carries a closed one (`closedApplicationOps`), so a middleware factory, a server
@@ -32,15 +47,15 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   router state, so one router mounted into two applications starts from what it declared in both. A router's or a
   controller's middleware is resolved once, keyed by its state or class, and installed in each group context after
   that scope's plugins, its relative paths rebased under the group's `RouteGroupScope.path` (`rebaseMiddlewares`,
-  `middleware/fastify.ts`), which refuses a wildcard or an optional parameter in the base.
+  `platform/fastify/middleware/fastify.ts`), which refuses a wildcard or an optional parameter in the base.
 - A callback-style Fastify plugin body calling a kept `context.app` throws where avvio does not catch; a plugin body
   adds a group with `$route`.
 
 ## Cookies
 
-- `http/cookie/` is the cookie implementation. Its core (`signer.ts`, `options.ts`, `rules.ts`, `_serialize.ts`)
+- `http/core/cookie/` is the cookie implementation (`signer.ts`, `options.ts`, `rules.ts`, `serialize.ts`). It
   imports nothing from Fastify, `node:crypto` or `Buffer`: signing is Web Crypto, so `ctx.req.signedCookie()` is
-  async. `plugin.ts` is the glue, built once per server by the cookie head slot.
+  async. `platform/fastify/cookie/plugin.ts` is the glue, built once per server by the cookie head slot.
 - Nothing here reads `request.cookies` or calls `reply.setCookie`/`clearCookie`. Cookies go through `ctx.req.cookie()`
   and `ctx.cookie()`, or `request.httpContext` from a raw hook. An application may register `@fastify/cookie` for an
   ecosystem plugin; the two coexist.
@@ -52,14 +67,14 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - The authentication schemes write every attribute of their cookies, an unset one as `undefined`, so the server's
   `parseOptions` defaults never reach them; they pin `signed: false`. Their values keep the server's `encode`: every
   read decodes with the server's `decode`, so clearing one without the other breaks sign-in.
-- `respond()` (`error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send that died writing
-  its cookies left `ctx.sent` true with nothing in flight.
+- `respond()` (`platform/fastify/error/plugin.ts`) asks `cookieFlushFailed(reply)` before trusting `ctx.sent`: a send
+  that died writing its cookies left `ctx.sent` true with nothing in flight.
 
 ## CSRF
 
-- `http/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
-  `origin.ts` is the check, pure, and `plugin.ts` the only file that knows Fastify; another adapter re-implements
-  `plugin.ts` alone.
+- `http/core/csrf/` is cross-origin protection by Fetch Metadata, and nothing else: no token, no cookie, no secret.
+  `origin.ts` is the check, pure, and `platform/fastify/csrf/plugin.ts` the only file that knows Fastify; another
+  adapter re-implements that file alone.
 - `checkOrigin` compares an `Origin` with `ctx.req.host` and `ctx.req.protocol`, so `trustProxy` governs what a
   proxy may say; never read `X-Forwarded-*` directly. `same-site` and `Origin: null` are refused; a request carrying
   neither header passes as non-browser traffic, as Go's `CrossOriginProtection` and ASP.NET Core's
@@ -105,8 +120,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `$caffeine` is optional (a 404 has none); `$caffeine.compiled`, never `$caffeine` itself, tells a compiled
   route from a raw one; `$caffeine.auth` is a raw route's policy slot, with no helper yet.
 - `isNavigation` (`navigation.ts`) alone reads `Sec-Fetch-Mode`, `Sec-Fetch-Dest` and `Accept` for that question, so
-  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree. `csrf/origin.ts` alone reads
-  `Sec-Fetch-Site` and `Origin`.
+  `shouldRedirectChallenge` and `@caffeinejs/static`'s `isDocumentRequest` agree. `core/csrf/origin.ts` alone
+  reads `Sec-Fetch-Site` and `Origin`.
 - Several schemes on one route each append `WWW-Authenticate` with `ctx.appendHeader`, never `ctx.header`.
 - A catch-all is the application's: `GET /*` on its own router, marked `detail('http', { internal: true })`,
   throwing `ErrHTTPNotFound` ([`../ai/docs/spa.md`](../ai/docs/spa.md)).
@@ -117,12 +132,12 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - The `healthProbes()` plugin resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
   non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
-- `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `error/common.ts`.
+- `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `core/error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
-- `protocolOf(request)` (`protocol.ts`) is the only reader of Fastify's `request.protocol`, which carries a trusted
-  proxy's `X-Forwarded-Proto` as written (`HTTPS`) and is `undefined` without a socket; it answers lower-case, `''`
-  when unknown. `ctx.req.protocol`, the cookie writer, the CSRF check and the middleware bridge all call it, and
-  need no request context to do so.
+- `protocolOf(request)` (`platform/fastify/protocol.ts`) is the only reader of Fastify's `request.protocol`, which
+  carries a trusted proxy's `X-Forwarded-Proto` as written (`HTTPS`) and is `undefined` without a socket; it answers
+  lower-case, `''` when unknown. `ctx.req.protocol`, the cookie writer, the CSRF check and the middleware bridge all
+  call it, and need no request context to do so.
 - The adapter applies the base path in `rewriteUrl`; never prefix at registration or rewrite `url` in `onRoute`.
   Only `ctx.redirect(...)`, `AuthenticationProperties.redirectURI` and the `returnTo` query resolve `~/`
   (`resolveAppURL`); nothing else is rewritten.
@@ -150,7 +165,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `IServer` (`server.ts`) is a server as its callers see it: `instance`, `address` and `fetch`, never a lifecycle
   member, and no `name`: `Application.name` is the application's, and a listener's name is its key in
   `app.listeners`. `WebApplication` implements it for its own server; `IAdapterServer` extends it with `run`,
-  `teardown` and `forceTeardown`. `app.listeners` hands out a view per listener (`listener/servers.ts`) delegating
+  `teardown` and `forceTeardown`. `app.listeners` hands out a view per listener (`core/listener/servers.ts`) delegating
   to its `IAdapterServer`, never the server cast to `IServer`, so only `ServerSet` runs or tears one down.
 - Every server, the application's own included, is a `ServerDefinition` (`server_definition.ts`) built by one path,
   `ServerSet` (`servers.ts`), through `setup(input)`. `WebApplication` fills its own; `Listener(...)` binds one
@@ -165,9 +180,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `IRouteGroup.boundTo` is metadata, stamped from the labels. Nothing routes by it.
 - A router binds through `binding.ts`, with `bindTo` or `@BindTo`. A plugin or a middleware reaches a listener
   only through its own `l.with(...)`, `l.use(...)` or `l.useFn(...)`. Only `WebApplication` and the package
-  barrel import `listener/`.
-- Each server reads `GlobalErrorHandlerRef` right after its own root loop. The servers are built one after another,
-  so no server reads the ref another server wrote.
+  barrel import `core/listener/`.
+- Each server's `GlobalErrorHandlerRef` is its own: the adapter builds one per server, hands it to the error-handling
+  plugin it installs first, and reads it right after that server's root loop.
 - A listener has no gate unless its own `l.with(...)` registers one; a gate covers only the server it was
   registered on. `OIDCRoutesRef.claimed` is shared, so the OIDC routes go to the first gate to install, and the
   application's own server is built first.
@@ -176,22 +191,22 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Routes
 
-- Outside the `routing/index.ts` barrel, nothing in `routing/` imports `routing/fastify/`. Do not reintroduce
-  `Router` as the compiled shape (`IRouteGroup`).
+- Nothing in `core/routing/` imports `platform/`: registering a compiled group with Fastify is
+  `platform/fastify/routing/`'s. Do not reintroduce `Router` as the compiled shape (`IRouteGroup`).
 - Keep the verb overloads' order (schema before handler) and the `.inject()` spec overload first; inference
   depends on it. The inline forms call `RouteChain`; do not give them an options argument.
-- Write a route-level feature as a `RouteExtension` (`routing/extension.ts`); the decorator calls it, and a router
+- Write a route-level feature as a `RouteExtension` (`core/routing/extension.ts`); the decorator calls it, and a router
   or a route chain applies it with `.extend(...)`. `.with(...)` on a router registers plugins.
   `flatten.ts` overwrites `path`, `method`, `parameters` and the handler, so an extension leaves them alone.
 - `addRouteHook` replaces a hook slot's array and never mutates it, since Fastify shares it with a GET route's
   HEAD twin; a `RouteExtension` writing plain route config comes first.
-- Both raw-body parsers are handed the route's `bodyLimit`, but Fastify enforces a limit only on a body it reads
-  itself. `bodyAsBuffer()` reads through `parseAs: 'buffer'`, so Fastify holds it to the limit; `bodyAsStream()`
-  holds its stream to `request.routeOptions.bodyLimit` itself (`limited()` in `routing/fastify/register.ts`). A new
-  parser reading the payload stream must do the same, and must not `pipeline` it: that destroys the request, and
-  its socket, before the 413 is sent.
-- `fst({ … })` (`routing/fastify/route_options.ts`) is the only Fastify escape hatch on a route. Do not widen it:
-  its type omits what the adapter writes, `config` included.
+- Both raw-body parsers are handed the route's `bodyLimit`, but Fastify enforces a limit only on a body it reads itself.
+  `bodyAsBuffer()` reads through `parseAs: 'buffer'`, so Fastify holds it to the limit; `bodyAsStream()` holds its
+  stream to `request.routeOptions.bodyLimit` itself (`limited()` in `platform/fastify/routing/register.ts`). A new
+  parser reading the payload stream must do the same, and must not `pipeline` it: that destroys the request, and its
+  socket, before the 413 is sent.
+- `fst({ … })` (`platform/fastify/routing/route_options.ts`) is the only Fastify escape hatch on a route. Do not widen
+  it: its type omits what the adapter writes, `config` included.
 - `compile.ts` knows nothing about constraints; `constraint()`/`@Constraint` write `route.config` under
   `kRouteConstraints` for the `constraints()` plugin to resolve. `appendVary` (`vary.ts`) is the one writer of
   `Vary`. No version argument on the inline verb form, no `enableVersioning()`, no `VERSION_NEUTRAL` catch-all,
@@ -216,10 +231,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 | what the route declared                                   | the route config                            | `ctx.routeConfig`           |
 | the application configuration                             | a snapshot on the context                   | `ctx.config`                |
 
-- Only the adapter builds a request context: `FastifyContext` once per request in `fastify_adapter.ts`, stored as
-  `request.httpContext`, and `FastifyContextRequest` lazily by its `req` getter. Code holding a raw
-  `FastifyRequest` reads `request.httpContext` (or `request.httpContext.req`); never construct either anywhere
-  else, or two contexts disagree on the same request.
+- Only the adapter builds a request context: `FastifyContext` once per request in `platform/fastify/fastify_adapter.ts`,
+  stored as `request.httpContext`, and `FastifyContextRequest` lazily by its `req` getter. Code holding a raw
+  `FastifyRequest` reads `request.httpContext` (or `request.httpContext.req`); never construct either anywhere else, or
+  two contexts disagree on the same request.
 - `ctx.state` is application space; a first-party value gets a dedicated member, as `ctx.user`, or the route
   config.
 - Do not add a Fastify-named member to `IContext` or cast one to `FastifyContext`; `ctx.platform` is the escape

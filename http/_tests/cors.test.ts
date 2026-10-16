@@ -3,17 +3,8 @@ import { type FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { describe, it, expect } from 'vitest'
 
-import {
-  CORS,
-  cors,
-  Controller,
-  Get,
-  Router,
-  RouteBuilder,
-  RouteGroupBuilder,
-  createWebApplication,
-  type CorsOptions,
-} from '../index.js'
+import { Controller, Get, Router, RouteBuilder, RouteGroupBuilder } from '../index.js'
+import { CORS, cors, createWebApplication, type CorsOptions } from '../platform/fastify/index.js'
 
 function corsApp(options: CorsOptions = {}) {
   const plugin: FastifyPluginAsync = async instance => {

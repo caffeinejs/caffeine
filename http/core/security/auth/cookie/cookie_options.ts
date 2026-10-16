@@ -1,0 +1,368 @@
+import { errMessage } from '@caffeinejs/std/framework/err'
+
+import type { IContext } from '../../../../context.js'
+import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
+import { cookieRuleViolation } from '../../../cookie/rules.js'
+import type { Principal } from '../../identity.js'
+import { ErrAuthConfiguration } from '../errors.js'
+import { sessionSecretViolation, type ChallengeMode } from '../internal/remote/config.js'
+import type { SealingSecrets } from '../internal/sealed_jwt.js'
+
+export interface CookieAuthenticationOptions {
+  /**
+   * Secret used to derive the sealing key. Required, at least 32 characters.
+   *
+   * An array rotates secrets: the first seals, and any of them opens. A session opened with an older one is sealed
+   * again with the first, keeping its expiry, so an old secret can go once the longest session has run out.
+   */
+  sessionSecret: SealingSecrets
+  /** Cookie name. Default `'caf.session'`. */
+  cookieName?: string
+  /**
+   * Enable durable, server-side-revocable remember-me (series + token). Requires a
+   * `RememberMeTokenStore` and a `UserProvider` bound to the container. When off (default),
+   * remember-me falls back to a persistent session cookie that cannot be revoked before expiry.
+   */
+  rememberMe?: boolean
+  /** Remember-me cookie name (durable mode). Default `'caf.remember'`. */
+  rememberMeCookieName?: string
+  /**
+   * How long a durable remember-me credential may live from the sign-in that issued it, in seconds, however often
+   * it is used. Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
+   */
+  rememberMeAbsoluteMaxAge?: number
+  /**
+   * How long a just-rotated remember-me token stays acceptable, in seconds. Default 60.
+   *
+   * Rotation is single-use, so a superseded token normally means theft. But a browser fires requests in
+   * parallel and every one of them carries the cookie as it stood when the batch began, so without a
+   * window the first response to rotate turns its own siblings into apparent thefts. The window bounds
+   * how long a spent token remains useful to someone who captured it; `0` disables the tolerance and
+   * restores strict single-use.
+   */
+  rememberMeRotationGraceSeconds?: number
+  /**
+   * Path to redirect to on challenge for browser apps. When unset, challenge returns a bare 401.
+   *
+   * Written as the application sees it: the request's `ctx.req.basePath` is put in front of a path on this
+   * origin. An absolute URL is used as it is. A path written with `~/` is refused, since the base goes in front
+   * already.
+   */
+  loginPath?: string
+  /**
+   * Whether a challenge redirects to {@link loginPath} or answers 401. Default `'auto'`.
+   *
+   * `auto` redirects a browser navigation and answers 401 to anything else, so a `fetch` gets a status it
+   * can act on instead of the login page's HTML with a 200. See {@link ChallengeMode}.
+   */
+  challengeMode?: ChallengeMode
+  /**
+   * Where to send an authenticated caller whose authorization failed. When unset, `forbid` answers 403.
+   *
+   * Separate from {@link loginPath} on purpose: sending a signed-in user back to the login page to fix a
+   * permissions problem produces a loop in which signing in again never helps.
+   *
+   * Written as the application sees it, like {@link loginPath}.
+   */
+  accessDeniedPath?: string
+  /** Query parameter carrying the post-login destination on the {@link loginPath} redirect. Default `'returnUrl'`. */
+  returnURLParameter?: string
+  /**
+   * Decides, per request, whether a session carried by a valid cookie is still acceptable.
+   *
+   * Return the principal (or a refreshed replacement) to accept, `null` to reject and clear the cookie.
+   * The sealed cookie is self-contained, so without this nothing that happens server-side — a password
+   * change, a revoked account, a role removal — reaches a session already issued until it expires on its
+   * own.
+   *
+   * It runs on every authenticated request, so it should be cheap: a version/stamp comparison, not a full
+   * user load.
+   */
+  validatePrincipal?: (ctx: IContext, principal: Principal) => Promise<Principal | null> | Principal | null
+  /**
+   * Overrides the default 403 on an authorization failure. Takes precedence over {@link accessDeniedPath}.
+   *
+   * Handed the URL a navigation would have been sent to — {@link accessDeniedPath} with the base path in front —
+   * or `undefined` when none is configured.
+   */
+  onForbid?: (ctx: IContext, accessDeniedURL: string | undefined) => Promise<void> | void
+  /**
+   * Told about a session cookie that was presented and could not be read — expired, tampered with, sealed under
+   * another secret — and about a remember-me credential that was refused. The request goes on unauthenticated
+   * either way; this is what makes it observable.
+   */
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  /** Absolute session lifetime, in seconds, for a non-persistent (session) cookie. Default 8 hours. */
+  maxAge?: number
+  /**
+   * How long remember-me lasts, in seconds. Default 30 days.
+   *
+   * Without the durable store it is the lifetime of the persistent session cookie, fixed at sign-in. With it, it is
+   * how long the credential stays good after it was last used: every use pushes it back, so it is not a limit on
+   * the whole — {@link rememberMeAbsoluteMaxAge} is.
+   */
+  rememberMeMaxAge?: number
+  /** `Secure` cookie flag. Default `true`. */
+  secure?: boolean
+  /** `SameSite` cookie flag. Default `'lax'`. */
+  sameSite?: CookieSameSite
+  /**
+   * Cookie `Path`. Default: the application's base path as the request came in, or `/` without one, so applications
+   * sharing an origin under different bases keep their sessions apart. A `__Host-` cookie name keeps `/`, the only
+   * path a browser accepts it at.
+   *
+   * The scope follows the request that wrote the cookie, as the redirects do. A session signed in under the base is
+   * not sent to a request that came without it, and one signed in on a request without the base is written at `/`,
+   * which every path on the host receives. Setting it pins one scope for both: `'/'` shares one session across them.
+   */
+  path?: string
+  /** Cookie `Domain`. Unset by default, which keeps the cookie to the host that set it; a `__Host-` name refuses one. */
+  domain?: string
+  /** Keeps the cookies apart per top-level site (CHIPS). Requires {@link secure}. */
+  partitioned?: boolean
+  /** Cookie `Priority`. */
+  priority?: CookiePriority
+  /** Claim type treated as the role claim on the rebuilt identity. Default `'roles'`. */
+  roleClaimType?: string
+  /**
+   * Overrides the challenge.
+   *
+   * Handed the URL a navigation would have been sent to — {@link loginPath} with the base path in front and the
+   * return URL on it — or `undefined` when no `loginPath` is configured.
+   */
+  onChallenge?: (ctx: IContext, loginURL: string | undefined) => Promise<void> | void
+}
+
+const EIGHT_HOURS = 8 * 60 * 60
+const THIRTY_DAYS = 30 * 24 * 60 * 60
+
+export class CookieAuthenticationOptionsBuilder {
+  readonly #options: Partial<CookieAuthenticationOptions> = {}
+
+  /** An array rotates secrets: the first seals, and any of them opens. See the option docs. */
+  sessionSecret(secret: SealingSecrets): this {
+    this.#options.sessionSecret = secret
+    return this
+  }
+
+  cookieName(name: string): this {
+    this.#options.cookieName = name
+    return this
+  }
+
+  rememberMe(enable = true): this {
+    this.#options.rememberMe = enable
+    return this
+  }
+
+  rememberMeCookieName(name: string): this {
+    this.#options.rememberMeCookieName = name
+    return this
+  }
+
+  /** Caps how long a remember-me credential lives from sign-in, however often it is used. Unset: no limit. */
+  rememberMeAbsoluteMaxAge(seconds: number): this {
+    this.#options.rememberMeAbsoluteMaxAge = seconds
+    return this
+  }
+
+  /** How long a just-rotated remember-me token stays acceptable. Default 60s; `0` is strict single-use. */
+  rememberMeRotationGraceSeconds(seconds: number): this {
+    this.#options.rememberMeRotationGraceSeconds = seconds
+    return this
+  }
+
+  /** How a challenge is delivered: redirect a navigation, answer 401 to anything else. Default `'auto'`. */
+  challengeMode(mode: ChallengeMode): this {
+    this.#options.challengeMode = mode
+    return this
+  }
+
+  loginPath(path: string): this {
+    this.#options.loginPath = path
+    return this
+  }
+
+  /** Where an authenticated-but-unauthorized caller is sent. Without it, `forbid` answers a bare 403. */
+  accessDeniedPath(path: string): this {
+    this.#options.accessDeniedPath = path
+    return this
+  }
+
+  /** Query parameter carrying the post-login destination. Default `'returnUrl'`. */
+  returnURLParameter(name: string): this {
+    this.#options.returnURLParameter = name
+    return this
+  }
+
+  /** Per-request session validation. Return `null` to reject and clear the cookie. See the option docs. */
+  validatePrincipal(validate: NonNullable<CookieAuthenticationOptions['validatePrincipal']>): this {
+    this.#options.validatePrincipal = validate
+    return this
+  }
+
+  /** Overrides the 403, handed the access-denied URL a navigation would have been sent to. See the option docs. */
+  onForbid(onForbid: NonNullable<CookieAuthenticationOptions['onForbid']>): this {
+    this.#options.onForbid = onForbid
+    return this
+  }
+
+  onFail(onFail: NonNullable<CookieAuthenticationOptions['onFail']>): this {
+    this.#options.onFail = onFail
+    return this
+  }
+
+  maxAge(seconds: number): this {
+    this.#options.maxAge = seconds
+    return this
+  }
+
+  rememberMeMaxAge(seconds: number): this {
+    this.#options.rememberMeMaxAge = seconds
+    return this
+  }
+
+  secure(secure: boolean): this {
+    this.#options.secure = secure
+    return this
+  }
+
+  sameSite(sameSite: CookieSameSite): this {
+    this.#options.sameSite = sameSite
+    return this
+  }
+
+  path(path: string): this {
+    this.#options.path = path
+    return this
+  }
+
+  domain(domain: string): this {
+    this.#options.domain = domain
+    return this
+  }
+
+  partitioned(partitioned = true): this {
+    this.#options.partitioned = partitioned
+    return this
+  }
+
+  priority(priority: CookiePriority): this {
+    this.#options.priority = priority
+    return this
+  }
+
+  roleClaimType(type: string): this {
+    this.#options.roleClaimType = type
+    return this
+  }
+
+  /** Overrides the challenge, handed the login URL a navigation would have been sent to. See the option docs. */
+  onChallenge(onChallenge: NonNullable<CookieAuthenticationOptions['onChallenge']>): this {
+    this.#options.onChallenge = onChallenge
+    return this
+  }
+
+  build(): CookieAuthenticationOptions {
+    if (this.#options.sessionSecret === undefined) {
+      throw new ErrAuthConfiguration(
+        errMessage('Cannot build CookieAuthenticationOptions: sessionSecret is required')
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
+    }
+
+    // The same HKDF-SHA256 into dir/A256GCM that the OAuth-family strategies seal their cookies with, so
+    // the same floor applies: below it the derived key is brute-forceable and the session cookie is
+    // forgeable. Enforced here rather than trusted to the caller because a short secret fails silently.
+    const secretViolation = sessionSecretViolation(this.#options.sessionSecret)
+    if (secretViolation !== undefined) {
+      throw new ErrAuthConfiguration(
+        errMessage(`Cannot build CookieAuthenticationOptions: ${secretViolation}`)
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
+    }
+
+    // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path
+    // would reach the browser as it is, which resolves it against whatever page it is on.
+    for (const [option, path] of [
+      ['loginPath', this.#options.loginPath],
+      ['accessDeniedPath', this.#options.accessDeniedPath],
+    ] as const) {
+      if (path?.startsWith('~/')) {
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot build CookieAuthenticationOptions: ${option} "${path}" starts with "~/"`)
+            .solutions(`Write it as "${path.slice(1)}", which is put under the base path already`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
+      }
+    }
+
+    const cookieName = this.#options.cookieName ?? 'caf.session'
+    const rememberMeCookieName = this.#options.rememberMeCookieName ?? 'caf.remember'
+    const secure = this.#options.secure ?? true
+    const sameSite = this.#options.sameSite ?? 'lax'
+
+    // A cookie a browser would drop fails here, rather than as a sign-in that never sticks. Without a path of its
+    // own the cookie goes to the base path, which no rule constrains, or to `/` for a `__Host-` name.
+    for (const [option, name] of [
+      ['cookieName', cookieName],
+      ['rememberMeCookieName', rememberMeCookieName],
+    ] as const) {
+      const violation = cookieRuleViolation(name, {
+        httpOnly: true,
+        secure,
+        sameSite,
+        path: this.#options.path ?? '/',
+        domain: this.#options.domain,
+        partitioned: this.#options.partitioned,
+      })
+
+      if (violation !== undefined) {
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot build CookieAuthenticationOptions: ${option} "${name}": ${violation}`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
+      }
+    }
+
+    if (this.#options.rememberMe === true && cookieName === rememberMeCookieName) {
+      throw new ErrAuthConfiguration(
+        errMessage(
+          `Cannot build CookieAuthenticationOptions: cookieName and rememberMeCookieName are both "${cookieName}"`,
+        )
+          .reference('@caffeinejs/http', ErrAuthConfiguration)
+          .build(),
+      )
+    }
+
+    return {
+      sessionSecret: this.#options.sessionSecret,
+      cookieName,
+      rememberMe: this.#options.rememberMe ?? false,
+      rememberMeCookieName,
+      rememberMeAbsoluteMaxAge: this.#options.rememberMeAbsoluteMaxAge,
+      rememberMeRotationGraceSeconds: this.#options.rememberMeRotationGraceSeconds ?? 60,
+      loginPath: this.#options.loginPath,
+      challengeMode: this.#options.challengeMode ?? 'auto',
+      accessDeniedPath: this.#options.accessDeniedPath,
+      returnURLParameter: this.#options.returnURLParameter ?? 'returnUrl',
+      validatePrincipal: this.#options.validatePrincipal,
+      onForbid: this.#options.onForbid,
+      onFail: this.#options.onFail,
+      maxAge: this.#options.maxAge ?? EIGHT_HOURS,
+      rememberMeMaxAge: this.#options.rememberMeMaxAge ?? THIRTY_DAYS,
+      secure,
+      sameSite,
+      path: this.#options.path,
+      domain: this.#options.domain,
+      partitioned: this.#options.partitioned,
+      priority: this.#options.priority,
+      roleClaimType: this.#options.roleClaimType ?? 'roles',
+      onChallenge: this.#options.onChallenge,
+    }
+  }
+}

@@ -1,7 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, expect, it } from 'vitest'
 
-import { Router, constraints, createWebApplication, version, healthProbes } from '../index.js'
+import { Router, version } from '../index.js'
+import { constraints, createWebApplication, healthProbes } from '../platform/fastify/index.js'
 
 /**
  * Version is a routing key: the request must select one of two same-URL handlers *before* a handler runs.

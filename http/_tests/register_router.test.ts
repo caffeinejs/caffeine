@@ -10,16 +10,8 @@ import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { registerRouteGroup } from '../decorators/registrar/index.js'
-import {
-  $p,
-  Keys,
-  type RouteAuthzOptions,
-  RouteBuilder,
-  WebApplication,
-  createWebApplication,
-  Authentication,
-  authentication,
-} from '../index.js'
+import { $p, Keys, type RouteAuthzOptions, RouteBuilder, WebApplication, Authentication } from '../index.js'
+import { createWebApplication, authentication } from '../platform/fastify/index.js'
 
 const TEST_SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 

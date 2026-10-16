@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Post, Status, createWebApplication } from '../index.js'
+import { Controller, Get, Post, Status } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('Status', () => {
   it('returns the custom status code set by @Status', async () => {

@@ -2,7 +2,8 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
-import { createWebApplication, Router } from '../index.js'
+import { Router } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 // QUERY is in Fastify's default method set, so a route declaring it needs nothing opted into.
 describe('Router.query()', () => {

@@ -1,5 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
+import { WebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'

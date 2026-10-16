@@ -1,15 +1,7 @@
 import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 
-import {
-  Catch,
-  type IContext,
-  Controller,
-  ErrorHandler,
-  Get,
-  Responder,
-  ActionResult,
-  createWebApplication,
-} from './index.js'
+import { Catch, type IContext, Controller, ErrorHandler, Get, Responder, ActionResult } from './index.js'
+import { createWebApplication } from './platform/fastify/index.js'
 
 // A custom response kind with NO view/Fastify involvement: it renders itself through the platform-neutral
 // Context API alone. Proves the adapter dispatches any ResponseResult subclass, not just ViewResult, and

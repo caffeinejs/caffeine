@@ -1,9 +1,9 @@
 import type { ConfigSnapshot } from '@caffeinejs/std/config'
 
 import type { AnyAdapterTypes, IAdapterTypes } from './adapter.js'
+import type { AuthenticationState } from './core/security/auth/authentication_state.js'
+import { type Principal } from './core/security/identity.js'
 import type { IRequest } from './request.js'
-import type { AuthenticationState } from './security/auth/authentication_state.js'
-import { type Principal } from './security/index.js'
 
 /**
  * The values a request carries between the middlewares, guards and handler that serve it.

@@ -1,4 +1,5 @@
-import { ErrHTTPNotFound, newRouter } from '@caffeinejs/http'
+import { ErrHTTPNotFound } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/fastify'
 import { apiGroup, operation } from '@caffeinejs/openapi'
 
 import { ProjectIdParamSchema, ProjectListSchema, ProjectSchema } from './projects.schemas.js'

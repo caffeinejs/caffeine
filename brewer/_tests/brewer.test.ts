@@ -1,4 +1,5 @@
-import { Router, bodyAsBuffer, createWebApplication } from '@caffeinejs/http'
+import { Router, bodyAsBuffer } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

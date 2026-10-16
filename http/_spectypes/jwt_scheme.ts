@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { JWTSchemeConfig } from '../security/auth/config.js'
+import type { JWTSchemeConfig } from '../core/security/auth/config.js'
 
 const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
 

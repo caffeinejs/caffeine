@@ -1,0 +1,790 @@
+import { randomBytes } from 'node:crypto'
+
+import { errMessage } from '@caffeinejs/std/framework/err'
+
+import { resolveAppURL } from '../../../../../base_path.js'
+import type { IContext } from '../../../../../context.js'
+import type { CookiePriority, CookieSerializeOptions } from '../../../../cookie/options.js'
+import type { CookieSecret } from '../../../../cookie/signer.js'
+import { Claim, Identity, Principal } from '../../../identity.js'
+import { BaseAuthenticationHandler } from '../../handler.js'
+import { AuthenticateResult, type AuthenticationProperties, AuthenticationTicket } from '../../ticket.js'
+import { noStore } from '../no_store.js'
+import {
+  challengeHeaders,
+  type ChallengeMode,
+  isSafeReturnPath,
+  returnTargetOf,
+  shouldRedirectChallenge,
+} from './config.js'
+import { ErrOAuthCallback, ErrOAuthConfiguration, ErrOAuthSession } from './errors.js'
+import { redactPii } from './pii.js'
+import { generateCodeChallenge, generateCodeVerifier } from './pkce.js'
+import {
+  assertValidSession,
+  claimsToSession,
+  decodeTicketRef,
+  encodeSession,
+  encodeTicketRef,
+  openSessionCookie,
+  openTicketRef,
+} from './session_store.js'
+import type { RemoteAuthenticationSession } from './session_store.js'
+import { decodeState, encodeState, STATE_TTL_SECONDS } from './state_store.js'
+import type { RemoteAuthenticationState } from './state_store.js'
+import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from './ticket_store.js'
+
+/** Raw tokens from the token endpoint. */
+export interface RemoteAuthenticationTokens {
+  accessToken?: string
+  refreshToken?: string
+  tokenType?: string
+  expiresIn?: number
+  scope?: string
+  /** Present only for OpenID Connect providers. */
+  idToken?: string
+}
+
+/** The principal material a protocol produces from a token response. */
+export interface RemoteAuthenticationIdentity {
+  claims: Claim[]
+  /** The stable per-user identifier the ticket store indexes by. Must be non-empty. */
+  subject: string
+  /**
+   * Tokens to persist with the server-side ticket.
+   *
+   * Set only when the strategy is configured to keep them. Silently ignored without a ticket
+   * store — which is why the option that produces them refuses to configure without one,
+   * rather than quietly degrading to a session that cannot do what was asked of it.
+   */
+  tokens?: RemoteAuthenticationTokens
+}
+
+/**
+ * How an unauthenticated request is challenged.
+ *
+ * The flow starts with a redirect to the provider, which only a browser navigation can follow: `fetch` and
+ * `XMLHttpRequest` follow it themselves, land on a cross-origin provider that sends no CORS headers, and the
+ * caller sees an opaque network error instead of "you are not signed in". So the default picks per request.
+ *
+ * - `auto` — redirect a navigation, answer 401 to anything else.
+ * - `redirect` — always redirect, whatever the caller is.
+ * - `status` — always 401. For an API with no browser surface at all.
+ */
+export type RemoteChallengeMode = ChallengeMode
+
+/** Sign-ins a browser may have under way at once for one strategy. One more clears the rest before it starts. */
+const MAX_OUTSTANDING_FLOWS = 8
+
+/** What a `state` this handler mints is spelled in: base64url without padding. */
+const STATE_CHARSET = /^[A-Za-z0-9_-]+$/
+
+/** The options every OAuth-family strategy shares. */
+export interface RemoteAuthenticationOptions {
+  clientID: string
+  clientSecret: string
+  callbackURL: string
+  defaultRedirectPath: string
+  scopes: string[]
+
+  /** One secret, or several: the first seals, and any of them opens. */
+  sessionSecret: CookieSecret
+  sessionCookieName: string
+  sessionCookieTtlSeconds: number
+  stateCookieName: string
+  secureCookie: boolean
+  cookieDomain?: string
+  cookiePartitioned?: boolean
+  cookiePriority?: CookiePriority
+
+  roleClaimType: string
+  httpTimeoutMs: number
+  showPii: boolean
+  challengeMode: RemoteChallengeMode
+
+  /**
+   * The path of the route that starts a sign-in, on the origin of `callbackURL`. `<callback path>/login` unless set.
+   *
+   * A challenge that cannot redirect — a script's request — answers `401` with this URL as `loginURL`, carrying
+   * where to come back to as `returnTo`. Sending the browser there is what begins the round trip to the provider.
+   */
+  loginPath?: string
+
+  ticketStore?: RemoteAuthenticationTicketStore
+  /**
+   * Called when a session cookie is refused and when a callback fails, with the diagnostic error.
+   *
+   * On a failed callback it may answer the request — `ctx.redirect('~/sign-in?failed=1')` — and what it answered is
+   * what goes out. Left unanswered, the callback responds `400` with a generic body.
+   */
+  onFail?: (ctx: IContext, error: Error) => Promise<void> | void
+  onChallenge?: (ctx: IContext, authorizationURL: string) => Promise<void> | void
+  onForbid?: (ctx: IContext) => Promise<void> | void
+  /** Adjusts the authorization URL before the redirect. Guarded parameters are re-asserted. */
+  onRedirectToProvider?: (ctx: IContext, url: URL) => Promise<void> | void
+}
+
+/**
+ * The machinery shared by the OpenID Connect and plain OAuth 2.0 strategies.
+ *
+ * Everything here is protocol-independent: reading a session, minting and validating state,
+ * the PKCE round trip, writing the session cookie or ticket, and signing out. What differs
+ * between the two protocols is confined to the abstract members below, so the guarantees this
+ * class enforces — fail-closed session reads, the strategy binding on state, an unguessable
+ * ticket key — hold for every strategy rather than being reimplemented per protocol.
+ */
+export abstract class RemoteAuthenticationHandler<
+  O extends RemoteAuthenticationOptions,
+> extends BaseAuthenticationHandler<O> {
+  protected readonly name: string
+  readonly #callbackPath: string
+  readonly #loginPath: string
+
+  constructor(name: string, options: O) {
+    super(options)
+    this.name = name
+    this.#callbackPath = new URL(options.callbackURL).pathname
+    this.#loginPath = options.loginPath ?? `${this.#callbackPath.replace(/\/$/, '')}/login`
+
+    if (!isSafeReturnPath(this.#loginPath) || this.#loginPath === this.#callbackPath) {
+      throw new ErrOAuthConfiguration(
+        errMessage(
+          `Cannot configure "${name}": loginPath "${this.#loginPath}" must be a path on this origin other than the callback's`,
+        )
+          .reference('@caffeinejs/http', ErrOAuthConfiguration)
+          .build(),
+      )
+    }
+  }
+
+  /** The strategy name this handler was registered under. */
+  get schemeName(): string {
+    return this.name
+  }
+
+  get callbackPath(): string {
+    return this.#callbackPath
+  }
+
+  /** The path of the route that starts a sign-in. See {@link RemoteAuthenticationOptions.loginPath}. */
+  get loginPath(): string {
+    return this.#loginPath
+  }
+
+  /** Exposed so startup can reject two strategies writing the same cookie. */
+  get sessionCookieName(): string {
+    return this.options.sessionCookieName
+  }
+
+  get stateCookieName(): string {
+    return this.options.stateCookieName
+  }
+
+  // ---------------------------------------------------------------- protocol seams
+
+  /** The provider identity bound into state and re-checked on callback. */
+  protected abstract resolveIssuer(): Promise<string>
+
+  /** The authorization endpoint to redirect to. */
+  protected abstract resolveAuthorizationEndpoint(): Promise<string>
+
+  /** Parameters beyond the ones every provider needs. */
+  protected abstract authorizationParams(args: {
+    state: string
+    nonce: string
+    codeChallenge: string
+  }): Promise<Record<string, string>> | Record<string, string>
+
+  /** Exchanges the code, then turns the response into claims. Protocol-specific throughout. */
+  protected abstract exchangeAndBuildIdentity(
+    ctx: IContext,
+    code: string,
+    stored: RemoteAuthenticationState,
+  ): Promise<RemoteAuthenticationIdentity>
+
+  /** Whether this strategy sends PKCE, and with which method. */
+  protected abstract resolvePKCEMethod(): Promise<'S256' | 'plain' | 'none'>
+
+  /** Wraps a callback failure in the protocol's error type. Override to change the class only. */
+  protected callbackError(message: string): Error {
+    return new ErrOAuthCallback(errMessage(message).reference('@caffeinejs/http', ErrOAuthCallback).build())
+  }
+
+  /** Wraps a session-read failure in the protocol's error type. */
+  protected sessionError(message: string): Error {
+    return new ErrOAuthSession(errMessage(message).reference('@caffeinejs/http', ErrOAuthSession).build())
+  }
+
+  /**
+   * A callback failure, named by the strategy that raised it.
+   *
+   * The strategy name rather than the protocol name: with Google, Okta and GitHub all
+   * configured, "OIDC" does not say which handler failed. Names are developer-authored
+   * configuration, never user data, so they stay outside the redaction boundary.
+   */
+  protected callbackFailure(detail: string): Error {
+    return this.callbackError(`Cannot process callback for "${this.name}": ${detail}`)
+  }
+
+  // ---------------------------------------------------------------- shared behaviour
+
+  async authenticate(ctx: IContext): Promise<AuthenticateResult> {
+    const cookie = ctx.req.cookie(this.options.sessionCookieName)
+    if (!cookie) {
+      return AuthenticateResult.none()
+    }
+
+    let session: RemoteAuthenticationSession
+    // Set when an older secret opened the cookie: how to seal it again with the current one, before it expires.
+    let reseal: { exp: number; seal: (ttl: number) => Promise<string> } | undefined
+    try {
+      if (this.options.ticketStore) {
+        const ref = await openTicketRef(cookie, this.options.sessionSecret, this.name)
+        session = await this.#retrieveTicket(ref.key)
+
+        if (ref.renew) {
+          reseal = { exp: ref.exp, seal: ttl => encodeTicketRef(ref.key, this.options.sessionSecret, this.name, ttl) }
+        }
+      } else {
+        const opened = await openSessionCookie(cookie, this.options.sessionSecret, this.name)
+        session = opened.claims
+
+        if (opened.renew) {
+          const sealed = { claims: opened.claims.claims, scheme: opened.claims.scheme }
+          reseal = { exp: opened.exp, seal: ttl => encodeSession(sealed, this.options.sessionSecret, this.name, ttl) }
+        }
+      }
+    } catch (e) {
+      // A cookie was presented and it did not resolve to a session — expired, tampered,
+      // revoked, or a cookie of another purpose replayed as a session. That is a failure,
+      // not an absent credential.
+      const detail = redactPii('session cookie', (e as Error).message, this.options.showPii)
+      const error = this.sessionError(`Cannot read session cookie for "${this.name}": ${detail}`)
+      await this.options.onFail?.(ctx, error)
+      return AuthenticateResult.fail(error)
+    }
+
+    // Unreachable once cookie names and derived keys are both namespaced by strategy — which
+    // is the point. It is the backstop for a deployment that sets the same cookie name on two
+    // handlers explicitly. Not a failure: another strategy's session is simply not this
+    // handler's credential to judge, and under a Forward default the right one still runs.
+    if (session.scheme !== this.name) {
+      return AuthenticateResult.none()
+    }
+
+    const claims = session.claims.map(c => new Claim(c.type, c.value, c.issuer))
+    const identity = new Identity(session.scheme, true, claims, this.options.roleClaimType)
+    const principal = new Principal(true, identity)
+
+    // Sealed again with the current secret, keeping its expiry, so a retired secret can go once the longest
+    // session has run out.
+    const ttl = reseal === undefined ? 0 : reseal.exp - Math.floor(Date.now() / 1000)
+    if (reseal !== undefined && ttl > 0) {
+      ctx.cookie(this.options.sessionCookieName, await reseal.seal(ttl), this.cookieOpts(ttl))
+      noStore(ctx)
+    }
+
+    return AuthenticateResult.success(new AuthenticationTicket(principal, session.scheme))
+  }
+
+  /**
+   * Resolves a reference cookie's key against the ticket store.
+   *
+   * Every path out of here other than a live ticket throws, so authentication fails closed:
+   * a store that is down or throwing must never be the reason someone is let in.
+   */
+  async #retrieveTicket(key: string): Promise<RemoteAuthenticationSession> {
+    let ticket: Awaited<ReturnType<RemoteAuthenticationTicketStore['retrieve']>>
+    try {
+      ticket = await this.options.ticketStore!.retrieve(key)
+    } catch (e) {
+      throw new Error(`ticket store is unavailable: ${(e as Error).message}`, { cause: e })
+    }
+
+    if (!ticket) {
+      throw new Error('session was revoked or has expired')
+    }
+
+    // The store is deployment-supplied; a malformed return must fail closed here, inside the
+    // caller's try, rather than surface as a TypeError on the later claims.map.
+    assertValidSession(ticket.session)
+    return ticket.session
+  }
+
+  /**
+   * Sends a navigation to the provider, and answers anything else `401` with where a navigation should go.
+   *
+   * A redirect to the provider is something only a navigation can follow, so a script is told to send the browser
+   * to {@link loginPath} instead. Nothing is started for it: an authorization round trip, and the state cookie that
+   * carries it, begin when a browser actually goes there. A page that polls while signed out is therefore
+   * challenged as often as it likes at no cost, and without the provider being asked anything.
+   */
+  override async challenge(ctx: IContext, properties?: AuthenticationProperties): Promise<void> {
+    // An explicit destination from the caller wins over the URL the challenge interrupted — that is what
+    // `properties.redirectURI` is for, and the interrupted URL is only ever a guess at intent. Both are
+    // re-validated by `isSafeReturnPath` on the callback before anything is redirected to. Either is kept as the
+    // browser will request it, base path included, since the browser is sent back there.
+    const returnTo = returnTargetOf(ctx, properties)
+
+    noStore(ctx)
+
+    if (!this.#redirects(ctx)) {
+      const loginURL = this.#loginURL(returnTo)
+
+      if (this.options.onChallenge) {
+        return this.options.onChallenge(ctx, loginURL)
+      }
+
+      // No `WWW-Authenticate`: the credential is a cookie, not an HTTP authentication scheme, so there is no
+      // registered token to name and inventing one would mislead a client that parses it. `location` on a 401
+      // is a hint — browsers follow it only on a 3xx — which is exactly the intent.
+      //
+      // The URL also goes in the body, and the header is exposed to cross-origin readers: `Location` is not
+      // CORS-safelisted, so a page served from another origin than its API could not read it otherwise.
+      ctx
+        .status(401)
+        .header('location', loginURL)
+        .header('access-control-expose-headers', 'location')
+        .body({ error: 'authentication_required', loginURL })
+      return
+    }
+
+    const authorizationURL = await this.#startFlow(ctx, returnTo)
+
+    // The hook runs only after state, PKCE and the state cookie are in place, so overriding
+    // the response can never bypass the flow's security machinery.
+    if (this.options.onChallenge) {
+      return this.options.onChallenge(ctx, authorizationURL)
+    }
+
+    ctx.redirect(authorizationURL, 302)
+  }
+
+  /**
+   * Answers {@link loginPath}: starts a sign-in and sends the browser to the provider.
+   *
+   * `returnTo` on the query string is where the user lands afterwards, as the browser will request it: a leading
+   * `~/` resolves against the base path, as it does in `redirectURI`. It is anybody's to write, so one that would
+   * leave this origin is dropped in favour of `defaultRedirectPath`.
+   */
+  async startSignIn(ctx: IContext): Promise<void> {
+    // Checked for a string, not for `undefined`: a parameter given twice arrives as an array.
+    const requested = ctx.req.query('returnTo')
+    const target = typeof requested === 'string' ? resolveAppURL(requested, ctx.req.basePath) : undefined
+    const returnTo =
+      target !== undefined && isSafeReturnPath(target) ? target : ctx.req.basePath + this.options.defaultRedirectPath
+
+    noStore(ctx)
+    ctx.redirect(await this.#startFlow(ctx, returnTo), 302)
+  }
+
+  /** Where a script is told to send the browser: this origin's {@link loginPath}, absolute so another origin can use it. */
+  #loginURL(returnTo: string): string {
+    const url = new URL(this.#loginPath, this.options.callbackURL)
+    if (isSafeReturnPath(returnTo)) {
+      url.searchParams.set('returnTo', returnTo)
+    }
+
+    return url.toString()
+  }
+
+  /** Mints the state of a new authorization round trip, sets the cookie that carries it, and builds the URL it rides in. */
+  async #startFlow(ctx: IContext, returnTo: string): Promise<string> {
+    const [issuer, endpoint, pkceMethod] = await Promise.all([
+      this.resolveIssuer(),
+      this.resolveAuthorizationEndpoint(),
+      this.resolvePKCEMethod(),
+    ])
+
+    const state = randomBytes(16).toString('base64url')
+    const nonce = randomBytes(16).toString('base64url')
+    const codeVerifier = generateCodeVerifier()
+    const codeChallenge = pkceMethod === 'S256' ? generateCodeChallenge(codeVerifier) : codeVerifier
+
+    // Every tab that navigates here starts a flow of its own, so that two tabs can both sign in, and their cookies
+    // add up. A cookie too many gets every request to the origin refused for its headers, the sign-in page
+    // included. Past a handful the old ones are flows nobody is going to finish.
+    const outstanding = this.#stateCookieNames(ctx)
+    if (outstanding.length >= MAX_OUTSTANDING_FLOWS) {
+      for (const name of outstanding) {
+        ctx.deleteCookie(name, this.cookieOpts())
+      }
+    }
+
+    const sealed = await encodeState(
+      {
+        state,
+        nonce,
+        codeVerifier,
+        pkceMethod: pkceMethod === 'none' ? 'S256' : pkceMethod,
+        returnTo,
+        scheme: this.name,
+        issuer,
+      },
+      this.options.sessionSecret,
+      this.name,
+    )
+    ctx.cookie(this.#stateCookieNameFor(state), sealed, this.cookieOpts(STATE_TTL_SECONDS))
+
+    const authURL = new URL(endpoint)
+    authURL.searchParams.set('client_id', this.options.clientID)
+    authURL.searchParams.set('redirect_uri', this.options.callbackURL)
+    authURL.searchParams.set('response_type', 'code')
+    authURL.searchParams.set('scope', this.options.scopes.join(' '))
+    authURL.searchParams.set('state', state)
+    if (pkceMethod !== 'none') {
+      authURL.searchParams.set('code_challenge', codeChallenge)
+      authURL.searchParams.set('code_challenge_method', pkceMethod)
+    }
+    const guarded = new Set(this.guardedAuthorizationParams())
+    for (const [key, value] of Object.entries(await this.authorizationParams({ state, nonce, codeChallenge }))) {
+      // A guarded parameter the base has already set is not the subclass's to replace, and by
+      // extension not a caller's either — provider-specific extras reach here as ordinary
+      // entries, and one named `redirect_uri` would otherwise send the code somewhere else.
+      // Guarded parameters the base does not set, such as the OIDC nonce, still pass through.
+      if (guarded.has(key) && authURL.searchParams.has(key)) {
+        continue
+      }
+      authURL.searchParams.set(key, value)
+    }
+
+    await this.#applyRedirectHook(ctx, authURL)
+
+    return authURL.toString()
+  }
+
+  /**
+   * The names of the state cookies of this strategy the request carries.
+   *
+   * Only names this handler could have minted: a cookie planted under the prefix — from a sibling subdomain — with
+   * a name a header cannot carry is not one of its flows, and deleting it would fail the sign-in.
+   */
+  #stateCookieNames(ctx: IContext): string[] {
+    const prefix = `${this.options.stateCookieName}.`
+
+    return Object.keys(ctx.req.cookie()).filter(
+      name => name.startsWith(prefix) && STATE_CHARSET.test(name.slice(prefix.length)),
+    )
+  }
+
+  /**
+   * The state cookie name for one authorization round-trip.
+   *
+   * Suffixed with the flow's own `state`, the per-flow random this handler mints, so sign-ins under way in two
+   * tabs each keep their cookie.
+   *
+   * `state` is base64url, which is within the cookie-name charset, so the composed name stays valid —
+   * including under the `__Host-` prefix, which constrains attributes rather than the name.
+   */
+  #stateCookieNameFor(state: string): string {
+    return `${this.options.stateCookieName}.${state}`
+  }
+
+  /** Whether this request should be redirected into the provider rather than answered 401. */
+  #redirects(ctx: IContext): boolean {
+    return shouldRedirectChallenge(this.options.challengeMode, challengeHeaders(ctx))
+  }
+
+  /**
+   * Parameters the redirect hook may read but not change.
+   *
+   * Everything else is fair game — adjusting `prompt` or `login_hint` per request is the
+   * hook's whole purpose. These are the ones whose alteration would silently weaken the flow:
+   * a different `redirect_uri` sends the code elsewhere, a missing `code_challenge` disables
+   * PKCE, and a replaced `state` unbinds the callback from this browser.
+   */
+  protected guardedAuthorizationParams(): string[] {
+    return ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'code_challenge', 'code_challenge_method']
+  }
+
+  /**
+   * Runs the redirect hook against a throwaway copy, then adopts only the changes it is allowed
+   * to make: additions and edits to non-guarded query parameters.
+   *
+   * The hook is handed a clone, never the real authorization URL. That makes the two things it
+   * must not touch structurally unreachable rather than merely restored afterwards:
+   *
+   * - The endpoint. A hook holding the live URL can do `url.host = 'evil.example'`, and a
+   *   restore-the-parameters approach then re-applies `client_id`, `state` and `code_challenge`
+   *   onto the attacker's origin. Since the hook only ever sees the clone, `origin` and
+   *   `pathname` here are never in its reach — provider-specific endpoints belong in a typed
+   *   option, not in a mutable URL.
+   * - The guarded parameters. Their values are taken from this handler after the hook runs, so
+   *   a stray `delete('code_challenge')` or a replaced `redirect_uri` cannot survive.
+   */
+  async #applyRedirectHook(ctx: IContext, url: URL): Promise<void> {
+    if (!this.options.onRedirectToProvider) {
+      return
+    }
+
+    const draft = new URL(url.toString())
+    await this.options.onRedirectToProvider(ctx, draft)
+
+    const guarded = new Set(this.guardedAuthorizationParams())
+    const merged = new URLSearchParams()
+
+    // The hook's take on the non-guarded parameters — prompt, login_hint, anything it added.
+    for (const [key, value] of draft.searchParams) {
+      if (!guarded.has(key)) {
+        merged.set(key, value)
+      }
+    }
+
+    // The guarded parameters, always this handler's own values, never the hook's. A guarded
+    // parameter the handler never set stays unset — the hook cannot introduce one either,
+    // since the callback would then check against something the state cookie does not know.
+    for (const key of guarded) {
+      const ours = url.searchParams.get(key)
+      if (ours !== null) {
+        merged.set(key, ours)
+      }
+    }
+
+    url.search = merged.toString()
+  }
+
+  override async forbid(ctx: IContext, _properties?: AuthenticationProperties): Promise<void> {
+    if (this.options.onForbid) {
+      return this.options.onForbid(ctx)
+    }
+
+    ctx.status(403)
+  }
+
+  /**
+   * Ends the sign-in for this strategy: drops the server-side ticket, if any, and clears the
+   * cookie.
+   *
+   * How complete that is depends on whether a `ticketStore` is configured. With one, the
+   * session stops working everywhere immediately, and `RemoteAuthenticationTicketStore.removeBySubject` ends
+   * every session the user holds. Without one the sealed cookie *is* the session: this clears
+   * the responding browser's copy and nothing more, so any other copy — a synced profile, a
+   * captured header — stays valid until `sessionCookieTtlSeconds` elapses.
+   *
+   * The cookie is cleared unconditionally: a store that throws must not leave the browser
+   * holding something that still looks like a session. The store failure is propagated, since
+   * a sign-out that did not actually revoke must not report success.
+   */
+  override async revoke(ctx: IContext, _properties?: AuthenticationProperties): Promise<void> {
+    try {
+      const key = await this.ticketKey(ctx)
+      if (key) {
+        await this.options.ticketStore!.remove(key)
+      }
+    } finally {
+      ctx.deleteCookie(this.options.sessionCookieName, this.cookieOpts())
+      noStore(ctx)
+    }
+  }
+
+  /**
+   * The stored ticket key the request is carrying, or undefined if there is nothing to act on.
+   *
+   * An unreadable cookie is not an error here: there is no ticket to remove either way. A
+   * store that throws, on the other hand, is propagated — a sign-out that did not actually
+   * revoke must not report success.
+   */
+  protected async ticketKey(ctx: IContext): Promise<string | undefined> {
+    const cookie = ctx.req.cookie(this.options.sessionCookieName)
+    if (!this.options.ticketStore || !cookie) {
+      return undefined
+    }
+
+    try {
+      return await decodeTicketRef(cookie, this.options.sessionSecret, this.name)
+    } catch {
+      return undefined
+    }
+  }
+
+  /**
+   * The stored ticket the request is carrying, or undefined.
+   *
+   * Unlike `authenticate()`, a store failure is not fatal here: callers use this to read
+   * material *about* a session they have already been granted — the saved tokens for a logout
+   * redirect — rather than to decide whether to grant one.
+   */
+  protected async currentTicket(ctx: IContext): Promise<RemoteAuthenticationTicket | undefined> {
+    const key = await this.ticketKey(ctx)
+    if (!key) {
+      return undefined
+    }
+
+    try {
+      return await this.options.ticketStore!.retrieve(key)
+    } catch {
+      return undefined
+    }
+  }
+
+  async processCallback(ctx: IContext): Promise<void> {
+    try {
+      await this.#processCallback(ctx)
+    } catch (e) {
+      await this.options.onFail?.(ctx, e as Error)
+      throw e
+    }
+  }
+
+  async #processCallback(ctx: IContext): Promise<void> {
+    const code = ctx.req.query('code')
+    const stateParam = ctx.req.query('state')
+
+    // The cookie is named after the flow's own state, so the parameter is what says which of possibly
+    // several concurrent flows this callback belongs to. Validated as base64url first: it is
+    // attacker-controlled and composes a cookie name, and nothing outside the set this handler mints can
+    // identify a real flow anyway.
+    const stateCookieName =
+      stateParam !== undefined && STATE_CHARSET.test(stateParam) ? this.#stateCookieNameFor(stateParam) : undefined
+
+    // Cleared on every path out of here, the provider's own refusal included: a flow that came back is over,
+    // whichever way it went, and its cookie would otherwise stay good for the rest of its ten minutes.
+    try {
+      // RFC 6749 §4.1.2.1: a denied or failed authorization comes back as an error redirect,
+      // not an absent code. Report what the provider actually said.
+      const error = ctx.req.query('error')
+      if (error) {
+        // error_description is provider-authored free text of unconstrained content — it can
+        // name the user or the reason they were denied — so it is treated as PII.
+        const description = ctx.req.query('error_description')
+        const detail =
+          description === undefined ? '' : `: ${redactPii('error_description', description, this.options.showPii)}`
+        throw this.callbackFailure(`provider returned "${errorCode(error)}"${detail}`)
+      }
+
+      if (stateParam === undefined || stateCookieName === undefined) {
+        throw this.callbackFailure('missing or malformed state parameter')
+      }
+
+      if (!code) {
+        throw this.callbackFailure('missing code parameter')
+      }
+
+      const stateCookie = ctx.req.cookie(stateCookieName)
+      if (!stateCookie) {
+        // The one host a browser sends it to is the callback URL's, so a sign-in that started on another —
+        // 127.0.0.1 for a callback on localhost — comes back without it, as does one older than the state's
+        // lifetime. Which host that was is not knowable here; naming the one it had to be is what makes the
+        // failure actionable rather than read as a cookie bug.
+        throw this.callbackFailure(
+          `missing state cookie: the sign-in must start on the callback URL host "${new URL(this.options.callbackURL).host}"` +
+            ` and come back within ${STATE_TTL_SECONDS / 60} minutes`,
+        )
+      }
+
+      let stored: RemoteAuthenticationState
+      try {
+        stored = await decodeState(stateCookie, this.options.sessionSecret, this.name)
+      } catch {
+        throw this.callbackFailure('invalid or expired state cookie')
+      }
+
+      if (stateParam !== stored.state) {
+        throw this.callbackFailure('state mismatch')
+      }
+
+      // The state is sealed under this strategy's key, so a mismatch here means the payload was
+      // minted for a different handler. Checked in the payload as well as the key so the binding
+      // survives any future change to key derivation.
+      if (stored.scheme !== this.name) {
+        throw this.callbackFailure('state was issued for another strategy')
+      }
+
+      await this.#completeCallback(ctx, code, stored)
+    } finally {
+      if (stateCookieName !== undefined) {
+        ctx.deleteCookie(stateCookieName, this.cookieOpts())
+      }
+    }
+  }
+
+  async #completeCallback(ctx: IContext, code: string, stored: RemoteAuthenticationState): Promise<void> {
+    // The provider the state was minted against must still be the one we would use now. A
+    // mismatch means the strategy was reconfigured — or two configurations are running — between
+    // the challenge and this callback, and the authorization code must not be exchanged against
+    // a provider the user did not authenticate with. OIDC binds this to the discovery issuer,
+    // OAuth2 to the authorization endpoint origin; the check lives here so both get it and a
+    // future protocol inherits it rather than re-deriving it.
+    const issuer = await this.resolveIssuer()
+    if (stored.issuer !== issuer) {
+      throw this.callbackFailure('state was issued against a different issuer')
+    }
+
+    const identity = await this.exchangeAndBuildIdentity(ctx, code, stored)
+
+    // Mirrors the OIDC `sub` requirement: without a stable identifier the ticket store cannot
+    // revoke by user, so "sign out everywhere" and erasure both silently stop working.
+    if (!identity.subject) {
+      throw this.callbackFailure('the provider returned no stable user identifier')
+    }
+
+    await this.writeSession(ctx, identity)
+
+    const fallback = ctx.req.basePath + this.options.defaultRedirectPath
+    const returnTo =
+      stored.returnTo && stored.returnTo !== this.#callbackPath && isSafeReturnPath(stored.returnTo)
+        ? stored.returnTo
+        : fallback
+
+    ctx.redirect(returnTo, 302)
+  }
+
+  /**
+   * Persists the principal: a server-side ticket when a store is configured, otherwise a
+   * self-contained sealed cookie.
+   */
+  protected async writeSession(ctx: IContext, identity: RemoteAuthenticationIdentity): Promise<void> {
+    const ttl = this.options.sessionCookieTtlSeconds
+    const session = claimsToSession(identity.claims, this.name)
+    const store = this.options.ticketStore
+
+    let cookieValue: string
+    if (store) {
+      // Signing in again while already signed in would otherwise orphan the previous ticket
+      // for the rest of its TTL, leaving a revocable session nobody holds a cookie for.
+      const previous = await this.ticketKey(ctx)
+      if (previous) {
+        await store.remove(previous)
+      }
+
+      // The handler owns key generation: the key is the bearer credential for the whole
+      // session, so its entropy cannot be left to the store implementation.
+      const key = randomBytes(32).toString('base64url')
+      await store.store(key, { session, subject: identity.subject, tokens: identity.tokens }, ttl)
+      cookieValue = await encodeTicketRef(key, this.options.sessionSecret, this.name, ttl)
+    } else {
+      cookieValue = await encodeSession(session, this.options.sessionSecret, this.name, ttl)
+    }
+
+    ctx.cookie(this.options.sessionCookieName, cookieValue, this.cookieOpts(ttl))
+    noStore(ctx)
+  }
+
+  // Every attribute is the strategy's own, one it leaves unset written as `undefined`: that clears whatever the
+  // server's `parseOptions` default, so an application-wide domain or `signed` never reaches these cookies. `encode`
+  // stays the server's: every read decodes with the server's `decode`, and the two have to match.
+  protected cookieOpts(maxAge?: number): CookieSerializeOptions {
+    return {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      secure: this.options.secureCookie,
+      domain: this.options.cookieDomain,
+      partitioned: this.options.cookiePartitioned,
+      priority: this.options.cookiePriority,
+      maxAge,
+      expires: undefined,
+      signed: false,
+    }
+  }
+}
+
+/**
+ * The `error` of an authorization response, fit to be written to a log.
+ *
+ * It arrives on a URL anyone can craft. RFC 6749 §4.1.2.1 confines it to printable ASCII without `"` and `\`;
+ * anything else — a line break that would forge a log entry, most of all — says nothing a provider sent.
+ */
+function errorCode(error: string): string {
+  return /^[\x20-\x21\x23-\x5B\x5D-\x7E]{1,64}$/.test(error) ? error : '(malformed error code)'
+}

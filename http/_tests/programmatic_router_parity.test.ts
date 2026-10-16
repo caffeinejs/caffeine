@@ -14,15 +14,13 @@ import {
   Identity,
   Principal,
   Router,
-  constraints,
-  createWebApplication,
   version,
   type ActionResult,
   type GuardInput,
   Authentication,
-  authentication,
   Guards,
 } from '../index.js'
+import { constraints, createWebApplication, authentication } from '../platform/fastify/index.js'
 
 class FakeAuthHandler extends BaseAuthenticationHandler<{}> {
   result: AuthenticateResult = AuthenticateResult.none()

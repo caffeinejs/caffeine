@@ -2,7 +2,8 @@ import { newConfiguration } from '@caffeinejs/std'
 import { $t } from '@caffeinejs/std/schema'
 import { expectTypeOf } from 'vitest'
 
-import { createWebApplication, type IContext } from '../index.js'
+import { type IContext } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * What `.basePath(...)` accepts, and what a handler reads back. Nothing at run time fails when a callback stops

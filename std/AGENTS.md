@@ -12,7 +12,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   helper it leaves out, such as `parseArgv`, through the module file.
 - Health indicators reach `ApplicationHealth` only as container beans bound with `.extends(HealthIndicator)`; do
   not add a registration API beside that.
-- Nothing in `health/` knows about HTTP: rendering and routes stay in `http/health/`.
+- Nothing in `health/` knows about HTTP: rendering stays in `http/core/health/`, routes in
+  `http/platform/fastify/health/`.
 - `framework/guards/` holds only what every kind of application shares: `runGuards`, `compileGuardKeys`,
   `ErrGuardConfiguration`, `BaseGuard<I>` and `GuardOutcome`.
 - `framework/err/message.ts` is the error message builder (`errMessage`), and the only place it is written. It

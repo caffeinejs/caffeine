@@ -1,7 +1,8 @@
 import { Injectable, type OnBootstrap, type OnDestroy } from '@caffeinejs/di'
 import { describe, it, expect, vi } from 'vitest'
 
-import { Controller, Get, createWebApplication } from '../index.js'
+import { Controller, Get } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('Adapter Lifecycle', () => {
   it('a container OnBootstrap hook runs before the first request is served', async () => {

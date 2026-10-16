@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { ErrConfiguration, createWebApplication, type AnyRouteExtension, type WebApplication } from '../index.js'
-import type { HTTPPluginFactory } from '../plugin.js'
-import { newRouter } from '../routing/programmatic/new_router.js'
+import { ErrConfiguration, type AnyRouteExtension, type WebApplication } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
+import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
+import { newRouter } from '../platform/fastify/routing/new_router.js'
 
 // What the caching package does to a route and to a server, without the package: a `cache` entry in the route's
 // config, and a plugin registered under its name. The start-up check reads nothing else.

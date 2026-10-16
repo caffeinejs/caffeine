@@ -2,7 +2,8 @@ import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, Router, blend, createWebApplication } from '../index.js'
+import { Controller, Get, Router, blend } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 class Greeter {
   greet(name: string) {

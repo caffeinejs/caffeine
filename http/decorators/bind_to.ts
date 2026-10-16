@@ -1,5 +1,5 @@
 import { kBindTo } from '../binding.js'
-import type { RouteGroupExtension } from '../routing/extension.js'
+import type { RouteGroupExtension } from '../core/routing/extension.js'
 import { configureRouteGroup } from './registrar/registrar.js'
 
 /**

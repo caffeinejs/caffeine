@@ -1,0 +1,239 @@
+import { describe, it, expect } from 'vitest'
+
+import { $p } from '../../../core/routing/picker.js'
+import { BodyLimit, Controller, Post, Args } from '../../../index.js'
+import { createWebApplication } from '../index.js'
+
+const FORM = 'application/x-www-form-urlencoded'
+
+async function appWith(controller: unknown) {
+  void [controller]
+  const app = createWebApplication()
+  await app.bootstrap()
+  return app
+}
+
+describe('form url-encoded body', () => {
+  it('parses the fields into an object', async () => {
+    @Controller('/form-object')
+    class FormObjectController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormObjectController)
+    const res = await app.fetch('/form-object/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'name=ada&age=36',
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ name: 'ada', age: '36' })
+  })
+
+  it('collects a repeated key into an array', async () => {
+    @Controller('/form-array')
+    class FormArrayController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormArrayController)
+    const res = await app.fetch('/form-array/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'tag=a&tag=b',
+    })
+
+    expect(await res.json()).toEqual({ tag: ['a', 'b'] })
+  })
+
+  it('percent- and plus-decodes values', async () => {
+    @Controller('/form-decode')
+    class FormDecodeController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormDecodeController)
+    const res = await app.fetch('/form-decode/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'msg=hello+world%21',
+    })
+
+    expect(await res.json()).toEqual({ msg: 'hello world!' })
+  })
+
+  it('parses when the content-type carries a charset parameter', async () => {
+    @Controller('/form-charset')
+    class FormCharsetController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormCharsetController)
+    const res = await app.fetch('/form-charset/echo', {
+      method: 'POST',
+      headers: { 'content-type': `${FORM}; charset=utf-8` },
+      body: 'name=ada',
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ name: 'ada' })
+  })
+
+  it('does not pollute Object.prototype via a __proto__ field', async () => {
+    @Controller('/form-proto')
+    class FormProtoController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(_b: Record<string, unknown>) {
+        return { polluted: ({} as Record<string, unknown>).polluted ?? null }
+      }
+    }
+
+    const app = await appWith(FormProtoController)
+    const res = await app.fetch('/form-proto/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: '__proto__[polluted]=yes&__proto__=yes',
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ polluted: null })
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+
+  it('parses an empty body as an empty object', async () => {
+    @Controller('/form-empty')
+    class FormEmptyController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormEmptyController)
+    const res = await app.fetch('/form-empty/echo', { method: 'POST', headers: { 'content-type': FORM }, body: '' })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({})
+  })
+
+  it('treats a key with no equals as an empty string', async () => {
+    @Controller('/form-bare-key')
+    class FormBareKeyController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormBareKeyController)
+    const res = await app.fetch('/form-bare-key/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: 'ok',
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: '' })
+  })
+
+  it('no longer answers 415 for an urlencoded body', async () => {
+    @Controller('/form-415')
+    class Form415Controller {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(Form415Controller)
+    const res = await app.fetch('/form-415/echo', { method: 'POST', headers: { 'content-type': FORM }, body: 'ok=1' })
+
+    expect(res.status).not.toBe(415)
+    expect(res.status).toBe(200)
+  })
+
+  it('rejects a body over the route bodyLimit with 413', async () => {
+    @Controller('/form-route-limit')
+    class FormRouteLimitController {
+      @BodyLimit(10)
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormRouteLimitController)
+    const res = await app.fetch('/form-route-limit/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${'x'.repeat(20)}`,
+    })
+
+    expect(res.status).toBe(413)
+  })
+
+  it('accepts a body over the 1 MiB default when the route bodyLimit allows it', async () => {
+    @BodyLimit('2mb')
+    @Controller('/form-route-raised')
+    class FormRouteRaisedController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, string>) {
+        return { length: b.name!.length }
+      }
+    }
+
+    const app = await appWith(FormRouteRaisedController)
+    const value = 'x'.repeat(1024 * 1024)
+    const res = await app.fetch('/form-route-raised/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${value}`,
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ length: value.length })
+  })
+
+  it('rejects a body over 1 MiB when the route sets no bodyLimit', async () => {
+    @Controller('/form-default-limit')
+    class FormDefaultLimitController {
+      @Post('/echo')
+      @Args([$p.body()])
+      echo(b: Record<string, unknown>) {
+        return b
+      }
+    }
+
+    const app = await appWith(FormDefaultLimitController)
+    const res = await app.fetch('/form-default-limit/echo', {
+      method: 'POST',
+      headers: { 'content-type': FORM },
+      body: `name=${'x'.repeat(1024 * 1024)}`,
+    })
+
+    expect(res.status).toBe(413)
+  })
+})

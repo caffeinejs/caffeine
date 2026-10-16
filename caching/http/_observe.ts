@@ -1,4 +1,4 @@
-import type { AdapterRouteOptions } from '@caffeinejs/http'
+import type { AdapterRouteOptions } from '@caffeinejs/http/fastify'
 import type { Logger } from '@caffeinejs/std/logger'
 
 import { routeMethods } from './_util.js'

@@ -1,4 +1,5 @@
-import { Controller, Get, Post, type WebApplication, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Post, type WebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 

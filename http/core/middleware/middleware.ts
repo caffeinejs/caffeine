@@ -1,0 +1,161 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
+import type { Ctor, InjectionToken } from '@caffeinejs/di'
+
+import type { HTTPSetupContext } from '../../adapter.js'
+import type { IContext } from '../../context.js'
+
+/**
+ * Optional preferred hook for a Caffeine middleware, when `use()` does not pass `{ hook }`: one of the names the
+ * application's adapter accepts, such as a `FastifyMiddlewareHook`.
+ *
+ * Omit it and the middleware runs at the adapter's default, `onRequest` under Fastify. On a class, declare it as a
+ * static getter. On a function, set it as a property. The adapter refuses a name it does not know at start-up.
+ */
+export const kMiddlewareHook = Symbol('@caffeinejs/http:middlewareHook')
+
+/**
+ * Continues the rest of the pipeline, or fails it.
+ *
+ * `next()` runs the remaining middlewares of this hook. `next(err)` skips the rest and fails. To answer the
+ * request from the middleware itself, write with `ctx.body()` and do not call `next`.
+ *
+ * Calling it twice in one middleware is a bug, not a fallback, and throws.
+ */
+export type Next = (err?: Error) => void
+
+/**
+ * A connect-style Node `(req, res, next)` middleware, run on the raw request and response.
+ *
+ * Registered under a path, it sees `req.url` with that path stripped, as connect mounts it.
+ */
+export type NodeMiddleware = (req: IncomingMessage, res: ServerResponse, next: Next) => void
+
+/**
+ * Builds a middleware once at start-up, from the same context an extension factory gets: the configuration, the
+ * container and the logger.
+ *
+ * `config` is the live handle, so `config.someSetting` reads the current tree. A later refresh does not rebuild
+ * the middleware.
+ */
+export type MiddlewareFactory<C = unknown> = (
+  context: HTTPSetupContext<C>,
+) => NodeMiddleware | MiddlewareFn | Middleware
+
+export type MiddlewarePath = string | readonly string[]
+
+/** `H` is the hook names the application's adapter accepts. */
+export interface MiddlewareOptions<H extends string = string> {
+  hook?: H
+}
+
+/**
+ * The functional form of a middleware. Call `next` to continue; omit it to short-circuit.
+ *
+ * `V` names what the middleware reads and writes through `ctx.state`, and `C` what `ctx.config` carries:
+ *
+ * ```ts
+ * const tenancy: MiddlewareFn<{ tenant: Tenant }> = (ctx, next) => {
+ *   ctx.state.set('tenant', resolve(ctx))
+ *   next()
+ * }
+ * ```
+ *
+ * To run at a later hook, set {@link kMiddlewareHook} on the function. `{ hook }` on `use()` overrides it.
+ */
+export type MiddlewareFn<V = Record<never, never>, C = Record<never, never>> = (ctx: IContext<V, C>, next: Next) => void
+
+/**
+ * The class form of a middleware, which is what a middleware with dependencies should be: bind it in the
+ * container and register it by class or key, and the container injects it.
+ *
+ * ```ts
+ * class Tagger implements Middleware {
+ *   static get [kMiddlewareHook](): FastifyMiddlewareHook {
+ *     return 'preHandler'
+ *   }
+ *
+ *   handle(ctx: IContext, next: Next) {
+ *     ctx.header('x-tag', '1')
+ *     next()
+ *   }
+ * }
+ *
+ * app.use(Tagger)
+ * ```
+ *
+ * The static getter is optional; without it the class runs at the adapter's default, `onRequest` under Fastify.
+ * `{ hook }` on `use()` overrides {@link kMiddlewareHook}.
+ */
+export interface Middleware<V = Record<never, never>, C = Record<never, never>> {
+  handle(ctx: IContext<V, C>, next: Next): void
+}
+
+/** Anything `use()` accepts as its middleware argument. */
+export type MiddlewareTarget<C = unknown> =
+  | NodeMiddleware
+  | MiddlewareFn
+  | Middleware
+  | InjectionToken<Middleware>
+  | MiddlewareFactory<C>
+
+export type MiddlewareResolvable = Middleware | InjectionToken<Middleware>
+
+/** Whether `value` is a `{ hook }` options object rather than a middleware. */
+export function isMiddlewareOptions(value: unknown): value is MiddlewareOptions {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+  if (isMiddlewareInstance(value)) {
+    return false
+  }
+  const keys = Object.keys(value)
+  return keys.every(key => key === 'hook')
+}
+
+/**
+ * Reads what a `use(...)` or `useFn(...)` call was given: a path or none, then the middleware, then `{ hook }`.
+ *
+ * @param argCount - How many arguments the call was given: a string no middleware follows is a container key, not
+ *   a path.
+ */
+export function parseUse<C, H extends string>(
+  pathOrTarget: MiddlewarePath | MiddlewareTarget<C> | ((req: never, res: never, next: Next) => void),
+  targetOrOptions:
+    | MiddlewareTarget<C>
+    | MiddlewareOptions<H>
+    | ((req: never, res: never, next: Next) => void)
+    | undefined,
+  options: MiddlewareOptions<H> | undefined,
+  argCount: number,
+): { path: MiddlewarePath | undefined; target: unknown; hook?: H } {
+  const asPath =
+    Array.isArray(pathOrTarget) ||
+    (typeof pathOrTarget === 'string' && argCount >= 2 && !isMiddlewareOptions(targetOrOptions))
+
+  if (asPath) {
+    return {
+      path: pathOrTarget as MiddlewarePath,
+      target: targetOrOptions,
+      hook: options?.hook,
+    }
+  }
+
+  return {
+    path: undefined,
+    target: pathOrTarget,
+    hook: isMiddlewareOptions(targetOrOptions) ? (targetOrOptions.hook as H | undefined) : undefined,
+  }
+}
+
+/** Whether `ref` is a middleware class rather than a plain middleware function. */
+export function isMiddlewareClass(ref: unknown): ref is Ctor<Middleware> {
+  return (
+    typeof ref === 'function' && typeof (ref as { prototype?: { handle?: unknown } }).prototype?.handle === 'function'
+  )
+}
+
+/** Whether `ref` is an already-constructed middleware. */
+export function isMiddlewareInstance(ref: unknown): ref is Middleware {
+  return typeof ref === 'object' && ref !== null && typeof (ref as Middleware).handle === 'function'
+}

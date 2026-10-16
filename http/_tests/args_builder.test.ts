@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { $p, Controller, Get, Args, createWebApplication, type ActionResult } from '../index.js'
+import { $p, Controller, Get, Args, type ActionResult } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 // @Args accepts either an array of `$p` pickers or a builder function that receives the builtin pickers.
 // Both must resolve handler arguments identically.

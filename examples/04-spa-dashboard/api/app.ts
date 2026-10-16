@@ -1,12 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import {
-  createWebApplication,
-  Authentication,
-  authentication,
-  Authorization,
-  csrf,
-  healthProbes,
-} from '@caffeinejs/http'
+import { Authentication, Authorization } from '@caffeinejs/http'
+import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
 import { openapi } from '@caffeinejs/openapi'
 import type { Logger } from '@caffeinejs/std/logger'
 

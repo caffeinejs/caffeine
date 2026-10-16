@@ -8,7 +8,6 @@ import {
   type AdapterExtensionFactory,
   type IContext,
   ErrAuthenticationRequired,
-  type FastifyRouterTypes,
   type Guard,
   type GuardInput,
   Guards,
@@ -18,10 +17,9 @@ import {
   type MiddlewareFn,
   Router,
   bindTo,
-  createWebApplication,
-  newRouter,
   type WebApplication,
 } from '../index.js'
+import { type FastifyRouterTypes, createWebApplication, newRouter } from '../platform/fastify/index.js'
 
 /**
  * Scenario: a plugin written against Caffeine alone. An `HTTPPlugin` registers in its `.with(...)` slot, and

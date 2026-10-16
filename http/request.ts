@@ -1,7 +1,7 @@
 import type { AnySchema, InferSchema } from '@caffeinejs/std/schema'
 
-import type { CookieSecret, CookieUnsignResult } from './cookie/signer.js'
-import type { RouteValidationSchema } from './routing/spec.js'
+import type { CookieSecret, CookieUnsignResult } from './core/cookie/signer.js'
+import type { RouteValidationSchema } from './core/routing/spec.js'
 
 export type UnsignedCookie = string | false | undefined
 

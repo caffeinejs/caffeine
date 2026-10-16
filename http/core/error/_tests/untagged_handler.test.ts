@@ -1,0 +1,29 @@
+import { Injectable } from '@caffeinejs/di'
+import { describe, it, expect } from 'vitest'
+
+import { type IContext, ErrConfiguration, ErrorHandler } from '../../../index.js'
+import { createWebApplication } from '../../../platform/fastify/index.js'
+
+// Bound, and shaped like a handler, but it never declared which errors it renders.
+@Injectable()
+class UntaggedHandler implements ErrorHandler<Error> {
+  async handle(_ctx: IContext, _error: Error): Promise<void> {}
+}
+
+describe('untagged error handler', () => {
+  it('rejects a handler enrolled without an error type', async () => {
+    const app = createWebApplication().errorHandling(e => e.globalHandlers(UntaggedHandler))
+
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+  })
+
+  // Declaring a class is no longer what puts it to work, so the same class nobody enrolled is inert rather
+  // than a start-up failure.
+  it('ignores the same handler when it is not enrolled', async () => {
+    const app = createWebApplication()
+
+    await app.bootstrap()
+
+    await app.close()
+  })
+})

@@ -1,10 +1,5 @@
-import {
-  ErrConfiguration,
-  kRouteConstraints,
-  type AdapterReply,
-  type AdapterRequest,
-  type AdapterRouteOptions,
-} from '@caffeinejs/http'
+import { ErrConfiguration, kRouteConstraints } from '@caffeinejs/http'
+import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
 import { describe, expect, it } from 'vitest'
 
 import {

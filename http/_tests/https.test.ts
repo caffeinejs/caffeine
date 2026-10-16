@@ -10,7 +10,8 @@ import { $t } from '@caffeinejs/std/schema'
 import { ErrShutdownTimeout } from '@caffeinejs/std/shutdown'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter, type NodeMiddleware, type WebApplication } from '../index.js'
+import { type NodeMiddleware, type WebApplication } from '../index.js'
+import { createWebApplication, newRouter } from '../platform/fastify/index.js'
 
 /**
  * A server `.server(...)` asks to serve TLS or HTTP/2 serves it, says so in its origin, and shuts down — within the

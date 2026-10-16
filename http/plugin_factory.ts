@@ -1,7 +1,7 @@
 import { kFeatureName, type Feature } from '@caffeinejs/std'
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import { ErrConfiguration } from './error/common.js'
+import { ErrConfiguration } from './core/error/common.js'
 
 /**
  * Refuses what a `.with(...)` was handed when it is not a plugin factory. The compiler already refuses a feature

@@ -1,5 +1,6 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get, createWebApplication, newRouter } from '@caffeinejs/http'
+import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
+import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
 import { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 

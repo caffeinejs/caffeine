@@ -4,7 +4,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Controller, Get, Router, createWebApplication } from '../index.js'
+import { Controller, Get, Router } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * Fastify answers a handler that outlives its timeout with a 503. An `onSend` hook that is asynchronous — a

@@ -1,4 +1,5 @@
-import { Listener, Router, bindTo, createWebApplication } from '@caffeinejs/http'
+import { Listener, Router, bindTo } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../brewer.js'

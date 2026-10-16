@@ -9,12 +9,13 @@ import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { HTTPSetupContext } from '../adapter.js'
+import { ErrHTTPBadRequest } from '../core/error/http.js'
+import { Router } from '../core/routing/programmatic/router.js'
 import { Controller, Get, Use } from '../decorators/index.js'
-import { ErrHTTPBadRequest } from '../error/http.js'
-import { createWebApplication, type WebApplication, healthProbes } from '../index.js'
-import type { HTTPPluginFactory } from '../plugin.js'
-import { newRouter } from '../routing/programmatic/new_router.js'
-import { Router } from '../routing/programmatic/router.js'
+import { type WebApplication } from '../index.js'
+import { createWebApplication, healthProbes } from '../platform/fastify/index.js'
+import type { HTTPPluginFactory } from '../platform/fastify/plugin.js'
+import { newRouter } from '../platform/fastify/routing/new_router.js'
 
 /**
  * What an application installs on its server: the plugins its `.with(...)` factories produce.

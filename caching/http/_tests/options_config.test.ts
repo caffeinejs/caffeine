@@ -1,4 +1,5 @@
-import { Controller, Get, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { EnvConfigSource } from '@caffeinejs/std/config/env'

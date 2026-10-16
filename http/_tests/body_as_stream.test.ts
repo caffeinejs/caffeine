@@ -3,8 +3,9 @@ import { connect } from 'node:net'
 
 import { describe, it, expect, vi } from 'vitest'
 
-import { Controller, Post, Args, createWebApplication, BodyAsStream, BodyLimit } from '../index.js'
-import { $p } from '../routing/picker.js'
+import { $p } from '../core/routing/picker.js'
+import { Controller, Post, Args, BodyAsStream, BodyLimit } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('BodyAsStream', () => {
   it('delivers the body as a ReadableStream', async () => {

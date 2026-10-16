@@ -90,6 +90,31 @@
       "rules": {
         "typescript/no-require-imports": "off"
       }
+    },
+    {
+      "files": ["http/**/*.ts"],
+      "excludeFiles": ["http/platform/**", "**/*.test.ts", "**/*.test-d.ts", "**/_tests/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(?:\\.\\./)+_",
+                "message": "Private (_*) modules cannot be imported from outside their directory."
+              },
+              {
+                "regex": "^(?:fastify|fastify-plugin|@fastify/)",
+                "message": "Only http/platform/fastify/ may import Fastify; http/ and http/core/ stay platform-agnostic."
+              },
+              {
+                "regex": "(?:^|/)platform/",
+                "message": "Only http/platform/ and tests may import http/platform/; http/ and http/core/ stay platform-agnostic."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

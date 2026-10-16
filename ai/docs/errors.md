@@ -4,7 +4,7 @@ Three different “404s”. `@Catch` only sees the first.
 
 | What                                   | Outcome                     | Mechanism                                            |
 | -------------------------------------- | --------------------------- | ---------------------------------------------------- |
-| Handler throws `ErrHTTPNotFound`       | JSON (or `@Catch` body)     | `http/error` — type-based                            |
+| Handler throws `ErrHTTPNotFound`       | JSON (or `@Catch` body)     | `http/core/error` — type-based                       |
 | No route matched                       | Fastify not-found           | Does **not** go through `@Catch`                     |
 | Browser client route (`GET /settings`) | 200 `index.html` for an SPA | A `GET /*` route the application wrote, not `@Catch` |
 

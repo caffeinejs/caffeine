@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import { Controller, Get, WebApplication, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, WebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { newConfiguration } from '@caffeinejs/std'
 import type { InferConfig } from '@caffeinejs/std/config'
 import { InlineConfigSource } from '@caffeinejs/std/config/inline'

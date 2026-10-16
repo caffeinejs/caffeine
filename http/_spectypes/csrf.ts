@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { CSRFConfig } from '../csrf/options.js'
+import type { CSRFConfig } from '../core/csrf/options.js'
 
 /** The `csrf()` plugin's block. */
 export const CSRFConfigSchema = $t.Object({

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { createWebApplication, newRouter } from '../index.js'
+import { createWebApplication, newRouter } from '../platform/fastify/index.js'
 
 /**
  * `ctx.req.host` and `ctx.req.protocol`: the authority and the scheme the server trusts for a request, which is what

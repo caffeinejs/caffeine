@@ -1,6 +1,7 @@
 import { DevtoolsModule, DevtoolsServer } from '@caffeinejs/devtools'
 import { CaffeineIoC, Injectable } from '@caffeinejs/di'
-import { Controller, Delete, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
+import { Controller, Delete, Get, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 // --- services ---
 

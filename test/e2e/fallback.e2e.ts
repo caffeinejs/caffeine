@@ -1,11 +1,5 @@
-import {
-  authenticationExempt,
-  newRouter,
-  Authentication,
-  authentication,
-  Authorization,
-  healthProbes,
-} from '@caffeinejs/http'
+import { Authentication, Authorization } from '@caffeinejs/http'
+import { authenticationExempt, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'

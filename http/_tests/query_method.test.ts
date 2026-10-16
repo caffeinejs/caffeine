@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Args, Query, createWebApplication } from '../index.js'
-import { $p } from '../routing/picker.js'
+import { $p } from '../core/routing/picker.js'
+import { Controller, Args, Query } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 // Isolated file: registering a @Query controller forces a QUERY route onto every app built in the
 // same module, the decorator registry being module-global.

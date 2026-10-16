@@ -1,5 +1,5 @@
-import { kRouteConstraints, type ResolvedRouteConstraint } from '../constraints/constraints.js'
-import type { AnyRouteExtension } from '../routing/extension.js'
+import { kRouteConstraints, type ResolvedRouteConstraint } from '../core/constraints/keys.js'
+import type { AnyRouteExtension } from '../core/routing/extension.js'
 import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 
 /**

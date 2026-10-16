@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { normalizeBasePath, resolveAppURL, stripBasePath } from './base_path.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrConfiguration } from './core/error/common.js'
 
 /**
  * What the server takes off a request's path before routing it, and what it refuses to take.

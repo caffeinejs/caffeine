@@ -10,9 +10,9 @@ import {
   Get,
   Post,
   Schema,
-  createWebApplication,
   type ActionResult,
 } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 

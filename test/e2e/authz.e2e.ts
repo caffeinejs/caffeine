@@ -8,11 +8,10 @@ import {
   Controller,
   Get,
   Roles,
-  newRouter,
   Authentication,
-  authentication,
   Authorization,
 } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'

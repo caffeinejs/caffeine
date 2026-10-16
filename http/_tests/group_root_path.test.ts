@@ -1,7 +1,8 @@
 import fp from 'fastify-plugin'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, createWebApplication, newRouter, type WebApplication, type ActionResult } from '../index.js'
+import { Controller, Get, type WebApplication, type ActionResult } from '../index.js'
+import { createWebApplication, newRouter } from '../platform/fastify/index.js'
 
 /**
  * What a group's prefix and a route at `/` compose to.

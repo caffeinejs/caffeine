@@ -1,5 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createWebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import { rootModule } from './root.gen.mod.js'
 

@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import { newRouter, type WebApplication } from '@caffeinejs/http'
+import { type WebApplication } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'

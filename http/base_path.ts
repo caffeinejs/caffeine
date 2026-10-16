@@ -1,7 +1,7 @@
 import { errMessage } from '@caffeinejs/std/framework/err'
 
-import { ErrConfiguration } from './error/common.js'
-import { normalizeGroupPath } from './routing/builder.js'
+import { ErrConfiguration } from './core/error/common.js'
+import { normalizeGroupPath } from './core/routing/builder.js'
 
 const SLASH = 47
 const QUESTION_MARK = 63

@@ -1,7 +1,8 @@
 import { ErrInvalidByteSize } from '@caffeinejs/std/bytes'
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Post, createWebApplication, BodyLimit } from '../index.js'
+import { Controller, Post, BodyLimit } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('BodyLimit', () => {
   it('class-level @BodyLimit rejects bodies exceeding the limit with 413', async () => {

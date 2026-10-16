@@ -1,4 +1,4 @@
-import { RouteAuthzOptions } from '../routing/spec.js'
+import { RouteAuthzOptions } from '../core/routing/spec.js'
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
 import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 

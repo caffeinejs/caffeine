@@ -8,13 +8,11 @@ import {
   Router,
   RouteBuilder,
   RouteGroupBuilder,
-  createWebApplication,
-  newRouter,
   type GuardInput,
-  type HTTPPluginFactory,
   type WebApplication,
   Guards,
 } from '../index.js'
+import { createWebApplication, newRouter, type HTTPPluginFactory } from '../platform/fastify/index.js'
 
 /** A plugin registered through `.with(...)`, so it runs at the exact point `$route` is meant to be called from. */
 function lateRoute(build: (router: RouteGroupBuilder) => void): HTTPPluginFactory {

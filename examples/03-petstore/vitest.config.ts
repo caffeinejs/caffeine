@@ -45,6 +45,7 @@ export default defineConfig({
       '@caffeinejs/http/decorators/registrar': fileURLToPath(
         new URL('../../http/decorators/registrar/index.ts', import.meta.url),
       ),
+      '@caffeinejs/http/fastify': fileURLToPath(new URL('../../http/platform/fastify/index.ts', import.meta.url)),
       '@caffeinejs/http': fileURLToPath(new URL('../../http/index.ts', import.meta.url)),
       // Source too, because `HTMLResult extends Responder` from @caffeinejs/http: resolved from dist, it would
       // extend a *different* Responder than the adapter checks for, and every HTML route would come back as JSON.

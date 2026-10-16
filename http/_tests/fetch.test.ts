@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, Header, Router, createWebApplication } from '../index.js'
+import { Controller, Get, Header, Router } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 describe('Fetch API Response Support', () => {
   it('maps status, headers, and body to fastify reply', async () => {

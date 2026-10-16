@@ -1,6 +1,7 @@
 import { Readable } from 'node:stream'
 
-import { Controller, Get, Header, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Header, Post, Status } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'

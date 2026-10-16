@@ -23,7 +23,8 @@ plugin fails at `app.bootstrap()`. There is no default store: you pass one.
 ```ts
 import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
-import { Controller, Get, Put, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Put } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 @Controller('/pets')
 class PetsController {

@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { AuthConfig, AuthCredentialsConfig, RefreshTokenConfig } from '../security/auth/config.js'
+import type { AuthConfig, AuthCredentialsConfig, RefreshTokenConfig } from '../core/security/auth/config.js'
 import { BasicSchemeConfigSchema } from './basic_scheme.js'
 import { CookieSchemeConfigSchema } from './cookie_scheme.js'
 import { JWTSchemeConfigSchema } from './jwt_scheme.js'

@@ -1,5 +1,6 @@
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
-import { Controller, Get, Router, createWebApplication, Guards } from '@caffeinejs/http'
+import { Controller, Get, Router, Guards } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Guard, type GuardReturn } from '@caffeinejs/http/guards'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it, vi } from 'vitest'

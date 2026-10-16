@@ -1,9 +1,12 @@
 # HTTP
 
-Package: `@caffeinejs/http`. Adapter is Fastify.
+Package: `@caffeinejs/http`. Adapter is Fastify: what is Fastify-specific — `createWebApplication()`, `newRouter()`,
+`HTTPPluginFactory`, and plugin factories such as `authentication()` and `healthProbes()` — is imported from
+`@caffeinejs/http/fastify`.
 
 ```ts
-import { createWebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
+import { Controller, Get, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 @Controller('/examples')
 export class ExampleController {

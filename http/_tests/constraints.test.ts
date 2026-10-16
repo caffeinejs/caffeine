@@ -2,9 +2,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { type FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { constraint, constraints, createWebApplication, fst, kRouteConstraints, Router, version } from '../index.js'
+import { RouteBuilder } from '../core/routing/builder.js'
+import { constraint, kRouteConstraints, Router, version } from '../index.js'
 import type { ConstraintStrategy } from '../index.js'
-import { RouteBuilder } from '../routing/builder.js'
+import { constraints, createWebApplication, fst } from '../platform/fastify/index.js'
 
 /** A trivial exact-match strategy: routes register under a string, requests derive from a header. */
 function flavorStrategy(): ConstraintStrategy {

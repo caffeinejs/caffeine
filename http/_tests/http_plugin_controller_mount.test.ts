@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, HTTPPlugin, type HTTPSetupContext, Router, Use, createWebApplication } from '../index.js'
+import { Controller, Get, HTTPPlugin, type HTTPSetupContext, Router, Use } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * Scenario: a controller's plugin trying to mount. A class has no children to nest routers under, so the start is

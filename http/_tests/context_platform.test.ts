@@ -2,9 +2,10 @@ import { CaffeineIoC } from '@caffeinejs/di'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { IContext } from '../context.js'
-import { createWebApplication, type WebApplication } from '../index.js'
+import { Router } from '../core/routing/programmatic/router.js'
+import { type WebApplication } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 import { Responder, type ActionResult } from '../response.js'
-import { Router } from '../routing/programmatic/router.js'
 
 /** What a reader holding only an `IContext` finds on `ctx.platform`, as plain values a response can carry. */
 function describePlatform(ctx: IContext): { name: string; ownRequest: boolean; ownReply: boolean } {

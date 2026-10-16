@@ -393,7 +393,7 @@ That rule holds for this repository without exception. An **application** that m
 
 A test that sleeps for something to happen fails once the machine is busy: a full run executes many files at once, and a timer can fire hundreds of milliseconds late. Wait on what the test asserts, never on a stretch of time standing in for it.
 
-- That something happened (a request reached its handler, a hook ran) is a latch: the code resolves `started` and awaits `held`, which the test releases at the end (`http/listener/_tests/lifecycle.test.ts`).
+- That something happened (a request reached its handler, a hook ran) is a latch: the code resolves `started` and awaits `held`, which the test releases at the end (`http/core/listener/_tests/lifecycle.test.ts`).
 - That time passed is a driven clock: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })`, with `'Date'` added when the code compares `Date.now()` with a deadline, then `await vi.advanceTimersByTimeAsync(ms)`. A test that also runs a server, a socket or a third-party SDK fakes that list and nothing else; `resilience/` uses its `useFakeClock()`.
 - Fake after `bootstrap()` or `run()`, and fake `setTimeout` only after the file's first global `fetch`: undici builds its own clock on first use, and one built fake never ticks again in that file.
 - `vi.useRealTimers()` drops every pending fake timer for good: advance past each one a close waits on before restoring. `afterEach` restores before it closes anything, and runs `await vi.runOnlyPendingTimersAsync()` first when its close could join one a failed test left waiting.

@@ -4,7 +4,8 @@ import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std/shutdo
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import type { WebApplication } from '../application.js'
-import { Controller, Get, createWebApplication, healthProbes } from '../index.js'
+import { Controller, Get } from '../index.js'
+import { createWebApplication, healthProbes } from '../platform/fastify/index.js'
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 

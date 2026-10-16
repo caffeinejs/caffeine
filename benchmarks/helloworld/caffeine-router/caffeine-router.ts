@@ -1,4 +1,5 @@
-import { Router, createWebApplication } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 const PORT = parseInt(process.env.PORT ?? '3000', 10)
 

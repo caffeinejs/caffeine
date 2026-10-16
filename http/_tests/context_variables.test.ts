@@ -1,18 +1,8 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Args,
-  Catch,
-  type IContext,
-  Controller,
-  ContextState,
-  Get,
-  type MiddlewareFn,
-  Router,
-  $p,
-  createWebApplication,
-} from '../index.js'
+import { Args, Catch, type IContext, Controller, ContextState, Get, type MiddlewareFn, Router, $p } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 // Controllers are registered globally at decoration time and a container snapshots them when it is
 // constructed, so every controller in this file is declared up front rather than inside the test that uses

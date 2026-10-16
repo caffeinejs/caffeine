@@ -24,23 +24,19 @@ import type {
   IContextPlatform,
   HTTPSetupContext,
 } from '../adapter.js'
-import { createWebApplication } from '../application.js'
+import { WebApplication } from '../application.js'
 import type { IContext } from '../context.js'
-import type { FastifyRouterTypes, FastifyTypes } from '../fastify_adapter.js'
-import { healthProbes } from '../index.js'
-import type { MiddlewareFn } from '../middleware/middleware.js'
-import type { ResolvedMiddleware } from '../middleware/pipeline.js'
-import {
-  HTTPPlugin,
-  pluginName,
-  type AnyFastifyPlugin,
-  type HTTPPluginConfigurer,
-  type HTTPPluginFactory,
-} from '../plugin.js'
-import { blend } from '../routing/programmatic/blend.js'
-import { newRouter } from '../routing/programmatic/new_router.js'
-import { Router } from '../routing/programmatic/router.js'
-import type { AdapterOf, RoutesOf } from '../routing/programmatic/types.js'
+import type { MiddlewareFn } from '../core/middleware/middleware.js'
+import type { ResolvedMiddleware } from '../core/middleware/pipeline.js'
+import { blend } from '../core/routing/programmatic/blend.js'
+import { Router } from '../core/routing/programmatic/router.js'
+import type { AdapterOf, RoutesOf } from '../core/routing/programmatic/types.js'
+import { createWebApplication } from '../platform/fastify/application.js'
+import type { FastifyRouterTypes, FastifyTypes } from '../platform/fastify/fastify_adapter.js'
+import { healthProbes } from '../platform/fastify/index.js'
+import type { HTTPPluginConfigurer, HTTPPluginFactory } from '../platform/fastify/plugin.js'
+import { newRouter } from '../platform/fastify/routing/new_router.js'
+import { HTTPPlugin } from '../plugin.js'
 
 /**
  * The adapter contract, held to its word: an application whose adapter is not Fastify's.
@@ -131,11 +127,11 @@ function recording<T extends IAdapterTypes>(adapter: RecordingAdapter<T>): Adapt
 }
 
 function onFake(adapter = new RecordingAdapter<FakeTypes>({ fake: true })) {
-  return createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+  return new WebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
 }
 
 function onBare() {
-  return createWebApplication(recording(new RecordingAdapter<BareTypes>({ fake: true })), {
+  return new WebApplication(recording(new RecordingAdapter<BareTypes>({ fake: true })), {
     container: new CaffeineIoC({ decorators: false }),
   })
 }
@@ -153,10 +149,10 @@ function fakeFeature(name: string): Feature {
 const noop: FastifyPluginAsync = async () => undefined
 
 describe('an application on an adapter that is not Fastify', () => {
-  // The contract's whole claim at run time: the adapter gets the root list in the order it was written, with the
-  // error-handling head slot first and the cookie one behind it — the two the application registers itself, before
-  // anything `.with(...)` adds. A feature installed anywhere in the chain takes no slot at all, and the middleware
-  // pipeline resolves with no server in sight.
+  // The contract's whole claim at run time: the adapter gets the root list in the order it was written, and nothing
+  // else. The framework's head slots are each adapter's own to install, so one that is not Fastify is never handed
+  // a Fastify plugin. A feature installed anywhere in the chain takes no slot at all, and the middleware pipeline
+  // resolves with no server in sight.
   it('hands the adapter its extensions in order and a pipeline it resolves alone', async () => {
     const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
     const unit =
@@ -171,13 +167,9 @@ describe('an application on an adapter that is not Fastify', () => {
 
     await app.bootstrap()
 
-    // The head slots are the built-ins' Fastify plugins, pushed under the application's one cast; their
-    // `fastify-plugin` names tell them apart.
-    const root = (adapter.input?.extensions.root() ?? []).map(entry =>
-      typeof entry === 'function' ? `head:${pluginName(entry as unknown as AnyFastifyPlugin)}` : entry.unit,
-    )
+    const root = (adapter.input?.extensions.root() ?? []).map(entry => entry.unit)
 
-    expect(root).toEqual(['head:caffeine-error-handling', 'head:caffeine-cookie', 'first', 'third'])
+    expect(root).toEqual(['first', 'third'])
     expect(adapter.middlewares.map(middleware => middleware.hook)).toEqual(['after'])
 
     await app.close()
@@ -207,7 +199,7 @@ describe('an application on an adapter that is not Fastify', () => {
   // An adapter factory is all an application needs: it makes its own container.
   it('builds on a container of its own when handed an adapter factory alone', async () => {
     const adapter = new RecordingAdapter<FakeTypes>({ fake: true })
-    const app = createWebApplication(recording(adapter))
+    const app = new WebApplication(recording(adapter))
 
     await app.bootstrap()
 
@@ -221,7 +213,7 @@ describe('an application on an adapter that is not Fastify', () => {
   // index would keep stale entries.
   it('replaces a server section that is not an object, and merges one that is', async () => {
     const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
-    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+    const app = new WebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ mode: 'fast', tags: ['a', 'b'], limits: { soft: 1 } }))
       .server(() => ({ mode: 2, tags: ['c'], limits: { hard: 9 } }))
 
@@ -235,7 +227,7 @@ describe('an application on an adapter that is not Fastify', () => {
   // Only `undefined` leaves an earlier section in place: `null` is a value like any other.
   it('takes null as a section that replaces the one before it', async () => {
     const adapter = new RecordingAdapter<TunedTypes>({ fake: true })
-    const app = createWebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
+    const app = new WebApplication(recording(adapter), { container: new CaffeineIoC({ decorators: false }) })
       .server(() => ({ limits: { soft: 1 } }))
       .server(() => ({ limits: null }))
 

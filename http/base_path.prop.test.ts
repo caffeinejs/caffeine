@@ -2,7 +2,7 @@ import { fc, it } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 
 import { normalizeBasePath, resolveAppURL, stripBasePath } from './base_path.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrConfiguration } from './core/error/common.js'
 
 /**
  * The invariants of taking a base path off a request, over bases, paths and queries no one wrote down.

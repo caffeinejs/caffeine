@@ -1,4 +1,4 @@
-import type { RouteGroupLabels } from './routing/routing.js'
+import type { RouteGroupLabels } from './core/routing/routing.js'
 
 /** The label a router's binding lives under: the name of the server that serves it. */
 export const kBindTo = Symbol('caffeine.http.bindTo')

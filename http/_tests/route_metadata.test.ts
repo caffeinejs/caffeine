@@ -1,20 +1,14 @@
-import fastify, { type FastifyInstance, type RouteOptions } from 'fastify'
+import fastify, { type FastifyInstance, type FastifyRequest, type RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { Controller, Get, RouteBuilder, Router, type IRoute, type IRouteGroup, type WebApplication } from '../index.js'
 import {
-  Controller,
-  Get,
-  RouteBuilder,
-  Router,
   collectRouteGroups,
   createWebApplication,
   type CaffeineRouteConfig,
   type HTTPPluginFactory,
-  type IRoute,
-  type IRouteGroup,
-  type WebApplication,
-} from '../index.js'
+} from '../platform/fastify/index.js'
 
 /**
  * A plugin learns the application's routes the way any Fastify plugin does — from `onRoute` — and finds what
@@ -35,8 +29,8 @@ interface Seen {
   /** The route's methods joined with `|`: the adapter hands Fastify an array, its HEAD twin a string. */
   method: string
   url: string
-  route: IRoute | undefined
-  group: IRouteGroup | undefined
+  route: IRoute<FastifyRequest> | undefined
+  group: IRouteGroup<FastifyRequest> | undefined
   /** The whole stamp, so a route carrying none is told from one carrying a stamp without compiled metadata. */
   stamp: CaffeineRouteConfig | undefined
 }
@@ -148,7 +142,7 @@ describe('route metadata on config.$caffeine', () => {
   })
 
   it('collectRouteGroups regroups what registered and counts the HEAD twin once', async () => {
-    let groups: IRouteGroup[] = []
+    let groups: IRouteGroup<FastifyRequest>[] = []
     app = createWebApplication()
       .with(() =>
         fp(

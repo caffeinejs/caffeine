@@ -2,15 +2,8 @@ import { fileURLToPath } from 'node:url'
 
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
-import {
-  Claim,
-  Identity,
-  Principal,
-  createWebApplication,
-  Authentication,
-  authentication,
-  healthProbes,
-} from '@caffeinejs/http'
+import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
+import { createWebApplication, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'

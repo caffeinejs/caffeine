@@ -1,0 +1,139 @@
+import { CaffeineIoC } from '@caffeinejs/di'
+import { describe, it, expect } from 'vitest'
+
+import {
+  Authorize,
+  Claim,
+  type IContext,
+  Controller,
+  Get,
+  Identity,
+  OpaqueTokenStore,
+  Args,
+  Principal,
+  $p,
+  Authentication,
+  Authorization,
+} from '../../../../index.js'
+import { createWebApplication, authentication } from '../../../../platform/fastify/index.js'
+
+class FakeOpaqueStore extends OpaqueTokenStore {
+  validate(token: string): Principal | null {
+    if (token === 'good-token') {
+      return new Principal(
+        true,
+        new Identity('OpaqueToken', true, [new Claim('sub', 'user-1', ''), new Claim('scope', 'orders:write', '')]),
+      )
+    }
+    if (token === 'reader-token') {
+      return new Principal(
+        true,
+        new Identity('OpaqueToken', true, [new Claim('sub', 'user-2', ''), new Claim('scope', 'orders:read', '')]),
+      )
+    }
+    return null
+  }
+}
+
+function opaqueBuilder() {
+  const container = new CaffeineIoC()
+  container.bind(OpaqueTokenStore, t => t.toClass(FakeOpaqueStore))
+  const builder = createWebApplication({ container })
+  // Only the policy this file's own controller references — no cross-section superset needed, since
+  // each test file has an isolated decorator registrar.
+  builder.install(
+    Authorization(authz =>
+      authz.addPolicy('WriteOrders', b => b.requireAuthenticated().claim('scope', 'orders:write')),
+    ),
+  )
+  return builder
+}
+
+describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () => {
+  it('authenticates a known token via the container-resolved store and exposes ctx.user', async () => {
+    @Authorize()
+    @Controller('/opaque-ok')
+    class OpaqueOkController {
+      @Args([$p.context()])
+      @Get('/')
+      list(ctx: IContext) {
+        return { sub: ctx.user.findFirst('sub')?.value, scope: ctx.user.findFirst('scope')?.value }
+      }
+    }
+    void [OpaqueOkController]
+
+    const builder = opaqueBuilder()
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
+    const app = builder
+    await app.bootstrap()
+
+    const res = await app.fetch('/opaque-ok', { headers: { authorization: 'Bearer good-token' } })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as Record<string, unknown>
+    expect(body.sub).toBe('user-1')
+    expect(body.scope).toBe('orders:write')
+  })
+
+  it('returns 401 when no token is sent', async () => {
+    @Authorize()
+    @Controller('/opaque-none')
+    class OpaqueNoneController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [OpaqueNoneController]
+
+    const builder = opaqueBuilder()
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
+    const app = builder
+    await app.bootstrap()
+
+    const res = await app.fetch('/opaque-none')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 401 when the store rejects the token (unknown/revoked/expired)', async () => {
+    @Authorize()
+    @Controller('/opaque-bad')
+    class OpaqueBadController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [OpaqueBadController]
+
+    const builder = opaqueBuilder()
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
+    const app = builder
+    await app.bootstrap()
+
+    const res = await app.fetch('/opaque-bad', { headers: { authorization: 'Bearer bad-token' } })
+    expect(res.status).toBe(401)
+  })
+
+  it('gates a route by a scope claim through the real policy pipeline', async () => {
+    @Authorize({ policy: 'WriteOrders' })
+    @Controller('/opaque-scope')
+    class OpaqueScopeController {
+      @Get('/')
+      list() {
+        return { ok: true }
+      }
+    }
+    void [OpaqueScopeController]
+
+    const builder = opaqueBuilder()
+    builder.install(Authentication(auth => auth.addOpaqueToken())).with(authentication())
+    const app = builder
+    await app.bootstrap()
+
+    const granted = await app.fetch('/opaque-scope', { headers: { authorization: 'Bearer good-token' } })
+    expect(granted.status).toBe(200)
+
+    const denied = await app.fetch('/opaque-scope', { headers: { authorization: 'Bearer reader-token' } })
+    expect(denied.status).toBe(403)
+  })
+})

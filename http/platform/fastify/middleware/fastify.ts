@@ -1,0 +1,192 @@
+import type { IncomingMessage, ServerResponse } from 'node:http'
+
+import { errMessage } from '@caffeinejs/std/framework/err'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+
+import { ErrConfiguration } from '../../../core/error/common.js'
+import type { MiddlewarePath, Next } from '../../../core/middleware/middleware.js'
+import type { ResolvedMiddleware } from '../../../core/middleware/pipeline.js'
+import { rawContext } from '../../../core/middleware/raw_context.js'
+import { protocolOf } from '../protocol.js'
+import { type Engine, type NormalizationOptions, createEngine } from './_engine.js'
+
+/**
+ * Where a middleware runs under the Fastify adapter: one of Fastify's request-lifecycle hooks.
+ *
+ * Defaults to `onRequest`. Hooks cover every route, including ones the framework registers for itself, except
+ * probe routes which have no context and are skipped. Use a later hook when the middleware must see a parsed
+ * or validated body.
+ */
+export type FastifyMiddlewareHook =
+  | 'onRequest'
+  | 'preParsing'
+  | 'preValidation'
+  | 'preHandler'
+  | 'preSerialization'
+  | 'onSend'
+  | 'onResponse'
+  | 'onError'
+  | 'onTimeout'
+
+const FASTIFY_MIDDLEWARE_HOOKS: readonly FastifyMiddlewareHook[] = [
+  'onRequest',
+  'preParsing',
+  'preValidation',
+  'preHandler',
+  'preSerialization',
+  'onSend',
+  'onResponse',
+  'onError',
+  'onTimeout',
+]
+
+const HOOKS_WITH_PAYLOAD: ReadonlySet<FastifyMiddlewareHook> = new Set([
+  'onError',
+  'onSend',
+  'preParsing',
+  'preSerialization',
+])
+
+/**
+ * Installs resolved middleware on a Fastify server: one Fastify hook per hook that has entries.
+ *
+ * Entries keep their registration order within a hook. Hooks do not compete: they run at Fastify's own
+ * lifecycle points.
+ *
+ * The hooks are registered in Fastify's callback style, not as `async` functions: an async hook returns a
+ * promise on every request, so Fastify defers to a microtask even when every middleware ran synchronously.
+ *
+ * @throws ErrConfiguration when a middleware names a hook Fastify does not have.
+ */
+export function installFastifyMiddlewares(server: FastifyInstance, resolved: readonly ResolvedMiddleware[]): void {
+  const options = normalizationOptions(server)
+  const engines = new Map<FastifyMiddlewareHook, Engine>()
+
+  for (const middleware of resolved) {
+    const hook = toHook(middleware.hook)
+
+    let engine = engines.get(hook)
+    if (engine === undefined) {
+      engine = createEngine(options)
+      engines.set(hook, engine)
+    }
+    engine.use(middleware.path, middleware.fn)
+  }
+
+  for (const hook of FASTIFY_MIDDLEWARE_HOOKS) {
+    const engine = engines.get(hook)
+    if (engine === undefined) {
+      continue
+    }
+
+    const run = (request: FastifyRequest, reply: FastifyReply, done: Next): void => {
+      if (rawContext(request.raw) == null) {
+        done()
+        return
+      }
+
+      stampRaw(request, reply)
+      engine.run(request.raw, reply.raw, done)
+    }
+
+    if (HOOKS_WITH_PAYLOAD.has(hook)) {
+      server.addHook(hook as 'onSend', (request, reply, _payload, done) => {
+        run(request, reply, done)
+      })
+    } else {
+      server.addHook(hook as 'onRequest', (request, reply, done) => {
+        run(request, reply, done)
+      })
+    }
+  }
+}
+
+/**
+ * A router's or a controller's middleware with each relative path rebased under `base`, that scope's full path:
+ * `/jobs` added by a router at `/admin` matches `/admin/jobs`. A middleware with no path covers every route of the
+ * scope already, and keeps none.
+ *
+ * A named parameter in `base` is kept and its regular expression dropped, which only widens a prefix the route
+ * itself still checks.
+ *
+ * @throws ErrConfiguration when a path would be rebased under a wildcard or an optional parameter: neither has a
+ *   prefix form.
+ */
+export function rebaseMiddlewares(base: string, middlewares: readonly ResolvedMiddleware[]): ResolvedMiddleware[] {
+  return middlewares.map(middleware =>
+    middleware.path === undefined ? middleware : { ...middleware, path: rebase(base, middleware.path) },
+  )
+}
+
+function rebase(base: string, path: MiddlewarePath): MiddlewarePath {
+  // `:name(regex)` reads as `:name` to the engine; nothing else in a Fastify path differs from it but these two.
+  const prefix = base.replace(/:(\w+)\([^/]*\)/g, ':$1')
+
+  if (/[*?]/.test(prefix)) {
+    throw new ErrConfiguration(
+      errMessage(
+        `Cannot add middleware "${String(path)}" under "${base}": a relative path cannot start from a wildcard or ` +
+          'an optional parameter',
+      )
+        .solutions(
+          'Leave the path out, so the middleware covers every route of the router',
+          'Or register it on the application with an absolute path, ".use(path, ...)"',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
+
+  // `use('/')` joins to `/admin/`, which the engine reads as `/admin`, as it reads a trailing slash on any prefix.
+  const join = (relative: string): string => {
+    const rooted = relative.startsWith('/') ? relative : `/${relative}`
+    return `${prefix}${rooted}`
+  }
+
+  return typeof path === 'string' ? join(path) : path.map(join)
+}
+
+function toHook(hook: string | undefined): FastifyMiddlewareHook {
+  if (hook === undefined) {
+    return 'onRequest'
+  }
+
+  if ((FASTIFY_MIDDLEWARE_HOOKS as readonly string[]).includes(hook)) {
+    return hook as FastifyMiddlewareHook
+  }
+
+  throw new ErrConfiguration(
+    errMessage(`Cannot register a middleware: the hook "${hook}" is not a middleware hook`)
+      .reference('@caffeinejs/http', ErrConfiguration)
+      .build(),
+  )
+}
+
+function normalizationOptions(server: FastifyInstance): NormalizationOptions {
+  const config = server.initialConfig
+  // find-my-way reads `useSemicolonDelimiter` from its options, but its types do not declare it.
+  const router: NormalizationOptions = config.routerOptions ?? {}
+
+  return {
+    ignoreDuplicateSlashes: router.ignoreDuplicateSlashes ?? config.ignoreDuplicateSlashes,
+    ignoreTrailingSlash: router.ignoreTrailingSlash ?? config.ignoreTrailingSlash,
+    useSemicolonDelimiter: router.useSemicolonDelimiter ?? config.useSemicolonDelimiter,
+  }
+}
+
+function stampRaw(request: FastifyRequest, reply: FastifyReply): void {
+  const raw = request.raw as IncomingMessage & Record<string, unknown>
+  // Kept when already set: Fastify saved the full URL there before a base path was taken off `url`.
+  raw.originalUrl ??= raw.url
+  raw.id = request.id
+  raw.hostname = request.hostname
+  raw.protocol = protocolOf(request)
+  raw.ip = request.ip
+  raw.ips = request.ips
+  raw.log = request.log
+  raw.query = request.query
+  ;(reply.raw as ServerResponse & { log?: unknown }).log = request.log
+  if (request.body !== undefined) {
+    raw.body = request.body
+  }
+}

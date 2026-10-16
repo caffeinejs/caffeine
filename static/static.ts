@@ -6,7 +6,7 @@ import {
   type AdapterRequest,
   type AdapterRouteOptions,
   type HTTPPluginConfigurer,
-} from '@caffeinejs/http'
+} from '@caffeinejs/http/fastify'
 import fastifyStatic, { type ListRender } from '@fastify/static'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'

@@ -1,5 +1,6 @@
 import { Injectable } from '@caffeinejs/di'
-import { WebApplication, Controller, Delete, Get, Post, Args, createWebApplication, $p } from '@caffeinejs/http'
+import { WebApplication, Controller, Delete, Get, Post, Args, $p } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { ErrNoRoutesForController, newURL, controllerClient } from './index.js'

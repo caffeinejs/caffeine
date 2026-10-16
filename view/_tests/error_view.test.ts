@@ -1,14 +1,7 @@
 import { fileURLToPath } from 'node:url'
 
-import {
-  Catch,
-  type ActionResult,
-  type IContext,
-  Controller,
-  ErrorHandler,
-  Get,
-  createWebApplication,
-} from '@caffeinejs/http'
+import { Catch, type ActionResult, type IContext, Controller, ErrorHandler, Get } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import handlebars from 'handlebars'
 import { describe, it, expect } from 'vitest'
 

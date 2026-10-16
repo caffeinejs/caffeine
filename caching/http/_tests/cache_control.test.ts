@@ -1,15 +1,8 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import {
-  Controller,
-  Delete,
-  ErrConfiguration,
-  Get,
-  Post,
-  Status,
-  createWebApplication as newWebApplication,
-} from '@caffeinejs/http'
+import { Controller, Delete, ErrConfiguration, Get, Post, Status } from '@caffeinejs/http'
+import { createWebApplication as newWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, it, expect } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'

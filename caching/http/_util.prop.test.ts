@@ -1,4 +1,4 @@
-import type { AdapterRequest } from '@caffeinejs/http'
+import type { AdapterRequest } from '@caffeinejs/http/fastify'
 import { it, fc } from '@fast-check/vitest'
 import { describe, expect } from 'vitest'
 

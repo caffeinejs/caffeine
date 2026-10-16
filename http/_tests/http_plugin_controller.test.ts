@@ -10,9 +10,9 @@ import {
   type MiddlewareFn,
   Prefix,
   Use,
-  createWebApplication,
   type WebApplication,
 } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * Scenario: a controller's `@Use(...)` taking an `HTTPPlugin`. Its middleware runs in front of the controller's

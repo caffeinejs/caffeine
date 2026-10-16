@@ -1,6 +1,8 @@
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
+import { RouteBuilder } from '../core/routing/builder.js'
+import { $p } from '../core/routing/picker.js'
 import {
   Args,
   BodyAsStream,
@@ -9,16 +11,13 @@ import {
   Router,
   bodyAsBuffer,
   bodyAsStream,
-  createWebApplication,
-  fst,
   type RouteExtension,
 } from '../index.js'
-import { RouteBuilder } from '../routing/builder.js'
-import { $p } from '../routing/picker.js'
+import { createWebApplication, fst } from '../platform/fastify/index.js'
 
 // A third party annotating a route it does not own: the namespace is declared here, exactly as
 // `@caffeinejs/openapi` declares its own.
-declare module '../routing/spec.js' {
+declare module '../core/routing/spec.js' {
   interface RouteDetail {
     testMark?: string
   }

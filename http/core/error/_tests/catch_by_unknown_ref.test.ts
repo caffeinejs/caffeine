@@ -1,0 +1,36 @@
+import { describe, it, expect } from 'vitest'
+
+import {
+  CatchWith,
+  type IContext,
+  Controller,
+  ErrConfiguration,
+  ErrorHandler,
+  Get,
+  type ActionResult,
+} from '../../../index.js'
+import { createWebApplication } from '../../../platform/fastify/index.js'
+
+// Isolated: the unresolvable reference poisons every app build in its module, so it must be the only
+// error-handler concern in this file.
+class UnboundHandler implements ErrorHandler<Error> {
+  async handle(_ctx: IContext, _error: Error): Promise<void> {}
+}
+
+@CatchWith(UnboundHandler)
+@Controller('/unknown')
+class UnknownRefController {
+  @Get('/')
+  boom(): ActionResult {
+    throw new Error('boom')
+  }
+}
+void [UnknownRefController]
+
+describe('@CatchWith with an unregistered handler', () => {
+  it('rejects when the referenced handler has no binding', async () => {
+    const app = createWebApplication()
+
+    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+  })
+})

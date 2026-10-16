@@ -3,7 +3,8 @@ import { Readable } from 'node:stream'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { describe, expect, it, vi } from 'vitest'
 
-import { Router, createWebApplication } from '../index.js'
+import { Router } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * The request scope has to live as long as the response, not as long as the handler's promise. Everything here

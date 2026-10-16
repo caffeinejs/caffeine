@@ -1,4 +1,5 @@
-import { newRouter, type WebApplication, Authentication, authentication, Authorization } from '@caffeinejs/http'
+import { type WebApplication, Authentication, Authorization } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { sendFile, staticFiles } from '../../index.js'

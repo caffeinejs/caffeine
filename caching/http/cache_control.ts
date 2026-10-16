@@ -1,12 +1,11 @@
+import { appendVary, type Principal } from '@caffeinejs/http'
 import {
   addRouteHook,
-  appendVary,
   type AdapterReply,
   type AdapterRequest,
   type AdapterRouteOptions,
   type FastifyContextRequest,
-  type Principal,
-} from '@caffeinejs/http'
+} from '@caffeinejs/http/fastify'
 import type { Duration } from '@caffeinejs/std/duration'
 import type { FastifyRequest } from 'fastify'
 

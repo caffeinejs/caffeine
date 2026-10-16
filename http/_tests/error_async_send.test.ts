@@ -4,7 +4,8 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Catch, Controller, Get, createWebApplication, type IContext } from '../index.js'
+import { Catch, Controller, Get, type IContext } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
  * The global error handler is asynchronous and, on the default path, sends the reply itself. An `onSend` hook

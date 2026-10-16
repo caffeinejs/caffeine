@@ -1,4 +1,4 @@
-import type { RouteValidationSchema } from '../routing/spec.js'
+import type { RouteValidationSchema } from '../core/routing/spec.js'
 import { configureRoute } from './registrar/registrar.js'
 
 /**

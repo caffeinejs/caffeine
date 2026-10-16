@@ -1,4 +1,5 @@
-import { JWTService, newRouter, type WebApplication, Authentication, authentication } from '@caffeinejs/http'
+import { JWTService, type WebApplication, Authentication } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'

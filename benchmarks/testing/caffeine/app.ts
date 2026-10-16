@@ -1,5 +1,5 @@
 import { CaffeineIoC, type Container } from '@caffeinejs/di'
-import { createWebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import { hello } from './hello.routes.js'
 

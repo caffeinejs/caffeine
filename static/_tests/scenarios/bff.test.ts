@@ -1,12 +1,11 @@
 import {
   AuthenticationService,
   AuthenticationTicket,
-  newRouter,
   type WebApplication,
   Authentication,
-  authentication,
   Authorization,
 } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'

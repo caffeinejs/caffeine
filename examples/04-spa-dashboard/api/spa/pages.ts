@@ -1,4 +1,5 @@
-import { ErrHTTPNotFound, newRouter, type IContext } from '@caffeinejs/http'
+import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/fastify'
 import { isDocumentRequest, sendFile } from '@caffeinejs/static'
 
 import { SITE } from './site.js'

@@ -9,15 +9,8 @@ import {
 } from '@caffeinejs/std'
 import { describe, it, expect } from 'vitest'
 
-import {
-  Controller,
-  Get,
-  createWebApplication,
-  Authentication,
-  authentication,
-  Authorization,
-  Guards,
-} from '../index.js'
+import { Controller, Get, Authentication, Authorization, Guards } from '../index.js'
+import { createWebApplication, authentication } from '../platform/fastify/index.js'
 
 describe('createWebApplication default Fastify form', () => {
   it('builds a working app with no adapter factory or Fastify instance', async () => {

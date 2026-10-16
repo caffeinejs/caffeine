@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Status, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get, Post, Status } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'

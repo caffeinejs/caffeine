@@ -1,4 +1,4 @@
-import type { HTTPPluginFactory } from '@caffeinejs/http'
+import type { HTTPPluginFactory } from '@caffeinejs/http/fastify'
 import helmet from '@fastify/helmet'
 
 /**

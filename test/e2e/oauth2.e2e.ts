@@ -1,10 +1,5 @@
-import {
-  Claim,
-  type OAuth2AuthenticationOptionsBuilder,
-  newRouter,
-  Authentication,
-  authentication,
-} from '@caffeinejs/http'
+import { Claim, type OAuth2AuthenticationOptionsBuilder, Authentication } from '@caffeinejs/http'
+import { newRouter, authentication } from '@caffeinejs/http/fastify'
 import { describe, expect, it } from 'vitest'
 
 import { startApp } from './internal/app.js'

@@ -1,4 +1,4 @@
-import { createWebApplication, newRouter } from '@caffeinejs/http'
+import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
 import type { FastifyInstance } from 'fastify'
 
 import { registerWattChecks } from '../watt.js'

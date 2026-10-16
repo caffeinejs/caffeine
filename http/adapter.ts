@@ -9,11 +9,11 @@ import type {
   MiddlewareResolvable,
   Next,
   NodeMiddleware,
-} from './middleware/middleware.js'
-import type { MiddlewarePipeline, ResolvedMiddleware } from './middleware/pipeline.js'
-import type { RouteGroupCompiler } from './routing/compile.js'
-import type { Router } from './routing/programmatic/router.js'
-import type { IRouteGroup } from './routing/route.js'
+} from './core/middleware/middleware.js'
+import type { MiddlewarePipeline, ResolvedMiddleware } from './core/middleware/pipeline.js'
+import type { RouteGroupCompiler } from './core/routing/compile.js'
+import type { Router } from './core/routing/programmatic/router.js'
+import type { IRouteGroup } from './core/routing/route.js'
 import type { IServer } from './server.js'
 
 /** What `ctx.platform` is at least. `name` says which server library serves the request. */
@@ -75,7 +75,7 @@ export interface IAdapterTypes {
  *
  * Code written without knowing its adapter is typed against every entry at once: `@Use(...)` takes any registered
  * extension, and `ctx.platform` on a plain `IContext` is any registered platform. With more than one entry, a
- * reader narrows on `ctx.platform.name` first. The Fastify entry is declared by this package's root entry point.
+ * reader narrows on `ctx.platform.name` first. The Fastify entry is declared by `@caffeinejs/http/fastify`.
  */
 export interface AdapterRegistry {}
 
@@ -132,7 +132,10 @@ export interface AdapterIn<T extends IAdapterTypes> {
   context: HTTPSetupContext
   /** What `app.use()` registered, for the adapter to resolve and attach to its hooks. */
   middlewares: MiddlewarePipeline<T['hook']>
-  /** What the application's head slots and `.with(...)` factories contributed, in install order. */
+  /**
+   * What the `.with(...)` factories contributed, in install order. The adapter installs its own error handling and
+   * cookies ahead of them, from what the error-handling and cookie features bound.
+   */
   extensions: AdapterExtensions<T['extension']>
   /** What every `.server(configure)` resolved to, merged section by section. Empty when none was made. */
   server: T['serverOptions']
@@ -282,10 +285,10 @@ export type AdapterExtensionFactory<X, C = unknown, T extends IAdapterTypes = ne
 /**
  * What an application hands its adapter to install.
  *
- * The root list is in the order the application wrote its `.with(...)` calls, after the framework's own head
- * slots, and that order is the whole ordering model: an adapter installs the extensions one at a time, each
- * finished before the next starts. What a router or a controller asked for is kept apart, per scope, for the
- * adapter to install in front of that scope's routes alone: its plugins, then the middleware its plugins added.
+ * The root list is in the order the application wrote its `.with(...)` calls, and that order is the whole ordering
+ * model: an adapter installs the extensions one at a time, each finished before the next starts. What a router or a
+ * controller asked for is kept apart, per scope, for the adapter to install in front of that scope's routes alone:
+ * its plugins, then the middleware its plugins added.
  */
 export class AdapterExtensions<X> {
   readonly #root: X[] = []

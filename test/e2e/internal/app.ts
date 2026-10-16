@@ -1,5 +1,6 @@
 import type { Container } from '@caffeinejs/di'
-import { createWebApplication, type WebApplicationOptions } from '@caffeinejs/http'
+import { type WebApplicationOptions } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import type { ConfigDefinition } from '@caffeinejs/std/config'
 
 /**

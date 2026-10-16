@@ -1,4 +1,4 @@
-import { csrfExempt } from '../csrf/route.js'
+import { csrfExempt } from '../core/csrf/route.js'
 import { defineClassOrMemberDecorator } from './_decorator_util.js'
 import { configureRoute, configureRouteGroup } from './registrar/registrar.js'
 

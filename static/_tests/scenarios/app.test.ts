@@ -8,17 +8,14 @@ import {
   ErrHTTPNotFound,
   Get,
   Post,
-  createWebApplication,
-  newRouter,
   $p,
   type IContext,
   type WebApplication,
   Authentication,
-  authentication,
   Authorization,
-  healthProbes,
   type ActionResult,
 } from '@caffeinejs/http'
+import { createWebApplication, newRouter, authentication, healthProbes } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { immutableAssets, isDocumentRequest, sendFile, spaMount, staticFiles } from '../../index.js'

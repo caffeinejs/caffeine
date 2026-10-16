@@ -1,4 +1,4 @@
-import { createWebApplication, healthProbes, newRouter } from '@caffeinejs/http'
+import { createWebApplication, healthProbes, newRouter } from '@caffeinejs/http/fastify'
 import { getBasePath } from '@platformatic/globals'
 
 import { registerWattChecks } from '../watt.js'

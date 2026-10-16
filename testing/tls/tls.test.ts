@@ -2,7 +2,8 @@ import { once } from 'node:events'
 import { createServer, get, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
 
-import { createWebApplication, newRouter, type WebApplication } from '@caffeinejs/http'
+import { type WebApplication } from '@caffeinejs/http'
+import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { testTLS, testTLSCertificate } from './index.js'

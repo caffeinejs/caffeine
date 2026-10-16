@@ -1,5 +1,6 @@
-import { $p, Args, Controller, Post, Router, createWebApplication } from '@caffeinejs/http'
-import type { FastifyContext } from '@caffeinejs/http'
+import { $p, Args, Controller, Post, Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
+import type { FastifyContext } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 

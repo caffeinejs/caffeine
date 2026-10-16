@@ -11,16 +11,16 @@ import type {
 } from './adapter.js'
 import { normalizeBasePath } from './base_path.js'
 import { boundTo, kBindTo } from './binding.js'
-import { ErrConfiguration } from './error/common.js'
+import { ErrConfiguration } from './core/error/common.js'
+import type { RouteGroupCompiler, RouteGroupMeta } from './core/routing/compile.js'
+import type { Router } from './core/routing/programmatic/router.js'
+import type { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
+import { FluentRouteSource } from './core/routing/programmatic/source.js'
+import type { IRouteGroup, RouteGroupScope } from './core/routing/route.js'
+import type { Routing } from './core/routing/routing.js'
+import type { RouteGroupSpec } from './core/routing/spec.js'
 import { HTTPPlugin } from './plugin.js'
 import { PluginSlot } from './plugin_slot.js'
-import type { RouteGroupCompiler, RouteGroupMeta } from './routing/compile.js'
-import type { Router } from './routing/programmatic/router.js'
-import type { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
-import { FluentRouteSource } from './routing/programmatic/source.js'
-import type { IRouteGroup, RouteGroupScope } from './routing/route.js'
-import type { Routing } from './routing/routing.js'
-import type { RouteGroupSpec } from './routing/spec.js'
 import type { ServerDefinition } from './server_definition.js'
 
 /** One server: the definition it is built from, the routers selected for it, and what the adapter built. */
@@ -37,8 +37,6 @@ export interface ServerSetupInput<T extends IAdapterTypes> {
    * server, a child logger.
    */
   readonly context: HTTPSetupContext
-  /** The framework's head slots, built fresh for one server: error handling, then cookies. */
-  headSlots(): T['extension'][]
   /**
    * What routers and controllers asked for, resolved and installed in front of their groups on any server. What a
    * server's plugins mount is resolved into it too.
@@ -118,8 +116,9 @@ export class ServerSet<T extends IAdapterTypes> {
     const server = await resolveServerOptions(definition.server, context)
     const basePath = normalizeBasePath(await definition.basePath?.(context))
 
-    // The framework's head slots, then its own `.with(...)` factories, in the order they were written.
-    const root = await slot.during(() => registerPlugins<T>(definition.plugins, input.headSlots(), context))
+    // Its own `.with(...)` factories, in the order they were written. The adapter installs the framework's head
+    // slots ahead of them.
+    const root = await slot.during(() => registerPlugins<T>(definition.plugins, context))
 
     // What the plugins mounted: those routers' own plugins first, since they may nest more, then the groups. A group
     // the application already serves on this server is served once, as a router mounted twice in one place is.
@@ -227,9 +226,10 @@ function serverContext(base: HTTPSetupContext, name: string | undefined, app: Pl
  */
 async function registerPlugins<T extends IAdapterTypes>(
   factories: readonly AdapterExtensionFactory<T['extension'] | HTTPPlugin<T>, unknown, T>[],
-  root: T['extension'][],
   context: HTTPSetupContext,
 ): Promise<T['extension'][]> {
+  const root: T['extension'][] = []
+
   for (const factory of factories) {
     const extension = await factory(context as HTTPSetupContext<unknown, T>)
 

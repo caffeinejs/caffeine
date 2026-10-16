@@ -1,5 +1,6 @@
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get, createWebApplication } from '@caffeinejs/http'
+import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'

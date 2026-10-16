@@ -1,4 +1,4 @@
-import { createWebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 // Side-effect imports register the controllers (and, transitively, their services and repositories)
 // in the global component registry that the container snapshots when the app is built.

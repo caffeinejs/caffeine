@@ -1,4 +1,4 @@
-import { createWebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 // Same app graph as app.ts, built but never listened on: this worker measures the resident memory
 // of the constructed application, not its network stack.

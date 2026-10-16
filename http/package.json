@@ -11,6 +11,18 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./constraints": {
+      "types": "./dist/core/constraints/index.d.ts",
+      "default": "./dist/core/constraints/index.js"
+    },
+    "./cookie": {
+      "types": "./dist/core/cookie/index.d.ts",
+      "default": "./dist/core/cookie/index.js"
+    },
+    "./csrf": {
+      "types": "./dist/core/csrf/index.d.ts",
+      "default": "./dist/core/csrf/index.js"
+    },
     "./decorators": {
       "types": "./dist/decorators/index.d.ts",
       "default": "./dist/decorators/index.js"
@@ -19,9 +31,37 @@
       "types": "./dist/decorators/registrar/index.d.ts",
       "default": "./dist/decorators/registrar/index.js"
     },
+    "./error": {
+      "types": "./dist/core/error/index.d.ts",
+      "default": "./dist/core/error/index.js"
+    },
+    "./fastify": {
+      "types": "./dist/platform/fastify/index.d.ts",
+      "default": "./dist/platform/fastify/index.js"
+    },
     "./guards": {
-      "types": "./dist/guards/index.d.ts",
-      "default": "./dist/guards/index.js"
+      "types": "./dist/core/guards/index.d.ts",
+      "default": "./dist/core/guards/index.js"
+    },
+    "./health": {
+      "types": "./dist/core/health/index.d.ts",
+      "default": "./dist/core/health/index.js"
+    },
+    "./listener": {
+      "types": "./dist/core/listener/index.d.ts",
+      "default": "./dist/core/listener/index.js"
+    },
+    "./middleware": {
+      "types": "./dist/core/middleware/index.d.ts",
+      "default": "./dist/core/middleware/index.js"
+    },
+    "./routing": {
+      "types": "./dist/core/routing/index.d.ts",
+      "default": "./dist/core/routing/index.js"
+    },
+    "./security": {
+      "types": "./dist/core/security/index.d.ts",
+      "default": "./dist/core/security/index.js"
     },
     "./package.json": "./package.json"
   },

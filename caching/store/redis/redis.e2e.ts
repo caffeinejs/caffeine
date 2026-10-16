@@ -11,7 +11,8 @@ import { randomUUID } from 'node:crypto'
 import { connect as dial } from 'node:net'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Router, createWebApplication } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import { createClient, createCluster } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

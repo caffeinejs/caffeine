@@ -14,10 +14,9 @@ import {
   Schema,
   Status,
   WebApplication,
-  createWebApplication,
   Authentication,
-  authentication,
 } from '@caffeinejs/http'
+import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
 import { $multipart } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std/schema'
 import { type FastifyInstance } from 'fastify'

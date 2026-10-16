@@ -45,7 +45,7 @@ export class ExampleController {
 App:
 
 ```ts
-import { createWebApplication } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import './presentation/example.controller.js'
 

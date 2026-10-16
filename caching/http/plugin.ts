@@ -1,11 +1,6 @@
 import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
-import {
-  ErrConfiguration,
-  type AdapterRouteOptions,
-  type HTTPPluginConfigurer,
-  type HTTPPluginFactory,
-  type HTTPSetupContext,
-} from '@caffeinejs/http'
+import { ErrConfiguration, type HTTPSetupContext } from '@caffeinejs/http'
+import { type AdapterRouteOptions, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/framework/err'

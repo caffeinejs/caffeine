@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
-import { Controller, Get, createWebApplication, healthProbes } from '../index.js'
+import { Controller, Get } from '../index.js'
+import { createWebApplication, healthProbes } from '../platform/fastify/index.js'
 
 // Isolated in its own file: the container snapshots the controller registry when it is constructed, so the
 // colliding controller below would otherwise be picked up by every application built after this test runs.

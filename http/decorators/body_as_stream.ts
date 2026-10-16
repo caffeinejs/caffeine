@@ -1,4 +1,4 @@
-import type { RouteExtension } from '../routing/extension.js'
+import type { RouteExtension } from '../core/routing/extension.js'
 import { configureRoute } from './registrar/registrar.js'
 
 /**

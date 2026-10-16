@@ -2,8 +2,9 @@ import { $i, type Provider } from '@caffeinejs/di'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
-import { Router, blend, createWebApplication, fst } from '../index.js'
-import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../routing/programmatic/types.js'
+import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../core/routing/programmatic/types.js'
+import { Router, blend } from '../index.js'
+import { createWebApplication, fst } from '../platform/fastify/index.js'
 
 class Greeter {}
 class Audit {}

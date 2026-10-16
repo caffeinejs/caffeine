@@ -3,7 +3,8 @@ import { ConsoleLogger } from '@caffeinejs/std/logger/console'
 import type { FastifyBaseLogger } from 'fastify'
 import { describe, expect, it } from 'vitest'
 
-import { Controller, Get, createWebApplication } from '../index.js'
+import { Controller, Get } from '../index.js'
+import { createWebApplication } from '../platform/fastify/index.js'
 
 type Record_ = { severity: string; args: unknown[]; bindings: Bindings }
 

@@ -5,7 +5,7 @@ import type {
   ServerConfigurer,
   ServerCustomizer,
 } from './adapter.js'
-import { MiddlewarePipeline } from './middleware/pipeline.js'
+import { MiddlewarePipeline } from './core/middleware/pipeline.js'
 import type { HTTPPlugin } from './plugin.js'
 
 /** What `.basePath(...)` takes besides a string: resolved once at start-up, like a `.server(...)` configurer. */

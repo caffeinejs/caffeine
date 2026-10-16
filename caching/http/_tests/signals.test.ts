@@ -1,7 +1,8 @@
 import { connect } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { Controller, Get, createWebApplication } from '@caffeinejs/http'
+import { Controller, Get } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 

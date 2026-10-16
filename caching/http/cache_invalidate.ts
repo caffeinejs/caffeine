@@ -1,4 +1,9 @@
-import { addRouteHook, type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http'
+import {
+  addRouteHook,
+  type AdapterReply,
+  type AdapterRequest,
+  type AdapterRouteOptions,
+} from '@caffeinejs/http/fastify'
 
 import { cacheRouteOf } from './_observe.js'
 import { assertTags } from './_util.js'

@@ -11,6 +11,7 @@ import { errMessage } from '@caffeinejs/std/framework/err'
 import {
   type IAdapter,
   type AdapterExtensionFactory,
+  type AnyAdapterTypes,
   type AdapterFactory,
   type IAdapterServer,
   type IAdapterTypes,
@@ -19,12 +20,10 @@ import {
   type ServerConfigurer,
   type ServerCustomizer,
 } from './adapter.js'
-import { CookieBuilder } from './cookie/cookie.js'
-import { getRouteGroup } from './decorators/registrar/registrar.js'
-import { ErrorHandlingBuilder } from './error/builder.js'
-import { ErrConfiguration } from './error/common.js'
-import { fastifyAdapterFactory, type FastifyTypes } from './fastify_adapter.js'
-import { listenerServers } from './listener/servers.js'
+import { CookieBuilder } from './core/cookie/cookie.js'
+import { ErrorHandlingBuilder } from './core/error/builder.js'
+import { ErrConfiguration } from './core/error/common.js'
+import { listenerServers } from './core/listener/servers.js'
 import {
   type MiddlewareFactory,
   type MiddlewareFn,
@@ -34,18 +33,19 @@ import {
   type MiddlewareTarget,
   type Next,
   type NodeMiddleware,
-} from './middleware/index.js'
-import { parseUse } from './middleware/middleware.js'
-import { kServerExtension, type HTTPPlugin } from './plugin.js'
+} from './core/middleware/index.js'
+import { parseUse } from './core/middleware/middleware.js'
+import { ControllerRouteSource } from './core/routing/decorated/source.js'
+import { buildRouting, type RouteSource } from './core/routing/index.js'
+import type { Router } from './core/routing/programmatic/router.js'
+import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'
+import { FluentRouteSource } from './core/routing/programmatic/source.js'
+import type { IRouteGroup } from './core/routing/route.js'
+import { AuthorizationBuilder } from './core/security/authz/index.js'
+import { getRouteGroup } from './decorators/registrar/registrar.js'
+import type { HTTPPlugin } from './plugin.js'
 import { assertPluginFactory } from './plugin_factory.js'
 import { closedApplicationOps } from './plugin_slot.js'
-import { ControllerRouteSource } from './routing/decorated/source.js'
-import { buildRouting, type RouteSource } from './routing/index.js'
-import type { Router } from './routing/programmatic/router.js'
-import { ScopedPlugins } from './routing/programmatic/scoped_plugins.js'
-import { FluentRouteSource } from './routing/programmatic/source.js'
-import type { IRouteGroup } from './routing/route.js'
-import { AuthorizationBuilder } from './security/authz/index.js'
 import type { IServer } from './server.js'
 import { ServerDefinition, type BasePathConfigurer } from './server_definition.js'
 import { ServerSet } from './servers.js'
@@ -64,9 +64,9 @@ export interface WebRunInfo extends RunInfo {
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
 
 /**
- * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}, Fastify's unless
- * another is given. `setup()` builds routing and sets the adapter up; `start()` runs it;
- * `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
+ * The HTTP application: an {@link Application} whose lifecycle steps drive an {@link IAdapter}: Fastify's, through
+ * `createWebApplication()` from `@caffeinejs/http/fastify`, or the one given to the constructor. `setup()` builds
+ * routing and sets the adapter up; `start()` runs it; `stop()` tears it down. `Application` handles the container, features, and lifecycle hooks.
  *
  * Configures fluently, and is itself the running instance — there is no separate builder. Features (container
  * binders) are installed with `.install(...)`, in any order; server plugins are registered with `.with(...)`,
@@ -80,7 +80,7 @@ export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfi
  *   .server(() => ({ listener: { port: 3000 } }))
  * ```
  */
-export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = never, DEPS = never, C = unknown>
+export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = never, DEPS = never, C = unknown>
   extends Application<C>
   implements IServer<T>
 {
@@ -104,8 +104,7 @@ export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = nev
   /** What routers and controllers registered for themselves, resolved once during start-up. */
   readonly #plugins = new ScopedPlugins<T>()
 
-  // Held as fields: the instance that configured is the one whose head-slot plugin installs, and it holds
-  // what its configure step bound.
+  // Held as fields: `.errorHandling(...)` and `.cookie(...)` hand their callbacks to the instances installed below.
   readonly #errorHandling = new ErrorHandlingBuilder<C>()
   readonly #cookieBuilder = new CookieBuilder<C>()
 
@@ -113,9 +112,10 @@ export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = nev
     super(options)
 
     // Installed unconditionally, so their names are dedupe-protected and `$hasFeature` answers for them. The
-    // order here is configure order only; the server order is the head slots in `#headSlots()`: error handling
-    // first, then cookies, ahead of everything `.with(...)` registers. Cookies are read lazily, so no plugin that
-    // reads one has an order to get right, and the cookie writer's `onSend` hook leads every later plugin's.
+    // order here is configure order only: each binds what its server half runs on, and the adapter installs those
+    // halves ahead of everything `.with(...)` registers, error handling first, then cookies. Cookies are read lazily,
+    // so no plugin that reads one has an order to get right, and the cookie writer's `onSend` hook leads every
+    // later plugin's.
     this.install(this.#errorHandling)
     this.install(this.#cookieBuilder)
 
@@ -419,16 +419,6 @@ export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = nev
     return this
   }
 
-  /** The framework's head slots, built fresh for one server: error handling first, then cookies. */
-  #headSlots(): T['extension'][] {
-    // Not checked against `T`: the built-ins are written against Fastify whatever the adapter, exactly as
-    // their configure halves are. A foreign adapter receives two extensions it cannot install.
-    return [
-      this.#errorHandling[kServerExtension]() as T['extension'],
-      this.#cookieBuilder[kServerExtension]() as T['extension'],
-    ]
-  }
-
   /** Resolves what each controller's `@Use(...)` asked for, keyed by its class. */
   async #controllerPlugins(context: HTTPSetupContext): Promise<void> {
     // Registered when the container compiled, so every controller the application can resolve is already known here.
@@ -517,7 +507,6 @@ export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = nev
 
     await servers.setup(this.#adapter, {
       context,
-      headSlots: () => this.#headSlots(),
       plugins: this.#plugins,
       compileRouteGroup: routing.compileRouteGroup,
     })
@@ -580,37 +569,6 @@ export class WebApplication<T extends IAdapterTypes = FastifyTypes, ROUTES = nev
 
     return server
   }
-}
-
-/**
- * Creates a web application.
- *
- * Features are installed with `.install(Feature(configure))` and server plugins are registered with
- * `.with(factory)`, at any point in the chain before `bootstrap()` — only `.with(...)` order matters.
- * Configuration is built separately with `newConfiguration` and passed in as `{ config }`. A plugin factory is
- * `.with(({ config }) => [fastifyCors, config.app.cors.options])`.
- *
- * ```ts
- * createWebApplication()
- *   .with(staticFiles(s => s.serve('public')))
- * ```
- */
-// Default Fastify — no adapter factory required; `.server(...)` configures the instance it builds.
-export function createWebApplication<TConfig = unknown>(
-  options?: WebApplicationOptions<TConfig>,
-): WebApplication<FastifyTypes, never, never, TConfig>
-// Explicit adapter factory — another adapter altogether.
-export function createWebApplication<T extends IAdapterTypes, TConfig = unknown>(
-  adapterFactory: AdapterFactory<T>,
-  options?: WebApplicationOptions<TConfig>,
-): WebApplication<T, never, never, TConfig>
-export function createWebApplication(
-  first?: AdapterFactory<any> | WebApplicationOptions,
-  second?: WebApplicationOptions,
-): WebApplication<any> {
-  return typeof first === 'function'
-    ? new WebApplication(first, second ?? {})
-    : new WebApplication(fastifyAdapterFactory(), first ?? {})
 }
 
 /** The routes one router declares, distributed so a union of routers folds into a union of their routes. */

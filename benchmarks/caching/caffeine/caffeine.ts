@@ -1,6 +1,7 @@
 import { HTTPCaching, cacheControl } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
-import { Router, createWebApplication } from '@caffeinejs/http'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import { PRODUCTS, TTL_SECONDS } from '../payload.js'
 

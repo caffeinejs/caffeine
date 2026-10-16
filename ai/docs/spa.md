@@ -27,7 +27,8 @@ drops the value lets the adapter send an empty body over it: the caller sees a 2
 ```ts
 import { resolve } from 'node:path'
 
-import { ErrHTTPNotFound, newRouter, type IContext } from '@caffeinejs/http'
+import { ErrHTTPNotFound, type IContext } from '@caffeinejs/http'
+import { newRouter } from '@caffeinejs/http/fastify'
 import { immutableAssets, isDocumentRequest, sendFile, spaMount, staticFiles } from '@caffeinejs/static'
 
 const DIST = resolve('site/dist')

@@ -1,7 +1,7 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
 import { $t } from '@caffeinejs/std/schema'
 
-import type { OIDCSchemeConfig } from '../security/auth/config.js'
+import type { OIDCSchemeConfig } from '../core/security/auth/config.js'
 
 const challengeMode = (): ReturnType<typeof $t.UnionEnum> => $t.UnionEnum(['auto', 'redirect', 'status'])
 
