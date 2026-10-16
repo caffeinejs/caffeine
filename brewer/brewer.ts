@@ -9,7 +9,8 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
   /**
    * Headers sent with every request. A function is called per request — sync or async — so a token can be read
    * when it is needed rather than captured when the client was made. A name given `undefined` is left out, so a
-   * token not known yet sends no header at all.
+   * token not known yet sends no header at all. A `content-type` here or on a call never reaches a `FormData` or
+   * `URLSearchParams` body, which goes with the type the platform writes for it.
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
@@ -177,6 +178,12 @@ async function send(
         merged.set('content-type', 'application/json')
       }
     }
+  }
+
+  // The platform writes the content type of a form it encodes, a multipart boundary included, so one set by hand
+  // could only replace it with something the server cannot read.
+  if (payload instanceof FormData || payload instanceof URLSearchParams) {
+    merged.delete('content-type')
   }
 
   const { headers: _clientHeaders, fetch: fetchImpl, ...clientRest } = options
