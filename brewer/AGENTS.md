@@ -2,8 +2,9 @@
 
 Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
-- Zero runtime dependencies, and it must stay that way: no Node imports and nothing beyond `fetch`, `URL`,
-  `URLSearchParams` and `Proxy`, because it runs in a browser. `@caffeinejs/http` is a devDependency for tests
+- Zero runtime dependencies, and it must stay that way: no Node imports and nothing beyond `fetch` and the classes it
+  works with (`Headers`, `FormData`, `Blob`, `File`, web streams), `URL`, `URLSearchParams` and `Proxy`, because it
+  runs in a browser. `@caffeinejs/http` is a devDependency for tests
   only; never import it from source.
 - `RouteContract` is a structural copy of `@caffeinejs/http`'s `RouteDef`, deliberately not an import. A type
   test guards the copy; if you change one, change both.

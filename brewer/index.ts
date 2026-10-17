@@ -1,5 +1,6 @@
 export * from './brewer.js'
 export type * from './contract.js'
+export * from './download.js'
 export * from './errors.js'
 export type * from './init.js'
 export type * from './platform.js'

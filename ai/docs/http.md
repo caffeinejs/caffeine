@@ -637,6 +637,9 @@ await client.pets.post({ body: { name: 'Rex' } })
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another.
+- Downloads are read with the platform's own readers. `fileOf(res)` turns one into a `File`, named from its
+  `Content-Disposition` (the UTF-8 `filename*` first, cut to a base name so it never holds a path) and typed from
+  `Content-Type`. `filenameOf(res)` names a download streamed from `res.body` without reading it.
 - `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
   it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
   which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
