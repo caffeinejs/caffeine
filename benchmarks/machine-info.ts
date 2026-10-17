@@ -27,7 +27,7 @@ export function printVersions(packages: string[]): void {
   }
   console.log('\nVersions:')
   const width = Math.max(...packages.map(p => p.length))
-  for (const pkg of packages) {
+  for (const pkg of packages.toSorted((a, b) => a.localeCompare(b))) {
     console.log(`  ${pkg.padEnd(width)}  ${installedVersion(pkg)}`)
   }
 }

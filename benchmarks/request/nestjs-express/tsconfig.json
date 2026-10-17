@@ -11,6 +11,6 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["nestjs.ts", "../shared.ts"],
+  "include": ["nestjs.ts"],
   "exclude": ["node_modules"]
 }

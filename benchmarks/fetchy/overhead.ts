@@ -180,14 +180,14 @@ group('dispatch across 8 classes', () => {
 group('in-memory call', () => {
   summary(() => {
     bench('control', async () => do_not_optimize(JSON.parse(await (await transport.send(controlRequest)).text())))
-    bench('fetchy field', async () => do_not_optimize(await api.post(benchId, benchFilter, benchBody)))
-    bench('fetchy method', async () => do_not_optimize(await api.postMethod(benchId, benchFilter, benchBody)))
-    bench('fetchy method + interceptor', async () =>
+    bench('fetchy (field)', async () => do_not_optimize(await api.post(benchId, benchFilter, benchBody)))
+    bench('fetchy (method)', async () => do_not_optimize(await api.postMethod(benchId, benchFilter, benchBody)))
+    bench('fetchy (method + interceptor)', async () =>
       do_not_optimize(await intercepted.postMethod(benchId, benchFilter, benchBody)))
-    bench('fetchy method, 3 declared headers', async () =>
+    bench('fetchy (method, 3 declared headers)', async () =>
       do_not_optimize(await api.postWithHeaders(benchId, benchFilter, benchBody)))
     // Last: the rows above run before any call sends through an authenticator, as they did before it existed.
-    bench('fetchy method + authenticator', async () =>
+    bench('fetchy (method + authenticator)', async () =>
       do_not_optimize(await authenticated.postMethod(benchId, benchFilter, benchBody)))
   })
 })

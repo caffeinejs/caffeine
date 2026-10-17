@@ -15,9 +15,11 @@ const servers: ServerConfig[] = [
   { name: 'hono', port: 3021, ...built('hono', 'hono.js') },
   { name: 'nestjs (fastify)', port: 3022, ...built('nestjs', 'nestjs.js') },
   { name: 'nestjs (express)', port: 3028, ...built('nestjs-express', 'nestjs.js') },
+  { name: 'nestjs (fastify, request scoped)', port: 3029, ...built('nestjs-request-scope', 'nestjs.js') },
   { name: 'express', port: 3027, ...built('express', 'express.js') },
   { name: 'caffeine', port: 3023, ...built('caffeine', 'caffeine.js') },
-  { name: 'caffeine-request-scope', port: 3025, ...built('caffeine-request-scope', 'caffeine.js') },
+  { name: 'caffeine (request scoped)', port: 3025, ...built('caffeine-request-scope', 'caffeine.js') },
+  { name: 'caffeine (router)', port: 3026, ...built('caffeine-router', 'caffeine.js') },
   { name: 'elysia', port: 3024, ...built('elysia', 'elysia.js') },
 ]
 

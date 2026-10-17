@@ -25,7 +25,7 @@ const servers: ServerConfig[] = [
   { name: 'caffeine', port: PORT, ...built('caffeine', 'caffeine.js') },
   // The same route declared programmatically. Paired with the one above it is the only honest read on what the
   // fluent router costs: everything else about the two processes is identical.
-  { name: 'caffeine-router', port: PORT, ...built('caffeine-router', 'caffeine-router.js') },
+  { name: 'caffeine (router)', port: PORT, ...built('caffeine-router', 'caffeine-router.js') },
 ]
 
 await runLoadBenchmark({

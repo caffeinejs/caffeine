@@ -24,7 +24,7 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
-    name: 'fastify-fetch',
+    name: 'fastify (fetch)',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'fastify', 'fetch.js')],
     port: 3031,

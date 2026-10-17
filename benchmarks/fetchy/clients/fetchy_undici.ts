@@ -8,6 +8,6 @@ import type { BenchClient } from './bench_client.js'
 const api = newClient().baseURL(baseURL).transportFactory(new UndiciTransportFactory()).build().create(BenchAPI)
 
 export const fetchyUndiciClient: BenchClient = {
-  name: 'fetchy-undici',
+  name: 'fetchy (undici)',
   request: () => api.post(benchId, benchFilter, benchBody),
 }

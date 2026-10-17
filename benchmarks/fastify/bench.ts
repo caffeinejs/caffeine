@@ -12,7 +12,7 @@ const built = (file: string): Pick<ServerConfig, 'args' | 'builtPath'> => {
 
 const servers: ServerConfig[] = [
   { name: 'fastify', port: 3030, ...built('bare.js') },
-  { name: 'fastify-fetch', port: 3031, ...built('fetch.js') },
+  { name: 'fastify (fetch)', port: 3031, ...built('fetch.js') },
 ]
 
 await runLoadBenchmark({

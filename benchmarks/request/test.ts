@@ -46,6 +46,13 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
+    name: 'nestjs (fastify, request scoped)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'nestjs-request-scope', 'nestjs.js')],
+    port: 3029,
+    requiresBuild: true,
+  },
+  {
     name: 'express',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'express', 'express.js')],
@@ -60,10 +67,17 @@ const servers: ServerConfig[] = [
     requiresBuild: true,
   },
   {
-    name: 'caffeine-request-scope',
+    name: 'caffeine (request scoped)',
     cmd: 'node',
     args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-request-scope', 'caffeine.js')],
     port: 3025,
+    requiresBuild: true,
+  },
+  {
+    name: 'caffeine (router)',
+    cmd: 'node',
+    args: [resolve(__dirname, '..', 'dist', 'request', 'caffeine-router', 'caffeine.js')],
+    port: 3026,
     requiresBuild: true,
   },
   {
