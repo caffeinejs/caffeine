@@ -41,9 +41,11 @@ type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends stri
  *
  * Every branch is a filter over the same entry union, so a node costs one pass per kind rather than a traversal
  * each. Intersecting the three means a node can be a terminal and a parent at once, which is what a path like
- * `/pets` and `/pets/:id` needs.
+ * `/pets` and `/pets/:id` needs. `Reserved` names the segments a node answers itself, as the root does `$request`.
  */
-export type Node<E extends AnyEntry> = Terminal<E> & StaticChildren<E> & ParamChild<E>
+export type Node<E extends AnyEntry, Reserved extends string = never> = Terminal<E> &
+  StaticChildren<E, Reserved> &
+  ParamChild<E>
 
 /**
  * The verbs answered by the routes whose path ends at this node.
@@ -59,10 +61,10 @@ type Terminal<E extends AnyEntry> = {
  *
  * A segment named after a verb is left out: the proxy reads a verb first, so offering it would promise something
  * the runtime cannot deliver. So is one named `then`, which the proxy never answers, so that a client is never
- * taken for a promise. `$request` reaches both.
+ * taken for a promise, and one the node reserves, as the root does `$request`. `$request` reaches them all.
  */
-type StaticChildren<E extends AnyEntry> = {
-  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then'>]: Node<Advance<E, K>>
+type StaticChildren<E extends AnyEntry, Reserved extends string> = {
+  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
 }
 
 type Advance<E extends AnyEntry, K extends string> = E extends {
@@ -106,8 +108,8 @@ type AdvanceAny<E extends AnyEntry> = E extends {
 /**
  * The escape hatch: a route addressed by method and path.
  *
- * There for what the proxy cannot serve — a path segment named after a verb or `then`, a method it has no verb
- * for, and a path decided at run time — and deliberately for nothing else.
+ * There for what the proxy cannot serve — a path segment named after a verb or `then`, or `$request` at the root, a
+ * method it has no verb for, and a path decided at run time — and deliberately for nothing else.
  */
 export interface RawCall<R extends RouteContract> {
   $request<M extends R['method'], P extends Extract<R, { method: M }>['path']>(
@@ -128,5 +130,5 @@ type RawInit<R extends RouteContract> = CallInit<R> &
       ? { params?: R['params'] }
       : { params: R['params'] })
 
-/** The client: the route tree, plus the escape hatch. */
-export type BrewClient<T> = Node<EntriesOf<Routes<T>>> & RawCall<Routes<T>>
+/** The client: the route tree, plus the escape hatch, which keeps its name at the root. */
+export type BrewClient<T> = Node<EntriesOf<Routes<T>>, '$request'> & RawCall<Routes<T>>

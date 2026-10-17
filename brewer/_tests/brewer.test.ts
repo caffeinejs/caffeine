@@ -51,6 +51,8 @@ const pets = new Router('/pets')
   .handler(ctx => ({ found: [ctx.req.body().name] }))
   .get('/query')
   .handler(() => ({ literalQuerySegment: true }))
+  .get('/$request')
+  .handler(() => ({ literalRequestSegment: true }))
   .get('/tenant')
   .schema({ headers: $t.Object({ 'x-tenant': $t.String(), 'if-match': $t.Optional($t.String()) }) })
   .handler(ctx => ({
@@ -80,7 +82,10 @@ const catalog = new Router('/catalog')
 // Declared in lower case, which `.route(...)` takes and the route's type keeps.
 const legacy = new Router('/legacy').route('patch', '/lower').handler(ctx => ({ method: ctx.req.method }))
 
-const app = createWebApplication().mount(pets, files, tags, catalog, legacy)
+// A root segment named like the escape hatch, which keeps that name for itself.
+const hatch = new Router('/$request').get('/').handler(() => ({ literalRequestRoot: true }))
+
+const app = createWebApplication().mount(pets, files, tags, catalog, legacy, hatch)
 
 let origin: string
 
@@ -519,6 +524,13 @@ describe('brewer against an application in process', () => {
       expect(await created.json()).toEqual({ created: { id: 3, name: 'Milou' } })
       expect(await searched.json()).toEqual({ tags: ['x'], tenant: 't9' })
       expect(await order.json()).toEqual({ petID: 'a b', orderID: 'ø' })
+    })
+
+    it('should reach a root segment named $request, whose name it keeps, while the proxy reaches one deeper down', async () => {
+      const client = brewer(app)
+
+      expect(await (await client.$request('GET', '/$request')).json()).toEqual({ literalRequestRoot: true })
+      expect(await (await client.pets.$request.get()).json()).toEqual({ literalRequestSegment: true })
     })
 
     it('should reject a path parameter with no value, naming it and the path, and send nothing', async () => {

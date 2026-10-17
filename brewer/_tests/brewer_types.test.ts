@@ -195,6 +195,20 @@ describe('the tree', () => {
     })
   })
 
+  it('keeps the name $request at the root for the escape hatch, and offers it as a segment further down', () => {
+    typeOnly(async () => {
+      const hatch = new Router('/$request').get('/').handler(() => ({ top: true }))
+      const api = new Router('/api').get('/$request').handler(() => ({ nested: true }))
+      const surface = blend(hatch, api)
+      const client = brewer<typeof surface>('http://localhost')
+
+      // @ts-expect-error -- at the root, `$request` is the escape hatch, which reaches the segment by its path
+      void client.$request.get()
+      expectTypeOf(await (await client.$request('GET', '/$request')).json()).toEqualTypeOf<{ top: boolean }>()
+      expectTypeOf(await (await client.api.$request.get()).json()).toEqualTypeOf<{ nested: boolean }>()
+    })
+  })
+
   it('rejects a verb the path does not answer', () => {
     typeOnly(() => {
       // @ts-expect-error -- /pets/:id answers GET only
