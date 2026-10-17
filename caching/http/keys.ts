@@ -4,8 +4,8 @@ import type { ETagGenerator } from './cache_control.js'
 import type { HTTPCacheStore } from './store.js'
 
 /**
- * Convenience DI key for an {@link ETagGenerator}, for an application that wants to bind one and reference it
- * by token: `container.bind(kETagGenerator).toValue(myGenerator)`, then
+ * Convenience DI key for an {@link ETagGenerator}, for an application that provides one and references it by
+ * token: a `@Provides(kETagGenerator)` method of a `@Configuration` class, then
  * `.with(HTTPCaching(b => b.etagGenerator(kETagGenerator)))`. `HTTPCaching` never binds this key itself. A
  * per-route `@CacheControl({ etagGenerator })` still takes precedence over it.
  */

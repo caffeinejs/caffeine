@@ -214,23 +214,37 @@ list() {}
 update() {}
 ```
 
-A service evicts the same way, through the store. Bind it under `kHTTPCacheStore` and hand the token to
-`HTTPCaching`; anything can inject it then — a message consumer, a job, another route's handler:
+A service evicts the same way, through the store. Provide the store under `kHTTPCacheStore` and hand the token
+to `HTTPCaching`; anything can inject it then — a message consumer, a job, another route's handler. Here it is the
+Redis store, on the connected `client` from the `RedisHTTPCacheStore` section below:
 
 ```ts
 import { HTTPCaching, kHTTPCacheStore, type HTTPCacheStore } from '@caffeinejs/caching/http'
+import { RedisHTTPCacheStore } from '@caffeinejs/caching/store/redis'
+import { Configuration, Injectable, Provides } from '@caffeinejs/di'
 
-container.bind(kHTTPCacheStore, t => t.toValue(new RedisHTTPCacheStore(client)))
+@Configuration()
+class CacheConfig {
+  @Provides(kHTTPCacheStore)
+  httpCacheStore(): HTTPCacheStore {
+    return new RedisHTTPCacheStore(client)
+  }
+}
+
 app.with(HTTPCaching(b => b.store(kHTTPCacheStore)))
 
+@Injectable([kHTTPCacheStore])
 class PetsConsumer {
-  constructor(@Inject(kHTTPCacheStore) private readonly cache: HTTPCacheStore) {}
+  constructor(private readonly cache: HTTPCacheStore) {}
 
   async onPetChanged() {
     await this.cache.evictByTag('pets')
   }
 }
 ```
+
+A decorated class registers when its module is imported: the application's container reads it at
+`app.bootstrap()`, before `HTTPCaching` resolves the token.
 
 An eviction is a counter moving, not a walk over the entries: it costs the same whether a tag covers one entry
 or a million. An entry the counter left behind is gone the next time it is read, and is dropped by its own `ttl`
@@ -373,11 +387,24 @@ import { createCache } from 'cache-manager'
 const store = new KeyvHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
 ```
 
-Bind it where the rest of your wiring lives, and hand `HTTPCaching` the token:
+Provide it where the rest of your wiring lives, and hand `HTTPCaching` the token. Providing the cache itself under
+a token of its own lets the rest of the application inject it too:
 
 ```ts
+import { HTTPCaching, kHTTPCacheStore, type HTTPCacheStore } from '@caffeinejs/caching/http'
+import { KeyvHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+import { Configuration, Provides, token } from '@caffeinejs/di'
+import { createCache, type Cache } from 'cache-manager'
+
+const kCacheManager = token<Cache>('cacheManager')
+
 @Configuration()
 class CacheConfig {
+  @Provides(kCacheManager)
+  cacheManager(): Cache {
+    return createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] })
+  }
+
   @Provides(kHTTPCacheStore, [kCacheManager])
   httpCacheStore(cache: Cache): HTTPCacheStore {
     return new KeyvHTTPCacheStore(cache)
@@ -386,6 +413,8 @@ class CacheConfig {
 
 app.with(HTTPCaching(b => b.store(kHTTPCacheStore)))
 ```
+
+`Cache` here is cache-manager's, not the `Cache` contract `@caffeinejs/caching` exports.
 
 Both backends live behind the one `store/keyv` path — cache-manager's own `stores` are `Keyv`s, so there is
 nothing separate to import for it. Each is an optional peer: bring whichever one your application already uses,
