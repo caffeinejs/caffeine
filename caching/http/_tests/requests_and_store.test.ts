@@ -344,6 +344,27 @@ describe('a response left out of the store', () => {
     ])
   })
 
+  // A request that said `no-cache` is not answered from the store, so nothing derived its key on the way in. Its
+  // response is still one the store would have kept, and is reported under the key it would have been kept by.
+  it('is reported under its key when the request bypassed the read', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer({ onSkip: e => skips.push(e) })),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    for (const path of ['/skip/stream', '/skip/empty']) {
+      await app.fetch(path)
+      const bypassed = await app.fetch(path, { headers: { 'cache-control': 'no-cache' } })
+      expect(bypassed.headers.get('x-cache')).toBe('BYPASS')
+    }
+
+    expect(skips.map(skip => skip.reason)).toEqual(['stream', 'stream', 'empty', 'empty'])
+    expect(skips[1].key).toBe(skips[0].key)
+    expect(skips[3].key).toBe(skips[2].key)
+  })
+
   it('refuses a maxEntrySize that is not a byte size at start-up', async () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize('lots')))
     close = () => app.close()

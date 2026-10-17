@@ -255,6 +255,14 @@ describe('assertConstraintsKeyed', () => {
     expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['host'] })).not.toThrow()
   })
 
+  // Fastify's own version constraint, written on the route with no declaration, reads `Accept-Version`.
+  it('wants a route under the version constraint Fastify ships to vary on Accept-Version', () => {
+    const constrained = route({ constraints: { version: '1.x' } })
+
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 })).toThrow('constrained on "Accept-Version"')
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['accept-version'] })).not.toThrow()
+  })
+
   // A custom constraint may read anything, a header or not. Nothing in `vary` can stand for it, so only a key
   // function of the route's own tells it apart.
   it('wants a key from a route under a constraint it does not know', () => {

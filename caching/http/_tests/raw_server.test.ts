@@ -139,6 +139,31 @@ describe('cachePlugin on a server the application does not drive', () => {
     expect(streamed.closed()).toBe(true)
   })
 
+  // A HEAD carries the length its GET would have had, which for bytes is their count, not a character count.
+  it('gives a HEAD served a stale binary entry over a 5xx the length of its bytes', async () => {
+    let calls = 0
+    const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0x0a])
+    const server = await serve(s =>
+      s.route({
+        method: 'GET',
+        url: '/blob',
+        config: { cache: { ttl: 60, staleIfError: 300 } },
+        handler: (_request, reply) =>
+          ++calls === 1 ? reply.type('application/octet-stream').send(bytes) : reply.code(503).send('down'),
+      }),
+    )
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    await server.inject('/blob')
+    vi.setSystemTime(Date.now() + 100_000)
+    const res = await server.inject({ method: 'HEAD', url: '/blob' })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.headers['x-cache']).toBe('STALE')
+    expect(res.headers['content-length']).toBe(String(bytes.length))
+    expect(res.body).toBe('')
+  })
+
   // A binary response is cached as the bytes it is, and its size reported in bytes, not in characters.
   it('stores a Buffer payload and replays it byte for byte', async () => {
     const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0x0a])

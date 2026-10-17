@@ -4,7 +4,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import { Controller, Get, Head, Header } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import fastify from 'fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import type { FlightTable } from '../flight.js'
@@ -19,24 +19,7 @@ import {
   type HTTPCachePutOptions,
   type HTTPCacheStore,
 } from '../index.js'
-
-/** A handler that waits to be let go, so requests pile up behind it on purpose. */
-function gate() {
-  let open!: () => void
-  let entered!: () => void
-  const opened = new Promise<void>(resolve => (open = resolve))
-  const seen = new Promise<void>(resolve => (entered = resolve))
-
-  return {
-    open,
-    /** Resolves once the handler has been entered. */
-    seen,
-    async hold() {
-      entered()
-      await opened
-    },
-  }
-}
+import { WatchedStore, counter, gate, turn } from './_latch.js'
 
 class Recording {
   readonly hits: CacheHitEvent[] = []
@@ -380,6 +363,48 @@ describe('concurrent misses for one key', () => {
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
   })
 
+  // What the leader stored is fresh, but not fresh enough for a follower that asked for more freshness than the
+  // route's ttl can give: it runs the handler itself rather than take what it said it would not.
+  it('run the handler again for a follower that cannot accept what the leader stored', async () => {
+    let calls = 0
+    const g = gate()
+
+    @Controller('/sf-fresh')
+    class FreshController {
+      @CacheControl({ ttl: 60 })
+      @Get('/data')
+      async data() {
+        calls++
+        if (calls === 1) {
+          await g.hold()
+        }
+        return { n: calls }
+      }
+    }
+    void [FreshController]
+
+    const store = new WatchedStore()
+    const recording = new Recording()
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
+    close = () => app.close()
+    await app.bootstrap()
+
+    const leader = app.fetch('/sf-fresh/data')
+    await g.seen
+    const follower = app.fetch('/sf-fresh/data', { headers: { 'cache-control': 'min-fresh=120' } })
+    await store.reads.reached(2)
+    await turn()
+    g.open()
+    const [led, followed] = await Promise.all([leader, follower])
+
+    expect(led.headers.get('x-cache')).toBe('MISS')
+    expect(followed.headers.get('x-cache')).toBe('MISS')
+    expect(await followed.json()).toEqual({ n: 2 })
+    expect(calls).toBe(2)
+    expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
+    expect(recording.coalesced).toBe(0)
+  })
+
   it('run the handler again when a follower cannot re-read the store, and report the failure', async () => {
     let calls = 0
     let reads = 0
@@ -697,6 +722,7 @@ describe('a follower whose request is over', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
@@ -787,6 +813,72 @@ describe('a follower whose request is over', () => {
     g.open()
     const led = await leader
     expect(led.headers['x-cache']).toBe('MISS')
+    expect(recording.reasons()).toEqual(['absent'])
+    expect(recording.hits).toEqual([])
+  })
+
+  // The flight settled and the follower went back to the store, then its own request ended while it was still
+  // reading. Nobody is left to serve or to tell: no hit, no miss, no store failure.
+  it('goes quietly when its request ends while it re-reads the store', async () => {
+    let calls = 0
+    const g = gate()
+    const reads = counter()
+    const inner = new MemoryHTTPCacheStore()
+    const store: HTTPCacheStore = {
+      get(key, options) {
+        reads.tick()
+        if (reads.count < 3) {
+          return inner.get(key, options)
+        }
+        // The follower's re-read: answered by nothing but the end of its request.
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener('abort', () => reject(options.signal?.reason), { once: true })
+        })
+      },
+      put: (key, entry, options) => inner.put(key, entry, options),
+      evictByTag: tags => inner.evictByTag(tags),
+    }
+    const recording = new Recording()
+    const errors: unknown[] = []
+    const server = fastify({ handlerTimeout: 1000 })
+    close = () => server.close()
+    await server.register(
+      cachePlugin({
+        store,
+        etagGenerator: undefined,
+        statusHeader: 'X-Cache',
+        observer: { ...recording.observer, onError: event => errors.push(event) },
+        flights: new Map(),
+        lockTimeoutMs: 60_000,
+      }),
+    )
+    server.route({
+      method: 'GET',
+      url: '/data',
+      config: { cache: { ttl: 60 } },
+      handler: async () => {
+        calls++
+        await g.hold()
+        return { ok: true }
+      },
+    })
+    await server.ready()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const leader = server.inject('/data')
+    await g.seen
+    const follower = server.inject('/data')
+    await reads.reached(2)
+    await turn()
+    g.open()
+    await reads.reached(3)
+    await vi.advanceTimersByTimeAsync(1000)
+    const [led, followed] = await Promise.all([leader, follower])
+
+    expect(led.headers['x-cache']).toBe('MISS')
+    expect(followed.statusCode).toBe(503)
+    expect(calls).toBe(1)
+    expect(errors).toEqual([])
     expect(recording.reasons()).toEqual(['absent'])
     expect(recording.hits).toEqual([])
   })

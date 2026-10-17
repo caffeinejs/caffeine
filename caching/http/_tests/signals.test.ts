@@ -65,7 +65,7 @@ describe('the signal a store call carries', () => {
     close = undefined
   })
 
-  async function start(store: RecordingStore, options: { storeTimeoutMs?: number; handlerTimeout?: number } = {}) {
+  async function start(store: HTTPCacheStore, options: { storeTimeoutMs?: number; handlerTimeout?: number } = {}) {
     const errors: CacheErrorEvent[] = []
     const sends = { n: 0 }
     const handled = { n: 0 }
@@ -139,6 +139,36 @@ describe('the signal a store call carries', () => {
     for (const event of errors) {
       expect(event.error).toBeInstanceOf(ErrCacheStoreTimeout)
     }
+  })
+
+  // A store method written without `async` throws instead of rejecting. It costs the cache, not the request, as a
+  // rejection does, and is reported as what it threw: nothing waited for it to time out.
+  it('treats a store method that throws like one that rejects', async () => {
+    const thrown = { get: new Error('get threw'), put: new Error('put threw'), evict: new Error('evict threw') }
+    const store: HTTPCacheStore = {
+      get() {
+        throw thrown.get
+      },
+      put() {
+        throw thrown.put
+      },
+      evictByTag() {
+        throw thrown.evict
+      },
+    }
+    const { server, errors } = await start(store, { storeTimeoutMs: 60_000 })
+
+    const read = await server.inject('/data')
+    const mutation = await server.inject({ method: 'POST', url: '/data' })
+
+    expect(read.statusCode).toBe(200)
+    expect(read.headers['x-cache']).toBe('MISS')
+    expect(mutation.statusCode).toBe(200)
+    expect(errors.map(event => [event.operation, event.error])).toEqual([
+      ['get', thrown.get],
+      ['put', thrown.put],
+      ['evict', thrown.evict],
+    ])
   })
 
   // Fastify answers 503 and aborts the request signal; the read stops with it, and it is not a store failure.

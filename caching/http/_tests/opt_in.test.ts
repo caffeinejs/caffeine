@@ -72,21 +72,18 @@ describe('caching is opt-in', () => {
     )
   })
 
-  it('throws ErrConfiguration when installed with no store option', async () => {
-    @Controller('/optin-default')
-    class DefaultController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        return { ok: true }
-      }
-    }
-    void [DefaultController]
-
-    const app = createWebApplication({}).with(HTTPCaching())
+  // There is no default store to fall back to, whichever way the install is written.
+  it.each([
+    ['no options', () => HTTPCaching()],
+    ['a builder that names no store', () => HTTPCaching(b => b.statusHeader('X-Cache'))],
+  ])('throws ErrConfiguration when installed with %s', async (_form, install) => {
+    const app = createWebApplication({}).with(install())
     close = () => app.close()
 
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
+    const booting = app.bootstrap()
+
+    await expect(booting).rejects.toThrow(ErrConfiguration)
+    await expect(booting).rejects.toThrow('Cannot install HTTP caching without a store')
   })
 
   it('resolves a container-bound store passed as a token', async () => {
