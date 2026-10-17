@@ -48,6 +48,18 @@ describe('cachePlugin on a server the application does not drive', () => {
     expect(stored.map(event => event.bytes)).toEqual([bytes.length])
   })
 
+  // A second install on one context would give every cached route two read hooks and two store hooks over one
+  // set of request decorations, each install overwriting the other's per-request state.
+  it('refuses a second registration on the same server', async () => {
+    const deps = { store: new MemoryHTTPCacheStore(), etagGenerator: undefined, statusHeader: 'X-Cache' }
+    const server = fastify()
+    close = () => server.close()
+    void server.register(cachePlugin(deps))
+    void server.register(cachePlugin(deps))
+
+    await expect(server.ready()).rejects.toMatchObject({ code: 'FST_ERR_DEC_ALREADY_PRESENT' })
+  })
+
   it('evicts after a mutation with nobody observing', async () => {
     let calls = 0
     const server = fastify()
