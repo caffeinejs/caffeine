@@ -1,4 +1,4 @@
-import { Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
+import { Responder, Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
@@ -104,6 +104,79 @@ describe('the tree', () => {
       // which overlaps every literal code, and that would widen the narrowed members back into a union.
       if (res.status === 500) {
         expectTypeOf(await res.json()).toEqualTypeOf<never>()
+      }
+    })
+  })
+
+  // A route that answers with a `Response`, a stream or bytes sends them as they are, and a string goes out as text:
+  // `json()` would reject, or parse something else, so it is not typed as what the handler returned.
+  it('types json() only for a body that is JSON, and leaves it unknown for text, bytes, streams and Responses', () => {
+    typeOnly(async () => {
+      const files = new Router('/files')
+        .get('/response')
+        .handler(() => new Response(new Uint8Array([1]), { headers: { 'content-type': 'application/pdf' } }))
+        .get('/stream')
+        .handler(() => new ReadableStream<Uint8Array>())
+        .get('/bytes')
+        .handler(() => new Uint8Array([1, 2]))
+        .get('/text')
+        .handler(() => 'plain text')
+      const client = brewer<typeof files>('http://localhost')
+
+      expectTypeOf(await (await client.files.response.get()).json()).toEqualTypeOf<unknown>()
+      expectTypeOf(await (await client.files.stream.get()).json()).toEqualTypeOf<unknown>()
+      expectTypeOf(await (await client.files.bytes.get()).json()).toEqualTypeOf<unknown>()
+      expectTypeOf(await (await client.files.text.get()).json()).toEqualTypeOf<unknown>()
+      expectTypeOf(await (await client.files.response.get()).blob()).toEqualTypeOf<Blob>()
+      expectTypeOf(await (await client.files.text.get()).text()).toEqualTypeOf<string>()
+    })
+  })
+
+  // The server encodes any other value as JSON, a class instance with methods included: only its data is sent.
+  it('keeps json() typed for an object the server encodes, methods or not, and unknown for a responder', () => {
+    typeOnly(async () => {
+      class Kennel {
+        constructor(readonly id: number) {}
+
+        label(): string {
+          return `kennel ${this.id}`
+        }
+      }
+      class Page extends Responder {
+        respond(): string {
+          return '<p>Rex</p>'
+        }
+      }
+      const kennels = new Router('/kennels')
+        .get('/entity')
+        .handler(() => new Kennel(1))
+        .get('/page')
+        .handler(() => new Page())
+        .get('/loose')
+        .handler(() => JSON.parse('{}'))
+      const client = brewer<typeof kennels>('http://localhost')
+
+      expectTypeOf(await (await client.kennels.entity.get()).json()).toEqualTypeOf<Kennel>()
+      expectTypeOf(await (await client.kennels.page.get()).json()).toEqualTypeOf<unknown>()
+      expectTypeOf(await (await client.kennels.loose.get()).json()).toBeAny()
+    })
+  })
+
+  it('leaves json() unknown for a file the route declares, and types the error body beside it', () => {
+    typeOnly(async () => {
+      const reports = new Router('/reports')
+        .get('/:id')
+        .schema({ params: $t.Object({ id: $t.Integer() }), response: { 200: $t.File(), 404: problemSchema } })
+        .handler(ctx => ctx.notFound({ detail: 'no such report' }))
+      const client = brewer<typeof reports>('http://localhost')
+
+      const res = await client.reports({ id: 1 }).get()
+
+      if (res.status === 200) {
+        expectTypeOf(await res.json()).toEqualTypeOf<unknown>()
+        expectTypeOf(await res.bytes()).toEqualTypeOf<Uint8Array<ArrayBuffer>>()
+      } else if (res.status === 404) {
+        expectTypeOf(await res.json()).toEqualTypeOf<Problem>()
       }
     })
   })

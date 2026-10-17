@@ -607,7 +607,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 
 - Static segments are properties; a parameterised segment is a call taking that one parameter. The path is never
   written out.
-- A verb ends the chain. Returns a `Response` whose `.json()` is typed — checking `res.ok` is yours.
+- A verb ends the chain. Returns a `Response` whose `.json()` is typed — checking `res.ok` is yours. A route that
+  answers with text, bytes, a file, a stream or a whole `Response` sends it as it is, so its `.json()` is
+  `unknown`: read it with `text()`, `bytes()`, `blob()` or `body`.
 - `brewer<typeof app>`, `brewer<typeof someRouter>` and `brewer<RoutesOf<typeof app>>` all work, so a package can
   ship a client for just its own routes.
 - The routes are the ones the application declares. An application served under a `.basePath(...)` puts the base
