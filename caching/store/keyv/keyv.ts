@@ -16,7 +16,8 @@ const DEFAULT_PREFIX = 'caffeine:cache:'
 const NEVER_EVICTED = '0'
 
 /**
- * The part of a key-value cache this store calls. A cache-manager `Cache` and a `Keyv` both satisfy it.
+ * The part of a `Keyv` this store calls. A `Keyv` satisfies it, and so does a cache-manager `Cache`, whose stores
+ * are `Keyv`s.
  *
  * `ttl` is required, and in milliseconds: this store always decides how long what it writes is kept, so the
  * backend's own default `ttl` never applies to an entry or a marker. A backend whose `set` takes `ttl` optionally
@@ -25,12 +26,12 @@ const NEVER_EVICTED = '0'
  * `get` hands back `unknown` rather than the string that was stored: `Keyv.get` is a set of overloads, and
  * pinning it to a concrete signature here is what breaks on an upstream release. The reply is coerced instead.
  */
-export interface KeyValueHTTPCacheClient {
+export interface KeyvHTTPCacheClient {
   get(key: string): Promise<unknown>
   set(key: string, value: string, ttl: number): Promise<unknown>
 }
 
-export interface KeyValueHTTPCacheStoreOptions {
+export interface KeyvHTTPCacheStoreOptions {
   /**
    * Put in front of every key this store writes, as given: no separator is added. Defaults to `caffeine:cache:`;
    * `''` puts nothing in front.
@@ -61,8 +62,8 @@ interface HTTPEnvelope {
 }
 
 /**
- * An {@link HTTPCacheStore} on any key-value cache — a cache-manager `Cache`, a `Keyv`, or anything else
- * satisfying {@link KeyValueHTTPCacheClient}.
+ * An {@link HTTPCacheStore} on a `Keyv` — or on a cache-manager `Cache`, whose stores are `Keyv`s, or on anything
+ * else satisfying {@link KeyvHTTPCacheClient}.
  *
  * The cache is the caller's: this store never creates, connects or disconnects it.
  *
@@ -80,12 +81,12 @@ interface HTTPEnvelope {
  * cache-manager's `get` reads a broken store as a miss, and Keyv resolves instead of rejecting unless it was
  * built with `throwOnErrors: true`.
  */
-export class KeyValueHTTPCacheStore implements HTTPCacheStore {
-  readonly #client: KeyValueHTTPCacheClient
+export class KeyvHTTPCacheStore implements HTTPCacheStore {
+  readonly #client: KeyvHTTPCacheClient
   readonly #prefix: string
   readonly #tagTtlMs: number
 
-  constructor(client: KeyValueHTTPCacheClient, options?: KeyValueHTTPCacheStoreOptions) {
+  constructor(client: KeyvHTTPCacheClient, options?: KeyvHTTPCacheStoreOptions) {
     this.#client = client
     this.#prefix = options?.prefix ?? DEFAULT_PREFIX
     this.#tagTtlMs = tagTtlOf(options?.tagTtl)

@@ -3,7 +3,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type { HTTPCacheEntry } from '../../http/store.js'
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { KeyValueHTTPCacheStore, type KeyValueHTTPCacheClient } from './keyv.js'
+import { KeyvHTTPCacheStore, type KeyvHTTPCacheClient } from './index.js'
 
 // A key-value cache that records every call, so the key layout and the bytes that go over the seam are
 // assertable. `ttl === 0` means never expires, which is what both real backends do with it.
@@ -39,17 +39,17 @@ function fakeKV() {
   }
 }
 
-describeHTTPCacheStoreContract('KeyValueHTTPCacheStore', () => new KeyValueHTTPCacheStore(fakeKV()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore', () => new KeyvHTTPCacheStore(fakeKV()))
 
-describeHTTPCacheStoreContract('KeyValueHTTPCacheStore on a Keyv', () => new KeyValueHTTPCacheStore(new Keyv()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore on a Keyv', () => new KeyvHTTPCacheStore(new Keyv()))
 
 // A Keyv is handed to the store as it comes. If this stops holding, wrap it at the call site rather than
 // widening the store's seam.
 it('takes a Keyv without an adapter', () => {
-  expectTypeOf<Keyv>().toExtend<KeyValueHTTPCacheClient>()
+  expectTypeOf<Keyv>().toExtend<KeyvHTTPCacheClient>()
 })
 
-describe('KeyValueHTTPCacheStore', () => {
+describe('KeyvHTTPCacheStore', () => {
   const entry = (payload: string | Buffer, extra?: Partial<HTTPCacheEntry>): HTTPCacheEntry => ({
     payload,
     statusCode: 200,
@@ -62,7 +62,7 @@ describe('KeyValueHTTPCacheStore', () => {
 
   it('keeps entries and tag markers in separate namespaces', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
     await store.evictByTag('pets')
@@ -74,7 +74,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // overwrite the entry — and the entry is not even supposed to carry that tag.
   it('does not touch an entry whose key matches the evicted tag', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
     await store.put('plain', entry('p'), { ttl: 60 })
 
     await store.evictByTag('plain')
@@ -87,7 +87,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // A backend only ever has to round-trip a string; bytes that are not valid UTF-8 survive as base64.
   it('stores a Buffer payload as base64 and a string payload verbatim', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
     const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80])
 
     await store.put('bin', entry(bytes), { ttl: 60 })
@@ -100,7 +100,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // The whole envelope is written on every put, so an entry can never inherit a field from the one it replaces.
   it('writes the envelope whole, leaving no field of the entry it replaces', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
     await store.put('k', entry('old', { etag: '"old"', lastModified: 'Mon, 01 Jan 2024 00:00:00 GMT' }), {
       ttl: 60,
     })
@@ -116,7 +116,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // hazard a counter has under an eviction policy that may drop it.
   it('writes a different marker on every eviction of the same tag', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.evictByTag('pets')
     await store.evictByTag('pets')
@@ -131,7 +131,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // real backends would simply keep entries 1000x too briefly only under a sub-second ttl.
   it('converts the ttl to milliseconds', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('k', entry('v'), { ttl: 60 })
     await store.put('sub', entry('v'), { ttl: '250ms' })
@@ -144,7 +144,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // one — and there is nothing to read the markers for either.
   it('issues no call at all for a ttl that is not positive', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('zero', entry('v'), { ttl: 0, tags: ['pets'] })
     await store.put('unparsable', entry('v'), { ttl: 'ten seconds', tags: ['pets'] })
@@ -155,11 +155,11 @@ describe('KeyValueHTTPCacheStore', () => {
 
   it('never expires a tag marker by default, and honours a tagTtl that is set', async () => {
     const kv = fakeKV()
-    await new KeyValueHTTPCacheStore(kv).evictByTag('pets')
+    await new KeyvHTTPCacheStore(kv).evictByTag('pets')
     expect(kv.sets[0].ttl).toBe(0)
 
     const bounded = fakeKV()
-    await new KeyValueHTTPCacheStore(bounded, { tagTtl: '2h' }).evictByTag('pets')
+    await new KeyvHTTPCacheStore(bounded, { tagTtl: '2h' }).evictByTag('pets')
     expect(bounded.sets[0].ttl).toBe(7_200_000)
   })
 
@@ -167,7 +167,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // hit, and never serves an entry that was meant to be gone.
   it('reads an entry as absent when the marker it recorded has expired', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv, { tagTtl: '1h' })
+    const store = new KeyvHTTPCacheStore(kv, { tagTtl: '1h' })
     await store.evictByTag('pets')
     await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
     expect((await store.get('k'))?.payload).toBe('v')
@@ -179,11 +179,11 @@ describe('KeyValueHTTPCacheStore', () => {
 
   it('uses the prefix verbatim, and puts nothing in front for an empty one', async () => {
     const kv = fakeKV()
-    await new KeyValueHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 })
     expect(kv.sets[0].key).toBe('app|e:k')
 
     const bare = fakeKV()
-    await new KeyValueHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 })
     expect(bare.sets[0].key).toBe('e:k')
   })
 })

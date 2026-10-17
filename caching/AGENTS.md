@@ -69,7 +69,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ### Keyv (`store/keyv`)
 
-- `KeyValueHTTPCacheClient` is a two-method seam. If a `Keyv` or a cache-manager `Cache` stops satisfying it,
+- `KeyvHTTPCacheClient` is a two-method seam. If a `Keyv` or a cache-manager `Cache` stops satisfying it,
   wrap at the call site rather than widening the seam.
 - Widen the `cache-manager` / `keyv` range only after re-reading in the new major: `set(key, value, 0)` means
   "never expires", ttl is in milliseconds, and the `Cache` / `Keyv` shape.

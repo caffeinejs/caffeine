@@ -13,6 +13,7 @@ npm install @caffeinejs/caching
 | `@caffeinejs/caching/http`         | `HTTPCaching`, `@CacheControl`, `@CacheInvalidate`, `HTTPCacheStore`, `kHTTPCacheStore`, observers            |
 | `@caffeinejs/caching/store/memory` | `MemoryHTTPCacheStore`, an in-process LRU store                                                               |
 | `@caffeinejs/caching/store/redis`  | `RedisHTTPCacheStore`, for Redis or Valkey, one server or a cluster                                           |
+| `@caffeinejs/caching/store/keyv`   | `KeyvHTTPCacheStore`, on a `Keyv` or a cache-manager cache                                                    |
 | `@caffeinejs/caching`              | The general-purpose `Cache` contract: `Cache`, `CacheEntry`, `CachePutItem`. Not what the HTTP cache runs on. |
 
 ## Quick start
@@ -360,16 +361,16 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 - `prefix` is put in front of every key as given, with no separator of the store's own: `''` puts nothing in
   front. It may not contain `{` or `}`, and neither may a tag: `ErrRedisCache`.
 
-### Key-value stores (cache-manager, Keyv)
+### `KeyvHTTPCacheStore`
 
-`KeyValueHTTPCacheStore` runs on any key-value cache. A cache-manager cache and a `Keyv` both fit as they come,
-so the only thing you supply is the cache:
+For a `Keyv`, or a cache-manager cache, whose stores are `Keyv`s. Both fit as they come, so the only thing you
+supply is the cache:
 
 ```ts
-import { KeyValueHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+import { KeyvHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
 import { createCache } from 'cache-manager'
 
-const store = new KeyValueHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
+const store = new KeyvHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
 ```
 
 Bind it where the rest of your wiring lives, and hand `HTTPCaching` the token:
@@ -379,7 +380,7 @@ Bind it where the rest of your wiring lives, and hand `HTTPCaching` the token:
 class CacheConfig {
   @Provides(kHTTPCacheStore, [kCacheManager])
   httpCacheStore(cache: Cache): HTTPCacheStore {
-    return new KeyValueHTTPCacheStore(cache)
+    return new KeyvHTTPCacheStore(cache)
   }
 }
 
@@ -431,8 +432,8 @@ interface HTTPCacheStore {
 - A call whose signal is aborted stops what it can and rejects; one made with a signal already aborted rejects
   and does nothing.
 
-If your backend is a key-value cache, `KeyValueHTTPCacheClient` is the smaller seam to implement instead:
-`get(key)` and `set(key, value, ttl)`, with `KeyValueHTTPCacheStore` doing the rest.
+If your backend can stand in for a `Keyv`, `KeyvHTTPCacheClient` is the smaller seam to implement instead:
+`get(key)` and `set(key, value, ttl)`, with `KeyvHTTPCacheStore` doing the rest.
 
 `describeHTTPCacheStoreContract` in `caching/http/store.testkit.ts` is the contract as a Vitest suite; every
 store here passes it.
