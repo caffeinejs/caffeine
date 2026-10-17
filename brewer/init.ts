@@ -1,4 +1,5 @@
 import type { RouteContract } from './contract.js'
+import type { FormDataOf } from './form.js'
 import type { BrewResponseOf } from './response.js'
 
 /** Whether `T` is the open record `InferQuery`/`InferHeaders` fall back to when a route declares no schema. */
@@ -36,8 +37,9 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * against its schema. Declared headers take others beside them.
  *
  * A declared body that is a file, or holds one, is passed as a `FormData`: a multipart form is the only way a file
- * travels, and the platform encodes it. Its fields are checked neither here nor by the server, which leaves an
- * upload unvalidated. A declared object is passed as itself, which goes as JSON, or, when every field is text, a
+ * travels, and the platform encodes it. One built with `formData(...)` has its fields checked against the declared
+ * ones; a plain one is checked neither here nor by the server, which leaves an upload unvalidated. A declared object
+ * is passed as itself, which goes as JSON, or, when every field is text, a
  * number, a boolean or a list of those, as a `URLSearchParams`, which goes as a classic form that every server
  * reads and checks against the same schema.
  *
@@ -63,7 +65,7 @@ type HeadersArg<H> = IsOpenRecord<H> extends true ? OpenHeaders : H & Record<str
 // as JSON, whatever its members hold.
 type BodyArg<B> = [B] extends [object]
   ? true extends IsFile<B> | HoldsFile<B>
-    ? FormData
+    ? FormDataOf<B>
     : false extends FitsForm<B>
       ? B
       : B | Form<B>

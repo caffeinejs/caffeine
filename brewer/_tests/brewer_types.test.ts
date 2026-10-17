@@ -5,6 +5,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
+import { formData } from '../form.js'
 import type { BrewResponse } from '../response.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -405,6 +406,27 @@ describe('the body', () => {
     .handler(() => ({ taken: true }))
   const bodies = blend(uploads, forms)
   const client = brewer<typeof bodies>('http://localhost')
+
+  // A FormData carries no types, so one built by `formData` remembers its fields for the call to check.
+  it('checks the fields of a form built with formData against the upload the route declares', () => {
+    typeOnly(() => {
+      const avatar = new File(['jpeg'], 'rex.jpg', { type: 'image/jpeg' })
+
+      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar }) })
+      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar, photos: [avatar, avatar] }) })
+      void client.$request('POST', '/uploads/profile', { body: formData({ caption: 'Rex', avatar }) })
+      // @ts-expect-error -- the avatar is required
+      void client.uploads.profile.post({ body: formData({ caption: 'Rex' }) })
+      // @ts-expect-error -- the caption is text
+      void client.uploads.profile.post({ body: formData({ caption: 7, avatar }) })
+      // @ts-expect-error -- a Blob carries no name, where the route declares a file
+      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar: new Blob(['jpeg']) }) })
+      // @ts-expect-error -- checked through the escape hatch too
+      void client.$request('POST', '/uploads/profile', { body: formData({ caption: 'Rex' }) })
+      // @ts-expect-error -- a form has no way to carry a nested object
+      void formData({ owner: { id: 1 } })
+    })
+  })
 
   it('takes a FormData for a body that is a file or holds one, and nothing else', () => {
     typeOnly(() => {

@@ -631,9 +631,10 @@ await client.pets.post({ body: { name: 'Rex' } })
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
-  `FormData`, which `fetch` encodes as multipart. Its fields are checked on neither side: the type takes any form,
-  and the server leaves an upload unvalidated, so the handler checks the parts it reads. A declared object goes as
-  JSON, or as a `URLSearchParams` form when every field is text, a number, a boolean or a list of those.
+  `FormData`, which `fetch` encodes as multipart. Build it with `formData({ caption, avatar })` and the call checks
+  its fields against the route. A plain `FormData` is checked on neither side, since the server leaves an upload
+  unvalidated, so the handler checks the parts it reads. A declared object goes as JSON, or as a `URLSearchParams`
+  form when every field is text, a number, a boolean or a list of those.
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another.
