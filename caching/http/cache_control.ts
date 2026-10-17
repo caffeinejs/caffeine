@@ -193,7 +193,8 @@ export interface CacheDeps {
  * A conditional request is answered `304` in two shapes. From the store, the `304` carries only what guides a
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
  * handler ran and its response matches, that response goes out as the `304`, with its own headers and without
- * its body or `Content-Length`.
+ * its body or `Content-Length`; a streamed body is closed unread, and so is a streamed `5xx` a stale entry
+ * replaces.
  *
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
@@ -569,6 +570,7 @@ export function attachCacheHooks(
     // RFC 5861 §4 — the stale entry the read hook kept stands in for the handler's 5xx.
     const stale = request.cacheStale
     if (stale !== null && SIE_STATUS.has(reply.statusCode)) {
+      discard(payload)
       next(null, replace(request, reply, stale))
       return
     }
@@ -739,6 +741,7 @@ export function attachCacheHooks(
     ) {
       reply.code(304)
       reply.removeHeader('content-length')
+      discard(payload)
 
       return null
     }
@@ -752,4 +755,26 @@ export function attachCacheHooks(
 
 function headerText(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
+}
+
+// The server closes only the stream it sends. One the cache answers in place of would keep the file, socket or
+// upstream connection behind it open until it is collected.
+function discard(payload: unknown): void {
+  if (!isStreamPayload(payload)) {
+    return
+  }
+
+  const stream = payload as {
+    destroy?: () => void
+    cancel?: () => Promise<void>
+    body?: { cancel(): Promise<void> } | null
+  }
+  if (typeof stream.destroy === 'function') {
+    stream.destroy()
+    return
+  }
+
+  // A web stream, or a `Response` around one. A source that fails to cancel is no reason to fail the response.
+  const cancelled = typeof stream.cancel === 'function' ? stream.cancel() : stream.body?.cancel()
+  cancelled?.catch(() => undefined)
 }

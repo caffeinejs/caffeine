@@ -4,19 +4,16 @@ sidebar_label: Decorators
 
 # Decorators
 
-All decorators are exported from:
-
-- **Stage 3 Decorators**: `@caffeinejs/di`
+All decorators are exported from `@caffeinejs/di`:
 
 ```ts
 import { Injectable, Lifetime, Inject } from '@caffeinejs/di'
-
-// or
 ```
 
-CaffeineIoC ships two decorator flavours. This document focus on **stage 3 decorators**
-(TypeScript 5.0+, no `experimentalDecorators`). The decorator API is
-identical in both flavours; differences are noted inline where they exist.
+They are TC39 standard (stage 3) decorators: TypeScript 5.0 or later, with no
+`experimentalDecorators` flag and no `reflect-metadata`. A class wired without
+decorators is bound by hand instead: see
+[Decorator modes](../explanation/decorator-modes.md).
 
 - [@Injectable](#injectable)
 - [@Lifetime](#lifetime)
@@ -420,38 +417,39 @@ An explicit `.bootstrap(fn)` / `.preDestroy(fn)` on the binding spec, or an
 ### @Inject
 
 ```ts
-@Inject(key: InjectionToken): ParameterDecorator & PropertyDecorator
-@Inject(descriptor: InjectionDescriptor): ParameterDecorator & PropertyDecorator
-@Inject(...deps: Injection[]): MethodDecorator
+@Inject(key: InjectionToken<T>)
+@Inject(descriptor: InjectionDescriptor)
 ```
 
-Injects a dependency into a constructor parameter, class property, or method.
+Injects a dependency into a field, an auto-accessor, a setter, or a getter that
+has a setter of the same name.
 
-**Constructor parameter:**
+The container assigns the member once the constructor has returned, so it is
+still unset inside the constructor: work that needs it belongs in a
+[`@PostConstruct`](#postconstruct) method. A getter without a setter fails at
+resolution, since there is nothing to assign through.
+
+A descriptor from the [`$i` helpers](./injection.md#helpers) resolves the member
+the way it resolves an entry in an `@Injectable` dependency list:
+[`$i.optional(key)`](./injection.md#optional) leaves it `undefined` when nothing
+is bound to `key`.
+
+`@Inject` never applies to a method: that is a type error, and the decorator
+throws `ErrInvalidDecorator` when it runs. Nor does it apply to a constructor
+parameter, since TC39 decorators have no parameter form: constructor
+dependencies go in the [`@Injectable`](#injectable) dependency list.
 
 ```ts
-@Injectable()
-class Service {
-  constructor(@Inject('config') private readonly cfg: AppConfig) {}
-}
-```
+const kMetrics = token<Metrics>('metrics')
 
-**Property:**
-
-```ts
-@Injectable()
-class Service {
+@Injectable([Database])
+class ReportService {
   @Inject(Logger)
   private readonly logger!: Logger
-}
-```
 
-**Method:**
+  @Inject($i.optional(kMetrics))
+  private readonly metrics: Metrics | undefined
 
-```ts
-@Injectable()
-class Service {
-  @Inject(Logger, Database)
-  setup(logger: Logger, db: Database) { ... }
+  constructor(private readonly db: Database) {}
 }
 ```

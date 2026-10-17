@@ -1,6 +1,4 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
 
@@ -12,12 +10,28 @@ const entry = (payload: string | Buffer, extra?: Partial<HTTPCacheEntry>): HTTPC
 })
 
 /**
+ * The clock of a store that reads `Date.now()`: moves `Date` forward by `ms`. `Date` alone is faked, from the first
+ * call in a case until the case ends.
+ */
+export function elapseDate(ms: number): void {
+  if (!vi.isFakeTimers()) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
+  }
+  vi.setSystemTime(Date.now() + ms)
+}
+
+/**
  * What every {@link HTTPCacheStore} owes the HTTP cache, stated once. `factory` hands back a store nothing
- * else writes to, so a case never reads another one's entries.
+ * else writes to, so a case never reads another one's entries. `elapse` moves the store's clock forward by `ms`:
+ * {@link elapseDate} for a store in this process.
  */
 export function describeHTTPCacheStoreContract(
   name: string,
   factory: () => HTTPCacheStore | Promise<HTTPCacheStore>,
+  elapse: (ms: number) => void | Promise<void>,
 ): void {
   describe(`${name}: HTTPCacheStore contract`, () => {
     it('reads back what was put, field by field', async () => {
@@ -77,7 +91,7 @@ export function describeHTTPCacheStoreContract(
       const store = await factory()
       await store.put('k', entry('v'), { ttl: '10ms', tags: ['pets'] })
 
-      await sleep(40)
+      await elapse(40)
 
       expect(await store.get('k')).toBeUndefined()
     })
@@ -132,6 +146,19 @@ export function describeHTTPCacheStoreContract(
 
       expect((await store.get('k'))?.payload).toBe('after')
       expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('after')
+    })
+
+    // Every eviction of a tag hides what was stored under it since the last one, not only the first eviction.
+    it('hides an entry put again after an eviction once the tag is evicted again', async () => {
+      const store = await factory()
+      await store.put('k', entry('first'), { ttl: 60, tags: ['pets'] })
+      await store.evictByTag('pets')
+      await store.put('k', entry('second'), { ttl: 60, tags: ['pets'] })
+
+      await store.evictByTag('pets')
+
+      expect(await store.get('k')).toBeUndefined()
+      expect(await store.get('k', { tags: ['pets'] })).toBeUndefined()
     })
 
     it('evicts several tags at once, and nothing for an empty list or a tag nothing carries', async () => {
@@ -198,6 +225,20 @@ export function describeHTTPCacheStoreContract(
 
       await store.evictByTag('pets', { signal })
       expect(await store.get('k', { signal })).toBeUndefined()
+    })
+
+    // Every read the HTTP cache makes carries a signal: a store that answers a signalled read another way than an
+    // unsignalled one must still hand bytes back as the same bytes.
+    it('keeps a Buffer payload a Buffer, byte for byte, through a read that carries a signal', async () => {
+      const store = await factory()
+      const signal = new AbortController().signal
+      const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
+
+      await store.put('bin', entry(bytes), { ttl: 60, signal })
+      const read = await store.get('bin', { signal })
+
+      expect(Buffer.isBuffer(read?.payload)).toBe(true)
+      expect(Buffer.compare(read!.payload as Buffer, bytes)).toBe(0)
     })
   })
 }

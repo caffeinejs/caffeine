@@ -50,7 +50,8 @@ class RepositoryService {
 ```
 
 There are no parameter decorators to reach for: TC39 has none, so `@Inject` applies to a
-field, accessor or method, never to a constructor parameter.
+field, an auto-accessor, a setter, or a getter with a setter of the same name, never to a
+constructor parameter or a method.
 
 ## Property injection
 

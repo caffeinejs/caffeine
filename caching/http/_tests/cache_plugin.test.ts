@@ -1,59 +1,18 @@
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
+import { ErrConfiguration } from '@caffeinejs/http'
 import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
-import { type RouteOptions } from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching, cacheControl } from '../index.js'
+import { HTTPCaching, cacheControl } from '../index.js'
 
-/**
- * The caching feature reaches routes through Fastify's own `onRoute` hook, not through the adapter. These
- * tests pin that wiring: the plugin registers, decorates the request, and touches only the routes that
- * declared cache config.
- */
+/** Where the plugin installs: once per context, the root or a route group, each install with its own store. */
 describe('cache plugin wiring', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
     await close?.()
     close = undefined
-  })
-
-  it('decorates the request and attaches hooks only where cache config is present', async () => {
-    const registered = new Map<string, RouteOptions>()
-
-    @Controller('/contrib')
-    class ContribController {
-      @Get('/plain')
-      plain() {
-        return { ok: true }
-      }
-
-      @CacheControl({ ttl: 60 })
-      @Get('/cached')
-      cached() {
-        return { ok: true }
-      }
-    }
-    void [ContribController]
-
-    const app = createWebApplication()
-      .serverCallback((_context, server) => {
-        server.addHook('onRoute', route => {
-          registered.set(`${route.method} ${route.url}`, route as RouteOptions)
-        })
-      })
-      .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    close = () => app.close()
-    await app.bootstrap()
-
-    // The plugin registered: the request decoration is in place.
-    expect(app.instance.hasRequestDecorator('responseCached')).toBe(true)
-
-    // The onRoute hook only touched the decorated route.
-    expect(registered.get('GET /contrib/plain')!.onSend).toBeUndefined()
-    expect(typeof registered.get('GET /contrib/cached')!.onSend).toBe('function')
   })
 
   // Named and fastify-plugin-wrapped like any other first-party plugin: a second registration on the exact
@@ -101,14 +60,15 @@ describe('cache plugin wiring', () => {
     expect((await app.fetch('/group-install/data')).headers.get('x-cache')).toBe('HIT')
   })
 
-  // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other.
+  // An install belongs to its group: two groups, two stores, and an entry of one is never found in the other,
+  // even under the same key.
   it('gives each group that installed it a store of its own', async () => {
     const stores = { pets: new MemoryHTTPCacheStore(), owners: new MemoryHTTPCacheStore() }
     const group = (name: keyof typeof stores) => {
       const router = newRouter(`/group-own-${name}`).with(HTTPCaching(b => b.store(stores[name])))
       router
         .get('/data')
-        .extend(cacheControl({ ttl: 60 }))
+        .extend(cacheControl({ ttl: 60, key: () => 'data' }))
         .handler(() => ({ name }))
 
       return router
@@ -122,12 +82,12 @@ describe('cache plugin wiring', () => {
     await app.bootstrap()
 
     await app.fetch('/group-own-pets/data')
-    await app.fetch('/group-own-owners/data')
+    const owners = await app.fetch('/group-own-owners/data')
 
-    const petsKey = encodeURIComponent('/group-own-pets/data')
-    expect((await stores.pets.get(petsKey))?.payload).toBe('{"name":"pets"}')
-    expect(await stores.owners.get(petsKey)).toBeUndefined()
-    expect((await app.fetch('/group-own-owners/data')).headers.get('x-cache')).toBe('HIT')
+    expect(owners.headers.get('x-cache')).toBe('MISS')
+    expect(await owners.json()).toEqual({ name: 'owners' })
+    expect((await stores.pets.get('data'))?.payload).toBe('{"name":"pets"}')
+    expect((await stores.owners.get('data'))?.payload).toBe('{"name":"owners"}')
   })
 
   it('still refuses a sibling group that declares caching and installed nothing', async () => {

@@ -1,20 +1,24 @@
 import { Controller, Get, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
+import type { Logger } from '@caffeinejs/std/logger'
 import fastify from 'fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, CacheInvalidate, HTTPCaching } from '../index.js'
-import type {
-  CacheBypassEvent,
-  CacheHitEvent,
-  CacheInvalidateEvent,
-  CacheMissEvent,
-  CacheObserver,
-  CacheStoreEvent,
-} from '../observer.js'
-import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
+import {
+  CacheControl,
+  CacheInvalidate,
+  HTTPCaching,
+  type CacheBypassEvent,
+  type CacheHitEvent,
+  type CacheInvalidateEvent,
+  type CacheMissEvent,
+  type CacheObserver,
+  type CacheStoreEvent,
+  type HTTPCacheEntry,
+  type HTTPCacheStore,
+} from '../index.js'
+import { RecordingLogger } from './_log.js'
 
 class RecordingObserver implements CacheObserver {
   readonly hits: CacheHitEvent[] = []
@@ -44,50 +48,10 @@ class RecordingObserver implements CacheObserver {
   }
 }
 
-/** A `Logger` that keeps what it was asked to write. */
-class Recorder implements Logger {
-  level = 'trace'
-  readonly levels: LevelMapping = {
-    values: { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60 },
-    labels: { 10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal' },
-  }
-
-  readonly written: { severity: string; args: unknown[] }[] = []
-
-  readonly trace = this.#record('trace')
-  readonly debug = this.#record('debug')
-  readonly info = this.#record('info')
-  readonly warn = this.#record('warn')
-  readonly error = this.#record('error')
-  readonly fatal = this.#record('fatal')
-  readonly silent = this.#record('silent')
-
-  isLevelEnabled(): boolean {
-    return true
-  }
-
-  bindings(): Bindings {
-    return {}
-  }
-
-  child(): Logger {
-    return this
-  }
-
-  flush(): void {
-    // Nothing is buffered.
-  }
-
-  #record(severity: string): LogFn {
-    return (...args: unknown[]): void => {
-      this.written.push({ severity, args })
-    }
-  }
-}
-
 let close: (() => Promise<unknown>) | undefined
 
 afterEach(async () => {
+  vi.useRealTimers()
   await close?.()
   close = undefined
 })
@@ -231,17 +195,20 @@ describe('miss events', () => {
     void [ColdController]
 
     const observer = new RecordingObserver()
-    const app = await start(observer)
+    const store = new MemoryHTTPCacheStore()
+    const app = await start(observer, { store })
 
     await app.fetch('/obs-cold/data')
 
     expect(observer.misses).toEqual([
       {
         route: { method: 'GET', url: '/obs-cold/data', handler: 'ColdController.data' },
-        key: encodeURIComponent('/obs-cold/data'),
+        key: expect.any(String),
         reason: 'absent',
       },
     ])
+    // The key names the entry the response was then stored under.
+    expect((await store.get(observer.misses[0].key))?.payload).toBe('{"ok":true}')
   })
 
   // The store was consulted, so it is a miss — but the request is answered 504 and nothing gets stored, which
@@ -317,13 +284,14 @@ describe('hit events', () => {
 
     const observer = new RecordingObserver()
     const app = await start(observer)
+    vi.useFakeTimers({ toFake: ['Date'] })
 
     await app.fetch('/obs-hit/data')
+    vi.setSystemTime(Date.now() + 2000)
     await app.fetch('/obs-hit/data')
 
     expect(observer.hits).toHaveLength(1)
-    expect(observer.hits[0]).toMatchObject({ key: encodeURIComponent('/obs-hit/data'), revalidated: false })
-    expect(observer.hits[0].ageSeconds).toBeGreaterThanOrEqual(0)
+    expect(observer.hits[0]).toMatchObject({ key: observer.misses[0].key, revalidated: false, ageSeconds: 2 })
   })
 
   it('reports a 304 answered from If-None-Match or If-Modified-Since as revalidated', async () => {
@@ -568,7 +536,10 @@ describe('a throwing observer', () => {
     const boom = () => {
       throw new Error('boom')
     }
-    const app = await start({ onHit: boom, onMiss: boom, onBypass: boom, onStore: boom }, { logger: new Recorder() })
+    const app = await start(
+      { onHit: boom, onMiss: boom, onBypass: boom, onStore: boom },
+      { logger: new RecordingLogger() },
+    )
 
     const miss = await app.fetch('/obs-throws/data')
     const hit = await app.fetch('/obs-throws/data')
@@ -580,8 +551,8 @@ describe('a throwing observer', () => {
     expect(await hit.json()).toEqual({ ok: true })
   })
 
-  // The server here is a bare `fastify()`, whose own logger discards everything. The throw is still reported,
-  // because it goes to the application logger.
+  // On the application logger the cache was set up with, not on `request.log`: that one is silent under a
+  // caller-supplied `fastify()`, and a report through it would carry the request it happened on.
   it('is reported once per method on the application logger', async () => {
     @Controller('/obs-throws-logged')
     class ThrowsLoggedController {
@@ -593,7 +564,7 @@ describe('a throwing observer', () => {
     }
     void [ThrowsLoggedController]
 
-    const logger = new Recorder()
+    const logger = new RecordingLogger()
     const app = await start(
       {
         onHit: () => {
@@ -611,5 +582,6 @@ describe('a throwing observer', () => {
 
     expect(reports).toHaveLength(1)
     expect(reports[0].args[1]).toBe('Cache observer "onHit" threw; further throws from "onHit" are suppressed')
+    expect(reports[0].bindings).not.toHaveProperty('reqId')
   })
 })

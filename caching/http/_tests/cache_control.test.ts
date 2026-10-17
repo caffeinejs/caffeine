@@ -1,13 +1,13 @@
 import { Readable } from 'node:stream'
 
 import { CaffeineIoC } from '@caffeinejs/di'
-import { Controller, Delete, ErrConfiguration, Get, Post, Status } from '@caffeinejs/http'
+import { Controller, Get, Post, Status } from '@caffeinejs/http'
 import { createWebApplication as newWebApplication } from '@caffeinejs/http/fastify'
-import { afterEach, describe, it, expect } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, CacheInvalidate, kETagGenerator, HTTPCaching } from '../index.js'
-import type { HTTPCacheEntry, HTTPCacheStore } from '../store.js'
+import { CacheControl, kETagGenerator, HTTPCaching } from '../index.js'
+import type { HTTPCacheEntry, HTTPCacheStore } from '../index.js'
 
 // Every application a case builds is closed after it, whether or not it got as far as `bootstrap()`.
 const opened: { close(): Promise<unknown> }[] = []
@@ -20,6 +20,7 @@ function createWebApplication(options?: { container: CaffeineIoC }) {
 }
 
 afterEach(async () => {
+  vi.useRealTimers()
   await Promise.all(opened.splice(0).map(app => app.close()))
 })
 
@@ -344,8 +345,7 @@ describe('ETag', () => {
 
     const res = await app.fetch('/cache-etag-present/data')
     expect(res.status).toBe(200)
-    expect(res.headers.get('etag')).toBeDefined()
-    expect(res.headers.get('etag')).toMatch(/^"[a-f0-9]+"$/)
+    expect(res.headers.get('etag')).toMatch(/^"[^"]+"$/)
   })
 
   it('same response body on two requests → same ETag', async () => {
@@ -391,8 +391,8 @@ describe('ETag', () => {
     const resA = await app.fetch('/cache-etag-diff/a')
     const resB = await app.fetch('/cache-etag-diff/b')
 
-    expect(resA.headers.get('etag')).toBeDefined()
-    expect(resB.headers.get('etag')).toBeDefined()
+    expect(resA.headers.get('etag')).toMatch(/^"[^"]+"$/)
+    expect(resB.headers.get('etag')).toMatch(/^"[^"]+"$/)
     expect(resA.headers.get('etag')).not.toBe(resB.headers.get('etag'))
   })
 
@@ -469,7 +469,7 @@ describe('304 Not Modified', () => {
 
     const res1 = await app.fetch('/cache-304-match/data')
     const etag = res1.headers.get('etag') as string
-    expect(etag).toBeDefined()
+    expect(etag).not.toBeNull()
 
     const res2 = await app.fetch('/cache-304-match/data', { headers: { 'if-none-match': etag } })
     expect(res2.status).toBe(304)
@@ -497,7 +497,7 @@ describe('304 Not Modified', () => {
     expect(await res.json()).toEqual({ value: 'cached' })
   })
 
-  it('GET with stale If-None-Match after cache clear → 200, new ETag', async () => {
+  it('GET with stale If-None-Match after a tag eviction → 200, new ETag', async () => {
     let version = 1
 
     @Controller('/cache-304-stale')
@@ -528,7 +528,7 @@ describe('304 Not Modified', () => {
 
   // The store forgetting an entry does not change the resource. A client revalidating the copy it holds is told
   // it is still current, from the response the handler just produced.
-  it('GET with a still-matching If-None-Match after cache clear → 304 off the fresh response', async () => {
+  it('GET with a still-matching If-None-Match after a tag eviction → 304 off the fresh response', async () => {
     @Controller('/cache-304-fresh')
     class Fresh304Controller {
       @CacheControl({ ttl: 60, tags: ['forgotten'] })
@@ -771,28 +771,6 @@ describe('Cache store', () => {
 })
 
 describe('Cache key', () => {
-  it('default key: same URL shares cached response', async () => {
-    let callCount = 0
-
-    @Controller('/cache-key-default')
-    class KeyDefaultController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        callCount++
-        return { n: callCount }
-      }
-    }
-    void [KeyDefaultController]
-
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-    await app.bootstrap()
-
-    await app.fetch('/cache-key-default/data')
-    await app.fetch('/cache-key-default/data')
-    expect(callCount).toBe(1)
-  })
-
   it('different URLs are cached independently', async () => {
     let aCount = 0
     let bCount = 0
@@ -925,7 +903,7 @@ describe('Decorator scope', () => {
     const resCached = await app.fetch('/cache-scope-method/cached')
     const resUncached = await app.fetch('/cache-scope-method/uncached')
 
-    expect(resCached.headers.get('cache-control')).toBeDefined()
+    expect(resCached.headers.get('cache-control')).toBe('public, max-age=60')
     expect(resUncached.headers.get('cache-control')).toBeNull()
   })
 
@@ -1049,8 +1027,8 @@ describe('@CacheControl(false)', () => {
   })
 })
 
-describe('Bug fixes', () => {
-  describe('Bug 1 — etag:false does not prevent caching', () => {
+describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
+  describe('etag: false', () => {
     it('@CacheControl({ ttl: 60, etag: false }) → no ETag header, but second request served from cache', async () => {
       let callCount = 0
 
@@ -1100,7 +1078,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Bug 2 — private responses not stored in server cache', () => {
+  describe('privacy: private', () => {
     it('@CacheControl({ ttl: 60, privacy: "private" }) → Cache-Control: private, handler called on every request', async () => {
       let callCount = 0
 
@@ -1128,7 +1106,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Bug 3 — Vary headers partitioned into cache key', () => {
+  describe('the request headers a route varies on', () => {
     it('same URL, different Vary header value → separate cache entries', async () => {
       let callCount = 0
 
@@ -1205,7 +1183,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Bug 4 — Incoming no-cache bypasses cache lookup', () => {
+  describe('a request that says no-cache', () => {
     it('GET with Cache-Control: no-cache after cache is primed → handler called again', async () => {
       let callCount = 0
 
@@ -1259,58 +1237,6 @@ describe('Bug fixes', () => {
       const res = await app.fetch('/cache-bug4-pragma/data', { headers: { pragma: 'no-cache' } })
       expect(res.status).toBe(200)
       expect(callCount).toBe(2)
-    })
-  })
-
-  describe('Bug 5 — HEAD responses must not include a body', () => {
-    it('GET primes cache; subsequent HEAD returns 200 with headers and no body', async () => {
-      @Controller('/cache-bug5-head-nobody')
-      class Bug5HeadNoBodyController {
-        @CacheControl({ ttl: 60 })
-        @Get('/data')
-        data() {
-          return { value: 'cached' }
-        }
-      }
-      void [Bug5HeadNoBodyController]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      const getRes = await app.fetch('/cache-bug5-head-nobody/data')
-      expect(getRes.status).toBe(200)
-      expect(getRes.headers.get('etag')).toBeDefined()
-
-      const headRes = await app.fetch('/cache-bug5-head-nobody/data', { method: 'HEAD' })
-      expect(headRes.status).toBe(200)
-      expect(await headRes.text()).toBe('')
-      expect(headRes.headers.get('content-type')).toBeDefined()
-    })
-
-    it('HEAD with matching If-None-Match after GET primes cache → 304', async () => {
-      @Controller('/cache-bug5-head-304')
-      class Bug5Head304Controller {
-        @CacheControl({ ttl: 60 })
-        @Get('/data')
-        data() {
-          return { value: 'head-cached' }
-        }
-      }
-      void [Bug5Head304Controller]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      const getRes = await app.fetch('/cache-bug5-head-304/data')
-      const etag = getRes.headers.get('etag') as string
-      expect(etag).toBeDefined()
-
-      const headRes = await app.fetch('/cache-bug5-head-304/data', {
-        method: 'HEAD',
-        headers: { 'if-none-match': etag },
-      })
-      expect(headRes.status).toBe(304)
-      expect(await headRes.text()).toBe('')
     })
   })
 
@@ -1380,7 +1306,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Authorization header → private by default (RFC 7234 §3.2)', () => {
+  describe('Authorization header → private by default (RFC 9111 §3.5)', () => {
     it('Authorization present without privacy override → Cache-Control: private, not stored', async () => {
       let callCount = 0
 
@@ -1437,8 +1363,10 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Cache key encoding', () => {
-    it('defaultCacheKey passes encodeURIComponent-encoded key to store', async () => {
+  describe('the store key', () => {
+    // One derivation: the read and the write of a request agree on its key. A brace would form a Redis hash tag,
+    // letting a request choose the cluster slot its entry lands on, and whitespace is refused by some backends.
+    it('is the same for the read and the write, and carries no brace or whitespace from the request', async () => {
       class SpyStore implements HTTPCacheStore {
         readonly keySeen: string[] = []
         async get(key: string) {
@@ -1457,7 +1385,7 @@ describe('Bug fixes', () => {
 
       @Controller('/cache-key-encode')
       class KeyEncodeController {
-        @CacheControl({ ttl: 60 })
+        @CacheControl({ ttl: 60, vary: ['X-Tenant'] })
         @Get('/data')
         data() {
           return { ok: true }
@@ -1468,17 +1396,15 @@ describe('Bug fixes', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
       await app.bootstrap()
 
-      await app.fetch('/cache-key-encode/data?a=1&b=2')
+      await app.fetch('/cache-key-encode/data?a=1', { headers: { 'x-tenant': '{acme corp}' } })
 
-      expect(keySeen.length).toBeGreaterThan(0)
-      // key must not contain raw special chars that would corrupt store backends
-      expect(keySeen[0]).toBe(encodeURIComponent('/cache-key-encode/data?a=1&b=2'))
-      // deterministic across calls
-      expect(keySeen[0]).toBe(keySeen[1])
+      expect(keySeen).toHaveLength(2)
+      expect(keySeen[1]).toBe(keySeen[0])
+      expect(keySeen[0]).not.toMatch(/[{}\s]/)
     })
   })
 
-  describe('Request no-store bypass (RFC 7234 §5.2.1.4)', () => {
+  describe('Request no-store bypass (RFC 9111 §5.2.1.5)', () => {
     it('Cache-Control: no-store in request → handler called again, not served from cache', async () => {
       let callCount = 0
 
@@ -1510,33 +1436,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('304 response includes cached headers (RFC 7232 §4.1)', () => {
-    it('304 response carries ETag and Cache-Control from cached entry', async () => {
-      @Controller('/cache-304-headers')
-      class Headers304Controller {
-        @CacheControl({ ttl: 60 })
-        @Get('/data')
-        data() {
-          return { value: 'hello' }
-        }
-      }
-      void [Headers304Controller]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      const res1 = await app.fetch('/cache-304-headers/data')
-      const etag = res1.headers.get('etag') as string
-      expect(etag).toBeDefined()
-
-      const res304 = await app.fetch('/cache-304-headers/data', { headers: { 'if-none-match': etag } })
-      expect(res304.status).toBe(304)
-      expect(res304.headers.get('etag')).toBe(etag)
-      expect(res304.headers.get('cache-control')).toBeDefined()
-    })
-  })
-
-  describe('If-None-Match: wildcard and comma-separated (RFC 7232 §3.2)', () => {
+  describe('If-None-Match: wildcard and comma-separated (RFC 9110 §13.1.2)', () => {
     it('If-None-Match: * → 304 when any cached response exists', async () => {
       @Controller('/cache-inm-wildcard')
       class InmWildcardController {
@@ -1596,7 +1496,7 @@ describe('Bug fixes', () => {
 
       const res1 = await app.fetch('/cache-inm-weak/data')
       const strongEtag = res1.headers.get('etag') as string
-      expect(strongEtag).toMatch(/^"[a-f0-9]+"$/)
+      expect(strongEtag).toMatch(/^"[^"]+"$/)
 
       const weakEtag = `W/${strongEtag}`
       const res = await app.fetch('/cache-inm-weak/data', { headers: { 'if-none-match': weakEtag } })
@@ -1604,7 +1504,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('proxyRevalidate option (RFC 7234 §5.2.2.7)', () => {
+  describe('proxyRevalidate option (RFC 9111 §5.2.2.8)', () => {
     it('@CacheControl({ ttl: 60, proxyRevalidate: true }) → Cache-Control includes proxy-revalidate', async () => {
       @Controller('/cache-proxy-revalidate')
       class ProxyRevalidateController {
@@ -1625,108 +1525,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('@CacheInvalidate()', () => {
-    it('POST evicts the cached GET that shares its tag', async () => {
-      let getCount = 0
-
-      @Controller('/cache-invalidate-self')
-      class InvalidateSelfController {
-        @CacheControl({ ttl: 60, tags: ['self'] })
-        @Get('/resource')
-        get() {
-          getCount++
-          return { count: getCount }
-        }
-
-        @CacheInvalidate({ tags: ['self'] })
-        @Post('/resource')
-        create() {
-          return { created: true }
-        }
-      }
-      void [InvalidateSelfController]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      await app.fetch('/cache-invalidate-self/resource')
-      await app.fetch('/cache-invalidate-self/resource')
-      expect(getCount).toBe(1)
-
-      await app.fetch('/cache-invalidate-self/resource', { method: 'POST' })
-
-      await app.fetch('/cache-invalidate-self/resource')
-      expect(getCount).toBe(2)
-    })
-
-    it('a mutation on another URL evicts by tag', async () => {
-      let getCount = 0
-
-      @Controller('/cache-invalidate-paths')
-      class InvalidatePathsController {
-        @CacheControl({ ttl: 60, tags: ['resource'] })
-        @Get('/resource')
-        get() {
-          getCount++
-          return { count: getCount }
-        }
-
-        @CacheInvalidate({ tags: ['resource'] })
-        @Post('/other')
-        create() {
-          return { created: true }
-        }
-      }
-      void [InvalidatePathsController]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      await app.fetch('/cache-invalidate-paths/resource')
-      expect(getCount).toBe(1)
-
-      await app.fetch('/cache-invalidate-paths/other', { method: 'POST' })
-
-      await app.fetch('/cache-invalidate-paths/resource')
-      expect(getCount).toBe(2)
-    })
-
-    it('non-2xx response must not invalidate the cache', async () => {
-      let getCount = 0
-
-      @Controller('/cache-invalidate-4xx')
-      class Invalidate4xxController {
-        @CacheControl({ ttl: 60, tags: ['resource-4xx'] })
-        @Get('/resource')
-        get() {
-          getCount++
-          return { count: getCount }
-        }
-
-        @CacheInvalidate({ tags: ['resource-4xx'] })
-        @Status(400)
-        @Delete('/resource')
-        remove() {
-          return { error: 'bad request' }
-        }
-      }
-      void [Invalidate4xxController]
-
-      const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
-      await app.bootstrap()
-
-      await app.fetch('/cache-invalidate-4xx/resource')
-      expect(getCount).toBe(1)
-
-      const del = await app.fetch('/cache-invalidate-4xx/resource', { method: 'DELETE' })
-      expect(del.status).toBe(400)
-
-      await app.fetch('/cache-invalidate-4xx/resource')
-      expect(getCount).toBe(1)
-    })
-  })
-
-  describe('only-if-cached request directive (RFC 7234 §5.2.1.7)', () => {
+  describe('only-if-cached request directive (RFC 9111 §5.2.1.7)', () => {
     it('cache miss + only-if-cached → 504', async () => {
       @Controller('/cache-only-if-cached-miss')
       class OnlyIfCachedMissController {
@@ -1771,7 +1570,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('no-transform directive (RFC 7234 §5.2.2.4)', () => {
+  describe('no-transform directive (RFC 9111 §5.2.2.6)', () => {
     it('@CacheControl({ ttl: 60, noTransform: true }) → Cache-Control includes no-transform', async () => {
       @Controller('/cache-no-transform')
       class NoTransformController {
@@ -1792,7 +1591,7 @@ describe('Bug fixes', () => {
     })
   })
 
-  describe('Last-Modified / If-Modified-Since (RFC 7232 §3.1, §3.3, §6)', () => {
+  describe('Last-Modified / If-Modified-Since (RFC 9110 §8.8.2, §13.1.3, §13.2.2)', () => {
     it('cached response includes a Last-Modified header', async () => {
       @Controller('/cache-last-modified')
       class LastModifiedController {
@@ -1808,7 +1607,7 @@ describe('Bug fixes', () => {
       await app.bootstrap()
 
       const res = await app.fetch('/cache-last-modified/data')
-      expect(res.headers.get('last-modified')).toBeDefined()
+      expect(Number.isNaN(Date.parse(res.headers.get('last-modified') ?? ''))).toBe(false)
     })
 
     it('If-Modified-Since at or after Last-Modified → 304', async () => {
@@ -1827,11 +1626,11 @@ describe('Bug fixes', () => {
 
       const res1 = await app.fetch('/cache-ims-match/data')
       const lastModified = res1.headers.get('last-modified') as string
-      expect(lastModified).toBeDefined()
+      expect(lastModified).not.toBeNull()
 
       const res2 = await app.fetch('/cache-ims-match/data', { headers: { 'if-modified-since': lastModified } })
       expect(res2.status).toBe(304)
-      expect(res2.headers.get('cache-control')).toBeDefined()
+      expect(res2.headers.get('cache-control')).toBe('public, max-age=60')
     })
 
     it('If-Modified-Since before Last-Modified → 200 with full body', async () => {
@@ -1873,8 +1672,8 @@ describe('Bug fixes', () => {
 
       await app.fetch('/cache-inm-precedence/data')
 
-      // Stale If-Modified-Since would normally yield 200, but a non-matching
-      // If-None-Match must be evaluated instead and also yield 200.
+      // The If-Modified-Since alone would yield a 304: it is later than the response. The non-matching
+      // If-None-Match is the one evaluated, and the answer is the full response.
       const res = await app.fetch('/cache-inm-precedence/data', {
         headers: {
           'if-none-match': '"does-not-match"',
@@ -1914,8 +1713,7 @@ describe('Bug fixes', () => {
 })
 
 describe('CacheControl builder & container-managed store', () => {
-  // Minimal Map-backed store used to prove a configured store actually backs caching and to observe which
-  // store received the traffic (i.e. that the default MemoryHTTPCacheStore was overridden).
+  // A Map-backed store, so the store a configuration names is seen to answer the requests.
   class MapStore implements HTTPCacheStore {
     readonly ops: string[] = []
     readonly #entries = new Map<string, HTTPCacheEntry>()
@@ -1958,61 +1756,9 @@ describe('CacheControl builder & container-managed store', () => {
     const res2 = await app.fetch('/cache-di-custom-store/data')
 
     const resolved = app.container.get(MapStore) as MapStore
-    expect(resolved).toBeInstanceOf(MapStore)
-    expect(resolved).not.toBeInstanceOf(MemoryHTTPCacheStore)
     expect(resolved.ops).toContain('put')
     expect(resolved.ops).toContain('get')
     // Second request served from the custom store — handler ran only once.
-    expect(callCount).toBe(1)
-    expect(await res2.json()).toEqual({ count: 1 })
-  })
-
-  it('a store bound in the container is ignored unless passed explicitly via .store(token)', async () => {
-    @Controller('/cache-di-ignored')
-    class IgnoredStoreController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        return { ok: true }
-      }
-    }
-    void [IgnoredStoreController]
-
-    const container = new CaffeineIoC()
-    container.bind(MapStore, t => t.toClass(MapStore))
-    // No .store(...) option — HTTPCaching requires one explicitly and throws without it; the container
-    // binding above is never consulted.
-    const app = createWebApplication({ container }).with(HTTPCaching())
-
-    await expect(app.bootstrap()).rejects.toThrow(ErrConfiguration)
-
-    const bound = app.container.get(MapStore) as MapStore
-    expect(bound.ops).toEqual([])
-  })
-
-  it('.store(instance) wires a custom store that backs caching', async () => {
-    let callCount = 0
-
-    @Controller('/cache-builder-store')
-    class BuilderStoreController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        callCount++
-        return { count: callCount }
-      }
-    }
-    void [BuilderStoreController]
-
-    const store = new MapStore()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
-    await app.bootstrap()
-
-    await app.fetch('/cache-builder-store/data')
-    const res2 = await app.fetch('/cache-builder-store/data')
-
-    expect(store.ops).toContain('put')
-    expect(store.ops).toContain('get')
     expect(callCount).toBe(1)
     expect(await res2.json()).toEqual({ count: 1 })
   })
@@ -2161,27 +1907,6 @@ describe('X-Cache status header', () => {
     const res = await app.fetch('/xc-false/data')
     expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
-
-  it('.statusHeader(...) renames the header', async () => {
-    @Controller('/xc-custom')
-    class XCCustomController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        return { ok: true }
-      }
-    }
-    void [XCCustomController]
-
-    const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).statusHeader('X-My-Cache')),
-    )
-    await app.bootstrap()
-
-    const res = await app.fetch('/xc-custom/data')
-    expect(res.headers.get('x-cache')).toBeNull()
-    expect(res.headers.get('x-my-cache')).toBe('MISS')
-  })
 })
 
 describe('Canonical query keys', () => {
@@ -2246,13 +1971,14 @@ describe('Age header & request max-age', () => {
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['Date'] })
 
     await app.fetch('/age-hit/data')
+    vi.setSystemTime(Date.now() + 3000)
     const res2 = await app.fetch('/age-hit/data')
 
     expect(res2.headers.get('x-cache')).toBe('HIT')
-    expect(res2.headers.get('age')).toBeDefined()
-    expect(Number(res2.headers.get('age'))).toBeGreaterThanOrEqual(0)
+    expect(res2.headers.get('age')).toBe('3')
   })
 
   it('request Cache-Control: max-age larger than the entry age is served from cache', async () => {

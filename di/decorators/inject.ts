@@ -6,10 +6,18 @@ import { errMessage } from '../internal/util/errutil/index.js'
 import { InjectionToken } from '../key.js'
 import { defineMemberInjection } from './registrar/index.js'
 
+/** A member whose value the container supplies: field, accessor, getter or setter. */
+type InjectedMemberContext<T> =
+  | ClassFieldDecoratorContext<unknown, T>
+  | ClassAccessorDecoratorContext<unknown, T>
+  | ClassGetterDecoratorContext<unknown, T>
+  | ClassSetterDecoratorContext<unknown, T>
+
 /**
- * Injects a dependency into a field, getter, setter, or accessor.
+ * Injects a dependency into a field, an auto-accessor, a setter, or a getter that has a setter of the same name.
  *
- * Methods are not injection points.
+ * The container assigns the member once the constructor has returned, so it is still unset inside the
+ * constructor. Methods are not injection points.
  *
  * @throws {@link ErrInvalidDecorator} when applied to a method.
  *
@@ -24,13 +32,6 @@ import { defineMemberInjection } from './registrar/index.js'
  * }
  * ```
  */
-/** A member whose value the container supplies: field, accessor, getter or setter. */
-type InjectedMemberContext<T> =
-  | ClassFieldDecoratorContext<unknown, T>
-  | ClassAccessorDecoratorContext<unknown, T>
-  | ClassGetterDecoratorContext<unknown, T>
-  | ClassSetterDecoratorContext<unknown, T>
-
 export function Inject<T>(
   key: InjectionToken<T>,
 ): (target: Function | object | undefined, context: InjectedMemberContext<T>) => void

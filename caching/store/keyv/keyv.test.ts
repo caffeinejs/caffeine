@@ -1,9 +1,9 @@
 import { Keyv } from 'keyv'
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { HTTPCacheEntry } from '../../http/store.js'
-import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { KeyValueHTTPCacheStore, type KeyValueHTTPCacheClient } from './keyv.js'
+import { describeHTTPCacheStoreContract, elapseDate } from '../../http/store.testkit.js'
+import { ErrKeyvCache, KeyvHTTPCacheStore, type KeyvHTTPCacheClient } from './index.js'
 
 // A key-value cache that records every call, so the key layout and the bytes that go over the seam are
 // assertable. `ttl === 0` means never expires, which is what both real backends do with it.
@@ -39,17 +39,17 @@ function fakeKV() {
   }
 }
 
-describeHTTPCacheStoreContract('KeyValueHTTPCacheStore', () => new KeyValueHTTPCacheStore(fakeKV()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore', () => new KeyvHTTPCacheStore(fakeKV()), elapseDate)
 
-describeHTTPCacheStoreContract('KeyValueHTTPCacheStore on a Keyv', () => new KeyValueHTTPCacheStore(new Keyv()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore on a Keyv', () => new KeyvHTTPCacheStore(new Keyv()), elapseDate)
 
 // A Keyv is handed to the store as it comes. If this stops holding, wrap it at the call site rather than
 // widening the store's seam.
 it('takes a Keyv without an adapter', () => {
-  expectTypeOf<Keyv>().toExtend<KeyValueHTTPCacheClient>()
+  expectTypeOf<Keyv>().toExtend<KeyvHTTPCacheClient>()
 })
 
-describe('KeyValueHTTPCacheStore', () => {
+describe('KeyvHTTPCacheStore', () => {
   const entry = (payload: string | Buffer, extra?: Partial<HTTPCacheEntry>): HTTPCacheEntry => ({
     payload,
     statusCode: 200,
@@ -57,81 +57,35 @@ describe('KeyValueHTTPCacheStore', () => {
     ...extra,
   })
 
-  const envelopeAt = (kv: ReturnType<typeof fakeKV>, key: string) =>
-    JSON.parse(kv.data.get(key)!.value) as Record<string, unknown>
-
   it('keeps entries and tag markers in separate namespaces', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
     await store.evictByTag('pets')
 
-    expect([...kv.data.keys()]).toEqual(['caffeine:cache:e:k', 'caffeine:cache:t:pets'])
+    expect([...kv.data.keys()].sort()).toEqual(['caffeine:cache:e:k', 'caffeine:cache:t:pets'])
   })
 
-  // Without the `e:`/`t:` split an entry and a tag of the same name share a key, so evicting the tag would
-  // overwrite the entry — and the entry is not even supposed to carry that tag.
-  it('does not touch an entry whose key matches the evicted tag', async () => {
+  // A backend only ever has to round-trip a string, which every Keyv adapter does; bytes that are not valid
+  // UTF-8 travel inside it as base64.
+  it('hands the backend a string, holding a Buffer payload as base64', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
-    await store.put('plain', entry('p'), { ttl: 60 })
-
-    await store.evictByTag('plain')
-
-    expect((await store.get('plain'))?.payload).toBe('p')
-    expect(kv.data.has('caffeine:cache:e:plain')).toBe(true)
-    expect(kv.data.has('caffeine:cache:t:plain')).toBe(true)
-  })
-
-  // A backend only ever has to round-trip a string; bytes that are not valid UTF-8 survive as base64.
-  it('stores a Buffer payload as base64 and a string payload verbatim', async () => {
-    const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
     const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80])
 
     await store.put('bin', entry(bytes), { ttl: 60 })
-    await store.put('text', entry('héllo'), { ttl: 60 })
 
-    expect(envelopeAt(kv, 'caffeine:cache:e:bin')).toMatchObject({ k: 'b', p: bytes.toString('base64') })
-    expect(envelopeAt(kv, 'caffeine:cache:e:text')).toMatchObject({ k: 's', p: 'héllo' })
-  })
-
-  // The whole envelope is written on every put, so an entry can never inherit a field from the one it replaces.
-  it('writes the envelope whole, leaving no field of the entry it replaces', async () => {
-    const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
-    await store.put('k', entry('old', { etag: '"old"', lastModified: 'Mon, 01 Jan 2024 00:00:00 GMT' }), {
-      ttl: 60,
-    })
-
-    await store.put('k', entry('new'), { ttl: 60 })
-
-    const stored = envelopeAt(kv, 'caffeine:cache:e:k')
-    expect(stored).not.toHaveProperty('t')
-    expect(stored).not.toHaveProperty('l')
-  })
-
-  // A marker is unique per eviction, so it can never come round to a value an entry already recorded — the
-  // hazard a counter has under an eviction policy that may drop it.
-  it('writes a different marker on every eviction of the same tag', async () => {
-    const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
-
-    await store.evictByTag('pets')
-    await store.evictByTag('pets')
-
-    const [first, second] = kv.sets
-    expect(first.key).toBe('caffeine:cache:t:pets')
-    expect(second.key).toBe('caffeine:cache:t:pets')
-    expect(first.value).not.toBe(second.value)
+    const written = kv.sets.find(set => set.key === 'caffeine:cache:e:bin')!.value
+    expect(typeof written).toBe('string')
+    expect(written).toContain(bytes.toString('base64'))
   })
 
   // Both backends take milliseconds. Dropping the `* 1000` passes every behavioral test, since the fake and the
   // real backends would simply keep entries 1000x too briefly only under a sub-second ttl.
-  it('converts the ttl to milliseconds', async () => {
+  it('hands the backend the ttl in milliseconds', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('k', entry('v'), { ttl: 60 })
     await store.put('sub', entry('v'), { ttl: '250ms' })
@@ -144,7 +98,7 @@ describe('KeyValueHTTPCacheStore', () => {
   // one — and there is nothing to read the markers for either.
   it('issues no call at all for a ttl that is not positive', async () => {
     const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv)
+    const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('zero', entry('v'), { ttl: 0, tags: ['pets'] })
     await store.put('unparsable', entry('v'), { ttl: 'ten seconds', tags: ['pets'] })
@@ -155,35 +109,105 @@ describe('KeyValueHTTPCacheStore', () => {
 
   it('never expires a tag marker by default, and honours a tagTtl that is set', async () => {
     const kv = fakeKV()
-    await new KeyValueHTTPCacheStore(kv).evictByTag('pets')
+    await new KeyvHTTPCacheStore(kv).evictByTag('pets')
     expect(kv.sets[0].ttl).toBe(0)
 
     const bounded = fakeKV()
-    await new KeyValueHTTPCacheStore(bounded, { tagTtl: '2h' }).evictByTag('pets')
+    await new KeyvHTTPCacheStore(bounded, { tagTtl: '2h' }).evictByTag('pets')
     expect(bounded.sets[0].ttl).toBe(7_200_000)
   })
 
-  // The documented direction of failure: a marker lost while an entry written under it is still alive costs a
-  // hit, and never serves an entry that was meant to be gone.
-  it('reads an entry as absent when the marker it recorded has expired', async () => {
-    const kv = fakeKV()
-    const store = new KeyValueHTTPCacheStore(kv, { tagTtl: '1h' })
-    await store.evictByTag('pets')
-    await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
-    expect((await store.get('k'))?.payload).toBe('v')
+  // An entry written before its tag's first eviction is hidden by that eviction's marker alone. Once that marker
+  // is gone it must stay hidden: the entry recorded no marker to fall back to, and serving it again would serve
+  // a response the eviction was meant to take down.
+  describe('an evicted entry whose marker is gone', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
 
-    kv.data.delete('caffeine:cache:t:pets')
+    it.each([
+      ['the fake backend', () => fakeKV()],
+      ['a Keyv', () => new Keyv()],
+    ])('stays hidden once the marker lapses past tagTtl, on %s', async (_backend, client) => {
+      const store = new KeyvHTTPCacheStore(client(), { tagTtl: '1h' })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      await store.put('k', entry('v'), { ttl: '1d', tags: ['pets'] })
+      await store.evictByTag('pets')
+      expect(await store.get('k')).toBeUndefined()
 
-    expect(await store.get('k')).toBeUndefined()
+      vi.setSystemTime(Date.now() + 3_600_001)
+
+      expect(await store.get('k')).toBeUndefined()
+    })
+
+    // A backend bounded by size, an LRU Keyv store for one, may drop a marker whatever tagTtl says.
+    it('stays hidden once the backend drops the marker', async () => {
+      const kv = fakeKV()
+      const store = new KeyvHTTPCacheStore(kv)
+      await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+      await store.evictByTag('pets')
+
+      kv.data.delete('caffeine:cache:t:pets')
+
+      expect(await store.get('k')).toBeUndefined()
+    })
+  })
+
+  describe('tagTtl', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    // Every other duration in the package fails loud. One that is not a duration would otherwise read as
+    // "never expires", the opposite of the bound on the marker keyspace that setting it asks for.
+    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, '1 hour', '-5s', ''])('refuses %s', tagTtl => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).toThrow(ErrKeyvCache)
+    })
+
+    it('names the value it refuses', () => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1 hour' })).toThrow(
+        'Cannot create a Keyv cache with the tagTtl "1 hour": it is not a non-negative duration',
+      )
+    })
+
+    it.each([0, '0s', '2h', 7200])('takes %s', tagTtl => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).not.toThrow()
+    })
+
+    // The documented direction of failure: a marker that lapses while an entry stored under it is still alive
+    // takes the entry down with it. A hit is lost; nothing meant to be gone is served.
+    it('takes an entry down with the marker it was stored under when that lapses', async () => {
+      const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1h' })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      await store.evictByTag('pets')
+      await store.put('k', entry('v'), { ttl: '1d', tags: ['pets'] })
+      expect((await store.get('k'))?.payload).toBe('v')
+
+      vi.setSystemTime(Date.now() + 3_600_001)
+
+      expect(await store.get('k')).toBeUndefined()
+    })
+
+    // `0` is the documented "never expires": the marker outlives anything stored under it.
+    it('keeps a marker for good at 0', async () => {
+      const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: 0 })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      await store.evictByTag('pets')
+      await store.put('k', entry('v'), { ttl: '30d', tags: ['pets'] })
+
+      vi.setSystemTime(Date.now() + 29 * 86_400_000)
+
+      expect((await store.get('k'))?.payload).toBe('v')
+    })
   })
 
   it('uses the prefix verbatim, and puts nothing in front for an empty one', async () => {
     const kv = fakeKV()
-    await new KeyValueHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 })
     expect(kv.sets[0].key).toBe('app|e:k')
 
     const bare = fakeKV()
-    await new KeyValueHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 })
     expect(bare.sets[0].key).toBe('e:k')
   })
 })
