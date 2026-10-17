@@ -2,7 +2,6 @@ import { Readable } from 'node:stream'
 
 import { Controller, Get, Header, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -21,6 +20,7 @@ import {
   type HTTPCachePutOptions,
   type HTTPCacheStore,
 } from '../index.js'
+import { RecordingLogger } from './_log.js'
 
 describe('what a request may ask of the cache', () => {
   let close: (() => Promise<unknown>) | undefined
@@ -373,44 +373,6 @@ describe('a response left out of the store', () => {
   })
 })
 
-/** A `Logger` that keeps what it was asked to write at `error`. */
-class ErrorRecorder implements Logger {
-  level = 'trace'
-  readonly levels: LevelMapping = {
-    values: { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60 },
-    labels: { 10: 'trace', 20: 'debug', 30: 'info', 40: 'warn', 50: 'error', 60: 'fatal' },
-  }
-  readonly errors: unknown[][] = []
-
-  readonly trace = this.#ignore()
-  readonly debug = this.#ignore()
-  readonly info = this.#ignore()
-  readonly warn = this.#ignore()
-  readonly fatal = this.#ignore()
-  readonly silent = this.#ignore()
-  readonly error: LogFn = (...args: unknown[]): void => {
-    this.errors.push(args)
-  }
-
-  isLevelEnabled(): boolean {
-    return true
-  }
-
-  bindings(): Bindings {
-    return {}
-  }
-
-  child(): Logger {
-    return this
-  }
-
-  flush(): void {}
-
-  #ignore(): LogFn {
-    return (): void => {}
-  }
-}
-
 /**
  * A store that is down is a cache that is off, not an application that is down: every request used to answer
  * 500, the mutation that had already gone through included.
@@ -506,7 +468,7 @@ describe('a store that rejects', () => {
   it('logs the failure on the application logger when no observer listens for it, once', async () => {
     const store = new DownStore()
     store.failGet = true
-    const log = new ErrorRecorder()
+    const log = new RecordingLogger()
 
     const app = createWebApplication({ logger: log }).with(HTTPCaching(b => b.store(store).observer({ onHit() {} })))
     close = () => app.close()
@@ -515,14 +477,16 @@ describe('a store that rejects', () => {
     await app.fetch('/store-down/data')
     await app.fetch('/store-down/data')
 
-    const reports = log.errors.filter(args => String(args[1]).includes('Cache store "get" failed'))
+    const reports = log.written.filter(w => String(w.args[1]).includes('Cache store "get" failed'))
     expect(reports).toHaveLength(1)
+    expect(reports[0].severity).toBe('error')
+    expect(reports[0].bindings).not.toHaveProperty('reqId')
   })
 
   it('leaves the report to an observer that listens for failures', async () => {
     const store = new DownStore()
     store.failGet = true
-    const log = new ErrorRecorder()
+    const log = new RecordingLogger()
     const errors: CacheErrorEvent[] = []
 
     const app = createWebApplication({ logger: log }).with(
@@ -534,7 +498,7 @@ describe('a store that rejects', () => {
     await app.fetch('/store-down/data')
 
     expect(errors).toHaveLength(1)
-    expect(log.errors.filter(args => String(args[1]).includes('Cache store'))).toEqual([])
+    expect(log.written.filter(w => String(w.args[1]).includes('Cache store'))).toEqual([])
   })
 })
 
@@ -638,7 +602,7 @@ describe('an entry the application put in the store itself', () => {
 
     @Controller('/store-warm')
     class WarmStoreController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60, key: () => 'store-warm' })
       @Get('/data')
       data() {
         return { n: ++calls }
@@ -647,7 +611,7 @@ describe('an entry the application put in the store itself', () => {
     void [WarmStoreController]
 
     await store.put(
-      encodeURIComponent('/store-warm/data'),
+      'store-warm',
       { payload: '{"warm":true}', statusCode: 200, headers: { 'content-type': 'application/json' } },
       { ttl: 60 },
     )

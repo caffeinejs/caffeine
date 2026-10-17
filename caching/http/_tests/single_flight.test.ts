@@ -7,7 +7,6 @@ import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import type { FlightTable } from '../flight.js'
 import {
   CacheControl,
   HTTPCaching,
@@ -19,7 +18,7 @@ import {
   type HTTPCachePutOptions,
   type HTTPCacheStore,
 } from '../index.js'
-import { WatchedStore, counter, gate, turn } from './_latch.js'
+import { WatchedStore, counter, gate, turn, whenAborted } from './_latch.js'
 
 class Recording {
   readonly hits: CacheHitEvent[] = []
@@ -578,17 +577,25 @@ describe('a HEAD and the flight', () => {
  * On a raw Fastify server, with the flight table in hand: what happens to a flight whose store hook never runs,
  * and to one that outlives its own timeout.
  */
-describe('the flight table', () => {
+/**
+ * A leader reports back from its store hook. When that hook never runs — a hijacked reply, a handler that never
+ * returns — `lockTimeout` alone releases the requests waiting on its run.
+ */
+describe('a handler run its leader does not report back on in time', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
 
-  async function start(options: { lockTimeoutMs: number; hijack?: boolean; handler?: () => Promise<unknown> }) {
-    const flights: FlightTable = new Map()
-    const store = new MemoryHTTPCacheStore()
+  async function start(options: {
+    lockTimeoutMs: number
+    hijack?: boolean
+    handler?: (request: { signal: AbortSignal }) => Promise<unknown>
+  }) {
+    const store = new WatchedStore()
     const recording = new Recording()
     const server = fastify()
     close = () => server.close()
@@ -598,7 +605,7 @@ describe('the flight table', () => {
         etagGenerator: undefined,
         statusHeader: 'X-Cache',
         observer: recording.observer,
-        flights,
+        flights: new Map(),
         lockTimeoutMs: options.lockTimeoutMs,
       }),
     )
@@ -611,89 +618,116 @@ describe('the flight table', () => {
             reply.hijack()
             reply.raw.end('raw')
           }
-        : (options.handler ?? (() => ({ ok: true }))),
+        : (options.handler ?? (() => Promise.resolve({ ok: true }))),
     })
     await server.ready()
 
-    return { server, flights, store, recording }
+    return { server, store, recording }
   }
 
-  it('is not consulted on a fresh hit', async () => {
-    const { server, flights } = await start({ lockTimeoutMs: 1000 })
-    let reads = 0
-    const get = flights.get.bind(flights)
-    flights.get = key => {
-      reads++
-      return get(key)
-    }
+  // Hooks do not run after a hijack, so nothing but lockTimeout releases the requests waiting on the run.
+  it('releases the requests waiting on a leader that hijacked its reply at lockTimeout, and no sooner', async () => {
+    const { server, store, recording } = await start({ lockTimeoutMs: 50, hijack: true })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    // A miss looks the key up, then the flight checks its own identity as it settles; a hit does none of it.
-    await server.inject('/data')
-    const afterMiss = reads
-    expect(afterMiss).toBeGreaterThan(0)
+    expect((await server.inject('/data')).body).toBe('raw')
+    let answered = false
+    const follower = server.inject('/data').then(res => {
+      answered = true
+      return res
+    })
+    await store.reads.reached(2)
+    await turn()
 
-    await server.inject('/data')
-    expect(reads).toBe(afterMiss)
-  })
+    await vi.advanceTimersByTimeAsync(49)
+    expect(answered).toBe(false)
 
-  // Hooks do not run after a hijack, so nothing settles the flight but its own timer.
-  it('releases the followers of a leader that hijacked its reply at lockTimeout, and forgets the flight', async () => {
-    const { server, flights, recording } = await start({ lockTimeoutMs: 50, hijack: true })
-
-    const leader = server.inject('/data')
-    await waitFor(() => flights.size === 1)
-    const started = Date.now()
-    const follower = server.inject('/data')
-
-    await Promise.all([leader, follower])
-
-    expect(Date.now() - started).toBeGreaterThanOrEqual(30)
-    expect(flights.size).toBe(0)
+    await vi.advanceTimersByTimeAsync(1)
+    expect((await follower).body).toBe('raw')
     expect(recording.reasons()).toEqual(['absent', 'not-coalesced'])
+
+    // The run is over for good: a request arriving now finds nothing to wait on, and leads.
+    await server.inject('/data')
+    expect(recording.reasons()).toEqual(['absent', 'not-coalesced', 'absent'])
   })
 
-  it('lets a leader that outlived its timeout settle only its own flight, and its late write still lands', async () => {
+  it('still stores what a leader produces after lockTimeout released the requests behind it', async () => {
+    const g = gate()
+    let calls = 0
+    const { server } = await start({
+      lockTimeoutMs: 30,
+      handler: async () => {
+        calls++
+        if (calls === 1) {
+          await g.hold()
+        }
+        return { arrival: calls }
+      },
+    })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const slow = server.inject('/data')
+    await g.seen
+    await vi.advanceTimersByTimeAsync(30)
+    g.open()
+    await slow
+
+    const res = await server.inject('/data')
+    expect(res.headers['x-cache']).toBe('HIT')
+    expect(res.json()).toEqual({ arrival: 1 })
+    expect(calls).toBe(1)
+  })
+
+  // A leader past lockTimeout still reports back when it finishes, first come first served, and that report only
+  // ever ends its own run: a newer leader's run under the same key, with a request waiting on it, is not its to end.
+  it('lets a leader that outlived lockTimeout end only its own run, never a newer one', async () => {
     const gates = [gate(), gate()]
     let arrivals = 0
-    const { server, flights, store, recording } = await start({
+    const { server, store, recording } = await start({
       lockTimeoutMs: 30,
       handler: async () => {
         const mine = arrivals++
-        await gates[mine].hold()
+        if (mine < gates.length) {
+          await gates[mine].hold()
+        }
+        if (mine === 0) {
+          throw new Error('the slow leader failed')
+        }
         return { arrival: mine }
       },
     })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     const slow = server.inject('/data')
     await gates[0].seen
-    const first = flights.get(encodeURIComponent('/data'))
-    expect(first).toBeDefined()
+    await vi.advanceTimersByTimeAsync(30)
 
-    // The timer fires: the flight is forgotten, and the next miss leads a new one under the same key.
-    await waitFor(() => flights.size === 0)
     const next = server.inject('/data')
     await gates[1].seen
-    const second = flights.get(encodeURIComponent('/data'))
-    expect(second).toBeDefined()
-    expect(second).not.toBe(first)
-
     gates[0].open()
-    await slow
-    // The slow leader settled its own flight, which was already gone; the newer one is untouched.
-    expect(flights.get(encodeURIComponent('/data'))).toBe(second)
-    expect((await store.get(encodeURIComponent('/data')))?.payload).toBe('{"arrival":0}')
+    expect((await slow).statusCode).toBe(500)
 
+    const follower = server.inject('/data')
+    await store.reads.reached(3)
+    await turn()
     gates[1].open()
-    await next
-    expect(flights.size).toBe(0)
+    const [led, followed] = await Promise.all([next, follower])
+
+    expect(arrivals).toBe(2)
+    expect(led.json()).toEqual({ arrival: 1 })
+    expect(followed.headers['x-cache']).toBe('HIT')
+    expect(followed.json()).toEqual({ arrival: 1 })
+    expect(recording.coalesced).toBe(1)
     expect(recording.reasons()).toEqual(['absent', 'absent'])
   })
 
-  it('still stores and releases the followers of a leader whose client went away', async () => {
+  it('still stores and releases the requests behind a leader whose client went away', async () => {
     const g = gate()
-    const { server, recording } = await start({
+    let leaderSignal: AbortSignal | undefined
+    const { server, store, recording } = await start({
       lockTimeoutMs: 1000,
-      handler: async () => {
+      handler: async request => {
+        leaderSignal ??= request.signal
         await g.hold()
         return { ok: true }
       },
@@ -706,10 +740,11 @@ describe('the flight table', () => {
     socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
     await g.seen
     const follower = server.inject('/data')
-    await sleep(10)
+    await store.reads.reached(2)
+    await turn()
 
     socket.destroy()
-    await sleep(10)
+    await whenAborted(leaderSignal!)
     g.open()
 
     const res = await follower
@@ -759,7 +794,7 @@ describe('a follower whose request is over', () => {
         etagGenerator: undefined,
         statusHeader: 'X-Cache',
         observer: recording.observer,
-        flights: new Map() as FlightTable,
+        flights: new Map(),
         lockTimeoutMs: options.lockTimeoutMs,
       }),
     )

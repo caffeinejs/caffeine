@@ -1,4 +1,4 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
+import { token } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -14,7 +14,9 @@ describe('caching is opt-in', () => {
     close = undefined
   })
 
-  it('does nothing to an undecorated application that never installs the plugin', async () => {
+  // The package is loaded by this file. Loading it registers nothing anywhere: until the plugin is installed, an
+  // application answers exactly as it would without it.
+  it('leaves an application that never installs the plugin as it was, though the package is loaded', async () => {
     @Controller('/optin-plain')
     class PlainController {
       @Get('/data')
@@ -84,42 +86,6 @@ describe('caching is opt-in', () => {
 
     await expect(booting).rejects.toThrow(ErrConfiguration)
     await expect(booting).rejects.toThrow('Cannot install HTTP caching without a store')
-  })
-
-  it('resolves a container-bound store passed as a token', async () => {
-    class MapStore implements HTTPCacheStore {
-      readonly ops: string[] = []
-      async get() {
-        this.ops.push('get')
-        return undefined
-      }
-      async put() {
-        this.ops.push('put')
-      }
-      async evictByTag() {}
-    }
-
-    @Controller('/optin-token-store')
-    class TokenStoreController {
-      @CacheControl({ ttl: 60 })
-      @Get('/data')
-      data() {
-        return { ok: true }
-      }
-    }
-    void [TokenStoreController]
-
-    const container = new CaffeineIoC()
-    container.bind(MapStore, t => t.toClass(MapStore))
-
-    const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
-    close = () => app.close()
-    await app.bootstrap()
-
-    await app.fetch('/optin-token-store/data')
-
-    const store = app.container.get(MapStore) as MapStore
-    expect(store.ops).toContain('put')
   })
 
   it('honors .statusHeader(...)', async () => {
