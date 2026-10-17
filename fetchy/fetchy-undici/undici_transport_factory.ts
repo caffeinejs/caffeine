@@ -31,10 +31,7 @@ class AgentTransport extends UndiciTransport {
 export class UndiciTransportFactory implements TransportFactory {
   constructor(private readonly options?: Pool.Options) {}
 
-  provide(baseURL: string): Transport {
-    // A base URL the agent cannot route fails the client as it is built, rather than every call.
-    new URL(baseURL)
-
+  provide(_baseURL: string): Transport {
     const options = this.options
     // An Agent asks `factory` for the dispatcher of each origin, where a Pool asks it for each connection: each origin
     // gets a pool of its own built with the options as given, so a factory they name goes on building connections.

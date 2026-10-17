@@ -646,6 +646,14 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
 
       await expect(call).rejects.toBe(reason)
     })
+
+    // A base URL without a scheme names no server: the client refuses it as the API client is made, before any call
+    // can go out, whichever transport would send it.
+    it('refuses a base URL that is not an absolute URL before any call is made', () => {
+      expect(() => clientOver(factory(), builder => builder.baseURL('api.test/v1')).create(ItemsAPI)).toThrow(
+        expect.objectContaining({ name: 'TypeError', code: 'ERR_INVALID_URL' }),
+      )
+    })
   })
 
   describe('a call sent again', () => {
