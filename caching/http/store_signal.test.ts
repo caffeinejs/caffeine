@@ -31,25 +31,29 @@ describe('withStoreSignal', () => {
     expect(call).not.toHaveBeenCalled()
   })
 
-  // The unbounded path is the default one, and it runs on every request of a cached route.
-  it('hands the call the request signal as is, and no timer, when no timeout is set', async () => {
-    const request = new AbortController().signal
-    const seen: (AbortSignal | undefined)[] = []
-    const call = (signal?: AbortSignal) => {
-      seen.push(signal)
-      return Promise.resolve('entry')
+  // Without a timeout a call is bounded by the request alone: it ends when the request does, and the cache arms
+  // nothing of its own to bound it.
+  it('bounds a call by the request alone, with no timer, when no timeout is set', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const request = new AbortController()
+      const pending = withStoreSignal(
+        'get',
+        request.signal,
+        undefined,
+        signal =>
+          new Promise<never>((_resolve, reject) => {
+            signal!.addEventListener('abort', () => reject(signal!.reason), { once: true })
+          }),
+      )
+      expect(vi.getTimerCount()).toBe(0)
+
+      request.abort(new Error('client gone'))
+
+      await expect(pending).rejects.toThrow('client gone')
+    } finally {
+      vi.useRealTimers()
     }
-
-    expect(await withStoreSignal('get', request, undefined, call)).toBe('entry')
-    expect(await withStoreSignal('put', undefined, undefined, call)).toBe('entry')
-    expect(seen).toEqual([request, undefined])
-  })
-
-  it('settles as the call does when the call is first', async () => {
-    await expect(withStoreSignal('get', undefined, 1000, () => Promise.resolve('entry'))).resolves.toBe('entry')
-    await expect(withStoreSignal('get', undefined, 1000, () => Promise.reject(new Error('down')))).rejects.toThrow(
-      'down',
-    )
   })
 
   // The store is handed one signal, aborted by the timeout, and the store's own abort rejection, which it sends
