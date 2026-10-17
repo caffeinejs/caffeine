@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
-import { AbortError, createClient, type createCluster } from '@redis/client'
+import { AbortError, RESP_TYPES, createClient, type createCluster } from '@redis/client'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
@@ -11,23 +11,6 @@ import {
   type RedisHTTPCacheCommands,
   type RedisHTTPCacheView,
 } from './index.js'
-
-// CRC16/XMODEM over the hash tag when the key has one, modulo 16384: how a cluster places a key.
-function slotOf(key: string): number {
-  const open = key.indexOf('{')
-  const end = open === -1 ? -1 : key.indexOf('}', open + 1)
-  const hashed = end > open + 1 ? key.slice(open + 1, end) : key
-
-  let crc = 0
-  for (const byte of Buffer.from(hashed)) {
-    crc ^= byte << 8
-    for (let bit = 0; bit < 8; bit++) {
-      crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xffff : (crc << 1) & 0xffff
-    }
-  }
-
-  return crc % 16384
-}
 
 interface SentCommand {
   command: string
@@ -41,7 +24,9 @@ interface SentCommand {
  * The four commands `RedisHTTPCacheStore` sends, over two maps, shaped like a single-server client (a view with
  * `withAbortSignal`) or like a cluster client (without it). Records every command with the signal it was bound
  * to and the batch it was issued in. `hold()` makes the server stop answering, as a paused one would; a held
- * command settles only through its signal. Faithful to a server for these commands and nothing else.
+ * command settles only through its signal. Like a node-redis client, it answers bulk replies as Buffers only to
+ * a view made with the Buffer type mapping, and as text otherwise. Faithful to a server for these commands and
+ * nothing else.
  */
 function fakeHTTPServer(
   shape: 'client' | 'cluster' = 'client',
@@ -54,7 +39,7 @@ function fakeHTTPServer(
   let settled = 0
   let held = false
 
-  function commandsWith(signal: AbortSignal | undefined): RedisHTTPCacheCommands {
+  function commandsWith(signal: AbortSignal | undefined, buffers: boolean): RedisHTTPCacheCommands {
     const run = <T>(command: string, key: string, reply: () => T): Promise<T> => {
       sent.push({ command, key, batch: settled, signal })
       if (signal?.aborted) {
@@ -79,14 +64,18 @@ function fakeHTTPServer(
         run('get', key, () => {
           const value = strings.get(key)
 
-          return value === undefined ? null : counterAs(value)
+          return value === undefined ? null : buffers ? counterAs(value) : value
         }),
       hmGet: (key, fields) =>
         run('hmGet', key, () =>
           fields.map(name => {
             const field = hashes.get(key)?.get(name)
 
-            return field !== undefined && field.expiresAt > Date.now() ? field.value : null
+            if (field === undefined || field.expiresAt <= Date.now()) {
+              return null
+            }
+
+            return buffers ? field.value : field.value.toString()
           }),
         ),
       hSetEx: (key, fields, options) =>
@@ -112,15 +101,21 @@ function fakeHTTPServer(
     }
   }
 
-  const view: RedisHTTPCacheView = commandsWith(undefined)
-  if (shape === 'client') {
-    view.withAbortSignal = signal => commandsWith(signal)
-  }
+  const asBuffers = (mapping: { [RESP_TYPES.BLOB_STRING]?: unknown } | undefined) =>
+    mapping?.[RESP_TYPES.BLOB_STRING] === Buffer
+
   const client: RedisHTTPCacheClient = {
-    withTypeMapping: () => view,
+    withTypeMapping: mapping => {
+      const buffers = asBuffers(mapping)
+      const view: RedisHTTPCacheView = commandsWith(undefined, buffers)
+      if (shape === 'client') {
+        view.withAbortSignal = signal => commandsWith(signal, buffers)
+      }
+      return view
+    },
     withCommandOptions: options => {
       withCommandOptions(options)
-      return commandsWith(options.abortSignal)
+      return commandsWith(options.abortSignal, asBuffers(options.typeMapping))
     },
   }
 
@@ -174,10 +169,10 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     server.reset()
 
     expect((await store.get('tagged', { tags: ['pets'] }))?.payload).toBe('v')
-    expect(sent.map(item => [item.command, item.key, item.batch])).toEqual([
-      ['hmGet', 'caffeine:cache:e:tagged', 0],
-      ['get', 'caffeine:cache:t:pets', 0],
-      ['get', 'caffeine:cache:t:all', 2],
+    expect(sent.map(item => [item.command, item.batch])).toEqual([
+      ['hmGet', 0],
+      ['get', 0],
+      ['get', 2],
     ])
 
     server.reset()
@@ -219,51 +214,42 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     expect(sent).toEqual([])
   })
 
-  // A `ttl` is seconds and the server is told milliseconds. No expiry test is slow enough to notice an hour
-  // that became 3.6 seconds, so the number sent is pinned here.
-  it('sends the ttl to the server in milliseconds', async () => {
-    const { client } = fakeHTTPServer()
-    const view = client.withTypeMapping({} as never)
-    const hSetEx = vi.spyOn(view, 'hSetEx')
-    const store = new RedisHTTPCacheStore(client)
+  // A `ttl` is seconds and the server is told milliseconds: an hour that became 3.6 seconds, or a second and a
+  // half rounded away, shows as an entry gone too soon or kept too long.
+  it.each([
+    ['1h', 3_600_000],
+    [1.5, 1500],
+    ['1ms', 1],
+  ])('keeps an entry put with a ttl of %s for %ims, and no longer', async (ttl, ms) => {
+    const store = new RedisHTTPCacheStore(fakeHTTPServer().client)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      await store.put('k', httpEntry, { ttl })
 
-    await store.put('a', httpEntry, { ttl: '1h' })
-    await store.put('b', httpEntry, { ttl: 1.5 })
-    await store.put('c', httpEntry, { ttl: '1ms' })
+      vi.setSystemTime(Date.now() + ms - 1)
+      expect((await store.get('k'))?.payload).toBe('v')
 
-    expect(hSetEx.mock.calls.map(call => call[2])).toEqual([
-      { expiration: { type: 'PX', value: 3_600_000 } },
-      { expiration: { type: 'PX', value: 1500 } },
-      { expiration: { type: 'PX', value: 1 } },
-    ])
-  })
-
-  // A cluster answers CROSSSLOT to a command whose keys fall in two slots, and keys carry no hash tag.
-  it('names one key in every command', async () => {
-    const { client, sent } = fakeHTTPServer()
-    const store = new RedisHTTPCacheStore(client)
-
-    await store.put('a', httpEntry, { ttl: 60, tags: ['x', 'y'] })
-    await store.get('a', { tags: ['x', 'y'] })
-    await store.evictByTag(['x', 'y'])
-
-    for (const item of sent) {
-      expect(typeof item.key).toBe('string')
-      expect(item.key.includes('{')).toBe(false)
+      vi.setSystemTime(Date.now() + 1)
+      expect(await store.get('k')).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
     }
-    expect(new Set(sent.map(item => slotOf(item.key))).size).toBeGreaterThan(1)
   })
 
-  it('puts the prefix in front of a key as given, and nothing for an empty one', async () => {
-    const prefixed = fakeHTTPServer()
-    const bare = fakeHTTPServer()
+  it('puts the prefix in front of every key as given, nothing for an empty one, and caffeine:cache: unset', async () => {
+    async function keysWith(prefix?: string) {
+      const server = fakeHTTPServer()
+      const store = new RedisHTTPCacheStore(server.client, prefix === undefined ? {} : { prefix })
+      await store.put('k', httpEntry, { ttl: 60, tags: ['pets'] })
+      await store.evictByTag('pets')
 
-    await new RedisHTTPCacheStore(prefixed.client, { prefix: 'app:' }).put('k', httpEntry, { ttl: 60, tags: ['pets'] })
-    await new RedisHTTPCacheStore(bare.client, { prefix: '' }).put('k', httpEntry, { ttl: 60, tags: ['pets'] })
-    await new RedisHTTPCacheStore(bare.client, { prefix: '' }).evictByTag('pets')
+      return server.sent.map(item => item.key)
+    }
 
-    expect(prefixed.sent.map(item => item.key)).toEqual(['app:t:pets', 'app:e:k'])
-    expect(bare.sent.map(item => item.key)).toEqual(['t:pets', 'e:k', 't:pets'])
+    const bare = await keysWith('')
+
+    expect(await keysWith('app:')).toEqual(bare.map(key => `app:${key}`))
+    expect(await keysWith()).toEqual(bare.map(key => `caffeine:cache:${key}`))
   })
 
   // Redis hashes the first `{...}` of a key: a brace of the caller's would decide the slot.
@@ -299,34 +285,40 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
 })
 
 describe('RedisHTTPCacheStore and a signal', () => {
+  // On a single-server client the signal is bound without replacing the client's own command options.
   it('binds the signal to every command of a call, through withAbortSignal on a client', async () => {
-    const { client, sent, withCommandOptions } = fakeHTTPServer('client')
-    const store = new RedisHTTPCacheStore(client)
+    const server = fakeHTTPServer('client')
+    const store = new RedisHTTPCacheStore(server.client)
     const signal = new AbortController().signal
+    const calls = [
+      () => store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b'], signal }),
+      () => store.get('k', { tags: ['a', 'b'], signal }),
+      () => store.evictByTag(['a', 'b'], { signal }),
+    ]
 
-    await store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b'], signal })
-    await store.get('k', { tags: ['a', 'b'], signal })
-    await store.evictByTag(['a', 'b'], { signal })
+    for (const call of calls) {
+      server.reset()
+      await call()
+      expect(server.sent.length).toBeGreaterThan(0)
+      expect(server.sent.every(item => item.signal === signal)).toBe(true)
+    }
+
+    server.reset()
     await store.get('k')
-
-    // Three, three and two commands with the signal; the last read, unhinted, sends three without it.
-    expect(sent).toHaveLength(11)
-    expect(sent.slice(0, 8).every(item => item.signal === signal)).toBe(true)
-    expect(sent.slice(8).every(item => item.signal === undefined)).toBe(true)
-    expect(withCommandOptions).not.toHaveBeenCalled()
+    expect(server.sent.every(item => item.signal === undefined)).toBe(true)
+    expect(server.withCommandOptions).not.toHaveBeenCalled()
   })
 
   it('binds it through withCommandOptions on a cluster client, which has no withAbortSignal', async () => {
-    const { client, sent, withCommandOptions } = fakeHTTPServer('cluster')
+    const { client, sent } = fakeHTTPServer('cluster')
     const store = new RedisHTTPCacheStore(client)
     const signal = new AbortController().signal
 
     await store.put('k', httpEntry, { ttl: 60, tags: ['a'], signal })
     await store.get('k', { tags: ['a'], signal })
 
+    expect(sent.length).toBeGreaterThan(0)
     expect(sent.every(item => item.signal === signal)).toBe(true)
-    expect(withCommandOptions).toHaveBeenCalledTimes(2)
-    expect(withCommandOptions.mock.calls[0][0]).toMatchObject({ abortSignal: signal })
   })
 
   it('gives up a command the server never answers once the signal aborts', async () => {

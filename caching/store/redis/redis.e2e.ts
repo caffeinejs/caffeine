@@ -1,10 +1,10 @@
 /**
- * `RedisCache` against real servers: Redis and Valkey, each as one server and as a cluster. The cluster rows are
+ * `RedisHTTPCacheStore` against real servers: Redis and Valkey, each as one server and as a cluster. The cluster rows are
  * what prove the store never names keys from two slots — a one-node cluster still answers CROSSSLOT.
  *
  *   make redis-up && npx vitest run --config test/e2e/vitest.config.ts redis.e2e
  *
- * It lives beside the store, not under `test/e2e`, so it can run the store contract every `Cache` passes; the
+ * It lives beside the store, not under `test/e2e`, so it can run the contract every `HTTPCacheStore` passes; the
  * e2e Vitest project picks up every `*.e2e.ts` in the repository.
  */
 import { randomUUID } from 'node:crypto'
@@ -18,7 +18,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { HTTPCaching, cacheControl, cacheInvalidate } from '../../http/index.js'
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { RedisHTTPCacheStore, type RedisHTTPCacheClient } from './redis.js'
+import { RedisHTTPCacheStore, type RedisHTTPCacheClient } from './index.js'
 
 // Copies of `test/e2e/internal`'s two helpers: this spec is inside the package's check project, which takes no
 // file from outside the package.

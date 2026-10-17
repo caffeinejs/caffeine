@@ -134,6 +134,19 @@ export function describeHTTPCacheStoreContract(
       expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('after')
     })
 
+    // Every eviction of a tag hides what was stored under it since the last one, not only the first eviction.
+    it('hides an entry put again after an eviction once the tag is evicted again', async () => {
+      const store = await factory()
+      await store.put('k', entry('first'), { ttl: 60, tags: ['pets'] })
+      await store.evictByTag('pets')
+      await store.put('k', entry('second'), { ttl: 60, tags: ['pets'] })
+
+      await store.evictByTag('pets')
+
+      expect(await store.get('k')).toBeUndefined()
+      expect(await store.get('k', { tags: ['pets'] })).toBeUndefined()
+    })
+
     it('evicts several tags at once, and nothing for an empty list or a tag nothing carries', async () => {
       const store = await factory()
       await store.put('a', entry('a'), { ttl: 60, tags: ['a'] })
@@ -198,6 +211,20 @@ export function describeHTTPCacheStoreContract(
 
       await store.evictByTag('pets', { signal })
       expect(await store.get('k', { signal })).toBeUndefined()
+    })
+
+    // Every read the HTTP cache makes carries a signal: a store that answers a signalled read another way than an
+    // unsignalled one must still hand bytes back as the same bytes.
+    it('keeps a Buffer payload a Buffer, byte for byte, through a read that carries a signal', async () => {
+      const store = await factory()
+      const signal = new AbortController().signal
+      const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
+
+      await store.put('bin', entry(bytes), { ttl: 60, signal })
+      const read = await store.get('bin', { signal })
+
+      expect(Buffer.isBuffer(read?.payload)).toBe(true)
+      expect(Buffer.compare(read!.payload as Buffer, bytes)).toBe(0)
     })
   })
 }
