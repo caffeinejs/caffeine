@@ -9,6 +9,7 @@
  */
 import { randomUUID } from 'node:crypto'
 import { connect as dial } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Router } from '@caffeinejs/http'
@@ -145,12 +146,17 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       await client?.close()
     })
 
-    describeHTTPCacheStoreContract(name, () => {
-      const created = newStore()
-      // Shared with the last case below, which reads back everything the contract made the store send.
-      created.sent.push = (...items) => sent.push(...items)
-      return created.store
-    })
+    // An entry lapses on the server's clock, which no test can move: the contract waits it out.
+    describeHTTPCacheStoreContract(
+      name,
+      () => {
+        const created = newStore()
+        // Shared with the last case below, which reads back everything the contract made the store send.
+        created.sent.push = (...items) => sent.push(...items)
+        return created.store
+      },
+      ms => sleep(ms),
+    )
 
     it('evicts a tag with one INCR, whatever it covers', async () => {
       const { store, sent: commands } = newStore()

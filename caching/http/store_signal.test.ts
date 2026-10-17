@@ -1,5 +1,3 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { ErrCacheStoreTimeout, withStoreSignal } from './store_signal.js'
@@ -62,6 +60,7 @@ describe('withStoreSignal', () => {
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
     process.on('unhandledRejection', onUnhandled)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     let handed: AbortSignal | undefined
 
     try {
@@ -71,11 +70,17 @@ describe('withStoreSignal', () => {
           signal!.addEventListener('abort', () => reject(new Error('the store noticed the abort')), { once: true })
         })
 
-      await expect(withStoreSignal('put', undefined, 5, call)).rejects.toBeInstanceOf(ErrCacheStoreTimeout)
+      const rejected = expect(withStoreSignal('put', undefined, 5, call)).rejects.toBeInstanceOf(ErrCacheStoreTimeout)
+      await vi.advanceTimersByTimeAsync(4)
+      expect(handed?.aborted).toBe(false)
+
+      await vi.advanceTimersByTimeAsync(1)
+      await rejected
       expect(handed?.aborted).toBe(true)
-      await sleep(20)
+      // An unhandled rejection is reported once the microtasks have run.
       await new Promise(resolve => setImmediate(resolve))
     } finally {
+      vi.useRealTimers()
       process.off('unhandledRejection', onUnhandled)
     }
 
@@ -100,17 +105,20 @@ describe('withStoreSignal', () => {
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
     process.on('unhandledRejection', onUnhandled)
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     try {
-      const late = () =>
-        sleep(30).then(() => {
-          throw new Error('late')
-        })
+      let fail!: (error: Error) => void
+      const late = () => new Promise<never>((_resolve, reject) => (fail = reject))
 
-      await expect(withStoreSignal('put', undefined, 5, late)).rejects.toBeInstanceOf(ErrCacheStoreTimeout)
-      await sleep(50)
+      const rejected = expect(withStoreSignal('put', undefined, 5, late)).rejects.toBeInstanceOf(ErrCacheStoreTimeout)
+      await vi.advanceTimersByTimeAsync(5)
+      await rejected
+
+      fail(new Error('late'))
       await new Promise(resolve => setImmediate(resolve))
     } finally {
+      vi.useRealTimers()
       process.off('unhandledRejection', onUnhandled)
     }
 

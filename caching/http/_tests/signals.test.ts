@@ -1,10 +1,9 @@
 import { connect } from 'node:net'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 import { Controller, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import fastify from 'fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
 import {
@@ -19,6 +18,7 @@ import {
   type HTTPCachePutOptions,
   type HTTPCacheStore,
 } from '../index.js'
+import { WatchedStore, turn, whenAborted } from './_latch.js'
 
 /** Keeps every call with the signal it was handed. `hang` makes a call settle only through that signal. */
 class RecordingStore implements HTTPCacheStore {
@@ -61,6 +61,7 @@ describe('the signal a store call carries', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
@@ -127,9 +128,19 @@ describe('the signal a store call carries', () => {
   it('aborts the signal after storeTimeout, and reports the timeout whatever the store rejected with', async () => {
     const store = new RecordingStore()
     store.hang = true
-    const { server, errors } = await start(store, { storeTimeoutMs: 20 })
+    const watched = new WatchedStore(store)
+    const { server, errors } = await start(watched, { storeTimeoutMs: 20 })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const res = await server.inject('/data')
+    const pending = server.inject('/data')
+    await watched.reads.reached(1)
+    await vi.advanceTimersByTimeAsync(19)
+    expect(store.signalOf('get')?.aborted).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+    await watched.writes.reached(1)
+    await vi.advanceTimersByTimeAsync(20)
+    const res = await pending
 
     expect(res.statusCode).toBe(200)
     expect(res.headers['x-cache']).toBe('MISS')
@@ -180,17 +191,22 @@ describe('the signal a store call carries', () => {
     process.on('unhandledRejection', onUnhandled)
     const store = new RecordingStore()
     store.hang = true
-    const { server, errors, sends, handled } = await start(store, { handlerTimeout: 50 })
+    const watched = new WatchedStore(store)
+    const { server, errors, sends, handled } = await start(watched, { handlerTimeout: 50 })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     try {
-      const res = await server.inject('/data')
+      const pending = server.inject('/data')
+      await watched.reads.reached(1)
+      await vi.advanceTimersByTimeAsync(50)
+      const res = await pending
 
       expect(res.statusCode).toBe(503)
       expect(store.signalOf('get')?.aborted).toBe(true)
       expect((store.signalOf('get')!.reason as { code?: string }).code).toBe('FST_ERR_HANDLER_TIMEOUT')
       expect(errors).toEqual([])
 
-      await sleep(20)
+      await turn()
       expect(handled.n).toBe(0)
       expect(sends.n).toBe(1)
     } finally {
@@ -203,20 +219,21 @@ describe('the signal a store call carries', () => {
   it('lets a client that disconnects take the read out, and reports nothing', async () => {
     const store = new RecordingStore()
     store.hang = true
-    const { server, errors } = await start(store)
+    const watched = new WatchedStore(store)
+    const { server, errors } = await start(watched)
     await server.listen({ port: 0, host: '127.0.0.1' })
     const { port } = server.server.address() as { port: number }
 
     const socket = connect({ host: '127.0.0.1', port })
     await new Promise(resolve => socket.once('connect', resolve))
     socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
-    await waitFor(() => store.calls.some(call => call.verb === 'get'))
+    await watched.reads.reached(1)
     expect(store.signalOf('get')?.aborted).toBe(false)
 
     socket.destroy()
-    await waitFor(() => store.signalOf('get')?.aborted === true)
+    await whenAborted(store.signalOf('get')!)
 
-    await sleep(20)
+    await turn()
     expect(errors).toEqual([])
   })
 })
@@ -225,6 +242,7 @@ describe('storeTimeout on HTTPCaching', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
@@ -243,37 +261,36 @@ describe('storeTimeout on HTTPCaching', () => {
     void [DefaultTimeoutController]
 
     const errors: CacheErrorEvent[] = []
-    const store: HTTPCacheStore = {
+    const store = new WatchedStore({
       get: (_key, options) =>
         new Promise((_resolve, reject) => {
           options?.signal?.addEventListener('abort', () => reject(options.signal!.reason), { once: true })
         }),
       put: () => Promise.resolve(),
       evictByTag: () => Promise.resolve(),
-    }
+    })
     const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer({ onError: e => errors.push(e) })))
     close = () => app.close()
     await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
-    const started = Date.now()
-    const res = await app.fetch('/default-timeout/data')
+    let answered = false
+    const pending = app.fetch('/default-timeout/data').then(res => {
+      answered = true
+      return res
+    })
+    await store.reads.reached(1)
+    await vi.advanceTimersByTimeAsync(1999)
+    expect(answered).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
+    const res = await pending
 
     expect(res.status).toBe(200)
     expect(res.headers.get('x-cache')).toBe('MISS')
-    expect(Date.now() - started).toBeGreaterThanOrEqual(1900)
     expect(errors).toHaveLength(1)
     expect(errors[0].operation).toBe('get')
     expect(errors[0].error).toBeInstanceOf(ErrCacheStoreTimeout)
     expect((errors[0].error as Error).message).toContain('2000ms')
-  }, 10_000)
+  })
 })
-
-async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 200; i++) {
-    if (condition()) {
-      return
-    }
-    await sleep(5)
-  }
-  throw new Error('Condition not met in time')
-}

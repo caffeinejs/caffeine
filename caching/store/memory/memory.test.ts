@@ -1,10 +1,16 @@
 import { LRUCache } from 'lru-cache'
 import { describe, expect, it } from 'vitest'
 
-import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
+import { describeHTTPCacheStoreContract, elapseDate } from '../../http/store.testkit.js'
 import { MemoryHTTPCacheStore, type MemoryHTTPCacheRecord } from './memory.js'
 
-describeHTTPCacheStoreContract('MemoryHTTPCacheStore', () => new MemoryHTTPCacheStore())
+// lru-cache reads its clock from the `performance` it found as it loaded, which a faked `Date` does not move. This
+// one reads `Date`, on every check.
+describeHTTPCacheStoreContract(
+  'MemoryHTTPCacheStore',
+  () => new MemoryHTTPCacheStore(new LRUCache({ max: 500, perf: { now: () => Date.now() }, ttlResolution: 0 })),
+  elapseDate,
+)
 
 describe('MemoryHTTPCacheStore', () => {
   const entry = (payload: string | Buffer, headers: Record<string, string | string[]> = {}) => ({

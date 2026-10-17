@@ -1,6 +1,4 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
 
@@ -12,12 +10,28 @@ const entry = (payload: string | Buffer, extra?: Partial<HTTPCacheEntry>): HTTPC
 })
 
 /**
+ * The clock of a store that reads `Date.now()`: moves `Date` forward by `ms`. `Date` alone is faked, from the first
+ * call in a case until the case ends.
+ */
+export function elapseDate(ms: number): void {
+  if (!vi.isFakeTimers()) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    onTestFinished(() => {
+      vi.useRealTimers()
+    })
+  }
+  vi.setSystemTime(Date.now() + ms)
+}
+
+/**
  * What every {@link HTTPCacheStore} owes the HTTP cache, stated once. `factory` hands back a store nothing
- * else writes to, so a case never reads another one's entries.
+ * else writes to, so a case never reads another one's entries. `elapse` moves the store's clock forward by `ms`:
+ * {@link elapseDate} for a store in this process.
  */
 export function describeHTTPCacheStoreContract(
   name: string,
   factory: () => HTTPCacheStore | Promise<HTTPCacheStore>,
+  elapse: (ms: number) => void | Promise<void>,
 ): void {
   describe(`${name}: HTTPCacheStore contract`, () => {
     it('reads back what was put, field by field', async () => {
@@ -77,7 +91,7 @@ export function describeHTTPCacheStoreContract(
       const store = await factory()
       await store.put('k', entry('v'), { ttl: '10ms', tags: ['pets'] })
 
-      await sleep(40)
+      await elapse(40)
 
       expect(await store.get('k')).toBeUndefined()
     })

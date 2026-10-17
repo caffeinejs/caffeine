@@ -1,5 +1,4 @@
 import { connect } from 'node:net'
-import { setTimeout as sleep } from 'node:timers/promises'
 
 import { Controller, Get, Head, Header } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
@@ -35,20 +34,11 @@ class Recording {
   }
 }
 
-async function waitFor(condition: () => boolean): Promise<void> {
-  for (let i = 0; i < 400; i++) {
-    if (condition()) {
-      return
-    }
-    await sleep(5)
-  }
-  throw new Error('Condition not met in time')
-}
-
 describe('concurrent misses for one key', () => {
   let close: (() => Promise<unknown>) | undefined
 
   afterEach(async () => {
+    vi.useRealTimers()
     await close?.()
     close = undefined
   })
@@ -69,17 +59,17 @@ describe('concurrent misses for one key', () => {
     }
     void [OnceController]
 
+    const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
     const leader = app.fetch('/sf-once/data')
     await g.seen
     const followers = Array.from({ length: 4 }, () => app.fetch('/sf-once/data'))
-    await sleep(10)
+    await store.reads.reached(5)
+    await turn()
     g.open()
 
     const responses = await Promise.all([leader, ...followers])
@@ -142,18 +132,21 @@ describe('concurrent misses for one key', () => {
     }
     void [NothingController]
 
+    const store = new WatchedStore(new FailingWrites())
     const recording = new Recording()
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new FailingWrites()).observer(recording.observer).storeTimeout('1s')),
+      HTTPCaching(b => b.store(store).observer(recording.observer).storeTimeout('1s')),
     )
     close = () => app.close()
     await app.bootstrap()
 
     for (const [path, g] of Object.entries(gates)) {
+      const reads = store.reads.count
       const leader = app.fetch(`/sf-nothing/${path}`)
       await g.seen
       const follower = app.fetch(`/sf-nothing/${path}`)
-      await sleep(10)
+      await store.reads.reached(reads + 2)
+      await turn()
       g.open()
       const [led, followed] = await Promise.all([leader, follower])
       expect(led.headers.get('x-cache')).toBe('MISS')
@@ -194,18 +187,30 @@ describe('concurrent misses for one key', () => {
     }
     void [HungController]
 
+    const store = new WatchedStore(new HungWrites())
     const recording = new Recording()
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new HungWrites()).observer(recording.observer).storeTimeout('30ms')),
+      HTTPCaching(b => b.store(store).observer(recording.observer).storeTimeout('30ms')),
     )
     close = () => app.close()
     await app.bootstrap()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     const leader = app.fetch('/sf-hung/data')
     await g.seen
     const follower = app.fetch('/sf-hung/data')
-    await sleep(10)
+    await store.reads.reached(2)
+    await turn()
     g.open()
+    await store.writes.reached(1)
+
+    await vi.advanceTimersByTimeAsync(29)
+    expect(calls).toBe(1)
+
+    // The follower runs the handler once the leader gives up on its put, and gives up on its own put in turn.
+    await vi.advanceTimersByTimeAsync(1)
+    await store.writes.reached(2)
+    await vi.advanceTimersByTimeAsync(30)
     await Promise.all([leader, follower])
 
     expect(calls).toBe(2)
@@ -240,8 +245,7 @@ describe('concurrent misses for one key', () => {
   })
 
   it('each run the handler on a route with lock: false, or without a ttl', async () => {
-    let unlocked = 0
-    let unstored = 0
+    const runs = { unlocked: counter(), unstored: counter() }
     const gates = { unlocked: gate(), unstored: gate() }
 
     @Controller('/sf-off')
@@ -249,7 +253,7 @@ describe('concurrent misses for one key', () => {
       @CacheControl({ ttl: 60, lock: false })
       @Get('/unlocked')
       async a() {
-        unlocked++
+        runs.unlocked.tick()
         await gates.unlocked.hold()
         return { ok: true }
       }
@@ -257,7 +261,7 @@ describe('concurrent misses for one key', () => {
       @CacheControl({ noCache: true })
       @Get('/unstored')
       async b() {
-        unstored++
+        runs.unstored.tick()
         await gates.unstored.hold()
         return { ok: true }
       }
@@ -271,21 +275,22 @@ describe('concurrent misses for one key', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    for (const [path, g] of Object.entries(gates)) {
+    for (const path of ['unlocked', 'unstored'] as const) {
       const leader = app.fetch(`/sf-off/${path}`)
-      await g.seen
+      await gates[path].seen
       const follower = app.fetch(`/sf-off/${path}`)
-      await sleep(10)
-      g.open()
+      // The second request is in the handler while the first is still held there.
+      await runs[path].reached(2)
+      gates[path].open()
       await Promise.all([leader, follower])
     }
 
-    expect([unlocked, unstored]).toEqual([2, 2])
+    expect([runs.unlocked.count, runs.unstored.count]).toEqual([2, 2])
     expect(recording.reasons().filter(reason => reason === 'not-coalesced')).toEqual([])
   })
 
   it('each run the handler when the store could not be read: nothing a follower could wait for', async () => {
-    let calls = 0
+    const runs = counter()
     const g = gate()
 
     class Down implements HTTPCacheStore {
@@ -301,7 +306,7 @@ describe('concurrent misses for one key', () => {
       @CacheControl({ ttl: 60 })
       @Get('/data')
       async data() {
-        calls++
+        runs.tick()
         await g.hold()
         return { ok: true }
       }
@@ -315,11 +320,12 @@ describe('concurrent misses for one key', () => {
     const leader = app.fetch('/sf-down/data')
     await g.seen
     const follower = app.fetch('/sf-down/data')
-    await sleep(10)
+    // The second request is in the handler while the first is still held there.
+    await runs.reached(2)
     g.open()
     await Promise.all([leader, follower])
 
-    expect(calls).toBe(2)
+    expect(runs.count).toBe(2)
   })
 
   it('run the handler again when what the leader stored is gone by the time a follower reads', async () => {
@@ -346,15 +352,17 @@ describe('concurrent misses for one key', () => {
     }
     void [GoneController]
 
+    const store = new WatchedStore(new Forgetful())
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new Forgetful()).observer(recording.observer)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
     const leader = app.fetch('/sf-gone/data')
     await g.seen
     const follower = app.fetch('/sf-gone/data')
-    await sleep(10)
+    await store.reads.reached(2)
+    await turn()
     g.open()
     await Promise.all([leader, follower])
 
@@ -439,12 +447,11 @@ describe('concurrent misses for one key', () => {
     }
     void [RereadController]
 
+    const store = new WatchedStore(new FailsOnReread())
     const recording = new Recording()
     const errors: { operation: string; error: unknown }[] = []
     const app = createWebApplication().with(
-      HTTPCaching(b =>
-        b.store(new FailsOnReread()).observer({ ...recording.observer, onError: event => errors.push(event) }),
-      ),
+      HTTPCaching(b => b.store(store).observer({ ...recording.observer, onError: event => errors.push(event) })),
     )
     close = () => app.close()
     await app.bootstrap()
@@ -452,7 +459,8 @@ describe('concurrent misses for one key', () => {
     const leader = app.fetch('/sf-reread/data')
     await g.seen
     const follower = app.fetch('/sf-reread/data')
-    await sleep(10)
+    await store.reads.reached(2)
+    await turn()
     g.open()
     const [led, followed] = await Promise.all([leader, follower])
 
@@ -476,7 +484,7 @@ describe('a HEAD and the flight', () => {
 
   // A HEAD's response is never stored: leading would only release its followers to nothing.
   it('never leads: a GET behind a HEAD runs the handler itself', async () => {
-    let calls = 0
+    const runs = counter()
     const g = gate()
 
     @Controller('/sf-head-leads')
@@ -484,7 +492,7 @@ describe('a HEAD and the flight', () => {
       @CacheControl({ ttl: 60 })
       @Get('/data')
       async data() {
-        calls++
+        runs.tick()
         await g.hold()
         return { value: 'x'.repeat(50) }
       }
@@ -501,11 +509,12 @@ describe('a HEAD and the flight', () => {
     const head = app.fetch('/sf-head-leads/data', { method: 'HEAD' })
     await g.seen
     const get = app.fetch('/sf-head-leads/data')
-    await sleep(10)
+    // The GET is in the handler while the HEAD is still held there.
+    await runs.reached(2)
     g.open()
     await Promise.all([head, get])
 
-    expect(calls).toBe(2)
+    expect(runs.count).toBe(2)
     expect(recording.reasons()).toEqual(['absent', 'absent'])
   })
 
@@ -523,17 +532,17 @@ describe('a HEAD and the flight', () => {
     }
     void [HeadFollowsController]
 
+    const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
     const leader = app.fetch('/sf-head-follows/data')
     await g.seen
     const head = app.fetch('/sf-head-follows/data', { method: 'HEAD' })
-    await sleep(10)
+    await store.reads.reached(2)
+    await turn()
     g.open()
     const [get, headRes] = await Promise.all([leader, head])
 
@@ -573,10 +582,6 @@ describe('a HEAD and the flight', () => {
   })
 })
 
-/**
- * On a raw Fastify server, with the flight table in hand: what happens to a flight whose store hook never runs,
- * and to one that outlives its own timeout.
- */
 /**
  * A leader reports back from its store hook. When that hook never runs — a hijacked reply, a handler that never
  * returns — `lockTimeout` alone releases the requests waiting on its run.
@@ -762,29 +767,13 @@ describe('a follower whose request is over', () => {
     close = undefined
   })
 
-  /** Counts the reads, so a follower's re-read of the store shows. */
-  class CountingStore implements HTTPCacheStore {
-    readonly inner = new MemoryHTTPCacheStore()
-    gets = 0
-    get(key: string, options?: HTTPCacheGetOptions) {
-      this.gets++
-      return this.inner.get(key, options)
-    }
-    put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions) {
-      return this.inner.put(key, entry, options)
-    }
-    evictByTag(tags: string | readonly string[]) {
-      return this.inner.evictByTag(tags)
-    }
-  }
-
   async function start(options: {
     lockTimeoutMs: number
     handlerTimeout?: number
     hijack?: boolean
     handler?: () => Promise<unknown>
   }) {
-    const store = new CountingStore()
+    const store = new WatchedStore()
     const recording = new Recording()
     const server = fastify(options.handlerTimeout === undefined ? {} : { handlerTimeout: options.handlerTimeout })
     close = () => server.close()
@@ -817,12 +806,12 @@ describe('a follower whose request is over', () => {
   // A follower whose client left has nobody to serve. Waiting on would hold its hook, and a re-read, for as long
   // as the leader takes; instead it goes on at once, and Fastify treats it as any request whose client left.
   it('stops waiting when its client leaves: no re-read, nothing reported', async () => {
-    let calls = 0
+    const runs = counter()
     const g = gate()
     const { server, store, recording } = await start({
       lockTimeoutMs: 1000,
       handler: async () => {
-        calls++
+        runs.tick()
         await g.hold()
         return { ok: true }
       },
@@ -836,14 +825,14 @@ describe('a follower whose request is over', () => {
     const socket = connect({ host: '127.0.0.1', port })
     await new Promise(resolve => socket.once('connect', resolve))
     socket.write('GET /data HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
-    await waitFor(() => store.gets === 2)
-    await sleep(10)
-    expect(calls).toBe(1)
+    await store.reads.reached(2)
+    await turn()
+    expect(runs.count).toBe(1)
 
     // The follower gives up its wait and, with the gate still closed, enters the handler itself.
     socket.destroy()
-    await waitFor(() => calls === 2)
-    expect(store.gets).toBe(2)
+    await runs.reached(2)
+    expect(store.reads.count).toBe(2)
 
     g.open()
     const led = await leader
@@ -922,17 +911,20 @@ describe('a follower whose request is over', () => {
   // settles later it is not there to re-read the store, nor to report a miss on a reply already sent.
   it('stops waiting at the handler timeout, and is not heard from when the flight settles', async () => {
     const { server, store, recording } = await start({ lockTimeoutMs: 200, handlerTimeout: 40, hijack: true })
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     // The leader hijacks, which clears its own timeout and settles its flight only at lockTimeout.
     const leader = await server.inject('/data')
     expect(leader.body).toBe('raw')
 
-    const follower = await server.inject('/data')
-    expect(follower.statusCode).toBe(503)
-    expect(store.gets).toBe(2)
+    const follower = server.inject('/data')
+    await store.reads.reached(2)
+    await turn()
+    await vi.advanceTimersByTimeAsync(40)
+    expect((await follower).statusCode).toBe(503)
 
-    await sleep(300)
-    expect(store.gets).toBe(2)
+    await vi.advanceTimersByTimeAsync(160)
+    expect(store.reads.count).toBe(2)
     expect(recording.reasons()).toEqual(['absent'])
   })
 })

@@ -2,7 +2,7 @@ import { Keyv } from 'keyv'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { HTTPCacheEntry } from '../../http/store.js'
-import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
+import { describeHTTPCacheStoreContract, elapseDate } from '../../http/store.testkit.js'
 import { ErrKeyvCache, KeyvHTTPCacheStore, type KeyvHTTPCacheClient } from './index.js'
 
 // A key-value cache that records every call, so the key layout and the bytes that go over the seam are
@@ -39,9 +39,9 @@ function fakeKV() {
   }
 }
 
-describeHTTPCacheStoreContract('KeyvHTTPCacheStore', () => new KeyvHTTPCacheStore(fakeKV()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore', () => new KeyvHTTPCacheStore(fakeKV()), elapseDate)
 
-describeHTTPCacheStoreContract('KeyvHTTPCacheStore on a Keyv', () => new KeyvHTTPCacheStore(new Keyv()))
+describeHTTPCacheStoreContract('KeyvHTTPCacheStore on a Keyv', () => new KeyvHTTPCacheStore(new Keyv()), elapseDate)
 
 // A Keyv is handed to the store as it comes. If this stops holding, wrap it at the call site rather than
 // widening the store's seam.

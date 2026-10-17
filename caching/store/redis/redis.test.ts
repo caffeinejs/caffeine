@@ -1,9 +1,7 @@
-import { setTimeout as sleep } from 'node:timers/promises'
-
 import { AbortError, RESP_TYPES, createClient, type createCluster } from '@redis/client'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
-import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
+import { describeHTTPCacheStoreContract, elapseDate } from '../../http/store.testkit.js'
 import {
   ErrRedisCache,
   RedisHTTPCacheStore,
@@ -136,10 +134,15 @@ function fakeHTTPServer(
 
 const httpEntry = { payload: 'v', statusCode: 200, headers: {} }
 
-describeHTTPCacheStoreContract('RedisHTTPCacheStore', () => new RedisHTTPCacheStore(fakeHTTPServer().client))
+describeHTTPCacheStoreContract(
+  'RedisHTTPCacheStore',
+  () => new RedisHTTPCacheStore(fakeHTTPServer().client),
+  elapseDate,
+)
 describeHTTPCacheStoreContract(
   'RedisHTTPCacheStore on a cluster-shaped client',
   () => new RedisHTTPCacheStore(fakeHTTPServer('cluster').client),
+  elapseDate,
 )
 
 describe('RedisHTTPCacheStore and the commands it sends', () => {
@@ -326,12 +329,22 @@ describe('RedisHTTPCacheStore and a signal', () => {
     const store = new RedisHTTPCacheStore(server.client)
     await store.put('k', httpEntry, { ttl: 60, tags: ['pets'] })
     server.hold()
+    const controller = new AbortController()
+    const { signal } = controller
 
-    await expect(store.get('k', { tags: ['pets'], signal: AbortSignal.timeout(20) })).rejects.toBeInstanceOf(AbortError)
-    await expect(store.put('k', httpEntry, { ttl: 60, signal: AbortSignal.timeout(20) })).rejects.toBeInstanceOf(
-      AbortError,
-    )
-    await expect(store.evictByTag('pets', { signal: AbortSignal.timeout(20) })).rejects.toBeInstanceOf(AbortError)
+    const calls = Promise.allSettled([
+      store.get('k', { tags: ['pets'], signal }),
+      store.put('k', httpEntry, { ttl: 60, signal }),
+      store.evictByTag('pets', { signal }),
+    ])
+    // Every command is out by now, and the server answers none of them.
+    await new Promise(resolve => setImmediate(resolve))
+    controller.abort()
+
+    for (const call of await calls) {
+      expect(call.status).toBe('rejected')
+      expect((call as PromiseRejectedResult).reason).toBeInstanceOf(AbortError)
+    }
   })
 
   // A node-redis client queues commands while its server is away, and answers none of them until it is back. The
@@ -343,11 +356,18 @@ describe('RedisHTTPCacheStore and a signal', () => {
     const store = new RedisHTTPCacheStore(client)
 
     try {
-      const started = Date.now()
-      await expect(store.get('k', { tags: ['pets'], signal: AbortSignal.timeout(20) })).rejects.toBeInstanceOf(
-        AbortError,
-      )
-      expect(Date.now() - started).toBeLessThan(1000)
+      const controller = new AbortController()
+      let settled = false
+      const reading = store.get('k', { tags: ['pets'], signal: controller.signal }).finally(() => {
+        settled = true
+      })
+      // Queued behind a connection that never comes up: nothing answers it, nothing rejects it.
+      await new Promise(resolve => setImmediate(resolve))
+      expect(settled).toBe(false)
+
+      controller.abort()
+
+      await expect(reading).rejects.toBeInstanceOf(AbortError)
     } finally {
       try {
         client.destroy()
@@ -363,9 +383,10 @@ describe('RedisHTTPCacheStore and a signal', () => {
   // down instead of costing it the cache.
   it('rejects a batch read without leaving a rejection unhandled', async () => {
     const down = new Error('connection lost')
+    const slower: (() => void)[] = []
     const view: RedisHTTPCacheView = {
       ...fakeHTTPServer().client.withTypeMapping({} as never),
-      get: () => new Promise((_resolve, reject) => setTimeout(() => reject(down), 5)),
+      get: () => new Promise((_resolve, reject) => slower.push(() => reject(down))),
       hmGet: async () => {
         throw down
       },
@@ -377,8 +398,11 @@ describe('RedisHTTPCacheStore and a signal', () => {
     try {
       await expect(store.get('a', { tags: ['pets'] })).rejects.toBe(down)
 
-      // Long enough for the slower command to reject and for Node to report it.
-      await sleep(30)
+      // The slower command rejects only after the read has failed; Node reports an unhandled rejection once the
+      // microtasks have run.
+      expect(slower).toHaveLength(1)
+      slower[0]()
+      await new Promise(resolve => setImmediate(resolve))
       expect(unhandled).not.toHaveBeenCalled()
     } finally {
       process.off('unhandledRejection', unhandled)

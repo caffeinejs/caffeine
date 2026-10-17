@@ -51,11 +51,12 @@ export function counter() {
 }
 
 /**
- * A store that counts the reads it is asked for, so a test waits for the n-th read instead of for a stretch of
- * time. Writes and evictions go straight to the store it wraps.
+ * A store that counts the reads and writes it is asked for, so a test waits for the n-th one instead of for a
+ * stretch of time. Every call goes on to the store it wraps.
  */
 export class WatchedStore implements HTTPCacheStore {
   readonly reads = counter()
+  readonly writes = counter()
 
   constructor(readonly inner: HTTPCacheStore = new MemoryHTTPCacheStore()) {}
 
@@ -65,6 +66,7 @@ export class WatchedStore implements HTTPCacheStore {
   }
 
   put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions): Promise<void> {
+    this.writes.tick()
     return this.inner.put(key, entry, options)
   }
 
