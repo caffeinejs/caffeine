@@ -36,9 +36,10 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * against its schema. Declared headers take others beside them.
  *
  * A declared body that is a file, or holds one, is passed as a `FormData`: a multipart form is the only way a file
- * travels, and the platform encodes it. A declared object is passed as itself, which goes as JSON, or, when every
- * field is text, a number, a boolean or a list of those, as a `URLSearchParams`, which goes as a classic form that
- * every server reads and checks against the same schema.
+ * travels, and the platform encodes it. Its fields are checked neither here nor by the server, which leaves an
+ * upload unvalidated. A declared object is passed as itself, which goes as JSON, or, when every field is text, a
+ * number, a boolean or a list of those, as a `URLSearchParams`, which goes as a classic form that every server
+ * reads and checks against the same schema.
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */

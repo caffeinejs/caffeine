@@ -468,6 +468,21 @@ describe('brewer against an application in process', () => {
     })
   })
 
+  // The proxy cannot tell `:id` from `:name?`, so it leaves out any parameter given no value: only the types require
+  // one. The escape hatch knows the path, and refuses.
+  describe('given a required path parameter forced to no value, past the types', () => {
+    it('should reach the parent route through the proxy, where the escape hatch rejects and sends nothing', async () => {
+      const { client, sent } = spied()
+
+      const res = await client.pets({ id: undefined as never }).get()
+      const refused = client.$request('GET', '/pets/:id', { params: { id: undefined as never } })
+
+      await expect(refused).rejects.toBeInstanceOf(ErrBrewPathParam)
+      expect(await res.json()).toEqual([{ id: 1, name: 'Rex' }])
+      expect(sent).toEqual(['http://localhost/pets'])
+    })
+  })
+
   // The URL standard resolves `.` and `..` as steps along the path, percent-encoded or not: `/pets/../orders/o1` is
   // `/orders/o1`. A value from a link or a form must never choose which route a call reaches.
   describe('given a path value that a URL would resolve as a step along the path', () => {

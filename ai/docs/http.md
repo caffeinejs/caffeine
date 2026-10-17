@@ -629,13 +629,16 @@ await client.pets.post({ body: { name: 'Rex' } })
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
-  `FormData`, which `fetch` encodes as multipart. A declared object goes as JSON, or as a `URLSearchParams` form when
-  every field is text, a number, a boolean or a list of those.
+  `FormData`, which `fetch` encodes as multipart. Its fields are checked on neither side: the type takes any form,
+  and the server leaves an upload unvalidated, so the handler checks the parts it reads. A declared object goes as
+  JSON, or as a `URLSearchParams` form when every field is text, a number, a boolean or a list of those.
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another.
 - `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
-  it as a step along the path and reach another route.
+  it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
+  which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
+  or plain JavaScript, reaches the parent route instead. `$request` rejects the same call with `ErrBrewPathParam`.
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
 - Escape hatch for a path built at run time, a segment named after a verb or `then` (or `$request`, at the root), or
