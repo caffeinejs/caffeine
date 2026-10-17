@@ -427,10 +427,13 @@ handling is written against.
 - Keys are `${prefix}e:${key}` for entries and `${prefix}t:${tag}` for tag markers. `prefix` is put in front as
   given, with no separator of the store's own, and `''` puts nothing in front.
 - A tag is a marker rather than a counter, since neither library has an atomic increment: an eviction writes a
-  fresh value for the tag, and entries recording the old one read as absent.
+  fresh value for the tag, and entries recording the old one read as absent. A marker that is gone, lapsed or
+  dropped by a backend that evicts under memory pressure, counts as changed too: an entry is never served again
+  once a tag it carries was evicted.
 - `tagTtl` is how long a tag marker is kept, and defaults to never expiring. Set it only to bound the marker
-  keyspace, and keep it above your longest `ttl` plus the longest stale window — a marker that expires while an
-  entry written under it is still alive takes that entry down too. You lose a cache hit, never correctness.
+  keyspace, and keep it well above your longest `ttl` plus the longest stale window — a marker that lapses takes
+  every entry recorded under it down, so the entries under a tag miss at least once per `tagTtl`. You lose cache
+  hits, never correctness.
 - Neither library takes an `AbortSignal`. A call the cache has given up on still runs to completion in the
   background; `storeTimeout` bounds the request, not the work.
 - Both hide failures by default, which costs you the cache's error reporting. cache-manager's `get` reads a

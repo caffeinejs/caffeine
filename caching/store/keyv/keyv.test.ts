@@ -1,5 +1,5 @@
 import { Keyv } from 'keyv'
-import { describe, expect, expectTypeOf, it } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { HTTPCacheEntry } from '../../http/store.js'
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
@@ -67,7 +67,7 @@ describe('KeyvHTTPCacheStore', () => {
     await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
     await store.evictByTag('pets')
 
-    expect([...kv.data.keys()]).toEqual(['caffeine:cache:e:k', 'caffeine:cache:t:pets'])
+    expect([...kv.data.keys()].sort()).toEqual(['caffeine:cache:e:k', 'caffeine:cache:t:pets'])
   })
 
   // Without the `e:`/`t:` split an entry and a tag of the same name share a key, so evicting the tag would
@@ -175,6 +175,42 @@ describe('KeyvHTTPCacheStore', () => {
     kv.data.delete('caffeine:cache:t:pets')
 
     expect(await store.get('k')).toBeUndefined()
+  })
+
+  // An entry written before its tag's first eviction is hidden by that eviction's marker alone. Once that marker
+  // is gone it must stay hidden: the entry recorded no marker to fall back to, and serving it again would serve
+  // a response the eviction was meant to take down.
+  describe('an evicted entry whose marker is gone', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it.each([
+      ['the fake backend', () => fakeKV()],
+      ['a Keyv', () => new Keyv()],
+    ])('stays hidden once the marker lapses past tagTtl, on %s', async (_backend, client) => {
+      const store = new KeyvHTTPCacheStore(client(), { tagTtl: '1h' })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      await store.put('k', entry('v'), { ttl: '1d', tags: ['pets'] })
+      await store.evictByTag('pets')
+      expect(await store.get('k')).toBeUndefined()
+
+      vi.setSystemTime(Date.now() + 3_600_001)
+
+      expect(await store.get('k')).toBeUndefined()
+    })
+
+    // A backend bounded by size, an LRU Keyv store for one, may drop a marker whatever tagTtl says.
+    it('stays hidden once the backend drops the marker', async () => {
+      const kv = fakeKV()
+      const store = new KeyvHTTPCacheStore(kv)
+      await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+      await store.evictByTag('pets')
+
+      kv.data.delete('caffeine:cache:t:pets')
+
+      expect(await store.get('k')).toBeUndefined()
+    })
   })
 
   it('uses the prefix verbatim, and puts nothing in front for an empty one', async () => {

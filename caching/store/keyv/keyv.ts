@@ -12,9 +12,6 @@ import type {
 
 const DEFAULT_PREFIX = 'caffeine:cache:'
 
-// What an absent marker reads as. A marker this store writes is a UUID, so it can never be this.
-const NEVER_EVICTED = '0'
-
 /**
  * The part of a `Keyv` this store calls. A `Keyv` satisfies it, and so does a cache-manager `Cache`, whose stores
  * are `Keyv`s.
@@ -41,9 +38,10 @@ export interface KeyvHTTPCacheStoreOptions {
    * How long a tag marker is kept. Defaults to `0` — never expires, which is what the counters of the Redis and
    * memory stores do.
    *
-   * Set it to bound the marker keyspace, and keep it above the longest `ttl` plus the longest stale window: a
-   * marker that expires while an entry written under it is still alive takes that entry down with it, since the
-   * marker it recorded no longer matches. That is over-eviction — a lost hit, never a stale response.
+   * Set it to bound the marker keyspace, and keep it well above the longest `ttl` plus the longest stale window:
+   * a marker that lapses takes every entry recorded under it down with it, since what they recorded no longer
+   * matches, so the entries under a tag miss at least once per `tagTtl`. That is over-eviction — a lost hit, never
+   * a stale response.
    */
   tagTtl?: Duration
 }
@@ -72,7 +70,9 @@ interface HTTPEnvelope {
  *
  * A tag is a marker: an entry records the marker of each of its tags when it is stored, and reads as absent once
  * any of them has changed. `evictByTag` writes a fresh marker per tag and touches no entry; the entry goes when
- * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again.
+ * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again. A marker that is
+ * gone — lapsed past `tagTtl`, or dropped by a backend that evicts under memory pressure — counts as changed: `put`
+ * writes one for a tag that has none, so no entry records an absent marker.
  *
  * Neither cache-manager nor Keyv takes an `AbortSignal`. A call whose signal is already aborted is refused, but
  * one already issued runs to completion even after the cache has given up waiting for it.
@@ -111,7 +111,7 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
     const envelope = JSON.parse(String(raw)) as HTTPEnvelope
     const recorded = envelope.g
     if (recorded !== undefined) {
-      const current = new Map<string, string>()
+      const current = new Map<string, string | undefined>()
       hinted.forEach((tag, i) => current.set(tag, marker(markers[i])))
 
       const unhinted = Object.keys(recorded).filter(tag => !current.has(tag))
@@ -142,13 +142,26 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
 
     const tags = options.tags ?? []
 
-    // Read together, once for the call. An eviction landing between this and the write leaves an entry under the
-    // earlier marker, which reads as absent.
+    // Read together, once for the call, and a tag with no marker gets one before the entry is written: an entry
+    // that recorded an absent marker would match again once a later marker is gone. An eviction landing between
+    // the read and the write leaves the entry under the earlier marker, which reads as absent.
     let markers: Record<string, string> | undefined
     if (tags.length > 0) {
-      const current = await Promise.all(tags.map(tag => this.#client.get(this.#tagKey(tag))))
-      markers = {}
-      tags.forEach((tag, i) => (markers![tag] = marker(current[i])))
+      const distinct = [...new Set(tags)]
+      const current = await Promise.all(distinct.map(tag => this.#client.get(this.#tagKey(tag))))
+      const recorded: Record<string, string> = {}
+      const written: Promise<unknown>[] = []
+      distinct.forEach((tag, i) => {
+        const existing = marker(current[i])
+        if (existing === undefined) {
+          recorded[tag] = randomUUID()
+          written.push(this.#client.set(this.#tagKey(tag), recorded[tag], this.#tagTtlMs))
+        } else {
+          recorded[tag] = existing
+        }
+      })
+      await Promise.all(written)
+      markers = recorded
     }
 
     await this.#client.set(this.#entryKey(key), JSON.stringify(envelopeOf(entry, markers)), ms)
@@ -184,8 +197,10 @@ function tagTtlOf(tagTtl: Duration | undefined): number {
   return Number.isFinite(ms) && ms > 0 ? ms : 0
 }
 
-function marker(value: unknown): string {
-  return value === null || value === undefined ? NEVER_EVICTED : String(value)
+// An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry
+// records.
+function marker(value: unknown): string | undefined {
+  return value === null || value === undefined ? undefined : String(value)
 }
 
 function envelopeOf(entry: HTTPCacheEntry, markers: Record<string, string> | undefined): HTTPEnvelope {
