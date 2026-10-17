@@ -294,6 +294,14 @@ describe('the body', () => {
     .post('/notes')
     .schema({ body: $t.Object({ meta: $t.Any() }) })
     .handler(() => ({ noted: true }))
+    .post('/attachments')
+    .schema({
+      body: $t.Object({ link: $t.Union([$t.File(), $t.String()]), cover: $t.Union([$t.File(), $t.Null()]) }),
+    })
+    .handler(() => ({ attached: true }))
+    .post('/changes')
+    .schema({ body: $t.Union([$t.Object({ name: $t.String() }), $t.Object({ avatar: $t.File() })]) })
+    .handler(() => ({ changed: true }))
     .post('/anything')
     .handler(() => ({ taken: true }))
   const bodies = blend(uploads, forms)
@@ -336,6 +344,23 @@ describe('the body', () => {
   it('reads a field typed any as no file, so the route keeps taking JSON', () => {
     typeOnly(() => {
       void client.forms.notes.post({ body: { meta: { tags: ['a'] } } })
+    })
+  })
+
+  // The server takes a field for a file only when it is one, or a list of them, so a union leaves the route on JSON.
+  it('reads a field that may be a file or something else, null included, as JSON', () => {
+    typeOnly(() => {
+      void client.forms.attachments.post({ body: { link: 'https://example.com/rex.jpg', cover: null } })
+      // @ts-expect-error -- the route reads JSON, so a multipart form never reaches its schema
+      void client.forms.attachments.post({ body: new FormData() })
+    })
+  })
+
+  it('reads a union body as JSON, whatever its members hold', () => {
+    typeOnly(() => {
+      void client.forms.changes.post({ body: { name: 'Rex' } })
+      // @ts-expect-error -- the server reads no multipart form into a union body
+      void client.forms.changes.post({ body: new FormData() })
     })
   })
 

@@ -57,18 +57,26 @@ type MayOmit<T> = IsOpenRecord<T> extends true ? true : AllOptional<T>
 type HeadersArg<H> = IsOpenRecord<H> extends true ? OpenHeaders : H & Record<string, H[keyof H] | string | undefined>
 
 // What a call sends for a declared body: a file, or a body holding one, only as a multipart form; a plain object as
-// itself or as a classic form; anything else as declared. Beside a URLSearchParams, a key of the object named like
-// one of its members (`size`, `sort`) is no longer refused as excess; the server's schema still strips it.
-type BodyArg<B> = B extends object
+// itself or as a classic form; anything else as declared. Not distributed: the server reads a union body as JSON,
+// whatever its members hold. Beside a URLSearchParams, a key of the object named like one of its members (`size`,
+// `sort`) is no longer refused as excess; the server's schema still strips it.
+type BodyArg<B> = [B] extends [object]
   ? true extends IsFile<B> | HoldsFile<B>
     ? FormData
-    : B extends readonly unknown[]
+    : [B] extends [readonly unknown[]]
       ? B
       : B | URLSearchParams
   : B
 
-// A file, or a list of them. A value typed `any` or `unknown` could hold anything, and is not taken for one.
-type IsFile<V> = unknown extends V ? false : [Extract<V, Blob | readonly Blob[]>] extends [never] ? false : true
+// A file or a list of files, perhaps left out, and nothing else: to the server, a union with another type, `null`
+// included, is not one. A value typed `any` or `unknown` could hold anything, and is not taken for one either.
+type IsFile<V> = unknown extends V
+  ? false
+  : [Exclude<V, undefined>] extends [never]
+    ? false
+    : [Exclude<V, undefined>] extends [Blob | readonly Blob[]]
+      ? true
+      : false
 
 // Whether one of a body's own properties is a file: one level, as the server's `hasFileSchema` reads an upload.
 type HoldsFile<B> = true extends { [K in keyof B]-?: IsFile<B[K]> }[keyof B] ? true : false
