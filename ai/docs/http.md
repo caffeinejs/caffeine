@@ -630,8 +630,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
   `FormData`, which `fetch` encodes as multipart; a declared object goes as JSON, or as a `URLSearchParams` form.
-  A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is, a form always under
-  the content type the platform writes for it.
+  A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
+  the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
+  another.
 - `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
   it as a step along the path and reach another route.
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to

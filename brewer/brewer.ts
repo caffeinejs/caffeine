@@ -10,7 +10,8 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
    * Headers sent with every request. A function is called per request — sync or async — so a token can be read
    * when it is needed rather than captured when the client was made. A name given `undefined` is left out, so a
    * token not known yet sends no header at all. A `content-type` here or on a call never reaches a `FormData` or
-   * `URLSearchParams` body, which goes with the type the platform writes for it.
+   * `URLSearchParams` body, which goes with the type the platform writes for it. One here does not reach a `Blob`
+   * that has a type either: it goes under its own, unless the call names another.
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
@@ -162,7 +163,15 @@ async function send(
   const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
 
   const merged = headersOf(await resolveHeaders(options.headers))
-  for (const [key, value] of headersOf(headers)) {
+  const own = headersOf(headers)
+
+  // A Blob that knows its type goes under it: the client's content type is a default for a body that has none, and
+  // only the call itself may name another.
+  if (body instanceof Blob && body.type !== '' && !own.has('content-type')) {
+    merged.delete('content-type')
+  }
+
+  for (const [key, value] of own) {
     merged.set(key, value)
   }
 

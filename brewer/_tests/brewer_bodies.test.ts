@@ -410,6 +410,33 @@ describe('brewer sending a body', () => {
       expect(await res.json()).toEqual({ type: 'application/pdf', bytes: utf8('%PDF-1.7') })
     })
 
+    // A client's content type is a default for a body that has none of its own; a call's is the caller's word.
+    it('should keep a Blob under its own type when the client sets another for every request', async () => {
+      const client = brewer(app, { headers: { 'content-type': 'application/json' } })
+      const png = new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' })
+
+      const res = await client.echo.raw.post({ body: png })
+
+      expect(await res.json()).toEqual({ type: 'image/png', bytes: [137, 80, 78, 71] })
+    })
+
+    it('should send a Blob under the type the call names, over its own', async () => {
+      const client = brewer(app, { headers: { 'content-type': 'application/json' } })
+      const csv = new Blob(['id,name\n1,Rex\n'], { type: 'text/plain' })
+
+      const res = await client.echo.raw.post({ body: csv, headers: { 'content-type': 'text/csv' } })
+
+      expect(await res.json()).toEqual({ type: 'text/csv', bytes: utf8('id,name\n1,Rex\n') })
+    })
+
+    it('should send a Blob that has no type under the type the client sets', async () => {
+      const client = brewer(app, { headers: { 'content-type': 'application/octet-stream' } })
+
+      const res = await client.echo.raw.post({ body: new Blob([new Uint8Array([1, 2, 3])]) })
+
+      expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: [1, 2, 3] })
+    })
+
     it('should send a Blob that has no type with no content type at all', async () => {
       const client = brewer(app)
 
