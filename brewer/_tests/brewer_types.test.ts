@@ -302,6 +302,18 @@ describe('the body', () => {
     .post('/changes')
     .schema({ body: $t.Union([$t.Object({ name: $t.String() }), $t.Object({ avatar: $t.File() })]) })
     .handler(() => ({ changed: true }))
+    .post('/owners')
+    .schema({ body: $t.Object({ name: $t.String(), owner: $t.Object({ id: $t.Integer() }) }) })
+    .handler(() => ({ owned: true }))
+    .post('/rows')
+    .schema({ body: $t.Object({ rows: $t.Array($t.Object({ id: $t.Integer() })) }) })
+    .handler(() => ({ stored: true }))
+    .post('/shirts')
+    .schema({ body: $t.Object({ size: $t.String(), tags: $t.Optional($t.Array($t.String())) }) })
+    .handler(() => ({ ordered: true }))
+    .post('/settings')
+    .schema({ body: $t.Record($t.String(), $t.String()) })
+    .handler(() => ({ saved: true }))
     .post('/anything')
     .handler(() => ({ taken: true }))
   const bodies = blend(uploads, forms)
@@ -338,6 +350,37 @@ describe('the body', () => {
       void client.forms.litter.post({ body: [{ id: 1, name: 'Rex' }] })
       // @ts-expect-error -- a form has no way to carry a list of objects
       void client.forms.litter.post({ body: new URLSearchParams() })
+    })
+  })
+
+  // A form carries text, which the server coerces to the declared numbers and booleans, and a list as a repeated key.
+  it('takes a URLSearchParams only for an object a form can carry', () => {
+    typeOnly(() => {
+      void client.forms.shirts.post({
+        body: new URLSearchParams([
+          ['size', 'L'],
+          ['tags', 'red'],
+          ['tags', 'cotton'],
+        ]),
+      })
+      void client.forms.settings.post({ body: new URLSearchParams({ theme: 'dark' }) })
+      void client.forms.owners.post({ body: { name: 'Rex', owner: { id: 1 } } })
+      // @ts-expect-error -- a form has no way to carry a nested object
+      void client.forms.owners.post({ body: new URLSearchParams() })
+      // @ts-expect-error -- nor a list of objects
+      void client.forms.rows.post({ body: new URLSearchParams() })
+      // @ts-expect-error -- nor a union body, which the server reads as JSON
+      void client.forms.changes.post({ body: new URLSearchParams() })
+    })
+  })
+
+  it('still refuses a key the object does not declare, one URLSearchParams has included', () => {
+    typeOnly(() => {
+      void client.forms.shirts.post({ body: { size: 'L' } })
+      // @ts-expect-error -- size is a member of URLSearchParams, and no field of this body
+      void client.forms.adoptions.post({ body: { name: 'Rex', age: 3, size: 1 } })
+      // @ts-expect-error -- sort, likewise, through the escape hatch too
+      void client.$request('POST', '/forms/adoptions', { body: { name: 'Rex', age: 3, sort: () => undefined } })
     })
   })
 

@@ -36,8 +36,9 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * against its schema. Declared headers take others beside them.
  *
  * A declared body that is a file, or holds one, is passed as a `FormData`: a multipart form is the only way a file
- * travels, and the platform encodes it. A declared plain object is passed as itself, which goes as JSON, or as a
- * `URLSearchParams`, which goes as a classic form that every server reads and checks against the same schema.
+ * travels, and the platform encodes it. A declared object is passed as itself, which goes as JSON, or, when every
+ * field is text, a number, a boolean or a list of those, as a `URLSearchParams`, which goes as a classic form that
+ * every server reads and checks against the same schema.
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */
@@ -56,16 +57,15 @@ type MayOmit<T> = IsOpenRecord<T> extends true ? true : AllOptional<T>
  */
 type HeadersArg<H> = IsOpenRecord<H> extends true ? OpenHeaders : H & Record<string, H[keyof H] | string | undefined>
 
-// What a call sends for a declared body: a file, or a body holding one, only as a multipart form; a plain object as
-// itself or as a classic form; anything else as declared. Not distributed: the server reads a union body as JSON,
-// whatever its members hold. Beside a URLSearchParams, a key of the object named like one of its members (`size`,
-// `sort`) is no longer refused as excess; the server's schema still strips it.
+// What a call sends for a declared body: a file, or a body holding one, only as a multipart form; an object a form
+// can carry as itself or as a classic form; anything else as declared. Not distributed: the server reads a union body
+// as JSON, whatever its members hold.
 type BodyArg<B> = [B] extends [object]
   ? true extends IsFile<B> | HoldsFile<B>
     ? FormData
-    : [B] extends [readonly unknown[]]
+    : false extends FitsForm<B>
       ? B
-      : B | URLSearchParams
+      : B | Form<B>
   : B
 
 // A file or a list of files, perhaps left out, and nothing else: to the server, a union with another type, `null`
@@ -80,6 +80,21 @@ type IsFile<V> = unknown extends V
 
 // Whether one of a body's own properties is a file: one level, as the server's `hasFileSchema` reads an upload.
 type HoldsFile<B> = true extends { [K in keyof B]-?: IsFile<B[K]> }[keyof B] ? true : false
+
+// Whether a classic form can carry the body: every field text, a number or a boolean, which the server coerces, or a
+// list of those, sent as a repeated key. Asked of each member of a union.
+type FitsForm<B> = B extends readonly unknown[]
+  ? false
+  : { [K in keyof B]-?: Exclude<B[K], undefined> extends FormField ? true : false }[keyof B]
+
+type FormField = string | number | boolean | ReadonlyArray<string | number | boolean>
+
+// A form beside the object. It names none of the object's keys, so TypeScript tells a literal object from it and
+// still refuses a key the object does not declare, `size` and `sort` included. An open record has no keys to name.
+type Form<B> =
+  IsOpenRecord<B> extends true
+    ? URLSearchParams
+    : URLSearchParams & { [K in Exclude<keyof B, keyof URLSearchParams>]?: never }
 
 /** Whether every slot of an init is optional, and so whether the argument may be left out entirely. */
 type AllOptional<T> = Partial<T> extends T ? true : false
