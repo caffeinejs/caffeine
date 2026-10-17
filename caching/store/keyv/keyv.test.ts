@@ -3,7 +3,7 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
 import type { HTTPCacheEntry } from '../../http/store.js'
 import { describeHTTPCacheStoreContract } from '../../http/store.testkit.js'
-import { KeyvHTTPCacheStore, type KeyvHTTPCacheClient } from './index.js'
+import { ErrKeyvCache, KeyvHTTPCacheStore, type KeyvHTTPCacheClient } from './index.js'
 
 // A key-value cache that records every call, so the key layout and the bytes that go over the seam are
 // assertable. `ttl === 0` means never expires, which is what both real backends do with it.
@@ -210,6 +210,40 @@ describe('KeyvHTTPCacheStore', () => {
       kv.data.delete('caffeine:cache:t:pets')
 
       expect(await store.get('k')).toBeUndefined()
+    })
+  })
+
+  describe('tagTtl', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    // Every other duration in the package fails loud. One that is not a duration would otherwise read as
+    // "never expires", the opposite of the bound on the marker keyspace that setting it asks for.
+    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, '1 hour', '-5s', ''])('refuses %s', tagTtl => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).toThrow(ErrKeyvCache)
+    })
+
+    it('names the value it refuses', () => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1 hour' })).toThrow(
+        'Cannot create a Keyv cache with the tagTtl "1 hour": it is not a non-negative duration',
+      )
+    })
+
+    it.each([0, '0s', '2h', 7200])('takes %s', tagTtl => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).not.toThrow()
+    })
+
+    // `0` is the documented "never expires": the marker outlives anything stored under it.
+    it('keeps a marker for good at 0', async () => {
+      const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: 0 })
+      vi.useFakeTimers({ toFake: ['Date'] })
+      await store.evictByTag('pets')
+      await store.put('k', entry('v'), { ttl: '30d', tags: ['pets'] })
+
+      vi.setSystemTime(Date.now() + 29 * 86_400_000)
+
+      expect((await store.get('k'))?.payload).toBe('v')
     })
   })
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import { parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type {
   HTTPCacheCallOptions,
@@ -10,7 +11,19 @@ import type {
   HTTPCacheStore,
 } from '../../http/store.js'
 
+/** Thrown for a {@link KeyvHTTPCacheStore} that is set up in a way it cannot serve. */
+export class ErrKeyvCache extends Error {
+  readonly code = 'ERR_KEYV_CACHE'
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'ErrKeyvCache'
+  }
+}
+
 const DEFAULT_PREFIX = 'caffeine:cache:'
+
+const DURATION = new RegExp(DURATION_PATTERN)
 
 /**
  * The part of a `Keyv` this store calls. A `Keyv` satisfies it, and so does a cache-manager `Cache`, whose stores
@@ -35,8 +48,8 @@ export interface KeyvHTTPCacheStoreOptions {
    */
   prefix?: string
   /**
-   * How long a tag marker is kept. Defaults to `0` — never expires, which is what the counters of the Redis and
-   * memory stores do.
+   * How long a tag marker is kept: a non-negative duration. Defaults to `0` — never expires, which is what the
+   * counters of the Redis and memory stores do.
    *
    * Set it to bound the marker keyspace, and keep it well above the longest `ttl` plus the longest stale window:
    * a marker that lapses takes every entry recorded under it down with it, since what they recorded no longer
@@ -80,6 +93,8 @@ interface HTTPEnvelope {
  * Both backends hide failures by default, which costs the cache its error reporting rather than its correctness:
  * cache-manager's `get` reads a broken store as a miss, and Keyv resolves instead of rejecting unless it was
  * built with `throwOnErrors: true`.
+ *
+ * @throws ErrKeyvCache When `tagTtl` is not a non-negative duration.
  */
 export class KeyvHTTPCacheStore implements HTTPCacheStore {
   readonly #client: KeyvHTTPCacheClient
@@ -188,13 +203,26 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
   }
 }
 
+// `parseDuration` reads what it cannot parse as 0, and `-5s` as 5: either would pass for a marker lifetime.
 function tagTtlOf(tagTtl: Duration | undefined): number {
   if (tagTtl === undefined) {
     return 0
   }
 
   const ms = Math.ceil(parseDuration(tagTtl) * 1000)
-  return Number.isFinite(ms) && ms > 0 ? ms : 0
+  if (!((typeof tagTtl === 'number' || DURATION.test(tagTtl)) && Number.isFinite(ms) && ms >= 0)) {
+    throw new ErrKeyvCache(
+      errMessage(`Cannot create a Keyv cache with the tagTtl "${String(tagTtl)}": it is not a non-negative duration`)
+        .solutions(
+          'Write tagTtl as duration text such as "1h", or as a number of seconds',
+          'Leave tagTtl unset, or set it to 0, for markers that never expire',
+        )
+        .reference('@caffeinejs/caching', ErrKeyvCache)
+        .build(),
+    )
+  }
+
+  return ms
 }
 
 // An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry
