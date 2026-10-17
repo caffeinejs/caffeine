@@ -1,7 +1,7 @@
 import { Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { $t } from '@caffeinejs/std/schema'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
 
@@ -78,6 +78,11 @@ afterAll(async () => {
   await app.close()
 })
 
+// Both transports reach the one store, so each run starts from an empty one and counts only what it created.
+beforeEach(() => {
+  store.clear()
+})
+
 describe.each([
   ['in process', () => brewer(app)],
   ['over a socket', () => brewer<typeof app>(origin)],
@@ -95,7 +100,7 @@ describe.each([
 
     const head = await client.items.head()
     expect(head.status).toBe(200)
-    expect(Number(head.headers.get('x-total-count'))).toBeGreaterThanOrEqual(1)
+    expect(head.headers.get('x-total-count')).toBe('1')
     expect(await head.text()).toBe('')
 
     const found = await client.items({ id }).get()
@@ -109,7 +114,7 @@ describe.each([
     expect(await updated.json()).toEqual({ id, name: 'Rex III', tags: ['dog', 'senior'] })
 
     const searched = await client.items.query({ body: { tag: 'senior' } })
-    expect(await searched.json()).toContainEqual({ id, name: 'Rex III', tags: ['dog', 'senior'] })
+    expect(await searched.json()).toEqual([{ id, name: 'Rex III', tags: ['dog', 'senior'] }])
 
     const deleted = await client.items({ id }).delete()
     expect(deleted.status).toBe(204)
