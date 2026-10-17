@@ -350,10 +350,10 @@ function multipartMessage(value: unknown, part: string | undefined): ErrMessageB
         ).solutions('Pass a FormData, or a plain object with one property per part')
   }
 
-  // formdata-node's File, say, is no Blob to the global FormData.
+  // formdata-node's File, say, is no Blob to the global FormData, or to a Blob composed of the parts.
   if ((tag === 'Blob' || tag === 'File') && !(value instanceof Blob)) {
     return errMessage(
-      `Cannot add part "${part}" to the multipart body: it is a ${tag} of another implementation, which the global FormData holds as text`,
+      `Cannot add part "${part}" to the multipart body: it is a ${tag} of another implementation, which would be sent as the text "[object ${tag}]"`,
     ).solutions(
       tag === 'File'
         ? 'Copy it into a global File: new File([await part.arrayBuffer()], part.name, { type: part.type })'
@@ -370,7 +370,7 @@ function multipartMessage(value: unknown, part: string | undefined): ErrMessageB
  * Thrown when an operation under `@Multipart()` is called with a body fetchy cannot encode: a part
  * value that is not a string, number, boolean, bigint, `Blob` or `File`, or a `@Body()` value that
  * is neither a `FormData`, of any implementation, nor a plain object. `FetchTransport` throws it too
- * for a part of a `FormData` of another implementation that is no `Blob` of the global class.
+ * for a part of a `FormData` that is no `Blob` of the global class.
  * Nothing is sent. The message names the value's type, never the value.
  */
 export class ErrFetchyInvalidMultipartBody extends ErrFetchy {

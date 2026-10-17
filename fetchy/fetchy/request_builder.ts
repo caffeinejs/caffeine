@@ -213,8 +213,8 @@ export class RequestBuilder {
     // sits. Without a label a JSON-stringified body reaches the server as `text/plain`, which a strict one answers
     // with 415.
     if (body !== null && body !== undefined) {
-      // Except over a FormData, of any implementation: fetch and undici write its boundary only into a request that has
-      // no content-type, so any type set here would name no boundary, and the server would find no part.
+      // Except over a FormData, of any implementation: the transport labels it with the boundary it encodes it under, so
+      // any type set here would name no boundary, and the server would find no part.
       if (typeof body === 'object' && (isFormData(body) || isFormDataLike(body))) {
         headers.delete('content-type')
       } else if (!headers.has('content-type')) {

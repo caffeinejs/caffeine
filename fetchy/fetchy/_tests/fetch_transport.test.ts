@@ -1,12 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { openAsBlob } from 'node:fs'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   API,
@@ -232,9 +232,62 @@ describe('FetchTransport on a multipart upload', () => {
 
     expect(error).toBeInstanceOf(ErrFetchyInvalidMultipartBody)
     expect((error as Error).message.split('\n')[0]).toBe(
-      'Cannot add part "file" to the multipart body: it is a File of another implementation, which the global FormData holds as text',
+      'Cannot add part "file" to the multipart body: it is a File of another implementation, which would be sent as the text "[object File]"',
     )
     expect(received).toEqual([])
+  })
+
+  // FormData names a Blob that is not a File "blob", and a server reads the part as a file by that name. Without one, the
+  // part would read as a field.
+  it('names a bare Blob of a FormData of another implementation "blob"', async () => {
+    const form = new OtherFormData()
+    form.append('file', new Blob(['%PDF-1.7'], { type: 'application/pdf' }))
+    const api = newClient().baseURL(baseURL).build().create(RawDocumentsAPI)
+
+    await api.replace('1', form)
+
+    const file = (await partsOf(received[0])).get('file') as File
+
+    expect(file.name).toBe('blob')
+    expect(await file.text()).toBe('%PDF-1.7')
+  })
+
+  // A file may make its bytes as it is read, as a generated upload does: what goes out is what its own stream gives,
+  // not the bytes it was built with.
+  it('sends a file that makes its own bytes by its own stream', async () => {
+    const file = Object.defineProperties(new File([], 'generated.txt', { type: 'text/plain' }), {
+      size: { value: 'generated'.length },
+      stream: { value: () => new Blob(['generated']).stream() },
+    }) as File
+    const api = newClient().baseURL(baseURL).build().create(DocumentsAPI)
+
+    await api.upload('Q3 report', file)
+
+    expect(await ((await partsOf(received[0])).get('file') as File).text()).toBe('generated')
+  })
+
+  // A file deleted or changed after it was opened cannot be read. Node's fetch left such a call pending forever and the
+  // error unhandled, which ends a Node process.
+  it('rejects when a file part cannot be read, and leaves no rejection unhandled', async () => {
+    const path = join(dir, 'removed.bin')
+    await writeFile(path, randomBytes(1024))
+    const blob = await openAsBlob(path)
+    await unlink(path)
+    const api = newClient().baseURL(baseURL).build().create(DocumentsAPI)
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+
+    try {
+      await expect(api.upload('Q3 report', new File([blob], 'removed.bin'))).rejects.toMatchObject({
+        name: 'TypeError',
+        cause: { name: 'NotReadableError' },
+      })
+      await new Promise(resolve => setImmediate(resolve))
+
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
   })
 
   it('sends a FormData a server can parse though the class declares JSON', async () => {

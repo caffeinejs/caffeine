@@ -26,12 +26,12 @@ import { OtherFile } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
- * A multipart body is only as good as what a server parses back out of it, so these tests read each request the way
- * `FetchTransport` sends it: as the `Request` handed to `fetch`, parsed with `formData()`. `fetch` writes the boundary
- * into `content-type` only when nothing else set one, so a request fetchy labelled has already lost it.
+ * A multipart body is only as good as what a server parses back out of it, so these tests read each request as `fetch`
+ * would send it: as a `Request` built from it, parsed with `formData()`. `fetch` writes the boundary into
+ * `content-type` only when nothing else set one, so a request fetchy labelled has already lost it.
  */
 
-// What `FetchTransport` hands `fetch`.
+// The request as `fetch` builds it from what a transport is handed.
 function wire(request: FetchyRequest): Request {
   return new Request(request.url, { method: request.method, headers: request.headers.record, body: request.body })
 }
@@ -268,7 +268,7 @@ describe('@Multipart() with Part() arguments', () => {
 
     expect(error).toBeInstanceOf(ErrFetchyInvalidMultipartBody)
     expect((error as Error).message.split('\n')[0]).toBe(
-      'Cannot add part "meta" to the multipart body: it is a File of another implementation, which the global FormData holds as text',
+      'Cannot add part "meta" to the multipart body: it is a File of another implementation, which would be sent as the text "[object File]"',
     )
     expect((error as Error).message).toContain('new File([await part.arrayBuffer()], part.name, { type: part.type })')
     expect(transport.sendCount).toBe(0)

@@ -58,9 +58,7 @@ import { UndiciTransportFactory } from '../undici_transport_factory.js'
  * - fetch adds request headers of its own (`accept`, `user-agent`, ...), so a case asserts only the headers it is about.
  *
  * Both follow redirects, but each fails its own way on one it does not follow: past 20 redirects, or on a 307 or 308
- * whose body was a stream, fetch rejects with a `TypeError` and undici hands the 3xx back as `ErrFetchyHTTP`. On an
- * upload answered 307 or 308, fetch sends the parts again under a boundary of its own, while the content-type keeps the
- * first one: no server can parse that request, so only undici's is asserted.
+ * whose body was a stream, fetch rejects with a `TypeError` and undici hands the 3xx back as `ErrFetchyHTTP`.
  */
 
 interface Received {
@@ -739,6 +737,20 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       expect(received[1].body.toString()).toBe('{"name":"Ada"}')
     })
 
+    // An upload is read part by part as it is sent, and a 307 or a 308 needs every part again. fetch sent them under a
+    // boundary of its own, which the content-type it kept did not name, and undici sent nothing at all.
+    it.each([307, 308])('after an upload answered %i sends every part again', async status => {
+      redirect(status, '/redirects/2/upload')
+      const form = new FormData()
+      form.append('title', 'Q3 report')
+      form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
+
+      await clientOver(factory()).create(RedirectsAPI).upload('1', form)
+
+      expect(received[1].url).toBe('/redirects/2/upload')
+      await expectReportParts(received[1])
+    })
+
     // A stream is read once. Sent again after a 307, it would arrive empty and the call would succeed: it fails instead,
     // and nothing more is sent.
     it('after a stream body answered 307 fails the call, and sends nothing more', async () => {
@@ -767,20 +779,6 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
 })
 
 describe('a call over UndiciTransport', () => {
-  // An upload is read part by part as it is sent, and a 307 needs every part again. Its first send used to leave nothing
-  // to read: undici sent the second empty, and the call failed.
-  it('sends every part of an upload again after a 307', async () => {
-    replies.push({ status: 307, headers: { location: '/redirects/2/upload' } })
-    const form = new FormData()
-    form.append('title', 'Q3 report')
-    form.append('file', new File([report], 'report.pdf', { type: 'application/pdf' }))
-
-    await clientOver(new UndiciTransportFactory()).create(RedirectsAPI).upload('1', form)
-
-    expect(received[1].url).toBe('/redirects/2/upload')
-    await expectReportParts(received[1])
-  })
-
   // PoolOptionsBuilder.factory() builds the connections of a pool, as a Pool's own factory does. Two calls held at the
   // server at once take two connections, each built by it.
   it('builds each connection with the factory the options name', async () => {
