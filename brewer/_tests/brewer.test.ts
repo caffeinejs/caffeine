@@ -343,9 +343,18 @@ describe('brewer against an application in process', () => {
   })
 
   describe('given client headers in any shape the platform takes', () => {
+    // Pairs to iterate, as every Headers is, but not this realm's: what a polyfill or another copy of undici hands
+    // over, which `instanceof Headers` does not recognise. Cast, since it implements only the iteration that is read.
+    class ForeignHeaders {
+      *[Symbol.iterator](): Generator<[string, string]> {
+        yield ['x-tenant', 't1']
+      }
+    }
+
     const shapes: Array<[string, BrewOptions['headers']]> = [
       ['a record', { 'x-tenant': 't1' }],
       ['a Headers', new Headers({ 'x-tenant': 't1' })],
+      ['a Headers from another realm or library', new ForeignHeaders() as unknown as Headers],
       ['a list of pairs', [['x-tenant', 't1']]],
       ['a function', () => ({ 'x-tenant': 't1' })],
       ['an async function', async () => new Headers({ 'x-tenant': 't1' })],

@@ -211,7 +211,8 @@ function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise
 
 /** Headers from any shape a client or a call gives them in, a name given no value left out, as the query does. */
 function headersOf(values: HeaderValues | undefined): Headers {
-  if (values === undefined || values instanceof Headers || Array.isArray(values)) {
+  // Pairs, whoever made them: a `Headers` from another realm or library is not `instanceof Headers`, but iterates.
+  if (values === undefined || Symbol.iterator in values) {
     return new Headers(values)
   }
 
