@@ -640,6 +640,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 - Downloads are read with the platform's own readers. `fileOf(res)` turns one into a `File`, named from its
   `Content-Disposition` (the UTF-8 `filename*` first, cut to a base name so it never holds a path) and typed from
   `Content-Type`. `filenameOf(res)` names a download streamed from `res.body` without reading it.
+- `progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body` through it
+  for a download, or send `file.stream().pipeThrough(progress(...))` as an upload. Browsers stream an upload only
+  over HTTP/2, and Firefox and Safari not at all.
 - `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
   it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
   which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
