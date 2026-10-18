@@ -56,8 +56,8 @@ export interface FileHelpers {
    * A multipart form built from an object, its fields checked against the route it is sent to.
    *
    * An upload route takes a `FormData`, whose parts nothing checks, here or on a server that leaves an upload
-   * unvalidated. A form built this way remembers its fields, and the call refuses one with a field missing or of the
-   * wrong type:
+   * unvalidated. A form built this way remembers its fields, and the call refuses one with a field missing, unknown or
+   * of the wrong type:
    *
    * ```ts
    * await client.pets.photos.post({ body: client.$formData({ caption: 'Rex', photo: file }) })

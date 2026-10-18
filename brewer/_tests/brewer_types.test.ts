@@ -448,8 +448,12 @@ describe('the body', () => {
       void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar }) })
       void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar, photos: [avatar, avatar] }) })
       void client.$request('POST', '/uploads/profile', { body: client.$formData({ caption: 'Rex', avatar }) })
+      const built = client.$formData({ caption: 'Rex', avatar })
+      void client.uploads.profile.post({ body: built })
       // @ts-expect-error -- the avatar is required
       void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex' }) })
+      // @ts-expect-error -- a field the route does not declare, which the server would take, unvalidated
+      void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar, phtos: [avatar] }) })
       // @ts-expect-error -- the caption is text
       void client.uploads.profile.post({ body: client.$formData({ caption: 7, avatar }) })
       // @ts-expect-error -- a Blob carries no name, where the route declares a file
