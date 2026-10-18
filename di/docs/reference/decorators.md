@@ -427,7 +427,9 @@ has a setter of the same name.
 The container assigns the member once the constructor has returned, so it is
 still unset inside the constructor: work that needs it belongs in a
 [`@PostConstruct`](#postconstruct) method. A getter without a setter fails at
-resolution, since there is nothing to assign through.
+resolution, since there is nothing to assign through. A class on an async
+binding (`@UseAsyncFactory`) takes no member injection: the container refuses
+the binding with `ErrInvalidBinding`.
 
 A descriptor from the [`$i` helpers](./injection.md#helpers) resolves the member
 the way it resolves an entry in an `@Injectable` dependency list:

@@ -140,5 +140,5 @@ A class that implements `OnBootstrap` has its `onBootstrap()` method run during
 For reference, the full sequence for a managed class:
 
 1. Constructor called with constructor deps
-2. Property injections applied (`@Inject` on fields)
+2. Property injections applied (`@Inject` on fields, accessors, setters and getters)
 3. `@PostConstruct` hook runs
