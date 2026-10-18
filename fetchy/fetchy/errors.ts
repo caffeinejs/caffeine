@@ -369,8 +369,8 @@ function multipartMessage(value: unknown, part: string | undefined): ErrMessageB
 /**
  * Thrown when an operation under `@Multipart()` is called with a body fetchy cannot encode: a part
  * value that is not a string, number, boolean, bigint, `Blob` or `File`, or a `@Body()` value that
- * is neither a `FormData`, of any implementation, nor a plain object. `FetchTransport` throws it too
- * for a part of a `FormData` that is no `Blob` of the global class.
+ * is neither a `FormData`, of any implementation, nor a plain object. The transports fetchy ships
+ * throw it too for a part of a `FormData` that is no `Blob` of the global class.
  * Nothing is sent. The message names the value's type, never the value.
  */
 export class ErrFetchyInvalidMultipartBody extends ErrFetchy {

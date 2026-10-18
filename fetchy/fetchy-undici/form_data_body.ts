@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
+import { ErrFetchyInvalidMultipartBody } from '@caffeinejs/fetchy'
 import { errors } from 'undici'
 
 const encoder = new TextEncoder()
@@ -77,7 +78,8 @@ async function* streamParts(
 }
 
 // Encodes a FormData of any implementation the way undici's own encoder does, apart from the boundary, but streams it:
-// undici's encoder reads every part into memory before the first byte goes out.
+// undici's encoder reads every part into memory before the first byte goes out. A part that is a Blob of another
+// implementation is refused, as FetchTransport refuses it.
 export function encodeFormData(form: FormData, signal?: AbortSignal): FormDataBody {
   const boundary = `----fetchy-${randomUUID()}`
   const chunks: (Uint8Array | Blob)[] = []
@@ -95,8 +97,16 @@ export function encodeFormData(form: FormData, signal?: AbortSignal): FormDataBo
       continue
     }
 
-    // As undici's encoder does, a File named '' gets no filename, which makes it a text part.
-    const filename = value.name ? `; filename="${escapeQuoted(value.name)}"` : ''
+    // One of another implementation has neither a size nor a stream to read as a Blob's: the upload would fail once
+    // started.
+    if (!(value instanceof Blob)) {
+      throw new ErrFetchyInvalidMultipartBody(value, name)
+    }
+
+    // FormData names a Blob that is not a File "blob". As undici's encoder does, a File named '' gets no filename, which
+    // makes it a text part.
+    const fileName = value instanceof File ? value.name : 'blob'
+    const filename = fileName ? `; filename="${escapeQuoted(fileName)}"` : ''
     const head = encoder.encode(
       `${disposition}${filename}\r\nContent-Type: ${value.type || 'application/octet-stream'}\r\n\r\n`,
     )

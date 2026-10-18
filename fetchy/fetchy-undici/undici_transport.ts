@@ -50,7 +50,9 @@ function asNodeStream(body: object): Readable | undefined {
  * with its length, and encoded again on every send, so a retry or an authentication follow-up sends
  * every part again. A file part that cannot be read fails the call. So does one whose bytes do not
  * add up to its `size`, with undici's `RequestContentLengthMismatchError`, before a byte past the
- * length is sent: over HTTP/2 too, and whatever the dispatcher's `strictContentLength`.
+ * length is sent: over HTTP/2 too, and whatever the dispatcher's `strictContentLength`. A part that
+ * is a `Blob` or `File` of another implementation fails the call with
+ * `ErrFetchyInvalidMultipartBody` before anything is sent.
  *
  * It follows redirects as far as its dispatcher does. `UndiciTransportFactory` composes undici's
  * redirect interceptor onto an `Agent`, which reaches any origin; a `Pool` follows none, and cannot

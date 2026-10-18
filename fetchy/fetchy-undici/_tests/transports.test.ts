@@ -18,6 +18,7 @@ import {
   Body,
   ErrFetchyHTTP,
   ErrFetchyInvalidFormBody,
+  ErrFetchyInvalidMultipartBody,
   ErrFetchyInvalidPathArgument,
   type FetchyBuilder,
   type FetchyClient,
@@ -51,6 +52,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 
 import { PoolOptionsBuilder } from '../pool_options_builder.js'
 import { UndiciTransportFactory } from '../undici_transport_factory.js'
+import { OtherFile, OtherFormData } from './other_form_data.js'
 
 /**
  * The same calls over each transport, against a server that records every request it reads whole. What the server
@@ -508,6 +510,32 @@ describe.each(TRANSPORTS)('a call over %s', (_name, factory) => {
       await send(clientOver(factory()), reportForm())
 
       await expectReportParts(received[0])
+    })
+
+    // FormData names a Blob that is not a File "blob", and a server reads the part as a file by that name. A FormData
+    // that keeps the Blob it was given needs the name all the same: without one, the part reads as a field.
+    it('names a bare Blob of a FormData of another implementation "blob"', async () => {
+      const form = new OtherFormData()
+      form.append('file', new Blob(['%PDF-1.7'], { type: 'application/pdf' }))
+
+      await clientOver(factory()).create(DocumentsAPI).replace('1', form)
+
+      const file = (await partsOf(received[0])).get('file') as File
+
+      expect(file.name).toBe('blob')
+      expect(await file.text()).toBe('%PDF-1.7')
+    })
+
+    // A File of another implementation is no Blob: fetch would send it as the text "[object File]", and undici's encoder
+    // could not read it once the upload had started.
+    it('rejects a FormData of another implementation holding a File of another, and sends nothing', async () => {
+      const form = new OtherFormData()
+      form.append('file', new OtherFile('report.pdf'))
+
+      await expect(clientOver(factory()).create(DocumentsAPI).replace('1', form)).rejects.toBeInstanceOf(
+        ErrFetchyInvalidMultipartBody,
+      )
+      expect(received).toEqual([])
     })
 
     it('sends no body and no content-type for an absent @Body()', async () => {
