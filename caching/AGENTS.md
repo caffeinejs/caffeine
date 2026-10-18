@@ -83,3 +83,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Entry and marker lookups are separate calls; an eviction landing between them is missed by that read.
 - `buildCacheKey` does not escape the `vary` values it joins; escaping would change every key.
 - A `GET` in flight during an eviction can store the older response after it.
+- Keyv: a `put` that creates a tag's marker can overwrite an eviction landing between its read and its write, and
+  keeps its entry: the line above, in a narrower window. Closing it needs a write-if-absent the two-method seam
+  does not have.
+- On a `HEAD`, Fastify's HEAD route runs ahead of the cache's `onSend` and takes the body: it resumes a Node
+  stream rather than closing it, and answers a `Response` with 500 (Fastify 5.12), with or without the cache.

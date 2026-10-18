@@ -194,7 +194,8 @@ export interface CacheDeps {
  * cache update: `Cache-Control`, `Content-Location`, `ETag`, `Expires`, `Last-Modified` and `Vary`. When the
  * handler ran and its response matches, that response goes out as the `304`, with its own headers and without
  * its body or `Content-Length`; a streamed body is closed unread, and so is a streamed `5xx` a stale entry
- * replaces.
+ * replaces. On a `HEAD`, Fastify's own HEAD route has taken the body before these hooks run: it resumes a Node
+ * stream and cancels a web stream.
  *
  * `@CacheControl(false)` gets the store hook alone — it has nothing to serve, but it still has to emit the
  * no-cache headers.
@@ -757,8 +758,8 @@ function headerText(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
-// The server closes only the stream it sends. One the cache answers in place of would keep the file, socket or
-// upstream connection behind it open until it is collected.
+// The server closes only the stream it sends. A stream the cache answers in place of would keep the file, socket
+// or upstream connection behind it open until it is collected.
 function discard(payload: unknown): void {
   if (!isStreamPayload(payload)) {
     return

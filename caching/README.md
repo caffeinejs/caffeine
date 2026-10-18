@@ -428,8 +428,8 @@ handling is written against.
   given, with no separator of the store's own, and `''` puts nothing in front.
 - A tag is a marker rather than a counter, since neither library has an atomic increment: an eviction writes a
   fresh value for the tag, and entries recording the old one read as absent. A marker that is gone, lapsed or
-  dropped by a backend that evicts under memory pressure, counts as changed too: an entry is never served again
-  once a tag it carries was evicted.
+  dropped by a backend that evicts under memory pressure, counts as changed too: an entry stored before an
+  eviction of a tag it carries is never served again.
 - `tagTtl` is how long a tag marker is kept, and defaults to never expiring, as `0` does; anything but a
   non-negative duration is refused with `ErrKeyvCache`. Set it only to bound the marker keyspace, and keep it
   well above your longest `ttl` plus the longest stale window — a marker that lapses takes every entry recorded
@@ -537,7 +537,10 @@ All of these fail `app.bootstrap()` with `ErrConfiguration`:
 
 - One handler run per miss holds in one process. Replicas do not share a lock.
 - A `GET` already running when a mutation evicts can store the older response after the eviction. One handler
-  run per miss narrows that to one writer per key; keep `ttl` short where it matters.
+  run per miss narrows that to one writer per key; keep `ttl` short where it matters. On `KeyvHTTPCacheStore`
+  this includes a `GET` whose store creates the marker of a tag that has none, the first under that tag or the
+  first since its marker lapsed, as the eviction lands: neither library can write only if absent, so that marker
+  replaces the eviction's.
 - A stale entry is served only while a handler run is under way for it (`staleWhileRevalidate`) or once one
   failed (`staleIfError`). Nothing refreshes an entry in the background.
 - A `HEAD` that misses stores nothing, and carries no `ETag` when the server dropped its body before the cache saw

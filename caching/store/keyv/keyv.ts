@@ -85,7 +85,9 @@ interface HTTPEnvelope {
  * any of them has changed. `evictByTag` writes a fresh marker per tag and touches no entry; the entry goes when
  * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again. A marker that is
  * gone — lapsed past `tagTtl`, or dropped by a backend that evicts under memory pressure — counts as changed: `put`
- * writes one for a tag that has none, so no entry records an absent marker.
+ * writes one for a tag that has none, so no entry records an absent marker. That write can replace the marker of an
+ * eviction landing during the `put`, whose entry is then served: the race any request in flight during an eviction
+ * has.
  *
  * Neither cache-manager nor Keyv takes an `AbortSignal`. A call whose signal is already aborted is refused, but
  * one already issued runs to completion even after the cache has given up waiting for it.
@@ -159,7 +161,8 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
 
     // Read together, once for the call, and a tag with no marker gets one before the entry is written: an entry
     // that recorded an absent marker would match again once a later marker is gone. An eviction landing between
-    // the read and the write leaves the entry under the earlier marker, which reads as absent.
+    // the read and the write leaves an entry under an existing marker, which then reads as changed; a marker this
+    // call creates replaces the eviction's instead, since neither backend can write only if absent.
     let markers: Record<string, string> | undefined
     if (tags.length > 0) {
       const distinct = [...new Set(tags)]
