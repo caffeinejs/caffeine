@@ -671,7 +671,11 @@ describe('the request an operation builds', () => {
       (api: StaticQueryAPI) => api.section('ada'),
       '/search?type=user&q=ada#section',
     ],
-    ['opens it before a fragment the path writes', (api: StaticQueryAPI) => api.anchored('ada'), '/search?q=ada#section'],
+    [
+      'opens it before a fragment the path writes',
+      (api: StaticQueryAPI) => api.anchored('ada'),
+      '/search?q=ada#section',
+    ],
   ])('%s', async (_case, call, path) => {
     const { api, transport } = clientOf(StaticQueryAPI)
 
