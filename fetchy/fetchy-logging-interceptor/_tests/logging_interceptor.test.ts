@@ -1,4 +1,6 @@
-import { ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import { format } from 'node:util'
+
+import { type Chain, ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
 import pino from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -42,6 +44,36 @@ function sink(): { lines: LogLine[]; destination: { write(line: string): void } 
 
 function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
   return new Response(JSON.stringify(body), { status, statusText, headers: { 'content-type': 'application/json' } })
+}
+
+// What a token endpoint answers a refresh it refuses, as the ErrFetchyHTTP a call made inside an interceptor rejects
+// with: a 400 with a body and a session cookie.
+function refusedRefresh(body: unknown = { error: 'invalid_grant' }): { error: ErrFetchyHTTP; chain: Chain } {
+  const request = new FetchyRequest('POST', ORIGIN, '/token')
+  const response = new Response(null, {
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { 'set-cookie': 'session=s3cr3t' },
+  })
+  const error = new ErrFetchyHTTP(request, response, body)
+
+  return { error, chain: fakeChain(request, () => Promise.reject(error)) }
+}
+
+// Everything the console is handed, one string per call, as the console would print it.
+function capturingConsole(): { lines: string[]; restore: () => void } {
+  const lines: string[] = []
+  const print = (...args: unknown[]): void => void lines.push(format(...args))
+  const info = vi.spyOn(console, 'info').mockImplementation(print)
+  const error = vi.spyOn(console, 'error').mockImplementation(print)
+
+  return {
+    lines,
+    restore: () => {
+      info.mockRestore()
+      error.mockRestore()
+    },
+  }
 }
 
 describe('LoggingInterceptor', () => {
@@ -288,6 +320,17 @@ describe('LoggingInterceptor lines', () => {
 
     expect(logger.lines).toContain(end)
   })
+
+  // A converter may read an error's body into a value JSON cannot write. The line says so, and the call still fails with
+  // the error the server's answer raised.
+  it("omits an ErrFetchyHTTP's body that JSON cannot write at Level.BODY, and rethrows the error", async () => {
+    const { logger, interceptor } = intercepting(Level.BODY)
+    const { error, chain } = refusedRefresh({ balance: 10n })
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+    expect(logger.lines).toContain('<-- END HTTP (body omitted)')
+  })
 })
 
 describe('PinoLogger', () => {
@@ -369,6 +412,24 @@ describe('PinoLogger', () => {
     })
     expect(failed?.err?.stack).toContain('other side closed')
   })
+
+  // An ErrFetchyHTTP carries the response's body, which only Level.BODY logs. Written under `err`, it reached the log at
+  // every level.
+  it("keeps an ErrFetchyHTTP's body out of what it writes below Level.BODY", async () => {
+    const { lines, destination } = sink()
+    const interceptor = new LoggingInterceptor({
+      level: Level.HEADERS,
+      logger: new PinoLogger(pino({ level: 'info' }, destination)),
+    })
+    interceptor.redactHeader('set-cookie')
+    const { error, chain } = refusedRefresh()
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+    expect(lines.map(line => line.msg)).toContain('<-- 400 Bad Request http://example.test/token')
+    expect(lines.map(line => line.msg)).toContain('set-cookie: ***')
+    expect(lines.some(line => /invalid_grant|s3cr3t/.test(JSON.stringify(line)))).toBe(false)
+  })
 })
 
 describe('ConsoleLogger', () => {
@@ -391,6 +452,45 @@ describe('ConsoleLogger', () => {
     } finally {
       info.mockRestore()
       error.mockRestore()
+    }
+  })
+
+  // The console prints an error with its properties: an ErrFetchyHTTP's body, and its headers with none redacted.
+  it("keeps an ErrFetchyHTTP's body and redacted headers out of the console below Level.BODY", async () => {
+    const printed = capturingConsole()
+
+    try {
+      const interceptor = new LoggingInterceptor({ level: Level.HEADERS })
+      interceptor.redactHeader('set-cookie')
+      const { error, chain } = refusedRefresh()
+
+      await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+      expect(printed.lines).toContain('set-cookie: ***')
+      expect(printed.lines.some(line => /invalid_grant|s3cr3t/.test(line))).toBe(false)
+    } finally {
+      printed.restore()
+    }
+  })
+
+  // At Level.BODY a failed call's body is logged as a successful one's is. A redacted header stays redacted.
+  it("logs an ErrFetchyHTTP's body at Level.BODY, with its headers still redacted", async () => {
+    const printed = capturingConsole()
+
+    try {
+      const interceptor = new LoggingInterceptor({ level: Level.BODY })
+      interceptor.redactHeader('set-cookie')
+      const { error, chain } = refusedRefresh()
+
+      await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+      const end = printed.lines.indexOf('<-- END HTTP')
+
+      expect(printed.lines[end - 1]).toBe('{"error":"invalid_grant"}')
+      expect(printed.lines).toContain('set-cookie: ***')
+      expect(printed.lines.some(line => line.includes('s3cr3t'))).toBe(false)
+    } finally {
+      printed.restore()
     }
   })
 })

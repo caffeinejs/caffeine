@@ -33,8 +33,26 @@ function isTextual(contentType: string | null): boolean {
   return TEXTUAL_CONTENT_TYPES.some(type => lower.includes(type)) || lower.includes('text/') || lower.includes('+json')
 }
 
+// A failed call's body as the response converter read it, as text: undefined for a value JSON cannot write, such as a
+// BigInt or a cycle.
+function errorBodyText(body: unknown): string | undefined {
+  if (typeof body === 'string') {
+    return body
+  }
+
+  try {
+    return JSON.stringify(body)
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * OkHttp-style request/response logging interceptor for `@caffeinejs/fetchy`.
+ *
+ * A call that fails with {@link ErrFetchyHTTP} is logged as its response would be: the status line, the headers,
+ * redacted as set, and at `Level.BODY` the body. The logger is not handed that error, which it would write whole. Any
+ * other error is handed over, so its type, code, stack and cause reach the log.
  */
 export class LoggingInterceptor implements Interceptor {
   static readonly DEFAULT: LoggingInterceptor = new LoggingInterceptor()
@@ -124,10 +142,19 @@ export class LoggingInterceptor implements Interceptor {
             this.logHeader(name, value, true)
           }
         }
+
+        if (logBody) {
+          this.logErrorBody(err.body)
+        }
       }
 
       this.logger.error(`Took: ${took}ms`)
-      this.logger.error(`<-- HTTP Failed: ${(err as Error).message}`, err as Error)
+      // An ErrFetchyHTTP carries the response's headers and body, logged above as far as the level and the redactions
+      // allow. Handed to the logger, it would be written whole.
+      this.logger.error(
+        `<-- HTTP Failed: ${(err as Error).message}`,
+        err instanceof ErrFetchyHTTP ? undefined : (err as Error),
+      )
       this.logger.error('')
 
       throw err
@@ -185,6 +212,24 @@ export class LoggingInterceptor implements Interceptor {
     this.logBodyText(text, endLine)
 
     return new Response(text, { status: response.status, statusText: response.statusText, headers: response.headers })
+  }
+
+  // The response converter has read the bytes the server sent into a value by now, so the end line counts none.
+  private logErrorBody(body: unknown): void {
+    if (body === undefined || body === null) {
+      this.logger.error('<-- END HTTP')
+      return
+    }
+
+    const text = errorBodyText(body)
+
+    if (text === undefined) {
+      this.logger.error('<-- END HTTP (body omitted)')
+      return
+    }
+
+    this.logger.error(text)
+    this.logger.error('<-- END HTTP')
   }
 
   private logBodyText(text: string, endLine: string): void {
