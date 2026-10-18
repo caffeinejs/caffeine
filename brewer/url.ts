@@ -25,8 +25,8 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
 
       const optional = segment.endsWith('?')
       const constraint = segment.indexOf('(')
-      const name =
-        segment === '*' ? '*' : segment.slice(1, constraint === -1 ? undefined : constraint).replace(/\?$/, '')
+      const end = constraint === -1 ? undefined : constraint
+      const name = segment === '*' ? '*' : segment.slice(1, end).replace(/\?$/, '')
       const value = params?.[name]
 
       if (value === undefined || value === null) {

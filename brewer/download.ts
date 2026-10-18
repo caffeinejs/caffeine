@@ -29,8 +29,7 @@ export async function fileOf(
   })
 }
 
-// The parameters after a disposition's type, by lower-cased name, the first of each kept. A value is a token running
-// to the next `;`, or a quoted string, which may hold `;` and backslash-escaped characters.
+// The parameters after a disposition's type, by lower-cased name, the first of each kept.
 function parametersOf(disposition: string): Map<string, string> {
   const parameters = new Map<string, string>()
   let at = disposition.indexOf(';')
@@ -53,25 +52,8 @@ function parametersOf(disposition: string): Map<string, string> {
       .slice(at + 1, equals)
       .trim()
       .toLowerCase()
-    let start = equals + 1
-    while (disposition[start] === ' ' || disposition[start] === '\t') {
-      start++
-    }
-
-    let value = ''
-    if (disposition[start] === '"') {
-      let i = start + 1
-      for (; i < disposition.length && disposition[i] !== '"'; i++) {
-        if (disposition[i] === '\\' && i + 1 < disposition.length) {
-          i++
-        }
-        value += disposition[i]
-      }
-      at = disposition.indexOf(';', i)
-    } else {
-      at = disposition.indexOf(';', start)
-      value = disposition.slice(start, at === -1 ? undefined : at).trim()
-    }
+    const [value, end] = valueAt(disposition, equals + 1)
+    at = disposition.indexOf(';', end)
 
     if (!parameters.has(name)) {
       parameters.set(name, value)
@@ -79,6 +61,30 @@ function parametersOf(disposition: string): Map<string, string> {
   }
 
   return parameters
+}
+
+// The value starting at `start`, past any whitespace, and where it ends: a token running to the next `;`, or a quoted
+// string, which may hold `;` and backslash-escaped characters.
+function valueAt(disposition: string, start: number): [value: string, end: number] {
+  let i = start
+  while (disposition[i] === ' ' || disposition[i] === '\t') {
+    i++
+  }
+
+  if (disposition[i] !== '"') {
+    const end = disposition.indexOf(';', i)
+    return end === -1 ? [disposition.slice(i).trim(), disposition.length] : [disposition.slice(i, end).trim(), end]
+  }
+
+  let value = ''
+  for (i++; i < disposition.length && disposition[i] !== '"'; i++) {
+    if (disposition[i] === '\\' && i + 1 < disposition.length) {
+      i++
+    }
+    value += disposition[i]
+  }
+
+  return [value, i]
 }
 
 // An RFC 8187 value, `charset'language'percent-encoded`, decoded; `undefined` for a charset no browser is required to
