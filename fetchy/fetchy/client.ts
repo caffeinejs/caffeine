@@ -133,13 +133,14 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
 
   const bodyParamCount = spec.params.filter(param => param.kind === 'body').length
   const hasParts = spec.params.some(param => param.kind === 'part')
+  const hasFormFields = spec.params.some(param => param.kind === 'form-field')
 
   if (bodyParamCount > 1) {
     throw new ErrFetchyInvalidRoute(name, 'more than one @Body() parameter is not allowed')
   }
 
   if (
-    (bodyParamCount > 0 || hasParts) &&
+    (bodyParamCount > 0 || hasParts || hasFormFields) &&
     (spec.httpMethod === 'GET' || spec.httpMethod === 'HEAD' || spec.httpMethod === 'OPTIONS')
   ) {
     throw new ErrFetchyInvalidRoute(name, `${spec.httpMethod} requests cannot have a body`)
@@ -151,8 +152,6 @@ function validateMethodSpec(name: string, spec: MethodSpec): void {
       '@Multipart() and @FormURLEncoded() cannot both apply to one method, whether set on the method or its class',
     )
   }
-
-  const hasFormFields = spec.params.some(param => param.kind === 'form-field')
 
   if (hasFormFields && !spec.formURLEncoded) {
     throw new ErrFetchyInvalidRoute(name, '@Field() requires @FormURLEncoded() on the method or class')

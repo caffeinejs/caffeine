@@ -1,7 +1,7 @@
 {
   "name": "@caffeinejs/fetchy-undici",
   "version": "0.0.0",
-  "description": "undici Pool-based transport for @caffeinejs/fetchy",
+  "description": "undici-based transport for @caffeinejs/fetchy",
   "license": "MIT",
   "private": true,
   "type": "module",

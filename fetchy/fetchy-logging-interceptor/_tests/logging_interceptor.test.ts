@@ -1,11 +1,15 @@
-import { ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import { format } from 'node:util'
+
+import { type Chain, ErrFetchyHTTP, FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import pino from 'pino'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ErrFetchyLoggingInvalidRedactHeaderArgs } from '../errors.js'
-import { ConsoleLogger, PinoLogger } from '../index.js'
+import { ConsoleLogger } from '../index.js'
 import { Level } from '../level.js'
 import type { Logger } from '../logger.js'
 import { LoggingInterceptor } from '../logging_interceptor.js'
+import { PinoLogger } from '../pino/index.js'
 import { fakeChain } from './fake_chain.js'
 
 class SpyLogger implements Logger {
@@ -25,18 +29,68 @@ class SpyLogger implements Logger {
 
 const ORIGIN = 'http://example.test'
 
+interface LogLine {
+  level: number
+  msg: string
+  err?: { type: string; message: string; stack: string; code?: string }
+}
+
+// A pino destination that keeps every line pino writes to it, parsed. pino writes to it synchronously.
+function sink(): { lines: LogLine[]; destination: { write(line: string): void } } {
+  const lines: LogLine[] = []
+
+  return { lines, destination: { write: line => void lines.push(JSON.parse(line) as LogLine) } }
+}
+
 function jsonResponse(body: unknown, status = 200, statusText = 'OK'): Response {
   return new Response(JSON.stringify(body), { status, statusText, headers: { 'content-type': 'application/json' } })
 }
 
+// What a token endpoint answers a refresh it refuses, as the ErrFetchyHTTP a call made inside an interceptor rejects
+// with: a 400 with a body and a session cookie.
+function refusedRefresh(body: unknown = { error: 'invalid_grant' }): { error: ErrFetchyHTTP; chain: Chain } {
+  const request = new FetchyRequest('POST', ORIGIN, '/token')
+  const response = new Response(null, {
+    status: 400,
+    statusText: 'Bad Request',
+    headers: { 'set-cookie': 'session=s3cr3t' },
+  })
+  const error = new ErrFetchyHTTP(request, response, body)
+
+  return { error, chain: fakeChain(request, () => Promise.reject(error)) }
+}
+
+// Everything the console is handed, one string per call, as the console would print it.
+function capturingConsole(): { lines: string[]; restore: () => void } {
+  const lines: string[] = []
+  const print = (...args: unknown[]): void => void lines.push(format(...args))
+  const info = vi.spyOn(console, 'info').mockImplementation(print)
+  const error = vi.spyOn(console, 'error').mockImplementation(print)
+
+  return {
+    lines,
+    restore: () => {
+      info.mockRestore()
+      error.mockRestore()
+    },
+  }
+}
+
 describe('LoggingInterceptor', () => {
-  it('LoggingInterceptor.DEFAULT logs without throwing and passes the response through', async () => {
+  // Given no logger of its own, an interceptor writes to the console, which needs nothing installed and starts nothing.
+  it('LoggingInterceptor.DEFAULT writes through the console and passes the response through', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const request = new FetchyRequest('GET', ORIGIN, '/users/1')
     const chain = fakeChain(request, () => Promise.resolve(jsonResponse({ id: '1' })))
 
-    const response = await LoggingInterceptor.DEFAULT.intercept(chain)
+    try {
+      const response = await LoggingInterceptor.DEFAULT.intercept(chain)
 
-    expect(response.status).toBe(200)
+      expect(response.status).toBe(200)
+      expect(info).toHaveBeenCalledWith('--> GET http://example.test/users/1')
+    } finally {
+      info.mockRestore()
+    }
   })
 
   it('logs request/response headers and body at Level.BODY', async () => {
@@ -266,6 +320,17 @@ describe('LoggingInterceptor lines', () => {
 
     expect(logger.lines).toContain(end)
   })
+
+  // A converter may read an error's body into a value JSON cannot write. The line says so, and the call still fails with
+  // the error the server's answer raised.
+  it("omits an ErrFetchyHTTP's body that JSON cannot write at Level.BODY, and rethrows the error", async () => {
+    const { logger, interceptor } = intercepting(Level.BODY)
+    const { error, chain } = refusedRefresh({ balance: 10n })
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+    expect(logger.lines).toContain('<-- END HTTP (body omitted)')
+  })
 })
 
 describe('PinoLogger', () => {
@@ -287,6 +352,83 @@ describe('PinoLogger', () => {
       [30, '--> GET http://example.test/users'],
       [50, '<-- HTTP Failed: network down'],
     ])
+  })
+
+  // An application with a pino logger of its own, writing where its logs go, hands it over rather than build another.
+  it('writes through a pino instance it is given', () => {
+    const { lines, destination } = sink()
+    const logger = new PinoLogger(pino({ level: 'info' }, destination))
+
+    logger.info('--> GET http://example.test/users')
+
+    expect(lines).toEqual([expect.objectContaining({ level: 30, msg: '--> GET http://example.test/users' })])
+  })
+
+  // A failure's type, code, stack and cause are what a reader of the log acts on. The error used to be dropped, so
+  // none of them reached the log; under `err`, pino's standard serializer writes them all.
+  it('writes the error it is given, with its type, code, stack and cause', () => {
+    const { lines, destination } = sink()
+    const logger = new PinoLogger(pino({ level: 'info' }, destination))
+    const error = Object.assign(new Error('other side closed', { cause: new Error('socket hang up') }), {
+      code: 'UND_ERR_SOCKET',
+    })
+
+    logger.error('<-- HTTP Failed: other side closed', error)
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({
+      level: 50,
+      msg: '<-- HTTP Failed: other side closed',
+      err: { type: 'Error', code: 'UND_ERR_SOCKET' },
+    })
+    expect(lines[0].err?.message).toContain('other side closed')
+    expect(lines[0].err?.message).toContain('socket hang up')
+    expect(lines[0].err?.stack).toContain('other side closed')
+    expect(lines[0].err?.stack).toContain('socket hang up')
+  })
+
+  it('writes no error for a line logged without one', () => {
+    const { lines, destination } = sink()
+
+    new PinoLogger(pino({ level: 'info' }, destination)).error('Took: 3ms')
+
+    expect(lines).toEqual([expect.objectContaining({ level: 50, msg: 'Took: 3ms' })])
+    expect(lines[0]).not.toHaveProperty('err')
+  })
+
+  // What the issue saw: a call that failed was logged by its message alone.
+  it('logs the error that failed a call through LoggingInterceptor', async () => {
+    const { lines, destination } = sink()
+    const interceptor = new LoggingInterceptor({ logger: new PinoLogger(pino({ level: 'info' }, destination)) })
+    const failure = Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' })
+    const chain = fakeChain(new FetchyRequest('GET', ORIGIN, '/users'), () => Promise.reject(failure))
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(failure)
+
+    const failed = lines.find(line => line.msg === '<-- HTTP Failed: other side closed')
+    expect(failed).toMatchObject({
+      level: 50,
+      err: { type: 'Error', message: 'other side closed', code: 'UND_ERR_SOCKET' },
+    })
+    expect(failed?.err?.stack).toContain('other side closed')
+  })
+
+  // An ErrFetchyHTTP carries the response's body, which only Level.BODY logs. Written under `err`, it reached the log at
+  // every level.
+  it("keeps an ErrFetchyHTTP's body out of what it writes below Level.BODY", async () => {
+    const { lines, destination } = sink()
+    const interceptor = new LoggingInterceptor({
+      level: Level.HEADERS,
+      logger: new PinoLogger(pino({ level: 'info' }, destination)),
+    })
+    interceptor.redactHeader('set-cookie')
+    const { error, chain } = refusedRefresh()
+
+    await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+    expect(lines.map(line => line.msg)).toContain('<-- 400 Bad Request http://example.test/token')
+    expect(lines.map(line => line.msg)).toContain('set-cookie: ***')
+    expect(lines.some(line => /invalid_grant|s3cr3t/.test(JSON.stringify(line)))).toBe(false)
   })
 })
 
@@ -310,6 +452,45 @@ describe('ConsoleLogger', () => {
     } finally {
       info.mockRestore()
       error.mockRestore()
+    }
+  })
+
+  // The console prints an error with its properties: an ErrFetchyHTTP's body, and its headers with none redacted.
+  it("keeps an ErrFetchyHTTP's body and redacted headers out of the console below Level.BODY", async () => {
+    const printed = capturingConsole()
+
+    try {
+      const interceptor = new LoggingInterceptor({ level: Level.HEADERS })
+      interceptor.redactHeader('set-cookie')
+      const { error, chain } = refusedRefresh()
+
+      await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+      expect(printed.lines).toContain('set-cookie: ***')
+      expect(printed.lines.some(line => /invalid_grant|s3cr3t/.test(line))).toBe(false)
+    } finally {
+      printed.restore()
+    }
+  })
+
+  // At Level.BODY a failed call's body is logged as a successful one's is. A redacted header stays redacted.
+  it("logs an ErrFetchyHTTP's body at Level.BODY, with its headers still redacted", async () => {
+    const printed = capturingConsole()
+
+    try {
+      const interceptor = new LoggingInterceptor({ level: Level.BODY })
+      interceptor.redactHeader('set-cookie')
+      const { error, chain } = refusedRefresh()
+
+      await expect(interceptor.intercept(chain)).rejects.toBe(error)
+
+      const end = printed.lines.indexOf('<-- END HTTP')
+
+      expect(printed.lines[end - 1]).toBe('{"error":"invalid_grant"}')
+      expect(printed.lines).toContain('set-cookie: ***')
+      expect(printed.lines.some(line => line.includes('s3cr3t'))).toBe(false)
+    } finally {
+      printed.restore()
     }
   })
 })

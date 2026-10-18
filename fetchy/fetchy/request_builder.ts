@@ -1,12 +1,17 @@
 import type { MethodSpec } from './decorators/registrar/index.js'
-import { ErrFetchyMissingPathArgument } from './errors.js'
+import { ErrFetchyInvalidPathArgument, ErrFetchyMissingPathArgument } from './errors.js'
 import { FetchyHeaders } from './headers.js'
-import { isFormData } from './internal/form_data.js'
+import { isFormData, isFormDataLike } from './internal/form_data.js'
 import type { ParamDescriptor } from './internal/param_descriptor.js'
 import { FetchyRequest } from './request.js'
 import { appendPart, JSONRequestBodyConverter, type RequestBodyConverter } from './request_body_converter.js'
 
 const PLACEHOLDER = /\{(\w+)\}/g
+
+// A path segment that sends a call to another path: nothing, a dot or two dots, written as such or as `%2e`. A URL
+// parser drops a "." segment and resolves ".." against the segment before it, and many servers merge the slashes around
+// an empty one.
+const MOVING_SEGMENT = /^(?:\.|%2e){0,2}$/i
 
 // The labels `fetch` gives these bodies when nothing names a content-type. Applied here so that every transport
 // sends the same header, undici included.
@@ -42,7 +47,9 @@ function appendQueryEntry(query: string, key: string, value: unknown): string {
 
   if (Array.isArray(value)) {
     for (const element of value) {
-      query += `${query === '' ? '?' : '&'}${key}${encodeURIComponent(String(element))}`
+      if (element !== undefined && element !== null) {
+        query += `${query === '' ? '?' : '&'}${key}${encodeURIComponent(String(element))}`
+      }
     }
     return query
   }
@@ -65,6 +72,9 @@ export class RequestBuilder {
   private readonly headers: Record<string, string> = {}
   private readonly bodyConverter: RequestBodyConverter
   private readonly origin: string = ''
+  // What opens the query the parameters add: `?`, or `&` after a query the path writes, as in
+  // `@GET('/search?type=user')`, and nothing after one it leaves open, as in `@GET('/search?')`.
+  private readonly querySeparator: string
 
   constructor(
     baseURL: string,
@@ -98,6 +108,8 @@ export class RequestBuilder {
       this.segments[0] = '/'
     }
 
+    this.querySeparator = !meta.path.includes('?') ? '?' : /[?&]$/.test(meta.path) ? '' : '&'
+
     for (const param of meta.params) {
       if (param.kind !== 'path') {
         this.params.push(compileParam(param))
@@ -113,9 +125,13 @@ export class RequestBuilder {
 
   /**
    * @throws {@link ErrFetchyMissingPathArgument} when a path parameter's argument is `undefined` or `null`.
+   * @throws {@link ErrFetchyInvalidPathArgument} when a path parameter's argument makes its segment empty, `"."` or
+   * `".."`, alone or with the text around its placeholder.
    */
   toRequest(args: readonly unknown[]): FetchyRequest {
     let path = this.segments[0]
+    // The arguments that may make such a segment, three numbers each: the slot, then where its text starts and ends.
+    let suspects: number[] | undefined
 
     for (let i = 0; i < this.slots.length; i++) {
       const value = args[this.slots[i]]
@@ -124,7 +140,19 @@ export class RequestBuilder {
         throw new ErrFetchyMissingPathArgument(this.meta.httpMethod, this.meta.path, this.slotKeys[i], value)
       }
 
-      path += encodeURIComponent(String(value)) + this.segments[i + 1]
+      const encoded = encodeURIComponent(String(value))
+
+      // `encodeURIComponent` leaves a dot alone and encodes `%`, so only these arguments can make such a segment.
+      if (encoded.length < 3 && (encoded === '' || encoded === '.' || encoded === '..')) {
+        suspects ??= []
+        suspects.push(i, path.length, path.length + encoded.length)
+      }
+
+      path += encoded + this.segments[i + 1]
+    }
+
+    if (suspects !== undefined) {
+      this.refuseMovingSegment(path, suspects)
     }
 
     let query = ''
@@ -185,9 +213,9 @@ export class RequestBuilder {
     // sits. Without a label a JSON-stringified body reaches the server as `text/plain`, which a strict one answers
     // with 415.
     if (body !== null && body !== undefined) {
-      // Except over a FormData: fetch and undici write its boundary only into a request that has no content-type, so
+      // Except over a FormData, of any implementation: the transport labels it with the boundary it encodes it under, so
       // any type set here would name no boundary, and the server would find no part.
-      if (typeof body === 'object' && isFormData(body)) {
+      if (typeof body === 'object' && (isFormData(body) || isFormDataLike(body))) {
         headers.delete('content-type')
       } else if (!headers.has('content-type')) {
         const mediaType =
@@ -209,6 +237,38 @@ export class RequestBuilder {
       body = body.toString()
     }
 
+    // The query was built to open the URL's. After a query the path writes, it continues that one instead.
+    if (query !== '' && this.querySeparator !== '?') {
+      query = this.querySeparator + query.slice(1)
+    }
+
     return new FetchyRequest(this.meta.httpMethod, this.origin, path + query, headers, body, signal)
+  }
+
+  // Reads the segment each suspect argument falls in, with the text the path writes around it, and refuses one that
+  // would send the call to another path. An argument in a query the path writes, as in `/search?q={q}`, is no segment.
+  private refuseMovingSegment(path: string, suspects: readonly number[]): void {
+    const query = path.search(/[?#]/)
+    const pathEnd = query === -1 ? path.length : query
+
+    for (let k = 0; k < suspects.length; k += 3) {
+      const start = suspects[k + 1]
+
+      if (start > pathEnd) {
+        continue
+      }
+
+      const next = path.indexOf('/', suspects[k + 2])
+      const segment = path.slice(path.lastIndexOf('/', start - 1) + 1, next === -1 || next > pathEnd ? pathEnd : next)
+
+      if (MOVING_SEGMENT.test(segment)) {
+        throw new ErrFetchyInvalidPathArgument(
+          this.meta.httpMethod,
+          this.meta.path,
+          this.slotKeys[suspects[k]],
+          segment,
+        )
+      }
+    }
   }
 }

@@ -12,3 +12,22 @@ export function isFormData(value: unknown): value is FormData {
 
   return formDataPrototype!.isPrototypeOf(value as object)
 }
+
+type FormDataMethod = 'append' | 'delete' | 'get' | 'getAll' | 'has' | 'set'
+
+// undici's own test for a FormData, which one of any implementation passes: undici's, and one built before `install()`
+// replaced the global. A stream that calls itself FormData, as the form-data package's do, fails it. Slower than
+// `isFormData`, so it is kept off the path every call takes.
+export function isFormDataLike(value: object): value is FormData {
+  const form = value as Partial<Record<FormDataMethod, unknown>> & { [Symbol.toStringTag]?: unknown }
+
+  return (
+    form[Symbol.toStringTag] === 'FormData' &&
+    typeof form.append === 'function' &&
+    typeof form.delete === 'function' &&
+    typeof form.get === 'function' &&
+    typeof form.getAll === 'function' &&
+    typeof form.has === 'function' &&
+    typeof form.set === 'function'
+  )
+}

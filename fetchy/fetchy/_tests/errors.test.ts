@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -7,8 +9,12 @@ import {
   ErrFetchyFollowUpNotSent,
   ErrFetchyHTTP,
   ErrFetchyInvalidDecoratorTarget,
+  ErrFetchyInvalidFormBody,
   ErrFetchyInvalidMultipartBody,
+  ErrFetchyInvalidPathArgument,
   ErrFetchyInvalidRoute,
+  ErrFetchyMissingAPIDecorator,
+  ErrFetchyMissingCallbackArgument,
   ErrFetchyMissingPathArgument,
   ErrFetchyTooManyAuthenticationAttempts,
 } from '../errors.js'
@@ -27,11 +33,26 @@ describe('errors', () => {
       'ERR_FETCHY_INVALID_ROUTE',
     ],
     ['ErrFetchyEmptyClient', () => new ErrFetchyEmptyClient('UsersAPI'), 'ERR_FETCHY_EMPTY_CLIENT'],
+    [
+      'ErrFetchyMissingAPIDecorator',
+      () => new ErrFetchyMissingAPIDecorator('UsersAPI'),
+      'ERR_FETCHY_MISSING_API_DECORATOR',
+    ],
+    [
+      'ErrFetchyMissingCallbackArgument',
+      () => new ErrFetchyMissingCallbackArgument(),
+      'ERR_FETCHY_MISSING_CALLBACK_ARGUMENT',
+    ],
     ['ErrFetchyClientNotBuilt', () => new ErrFetchyClientNotBuilt('getUser'), 'ERR_FETCHY_CLIENT_NOT_BUILT'],
     [
       'ErrFetchyMissingPathArgument',
       () => new ErrFetchyMissingPathArgument('GET', '/users/{id}', 'id', undefined),
       'ERR_FETCHY_MISSING_PATH_ARGUMENT',
+    ],
+    [
+      'ErrFetchyInvalidPathArgument',
+      () => new ErrFetchyInvalidPathArgument('DELETE', '/users/{id}/sessions', 'id', '..'),
+      'ERR_FETCHY_INVALID_PATH_ARGUMENT',
     ],
     [
       'ErrFetchyTooManyAuthenticationAttempts',
@@ -40,7 +61,12 @@ describe('errors', () => {
     ],
     [
       'ErrFetchyFollowUpNotSent',
-      () => new ErrFetchyFollowUpNotSent(new FetchyRequest('PUT', 'http://x.test', '/files/1'), 'body'),
+      () =>
+        new ErrFetchyFollowUpNotSent(
+          new FetchyRequest('PUT', 'http://x.test', '/files/1'),
+          'body',
+          new ReadableStream(),
+        ),
       'ERR_FETCHY_FOLLOW_UP_NOT_SENT',
     ],
     [
@@ -48,6 +74,7 @@ describe('errors', () => {
       () => new ErrFetchyInvalidMultipartBody({ pages: 12 }, 'meta'),
       'ERR_FETCHY_INVALID_MULTIPART_BODY',
     ],
+    ['ErrFetchyInvalidFormBody', () => new ErrFetchyInvalidFormBody('value', 42), 'ERR_FETCHY_INVALID_FORM_BODY'],
   ] as const)('%s has name and code aligned', (name, factory, code) => {
     const error = factory()
 
@@ -107,17 +134,39 @@ describe('errors', () => {
 
   // The same holds for a follow-up fetchy refuses to send, whatever the reason.
   it.each([
-    ['origin', 'it does not target "https://api.test"'],
-    ['body', 'its body is a stream or an iterator, which the first send may have read'],
-  ] as const)('ErrFetchyFollowUpNotSent keeps the query string out of its message about the %s', (problem, reason) => {
-    const request = new FetchyRequest('PUT', 'https://api.test', '/files/1?api_key=s3cr3t')
+    [
+      'origin',
+      (request: FetchyRequest) => new ErrFetchyFollowUpNotSent(request, 'origin'),
+      'it does not target "https://api.test"',
+    ],
+    [
+      'body',
+      (request: FetchyRequest) => new ErrFetchyFollowUpNotSent(request, 'body', new ReadableStream()),
+      'its body is a stream or an iterator (ReadableStream), which the first send may have read',
+    ],
+  ] as const)(
+    'ErrFetchyFollowUpNotSent keeps the query string out of its message about the %s',
+    (_problem, refuse, reason) => {
+      const request = new FetchyRequest('PUT', 'https://api.test', '/files/1?api_key=s3cr3t')
 
-    const error = new ErrFetchyFollowUpNotSent(request, problem)
+      const error = refuse(request)
 
-    expect(error.message.split('\n')[0]).toBe(
-      `Cannot send the authentication follow-up of "PUT https://api.test/files/1": ${reason}`,
-    )
-    expect(error.message).not.toContain('s3cr3t')
+      expect(error.message.split('\n')[0]).toBe(
+        `Cannot send the authentication follow-up of "PUT https://api.test/files/1": ${reason}`,
+      )
+      expect(error.message).not.toContain('s3cr3t')
+    },
+  )
+
+  // A body fetchy cannot send again is named for what it is, so the caller knows which value to send another way.
+  it.each([
+    ['a web stream', new ReadableStream(), 'ReadableStream'],
+    ['a Node stream', Readable.from(['part']), 'Readable'],
+    ['an async generator', (async function* () {})(), 'AsyncGenerator'],
+  ])('ErrFetchyFollowUpNotSent names the type of %s it cannot send again', (_kind, body, type) => {
+    const error = new ErrFetchyFollowUpNotSent(new FetchyRequest('PUT', 'https://api.test', '/files/1'), 'body', body)
+
+    expect(error.message.split('\n')[0]).toContain(`its body is a stream or an iterator (${type})`)
   })
 
   // A part may carry a token or a password, and the message ends up in log lines.

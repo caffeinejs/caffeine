@@ -1,4 +1,4 @@
-import { errMessage } from './_err_message.gen.js'
+import { errMessage, type ErrMessageBuilder } from './_err_message.gen.js'
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 
@@ -10,11 +10,16 @@ function requestLabel(request: FetchyRequest): string {
   return `${request.method} ${request.origin}${path}`
 }
 
-// Names what a value is without showing it, since a part may carry a secret.
+// Names what a value is without showing it, since a part may carry a secret. A generator object's constructor has no
+// name, so its tag names it: `AsyncGenerator`.
 function typeName(value: unknown): string {
-  return typeof value === 'object' && value !== null
-    ? (Object.getPrototypeOf(value)?.constructor?.name ?? 'Object')
-    : typeof value
+  if (typeof value !== 'object' || value === null) {
+    return typeof value
+  }
+
+  const name: unknown = Object.getPrototypeOf(value)?.constructor?.name
+
+  return typeof name === 'string' && name !== '' ? name : Object.prototype.toString.call(value).slice(8, -1)
 }
 
 // The fix for a part value that cannot be sent, by what the value most likely is. Bytes come first: a typed array is
@@ -193,10 +198,12 @@ export class ErrFetchyTooManyAuthenticationAttempts extends ErrFetchy {
 /**
  * Thrown when fetchy refuses to send the follow-up an `Authenticator` returned: it targets another origin than the
  * call's, or its body is a stream or an iterator the first send may have read. The message names the request without
- * its query string, which often carries credentials.
+ * its query string, which often carries credentials, and the body's type, never the body.
  */
 export class ErrFetchyFollowUpNotSent extends ErrFetchy {
-  constructor(request: FetchyRequest, problem: 'origin' | 'body') {
+  constructor(request: FetchyRequest, problem: 'origin')
+  constructor(request: FetchyRequest, problem: 'body', body: unknown)
+  constructor(request: FetchyRequest, problem: 'origin' | 'body', body?: unknown) {
     const first = `Cannot send the authentication follow-up of "${requestLabel(request)}"`
     // Names the call's own origin only: the one the authenticator built may carry anything.
     const message =
@@ -204,7 +211,9 @@ export class ErrFetchyFollowUpNotSent extends ErrFetchy {
         ? errMessage(`${first}: it does not target "${request.origin}"`).solutions(
             'Build the follow-up with request.clone(), which keeps the origin',
           )
-        : errMessage(`${first}: its body is a stream or an iterator, which the first send may have read`).solutions(
+        : errMessage(
+            `${first}: its body is a stream or an iterator (${typeName(body)}), which the first send may have read`,
+          ).solutions(
             'Add the credentials with an interceptor, before the first send, so a streamed body needs no follow-up',
             'Send the body as a string, bytes or a Blob, which fetchy can send again',
           )
@@ -246,49 +255,130 @@ export class ErrFetchyMissingPathArgument extends ErrFetchy {
   }
 }
 
+// What a server ends up doing with a path segment of nothing, a dot or two dots, written as such or as `%2e`.
+function segmentEffect(segment: string): string {
+  if (segment === '') {
+    return 'leaves the path segment empty, which many servers drop'
+  }
+
+  return segment.replace(/%2e/gi, '.') === '.'
+    ? `makes the path segment "${segment}", which a URL parser drops`
+    : `makes the path segment "${segment}", which a URL parser removes along with the segment before it`
+}
+
+/**
+ * Thrown when an operation is called with a path parameter argument that would send the call to another path: one that
+ * makes its segment empty, `"."` or `".."`, alone or with the text the path writes around its placeholder. Nothing is
+ * sent. Encoding keeps such an argument in its segment, but a URL parser drops a `"."` segment and resolves a `".."` one
+ * against the segment before it, and many servers merge the slashes around an empty one.
+ */
+export class ErrFetchyInvalidPathArgument extends ErrFetchy {
+  /**
+   * @param segment - The path segment the argument makes, as it would be sent
+   */
+  constructor(method: string, path: string, key: string, segment: string) {
+    super(
+      errMessage(`Cannot build request "${method} ${path}": the argument for "{${key}}" ${segmentEffect(segment)}`)
+        .solutions(
+          'Refuse an argument of "", "." or ".." before the call',
+          'Send a value that can be one of these with Query(name) or in the body',
+        )
+        .reference('@caffeinejs/fetchy', ErrFetchyInvalidPathArgument)
+        .build(),
+      'ERR_FETCHY_INVALID_PATH_ARGUMENT',
+    )
+    this.name = 'ErrFetchyInvalidPathArgument'
+  }
+}
+
+// Names what a form cannot be made of, and what to pass instead.
+function formMessage(problem: 'pairs' | 'form-data' | 'value' | 'fields', value: unknown): ErrMessageBuilder {
+  switch (problem) {
+    case 'pairs':
+      return errMessage(
+        'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
+      )
+    case 'value':
+      return errMessage(
+        `Cannot convert the @Body() value to application/x-www-form-urlencoded: expected an object, an array of [key, value] pairs or an encoded string, got ${typeName(value)}`,
+      ).solutions(
+        'Pass the value as a field of an object: { name: value }',
+        'Bind the value with Field(name) in place of Body()',
+      )
+    case 'fields':
+      return errMessage(
+        `Cannot convert the @Body() value to application/x-www-form-urlencoded: a ${typeName(value)} has no fields to encode`,
+      ).solutions('Pass the values as fields of a plain object: { name: value }')
+    case 'form-data':
+      return errMessage(
+        'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
+      ).solutions('Use @Multipart() instead of @FormURLEncoded() or FormRequestBodyConverter')
+  }
+}
+
 /**
  * Thrown by `FormRequestBodyConverter` when given a flat (non-2D) array, since it only accepts an
- * array of `[key, value]` pairs, or a `FormData`, which `@Multipart()` sends.
+ * array of `[key, value]` pairs, a `FormData` of any implementation, which `@Multipart()` sends, a
+ * number, boolean, bigint, symbol or function, which is no form, or an object that is not plain and
+ * has no field of its own, such as a `Date` or a `Set`. Nothing is sent. The message names the
+ * value's type, never the value.
  */
 export class ErrFetchyInvalidFormBody extends ErrFetchy {
-  constructor(problem: 'pairs' | 'form-data') {
-    const message =
-      problem === 'pairs'
-        ? errMessage(
-            'Cannot convert to application/x-www-form-urlencoded: array body must be an array of [key, value] pairs',
-          )
-        : errMessage(
-            'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
-          ).solutions('Use @Multipart() instead of @FormURLEncoded() or FormRequestBodyConverter')
-
-    super(message.reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody).build(), 'ERR_FETCHY_INVALID_FORM_BODY')
+  /**
+   * @param value - The `@Body()` value, for the `'value'` and `'fields'` problems
+   */
+  constructor(problem: 'pairs' | 'form-data' | 'value' | 'fields', value?: unknown) {
+    super(
+      formMessage(problem, value).reference('@caffeinejs/fetchy', ErrFetchyInvalidFormBody).build(),
+      'ERR_FETCHY_INVALID_FORM_BODY',
+    )
     this.name = 'ErrFetchyInvalidFormBody'
   }
+}
+
+// Names a value the multipart body cannot take, by what it most likely is: a part, or the whole `@Body()` value.
+function multipartMessage(value: unknown, part: string | undefined): ErrMessageBuilder {
+  const tag = Object.prototype.toString.call(value).slice(8, -1)
+
+  if (part === undefined) {
+    return tag === 'FormData'
+      ? errMessage(
+          'Cannot convert the @Body() value to multipart/form-data: it calls itself a FormData without being one, as a stream of the form-data package does',
+        ).solutions('Build the body with the global FormData')
+      : errMessage(
+          `Cannot convert the @Body() value to multipart/form-data: expected a FormData or a plain object, got ${typeName(value)}`,
+        ).solutions('Pass a FormData, or a plain object with one property per part')
+  }
+
+  // formdata-node's File, say, is no Blob to the global FormData, or to a Blob composed of the parts.
+  if ((tag === 'Blob' || tag === 'File') && !(value instanceof Blob)) {
+    return errMessage(
+      `Cannot add part "${part}" to the multipart body: it is a ${tag} of another implementation, which would be sent as the text "[object ${tag}]"`,
+    ).solutions(
+      tag === 'File'
+        ? 'Copy it into a global File: new File([await part.arrayBuffer()], part.name, { type: part.type })'
+        : 'Copy it into a global Blob: new Blob([await part.arrayBuffer()], { type: part.type })',
+    )
+  }
+
+  return errMessage(
+    `Cannot add part "${part}" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${typeName(value)}`,
+  ).solutions(...partSolutions(value))
 }
 
 /**
  * Thrown when an operation under `@Multipart()` is called with a body fetchy cannot encode: a part
  * value that is not a string, number, boolean, bigint, `Blob` or `File`, or a `@Body()` value that
- * is neither the global `FormData` nor a plain object. Nothing is sent. The message names the
- * value's type, never the value.
+ * is neither a `FormData`, of any implementation, nor a plain object. `FetchTransport` throws it too
+ * for a part of a `FormData` that is no `Blob` of the global class.
+ * Nothing is sent. The message names the value's type, never the value.
  */
 export class ErrFetchyInvalidMultipartBody extends ErrFetchy {
   /**
    * @param part - The part the value was given for, or `undefined` for a `@Body()` value
    */
   constructor(value: unknown, part?: string) {
-    const message =
-      part !== undefined
-        ? errMessage(
-            `Cannot add part "${part}" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${typeName(value)}`,
-          ).solutions(...partSolutions(value))
-        : Object.prototype.toString.call(value) === '[object FormData]'
-          ? errMessage(
-              'Cannot convert the @Body() value to multipart/form-data: it is a FormData from another implementation, such as the one undici exports',
-            ).solutions('Build the body with the global FormData')
-          : errMessage(
-              `Cannot convert the @Body() value to multipart/form-data: expected a FormData or a plain object, got ${typeName(value)}`,
-            ).solutions('Pass a FormData, or a plain object with one property per part')
+    const message = multipartMessage(value, part)
 
     super(
       message.reference('@caffeinejs/fetchy', ErrFetchyInvalidMultipartBody).build(),

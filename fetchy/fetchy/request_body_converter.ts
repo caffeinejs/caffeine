@@ -1,5 +1,5 @@
 import { ErrFetchyInvalidFormBody, ErrFetchyInvalidMultipartBody } from './errors.js'
-import { isFormData } from './internal/form_data.js'
+import { isFormData, isFormDataLike } from './internal/form_data.js'
 import { MediaTypes } from './media_types.js'
 
 // `BodyInit` is a DOM-lib-only type name, unavailable in this package's `lib` set. `RequestInit`
@@ -17,8 +17,8 @@ export interface RequestBodyConverter {
    *
    * Asked per value rather than declared once, because a converter that passes some values through untouched
    * does not describe them all the same way. The request builder sets it only when nothing else already set
-   * `content-type`, so `@ContentType` and `@FormURLEncoded` still win, and never for a `FormData`, which the
-   * transport labels with its boundary.
+   * `content-type`, so `@ContentType` and `@FormURLEncoded` still win, and never for a `FormData` of any
+   * implementation, which the transport labels with its boundary.
    */
   contentType?(value: unknown): string | undefined
 }
@@ -30,13 +30,17 @@ function isNativeBody(value: unknown): boolean {
     value instanceof Blob ||
     value instanceof URLSearchParams ||
     ArrayBuffer.isView(value) ||
-    isFormData(value)
+    isFormData(value) ||
+    value instanceof ArrayBuffer ||
+    // A runtime without web streams has no global to test against, and every JSON body is tested.
+    (typeof ReadableStream === 'function' && value instanceof ReadableStream)
   )
 }
 
 /**
  * Default request body converter: passes through values that are already valid fetch body types
- * (string, `Blob`, `URLSearchParams`, typed arrays, `FormData`), JSON-stringifies everything else.
+ * (string, `Blob`, `URLSearchParams`, `ArrayBuffer`, typed arrays, `ReadableStream`, a `FormData` of
+ * any implementation), JSON-stringifies everything else.
  */
 export const JSONRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -48,12 +52,22 @@ export const JSONRequestBodyConverter: RequestBodyConverter = {
       return value as RequestBody
     }
 
-    return JSON.stringify(value)
+    const json = JSON.stringify(value)
+
+    // A FormData of another implementation, as undici's is, holds no field `JSON.stringify` can see. Tested only once
+    // the text is `{}`, so a body with fields pays nothing for it.
+    if (json === '{}' && typeof value === 'object' && isFormDataLike(value)) {
+      return value
+    }
+
+    return json
   },
 
   // Only what this converter stringified is JSON. A `Blob` carries its own type, `fetch` labels a
   // `URLSearchParams` itself, the transport labels a `FormData` with its boundary, and a string may be
-  // anything — claiming JSON for those would be a lie the server acts on.
+  // anything — claiming JSON for those would be a lie the server acts on. A FormData of another
+  // implementation is not told apart here, which every JSON body would pay for: the request builder never
+  // asks about a body it hands on as a FormData.
   contentType(value: unknown): string | undefined {
     if (value === null || value === undefined || isNativeBody(value)) {
       return undefined
@@ -79,12 +93,14 @@ function appendFormValue(params: URLSearchParams, key: string, value: unknown): 
 }
 
 /**
- * Converts a plain object, a `URLSearchParams` instance, or a 2D array of `[key, value]` pairs
- * into an `application/x-www-form-urlencoded` string, leaving out `undefined` and `null` values,
- * as `@Field()` does. A string, a `Blob` or a typed array is already encoded and passes through
- * untouched.
+ * Converts an object's own fields, a `Map`, a `URLSearchParams` instance, or a 2D array of
+ * `[key, value]` pairs into an `application/x-www-form-urlencoded` string, leaving out `undefined`
+ * and `null` values, as `@Field()` does. A string, a `Blob`, an `ArrayBuffer`, a typed array or a
+ * `ReadableStream` is already encoded and passes through untouched.
  *
- * @throws {@link ErrFetchyInvalidFormBody} for a flat array, or a `FormData`, which `@Multipart()` sends.
+ * @throws {@link ErrFetchyInvalidFormBody} for a flat array, a `FormData` of any implementation, which `@Multipart()`
+ * sends, a number, boolean, bigint, symbol or function, which is no form, or an object that is not plain and has no
+ * field of its own, such as a `Date` or a `Set`.
  */
 export const FormRequestBodyConverter: RequestBodyConverter = {
   convert(value: unknown): RequestBody {
@@ -96,12 +112,24 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
       return value.toString()
     }
 
-    if (typeof value !== 'object' || isNativeBody(value)) {
+    if (typeof value === 'string') {
+      return value
+    }
+
+    if (typeof value !== 'object') {
+      throw new ErrFetchyInvalidFormBody('value', value)
+    }
+
+    if (isNativeBody(value)) {
       if (isFormData(value)) {
         throw new ErrFetchyInvalidFormBody('form-data')
       }
 
       return value as RequestBody
+    }
+
+    if (isFormDataLike(value)) {
+      throw new ErrFetchyInvalidFormBody('form-data')
     }
 
     const params = new URLSearchParams()
@@ -118,7 +146,24 @@ export const FormRequestBodyConverter: RequestBodyConverter = {
       return params.toString()
     }
 
-    for (const [key, val] of Object.entries(value)) {
+    // A Map holds its pairs where `Object.entries` cannot see them.
+    if (value instanceof Map) {
+      for (const [key, val] of value as Map<unknown, unknown>) {
+        appendFormValue(params, String(key), val)
+      }
+
+      return params.toString()
+    }
+
+    const entries = Object.entries(value)
+
+    // Only a plain object may have no field at all. A Date, a Set or a class that keeps its values behind getters gives
+    // `Object.entries` nothing, and would go out as an empty form.
+    if (entries.length === 0 && !isPlainObject(value)) {
+      throw new ErrFetchyInvalidFormBody('fields', value)
+    }
+
+    for (const [key, val] of entries) {
       appendFormValue(params, key, val)
     }
 
@@ -178,8 +223,8 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 /**
  * Converts a plain object into a `FormData`, one part per property, under the rules `Part()`
- * follows. A `FormData` passes through untouched. Neither carries a `content-type`: the transport
- * labels the body `multipart/form-data` with the boundary it generates.
+ * follows. A `FormData` of any implementation passes through untouched. Neither carries a
+ * `content-type`: the transport labels the body `multipart/form-data` with the boundary it generates.
  *
  * @throws {@link ErrFetchyInvalidMultipartBody} for any other value, or a property that cannot be a part.
  */
@@ -189,7 +234,7 @@ export const MultipartRequestBodyConverter: RequestBodyConverter = {
       return null
     }
 
-    if (isFormData(value)) {
+    if (isFormData(value) || (typeof value === 'object' && isFormDataLike(value))) {
       return value
     }
 

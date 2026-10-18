@@ -17,11 +17,12 @@ import { QueryName } from '../decorators/params/query_name.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { UseResponseConverter } from '../decorators/response_converter.js'
-import { DELETE, GET, POST } from '../decorators/verbs.js'
+import { DELETE, GET, HEAD, HTTP, OPTIONS, PATCH, POST, PUT } from '../decorators/verbs.js'
 import {
   ErrFetchyClientNotBuilt,
   ErrFetchyEmptyClient,
   ErrFetchyHTTP,
+  ErrFetchyInvalidPathArgument,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingPathArgument,
@@ -232,6 +233,42 @@ describe('FetchyClient end-to-end (fake TransportFactory)', () => {
     expect(() => client.create(Invalid)).toThrow(
       'Invalid route configuration for method "Invalid.bad": @Field() requires @FormURLEncoded() on the method or class',
     )
+  })
+
+  // A form field is a body like any other: fetch refuses a GET that has one, and undici sends it where most servers
+  // ignore it. Refused when the client is built, as a @Body() or a Part() is, rather than on every call.
+  it.each(['GET', 'HEAD', 'OPTIONS'])('throws ErrFetchyInvalidRoute for a @Field() on %s', verb => {
+    @API('/search')
+    class SearchAPI {
+      @HTTP(verb)
+      @FormURLEncoded()
+      @Params([Field('q')])
+      search!: (q: string) => Promise<unknown>
+    }
+
+    const client = newClient().baseURL('http://example.test').transportFactory(new TestTransportFactory()).build()
+
+    expect(() => client.create(SearchAPI)).toThrow(
+      `Invalid route configuration for method "SearchAPI.search": ${verb} requests cannot have a body`,
+    )
+  })
+
+  // A class-level @FormURLEncoded() reaches every operation, a bodiless GET included, which sends no form.
+  it('builds a GET without fields under a class-level @FormURLEncoded()', async () => {
+    @API('/users')
+    @FormURLEncoded()
+    class UsersAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      get!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(UsersAPI)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.get('1')).resolves.toEqual({ id: '1' })
+    expect(transportFactory.transports[0].lastRequest?.body).toBeNull()
   })
 
   it('throws ErrFetchyInvalidRoute for a @Param() the path has no placeholder for', () => {
@@ -588,6 +625,65 @@ describe('the request an operation builds', () => {
     expect(users.transport.lastRequest!.url).toBe('http://example.test/users/active')
     expect(root.transport.lastRequest!.url).toBe('http://example.test/')
   })
+
+  @API()
+  class StaticQueryAPI {
+    @GET('/search?type=user')
+    @Params([Query('q')])
+    search!: (q: string | null) => Promise<unknown>
+
+    @GET('/search?type=user')
+    @Params([QueryName()])
+    flagged!: (flag: string) => Promise<unknown>
+
+    @GET('/search?')
+    @Params([Query('q')])
+    open!: (q: string) => Promise<unknown>
+
+    @GET('/users/{id}?expand=true')
+    @Params([Param('id'), Query('fields')])
+    user!: (id: string, fields: string) => Promise<unknown>
+  }
+
+  // A path may write a query string of its own, as `@GET('/search?type=user')`. The parameters continue it: a second
+  // `?` would reach the server as part of the last value, `type` = `user?q=ada`.
+  it.each([
+    ['continues a query string the path writes', (api: StaticQueryAPI) => api.search('ada'), '/search?type=user&q=ada'],
+    ['continues it with a query name', (api: StaticQueryAPI) => api.flagged('exact'), '/search?type=user&exact'],
+    ['leaves it as written with no argument to add', (api: StaticQueryAPI) => api.search(null), '/search?type=user'],
+    ['adds no separator to a query the path leaves open', (api: StaticQueryAPI) => api.open('ada'), '/search?q=ada'],
+    [
+      'continues it after a path placeholder',
+      (api: StaticQueryAPI) => api.user('1', 'name'),
+      '/users/1?expand=true&fields=name',
+    ],
+  ])('%s', async (_case, call, path) => {
+    const { api, transport } = clientOf(StaticQueryAPI)
+
+    await call(api)
+
+    expect(transport.lastRequest!.path).toBe(path)
+  })
+
+  @API('/search')
+  class TagsAPI {
+    @GET('')
+    @Params([Query('tag')])
+    tagged!: (tags: (string | null | undefined)[]) => Promise<unknown>
+  }
+
+  // A value left out of a list is not sent, as a lone one is not, and as Part() leaves it out: never as the text
+  // "null" or "undefined", which a server would filter by.
+  it.each([
+    ['between values', ['math', null, undefined, 'history'], '/search?tag=math&tag=history'],
+    ['when the list holds nothing else', [null, undefined], '/search'],
+  ])('leaves null and undefined out of a query array %s', async (_case, tags, path) => {
+    const { api, transport } = clientOf(TagsAPI)
+
+    await api.tagged(tags)
+
+    expect(transport.lastRequest!.path).toBe(path)
+  })
 })
 
 // A base URL may carry a path of its own: a versioned API, or a service mounted under a prefix. An operation that adds
@@ -625,6 +721,24 @@ describe('the URL an operation calls', () => {
     call!: () => Promise<unknown>
   }
 
+  @API('/')
+  class RootUsers {
+    @GET('/users')
+    call!: () => Promise<unknown>
+  }
+
+  @API('/')
+  class RootSlash {
+    @GET('/')
+    call!: () => Promise<unknown>
+  }
+
+  @API('/')
+  class RootBare {
+    @GET()
+    call!: () => Promise<unknown>
+  }
+
   it('is the base URL as written when neither the class nor the operation adds a path', async () => {
     expect(await urlOf('http://example.test/v1', Bare)).toBe('http://example.test/v1')
   })
@@ -639,6 +753,195 @@ describe('the URL an operation calls', () => {
 
   it("puts the class's path after the base URL's own", async () => {
     expect(await urlOf('http://example.test/v1', Users)).toBe('http://example.test/v1/users')
+  })
+
+  // `@API('/')` names the root, as `@API('')` does. Joined as written, its slash and the operation's made `//users`, a
+  // path many servers route apart from `/users` or answer with 404.
+  it.each([
+    ['joins an operation path with one slash', 'http://example.test', RootUsers, 'http://example.test/users'],
+    ["keeps the operation's own slash alone", 'http://example.test', RootSlash, 'http://example.test/'],
+    [
+      "puts an operation path after the base URL's own",
+      'http://example.test/v1',
+      RootUsers,
+      'http://example.test/v1/users',
+    ],
+    [
+      'calls the base URL as written for an operation with no path',
+      'http://example.test/v1',
+      RootBare,
+      'http://example.test/v1',
+    ],
+  ])("%s under a class path of '/'", async (_case, baseURL, TargetAPI, expected) => {
+    expect(await urlOf(baseURL, TargetAPI)).toBe(expected)
+  })
+})
+
+// A path argument is encoded to stay one segment, but encoding leaves a dot alone. A URL parser drops a "." segment and
+// resolves ".." against the segment before it, and many servers merge the slashes around an empty one, so an argument
+// taken from a request, as a backend for a frontend passes one on, would pick the endpoint the call reaches.
+describe('a path argument that would send the call to another path', () => {
+  @API('/users')
+  class UsersAPI {
+    @DELETE('/{id}/sessions')
+    @Params([Param('id')])
+    revokeSessions!: (id: string) => Promise<unknown>
+
+    @DELETE('/{id}')
+    @Params([Param('id')])
+    remove!: (id: string) => Promise<unknown>
+  }
+
+  @API('/files')
+  class FilesAPI {
+    @GET('/{name}.{ext}')
+    @Params([Param('name'), Param('ext')])
+    named!: (name: string, ext: string) => Promise<unknown>
+
+    @GET('/{name}.pdf')
+    @Params([Param('name')])
+    pdf!: (name: string) => Promise<unknown>
+
+    @GET('/%2e{name}')
+    @Params([Param('name')])
+    hidden!: (name: string) => Promise<unknown>
+
+    @GET('/v{version}/latest')
+    @Params([Param('version')])
+    versioned!: (version: string) => Promise<unknown>
+
+    @GET('/search?under=/{dir}')
+    @Params([Param('dir')])
+    search!: (dir: string) => Promise<unknown>
+  }
+
+  async function callOn<T extends object>(TargetAPI: new () => T, call: (api: T) => Promise<unknown>) {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient().baseURL('http://example.test').transportFactory(transportFactory).build().create(TargetAPI)
+    const transport = transportFactory.transports[0]
+    transport.willRespond(fakeJSONResponse(200, {}))
+
+    const error = await call(api).then(
+      () => undefined,
+      (err: unknown) => err,
+    )
+
+    return { error, transport }
+  }
+
+  it.each([
+    [
+      '".." in a segment of its own',
+      () => callOn(UsersAPI, api => api.revokeSessions('..')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" makes the path segment "..", which a URL parser removes along with the segment before it',
+    ],
+    [
+      '"." in a segment of its own',
+      () => callOn(UsersAPI, api => api.revokeSessions('.')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" makes the path segment ".", which a URL parser drops',
+    ],
+    [
+      'an empty segment',
+      () => callOn(UsersAPI, api => api.revokeSessions('')),
+      'Cannot build request "DELETE /users/{id}/sessions": the argument for "{id}" leaves the path segment empty, which many servers drop',
+    ],
+    // `/users/` is the collection, not one of its users.
+    [
+      'an empty last segment',
+      () => callOn(UsersAPI, api => api.remove('')),
+      'Cannot build request "DELETE /users/{id}": the argument for "{id}" leaves the path segment empty, which many servers drop',
+    ],
+    // Placeholders that share a segment make a dot segment together, with the dot the path writes between them.
+    [
+      'empty arguments beside a dot',
+      () => callOn(FilesAPI, api => api.named('', '')),
+      'Cannot build request "GET /files/{name}.{ext}": the argument for "{name}" makes the path segment ".", which a URL parser drops',
+    ],
+    [
+      'a dot and an empty argument beside a dot',
+      () => callOn(FilesAPI, api => api.named('.', '')),
+      'Cannot build request "GET /files/{name}.{ext}": the argument for "{name}" makes the path segment "..", which a URL parser removes along with the segment before it',
+    ],
+    // A URL parser reads `%2e` as a dot.
+    [
+      'an empty argument beside a %2e',
+      () => callOn(FilesAPI, api => api.hidden('')),
+      'Cannot build request "GET /files/%2e{name}": the argument for "{name}" makes the path segment "%2e", which a URL parser drops',
+    ],
+  ])('refuses %s, and sends nothing', async (_case, call, firstLine) => {
+    const { error, transport } = await call()
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidPathArgument)
+    expect((error as Error).message.split('\n')[0]).toBe(firstLine)
+    expect(transport.sendCount).toBe(0)
+  })
+
+  // Only a whole segment of dots, or none at all, moves the call: refusing more would fail calls to the path they name.
+  it.each([
+    ['three dots', () => callOn(UsersAPI, api => api.revokeSessions('...')), '/users/.../sessions'],
+    [
+      'an encoded dot, encoded again',
+      () => callOn(UsersAPI, api => api.revokeSessions('%2e')),
+      '/users/%252e/sessions',
+    ],
+    ['an empty argument beside text', () => callOn(FilesAPI, api => api.pdf('')), '/files/.pdf'],
+    ['a dot beside text', () => callOn(FilesAPI, api => api.versioned('.')), '/files/v./latest'],
+    ['dots in a query the path writes', () => callOn(FilesAPI, api => api.search('..')), '/files/search?under=/..'],
+  ])('sends %s as it is', async (_case, call, path) => {
+    const { error, transport } = await call()
+
+    expect(error).toBeUndefined()
+    expect(transport.lastRequest?.path).toBe(path)
+  })
+})
+
+// The verb is what a server routes on first: each decorator sends its own, and HTTP() any other, as servers spell it.
+describe('the method an operation sends', () => {
+  @API('/resources')
+  class ResourcesAPI {
+    @PATCH('/{id}')
+    @Params([Param('id')])
+    patch!: (id: string) => Promise<unknown>
+
+    @PUT('/{id}')
+    @Params([Param('id')])
+    put!: (id: string) => Promise<unknown>
+
+    @DELETE('/{id}')
+    @Params([Param('id')])
+    remove!: (id: string) => Promise<unknown>
+
+    @OPTIONS()
+    options!: () => Promise<unknown>
+
+    @HEAD('/{id}')
+    @Params([Param('id')])
+    head!: (id: string) => Promise<unknown>
+
+    @HTTP('purge', '/{id}')
+    @Params([Param('id')])
+    purge!: (id: string) => Promise<unknown>
+  }
+
+  it.each([
+    ['@PATCH()', 'PATCH', (api: ResourcesAPI) => api.patch('1')],
+    ['@PUT()', 'PUT', (api: ResourcesAPI) => api.put('1')],
+    ['@DELETE()', 'DELETE', (api: ResourcesAPI) => api.remove('1')],
+    ['@OPTIONS()', 'OPTIONS', (api: ResourcesAPI) => api.options()],
+    ['@HEAD()', 'HEAD', (api: ResourcesAPI) => api.head('1')],
+    ["@HTTP('purge')", 'PURGE', (api: ResourcesAPI) => api.purge('1')],
+  ])('%s sends %s', async (_decorator, method, call) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(ResourcesAPI)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 204 }))
+
+    await call(api)
+
+    expect(transportFactory.transports[0].lastRequest?.method).toBe(method)
   })
 })
 

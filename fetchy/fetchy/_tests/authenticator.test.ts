@@ -274,7 +274,10 @@ describe('Authenticator', () => {
     const challenge = unauthorized()
     transport.willRespond(challenge)
 
-    await expect(api.upload('1', webStream())).rejects.toBeInstanceOf(ErrFetchyFollowUpNotSent)
+    const call = api.upload('1', webStream())
+
+    await expect(call).rejects.toBeInstanceOf(ErrFetchyFollowUpNotSent)
+    await expect(call).rejects.toThrow('its body is a stream or an iterator (ReadableStream)')
     expect(transport.sendCount).toBe(1)
     expect(attempts).toEqual([1])
     expect(challenge.bodyUsed).toBe(true)
