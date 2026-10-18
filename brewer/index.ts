@@ -1,6 +1,8 @@
 export * from './brewer.js'
 export type * from './contract.js'
 export * from './errors.js'
+export type * from './files.js'
+export type { FormDataOf, FormFields, FormPart } from './form.js'
 export type * from './init.js'
 export type * from './platform.js'
 export type * from './response.js'

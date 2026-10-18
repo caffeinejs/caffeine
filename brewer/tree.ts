@@ -1,4 +1,5 @@
 import type { RouteContract, Routes } from './contract.js'
+import type { FileHelpers } from './files.js'
 import type { CallInit, VerbCall } from './init.js'
 import type { BrewResponseOf } from './response.js'
 import type { Verb } from './verbs.js'
@@ -41,23 +42,30 @@ type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends stri
  *
  * Every branch is a filter over the same entry union, so a node costs one pass per kind rather than a traversal
  * each. Intersecting the three means a node can be a terminal and a parent at once, which is what a path like
- * `/pets` and `/pets/:id` needs.
+ * `/pets` and `/pets/:id` needs. `Reserved` names the segments a node answers itself, as the root does `$request`.
  */
-export type Node<E extends AnyEntry> = Terminal<E> & StaticChildren<E> & ParamChild<E>
+export type Node<E extends AnyEntry, Reserved extends string = never> = Terminal<E> &
+  StaticChildren<E, Reserved> &
+  ParamChild<E>
 
-/** The verbs answered by the routes whose path ends at this node. */
+/**
+ * The verbs answered by the routes whose path ends at this node.
+ *
+ * Only methods the proxy has a verb for: it would read any other name as a segment. `$request` sends those.
+ */
 type Terminal<E extends AnyEntry> = {
-  [R in Extract<E, { segs: readonly [] }>['route'] as Lowercase<R['method']>]: VerbCall<R>
+  [R in Extract<E, { segs: readonly [] }>['route'] as Extract<Lowercase<R['method']>, Verb>]: VerbCall<R>
 }
 
 /**
  * The named segments continuing from here.
  *
  * A segment named after a verb is left out: the proxy reads a verb first, so offering it would promise something
- * the runtime cannot deliver. `$request` reaches those.
+ * the runtime cannot deliver. So is one named `then`, which the proxy never answers, so that a client is never
+ * taken for a promise, and one the node reserves, as the root does `$request`. `$request` reaches them all.
  */
-type StaticChildren<E extends AnyEntry> = {
-  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb>]: Node<Advance<E, K>>
+type StaticChildren<E extends AnyEntry, Reserved extends string> = {
+  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
 }
 
 type Advance<E extends AnyEntry, K extends string> = E extends {
@@ -101,8 +109,8 @@ type AdvanceAny<E extends AnyEntry> = E extends {
 /**
  * The escape hatch: a route addressed by method and path.
  *
- * There for the two cases the proxy cannot serve — a path segment named after a verb, and a path decided at run
- * time — and deliberately for nothing else.
+ * There for what the proxy cannot serve — a path segment named after a verb or `then`, or `$request` at the root, a
+ * method it has no verb for, and a path decided at run time — and deliberately for nothing else.
  */
 export interface RawCall<R extends RouteContract> {
   $request<M extends R['method'], P extends Extract<R, { method: M }>['path']>(
@@ -115,8 +123,15 @@ export interface RawCall<R extends RouteContract> {
 type RawArgs<R extends RouteContract> =
   Partial<RawInit<R>> extends RawInit<R> ? [init?: RawInit<R>] : [init: RawInit<R>]
 
+// A path whose every parameter is optional may be addressed with no params at all.
 type RawInit<R extends RouteContract> = CallInit<R> &
-  ([keyof R['params']] extends [never] ? { params?: undefined } : { params: R['params'] })
+  ([keyof R['params']] extends [never]
+    ? { params?: undefined }
+    : Partial<R['params']> extends R['params']
+      ? { params?: R['params'] }
+      : { params: R['params'] })
 
-/** The client: the route tree, plus the escape hatch. */
-export type BrewClient<T> = Node<EntriesOf<Routes<T>>> & RawCall<Routes<T>>
+/** The client: the route tree, plus the escape hatch and the file helpers, which keep their names at the root. */
+export type BrewClient<T> = Node<EntriesOf<Routes<T>>, '$request' | keyof FileHelpers> &
+  RawCall<Routes<T>> &
+  FileHelpers

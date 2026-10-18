@@ -1,4 +1,9 @@
+import { encodeParam } from './_path.js'
+import { fileOf, filenameOf } from './download.js'
+import type { FileHelpers } from './files.js'
+import { formData } from './form.js'
 import type { HeaderValues, RawBody } from './platform.js'
+import { progress } from './progress.js'
 import type { BrewClient } from './tree.js'
 import { buildQuery, fillPath, joinURL } from './url.js'
 import { isVerb } from './verbs.js'
@@ -7,7 +12,10 @@ import { isVerb } from './verbs.js'
 export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'headers'> {
   /**
    * Headers sent with every request. A function is called per request — sync or async — so a token can be read
-   * when it is needed rather than captured when the client was made.
+   * when it is needed rather than captured when the client was made. A name given `undefined` is left out, so a
+   * token not known yet sends no header at all. A `content-type` here or on a call never reaches a `FormData` or
+   * `URLSearchParams` body, which goes with the type the platform writes for it. One here does not reach a `Blob`
+   * that has a type either: it goes under its own, unless the call names another.
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
@@ -27,6 +35,9 @@ export interface Fetchable {
 
 /** Where a client built over a {@link Fetchable} addresses its requests, since there is no origin to speak of. */
 const IN_PROCESS_ORIGIN = 'http://localhost'
+
+/** What the root answers beside its routes, under the names `FileHelpers` gives them. */
+const fileHelpers: FileHelpers = { $file: fileOf, $filename: filenameOf, $progress: progress, $formData: formData }
 
 /** What one call adds on top of the client's own options. */
 interface RequestArgs {
@@ -61,8 +72,8 @@ interface RequestArgs {
  * const client = brewer(app)
  * ```
  *
- * The application has to be ready first: an application that has not been set up has registered no routes, so
- * every call comes back 404.
+ * The application has to be ready first: before `bootstrap()` or `run()`, every call rejects with
+ * `ErrApplicationNotReady`.
  *
  * @param options - `fetch` overrides the transport, an application target included.
  */
@@ -80,19 +91,53 @@ export function brewer<T>(target: string | Fetchable, options: BrewOptions = {})
   return node(IN_PROCESS_ORIGIN, resolved, [], undefined) as BrewClient<T>
 }
 
-// A node of the proxy: the segments walked so far, and the method once a verb has been read. Built over a function
-// target so one object can be both called — to supply a parameter, or to send the request — and indexed.
-function node(baseURL: string, options: BrewOptions, segments: readonly string[], method: string | undefined): unknown {
-  return new Proxy(target, {
+/** A segment the proxy walked: a name as written, or a path parameter, encoded when the request is sent. */
+type Segment = string | { readonly name: string; readonly value: unknown }
+
+// A node of the proxy: the segments walked so far, and the method once a verb has been read. Its target is the call
+// itself — to supply a parameter, or to send the request — so one object can be both called and indexed.
+function node(
+  baseURL: string,
+  options: BrewOptions,
+  segments: readonly Segment[],
+  method: string | undefined,
+): unknown {
+  const call = (init: Record<string, unknown> = {}): unknown => {
+    if (method !== undefined) {
+      return send(baseURL, options, () => pathOf(segments), method, init)
+    }
+
+    // A parameter segment binds exactly one name, so the single value is unambiguous — which is what lets the
+    // runtime stay this small: it never has to know the path shape the types know. An optional parameter given
+    // no value adds no segment, as `fillPath` leaves it out.
+    const [name, value] = Object.entries(init)[0] ?? ['', undefined]
+    if (value === undefined || value === null) {
+      return node(baseURL, options, segments, method)
+    }
+
+    return node(baseURL, options, [...segments, { name, value }], method)
+  }
+
+  return new Proxy(call, {
     get(_target, prop) {
-      if (typeof prop !== 'string') {
+      // Nor `then`: whatever is awaited is asked for it, and a node answering it would be taken for a promise that
+      // never settles.
+      if (typeof prop !== 'string' || prop === 'then') {
         return undefined
       }
 
-      // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
-      if (prop === '$request' && segments.length === 0) {
-        return (verb: string, path: string, init: RequestArgs = {}) =>
-          send(baseURL, options, fillPath(path, init.params), verb, init)
+      if (segments.length === 0) {
+        // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
+        // Upper-cased because `fetch` normalises only the six methods the standard names, and a route may be
+        // declared in lower case.
+        if (prop === '$request') {
+          return (verb: string, path: string, init: RequestArgs = {}) =>
+            send(baseURL, options, () => fillPath(path, init.params), verb.toUpperCase(), init)
+        }
+
+        if (Object.hasOwn(fileHelpers, prop)) {
+          return fileHelpers[prop as keyof FileHelpers]
+        }
       }
 
       if (method === undefined && isVerb(prop)) {
@@ -101,34 +146,45 @@ function node(baseURL: string, options: BrewOptions, segments: readonly string[]
 
       return node(baseURL, options, [...segments, prop], method)
     },
-
-    apply(_target, _thisArg, args: unknown[]) {
-      if (method !== undefined) {
-        return send(baseURL, options, `/${segments.join('/')}`, method, (args[0] ?? {}) as RequestArgs)
-      }
-
-      // A parameter segment binds exactly one name, so the single value is unambiguous — which is what lets the
-      // runtime stay this small: it never has to know the path shape the types know.
-      const [name, value] = Object.entries((args[0] ?? {}) as Record<string, unknown>)[0] ?? ['', '']
-      const encoded = name === '*' ? String(value) : encodeURIComponent(String(value))
-
-      return node(baseURL, options, [...segments, encoded], method)
-    },
   })
 }
 
+/** The path the segments spell, each parameter encoded. */
+function pathOf(segments: readonly Segment[]): string {
+  // How the route reads — `/users/:id` — named by a value the path refuses to carry.
+  const route = `/${segments.map(segment => (typeof segment === 'string' ? segment : marker(segment.name))).join('/')}`
+  const parts = segments.map(segment =>
+    typeof segment === 'string' ? segment : encodeParam(route, segment.name, segment.value),
+  )
+
+  return `/${parts.join('/')}`
+}
+
+function marker(name: string): string {
+  return name === '*' ? '*' : `:${name}`
+}
+
+// The path is built here, inside the promise, so a path the call cannot fill rejects like any other failure.
 async function send(
   baseURL: string,
   options: BrewOptions,
-  path: string,
+  path: () => string,
   method: string,
   init: RequestArgs,
 ): Promise<Response> {
   const { params: _params, query, body, headers, ...rest } = init
-  const url = `${joinURL(baseURL, path)}${buildQuery(query)}`
+  const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
 
-  const merged = new Headers(await resolveHeaders(options.headers))
-  for (const [key, value] of new Headers(headers).entries()) {
+  const merged = headersOf(await resolveHeaders(options.headers))
+  const own = headersOf(headers)
+
+  // A Blob that knows its type goes under it: the client's content type is a default for a body that has none, and
+  // only the call itself may name another.
+  if (body instanceof Blob && body.type !== '' && !own.has('content-type')) {
+    merged.delete('content-type')
+  }
+
+  for (const [key, value] of own) {
     merged.set(key, value)
   }
 
@@ -146,19 +202,50 @@ async function send(
     }
   }
 
+  // The platform writes the content type of a form it encodes, a multipart boundary included, so one set by hand
+  // could only replace it with something the server cannot read.
+  if (payload instanceof FormData || payload instanceof URLSearchParams) {
+    merged.delete('content-type')
+  }
+
   const { headers: _clientHeaders, fetch: fetchImpl, ...clientRest } = options
 
-  return (fetchImpl ?? globalThis.fetch)(url, {
+  // `duplex` is not in the DOM lib's `RequestInit`, so the init is typed with it rather than passed as a literal.
+  const request: RequestInit & { duplex?: 'half' } = {
     ...clientRest,
     ...rest,
     method,
     headers: merged,
     body: payload as RequestInit['body'],
-  })
+  }
+
+  // A stream is sent as it is read, which fetch does only for a request it is told is half duplex.
+  if (payload instanceof ReadableStream) {
+    request.duplex = 'half'
+  }
+
+  return (fetchImpl ?? globalThis.fetch)(url, request)
 }
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {
   return typeof headers === 'function' ? headers() : headers
+}
+
+/** Headers from any shape a client or a call gives them in, a name given no value left out, as the query does. */
+function headersOf(values: HeaderValues | undefined): Headers {
+  // Pairs, whoever made them: a `Headers` from another realm or library is not `instanceof Headers`, but iterates.
+  if (values === undefined || Symbol.iterator in values) {
+    return new Headers(values)
+  }
+
+  const headers = new Headers()
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null) {
+      headers.append(name, value)
+    }
+  }
+
+  return headers
 }
 
 function isRawBody(body: unknown): body is RawBody {
@@ -171,14 +258,4 @@ function isRawBody(body: unknown): body is RawBody {
     body instanceof ReadableStream ||
     ArrayBuffer.isView(body)
   )
-}
-
-/**
- * The proxy's target, and never called.
- *
- * A function rather than an object so one node can be both indexed — for a static segment — and called, either to
- * supply a path parameter or to send the request. Every operation is trapped; nothing reaches this.
- */
-function target(): void {
-  return undefined
 }

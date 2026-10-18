@@ -4,9 +4,10 @@ import type { RouteContract } from './contract.js'
  * The `Response` a call answers with, with `json()` typed to what the route returns.
  *
  * Everything else `Response` gives — `ok`, `status`, `headers`, `text()`, `body` — is untouched, and checking the
- * status stays with the caller.
+ * status stays with the caller. A route that answers with text, bytes, a file, a stream or a whole `Response` sends
+ * it as it is rather than as JSON, so its `json()` is `unknown`: read it with `text()`, `bytes()`, `blob()` or `body`.
  */
-export type BrewResponse<T> = Omit<Response, 'json'> & { json(): Promise<T> }
+export type BrewResponse<T> = Omit<Response, 'json'> & { json(): Promise<JSONOf<T>> }
 
 /**
  * The `Response` a call answers with when the status is known, so `json()` is the body that goes with that status.
@@ -15,8 +16,25 @@ export type BrewResponse<T> = Omit<Response, 'json'> & { json(): Promise<T> }
  */
 export type BrewStatusResponse<S extends number, T> = Omit<Response, 'json' | 'status'> & {
   readonly status: S
-  json(): Promise<T>
+  json(): Promise<JSONOf<T>>
 }
+
+// What `json()` yields for a body typed `T`: `T` itself when the server encodes it as JSON, and `unknown` when the
+// server sends it as it is. `never` stays `never`, which keeps the open member of `BrewResponseOf` narrowable, and
+// `any` stays `any`.
+type JSONOf<T> = 0 extends 1 & T ? T : [Extract<T, Unencoded>] extends [never] ? T : unknown
+
+// A body the server writes as it is: text, bytes, a file, a stream, a whole `Response`, or a responder that writes its
+// own, such as an HTML page. A Node stream is matched by being async iterable, which no JSON value is.
+type Unencoded =
+  | string
+  | ArrayBuffer
+  | ArrayBufferView
+  | Blob
+  | ReadableStream
+  | Response
+  | AsyncIterable<unknown>
+  | { respond(...args: never[]): unknown }
 
 /**
  * What one call answers with: a member per status the route declared, so checking the status types the body.

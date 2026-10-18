@@ -24,3 +24,25 @@ export class ErrBrewPathParam extends ErrBrew {
     this.name = 'ErrBrewPathParam'
   }
 }
+
+/**
+ * A path parameter's value is `.` or `..`, or a wildcard holds one as a part.
+ *
+ * The URL standard resolves either as a step along the path, percent-encoded or not, so the request would reach
+ * another route than the one the call names.
+ */
+export class ErrBrewPathValue extends ErrBrew {
+  override readonly code = 'ERR_BREW_PATH_VALUE'
+
+  constructor(path: string, param: string, value: string) {
+    super(
+      errMessage(
+        `Cannot build a request for "${path}": path parameter "${param}" is "${value}", which a URL resolves as a step along the path`,
+      )
+        .solutions('Refuse the value before the call, or send it in the query or the body')
+        .reference('@caffeinejs/brewer', ErrBrewPathValue)
+        .build(),
+    )
+    this.name = 'ErrBrewPathValue'
+  }
+}

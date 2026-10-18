@@ -1,10 +1,15 @@
+import { encodeParam } from './_path.js'
 import { ErrBrewPathParam } from './errors.js'
 
 /**
  * Substitutes a path's parameters, for a path addressed by `$request`.
  *
- * The proxy does not come through here — it has the values already, one segment at a time. A `*` is the one
- * parameter left un-encoded, since carrying slashes is the whole point of a wildcard.
+ * The proxy does not come through here — it has the values already, one segment at a time. A `*` keeps its
+ * slashes, since carrying them is the whole point of a wildcard; every part between them is encoded like any other
+ * value.
+ *
+ * @throws ErrBrewPathParam - A parameter the path requires, a wildcard included, has no value.
+ * @throws ErrBrewPathValue - A value is `.` or `..`, or a wildcard holds one as a part.
  */
 export function fillPath(path: string, params: Record<string, unknown> | undefined): string {
   if (!path.includes(':') && !path.includes('*')) {
@@ -14,17 +19,14 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
   return path
     .split('/')
     .map(segment => {
-      if (segment === '*') {
-        return String(params?.['*'] ?? '')
-      }
-
-      if (!segment.startsWith(':')) {
+      if (segment !== '*' && !segment.startsWith(':')) {
         return segment
       }
 
       const optional = segment.endsWith('?')
       const constraint = segment.indexOf('(')
-      const name = segment.slice(1, constraint === -1 ? undefined : constraint).replace(/\?$/, '')
+      const name =
+        segment === '*' ? '*' : segment.slice(1, constraint === -1 ? undefined : constraint).replace(/\?$/, '')
       const value = params?.[name]
 
       if (value === undefined || value === null) {
@@ -35,7 +37,7 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
         throw new ErrBrewPathParam(path, name)
       }
 
-      return encodeURIComponent(String(value))
+      return encodeParam(path, name, value)
     })
     .filter(segment => segment !== undefined)
     .join('/')
