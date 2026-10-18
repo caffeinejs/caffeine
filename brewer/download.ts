@@ -1,13 +1,4 @@
-/**
- * The name a download gives itself in its `Content-Disposition`, or `undefined` when it gives none a file could be
- * saved under.
- *
- * The UTF-8 `filename*` of RFC 8187 wins over the plain `filename`, as browsers read it. The name is reduced to its
- * last segment, with control characters dropped, so a name the server chose can never point outside where the
- * caller saves it: `../../.ssh/authorized_keys` names `authorized_keys`.
- *
- * Reads only the headers, so a download streamed straight from `body` can be named before any of it is read.
- */
+// The client's `$filename`, documented on `FileHelpers`: `filename*` first, then `filename`, each cut to a base name.
 export function filenameOf(response: Pick<Response, 'headers'>): string | undefined {
   const disposition = response.headers.get('content-disposition')
   if (disposition === null) {
@@ -24,14 +15,7 @@ export function filenameOf(response: Pick<Response, 'headers'>): string | undefi
   )
 }
 
-/**
- * A download as a `File`: its bytes, under the name {@link filenameOf} reads, typed by `Content-Type` and dated by
- * `Last-Modified`.
- *
- * A download that names itself nowhere is named after the last segment of its URL, as a browser names it, and
- * otherwise `fallback`. The whole body is read into memory: a download too large to hold is read from `body`
- * instead, and named with {@link filenameOf}.
- */
+// The client's `$file`, documented on `FileHelpers`: the body read whole, named, typed and dated by the headers.
 export async function fileOf(
   response: Pick<Response, 'headers' | 'url' | 'blob'>,
   fallback = 'download',

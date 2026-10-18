@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
-import { fileOf, filenameOf } from '../index.js'
+import { brewer } from '../index.js'
+
+const client = brewer('http://localhost')
 
 /** A response carrying only the headers a download names itself with. */
 function named(disposition: string | undefined): Response {
   return new Response('x', disposition === undefined ? {} : { headers: { 'content-disposition': disposition } })
 }
 
-describe('filenameOf', () => {
+describe('$filename', () => {
   it.each([
     ['a quoted name', 'attachment; filename="report.pdf"', 'report.pdf'],
     ['a bare name', 'attachment; filename=report.pdf', 'report.pdf'],
@@ -20,7 +22,7 @@ describe('filenameOf', () => {
     ['spaces around the equals sign', 'attachment; filename = "spaced.txt"', 'spaced.txt'],
     ['the first of a repeated name', 'attachment; filename="first.txt"; filename="second.txt"', 'first.txt'],
   ])('reads %s', (_case, disposition, name) => {
-    expect(filenameOf(named(disposition))).toBe(name)
+    expect(client.$filename(named(disposition))).toBe(name)
   })
 
   // RFC 8187: `filename*` carries the name in UTF-8, and `filename` is the fallback for a reader that cannot decode it.
@@ -39,7 +41,7 @@ describe('filenameOf', () => {
       'résumé.pdf',
     ],
   ])('reads %s', (_case, disposition, name) => {
-    expect(filenameOf(named(disposition))).toBe(name)
+    expect(client.$filename(named(disposition))).toBe(name)
   })
 
   it.each([
@@ -47,7 +49,7 @@ describe('filenameOf', () => {
     ['a charset it cannot read', 'attachment; filename*=Shift_JIS\'\'%82%A0; filename="plain.txt"'],
     ['a value with no charset', 'attachment; filename*=plain.txt; filename="plain.txt"'],
   ])('falls back to the plain name past %s', (_case, disposition) => {
-    expect(filenameOf(named(disposition))).toBe('plain.txt')
+    expect(client.$filename(named(disposition))).toBe('plain.txt')
   })
 
   // A name is the server's word, and may be saved to disk as it is: it never gets to choose the directory.
@@ -58,7 +60,7 @@ describe('filenameOf', () => {
     ['an encoded path', "attachment; filename*=UTF-8''..%2F..%2Fevil.sh", 'evil.sh'],
     ['control characters', "attachment; filename*=UTF-8''line%0Abreak%00.txt", 'linebreak.txt'],
   ])('keeps only the base name of %s', (_case, disposition, name) => {
-    expect(filenameOf(named(disposition))).toBe(name)
+    expect(client.$filename(named(disposition))).toBe(name)
   })
 
   it.each([
@@ -69,11 +71,11 @@ describe('filenameOf', () => {
     ['a name of dots', 'attachment; filename=".."'],
     ['a path ending in a separator', 'attachment; filename="reports/"'],
   ])('names nothing given %s', (_case, disposition) => {
-    expect(filenameOf(named(disposition))).toBeUndefined()
+    expect(client.$filename(named(disposition))).toBeUndefined()
   })
 })
 
-describe('fileOf', () => {
+describe('$file', () => {
   it('reads the body into a File, named, typed and dated by the headers', async () => {
     const response = new Response(new Uint8Array([37, 80, 68, 70]), {
       headers: {
@@ -83,7 +85,7 @@ describe('fileOf', () => {
       },
     })
 
-    const file = await fileOf(response)
+    const file = await client.$file(response)
 
     expect(file).toBeInstanceOf(File)
     expect(file.name).toBe('invoice.pdf')
@@ -100,7 +102,7 @@ describe('fileOf', () => {
       blob: async () => new Blob(['a,b']),
     }
 
-    expect((await fileOf(response)).name).toBe('q3 report.csv')
+    expect((await client.$file(response)).name).toBe('q3 report.csv')
   })
 
   it('keeps a URL segment it cannot decode as it is', async () => {
@@ -110,21 +112,21 @@ describe('fileOf', () => {
       blob: async () => new Blob([]),
     }
 
-    expect((await fileOf(response)).name).toBe('100%25%E0.csv')
+    expect((await client.$file(response)).name).toBe('100%25%E0.csv')
   })
 
   it('names it with the fallback when neither the headers nor the URL name it', async () => {
-    expect((await fileOf(new Response('x'))).name).toBe('download')
-    expect((await fileOf(new Response('x'), 'export.csv')).name).toBe('export.csv')
+    expect((await client.$file(new Response('x'))).name).toBe('download')
+    expect((await client.$file(new Response('x'), 'export.csv')).name).toBe('export.csv')
     expect(
-      (await fileOf({ headers: new Headers(), url: 'https://cdn.test/', blob: async () => new Blob([]) })).name,
+      (await client.$file({ headers: new Headers(), url: 'https://cdn.test/', blob: async () => new Blob([]) })).name,
     ).toBe('download')
   })
 
   it('dates it now when the server sends no date it can read', async () => {
     const before = Date.now()
 
-    const file = await fileOf(new Response('x', { headers: { 'last-modified': 'not a date' } }))
+    const file = await client.$file(new Response('x', { headers: { 'last-modified': 'not a date' } }))
 
     expect(file.lastModified).toBeGreaterThanOrEqual(before)
   })

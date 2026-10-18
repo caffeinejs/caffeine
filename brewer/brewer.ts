@@ -1,5 +1,9 @@
 import { encodeParam } from './_path.js'
+import { fileOf, filenameOf } from './download.js'
+import type { FileHelpers } from './files.js'
+import { formData } from './form.js'
 import type { HeaderValues, RawBody } from './platform.js'
+import { progress } from './progress.js'
 import type { BrewClient } from './tree.js'
 import { buildQuery, fillPath, joinURL } from './url.js'
 import { isVerb } from './verbs.js'
@@ -31,6 +35,9 @@ export interface Fetchable {
 
 /** Where a client built over a {@link Fetchable} addresses its requests, since there is no origin to speak of. */
 const IN_PROCESS_ORIGIN = 'http://localhost'
+
+/** What the root answers beside its routes, under the names `FileHelpers` gives them. */
+const fileHelpers: FileHelpers = { $file: fileOf, $filename: filenameOf, $progress: progress, $formData: formData }
 
 /** What one call adds on top of the client's own options. */
 interface RequestArgs {
@@ -119,12 +126,18 @@ function node(
         return undefined
       }
 
-      // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
-      // Upper-cased because `fetch` normalises only the six methods the standard names, and a route may be declared
-      // in lower case.
-      if (prop === '$request' && segments.length === 0) {
-        return (verb: string, path: string, init: RequestArgs = {}) =>
-          send(baseURL, options, () => fillPath(path, init.params), verb.toUpperCase(), init)
+      if (segments.length === 0) {
+        // The escape hatch, only ever reachable from the root — a nested `$request` would have segments to ignore.
+        // Upper-cased because `fetch` normalises only the six methods the standard names, and a route may be
+        // declared in lower case.
+        if (prop === '$request') {
+          return (verb: string, path: string, init: RequestArgs = {}) =>
+            send(baseURL, options, () => fillPath(path, init.params), verb.toUpperCase(), init)
+        }
+
+        if (Object.hasOwn(fileHelpers, prop)) {
+          return fileHelpers[prop as keyof FileHelpers]
+        }
       }
 
       if (method === undefined && isVerb(prop)) {

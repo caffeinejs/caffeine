@@ -4,8 +4,8 @@ declare const fields: unique symbol
 export type FormPart = string | number | boolean | Blob
 
 /**
- * What {@link formData} builds a form from: per field, a part, or a list of parts sent under the field's name. A
- * field given `undefined` or `null` is left out.
+ * What `$formData` builds a form from: per field, a part, or a list of parts sent under the field's name. A field
+ * given `undefined` or `null` is left out.
  */
 export type FormFields = Record<string, FormPart | readonly FormPart[] | null | undefined>
 
@@ -16,20 +16,7 @@ export type FormFields = Record<string, FormPart | readonly FormPart[] | null | 
  */
 export type FormDataOf<T> = FormData & { readonly [fields]?: T }
 
-/**
- * A multipart form built from an object, its fields checked against the route it is sent to.
- *
- * An upload route takes a `FormData`, whose parts nothing checks, here or on a server that leaves an upload
- * unvalidated. A form built this way remembers its fields, and the call refuses one with a field missing or of the
- * wrong type:
- *
- * ```ts
- * await client.pets.photos.post({ body: formData({ caption: 'Rex', photo: file }) })
- * ```
- *
- * A list sends each of its items under the field's name, a number or a boolean goes as the text the server reads
- * back, and a field given `undefined` or `null` is left out. A plain `FormData` is still taken, unchecked.
- */
+// The client's `$formData`, documented on `FileHelpers`: each part appended under its field, a list part by part.
 export function formData<T extends FormFields>(values: T): FormDataOf<T> {
   const form = new FormData()
 

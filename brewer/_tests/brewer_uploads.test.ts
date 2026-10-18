@@ -9,10 +9,10 @@ import { multipart, multipartPlugin } from '@caffeinejs/multipart'
 import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { brewer, formData, progress } from '../index.js'
+import { brewer } from '../index.js'
 
 /**
- * Uploads as the server receives them: a form built by `formData`, files of every size and name, and a body streamed
+ * Uploads as the server receives them: a form built by `$formData`, files of every size and name, and a body streamed
  * while it is counted, or stopped part-way.
  *
  * Every route answers with what reached it, a file by its SHA-256, so each test asserts on what the server read
@@ -106,13 +106,15 @@ describe.each([
   ['in process', () => brewer(app)],
   ['over a socket', () => brewer<typeof app>(origin)],
 ] as const)('brewer uploading files, %s', (_transport, connect) => {
-  it('should send a form built with formData, each part as the route declares it', async () => {
+  it('should send a form built with $formData, each part as the route declares it', async () => {
     const avatar = fileNamed(new Uint8Array([255, 216, 255]), 'rex.jpg', 'image/jpeg')
     const beach = fileNamed('beach', 'beach.png', 'image/png')
     const park = fileNamed('park', 'park.png', 'image/png')
 
-    const res = await connect().uploads.profile.post({
-      body: formData({ caption: 'Rex at the beach', avatar, photos: [beach, park] }),
+    const client = connect()
+
+    const res = await client.uploads.profile.post({
+      body: client.$formData({ caption: 'Rex at the beach', avatar, photos: [beach, park] }),
     })
 
     expect(await res.json()).toEqual({
@@ -144,14 +146,20 @@ describe.each([
   })
 
   it('should keep a file name in UTF-8, spaces and all', async () => {
-    const res = await connect().uploads.files.post({ body: formData({ file: fileNamed('x', 'résumé 2026 😀.pdf') }) })
+    const client = connect()
+
+    const res = await client.uploads.files.post({
+      body: client.$formData({ file: fileNamed('x', 'résumé 2026 😀.pdf') }),
+    })
 
     expect(await res.json()).toMatchObject({ parts: [{ name: 'résumé 2026 😀.pdf' }] })
   })
 
   it('should send an empty file as a part with a name and no bytes', async () => {
-    const res = await connect().uploads.files.post({
-      body: formData({ file: fileNamed('', 'empty.txt', 'text/plain') }),
+    const client = connect()
+
+    const res = await client.uploads.files.post({
+      body: client.$formData({ file: fileNamed('', 'empty.txt', 'text/plain') }),
     })
 
     expect(await res.json()).toMatchObject({ parts: [{ name: 'empty.txt', type: 'text/plain', size: 0 }] })
@@ -160,7 +168,9 @@ describe.each([
   it('should send many files under one field, every one in order', async () => {
     const files = Array.from({ length: 25 }, (_, i) => fileNamed(`page ${i}`, `page-${i}.txt`, 'text/plain'))
 
-    const res = await connect().uploads.files.post({ body: formData({ pages: files }) })
+    const client = connect()
+
+    const res = await client.uploads.files.post({ body: client.$formData({ pages: files }) })
 
     const { parts } = (await res.json()) as { parts: Array<{ name: string }> }
     expect(parts.map(part => part.name)).toEqual(files.map(file => file.name))
@@ -196,7 +206,7 @@ describe('brewer uploading a large file over a socket', () => {
   it('should deliver every byte of a multipart upload, as the server hashes it', async () => {
     const client = brewer<typeof app>(origin)
 
-    const res = await client.uploads.files.post({ body: formData({ backup: file }) })
+    const res = await client.uploads.files.post({ body: client.$formData({ backup: file }) })
 
     expect(await res.json()).toEqual({
       parts: [{ field: 'backup', name: 'backup.tar', type: 'application/x-tar', size: LARGE, sha256: sha256(large) }],
@@ -208,7 +218,7 @@ describe('brewer uploading a large file over a socket', () => {
     const reported: number[] = []
 
     const res = await client.uploads.raw.post({
-      body: file.stream().pipeThrough(progress(loaded => reported.push(loaded))),
+      body: file.stream().pipeThrough(client.$progress(loaded => reported.push(loaded))),
       headers: { 'content-type': file.type },
     })
 

@@ -5,7 +5,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
-import { formData } from '../form.js'
+import type { FormDataOf } from '../form.js'
 import type { BrewResponse } from '../response.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -283,6 +283,25 @@ describe('the tree', () => {
     })
   })
 
+  it('keeps the names of the file helpers at the root too, and offers them as segments further down', () => {
+    typeOnly(async () => {
+      const forms = new Router('/$formData').get('/').handler(() => ({ top: true }))
+      const api = new Router('/api').get('/$file').handler(() => ({ nested: true }))
+      const surface = blend(forms, api)
+      const client = brewer<typeof surface>('http://localhost')
+      const res = new Response('x')
+
+      // @ts-expect-error -- at the root, `$formData` builds a form; `$request` reaches the segment by its path
+      void client.$formData.get()
+      expectTypeOf(client.$formData({ caption: 'Rex' })).toEqualTypeOf<FormDataOf<{ caption: string }>>()
+      expectTypeOf(await client.$file(res)).toEqualTypeOf<File>()
+      expectTypeOf(client.$filename(res)).toEqualTypeOf<string | undefined>()
+      expectTypeOf(client.$progress(() => undefined)).toEqualTypeOf<TransformStream<Uint8Array, Uint8Array>>()
+      expectTypeOf(await (await client.$request('GET', '/$formData')).json()).toEqualTypeOf<{ top: boolean }>()
+      expectTypeOf(await (await client.api.$file.get()).json()).toEqualTypeOf<{ nested: boolean }>()
+    })
+  })
+
   it('rejects a verb the path does not answer', () => {
     typeOnly(() => {
       // @ts-expect-error -- /pets/:id answers GET only
@@ -412,19 +431,19 @@ describe('the body', () => {
     typeOnly(() => {
       const avatar = new File(['jpeg'], 'rex.jpg', { type: 'image/jpeg' })
 
-      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar }) })
-      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar, photos: [avatar, avatar] }) })
-      void client.$request('POST', '/uploads/profile', { body: formData({ caption: 'Rex', avatar }) })
+      void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar }) })
+      void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar, photos: [avatar, avatar] }) })
+      void client.$request('POST', '/uploads/profile', { body: client.$formData({ caption: 'Rex', avatar }) })
       // @ts-expect-error -- the avatar is required
-      void client.uploads.profile.post({ body: formData({ caption: 'Rex' }) })
+      void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex' }) })
       // @ts-expect-error -- the caption is text
-      void client.uploads.profile.post({ body: formData({ caption: 7, avatar }) })
+      void client.uploads.profile.post({ body: client.$formData({ caption: 7, avatar }) })
       // @ts-expect-error -- a Blob carries no name, where the route declares a file
-      void client.uploads.profile.post({ body: formData({ caption: 'Rex', avatar: new Blob(['jpeg']) }) })
+      void client.uploads.profile.post({ body: client.$formData({ caption: 'Rex', avatar: new Blob(['jpeg']) }) })
       // @ts-expect-error -- checked through the escape hatch too
-      void client.$request('POST', '/uploads/profile', { body: formData({ caption: 'Rex' }) })
+      void client.$request('POST', '/uploads/profile', { body: client.$formData({ caption: 'Rex' }) })
       // @ts-expect-error -- a form has no way to carry a nested object
-      void formData({ owner: { id: 1 } })
+      void client.$formData({ owner: { id: 1 } })
     })
   })
 

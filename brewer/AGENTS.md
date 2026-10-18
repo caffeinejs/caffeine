@@ -16,8 +16,9 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - The open member of `BrewResponseOf` stays `BrewResponse<never>`: give it a body and every declared member stops
   narrowing. A wildcard response key (`'4xx'`, `'5xx'`, `'default'`) is not read.
 - `StaticChildren` hides exactly the names the proxy answers itself: a verb (`Verb`, the runtime's list), `then`,
-  which it never answers so that a client is not taken for a promise, and `$request` at the root, which `BrewClient`
-  passes to `Node` as reserved. Hiding more would hide segments the proxy can reach.
+  which it never answers so that a client is not taken for a promise, and at the root `$request` and the
+  `FileHelpers` names (`files.ts`), which `BrewClient` passes to `Node` as reserved. Hiding more would hide segments
+  the proxy can reach.
 - `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`std/schema/t.ts`) does: the body itself, or one
   level of its properties, each a file or a list of files and nothing else, so a union holding one is no upload.
   Change them together.

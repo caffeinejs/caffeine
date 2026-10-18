@@ -7,7 +7,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { download, staticFiles } from '@caffeinejs/static'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { brewer, fileOf, filenameOf, progress } from '../index.js'
+import { brewer } from '../index.js'
 
 /**
  * Downloads read the way the platform reads any response: whole, as a `File`, in ranges, or as a stream that arrives
@@ -148,9 +148,10 @@ describe.each([
   })
 
   it('should read it into a File named, typed and dated by the server, the UTF-8 name included', async () => {
-    const res = await connect().downloads.report.get()
+    const client = connect()
+    const res = await client.downloads.report.get()
 
-    const file = await fileOf(res)
+    const file = await client.$file(res)
 
     expect(file.name).toBe('résumé 2026.pdf')
     expect(file.type).toBe('application/pdf')
@@ -159,9 +160,10 @@ describe.each([
   })
 
   it('should name it before reading a byte, so it can be streamed to disk under that name', async () => {
-    const res = await connect().downloads.report.get()
+    const client = connect()
+    const res = await client.downloads.report.get()
 
-    const name = filenameOf(res)
+    const name = client.$filename(res)
 
     expect(res.bodyUsed).toBe(false)
     expect(name).toBe('résumé 2026.pdf')
@@ -243,7 +245,7 @@ describe('brewer streaming a download over a socket', () => {
     const total = Number(res.headers.get('content-length'))
     let offset = 0
     let chunks = 0
-    for await (const chunk of res.body!.pipeThrough(progress(loaded => reported.push(loaded)))) {
+    for await (const chunk of res.body!.pipeThrough(client.$progress(loaded => reported.push(loaded)))) {
       chunks++
       for (let i = 0; i < chunk.byteLength; i++) {
         if (chunk[i] !== byteAt(offset + i)) {

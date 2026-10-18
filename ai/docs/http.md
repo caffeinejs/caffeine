@@ -631,19 +631,21 @@ await client.pets.post({ body: { name: 'Rex' } })
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
-  `FormData`, which `fetch` encodes as multipart. Build it with `formData({ caption, avatar })` and the call checks
-  its fields against the route. A plain `FormData` is checked on neither side, since the server leaves an upload
+  `FormData`, which `fetch` encodes as multipart. Build it with `client.$formData({ caption, avatar })` and the call
+  checks its fields against the route. A plain `FormData` is checked on neither side, since the server leaves an upload
   unvalidated, so the handler checks the parts it reads. A declared object goes as JSON, or as a `URLSearchParams`
   form when every field is text, a number, a boolean or a list of those.
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another.
-- Downloads are read with the platform's own readers. `fileOf(res)` turns one into a `File`, named from its
+- Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
   `Content-Disposition` (the UTF-8 `filename*` first, cut to a base name so it never holds a path) and typed from
-  `Content-Type`. `filenameOf(res)` names a download streamed from `res.body` without reading it.
-- `progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body` through it
-  for a download, or send `file.stream().pipeThrough(progress(...))` as an upload. Browsers stream an upload only
-  over HTTP/2, and Firefox and Safari not at all.
+  `Content-Type`. `client.$filename(res)` names a download streamed from `res.body` without reading it.
+- `client.$progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body`
+  through it for a download, or send `file.stream().pipeThrough(client.$progress(...))` as an upload. Browsers
+  stream an upload only over HTTP/2, and Firefox and Safari not at all.
+- The file helpers hang off the client's root, `$`-prefixed like `$request`, so they seldom share a name with a
+  route segment. A root segment that does is reached through `$request`.
 - `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
   it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
   which is how an optional one is left out, so only the types require one: a call they do not check, through a cast

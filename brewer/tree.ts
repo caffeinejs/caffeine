@@ -1,4 +1,5 @@
 import type { RouteContract, Routes } from './contract.js'
+import type { FileHelpers } from './files.js'
 import type { CallInit, VerbCall } from './init.js'
 import type { BrewResponseOf } from './response.js'
 import type { Verb } from './verbs.js'
@@ -130,5 +131,7 @@ type RawInit<R extends RouteContract> = CallInit<R> &
       ? { params?: R['params'] }
       : { params: R['params'] })
 
-/** The client: the route tree, plus the escape hatch, which keeps its name at the root. */
-export type BrewClient<T> = Node<EntriesOf<Routes<T>>, '$request'> & RawCall<Routes<T>>
+/** The client: the route tree, plus the escape hatch and the file helpers, which keep their names at the root. */
+export type BrewClient<T> = Node<EntriesOf<Routes<T>>, '$request' | keyof FileHelpers> &
+  RawCall<Routes<T>> &
+  FileHelpers
