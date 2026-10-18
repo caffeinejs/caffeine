@@ -20,5 +20,5 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `FileHelpers` names (`files.ts`), which `BrewClient` passes to `Node` as reserved. Hiding more would hide segments
   the proxy can reach.
 - `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`std/schema/t.ts`) does: the body itself, or one
-  level of its properties, each a file or a list of files and nothing else, so a union holding one is no upload.
-  Change them together.
+  level of its properties, each a file or a list of files and nothing else, so a union holding one is no upload,
+  and a union body is JSON whatever its members hold. Change them together.

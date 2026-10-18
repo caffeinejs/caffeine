@@ -409,6 +409,20 @@ describe('the body', () => {
     .post('/changes')
     .schema({ body: $t.Union([$t.Object({ name: $t.String() }), $t.Object({ avatar: $t.File() })]) })
     .handler(() => ({ changed: true }))
+    .post('/swaps')
+    .schema({
+      body: $t.Union([
+        $t.Object({ kind: $t.Literal('a'), avatar: $t.File() }),
+        $t.Object({ kind: $t.Literal('b'), avatar: $t.File() }),
+      ]),
+    })
+    .handler(() => ({ swapped: true }))
+    .post('/scans')
+    .schema({ body: $t.Object({ pages: $t.Union([$t.File(), $t.Files()]) }) })
+    .handler(() => ({ scanned: true }))
+    .post('/scan')
+    .schema({ body: $t.Union([$t.File(), $t.Files()]) })
+    .handler(() => ({ scanned: true }))
     .post('/owners')
     .schema({ body: $t.Object({ name: $t.String(), owner: $t.Object({ id: $t.Integer() }) }) })
     .handler(() => ({ owned: true }))
@@ -518,20 +532,32 @@ describe('the body', () => {
     })
   })
 
-  // The server takes a field for a file only when it is one, or a list of them, so a union leaves the route on JSON.
-  it('reads a field that may be a file or something else, null included, as JSON', () => {
+  // The server takes a field for a file only when it is one, or a list of them, so a union leaves the route on JSON:
+  // with another type, null included, and with a list of files alike.
+  it('reads a field that may be a file or something else, null and a list of files included, as JSON', () => {
     typeOnly(() => {
       void client.forms.attachments.post({ body: { link: 'https://example.com/rex.jpg', cover: null } })
+      void client.forms.scans.post({ body: { pages: [] } })
       // @ts-expect-error -- the route reads JSON, so a multipart form never reaches its schema
       void client.forms.attachments.post({ body: new FormData() })
+      // @ts-expect-error -- nor for a field that is a file or a list of files
+      void client.forms.scans.post({ body: new FormData() })
     })
   })
 
+  // The server looks for a file in the body and in its own properties, never inside a union.
   it('reads a union body as JSON, whatever its members hold', () => {
     typeOnly(() => {
+      const avatar = new File(['jpeg'], 'rex.jpg', { type: 'image/jpeg' })
+
       void client.forms.changes.post({ body: { name: 'Rex' } })
+      void client.forms.scan.post({ body: [] })
       // @ts-expect-error -- the server reads no multipart form into a union body
       void client.forms.changes.post({ body: new FormData() })
+      // @ts-expect-error -- not even one whose every member holds the same file
+      void client.forms.swaps.post({ body: client.$formData({ kind: 'a', avatar }) })
+      // @ts-expect-error -- nor a body that is a file or a list of files
+      void client.forms.scan.post({ body: new FormData() })
     })
   })
 

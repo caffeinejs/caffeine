@@ -72,17 +72,25 @@ type BodyArg<B> = [B] extends [object]
   : B
 
 // A file or a list of files, perhaps left out, and nothing else: to the server, a union with another type, `null`
-// included, is not one. A value typed `any` or `unknown` could hold anything, and is not taken for one either.
+// included, is not one, and neither is a union of the two. A value typed `any` or `unknown` could hold anything, and
+// is not taken for one either.
 type IsFile<V> = unknown extends V
   ? false
   : [Exclude<V, undefined>] extends [never]
     ? false
-    : [Exclude<V, undefined>] extends [Blob | readonly Blob[]]
+    : [Exclude<V, undefined>] extends [Blob]
       ? true
-      : false
+      : [Exclude<V, undefined>] extends [readonly Blob[]]
+        ? true
+        : false
 
-// Whether one of a body's own properties is a file: one level, as the server's `hasFileSchema` reads an upload.
-type HoldsFile<B> = true extends { [K in keyof B]-?: IsFile<B[K]> }[keyof B] ? true : false
+// Whether one of a body's own properties is a file: one level, as the server's `hasFileSchema` reads an upload, and
+// never in a union, which it does not look inside even when every member holds the same file.
+type HoldsFile<B> =
+  true extends IsUnion<B> ? false : true extends { [K in keyof B]-?: IsFile<B[K]> }[keyof B] ? true : false
+
+// Whether `T` is a union: some member of it is not the whole.
+type IsUnion<T, Whole = T> = T extends unknown ? ([Whole] extends [T] ? false : true) : never
 
 // Whether a classic form can carry the body: every field text, a number or a boolean, which the server coerces, or a
 // list of those, sent as a repeated key. Asked of each member of a union.
