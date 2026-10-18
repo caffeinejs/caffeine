@@ -643,6 +643,14 @@ describe('the request an operation builds', () => {
     @GET('/users/{id}?expand=true')
     @Params([Param('id'), Query('fields')])
     user!: (id: string, fields: string) => Promise<unknown>
+
+    @GET('/search?type=user#section')
+    @Params([Query('q')])
+    section!: (q: string) => Promise<unknown>
+
+    @GET('/search#section')
+    @Params([Query('q')])
+    anchored!: (q: string) => Promise<unknown>
   }
 
   // A path may write a query string of its own, as `@GET('/search?type=user')`. The parameters continue it: a second
@@ -657,6 +665,13 @@ describe('the request an operation builds', () => {
       (api: StaticQueryAPI) => api.user('1', 'name'),
       '/users/1?expand=true&fields=name',
     ],
+    // fetch sends nothing after a `#`, so a parameter placed after the fragment never left the client.
+    [
+      'continues it before a fragment the path writes',
+      (api: StaticQueryAPI) => api.section('ada'),
+      '/search?type=user&q=ada#section',
+    ],
+    ['opens it before a fragment the path writes', (api: StaticQueryAPI) => api.anchored('ada'), '/search?q=ada#section'],
   ])('%s', async (_case, call, path) => {
     const { api, transport } = clientOf(StaticQueryAPI)
 

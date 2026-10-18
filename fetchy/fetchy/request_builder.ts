@@ -108,7 +108,9 @@ export class RequestBuilder {
       this.segments[0] = '/'
     }
 
-    this.querySeparator = !meta.path.includes('?') ? '?' : /[?&]$/.test(meta.path) ? '' : '&'
+    // A query the path writes ends at its fragment, if it has one.
+    const written = meta.path.split('#', 1)[0]
+    this.querySeparator = !written.includes('?') ? '?' : /[?&]$/.test(written) ? '' : '&'
 
     for (const param of meta.params) {
       if (param.kind !== 'path') {
@@ -242,7 +244,14 @@ export class RequestBuilder {
       query = this.querySeparator + query.slice(1)
     }
 
-    return new FetchyRequest(this.meta.httpMethod, this.origin, path + query, headers, body, signal)
+    // Ahead of a fragment the path writes, as in `@GET('/search?type=user#section')`: fetch sends nothing after a `#`.
+    // Only the path can hold one: an argument's `#` is encoded.
+    if (query !== '') {
+      const fragment = path.indexOf('#')
+      path = fragment === -1 ? path + query : path.slice(0, fragment) + query + path.slice(fragment)
+    }
+
+    return new FetchyRequest(this.meta.httpMethod, this.origin, path, headers, body, signal)
   }
 
   // Reads the segment each suspect argument falls in, with the text the path writes around it, and refuses one that
