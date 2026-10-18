@@ -28,7 +28,7 @@ async function probe(specifier: string): Promise<{ exports: string[]; pino: stri
 
 describe('importing the package', { timeout: 30_000 }, () => {
   // An application that logs through a logger of its own pays nothing for pino. The import used to load pino and start
-  // the pino-pretty worker PinoLogger's default options name, in every process.
+  // the pino-pretty worker PinoLogger's default options named, in every process.
   it('loads no pino module from the root', async () => {
     const root = await probe('@caffeinejs/fetchy-logging-interceptor')
 

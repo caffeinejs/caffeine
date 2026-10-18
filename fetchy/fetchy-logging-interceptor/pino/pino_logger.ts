@@ -6,22 +6,14 @@ import type { Logger } from '../logger.js'
  * A {@link Logger} backed by pino.
  *
  * Takes the options pino is built with, or an instance built elsewhere, such as the application's own: a destination,
- * serializers and redaction are configured on pino, not here.
+ * serializers, redaction and a transport, such as pino-pretty's, are configured on pino, not here.
  */
 export class PinoLogger implements Logger {
-  static readonly DEFAULT_OPTIONS: LoggerOptions = {
-    level: 'info',
-    transport: {
-      target: 'pino-pretty',
-      worker: { autoEnd: true },
-      options: {
-        colorize: true,
-        messageFormat: '{msg}',
-        translateTime: true,
-        ignore: 'hostname',
-      },
-    },
-  }
+  /**
+   * What `new PinoLogger()` builds pino with: JSON lines from `info` up, on stdout. They name no transport, so pino
+   * alone builds them. For pino-pretty's output, pass options whose `transport` names it.
+   */
+  static readonly DEFAULT_OPTIONS: LoggerOptions = { level: 'info' }
 
   private readonly pino: PinoInstance
 

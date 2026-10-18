@@ -354,6 +354,17 @@ describe('PinoLogger', () => {
     ])
   })
 
+  // pino-pretty is an install of its own, which an application with pino alone does not have. The default options name
+  // no transport, so pino builds them as they are, writing where it is told to.
+  it('builds from its default options with pino alone', () => {
+    const { lines, destination } = sink()
+    const logger = new PinoLogger(pino(PinoLogger.DEFAULT_OPTIONS, destination))
+
+    logger.info('--> GET http://example.test/users')
+
+    expect(lines).toEqual([expect.objectContaining({ level: 30, msg: '--> GET http://example.test/users' })])
+  })
+
   // An application with a pino logger of its own, writing where its logs go, hands it over rather than build another.
   it('writes through a pino instance it is given', () => {
     const { lines, destination } = sink()
