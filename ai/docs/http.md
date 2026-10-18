@@ -639,8 +639,9 @@ await client.pets.post({ body: { name: 'Rex' } })
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another.
 - Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
-  `Content-Disposition` (the UTF-8 `filename*` first, cut to a base name so it never holds a path) and typed from
-  `Content-Type`. `client.$filename(res)` names a download streamed from `res.body` without reading it.
+  `Content-Disposition` (the UTF-8 `filename*` first, made a plain file name on any system: never a path, a drive, a
+  stream or a device) and typed from `Content-Type`. `client.$filename(res)` names a download streamed from
+  `res.body` without reading it.
 - `client.$progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body`
   through it for a download, or send `file.stream().pipeThrough(client.$progress(...))` as an upload. Browsers
   stream an upload only over HTTP/2, and Firefox and Safari not at all.

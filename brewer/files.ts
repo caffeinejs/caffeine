@@ -22,9 +22,11 @@ export interface FileHelpers {
    * The name a download gives itself in its `Content-Disposition`, or `undefined` when it gives none a file could be
    * saved under.
    *
-   * The UTF-8 `filename*` of RFC 8187 wins over the plain `filename`, as browsers read it. The name is reduced to its
-   * last segment, with control characters dropped, so a name the server chose can never point outside where the
-   * caller saves it: `../../.ssh/authorized_keys` names `authorized_keys`.
+   * The UTF-8 `filename*` of RFC 8187 wins over the plain `filename`, as browsers read it. Whatever the server wrote,
+   * the name is a plain file in the directory the caller saves it to, on any system. It is cut to its last segment, so
+   * `../../.ssh/authorized_keys` names `authorized_keys`. A character Windows refuses in a name becomes `_`, so
+   * `C:run.bat` names no drive and `report.txt:secret` no stream, and a device name gains a leading `_`, so `CON`
+   * names `_CON`. Control characters are dropped, and so are the ones that reorder how a name reads, such as U+202E.
    *
    * Reads only the headers, so a download streamed straight from `body` can be named before any of it is read.
    */

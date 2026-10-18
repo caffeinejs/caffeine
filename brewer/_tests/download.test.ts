@@ -16,7 +16,11 @@ describe('$filename', () => {
     ['a name shown inline', 'inline; filename="chart.png"', 'chart.png'],
     ['a name holding spaces', 'attachment; filename="annual report.pdf"', 'annual report.pdf'],
     ['a name holding a semicolon', 'attachment; filename="q1;q2.csv"', 'q1;q2.csv'],
-    ['a name holding an escaped quote', 'attachment; filename="the \\"final\\" cut.mp4"', 'the "final" cut.mp4'],
+    [
+      'a name holding an escaped quote, which Windows refuses',
+      'attachment; filename="the \\"final\\" cut.mp4"',
+      'the _final_ cut.mp4',
+    ],
     ['parameter names in any case', 'Attachment; FileName="Upper.TXT"', 'Upper.TXT'],
     ['a parameter with no value before it', 'attachment; size; filename="x.txt"', 'x.txt'],
     ['spaces around the equals sign', 'attachment; filename = "spaced.txt"', 'spaced.txt'],
@@ -63,12 +67,39 @@ describe('$filename', () => {
     expect(client.$filename(named(disposition))).toBe(name)
   })
 
+  // A base name saved as it is could still reach something other than a file in the directory: a drive, a stream or
+  // a device on Windows, or a file whose name reads in another order than it is written.
+  it.each([
+    ['a drive-relative path', 'attachment; filename="C:run.bat"', 'C_run.bat'],
+    ['an alternate data stream', 'attachment; filename="report.txt:secret"', 'report.txt_secret'],
+    ['the other characters Windows refuses', 'attachment; filename="a<b>c|d?e*f\\"g.txt"', 'a_b_c_d_e_f_g.txt'],
+    ['a device', 'attachment; filename="CON"', '_CON'],
+    ['a device in lower case, with an extension', 'attachment; filename="nul.txt"', '_nul.txt'],
+    ['a numbered device', "attachment; filename*=UTF-8''LPT%C2%B9.log", '_LPT¹.log'],
+    ['a C1 control character', "attachment; filename*=UTF-8''a%C2%9Bb.txt", 'ab.txt'],
+    ['an override that shows exe as txt', "attachment; filename*=UTF-8''report%E2%80%AEtxt.exe", 'reporttxt.exe'],
+  ])('names a plain file given %s', (_case, disposition, name) => {
+    expect(client.$filename(named(disposition))).toBe(name)
+  })
+
+  it.each([
+    ['a name that only starts like a device', 'attachment; filename="console.log"', 'console.log'],
+    [
+      'the joiner an emoji is written with',
+      "attachment; filename*=UTF-8''%F0%9F%91%A9%E2%80%8D%F0%9F%92%BB.txt",
+      '\u{1F469}‍\u{1F4BB}.txt',
+    ],
+  ])('keeps %s as it is', (_case, disposition, name) => {
+    expect(client.$filename(named(disposition))).toBe(name)
+  })
+
   it.each([
     ['no header', undefined],
     ['no name', 'attachment'],
     ['only a parameter with no value', 'attachment; size'],
     ['an empty name', 'attachment; filename=""'],
     ['a name of dots', 'attachment; filename=".."'],
+    ['a name of dots and spaces, which Windows reads as the directory', 'attachment; filename=". ."'],
     ['a path ending in a separator', 'attachment; filename="reports/"'],
   ])('names nothing given %s', (_case, disposition) => {
     expect(client.$filename(named(disposition))).toBeUndefined()

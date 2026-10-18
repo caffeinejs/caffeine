@@ -111,20 +111,31 @@ function decodeExtended(value: string): string | undefined {
   return undefined
 }
 
-// The last segment of a name that may hold a path, `/` or `\` separated, without control characters; `undefined`
-// when nothing is left that a file could be named, such as `..`.
+// Control characters, and the ones that reorder how a name reads, which can show `exe` as `txt`. Not every invisible
+// character: the zero-width joiner writes emoji, and words in some scripts.
+const HIDDEN = /[\p{Cc}\p{Bidi_Control}]/gu
+
+// What Windows refuses in a name, where `:` would name a drive or a stream.
+const RESERVED = /[<>:"|?*]/g
+
+// A device Windows opens in whatever directory it is named, with or without an extension.
+const DEVICE = /^(?:con|prn|aux|nul|com[0-9¹²³]|lpt[0-9¹²³]) *(?:\.|$)/i
+
+// The last segment of a name that may hold a path, `/` or `\` separated, made a plain file on any system;
+// `undefined` when nothing is left that a file could be named, such as `..`.
 function baseName(name: string | undefined): string | undefined {
   if (name === undefined) {
     return undefined
   }
 
   const last = name.slice(Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\')) + 1)
-  const base = Array.from(last)
-    .filter(char => char >= ' ' && char !== '\u007f')
-    .join('')
-    .trim()
+  const base = last.replaceAll(HIDDEN, '').replaceAll(RESERVED, '_').trim()
 
-  return base === '' || /^\.+$/.test(base) ? undefined : base
+  if (/^[. ]*$/.test(base)) {
+    return undefined
+  }
+
+  return DEVICE.test(base) ? `_${base}` : base
 }
 
 // The last segment of a URL's path, decoded, as a download that names itself nowhere is saved under.
