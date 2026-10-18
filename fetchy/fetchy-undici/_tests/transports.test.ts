@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { mkdtemp, rm } from 'node:fs/promises'
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -7,6 +8,8 @@ import {
   type ServerResponse,
 } from 'node:http'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import {
   Accept,
@@ -810,6 +813,40 @@ describe('a call over UndiciTransport', () => {
 
     await expect(Promise.all(calls)).resolves.toHaveLength(2)
     expect(built).toHaveLength(2)
+  })
+
+  // socketPath says how to reach the base URL's origin. Applied to the origin a redirect named, it had the socket's
+  // server answer for another host.
+  it('connects a redirect to another origin to that origin, not to the socket the options name', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fetchy-socket-'))
+    const socketPath = join(dir, 'api.sock')
+    const seen: string[] = []
+    const socketServer = createServer((req, res) => {
+      seen.push(req.url!)
+
+      if (seen.length === 1) {
+        res.writeHead(302, { location: `${otherURL}/landed` })
+        res.end()
+      } else {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end('{"from":"socket"}')
+      }
+    })
+    await new Promise<void>(resolve => socketServer.listen(socketPath, resolve))
+
+    try {
+      const options = PoolOptionsBuilder.newBuilder().socketPath(socketPath).build()
+      const client = clientOver(new UndiciTransportFactory(options), builder => builder.baseURL('http://localhost'))
+
+      await client.create(ItemsAPI).get('1')
+
+      expect(seen).toEqual(['/items/1'])
+      expect(received.map(request => request.url)).toEqual(['/landed'])
+    } finally {
+      socketServer.closeAllConnections()
+      await new Promise(resolve => socketServer.close(resolve))
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   // With one connection, the 503 holds it until its body is read or let go, and a retry behind an unread body would
