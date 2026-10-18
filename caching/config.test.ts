@@ -61,6 +61,7 @@ async function start(
     env?: Record<string, string>
     store?: HTTPCacheStore
     body?: string
+    handler?: () => string | Promise<string>
     fluent?: (b: HTTPCachingOptionsBuilder) => void
   },
 ) {
@@ -74,7 +75,7 @@ async function start(
   router
     .get('/data')
     .extend(cacheControl({ ttl: 60 }))
-    .handler(() => options?.body ?? 'payload')
+    .handler(options?.handler ?? (() => options?.body ?? 'payload'))
 
   const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
     .with(
@@ -106,6 +107,40 @@ describe('HTTP caching configuration', () => {
     expect(res.headers.get('x-cache')).toBe('MISS')
     expect(errors).toHaveLength(1)
     expect((errors[0] as Error).message).toContain('did not settle within 50ms')
+  })
+
+  // The same for lockTimeout: read as seconds, a 50ms lock would keep a request waiting behind a slow leader for
+  // 50 seconds instead of letting it run the handler itself.
+  it('stops waiting on a slow leader after the lockTimeout the tree sets', async () => {
+    let runs = 0
+    let entered!: () => void
+    const leading = new Promise<void>(resolve => (entered = resolve))
+    let release!: () => void
+    const released = new Promise<void>(resolve => (release = resolve))
+    const { app } = await start(
+      { lockTimeout: '50ms' },
+      {
+        handler: async () => {
+          if (++runs === 1) {
+            entered()
+            await released
+          }
+          return 'payload'
+        },
+      },
+    )
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const leader = app.fetch('/cfg/data')
+    await leading
+    const follower = app.fetch('/cfg/data')
+    await vi.advanceTimersByTimeAsync(50)
+
+    expect((await follower).headers.get('x-cache')).toBe('MISS')
+    expect(runs).toBe(2)
+
+    release()
+    await leader
   })
 
   it('names the status header after the tree', async () => {
