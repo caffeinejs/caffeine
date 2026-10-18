@@ -230,9 +230,9 @@ function tagTtlOf(tagTtl: Duration | undefined): number {
 }
 
 // An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry
-// records.
+// records. Markers are written as strings, so a value of any other type reads as absent too.
 function marker(value: unknown): string | undefined {
-  return value === null || value === undefined ? undefined : String(value)
+  return typeof value === 'string' ? value : undefined
 }
 
 function envelopeOf(entry: HTTPCacheEntry, markers: Record<string, string> | undefined): HTTPEnvelope {
