@@ -160,7 +160,7 @@ describe('KeyvHTTPCacheStore', () => {
 
     // Every other duration in the package fails loud. One that is not a duration would otherwise read as
     // "never expires", the opposite of the bound on the marker keyspace that setting it asks for.
-    it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, '1 hour', '-5s', ''])('refuses %s', tagTtl => {
+    it.each([-1, -0.0001, Number.NaN, Number.POSITIVE_INFINITY, '1 hour', '-5s', ''])('refuses %s', tagTtl => {
       expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).toThrow(ErrKeyvCache)
     })
 

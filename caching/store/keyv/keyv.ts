@@ -209,8 +209,9 @@ function tagTtlOf(tagTtl: Duration | undefined): number {
     return 0
   }
 
-  const ms = Math.ceil(parseDuration(tagTtl) * 1000)
-  if (!((typeof tagTtl === 'number' || DURATION.test(tagTtl)) && Number.isFinite(ms) && ms >= 0)) {
+  // Checked before rounding: a negative fraction of a millisecond would round to 0, which means never expires.
+  const seconds = parseDuration(tagTtl)
+  if (!((typeof tagTtl === 'number' || DURATION.test(tagTtl)) && Number.isFinite(seconds) && seconds >= 0)) {
     throw new ErrKeyvCache(
       errMessage(`Cannot create a Keyv cache with the tagTtl "${String(tagTtl)}": it is not a non-negative duration`)
         .solutions(
@@ -222,7 +223,7 @@ function tagTtlOf(tagTtl: Duration | undefined): number {
     )
   }
 
-  return ms
+  return seconds === 0 ? 0 : Math.ceil(seconds * 1000)
 }
 
 // An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry
