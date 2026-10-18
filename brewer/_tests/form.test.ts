@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { brewer } from '../index.js'
+import { fromAnotherRealm } from './_realm.js'
 
 const client = brewer('http://localhost')
 
@@ -43,5 +44,20 @@ describe('$formData', () => {
     const form = client.$formData({ caption: 'Rex', avatar: undefined, note: null })
 
     expect([...form.keys()]).toEqual(['caption'])
+  })
+
+  // A file picked in an iframe is not this realm's. A browser's FormData takes it as a file all the same; Node's reads
+  // a Blob by its prototype, so what is asserted is what reaches it.
+  it('hands a file made in another realm to the form as it is, not as text', () => {
+    const append = vi.spyOn(FormData.prototype, 'append')
+    const avatar = fromAnotherRealm(new File(['jpeg'], 'rex.jpg', { type: 'image/jpeg' }))
+
+    try {
+      client.$formData({ avatar })
+
+      expect(append).toHaveBeenCalledWith('avatar', avatar)
+    } finally {
+      append.mockRestore()
+    }
   })
 })

@@ -3,6 +3,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'
+import { fromAnotherRealm } from './_realm.js'
 
 /**
  * What a call hands the transport beyond its route: the RequestInit fields that steer redirects, aborts and caching,
@@ -160,6 +161,51 @@ describe('brewer handing a call to its transport', () => {
       keepalive: true,
     })
     expect(calls[0]!.init).not.toHaveProperty('duplex')
+  })
+
+  // A body made in another realm fails `instanceof` against this one's classes, but `fetch` still sends it as what it
+  // is. Answered here, since Node's own `fetch` reads a Blob by its prototype too.
+  describe('given a body made in another realm', () => {
+    const upload = new Router('/upload').post('/').handler(() => ({ received: true }))
+
+    function recorded() {
+      const calls: RequestInit[] = []
+      const client = brewer<typeof upload>('http://localhost', {
+        headers: { 'content-type': 'application/json' },
+        fetch: async (_input, init = {}) => {
+          calls.push(init)
+          return new Response(null, { status: 204 })
+        },
+      })
+
+      return { client, calls }
+    }
+
+    // None goes under the client's JSON type: a Blob under its own, a form under the one the platform writes for it.
+    it.each([
+      ['a Blob', () => new Blob(['png'], { type: 'image/png' })],
+      ['a File', () => new File(['%PDF-1.7'], 'adoption.pdf', { type: 'application/pdf' })],
+      ['a FormData', () => new FormData()],
+      ['a URLSearchParams', () => new URLSearchParams({ name: 'Rex' })],
+    ])('should hand %s over as it is, under its own content type', async (_body, make) => {
+      const { client, calls } = recorded()
+      const body = fromAnotherRealm(make())
+
+      await client.upload.post({ body })
+
+      expect(calls[0]!.body).toBe(body)
+      expect(new Headers(calls[0]!.headers).has('content-type')).toBe(false)
+    })
+
+    it('should hand a stream over as it is, to be sent as it is read', async () => {
+      const { client, calls } = recorded()
+      const body = fromAnotherRealm(new ReadableStream<Uint8Array>())
+
+      await client.upload.post({ body })
+
+      expect(calls[0]!.body).toBe(body)
+      expect(calls[0]).toHaveProperty('duplex', 'half')
+    })
   })
 
   describe('given a headers function that fails', () => {

@@ -39,6 +39,9 @@ const IN_PROCESS_ORIGIN = 'http://localhost'
 /** What the root answers beside its routes, under the names `FileHelpers` gives them. */
 const fileHelpers: FileHelpers = { $file: fileOf, $filename: filenameOf, $progress: progress, $formData: formData }
 
+/** The bodies `fetch` sends as they are, by the brand each carries whatever realm made it. */
+const RAW_BODIES = new Set(['Blob', 'File', 'FormData', 'URLSearchParams', 'ArrayBuffer', 'ReadableStream'])
+
 /** What one call adds on top of the client's own options. */
 interface RequestArgs {
   params?: Record<string, unknown>
@@ -174,13 +177,14 @@ async function send(
 ): Promise<Response> {
   const { params: _params, query, body, headers, ...rest } = init
   const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
+  const brand = brandOf(body)
 
   const merged = headersOf(await resolveHeaders(options.headers))
   const own = headersOf(headers)
 
   // A Blob that knows its type goes under it: the client's content type is a default for a body that has none, and
   // only the call itself may name another.
-  if (body instanceof Blob && body.type !== '' && !own.has('content-type')) {
+  if ((brand === 'Blob' || brand === 'File') && (body as Blob).type !== '' && !own.has('content-type')) {
     merged.delete('content-type')
   }
 
@@ -192,7 +196,7 @@ async function send(
   // content type and its own encoding. Everything else is JSON.
   let payload: RawBody | undefined
   if (body !== undefined && body !== null) {
-    if (isRawBody(body)) {
+    if (isRawBody(body, brand)) {
       payload = body
     } else {
       payload = JSON.stringify(body)
@@ -204,7 +208,7 @@ async function send(
 
   // The platform writes the content type of a form it encodes, a multipart boundary included, so one set by hand
   // could only replace it with something the server cannot read.
-  if (payload instanceof FormData || payload instanceof URLSearchParams) {
+  if (brand === 'FormData' || brand === 'URLSearchParams') {
     merged.delete('content-type')
   }
 
@@ -220,7 +224,7 @@ async function send(
   }
 
   // A stream is sent as it is read, which fetch does only for a request it is told is half duplex.
-  if (payload instanceof ReadableStream) {
+  if (brand === 'ReadableStream') {
     request.duplex = 'half'
   }
 
@@ -248,14 +252,12 @@ function headersOf(values: HeaderValues | undefined): Headers {
   return headers
 }
 
-function isRawBody(body: unknown): body is RawBody {
-  return (
-    typeof body === 'string' ||
-    body instanceof FormData ||
-    body instanceof URLSearchParams ||
-    body instanceof Blob ||
-    body instanceof ArrayBuffer ||
-    body instanceof ReadableStream ||
-    ArrayBuffer.isView(body)
-  )
+function isRawBody(body: unknown, brand: string): body is RawBody {
+  return typeof body === 'string' || ArrayBuffer.isView(body) || RAW_BODIES.has(brand)
+}
+
+// What a value is by the brand it carries, not the class it came from: `instanceof` knows only this realm's classes,
+// and a body made in an iframe, or in a window this one opened, would fail it and go as JSON.
+function brandOf(value: unknown): string {
+  return Object.prototype.toString.call(value).slice(8, -1)
 }

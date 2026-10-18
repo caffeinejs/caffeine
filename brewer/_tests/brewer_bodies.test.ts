@@ -1,3 +1,5 @@
+import { runInNewContext } from 'node:vm'
+
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { multipart, multipartPlugin } from '@caffeinejs/multipart'
@@ -381,6 +383,16 @@ describe('brewer sending a body', () => {
       })
 
       expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: Array.from(everyByte) })
+    })
+
+    // A vm context is a realm of its own, as an iframe is: its ArrayBuffer is not this realm's, and fails `instanceof`.
+    it('should send an ArrayBuffer made in another realm byte for byte', async () => {
+      const client = brewer(app)
+      const bytes = runInNewContext('new Uint8Array([1, 2, 3]).buffer') as ArrayBuffer
+
+      const res = await client.echo.raw.post({ body: bytes, headers: { 'content-type': 'application/octet-stream' } })
+
+      expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: [1, 2, 3] })
     })
 
     it('should send only the bytes a view covers, not the whole buffer behind it', async () => {

@@ -29,7 +29,8 @@ export function formData<T extends FormFields>(values: T): FormDataOf<T> {
   for (const [name, value] of Object.entries(values)) {
     for (const part of Array.isArray(value) ? value : [value]) {
       if (part !== undefined && part !== null) {
-        form.append(name, part instanceof Blob ? part : String(part))
+        // A Blob is the only object a part can be, whatever realm made it, which `instanceof` would not tell.
+        form.append(name, typeof part === 'object' ? part : String(part))
       }
     }
   }
