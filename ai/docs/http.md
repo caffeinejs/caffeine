@@ -697,7 +697,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 
   Keep a credential the authenticator compares in `headers`, which a follow-up does not resolve again: it never sees
   what an interceptor set. It answers the call's own server only: a 401 that `fetch` reached by a redirect to another
-  origin goes to the caller, and a follow-up to another origin rejects with `ErrBrewFollowUpNotSent`. A stream passed
+  origin goes to the caller, and a follow-up to another origin rejects with `ErrBrewFollowUpNotSent`. On a redirect to
+  another origin, `fetch` drops `Authorization` but forwards every other header, so carry the credential in
+  `Authorization`, or send with `redirect: 'error'`, to keep it from a server yours redirects to. A stream passed
   as the body is read as it is sent, so its follow-up rejects with the same error; given as `body: () => file.stream()`,
   it is opened anew for each send. An aborted call rejects at once, even while the refresh it waits on goes on.
 

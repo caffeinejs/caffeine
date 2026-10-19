@@ -243,6 +243,13 @@ const redirects = new Router('/redirect')
     hit(ctx)
     return allowed(ctx) ? ctx.redirect(`${otherOrigin}/cdn/echo`) : refuse(ctx)
   })
+  .get('/keyed')
+  .handler(ctx => {
+    hit(ctx)
+    return ctx.req.header('x-api-key') === server.key
+      ? ctx.redirect(`${otherOrigin}/cdn/echo`)
+      : refuse(ctx, 'ApiKey realm="reports"', 'invalid_key')
+  })
 
 // The token endpoint: each refresh token is good for one refresh, which issues the next pair.
 const oauth = new Router('/oauth')
@@ -1161,8 +1168,8 @@ describe('brewer answering a 401 over a socket', () => {
       expect(server.refreshes).toBe(1)
     })
 
-    // Credentials the authenticator sets belong to the call's origin: a redirect onwards must not carry them.
-    it('should not let the credential the authenticator set follow a redirect to another origin', async () => {
+    // fetch drops `Authorization` on a redirect to another origin, which is why the docs say to carry credentials in it.
+    it('should leave Authorization behind on a redirect to another origin, as fetch does', async () => {
       const tokens = tokensFor(connect)
       const client = connect({ headers: tokens.headers, authenticator: tokens.authenticator })
 
@@ -1173,6 +1180,23 @@ describe('brewer answering a 401 over a socket', () => {
         ['/redirect/out', 'Bearer access-0'],
         ['/redirect/out', 'Bearer access-2'],
         ['/cdn/echo', null],
+      ])
+    })
+
+    // fetch forwards every other header: a key in one of its own stays home only when the call refuses to follow.
+    it("should keep a key in a header of its own from another origin when the call sends with redirect: 'error'", async () => {
+      const client = connect({
+        headers: { 'x-api-key': 'key-1' },
+        authenticator: (request, _response, attempt) => {
+          request.headers.set('x-api-key', 'key-2')
+          return attempt === 1 ? request : null
+        },
+      })
+
+      await expect(client.redirect.keyed.get({ redirect: 'error' })).rejects.toThrow(TypeError)
+      expect(hits.map(entry => [entry.path, entry.key])).toEqual([
+        ['/redirect/keyed', 'key-1'],
+        ['/redirect/keyed', 'key-2'],
       ])
     })
   })

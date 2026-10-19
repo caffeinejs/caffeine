@@ -17,8 +17,10 @@ import { intercept, type Interceptor } from './interceptor.js'
  * Only the call's own server is answered. A 401 that `fetch` reached by following a redirect to another origin goes to
  * the caller, told by its `url` and `redirected`, which `clone()` keeps: one an interceptor builds with `new Response()`
  * has neither, and counts as the call's own. A follow-up to another origin rejects with
- * {@link ErrBrewFollowUpNotSent}, so credentials stay with the server that asked for them. A stream passed as the body
- * is read as it is sent: `request` comes without it, and a follow-up rejects with the same error. A body given as a
+ * {@link ErrBrewFollowUpNotSent}. A redirect is followed as the call's `redirect` says, and on one to another origin
+ * `fetch` drops `Authorization` but forwards every other header: carry the credential in `Authorization`, or send with
+ * `redirect: 'error'`, to keep it from a server the call's own server redirects to. A stream passed as the body is
+ * read as it is sent: `request` comes without it, and a follow-up rejects with the same error. A body given as a
  * function that returns the stream is opened anew instead.
  *
  * `response` is a copy of the 401 while its body is unread, so a body read here is still the caller's when the answer
