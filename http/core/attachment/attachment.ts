@@ -9,6 +9,9 @@ import { ErrConfiguration } from '../error/common.js'
 import { contentDisposition } from './_disposition.js'
 import { byteRange } from './_range.js'
 
+// The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
+const LARGEST_SLICEABLE = 2 ** 32 - 1
+
 // RFC 9110 §8.8.3: an optional weak prefix, then a quoted string holding neither a space nor a quote.
 const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 
@@ -43,7 +46,8 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * A `Blob` or bytes answer a `GET` carrying `Range` with `206` and that range, or `416` for one past the end, and
  * say `Accept-Ranges: bytes`. Several ranges, a malformed one or another unit are answered with the whole body.
  * With `If-Range`, the range is served only while the client's validator still matches `etag` or `lastModified`;
- * otherwise the whole current body goes out. A stream is sent whole: its length is not known.
+ * otherwise the whole current body goes out. A stream is sent whole, its length not known, and so is a `Blob` past
+ * 4 GiB, which Node cannot cut a part out of.
  *
  * A range answers a `200` only: a status the route or the handler set is kept, with the whole body.
  *
@@ -145,10 +149,13 @@ class AttachmentResult extends Responder {
   }
 }
 
-/** The body as something with a length to take ranges of, or `undefined` for a stream. */
+/**
+ * The body as something with a length to take ranges of, or `undefined` for one to send whole: a stream, or a Blob
+ * past 4 GiB, which Node cannot cut a part out of — its `slice` takes 32-bit offsets and aborts the process past them.
+ */
 function sizedOf(body: AttachmentBody): NodeBlob | Uint8Array<ArrayBuffer> | undefined {
   if (body instanceof NodeBlob) {
-    return body
+    return body.size <= LARGEST_SLICEABLE ? body : undefined
   }
 
   if (body instanceof ArrayBuffer) {

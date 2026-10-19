@@ -20,12 +20,29 @@ export function byteAt(offset: number): number {
 /** `length` bytes of the pattern, starting at `offset`. */
 export function patterned(offset: number, length: number): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(length)
+  fillPatterned(bytes, offset)
 
-  for (let i = 0; i < length; i++) {
+  return bytes
+}
+
+/** Lays the pattern from `offset` into `bytes`: a word at a time where the words line up, so a large body is quick. */
+export function fillPatterned(bytes: Uint8Array, offset: number): void {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  let i = 0
+
+  for (; i < bytes.length && (offset + i) % WORD !== 0; i++) {
     bytes[i] = byteAt(offset + i)
   }
 
-  return bytes
+  for (; i + WORD <= bytes.length; i += WORD) {
+    const word = offset + i
+    view.setUint32(i, Math.floor(word / HIGH))
+    view.setUint32(i + 4, word % HIGH)
+  }
+
+  for (; i < bytes.length; i++) {
+    bytes[i] = byteAt(offset + i)
+  }
 }
 
 /**
