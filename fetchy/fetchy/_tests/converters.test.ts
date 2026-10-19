@@ -20,6 +20,7 @@ import {
 } from '../request_body_converter.js'
 import { JSONResponseConverter, TextResponseConverter } from '../response_converter.js'
 import { DefaultResponseHandler, NoopResponseHandler } from '../response_handler.js'
+import { OtherFormData } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 @API('/users')
@@ -166,17 +167,26 @@ describe('converters', () => {
     expect([...(MultipartRequestBodyConverter.convert(parts) as FormData).entries()]).toEqual([['title', 'Q3 report']])
   })
 
-  // undici exports a FormData of its own, which `instanceof FormData` does not recognize. Refused as "not a FormData",
-  // it would leave the caller puzzled; it has to be named for what it is.
-  it('MultipartRequestBodyConverter names a FormData from another implementation', () => {
-    class OtherFormData {
+  // undici exports a FormData of its own, which `instanceof FormData` does not recognize. It is a FormData all the same,
+  // and the transport encodes it as it does the global one.
+  it('MultipartRequestBodyConverter hands a FormData of another implementation on as it is', () => {
+    const form = new OtherFormData()
+    form.append('title', 'Q3 report')
+
+    expect(MultipartRequestBodyConverter.convert(form)).toBe(form)
+  })
+
+  // A stream of the form-data package calls itself a FormData, but has not the methods of one. Refused as "not a
+  // FormData", it would leave the caller puzzled; it has to be named for what it is.
+  it('MultipartRequestBodyConverter names an object that only calls itself a FormData', () => {
+    class Impostor {
       get [Symbol.toStringTag](): string {
         return 'FormData'
       }
     }
 
-    expect(() => MultipartRequestBodyConverter.convert(new OtherFormData())).toThrow(
-      'Cannot convert the @Body() value to multipart/form-data: it is a FormData from another implementation, such as the one undici exports',
+    expect(() => MultipartRequestBodyConverter.convert(new Impostor())).toThrow(
+      'Cannot convert the @Body() value to multipart/form-data: it calls itself a FormData without being one, as a stream of the form-data package does',
     )
   })
 
@@ -406,5 +416,50 @@ describe('response handling', () => {
 
     expect(error).toBeInstanceOf(ErrFetchyHTTP)
     expect((error as ErrFetchyHTTP).body).toBe('quota exceeded')
+  })
+
+  // A 205 tells the client to reset its view, and carries no body to parse.
+  it('resolves a 205 with undefined', async () => {
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConverterAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 205 }))
+
+    await expect(api.createUser({ name: 'Ada' })).resolves.toBeUndefined()
+  })
+
+  // Only a 2xx is a success. A 304 answers a conditional request, and the caller holding the copy it validated acts on
+  // the status, as on any other.
+  it('rejects a 304 with ErrFetchyHTTP', async () => {
+    @API('/users')
+    class ConditionalAPI {
+      @GET('/{id}')
+      @Params([Param('id')])
+      getUser!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(ConditionalAPI, transportFactory)
+    transportFactory.transports[0].willRespond(new Response(null, { status: 304 }))
+
+    await expect(api.getUser('1')).rejects.toMatchObject({ name: 'ErrFetchyHTTP', status: 304 })
+  })
+
+  // A handler that refuses a response, one whose signature does not verify say, fails the call with its own error.
+  it('rejects the call with the error a response handler throws', async () => {
+    const refusal = new Error('signature mismatch')
+
+    @API('/users')
+    class VerifiedAPI {
+      @GET('/{id}')
+      @UseResponseHandler({ handle: () => Promise.reject(refusal) })
+      @Params([Param('id')])
+      getUser!: (id: string) => Promise<unknown>
+    }
+
+    const transportFactory = new TestTransportFactory()
+    const api = buildClient(VerifiedAPI, transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, { id: '1' }))
+
+    await expect(api.getUser('1')).rejects.toBe(refusal)
   })
 })

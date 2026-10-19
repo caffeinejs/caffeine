@@ -22,15 +22,16 @@ import {
   type RequestBodyConverter,
 } from '../request_body_converter.js'
 import { RetryInterceptor } from '../retry/index.js'
+import { OtherFile } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
- * A multipart body is only as good as what a server parses back out of it, so these tests read each request the way
- * `FetchTransport` sends it: as the `Request` handed to `fetch`, parsed with `formData()`. `fetch` writes the boundary
- * into `content-type` only when nothing else set one, so a request fetchy labelled has already lost it.
+ * A multipart body is only as good as what a server parses back out of it, so these tests read each request as `fetch`
+ * would send it: as a `Request` built from it, parsed with `formData()`. `fetch` writes the boundary into
+ * `content-type` only when nothing else set one, so a request fetchy labelled has already lost it.
  */
 
-// What `FetchTransport` hands `fetch`.
+// The request as `fetch` builds it from what a transport is handed.
 function wire(request: FetchyRequest): Request {
   return new Request(request.url, { method: request.method, headers: request.headers.record, body: request.body })
 }
@@ -244,6 +245,8 @@ describe('@Multipart() with Part() arguments', () => {
     ['an object with no prototype', Object.assign(Object.create(null) as object, { pages: 12 }), 'Object'],
     // Passed where a value belongs, a callback would go out as its own source code.
     ['a function', () => 'Q3 report', 'function'],
+    // A generator's constructor has no name: the message named nothing, and ended "got ".
+    ['an async generator', (async function* () {})(), 'AsyncGenerator'],
   ])('rejects %s and sends nothing', async (_kind, value, type) => {
     const { api, transport } = clientOf(DocumentsAPI)
 
@@ -253,6 +256,21 @@ describe('@Multipart() with Part() arguments', () => {
     await expect(call).rejects.toThrow(
       `Cannot add part "meta" to the multipart body: expected a string, number, boolean, bigint, Blob or File, got ${type}`,
     )
+    expect(transport.sendCount).toBe(0)
+  })
+
+  // formdata-node's File is no Blob to the global FormData, which would hold it as the text "[object File]". Named as a
+  // File, it read "expected … File, got File".
+  it('rejects a File of another implementation, naming what it is and how to copy it, and sends nothing', async () => {
+    const { api, transport } = clientOf(DocumentsAPI)
+
+    const error = await api.annotate(new OtherFile('report.pdf')).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidMultipartBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot add part "meta" to the multipart body: it is a File of another implementation, which would be sent as the text "[object File]"',
+    )
+    expect((error as Error).message).toContain('new File([await part.arrayBuffer()], part.name, { type: part.type })')
     expect(transport.sendCount).toBe(0)
   })
 

@@ -18,6 +18,7 @@ export {
   ErrFetchyInvalidDecoratorTarget,
   ErrFetchyInvalidFormBody,
   ErrFetchyInvalidMultipartBody,
+  ErrFetchyInvalidPathArgument,
   ErrFetchyInvalidRoute,
   ErrFetchyMissingAPIDecorator,
   ErrFetchyMissingCallbackArgument,

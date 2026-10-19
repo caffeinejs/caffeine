@@ -10,6 +10,7 @@ import { Field } from '../decorators/params/field.js'
 import { Header } from '../decorators/params/header.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
 import { POST } from '../decorators/verbs.js'
+import { ErrFetchyInvalidFormBody } from '../errors.js'
 import { MediaTypes } from '../media_types.js'
 import { noop } from '../noop.js'
 import type { FetchyRequest } from '../request.js'
@@ -18,6 +19,7 @@ import {
   RawRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
+import { OtherFormData } from './other_form_data.js'
 import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
@@ -110,6 +112,41 @@ describe('the content-type of a converted body', () => {
       'application/x-www-form-urlencoded;charset=UTF-8',
     )
     expect(await contentTypeOf(api => api.create(new FormData()))).toBeNull()
+  })
+
+  // `JSON.stringify` reads an ArrayBuffer and a stream as empty objects, so both went out as `{}` labelled JSON and
+  // their bytes never left. Like a typed array or a Blob, each is a body fetch sends as it is.
+  it.each([
+    ['an ArrayBuffer', (): unknown => new TextEncoder().encode('%PDF-1.7').buffer],
+    ['a ReadableStream', (): unknown => new ReadableStream()],
+  ])('hands %s to the transport as it is, unlabelled', async (_kind, make) => {
+    const body = make()
+    const transportFactory = new TestTransportFactory()
+    const api = build(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.create(body)
+
+    const request = transportFactory.transports[0].lastRequest!
+    expect(request.body).toBe(body)
+    expect(request.headers.get('content-type')).toBeNull()
+  })
+
+  // undici's FormData, or one built before `undici.install()` replaced the global, is no instance of the global class,
+  // and `JSON.stringify` reads it as `{}`: that text went out labelled JSON, and the parts never left. Handed on as a
+  // FormData is, the transport encodes it under the boundary it generates.
+  it('hands a FormData of another implementation to the transport as it is, unlabelled', async () => {
+    const form = new OtherFormData()
+    form.append('title', 'Q3 report')
+    const transportFactory = new TestTransportFactory()
+    const api = build(transportFactory)
+    transportFactory.transports[0].willRespond(fakeJSONResponse(200, {}))
+
+    await api.create(form)
+
+    const request = transportFactory.transports[0].lastRequest!
+    expect(request.body).toBe(form)
+    expect(request.headers.get('content-type')).toBeNull()
   })
 
   it('does not overwrite a content-type the declaration already set', async () => {
@@ -253,5 +290,133 @@ describe('a @Body() under @FormURLEncoded()', () => {
     const request = await send(FormBodyAPI, api => api.tokenMarked({ grant_type: 'client_credentials' }))
 
     expect(request.body).toBe('marked')
+  })
+
+  // Bytes are a form already encoded, as a typed array's are. Read as an object, an ArrayBuffer went out as an empty form.
+  it('hands an ArrayBuffer on as the encoded form it already is', async () => {
+    const bytes = new TextEncoder().encode('grant_type=client_credentials').buffer
+    const request = await send(FormBodyAPI, api => api.token(bytes))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe(bytes)
+  })
+
+  // A string is the form already encoded, as a caller who built it by hand sends it.
+  it('sends a string as the encoded form it already is', async () => {
+    const request = await send(FormBodyAPI, api => api.token('grant_type=client_credentials&scope=read'))
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials&scope=read')
+  })
+
+  // A Map holds name and value pairs, as an array of pairs does. Read field by field it gave nothing, and an empty form
+  // went out in place of the credentials.
+  it('encodes a Map entry by entry, leaving out null and undefined', async () => {
+    const request = await send(FormBodyAPI, api =>
+      api.token(
+        new Map<string, unknown>([
+          ['grant_type', 'client_credentials'],
+          ['scope', 'a b'],
+          ['audience', null],
+        ]),
+      ),
+    )
+
+    expect(request.headers.get('content-type')).toBe(MediaTypes.FORM_URL_ENCODED)
+    expect(request.body).toBe('grant_type=client_credentials&scope=a+b')
+  })
+
+  // A class instance whose values are fields of its own is a form as a plain object is, even with none of them set.
+  it('encodes a class instance by its own fields, even when none is set', async () => {
+    class TokenRequest {
+      grant_type: string | undefined = 'client_credentials'
+      scope: string | undefined = undefined
+    }
+
+    const set = await send(FormBodyAPI, api => api.token(new TokenRequest()))
+    const unset = await send(FormBodyAPI, api =>
+      api.token(Object.assign(new TokenRequest(), { grant_type: undefined })),
+    )
+
+    expect(set.body).toBe('grant_type=client_credentials')
+    expect(unset.body).toBe('')
+  })
+
+  // A Date, a Set or a class that keeps its values behind getters has no field of its own: read field by field each
+  // gave nothing, and an empty form went out. Refused before anything is sent, the error names the type.
+  it.each([
+    ['a Date', new Date(0), 'Date'],
+    ['a Set', new Set(['client_credentials']), 'Set'],
+    [
+      'an object with only getters',
+      new (class Credentials {
+        get grantType(): string {
+          return 'client_credentials'
+        }
+      })(),
+      'Credentials',
+    ],
+  ])('rejects %s, which has no fields, and sends nothing', async (_kind, value, type) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(value).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      `Cannot convert the @Body() value to application/x-www-form-urlencoded: a ${type} has no fields to encode`,
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
+  })
+
+  // A FormData is multipart material, of any implementation. Read field by field, undici's gave nothing, and an empty
+  // form went out in its place.
+  it('rejects a FormData of another implementation and sends nothing', async () => {
+    const form = new OtherFormData()
+    form.append('grant_type', 'client_credentials')
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(form).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      'Cannot convert a FormData to application/x-www-form-urlencoded: FormData is sent as multipart/form-data',
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
+  })
+
+  // A form is name and value pairs, and a lone value is neither. fetch sent a number as the text `42` under the form
+  // label, and undici refused it with an error that named no fetchy API. Refused before anything is sent, the error
+  // names the value's type and the fix.
+  it.each([
+    ['a number', 42, 'number'],
+    ['a boolean', true, 'boolean'],
+    ['a bigint', 42n, 'bigint'],
+    ['a symbol', Symbol('q'), 'symbol'],
+    ['a function', () => 'q', 'function'],
+  ])('rejects %s and sends nothing', async (_kind, value, type) => {
+    const transportFactory = new TestTransportFactory()
+    const api = newClient()
+      .baseURL('http://example.test')
+      .transportFactory(transportFactory)
+      .build()
+      .create(FormBodyAPI)
+
+    const error = await api.token(value).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ErrFetchyInvalidFormBody)
+    expect((error as Error).message.split('\n')[0]).toBe(
+      `Cannot convert the @Body() value to application/x-www-form-urlencoded: expected an object, an array of [key, value] pairs or an encoded string, got ${type}`,
+    )
+    expect(transportFactory.transports[0].sendCount).toBe(0)
   })
 })

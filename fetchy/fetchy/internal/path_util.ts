@@ -12,7 +12,10 @@ export function normalizePath(path: string): string {
   return normalized
 }
 
-// Empty when neither has a path: the request builder decides what that calls, the base URL's own path or the root.
+// Empty when neither has a path: the request builder decides what that calls, the base URL's own path or the root. A base
+// of `/` alone, as `@API('/')` writes, adds nothing: the path after it brings its own slash.
 export function joinPaths(base: string, path: string): string {
-  return `${normalizePath(base)}${normalizePath(path)}`
+  const prefix = normalizePath(base)
+
+  return `${prefix === '/' ? '' : prefix}${normalizePath(path)}`
 }

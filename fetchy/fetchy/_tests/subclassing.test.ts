@@ -305,6 +305,23 @@ describe('subclassing through create()', () => {
     expect(kept.sent()?.url).toBe('http://example.test/users/a')
   })
 
+  // A subclass that names the root with a slash means what `@API('')` means, not a path of its own.
+  it("clears an inherited path with @API('/') as with @API('')", async () => {
+    @API('/users')
+    class Base {
+      @GET('/a')
+      a!: () => Promise<unknown>
+    }
+
+    @API('/')
+    class Rooted extends Base {}
+
+    const { api, sent } = clientOf(Rooted)
+    await api.a()
+
+    expect(sent()?.url).toBe('http://example.test/a')
+  })
+
   it('merges class headers by name, case-insensitively, the subclass winning', async () => {
     @API('/users')
     @HeaderMap({ 'X-Version': '1', 'x-base': 'yes' })
