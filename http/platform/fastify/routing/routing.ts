@@ -12,10 +12,9 @@ import {
 } from 'fastify'
 
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
-import { Responder } from '../../../response.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
-import { payloadOf } from '../response.js'
+import { answer } from '../response.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
 import { compileRouteSchema } from './schema/schema.js'
@@ -175,21 +174,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
                     return res
                   }
 
-                  const answer = r instanceof Responder ? r.respond(req.httpContext) : r
-
-                  // A Responder may have answered through the context, as the handler may: that send is the answer.
-                  if (req.httpContext.sent) {
-                    return res
-                  }
-
-                  const payload = payloadOf(res, answer)
-
-                  if (payload === undefined) {
-                    res.send()
-                    return res
-                  }
-
-                  return payload
+                  return answer(res, req.httpContext, r, () => req.httpContext.sent)
                 },
                 (err: unknown) => {
                   // A rejection after the timeout is the late result too: the 503 is what answers the request.
@@ -209,22 +194,9 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
               return
             }
 
-            const answer = result instanceof Responder ? result.respond(req.httpContext) : result
-
-            if (req.httpContext.sent) {
-              return
-            }
-
-            const payload = payloadOf(res, answer)
-
-            // Fastify sends nothing for a synchronous `undefined`: a Responder that answered nothing, or a Response
-            // with no body, would leave the request waiting.
-            if (payload === undefined) {
-              res.send()
-              return
-            }
-
-            return payload
+            // Fastify sends nothing for a synchronous `undefined`, so an answer with no body — a Responder that
+            // answered nothing, a Response without one — is sent empty here rather than left waiting.
+            return answer(res, req.httpContext, result, () => req.httpContext.sent)
           },
         }
 

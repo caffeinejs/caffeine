@@ -289,6 +289,13 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     }
   }
 
+  // The same, through a thenable that is not a native promise: one from another realm, or a library's own.
+  class ThenableBlobResult extends Responder {
+    respond(): ActionResult {
+      return { then: (resolve: (blob: Blob) => void) => resolve(pdf()) }
+    }
+  }
+
   // A Responder that answers nothing at all.
   class SilentResult extends Responder {
     respond(): ActionResult {
@@ -351,6 +358,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   routes.get('/responder').handler(() => new BlobResult(pdf()))
   routes.get('/responder-async').handler(async () => new BlobResult(pdf()))
   routes.get('/responder-stored').handler(() => new StoredBlobResult())
+  routes.get('/responder-thenable').handler(() => new ThenableBlobResult())
   routes
     .get('/route-catch')
     .catchBy([RouteCatcher])
@@ -400,6 +408,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     ['a Responder', '/sites/responder'],
     ['a Responder an asynchronous handler resolves to', '/sites/responder-async'],
     ['a Responder that resolves to the Blob later', '/sites/responder-stored'],
+    ['a Responder whose thenable is not a native promise', '/sites/responder-thenable'],
     ['a middleware that answers before the handler runs', '/sites/gated'],
   ])('sends it from %s', async (_site, path) => {
     await expectPatterned(await app.fetch(path), { type: PDF })

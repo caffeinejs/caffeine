@@ -2,7 +2,9 @@ import { Blob } from 'node:buffer'
 
 import { errorCodes } from 'fastify'
 
+import type { IContext } from '../../context.js'
 import { MediaType } from '../../media.js'
+import { Responder } from '../../response.js'
 
 /** The part of a reply {@link payloadOf} writes to, so a reply of any server parameterization fits. */
 export interface PayloadReply {
@@ -10,6 +12,46 @@ export interface PayloadReply {
   header(name: string, value: string): unknown
   hasHeader(name: string): boolean
   type(contentType: string): unknown
+}
+
+/** The reply {@link answer} sends an empty answer on, and hands back for the server to wait on. */
+export interface AnswerReply extends PayloadReply {
+  send(): unknown
+}
+
+/**
+ * What the adapter hands Fastify for what a route's handler or a catch handler answered with: a `Responder`'s own
+ * answer in its place, shaped by {@link payloadOf}. The reply itself once `sent` says the request was answered
+ * through the context, so the server waits on that send rather than starting another, and once the empty answer
+ * of an answer with no body is on its way.
+ *
+ * An answer given later — a `Responder`'s promise, or any other thenable — is handled the same once it settles,
+ * `sent` asked again then: a `Responder` may have answered through the context meanwhile.
+ */
+export function answer(reply: AnswerReply, ctx: IContext, result: unknown, sent: () => boolean): unknown {
+  const value = result instanceof Responder ? result.respond(ctx) : result
+
+  // The reply is a thenable too: handed back, the server waits on it, which is what it is for.
+  if (value !== reply && typeof (value as PromiseLike<unknown> | null)?.then === 'function') {
+    return Promise.resolve(value).then(settled => settle(reply, settled, sent))
+  }
+
+  return settle(reply, value, sent)
+}
+
+function settle(reply: AnswerReply, value: unknown, sent: () => boolean): unknown {
+  if (sent()) {
+    return reply
+  }
+
+  const payload = payloadOf(reply, value)
+
+  if (payload === undefined) {
+    reply.send()
+    return reply
+  }
+
+  return payload
 }
 
 /**
@@ -23,16 +65,16 @@ export interface PayloadReply {
  * route or the handler named a type. A `Response` is taken apart here rather than handed on: its status and
  * headers reach the reply before the `onSend` hooks run, so they see what goes out, and Fastify's HEAD route, which
  * cannot measure a `Response`, gets a body it can drop.
- *
- * A `Responder` that answers later hands back a promise; its value is shaped once it settles.
  */
 export function payloadOf(reply: PayloadReply, value: unknown): unknown {
   if (typeof value !== 'object' || value === null) {
     return value
   }
 
-  if (value instanceof Promise) {
-    return value.then((settled: unknown) => payloadOf(reply, settled))
+  // The common answer, a plain object or an array, is JSON: nothing below could match it.
+  const prototype: unknown = Object.getPrototypeOf(value)
+  if (prototype === Object.prototype || prototype === Array.prototype || prototype === null) {
+    return value
   }
 
   // The global Blob, and File with it: `node:buffer` exports the same classes.

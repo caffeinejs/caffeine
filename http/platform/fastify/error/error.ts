@@ -7,10 +7,9 @@ import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from '../../../core/error/http.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
-import { Responder } from '../../../response.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
-import { payloadOf } from '../response.js'
+import { answer, payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
@@ -243,24 +242,11 @@ function respond(ctx: Context, result: unknown): unknown {
   // this runs inside an async `setErrorHandler`, whose `undefined` the server takes as a request to send.
   // Unless that answer died writing its cookies, which is the error being handled: nothing is in flight to wait
   // for, and the wait would hang the request. An answer from the catch handler itself reopened them first.
-  if (ctx.sent && !cookieFlushFailed(reply)) {
+  const sent = () => ctx.sent && !cookieFlushFailed(reply)
+
+  if (sent()) {
     return reply
   }
 
-  const answer = result instanceof Responder ? result.respond(ctx) : result
-
-  // A Responder may have answered through the context, as the catch handler may.
-  if (ctx.sent && !cookieFlushFailed(reply)) {
-    return reply
-  }
-
-  const payload = payloadOf(reply, answer)
-
-  if (payload !== undefined) {
-    return payload
-  }
-
-  reply.send()
-
-  return reply
+  return answer(reply, ctx, result, sent)
 }
