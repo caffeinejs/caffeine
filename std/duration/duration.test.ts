@@ -26,7 +26,7 @@ import {
 
 const pattern = new RegExp(DURATION_PATTERN)
 
-// Go's own `parseDurationTests` that float64 can hold, unsigned, with the expected span in nanoseconds, plus `d`.
+// Go's own `parseDurationTests`, unsigned, with the expected span in nanoseconds, plus `d`.
 // Every row is checked against the parser and the pattern alike: the pattern is what configuration validates, so
 // a value it admits must parse, and to the same span Go would read.
 const VALID: ReadonlyArray<readonly [text: string, nanoseconds: number]> = [
@@ -60,6 +60,12 @@ const VALID: ReadonlyArray<readonly [text: string, nanoseconds: number]> = [
   ['0.3333333333333333333h', 20 * 60e9],
   ['0.100000000000000000000h', 6 * 60e9],
   ['0.830103483285477580700h', 49 * 60e9 + 48e9 + 372539827],
+  // Go takes a fraction's share in floating point too, so this is one second in Go as well.
+  ['0.9999999999999999999s', 1e9],
+  // The largest span, 2^63 - 1 nanoseconds, which a double holds as 2^63.
+  ['9223372036854775807ns', 2 ** 63],
+  ['9223372036854775.807us', 2 ** 63],
+  ['9223372036s854ms775us807ns', 2 ** 63],
   // Days, which Go leaves out: exactly 24 hours each.
   ['7d', 7 * 86400e9],
   ['1d12h', 36 * 3600e9],
@@ -122,6 +128,25 @@ describe('parseDuration', () => {
     expect(() => parseDuration('5 hours')).toThrow('Cannot parse duration "5 hours": unknown unit " hours"')
     expect(() => parseDuration('3000000h')).toThrow('Cannot parse duration "3000000h": out of range')
   })
+
+  // Summed exactly, as Go sums its int64: 2^63 - 1 nanoseconds ahead, 2^63 back, and not one more either way.
+  it.each([
+    '9223372036854775808ns',
+    '9223372036854775810ns',
+    '-9223372036854775809ns',
+    '9223372036854776us',
+    '9223372036854775.808us',
+    '9223372036854ms775us808ns',
+  ])('refuses %o, one past the bound', text => {
+    expect(() => parseDuration(text)).toThrow(`Cannot parse duration "${text}": out of range`)
+  })
+
+  it.each(['-9223372036854775808ns', '-9223372036854775.808us', '-9223372036s854ms775us808ns'])(
+    'reads %o, the bound going back',
+    text => {
+      expect(parseDuration(text)).toBe(-(2 ** 63) / 1e6)
+    },
+  )
 
   it('refuses a span past Go’s bound of 2^63 nanoseconds, and a run of digits too long to be finite', () => {
     expect(() => parseDuration('2562048h')).toThrow(ErrInvalidDuration)

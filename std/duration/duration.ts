@@ -21,28 +21,29 @@ export const Day: Duration = 86_400_000
 /**
  * JSON Schema `pattern` for duration text in configuration.
  *
- * Anchored; the grammar {@link parseDuration} accepts, without a sign, so whatever it admits is a span of zero or
- * more: a configured timeout or lifetime is never negative.
+ * Anchored: the grammar {@link parseDuration} reads, without a sign, so it admits no negative span.
  */
-export const DURATION_PATTERN = '^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$'
+export const DURATION_PATTERN = String.raw`^(?:0|(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$`
 
-// Each unit in nanoseconds, the parser's working unit: whole numbers, so the parts of a span add up exactly.
-const UNITS: ReadonlyMap<string, number> = new Map([
-  ['ns', 1],
-  ['us', 1e3],
-  ['µs', 1e3], // U+00B5 micro sign
-  ['μs', 1e3], // U+03BC Greek small letter mu
-  ['ms', 1e6],
-  ['s', 1e9],
-  ['m', 6e10],
-  ['h', 3.6e12],
-  ['d', 8.64e13],
+// Each unit in nanoseconds, the parser's working unit. Whole numbers, summed exactly.
+const UNITS: ReadonlyMap<string, bigint> = new Map([
+  ['ns', 1n],
+  ['us', 1_000n],
+  ['µs', 1_000n], // U+00B5 micro sign
+  ['μs', 1_000n], // U+03BC Greek small letter mu
+  ['ms', 1_000_000n],
+  ['s', 1_000_000_000n],
+  ['m', 60_000_000_000n],
+  ['h', 3_600_000_000_000n],
+  ['d', 86_400_000_000_000n],
 ])
 
-// Go's bound: a duration is an int64 count of nanoseconds, about 292 years either way.
-const MAX_NANOSECONDS = 2 ** 63
+// Go's bound: a duration is an int64 count of nanoseconds, 2^63 - 1 ahead and 2^63 back, about 292 years.
+const LIMIT = 1n << 63n
 
 const GRAMMAR = 'expected a sequence of decimal numbers, each with a unit: ns, us, µs, ms, s, m, h or d'
+const NO_UNIT = 'a number has no unit: use ns, us, µs, ms, s, m, h or d'
+const OUT_OF_RANGE = 'out of range: a duration spans at most about 292 years'
 
 /**
  * Reads duration text as a {@link Duration}: `'300ms'`, `'1.5h'`, `'-2h45m'` or `'7d'`, a `d` being exactly 24
@@ -51,18 +52,11 @@ const GRAMMAR = 'expected a sequence of decimal numbers, each with a unit: ns, u
  * A possibly signed sequence of decimal numbers, each with an optional fraction and a unit: `ns`, `us` (or `µs`),
  * `ms`, `s`, `m`, `h` or `d`. `'0'` alone needs no unit. No spaces.
  *
- * Unreadable text throws rather than reading as `0`: a timeout of zero aborts everything it guards.
- *
  * @throws {@link ErrInvalidDuration} if the text is outside the grammar, or spans more than about 292 years.
  */
 export function parseDuration(text: string): Duration {
-  let rest = text
-  let negative = false
-
-  if (rest.startsWith('-') || rest.startsWith('+')) {
-    negative = rest.startsWith('-')
-    rest = rest.slice(1)
-  }
+  const negative = text.startsWith('-')
+  let rest = negative || text.startsWith('+') ? text.slice(1) : text
 
   if (rest === '0') {
     return 0
@@ -72,58 +66,30 @@ export function parseDuration(text: string): Duration {
     throw new ErrInvalidDuration(text, GRAMMAR)
   }
 
-  let total = 0
+  let total = 0n
 
   while (rest !== '') {
-    if (rest[0] !== '.' && !isDigit(rest, 0)) {
-      throw new ErrInvalidDuration(text, GRAMMAR)
+    const part = readPart(text, rest)
+
+    total += part.span
+    if (total > LIMIT) {
+      throw new ErrInvalidDuration(text, OUT_OF_RANGE)
     }
 
-    const whole = digits(rest, 0)
-    let fraction = ''
-    let unitAt = whole
-
-    if (rest[whole] === '.') {
-      unitAt = digits(rest, whole + 1)
-      fraction = rest.slice(whole + 1, unitAt)
-    }
-
-    // A dot with no digit on either side, `.s`, is not a number.
-    if (whole === 0 && fraction === '') {
-      throw new ErrInvalidDuration(text, GRAMMAR)
-    }
-
-    let next = unitAt
-    while (next < rest.length && rest[next] !== '.' && !isDigit(rest, next)) {
-      next++
-    }
-
-    if (next === unitAt) {
-      throw new ErrInvalidDuration(text, 'a number has no unit: use ns, us, µs, ms, s, m, h or d')
-    }
-
-    const name = rest.slice(unitAt, next)
-    const unit = UNITS.get(name)
-    if (unit === undefined) {
-      throw new ErrInvalidDuration(text, `unknown unit "${name}": use ns, us, µs, ms, s, m, h or d`)
-    }
-
-    total += Number(rest.slice(0, whole) || '0') * unit + fractionOf(fraction, unit)
-
-    // Also refuses a run of digits too long to be finite.
-    if (!(total <= MAX_NANOSECONDS)) {
-      throw new ErrInvalidDuration(text, 'out of range: a duration spans at most about 292 years')
-    }
-
-    rest = rest.slice(next)
+    rest = part.rest
   }
 
-  return negative && total !== 0 ? -total / 1e6 : total / 1e6
+  // 2^63 is reachable going back only.
+  if (!negative && total === LIMIT) {
+    throw new ErrInvalidDuration(text, OUT_OF_RANGE)
+  }
+
+  const value = Number(total) / 1e6
+  return negative && total !== 0n ? -value : value
 }
 
 /**
- * Reads a span written either way, as text or as a {@link Duration}, so the package serves an option Caffeine does
- * not type itself.
+ * Reads a span written either way, as text or as a {@link Duration}.
  *
  * Text goes through {@link parseDuration}; a number is already milliseconds and passes through.
  *
@@ -170,50 +136,25 @@ export function formatDuration(d: Duration): string {
     subsecond -= 1e9
   }
 
-  let text: string
-
-  if (wholeSeconds === 0) {
-    if (subsecond === 0) {
-      return '0s'
-    }
-
-    if (subsecond < 1e3) {
-      text = `${subsecond}ns`
-    } else if (subsecond < 1e6) {
-      text = `${decimal(subsecond, 3)}µs`
-    } else {
-      text = `${decimal(subsecond, 6)}ms`
-    }
-  } else {
-    text = `${decimal((wholeSeconds % 60) * 1e9 + subsecond, 9)}s`
-
-    const minutes = Math.floor(wholeSeconds / 60)
-    if (minutes > 0) {
-      text = `${minutes % 60}m${text}`
-
-      const hours = Math.floor(minutes / 60)
-      if (hours > 0) {
-        text = `${hours % 24}h${text}`
-
-        const days = Math.floor(hours / 24)
-        if (days > 0) {
-          text = `${days}d${text}`
-        }
-      }
-    }
+  if (wholeSeconds === 0 && subsecond === 0) {
+    return '0s'
   }
 
+  const text = wholeSeconds === 0 ? subsecondText(subsecond) : clockText(wholeSeconds, subsecond)
   return d < 0 ? `-${text}` : text
 }
 
+/** `d` in hours, its fraction kept: `hours(90 * Minute)` is `1.5`. */
 export function hours(d: Duration): number {
   return d / Hour
 }
 
+/** `d` in minutes, its fraction kept: `minutes(90 * Second)` is `1.5`. */
 export function minutes(d: Duration): number {
   return d / Minute
 }
 
+/** `d` in seconds, its fraction kept: `seconds(300 * Millisecond)` is `0.3`. */
 export function seconds(d: Duration): number {
   return d / Second
 }
@@ -241,7 +182,7 @@ export function nanoseconds(d: Duration): number {
  */
 export function truncate(d: Duration, m: Duration): Duration {
   const step = nanoseconds(m)
-  if (!(step > 0)) {
+  if (Number.isNaN(step) || step <= 0) {
     return d
   }
 
@@ -258,7 +199,7 @@ export function truncate(d: Duration, m: Duration): Duration {
  */
 export function round(d: Duration, m: Duration): Duration {
   const step = nanoseconds(m)
-  if (!(step > 0)) {
+  if (Number.isNaN(step) || step <= 0) {
     return d
   }
 
@@ -270,17 +211,18 @@ export function round(d: Duration, m: Duration): Duration {
   return zeroUnsigned(rounded / 1e6)
 }
 
+/** `d` without its sign. */
 export function abs(d: Duration): Duration {
   return Math.abs(d)
 }
 
 function isDigit(text: string, at: number): boolean {
-  const code = text.charCodeAt(at)
-  return code >= 48 && code <= 57
+  const code = text.codePointAt(at)
+  return code !== undefined && code >= 48 && code <= 57
 }
 
 // Where the run of digits starting at `from` ends.
-function digits(text: string, from: number): number {
+function digitsEnd(text: string, from: number): number {
   let at = from
   while (at < text.length && isDigit(text, at)) {
     at++
@@ -288,26 +230,129 @@ function digits(text: string, from: number): number {
   return at
 }
 
-// The fraction's share of the unit, in whole nanoseconds, computed as Go's `leadingFraction` does: digits are kept
-// while their value fits in 2^63, the rest ignored, and the share truncated.
-function fractionOf(fraction: string, unit: number): number {
-  if (fraction === '') {
-    return 0
+// One number and its unit from the front of `rest`, in nanoseconds, and the text after them.
+function readPart(text: string, rest: string): { span: bigint; rest: string } {
+  if (!rest.startsWith('.') && !isDigit(rest, 0)) {
+    throw new ErrInvalidDuration(text, GRAMMAR)
   }
 
-  const kept =
-    fraction.length > 18 && fraction.slice(0, 19) <= '9223372036854775808' ? 19 : Math.min(fraction.length, 18)
-  return Math.trunc(Number(fraction.slice(0, kept)) * (unit / 10 ** kept))
+  const wholeEnd = digitsEnd(rest, 0)
+  const unitAt = rest.startsWith('.', wholeEnd) ? digitsEnd(rest, wholeEnd + 1) : wholeEnd
+  const fraction = rest.slice(wholeEnd + 1, unitAt)
+
+  // A dot with no digit on either side, `.s`, is not a number.
+  if (wholeEnd === 0 && fraction === '') {
+    throw new ErrInvalidDuration(text, GRAMMAR)
+  }
+
+  let unitEnd = unitAt
+  while (unitEnd < rest.length && !rest.startsWith('.', unitEnd) && !isDigit(rest, unitEnd)) {
+    unitEnd++
+  }
+
+  if (unitEnd === unitAt) {
+    throw new ErrInvalidDuration(text, NO_UNIT)
+  }
+
+  const name = rest.slice(unitAt, unitEnd)
+  const unit = UNITS.get(name)
+  if (unit === undefined) {
+    throw new ErrInvalidDuration(text, `unknown unit "${name}": use ns, us, µs, ms, s, m, h or d`)
+  }
+
+  const whole = wholeNumber(rest.slice(0, wholeEnd))
+  if (whole === undefined || whole > LIMIT / unit) {
+    throw new ErrInvalidDuration(text, OUT_OF_RANGE)
+  }
+
+  const span = whole * unit + fractionOf(fraction, unit)
+  if (span > LIMIT) {
+    throw new ErrInvalidDuration(text, OUT_OF_RANGE)
+  }
+
+  return { span, rest: rest.slice(unitEnd) }
+}
+
+// The digits before the point, or `undefined` past 2^63. Leading zeros are dropped first, so a long run of them
+// costs nothing, and more than 19 digits left is past 2^63 without converting them.
+function wholeNumber(digits: string): bigint | undefined {
+  let first = 0
+  while (first < digits.length - 1 && digits[first] === '0') {
+    first++
+  }
+
+  const significant = digits.slice(first)
+  if (significant.length > 19) {
+    return undefined
+  }
+
+  const value = BigInt(significant || '0')
+  return value > LIMIT ? undefined : value
+}
+
+// The fraction's share of the unit, in whole nanoseconds, as Go's `leadingFraction` computes it: digits are kept
+// while their value stays within 2^63, the rest ignored, and the share is taken in floating point and truncated.
+function fractionOf(fraction: string, unit: bigint): bigint {
+  let value = 0n
+  let scale = 1
+
+  for (let at = 0; at < fraction.length; at++) {
+    if (value > (LIMIT - 1n) / 10n) {
+      break
+    }
+
+    const next = value * 10n + BigInt(fraction.charAt(at))
+    if (next > LIMIT) {
+      break
+    }
+
+    value = next
+    scale *= 10
+  }
+
+  return value === 0n ? 0n : BigInt(Math.trunc(Number(value) * (Number(unit) / scale)))
+}
+
+// A span under a second, in the unit that keeps its leading digit non-zero.
+function subsecondText(ns: number): string {
+  if (ns < 1e3) {
+    return `${ns}ns`
+  }
+
+  return ns < 1e6 ? `${decimal(ns, 3)}µs` : `${decimal(ns, 6)}ms`
+}
+
+// A span of a second or more, from its largest unit down to the seconds. Leading zero units are left out.
+function clockText(wholeSeconds: number, subsecond: number): string {
+  const text = `${decimal((wholeSeconds % 60) * 1e9 + subsecond, 9)}s`
+
+  const wholeMinutes = Math.floor(wholeSeconds / 60)
+  if (wholeMinutes === 0) {
+    return text
+  }
+
+  const wholeHours = Math.floor(wholeMinutes / 60)
+  if (wholeHours === 0) {
+    return `${wholeMinutes}m${text}`
+  }
+
+  const wholeDays = Math.floor(wholeHours / 24)
+  const clock = `${wholeHours % 24}h${wholeMinutes % 60}m${text}`
+  return wholeDays === 0 ? clock : `${wholeDays}d${clock}`
 }
 
 // `value / 10^places` written out with the fraction's trailing zeros dropped, as Go prints a duration.
 function decimal(value: number, places: number): string {
   const scale = 10 ** places
-  const fraction = String(value % scale)
-    .padStart(places, '0')
-    .replace(/0+$/, '')
+  const digits = String(value % scale).padStart(places, '0')
 
-  return fraction === '' ? String(Math.floor(value / scale)) : `${Math.floor(value / scale)}.${fraction}`
+  let end = digits.length
+  while (end > 0 && digits[end - 1] === '0') {
+    end--
+  }
+
+  const whole = String(Math.floor(value / scale))
+  return end === 0 ? whole : `${whole}.${digits.slice(0, end)}`
 }
 
 function wholeOf(value: number): number {
