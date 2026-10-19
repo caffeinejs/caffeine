@@ -28,5 +28,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - The authenticator's copy is `new Request(sent, { headers, body })`, its body extracted anew from what the call gave,
   never `request.clone()`: a clone tees the body into memory, opens a function body early, and in Node 22 drops an
   undici `dispatcher`. A `FormData` copy drops `content-type`, so the platform writes the new boundary.
+- Nothing outlives a call: no module-level `WeakSet`, `WeakMap` or other state shared across calls. A call decides
+  from what it holds, such as a response's `url` and `redirected`, which a `clone()` keeps; constant lookup tables
+  (`RAW_BODIES`) are not state.
 - `discard()` cancels every body it is given at once: a body and its `clone()` share a tee, which settles the cancel
   of one only once the other is cancelled too, so cancelling them in turn never returns.

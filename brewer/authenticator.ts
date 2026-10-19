@@ -15,9 +15,11 @@ import { intercept, type Interceptor } from './interceptor.js'
  * asking: return `null` once the credentials you hold are refused.
  *
  * Only the call's own server is answered. A 401 that `fetch` reached by following a redirect to another origin goes to
- * the caller, and a follow-up to another origin rejects with {@link ErrBrewFollowUpNotSent}, so credentials stay with
- * the server that asked for them. A stream passed as the body is read as it is sent: `request` comes without it, and a
- * follow-up rejects with the same error. A body given as a function that returns the stream is opened anew instead.
+ * the caller, told by its `url` and `redirected`, which `clone()` keeps: one an interceptor builds with `new Response()`
+ * has neither, and counts as the call's own. A follow-up to another origin rejects with
+ * {@link ErrBrewFollowUpNotSent}, so credentials stay with the server that asked for them. A stream passed as the body
+ * is read as it is sent: `request` comes without it, and a follow-up rejects with the same error. A body given as a
+ * function that returns the stream is opened anew instead.
  *
  * `response` is a copy of the 401 while its body is unread, so a body read here is still the caller's when the answer
  * is `null`: release any reader before returning. What is left of the 401 is cancelled before the follow-up goes.
@@ -48,9 +50,6 @@ export interface Answering {
   copy(sent: Request, headers: Headers): Request
 }
 
-// 401s that `fetch` reached by following a redirect to another origin: that origin's challenge, not the call's.
-const elsewhere = new WeakSet<Response>()
-
 // Sends `first` through the interceptors, and answers each 401 it meets with the authenticator's follow-up.
 export async function authenticate(
   first: Request,
@@ -58,7 +57,7 @@ export async function authenticate(
   transport: (request: Request) => Promise<Response>,
   answering: Answering,
 ): Promise<Response> {
-  const chain = intercept(interceptors, noting(transport))
+  const chain = intercept(interceptors, transport)
   const origin = new URL(first.url).origin
   let sent = first
 
@@ -68,7 +67,7 @@ export async function authenticate(
     const headers = new Headers(sent.headers)
     const response = await chain(sent)
 
-    if (response.status !== 401 || elsewhere.has(response)) {
+    if (response.status !== 401 || elsewhere(response, origin)) {
       return response
     }
 
@@ -110,21 +109,10 @@ export async function authenticate(
   }
 }
 
-// `transport`, noting a 401 it reached by following a redirect to another origin.
-function noting(transport: (request: Request) => Promise<Response>): (request: Request) => Promise<Response> {
-  return async request => {
-    const response = await transport(request)
-    if (
-      response.status === 401 &&
-      response.redirected &&
-      response.url !== '' &&
-      new URL(response.url).origin !== new URL(request.url).origin
-    ) {
-      elsewhere.add(response)
-    }
-
-    return response
-  }
+// Whether `fetch` reached `response` by following a redirect to another origin, whose challenge it is and not the
+// call's. Read off what `clone()` keeps, so a copy an interceptor hands on is still another origin's.
+function elsewhere(response: Response, origin: string): boolean {
+  return response.redirected && response.url !== '' && new URL(response.url).origin !== origin
 }
 
 // A 401 whose body nobody has started to read: a copy of it keeps the body whole for the caller.

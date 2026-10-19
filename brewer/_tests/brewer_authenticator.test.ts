@@ -1096,6 +1096,29 @@ describe('brewer answering a 401 over a socket', () => {
       expect(hits).toEqual([expect.objectContaining({ path: '/cdn/blob', authorization: null })])
     })
 
+    // An interceptor that logs the body reads the 401 and hands on a copy: the copy is still the other origin's.
+    it("should resolve with another origin's 401 without asking when an interceptor hands on a copy", async () => {
+      const tokens = tokensFor(connect)
+      const { authenticator, attempts } = counting(tokens.authenticator)
+      const logged: string[] = []
+      const logging: Interceptor = async (request, next) => {
+        const response = await next(request)
+        const copy = response.clone()
+        logged.push(await response.text())
+        return copy
+      }
+      const client = connect({ headers: tokens.headers, authenticator, interceptors: [logging] })
+
+      const res = await client.redirect.away.get()
+
+      expect(res.status).toBe(401)
+      expect(res.url.startsWith(otherOrigin)).toBe(true)
+      expect(attempts).toEqual([])
+      expect(server.refreshes).toBe(0)
+      expect(logged).toHaveLength(1)
+      expect(await res.text()).toBe(logged[0])
+    })
+
     // The call's own server challenged at the end of a redirect: the follow-up goes to the call's URL and follows it
     // again.
     it('should answer a 401 met at the end of a same-origin redirect, following it again', async () => {
