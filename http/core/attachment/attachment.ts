@@ -142,11 +142,25 @@ class AttachmentResult extends Responder {
     const [start, end] = range
     ctx.status(206).header('content-range', `bytes ${start}-${end}/${size}`)
 
-    // A part is sent as a stream either way: a cache in front hashes and keeps whole bodies, never a part of one.
-    return sized instanceof NodeBlob
-      ? sized.slice(start, end + 1, sized.type)
-      : new NodeBlob([sized.subarray(start, end + 1)])
+    // A part goes out as a stream either way, so a cache in front, which hashes and keeps bytes, never takes it for
+    // the whole. Bytes are not copied for it: the one chunk is a view of the same memory.
+    if (sized instanceof NodeBlob) {
+      return sized.slice(start, end + 1, sized.type)
+    }
+
+    ctx.header('content-length', String(end - start + 1))
+    return chunk(sized.subarray(start, end + 1))
   }
+}
+
+/** `bytes` as a stream of one chunk. */
+function chunk(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes)
+      controller.close()
+    },
+  })
 }
 
 /**
