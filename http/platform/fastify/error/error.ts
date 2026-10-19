@@ -10,6 +10,7 @@ import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.j
 import { Responder } from '../../../response.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
+import { payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
@@ -99,7 +100,7 @@ export function installGlobalErrorHandler(
       // so there is nothing to add a stack trace to.
       const body = err.body !== undefined ? err.body : withStacktrace(httpErrorBody(err), err)
 
-      return reply.send(body)
+      return reply.send(payloadOf(reply, body))
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
@@ -246,12 +247,17 @@ function respond(ctx: Context, result: unknown): unknown {
     return reply
   }
 
-  if (result instanceof Responder) {
-    return result.respond(ctx)
+  const answer = result instanceof Responder ? result.respond(ctx) : result
+
+  // A Responder may have answered through the context, as the catch handler may.
+  if (ctx.sent && !cookieFlushFailed(reply)) {
+    return reply
   }
 
-  if (result !== undefined) {
-    return result
+  const payload = payloadOf(reply, answer)
+
+  if (payload !== undefined) {
+    return payload
   }
 
   reply.send()

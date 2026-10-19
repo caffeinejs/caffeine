@@ -15,6 +15,7 @@ import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, Unsign
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
 import { protocolOf } from './protocol.js'
+import { payloadOf } from './response.js'
 
 /** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class Context<
@@ -145,11 +146,14 @@ export class Context<
   }
 
   body(body?: unknown): this {
+    // Shaped first: an answer that cannot be sent at all — a Response whose body was read — throws with nothing in
+    // flight, and the context stays unanswered for a catch handler to answer instead.
+    const payload = payloadOf(this.#reply, body)
     // Before the send, so a send that throws still leaves the context answered.
     this.#answered = true
     // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
     reopenCookieFlush(this.#reply)
-    this.#reply.send(body)
+    this.#reply.send(payload)
     return this
   }
 
