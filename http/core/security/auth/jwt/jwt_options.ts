@@ -1,14 +1,15 @@
 import type { Duration } from '@caffeinejs/std/duration'
-import { JWTPayload, JWTVerifyOptions, type CryptoKey } from 'jose'
+import { JWTPayload, type CryptoKey } from 'jose'
 
 import { IContext } from '../../../../context.js'
 import { Claim } from '../../identity.js'
+import type { JWTServiceVerifyOptions } from './jwt_service.js'
 import { JWTKeyResolver, JWTServiceOptions } from './jwt_service_options.js'
 
 export interface JWTAuthenticationOptions {
   /** A symmetric secret, or an asymmetric public key to verify with. Absent with a key pair or a key resolver. */
   secret?: string | Uint8Array | CryptoKey
-  jwtOptions?: JWTVerifyOptions
+  jwtOptions?: JWTServiceVerifyOptions
   roleClaimType?: string
   /**
    * Includes the validation failure's description in the `WWW-Authenticate` challenge.
@@ -105,7 +106,7 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
-  jwtOptions(jwt: JWTVerifyOptions): this {
+  jwtOptions(jwt: JWTServiceVerifyOptions): this {
     this.#options.jwtOptions = jwt
     return this
   }

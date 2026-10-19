@@ -30,6 +30,6 @@ export interface JWTServiceOptions {
   expiresIn?: Duration
   // How long after it is signed a token starts to be accepted. Negative backdates it.
   notBefore?: Duration
-  // Verification clock skew tolerance.
+  // Verification clock skew tolerance, in whole seconds.
   clockTolerance?: Duration
 }

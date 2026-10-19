@@ -161,6 +161,9 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
 
     const tokens = await this.#exchangeCode(code, stored.codeVerifier, discovery)
 
+    // Every time claim counts whole seconds, and so does the leeway on them: one value for both checks below.
+    const tolerance = Math.floor(this.options.clockTolerance / Second)
+
     let payload: Record<string, unknown>
     let alg: string
     try {
@@ -169,8 +172,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
         issuer: discovery.issuer,
         audience: this.options.clientID,
         algorithms: ID_TOKEN_ALGORITHMS,
-        // jose counts seconds.
-        clockTolerance: this.options.clockTolerance / Second,
+        clockTolerance: tolerance,
         // OIDC Core §2: both are REQUIRED. jose checks a time claim only when there is one, so an id_token without
         // `exp` would otherwise be good forever.
         requiredClaims: ['exp', 'iat'],
@@ -210,7 +212,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       // `auth_time` and `max_age` count whole seconds.
       const maxAge = Math.floor(this.options.maxAge / Second)
       const age = Math.floor(Date.now() / 1000) - payload.auth_time
-      if (age > maxAge + this.options.clockTolerance / Second) {
+      if (age > maxAge + tolerance) {
         throw this.callbackFailure(
           `the provider authenticated the user ${age}s ago, older than the requested max_age of ${maxAge}s`,
         )

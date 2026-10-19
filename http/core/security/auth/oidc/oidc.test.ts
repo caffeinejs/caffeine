@@ -1,4 +1,4 @@
-import { Hour, Minute, Second } from '@caffeinejs/std/duration'
+import { Hour, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -133,8 +133,11 @@ describe('OIDCAuthenticationHandler', () => {
 
       expect((await handler.authenticate(ctx)).succeeded).toBe(true)
 
-      const [name, resealed] = cookie.mock.calls[0] as [string, string]
+      const [name, resealed, opts] = cookie.mock.calls[0] as [string, string, { maxAge: number }]
       expect(name).toBe('__oidc_session')
+      // What is left of the hour, in milliseconds: a count of seconds here would expire the cookie at once.
+      expect(opts.maxAge).toBeGreaterThan(1 * Hour - 5 * Second)
+      expect(opts.maxAge).toBeLessThanOrEqual(1 * Hour)
       expect((await openSessionCookie(resealed, NEWER, SCHEME)).exp).toBe(
         (await openSessionCookie(jwt, SESSION_SECRET, SCHEME)).exp,
       )
@@ -851,6 +854,8 @@ describe('OIDCAuthenticationHandler', () => {
     // Every other test here hands the handler its keys. A deployment hands it none: the keys are the ones the
     // provider publishes at `jwks_uri`, and that is the path a forged id_token has to get past.
     describe('with no key resolver of its own', () => {
+      const USER_INFO = `${ISSUER}/userinfo`
+
       /** The provider, its key set included. `published` is what `jwks_uri` answers with. */
       function provider(nonce: string, signingKey: CryptoKey, published: CryptoKey): { jwksFetches: () => number } {
         let jwksFetches = 0
@@ -867,8 +872,11 @@ describe('OIDCAuthenticationHandler', () => {
                 headers: { 'content-type': 'application/json' },
               })
             }
+            if (String(url) === USER_INFO) {
+              return Response.json({ sub: 'user123' })
+            }
             if (String(url).includes('.well-known')) {
-              return { ok: true, json: () => Promise.resolve(DISCOVERY_DOCUMENT) }
+              return { ok: true, json: () => Promise.resolve({ ...DISCOVERY_DOCUMENT, userinfo_endpoint: USER_INFO }) }
             }
             if (opts?.method === 'POST') {
               const idToken = await new SignJWT({ sub: 'user123', nonce })
@@ -890,8 +898,8 @@ describe('OIDCAuthenticationHandler', () => {
         return { jwksFetches: () => jwksFetches }
       }
 
-      async function callback(nonce: string) {
-        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions())
+      async function callback(nonce: string, overrides: Partial<OIDCAuthenticationOptions> = {}) {
+        const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions(overrides))
         const { ctx } = makeCtx({
           cookies: { '__oidc_state.st': await makeStateCookie(nonce) },
           query: { code: 'c', state: 'st' },
@@ -914,6 +922,17 @@ describe('OIDCAuthenticationHandler', () => {
         provider('forged', forgers.privateKey, providers.publicKey)
 
         await expect(callback('forged')).rejects.toThrow(/signature verification failed/)
+      })
+
+      // Each request's deadline takes whole milliseconds, and refuses a fraction.
+      it('reaches every endpoint under a timeout that is not a whole number of milliseconds', async () => {
+        const pair = await generateKeyPair('RS256')
+        const { jwksFetches } = provider('fractional', pair.privateKey, pair.publicKey)
+
+        await expect(
+          callback('fractional', { httpTimeout: 5 * Second + 0.5 * Millisecond, getClaimsFromUserInfoEndpoint: true }),
+        ).resolves.toBeUndefined()
+        expect(jwksFetches()).toBe(1)
       })
     })
 
@@ -1085,6 +1104,30 @@ describe('OIDCAuthenticationHandler', () => {
         await handler.challenge(makeCtx().ctx)
 
         expect(calls.discovery).toBe(2)
+      })
+
+      it('keeps the document for discoveryCacheTTL, then refetches', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+
+        try {
+          const calls = countingFetch('n')
+          const handler = new OIDCAuthenticationHandler(
+            'OIDC',
+            makeBaseOptions({ jwksResolver, discoveryCacheTTL: 1 * Minute }),
+          )
+          const fetchedAt = Date.now()
+
+          await handler.challenge(makeCtx().ctx)
+          vi.setSystemTime(fetchedAt + 59 * Second)
+          await handler.challenge(makeCtx().ctx)
+          expect(calls.discovery).toBe(1)
+
+          vi.setSystemTime(fetchedAt + 1 * Minute)
+          await handler.challenge(makeCtx().ctx)
+          expect(calls.discovery).toBe(2)
+        } finally {
+          vi.useRealTimers()
+        }
       })
 
       it('refetches the JWKS when discovery rotates jwks_uri', async () => {
@@ -1345,7 +1388,12 @@ describe('OIDCAuthenticationHandler', () => {
      * green. Both are cheap to lose in a refactor and expensive to lose in production.
      */
     describe('id_token trust boundary', () => {
-      async function callbackWithToken(idToken: string, nonce: string, resolver?: JWTVerifyGetKey) {
+      async function callbackWithToken(
+        idToken: string,
+        nonce: string,
+        resolver?: JWTVerifyGetKey,
+        options: Partial<OIDCAuthenticationOptions> = {},
+      ) {
         vi.stubGlobal(
           'fetch',
           vi.fn(async (url: string, opts?: RequestInit) => {
@@ -1363,6 +1411,7 @@ describe('OIDCAuthenticationHandler', () => {
           'OIDC',
           makeBaseOptions({
             jwksResolver: resolver ? () => resolver : jwksResolver,
+            ...options,
           }),
         )
         const { ctx } = makeCtx({
@@ -1452,6 +1501,33 @@ describe('OIDCAuthenticationHandler', () => {
 
         await expect(callbackWithToken(expired, nonce)).rejects.toThrow(/id_token validation failed.*"exp"/)
       })
+
+      // Time claims are whole seconds, and so is the leeway on them: under 1.9 s, as under 1 s, an id_token that
+      // expired a second ago is refused.
+      it('counts the clock tolerance in whole seconds', async () => {
+        vi.useFakeTimers({ toFake: ['Date'] })
+
+        try {
+          const nonce = 'just-expired'
+          const now = Math.floor(Date.now() / 1000)
+          const expired = await new SignJWT({ sub: 'user123', nonce })
+            .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+            .setIssuer(ISSUER)
+            .setAudience(CLIENT_ID)
+            .setIssuedAt(now - 60)
+            .setExpirationTime(now - 1)
+            .sign(privateKey)
+
+          await expect(
+            callbackWithToken(expired, nonce, undefined, { clockTolerance: 1 * Second + 900 * Millisecond }),
+          ).rejects.toThrow(/id_token validation failed.*"exp"/)
+          await expect(
+            callbackWithToken(expired, nonce, undefined, { clockTolerance: 2 * Second }),
+          ).resolves.toBeUndefined()
+        } finally {
+          vi.useRealTimers()
+        }
+      })
     })
 
     // OIDC Core §3.1.3.3. The access token goes on to be presented at the UserInfo endpoint as a bearer token,
@@ -1527,6 +1603,12 @@ describe('OIDCAuthenticationHandler', () => {
         expect(url.searchParams.get('prompt')).toBe('login')
         expect(url.searchParams.get('login_hint')).toBe('jane@example.com')
         expect(url.searchParams.get('acr_values')).toBe('urn:mace:incommon:iap:silver phr')
+        expect(url.searchParams.get('max_age')).toBe('300')
+      })
+
+      it('sends max_age in whole seconds, dropping a part of a second', async () => {
+        const url = await challengeURL({ maxAge: 5 * Minute + 500 * Millisecond })
+
         expect(url.searchParams.get('max_age')).toBe('300')
       })
 

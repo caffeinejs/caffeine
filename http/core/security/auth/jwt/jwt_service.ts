@@ -16,6 +16,17 @@ export interface JWTSignOptions {
   header?: Record<string, unknown>
 }
 
+/**
+ * Per-call checks for {@link JWTService.verify}: jose's verify options, with `clockTolerance` and `maxTokenAge` as
+ * {@link Duration}s. Both count whole seconds, a part of a second dropped.
+ */
+export type JWTServiceVerifyOptions = Omit<JWTVerifyOptions, 'clockTolerance' | 'maxTokenAge'> & {
+  /** How far past `exp`, or before `nbf`, a token is still accepted. Overrides the service's. */
+  clockTolerance?: Duration
+  /** How old a token may be, by its `iat`, which it then has to carry. */
+  maxTokenAge?: Duration
+}
+
 /** RFC 7518 §3.2: an HMAC key has to be at least as long as the hash it feeds. */
 const HMAC = new Map([
   ['HS256', { hash: 'SHA-256', bytes: 32 }],
@@ -132,20 +143,22 @@ export class JWTService {
 
   /**
    * Verifies a token's signature and claims, returning its payload. Rejects on any failure
-   * (bad signature, expiry, issuer/audience mismatch). `options` merge over the service defaults.
+   * (bad signature, expiry, issuer/audience mismatch). `options` merge over the service defaults, and their
+   * `clockTolerance` and `maxTokenAge` are {@link Duration}s, like the service's.
    *
    * A token with no `exp` is rejected: jose checks an expiry only when there is one, so without this a token minted
    * without a lifetime is good forever. `requiredClaims` adds to that and does not replace it: asking for `sub`
    * asks for `sub` and `exp`. Pass `requiredClaims: []`, and nothing else, to accept a token with no expiry.
    */
-  async verify<T extends JWTPayload = JWTPayload>(token: string, options: JWTVerifyOptions = {}): Promise<T> {
+  async verify<T extends JWTPayload = JWTPayload>(token: string, options: JWTServiceVerifyOptions = {}): Promise<T> {
+    const { clockTolerance = this.#options.clockTolerance, maxTokenAge, ...rest } = options
     const verifyOptions: JWTVerifyOptions = {
       algorithms: [this.#algorithm],
       issuer: this.#options.issuer,
       audience: this.#options.audience,
-      // jose counts seconds.
-      clockTolerance: this.#options.clockTolerance === undefined ? undefined : this.#options.clockTolerance / Second,
-      ...options,
+      ...rest,
+      clockTolerance: wholeSeconds(clockTolerance),
+      maxTokenAge: wholeSeconds(maxTokenAge),
       requiredClaims: withExpiry(options.requiredClaims),
     }
 
@@ -251,6 +264,11 @@ export class JWTServiceBuilder {
   build(): JWTService {
     return new JWTService(this.#options)
   }
+}
+
+// jose counts the tolerance and the maximum age in seconds; a part of one would read as a whole one.
+function wholeSeconds(span: Duration | undefined): number | undefined {
+  return span === undefined ? undefined : Math.floor(span / Second)
 }
 
 // jose's setExpirationTime/setNotBefore read a number as an absolute epoch, so a span from now goes over as a date.

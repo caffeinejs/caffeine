@@ -5,6 +5,7 @@ import type { IContext } from '../../../../context.js'
 import type { CookiePriority } from '../../../cookie/options.js'
 import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../identity.js'
+import { lifetimeViolation } from '../internal/lifetime.js'
 import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
@@ -63,6 +64,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    */
   sessionSecret: CookieSecret
   sessionCookieName: string
+  /** How long a sign-in lasts: the session cookie and its sealed token. At least one second. */
   sessionCookieTTL: Duration
   stateCookieName: string
   secureCookie: boolean
@@ -192,6 +194,16 @@ export function resolveOAuth2Options(
   if (secretViolation !== undefined) {
     throw new ErrOAuthConfiguration(
       errMessage(`Cannot configure OAuth2: ${secretViolation}`)
+        .reference('@caffeinejs/http', ErrOAuthConfiguration)
+        .build(),
+    )
+  }
+
+  const lifetime = lifetimeViolation('sessionCookieTTL', input.sessionCookieTTL)
+  if (lifetime !== undefined) {
+    throw new ErrOAuthConfiguration(
+      errMessage(`Cannot configure OAuth2: ${lifetime}`)
+        .solutions('Write it with the constants, such as 1 * Hour')
         .reference('@caffeinejs/http', ErrOAuthConfiguration)
         .build(),
     )

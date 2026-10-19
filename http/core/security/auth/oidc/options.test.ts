@@ -1,4 +1,4 @@
-import { Hour, Minute, Second } from '@caffeinejs/std/duration'
+import { Hour, Millisecond, Minute, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect } from 'vitest'
 
 import { OIDCAuthenticationOptionsBuilder } from './options.js'
@@ -231,6 +231,11 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
         'a domain a header cannot carry',
         o => o.cookieDomain('bad domain'),
         'sessionCookieName "__Secure-oidc_OIDC_session": its Domain is not a valid domain name',
+      ],
+      [
+        'a session under one second',
+        o => o.sessionCookieTTL(500 * Millisecond),
+        'sessionCookieTTL must be a finite Duration of at least 1s, got "500ms"',
       ],
     ])('%s', (_what, configure, message) => {
       expect(() => configure(minimal()).build(SCHEME)).toThrow(`Cannot configure OIDC: ${message}`)

@@ -6,6 +6,7 @@ import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
 import { cookieRuleViolation } from '../../../cookie/rules.js'
 import type { Principal } from '../../identity.js'
 import { ErrAuthConfiguration } from '../errors.js'
+import { lifetimeViolation } from '../internal/lifetime.js'
 import { sessionSecretViolation, type ChallengeMode } from '../internal/remote/config.js'
 import type { SealingSecrets } from '../internal/sealed_jwt.js'
 
@@ -29,7 +30,7 @@ export interface CookieAuthenticationOptions {
   rememberMeCookieName?: string
   /**
    * How long a durable remember-me credential may live from the sign-in that issued it, however often it is used.
-   * Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
+   * At least one second. Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
    */
   rememberMeAbsoluteMaxAge?: Duration
   /**
@@ -93,10 +94,10 @@ export interface CookieAuthenticationOptions {
    * either way; this is what makes it observable.
    */
   onFail?: (ctx: IContext, error: Error) => Promise<void> | void
-  /** Absolute session lifetime for a non-persistent (session) cookie. Default 8 hours. */
+  /** Absolute session lifetime for a non-persistent (session) cookie. At least one second. Default 8 hours. */
   maxAge?: Duration
   /**
-   * How long remember-me lasts. Default 30 days.
+   * How long remember-me lasts. At least one second. Default 30 days.
    *
    * Without the durable store it is the lifetime of the persistent session cookie, fixed at sign-in. With it, it is
    * how long the credential stays good after it was last used: every use pushes it back, so it is not a limit on
@@ -283,6 +284,22 @@ export class CookieAuthenticationOptionsBuilder {
           .reference('@caffeinejs/http', ErrAuthConfiguration)
           .build(),
       )
+    }
+
+    for (const [option, lifetime, example] of [
+      ['maxAge', this.#options.maxAge, '8 * Hour'],
+      ['rememberMeMaxAge', this.#options.rememberMeMaxAge, '30 * Day'],
+      ['rememberMeAbsoluteMaxAge', this.#options.rememberMeAbsoluteMaxAge, '90 * Day'],
+    ] as const) {
+      const violation = lifetimeViolation(option, lifetime)
+      if (violation !== undefined) {
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot build CookieAuthenticationOptions: ${violation}`)
+            .solutions(`Write it with the constants, such as ${example}`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
+      }
     }
 
     // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path

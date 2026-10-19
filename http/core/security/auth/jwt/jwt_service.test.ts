@@ -1,7 +1,7 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides, token } from '@caffeinejs/di'
 import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair } from 'jose'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 import { JWTService, JWTServiceBuilder } from './jwt_service.js'
 import type { JWTKeyResolver } from './jwt_service_options.js'
@@ -64,6 +64,48 @@ describe('JWTService (symmetric)', () => {
 
     await expect(lenient.verify(justExpired)).resolves.toMatchObject({ sub: 'u3d' })
     await expect(lenient.verify(longExpired)).rejects.toThrow('"exp" claim timestamp check failed')
+  })
+
+  // The per-call tolerance is a Duration too. Handed to jose as written, thirty seconds would be eight hours.
+  it('takes a per-call clockTolerance as a Duration', async () => {
+    const justExpired = await jwt.sign({ sub: 'u3e' }, { expiresIn: -10 * Second })
+    const longExpired = await jwt.sign({ sub: 'u3e' }, { expiresIn: -1 * Minute })
+
+    await expect(jwt.verify(justExpired, { clockTolerance: 30 * Second })).resolves.toMatchObject({ sub: 'u3e' })
+    await expect(jwt.verify(longExpired, { clockTolerance: 30 * Second })).rejects.toThrow(
+      '"exp" claim timestamp check failed',
+    )
+  })
+
+  // `exp` counts whole seconds, so a tolerance does too: 1.9 seconds forgives what one second forgives, no more.
+  it('counts a tolerance in whole seconds', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const oneSecondPast = await jwt.sign({ sub: 'u3f' }, { expiresIn: -1 * Second })
+
+      await expect(jwt.verify(oneSecondPast, { clockTolerance: 1.9 * Second })).rejects.toThrow(
+        '"exp" claim timestamp check failed',
+      )
+      await expect(jwt.verify(oneSecondPast, { clockTolerance: 2 * Second })).resolves.toMatchObject({ sub: 'u3f' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // jose reads a maximum age in seconds: a minute handed over as written would let a token live for 16 hours.
+  it('takes maxTokenAge as a Duration', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const token = await jwt.sign({ sub: 'u3g' })
+      vi.setSystemTime(new Date('2026-01-01T00:02:00Z'))
+
+      await expect(jwt.verify(token, { maxTokenAge: 1 * Minute })).rejects.toThrow('"iat" claim timestamp check failed')
+      await expect(jwt.verify(token, { maxTokenAge: 5 * Minute })).resolves.toMatchObject({ sub: 'u3g' })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects a token whose notBefore is in the future', async () => {

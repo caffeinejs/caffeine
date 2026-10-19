@@ -1,8 +1,11 @@
 import { Day, type Duration, Minute, Second } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
 import type { JWTPayload } from 'jose'
 
 import { ErrHTTPUnauthorized } from '../../../error/http.js'
 import type { Principal } from '../../identity.js'
+import { ErrAuthConfiguration } from '../errors.js'
+import { lifetimeViolation } from '../internal/lifetime.js'
 import {
   newSeriesToken,
   parseToken,
@@ -48,7 +51,20 @@ export class RefreshTokenService {
   readonly #policy: SeriesTokenPolicy
   readonly #claims: (principal: Principal) => JWTPayload
 
+  /** @throws {@link ErrAuthConfiguration} when a lifetime is under one second. */
   constructor(jwt: JWTService, store: RefreshTokenStore, options: RefreshTokenOptions) {
+    for (const option of ['accessTTL', 'refreshTTL', 'absoluteTTL'] as const) {
+      const violation = lifetimeViolation(option, options[option])
+      if (violation !== undefined) {
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot create RefreshTokenService: ${violation}`)
+            .solutions('Write it with the constants, such as 15 * Minute or 30 * Day')
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
+      }
+    }
+
     this.#jwt = jwt
     this.#store = store
     this.#resolve = options.resolve

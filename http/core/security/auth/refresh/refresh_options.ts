@@ -16,16 +16,16 @@ export type RefreshPrincipalResolver = (
 
 export interface RefreshTokenOptions {
   resolve: RefreshPrincipalResolver
-  /** Access-token lifetime. Default 15 minutes. */
+  /** Access-token lifetime. At least one second. Default 15 minutes. */
   accessTTL?: Duration
   /**
-   * How long a refresh token stays good after it was last used. Default 30 days. Every refresh pushes it back, so
-   * by itself it lets a client that keeps refreshing do so forever.
+   * How long a refresh token stays good after it was last used. At least one second. Default 30 days. Every refresh
+   * pushes it back, so by itself it lets a client that keeps refreshing do so forever.
    */
   refreshTTL?: Duration
   /**
    * How long a refresh token family may live from the sign-in that issued it, however often it is refreshed.
-   * Unset by default: no limit.
+   * At least one second. Unset by default: no limit.
    */
   absoluteTTL?: Duration
   /** Maps the reloaded principal to the access-token payload. Default: every claim as `type: value`. */

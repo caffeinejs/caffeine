@@ -1,4 +1,4 @@
-import { Day, Hour, Second } from '@caffeinejs/std/duration'
+import { Day, Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
@@ -571,6 +571,22 @@ describe('CookieAuthenticationHandler', () => {
         'sessionSecret 1 of the list must be at least 32 characters',
       ],
       ['an empty list of secrets', o => o.sessionSecret([]), 'the list of sessionSecret is empty'],
+      // A cookie's Max-Age counts whole seconds: under one, the session would end as it starts.
+      [
+        'a session under one second',
+        o => o.maxAge(500 * Millisecond),
+        'maxAge must be a finite Duration of at least 1s, got "500ms"',
+      ],
+      [
+        'a remember-me under one second',
+        o => o.rememberMe().rememberMeMaxAge(500 * Millisecond),
+        'rememberMeMaxAge must be a finite Duration of at least 1s, got "500ms"',
+      ],
+      [
+        'a remember-me limit under one second',
+        o => o.rememberMe().rememberMeAbsoluteMaxAge(999 * Millisecond),
+        'rememberMeAbsoluteMaxAge must be a finite Duration of at least 1s, got "999ms"',
+      ],
     ])('%s', (_what, configure, message) => {
       const options = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET)
       configure(options)

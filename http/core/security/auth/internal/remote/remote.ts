@@ -40,7 +40,7 @@ export interface RemoteAuthenticationTokens {
   accessToken?: string
   refreshToken?: string
   tokenType?: string
-  /** How long the access token lasts, from the token response's `expires_in`. */
+  /** How long the access token lasts: the token response's `expires_in`, which counts seconds, as a `Duration`. */
   expiresIn?: Duration
   scope?: string
   /** Present only for OpenID Connect providers. */

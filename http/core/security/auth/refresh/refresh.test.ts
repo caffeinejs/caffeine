@@ -1,4 +1,4 @@
-import { Day, Minute, Hour, Second } from '@caffeinejs/std/duration'
+import { Day, Minute, Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import { Claim, Identity, Principal } from '../../index.js'
@@ -52,6 +52,15 @@ function make(resolve = vi.fn<RefreshPrincipalResolver>(async (sub: string) => p
 }
 
 describe('RefreshTokenService', () => {
+  // The refresh cookie and the access token both count whole seconds: under one, a pair would expire as it is issued.
+  it.each(['accessTTL', 'refreshTTL', 'absoluteTTL'] as const)('refuses a %s under one second', option => {
+    const options = { resolve: vi.fn<RefreshPrincipalResolver>(), accessTTL: 15 * Minute, refreshTTL: 30 * Day }
+
+    expect(() => new RefreshTokenService(jwt, new FakeStore(), { ...options, [option]: 500 * Millisecond })).toThrow(
+      `Cannot create RefreshTokenService: ${option} must be a finite Duration of at least 1s, got "500ms"`,
+    )
+  })
+
   it('issue: stores a hashed token and signs a verifiable access JWT', async () => {
     const { store, service } = make()
 

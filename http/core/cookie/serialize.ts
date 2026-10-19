@@ -1,4 +1,4 @@
-import { Second } from '@caffeinejs/std/duration'
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie'
 
@@ -69,7 +69,7 @@ export function prepareCookie(
     domain: merged.domain,
     path: merged.path,
     expires: op === 'delete' ? EPOCH : expiry(op, name, merged.expires),
-    maxAge: op === 'delete' ? 0 : merged.maxAge === undefined ? undefined : merged.maxAge / Second,
+    maxAge: maxAgeSeconds(op, merged.maxAge),
     httpOnly: Boolean(merged.httpOnly),
     secure: Boolean(secure),
     sameSite,
@@ -213,6 +213,15 @@ function expiry(op: CookieOperation, name: string, expires: Date | number | unde
   }
 
   return date
+}
+
+// `Max-Age` counts seconds. A span that is not whole seconds reaches cookie@2 as a fraction, which it refuses.
+function maxAgeSeconds(op: CookieOperation, maxAge: Duration | undefined): number | undefined {
+  if (op === 'delete') {
+    return 0
+  }
+
+  return maxAge === undefined ? undefined : maxAge / Second
 }
 
 function normalizedDomain(domain: string | undefined): string {

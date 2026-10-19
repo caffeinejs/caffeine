@@ -6,6 +6,7 @@ import type { IContext } from '../../../../context.js'
 import type { CookiePriority } from '../../../cookie/options.js'
 import type { CookieSecret } from '../../../cookie/signer.js'
 import type { Claim } from '../../identity.js'
+import { lifetimeViolation } from '../internal/lifetime.js'
 import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
@@ -39,7 +40,7 @@ export interface OIDCTokens {
   accessToken?: string
   refreshToken?: string
   tokenType?: string
-  /** How long the access token lasts, from the token response's `expires_in`. */
+  /** How long the access token lasts: the token response's `expires_in`, which counts seconds, as a `Duration`. */
   expiresIn?: Duration
   scope?: string
 }
@@ -94,6 +95,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    */
   sessionSecret: CookieSecret
   sessionCookieName: string
+  /** How long a sign-in lasts: the session cookie and its sealed token. At least one second. */
   sessionCookieTTL: Duration
   stateCookieName: string
   secureCookie: boolean
@@ -106,7 +108,7 @@ export interface ResolvedOIDCAuthenticationOptions {
   roleClaimType: string
   /** Permits the `plain` PKCE method against providers that do not advertise S256. */
   allowPlainPKCE: boolean
-  /** Leeway for provider clock drift when validating id_token time claims. */
+  /** Leeway for provider clock drift when validating id_token time claims, in whole seconds. */
   clockTolerance: Duration
   /** Ceiling on discovery and token-exchange requests, so a hung provider cannot pin a request. */
   httpTimeout: Duration
@@ -212,7 +214,8 @@ export interface ResolvedOIDCAuthenticationOptions {
   acrValues?: string[]
 
   /**
-   * The maximum age of the user's authentication at the provider, sent as `max_age` in whole seconds.
+   * The maximum age of the user's authentication at the provider. Sent as `max_age` in whole seconds, a part of a
+   * second dropped: `5 * Minute` is `max_age=300`.
    *
    * OIDC Core §2 makes `auth_time` REQUIRED in the id_token once this is sent, and the handler
    * enforces it: an id_token with no `auth_time`, or one older than this, is rejected.
@@ -325,6 +328,16 @@ export function resolveOIDCOptions(
   if (secretViolation !== undefined) {
     throw new ErrOIDCConfiguration(
       errMessage(`Cannot configure OIDC: ${secretViolation}`)
+        .reference('@caffeinejs/http', ErrOIDCConfiguration)
+        .build(),
+    )
+  }
+
+  const lifetime = lifetimeViolation('sessionCookieTTL', input.sessionCookieTTL)
+  if (lifetime !== undefined) {
+    throw new ErrOIDCConfiguration(
+      errMessage(`Cannot configure OIDC: ${lifetime}`)
+        .solutions('Write it with the constants, such as 1 * Hour')
         .reference('@caffeinejs/http', ErrOIDCConfiguration)
         .build(),
     )

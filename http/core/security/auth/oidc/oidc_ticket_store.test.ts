@@ -1,4 +1,4 @@
-import { Hour } from '@caffeinejs/std/duration'
+import { Hour, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -266,6 +266,8 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
       expect(name).toBe('__oidc_session')
       expect(after.key).toBe(before.key)
       expect(after.exp).toBe(before.exp)
+      // What is left of the hour, in milliseconds: a count of seconds here would expire the cookie at once.
+      expect(opts.maxAge).toBeGreaterThan(1 * Hour - 5 * Second)
       expect(opts.maxAge).toBeLessThanOrEqual(1 * Hour)
     })
 

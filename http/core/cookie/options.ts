@@ -23,7 +23,10 @@ export interface CookieSerializeOptions {
   /** A date, or milliseconds since the epoch. */
   expires?: Date | number
 
-  /** Written as `Max-Age`, in seconds: a span that is not a whole number of seconds is refused. */
+  /**
+   * How long the cookie lasts, a `Duration`: `1 * Hour` is written `Max-Age=3600`. A span that is not a whole number
+   * of seconds is refused.
+   */
   maxAge?: Duration
 
   httpOnly?: boolean
