@@ -50,7 +50,8 @@ class RepositoryService {
 ```
 
 There are no parameter decorators to reach for: TC39 has none, so `@Inject` applies to a
-field, accessor or method, never to a constructor parameter.
+field, an auto-accessor, a setter, or a getter with a setter of the same name, never to a
+constructor parameter or a method.
 
 ## Property injection
 
@@ -139,5 +140,5 @@ A class that implements `OnBootstrap` has its `onBootstrap()` method run during
 For reference, the full sequence for a managed class:
 
 1. Constructor called with constructor deps
-2. Property injections applied (`@Inject` on fields)
+2. Property injections applied (`@Inject` on fields, accessors, setters and getters)
 3. `@PostConstruct` hook runs

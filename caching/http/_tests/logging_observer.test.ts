@@ -1,8 +1,7 @@
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
 import { describe, expect, it } from 'vitest'
 
-import { loggingCacheObserver } from '../logging_observer.js'
-import type { CacheRoute } from '../observer.js'
+import { loggingCacheObserver, type CacheRoute } from '../index.js'
 
 type Written = { severity: string; args: unknown[] }
 
@@ -106,6 +105,20 @@ describe('loggingCacheObserver', () => {
     loggingCacheObserver(log).onInvalidate!({ route, tags: ['products', 'all'] })
 
     expect(log.written[0].args).toEqual([{ route, tags: ['products', 'all'] }, 'cache invalidate'])
+  })
+
+  // The age says how stale the answer that went out was, `replaced` what the handler had produced instead.
+  it('records a stale entry served over a 5xx, with the key only when asked for', () => {
+    const log = new Recorder()
+    const event = { route, key: 'k', ageSeconds: 90, replaced: 503 }
+
+    loggingCacheObserver(log, { level: 'warn' }).onStaleIfError!(event)
+    loggingCacheObserver(log, { includeKeys: true }).onStaleIfError!(event)
+
+    expect(log.written).toEqual([
+      { severity: 'warn', args: [{ route, ageSeconds: 90, replaced: 503 }, 'cache stale-if-error'] },
+      { severity: 'debug', args: [{ route, ageSeconds: 90, replaced: 503, key: 'k' }, 'cache stale-if-error'] },
+    ])
   })
 
   // An outage is not a debug-level outcome: it is written at error whatever `level` says.

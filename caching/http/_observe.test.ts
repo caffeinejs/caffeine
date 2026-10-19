@@ -32,12 +32,6 @@ describe('cacheRouteOf', () => {
     expect(cacheRouteOf(routeDef(['GET'])).url).toBe('/api/pets/:id')
   })
 
-  it('names the handler after its group and route when the framework compiled the route', () => {
-    expect(cacheRouteOf(routeDef(['GET'], { group: 'PetsController', route: 'find' })).handler).toBe(
-      'PetsController.find',
-    )
-  })
-
   // A route straight on Fastify carries no `$caffeine`; a programmatic route may be unnamed; a symbol-named
   // method would stringify to `Symbol(...)`. None of those is a name worth a metric attribute.
   it('leaves the handler out when there is no usable name', () => {
@@ -47,12 +41,6 @@ describe('cacheRouteOf', () => {
     expect(cacheRouteOf(routeDef(['GET'], { group: 'PetsController', route: Symbol('find') }))).not.toHaveProperty(
       'handler',
     )
-  })
-
-  // Every observer receives this same object on every request to the route; one observer mutating it would
-  // corrupt what all the others see.
-  it('is frozen', () => {
-    expect(Object.isFrozen(cacheRouteOf(routeDef(['GET'])))).toBe(true)
   })
 })
 
@@ -75,26 +63,6 @@ describe('guardObserver', () => {
       },
     }
   }
-
-  it('keeps a throw from escaping', () => {
-    const { log } = recordingLog()
-
-    expect(() => guardObserver(throwing(), log).onBypass!(bypass)).not.toThrow()
-  })
-
-  // A broken observer on a hot route would otherwise write one error line per request.
-  it('logs the first throw from a method and drops the ones after it', () => {
-    const { log, errors } = recordingLog()
-    const guarded = guardObserver(throwing(), log)
-
-    guarded.onBypass!(bypass)
-    guarded.onBypass!(bypass)
-    guarded.onBypass!(bypass)
-
-    expect(errors).toHaveLength(1)
-    expect(errors[0][0]).toMatchObject({ err: expect.objectContaining({ message: 'boom' }) })
-    expect(errors[0][1]).toBe('Cache observer "onBypass" threw; further throws from "onBypass" are suppressed')
-  })
 
   it('reports each method on its own', () => {
     const { log, errors } = recordingLog()

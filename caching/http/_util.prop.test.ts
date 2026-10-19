@@ -20,8 +20,9 @@ describe('generateETag (property)', () => {
     fc.uint8Array().map(a => Buffer.from(a)), // arbitrary binary bytes as Buffer
   )
 
-  it.prop([anyPayload])('result is a quoted 16-hex-char string', async payload => {
-    expect(await generateETag(payload as string | Buffer)).toMatch(/^"[0-9a-f]{16}"$/)
+  // The default tag is strong (README "Installing"): quoted, with no `W/` in front. How it is hashed is its own.
+  it.prop([anyPayload])('is a strong entity-tag, whatever the payload', async payload => {
+    expect(await generateETag(payload as string | Buffer)).toMatch(/^"[^"]*"$/)
   })
 
   it.prop([anyPayload])('deterministic: same input produces same ETag', async payload => {
@@ -134,6 +135,28 @@ describe('defaultCacheKey (property)', () => {
 
       expect(defaultCacheKey(asRequest('GET', withQuery(path, withExtra)), undefined, named)).toBe(
         defaultCacheKey(asRequest('GET', withQuery(path, params)), undefined, named),
+      )
+    },
+  )
+
+  // Equal keys for equal requests is half of it: a key that told nothing apart would answer every request with the
+  // one response stored first.
+  it.prop([fc.stringMatching(/^\/[a-z0-9/-]{0,12}$/), fc.stringMatching(/^\/[a-z0-9/-]{0,12}$/)])(
+    'gives requests for different paths different keys',
+    (a, b) => {
+      fc.pre(a !== b)
+      expect(defaultCacheKey(asRequest('GET', a))).not.toBe(defaultCacheKey(asRequest('GET', b)))
+    },
+  )
+
+  it.prop([fc.stringMatching(/^[a-z]{1,6}$/), fc.string(), fc.string()])(
+    'gives requests that differ in a parameter the key carries different keys',
+    (name, a, b) => {
+      fc.pre(a !== b)
+      const named = new Set([name])
+
+      expect(defaultCacheKey(asRequest('GET', withQuery('/pets', [[name, a]])), undefined, named)).not.toBe(
+        defaultCacheKey(asRequest('GET', withQuery('/pets', [[name, b]])), undefined, named),
       )
     },
   )

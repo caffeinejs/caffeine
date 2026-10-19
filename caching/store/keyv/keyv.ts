@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
-import { parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/framework/err'
 
 import type {
   HTTPCacheCallOptions,
@@ -10,13 +11,23 @@ import type {
   HTTPCacheStore,
 } from '../../http/store.js'
 
+/** Thrown for a {@link KeyvHTTPCacheStore} that is set up in a way it cannot serve. */
+export class ErrKeyvCache extends Error {
+  readonly code = 'ERR_KEYV_CACHE'
+
+  constructor(message: string) {
+    super(message)
+    this.name = 'ErrKeyvCache'
+  }
+}
+
 const DEFAULT_PREFIX = 'caffeine:cache:'
 
-// What an absent marker reads as. A marker this store writes is a UUID, so it can never be this.
-const NEVER_EVICTED = '0'
+const DURATION = new RegExp(DURATION_PATTERN)
 
 /**
- * The part of a key-value cache this store calls. A cache-manager `Cache` and a `Keyv` both satisfy it.
+ * The part of a `Keyv` this store calls. A `Keyv` satisfies it, and so does a cache-manager `Cache`, whose stores
+ * are `Keyv`s.
  *
  * `ttl` is required, and in milliseconds: this store always decides how long what it writes is kept, so the
  * backend's own default `ttl` never applies to an entry or a marker. A backend whose `set` takes `ttl` optionally
@@ -25,24 +36,25 @@ const NEVER_EVICTED = '0'
  * `get` hands back `unknown` rather than the string that was stored: `Keyv.get` is a set of overloads, and
  * pinning it to a concrete signature here is what breaks on an upstream release. The reply is coerced instead.
  */
-export interface KeyValueHTTPCacheClient {
+export interface KeyvHTTPCacheClient {
   get(key: string): Promise<unknown>
   set(key: string, value: string, ttl: number): Promise<unknown>
 }
 
-export interface KeyValueHTTPCacheStoreOptions {
+export interface KeyvHTTPCacheStoreOptions {
   /**
    * Put in front of every key this store writes, as given: no separator is added. Defaults to `caffeine:cache:`;
    * `''` puts nothing in front.
    */
   prefix?: string
   /**
-   * How long a tag marker is kept. Defaults to `0` — never expires, which is what the counters of the Redis and
-   * memory stores do.
+   * How long a tag marker is kept: a non-negative duration. Defaults to `0` — never expires, which is what the
+   * counters of the Redis and memory stores do.
    *
-   * Set it to bound the marker keyspace, and keep it above the longest `ttl` plus the longest stale window: a
-   * marker that expires while an entry written under it is still alive takes that entry down with it, since the
-   * marker it recorded no longer matches. That is over-eviction — a lost hit, never a stale response.
+   * Set it to bound the marker keyspace, and keep it well above the longest `ttl` plus the longest stale window:
+   * a marker that lapses takes every entry recorded under it down with it, since what they recorded no longer
+   * matches, so the entries under a tag miss at least once per `tagTtl`. That is over-eviction — a lost hit, never
+   * a stale response.
    */
   tagTtl?: Duration
 }
@@ -61,8 +73,8 @@ interface HTTPEnvelope {
 }
 
 /**
- * An {@link HTTPCacheStore} on any key-value cache — a cache-manager `Cache`, a `Keyv`, or anything else
- * satisfying {@link KeyValueHTTPCacheClient}.
+ * An {@link HTTPCacheStore} on a `Keyv` — or on a cache-manager `Cache`, whose stores are `Keyv`s, or on anything
+ * else satisfying {@link KeyvHTTPCacheClient}.
  *
  * The cache is the caller's: this store never creates, connects or disconnects it.
  *
@@ -71,7 +83,11 @@ interface HTTPEnvelope {
  *
  * A tag is a marker: an entry records the marker of each of its tags when it is stored, and reads as absent once
  * any of them has changed. `evictByTag` writes a fresh marker per tag and touches no entry; the entry goes when
- * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again.
+ * it is next read, overwritten, or expired. Unlike a counter a marker cannot come round again. A marker that is
+ * gone — lapsed past `tagTtl`, or dropped by a backend that evicts under memory pressure — counts as changed: `put`
+ * writes one for a tag that has none, so no entry records an absent marker. That write can replace the marker of an
+ * eviction landing during the `put`, whose entry is then served: the race any request in flight during an eviction
+ * has.
  *
  * Neither cache-manager nor Keyv takes an `AbortSignal`. A call whose signal is already aborted is refused, but
  * one already issued runs to completion even after the cache has given up waiting for it.
@@ -79,13 +95,15 @@ interface HTTPEnvelope {
  * Both backends hide failures by default, which costs the cache its error reporting rather than its correctness:
  * cache-manager's `get` reads a broken store as a miss, and Keyv resolves instead of rejecting unless it was
  * built with `throwOnErrors: true`.
+ *
+ * @throws ErrKeyvCache When `tagTtl` is not a non-negative duration.
  */
-export class KeyValueHTTPCacheStore implements HTTPCacheStore {
-  readonly #client: KeyValueHTTPCacheClient
+export class KeyvHTTPCacheStore implements HTTPCacheStore {
+  readonly #client: KeyvHTTPCacheClient
   readonly #prefix: string
   readonly #tagTtlMs: number
 
-  constructor(client: KeyValueHTTPCacheClient, options?: KeyValueHTTPCacheStoreOptions) {
+  constructor(client: KeyvHTTPCacheClient, options?: KeyvHTTPCacheStoreOptions) {
     this.#client = client
     this.#prefix = options?.prefix ?? DEFAULT_PREFIX
     this.#tagTtlMs = tagTtlOf(options?.tagTtl)
@@ -110,7 +128,7 @@ export class KeyValueHTTPCacheStore implements HTTPCacheStore {
     const envelope = JSON.parse(String(raw)) as HTTPEnvelope
     const recorded = envelope.g
     if (recorded !== undefined) {
-      const current = new Map<string, string>()
+      const current = new Map<string, string | undefined>()
       hinted.forEach((tag, i) => current.set(tag, marker(markers[i])))
 
       const unhinted = Object.keys(recorded).filter(tag => !current.has(tag))
@@ -141,13 +159,27 @@ export class KeyValueHTTPCacheStore implements HTTPCacheStore {
 
     const tags = options.tags ?? []
 
-    // Read together, once for the call. An eviction landing between this and the write leaves an entry under the
-    // earlier marker, which reads as absent.
+    // Read together, once for the call, and a tag with no marker gets one before the entry is written: an entry
+    // that recorded an absent marker would match again once a later marker is gone. An eviction landing between
+    // the read and the write leaves an entry under an existing marker, which then reads as changed; a marker this
+    // call creates replaces the eviction's instead, since neither backend can write only if absent.
     let markers: Record<string, string> | undefined
     if (tags.length > 0) {
-      const current = await Promise.all(tags.map(tag => this.#client.get(this.#tagKey(tag))))
-      markers = {}
-      tags.forEach((tag, i) => (markers![tag] = marker(current[i])))
+      const distinct = [...new Set(tags)]
+      const current = await Promise.all(distinct.map(tag => this.#client.get(this.#tagKey(tag))))
+      const recorded: Record<string, string> = {}
+      const written: Promise<unknown>[] = []
+      distinct.forEach((tag, i) => {
+        const existing = marker(current[i])
+        if (existing === undefined) {
+          recorded[tag] = randomUUID()
+          written.push(this.#client.set(this.#tagKey(tag), recorded[tag], this.#tagTtlMs))
+        } else {
+          recorded[tag] = existing
+        }
+      })
+      await Promise.all(written)
+      markers = recorded
     }
 
     await this.#client.set(this.#entryKey(key), JSON.stringify(envelopeOf(entry, markers)), ms)
@@ -174,17 +206,33 @@ export class KeyValueHTTPCacheStore implements HTTPCacheStore {
   }
 }
 
+// `parseDuration` reads what it cannot parse as 0, and `-5s` as 5: either would pass for a marker lifetime.
 function tagTtlOf(tagTtl: Duration | undefined): number {
   if (tagTtl === undefined) {
     return 0
   }
 
-  const ms = Math.ceil(parseDuration(tagTtl) * 1000)
-  return Number.isFinite(ms) && ms > 0 ? ms : 0
+  // Checked before rounding: a negative fraction of a millisecond would round to 0, which means never expires.
+  const seconds = parseDuration(tagTtl)
+  if (!((typeof tagTtl === 'number' || DURATION.test(tagTtl)) && Number.isFinite(seconds) && seconds >= 0)) {
+    throw new ErrKeyvCache(
+      errMessage(`Cannot create a Keyv cache with the tagTtl "${String(tagTtl)}": it is not a non-negative duration`)
+        .solutions(
+          'Write tagTtl as duration text such as "1h", or as a number of seconds',
+          'Leave tagTtl unset, or set it to 0, for markers that never expire',
+        )
+        .reference('@caffeinejs/caching', ErrKeyvCache)
+        .build(),
+    )
+  }
+
+  return seconds === 0 ? 0 : Math.ceil(seconds * 1000)
 }
 
-function marker(value: unknown): string {
-  return value === null || value === undefined ? NEVER_EVICTED : String(value)
+// An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry
+// records. Markers are written as strings, so a value of any other type reads as absent too.
+function marker(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
 }
 
 function envelopeOf(entry: HTTPCacheEntry, markers: Record<string, string> | undefined): HTTPEnvelope {

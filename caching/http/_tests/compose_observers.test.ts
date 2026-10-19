@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { composeObservers, type CacheHitEvent, type CacheObserver, type CacheRoute } from '../observer.js'
+import { composeObservers, type CacheHitEvent, type CacheObserver, type CacheRoute } from '../index.js'
 
 const route: CacheRoute = Object.freeze({ method: 'GET', url: '/pets/:id' })
 const hit: CacheHitEvent = {

@@ -13,6 +13,7 @@ npm install @caffeinejs/caching
 | `@caffeinejs/caching/http`         | `HTTPCaching`, `@CacheControl`, `@CacheInvalidate`, `HTTPCacheStore`, `kHTTPCacheStore`, observers            |
 | `@caffeinejs/caching/store/memory` | `MemoryHTTPCacheStore`, an in-process LRU store                                                               |
 | `@caffeinejs/caching/store/redis`  | `RedisHTTPCacheStore`, for Redis or Valkey, one server or a cluster                                           |
+| `@caffeinejs/caching/store/keyv`   | `KeyvHTTPCacheStore`, on a `Keyv` or a cache-manager cache                                                    |
 | `@caffeinejs/caching`              | The general-purpose `Cache` contract: `Cache`, `CacheEntry`, `CachePutItem`. Not what the HTTP cache runs on. |
 
 ## Quick start
@@ -213,23 +214,37 @@ list() {}
 update() {}
 ```
 
-A service evicts the same way, through the store. Bind it under `kHTTPCacheStore` and hand the token to
-`HTTPCaching`; anything can inject it then — a message consumer, a job, another route's handler:
+A service evicts the same way, through the store. Provide the store under `kHTTPCacheStore` and hand the token
+to `HTTPCaching`; anything can inject it then — a message consumer, a job, another route's handler. Here it is the
+Redis store, on the connected `client` from the `RedisHTTPCacheStore` section below:
 
 ```ts
 import { HTTPCaching, kHTTPCacheStore, type HTTPCacheStore } from '@caffeinejs/caching/http'
+import { RedisHTTPCacheStore } from '@caffeinejs/caching/store/redis'
+import { Configuration, Injectable, Provides } from '@caffeinejs/di'
 
-container.bind(kHTTPCacheStore, t => t.toValue(new RedisHTTPCacheStore(client)))
+@Configuration()
+class CacheConfig {
+  @Provides(kHTTPCacheStore)
+  httpCacheStore(): HTTPCacheStore {
+    return new RedisHTTPCacheStore(client)
+  }
+}
+
 app.with(HTTPCaching(b => b.store(kHTTPCacheStore)))
 
+@Injectable([kHTTPCacheStore])
 class PetsConsumer {
-  constructor(@Inject(kHTTPCacheStore) private readonly cache: HTTPCacheStore) {}
+  constructor(private readonly cache: HTTPCacheStore) {}
 
   async onPetChanged() {
     await this.cache.evictByTag('pets')
   }
 }
 ```
+
+A decorated class registers when its module is imported: the application's container reads it at
+`app.bootstrap()`, before `HTTPCaching` resolves the token.
 
 An eviction is a counter moving, not a walk over the entries: it costs the same whether a tag covers one entry
 or a million. An entry the counter left behind is gone the next time it is read, and is dropped by its own `ttl`
@@ -360,31 +375,46 @@ const store = new RedisHTTPCacheStore(client, { prefix: 'myapp:cache:' })
 - `prefix` is put in front of every key as given, with no separator of the store's own: `''` puts nothing in
   front. It may not contain `{` or `}`, and neither may a tag: `ErrRedisCache`.
 
-### Key-value stores (cache-manager, Keyv)
+### `KeyvHTTPCacheStore`
 
-`KeyValueHTTPCacheStore` runs on any key-value cache. A cache-manager cache and a `Keyv` both fit as they come,
-so the only thing you supply is the cache:
+For a `Keyv`, or a cache-manager cache, whose stores are `Keyv`s. Both fit as they come, so the only thing you
+supply is the cache:
 
 ```ts
-import { KeyValueHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+import { KeyvHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
 import { createCache } from 'cache-manager'
 
-const store = new KeyValueHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
+const store = new KeyvHTTPCacheStore(createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] }))
 ```
 
-Bind it where the rest of your wiring lives, and hand `HTTPCaching` the token:
+Provide it where the rest of your wiring lives, and hand `HTTPCaching` the token. Providing the cache itself under
+a token of its own lets the rest of the application inject it too:
 
 ```ts
+import { HTTPCaching, kHTTPCacheStore, type HTTPCacheStore } from '@caffeinejs/caching/http'
+import { KeyvHTTPCacheStore } from '@caffeinejs/caching/store/keyv'
+import { Configuration, Provides, token } from '@caffeinejs/di'
+import { createCache, type Cache } from 'cache-manager'
+
+const kCacheManager = token<Cache>('cacheManager')
+
 @Configuration()
 class CacheConfig {
+  @Provides(kCacheManager)
+  cacheManager(): Cache {
+    return createCache({ stores: [new Keyv({ store: new KeyvRedis(url) })] })
+  }
+
   @Provides(kHTTPCacheStore, [kCacheManager])
   httpCacheStore(cache: Cache): HTTPCacheStore {
-    return new KeyValueHTTPCacheStore(cache)
+    return new KeyvHTTPCacheStore(cache)
   }
 }
 
 app.with(HTTPCaching(b => b.store(kHTTPCacheStore)))
 ```
+
+`Cache` here is cache-manager's, not the `Cache` contract `@caffeinejs/caching` exports.
 
 Both backends live behind the one `store/keyv` path — cache-manager's own `stores` are `Keyv`s, so there is
 nothing separate to import for it. Each is an optional peer: bring whichever one your application already uses,
@@ -397,10 +427,14 @@ handling is written against.
 - Keys are `${prefix}e:${key}` for entries and `${prefix}t:${tag}` for tag markers. `prefix` is put in front as
   given, with no separator of the store's own, and `''` puts nothing in front.
 - A tag is a marker rather than a counter, since neither library has an atomic increment: an eviction writes a
-  fresh value for the tag, and entries recording the old one read as absent.
-- `tagTtl` is how long a tag marker is kept, and defaults to never expiring. Set it only to bound the marker
-  keyspace, and keep it above your longest `ttl` plus the longest stale window — a marker that expires while an
-  entry written under it is still alive takes that entry down too. You lose a cache hit, never correctness.
+  fresh value for the tag, and entries recording the old one read as absent. A marker that is gone, lapsed or
+  dropped by a backend that evicts under memory pressure, counts as changed too: an entry stored before an
+  eviction of a tag it carries is never served again.
+- `tagTtl` is how long a tag marker is kept, and defaults to never expiring, as `0` does; anything but a
+  non-negative duration is refused with `ErrKeyvCache`. Set it only to bound the marker keyspace, and keep it
+  well above your longest `ttl` plus the longest stale window — a marker that lapses takes every entry recorded
+  under it down, so the entries under a tag miss at least once per `tagTtl`. You lose cache hits, never
+  correctness.
 - Neither library takes an `AbortSignal`. A call the cache has given up on still runs to completion in the
   background; `storeTimeout` bounds the request, not the work.
 - Both hide failures by default, which costs you the cache's error reporting. cache-manager's `get` reads a
@@ -431,8 +465,8 @@ interface HTTPCacheStore {
 - A call whose signal is aborted stops what it can and rejects; one made with a signal already aborted rejects
   and does nothing.
 
-If your backend is a key-value cache, `KeyValueHTTPCacheClient` is the smaller seam to implement instead:
-`get(key)` and `set(key, value, ttl)`, with `KeyValueHTTPCacheStore` doing the rest.
+If your backend can stand in for a `Keyv`, `KeyvHTTPCacheClient` is the smaller seam to implement instead:
+`get(key)` and `set(key, value, ttl)`, with `KeyvHTTPCacheStore` doing the rest.
 
 `describeHTTPCacheStoreContract` in `caching/http/store.testkit.ts` is the contract as a Vitest suite; every
 store here passes it.
@@ -503,7 +537,10 @@ All of these fail `app.bootstrap()` with `ErrConfiguration`:
 
 - One handler run per miss holds in one process. Replicas do not share a lock.
 - A `GET` already running when a mutation evicts can store the older response after the eviction. One handler
-  run per miss narrows that to one writer per key; keep `ttl` short where it matters.
+  run per miss narrows that to one writer per key; keep `ttl` short where it matters. On `KeyvHTTPCacheStore`
+  this includes a `GET` whose store creates the marker of a tag that has none, the first under that tag or the
+  first since its marker lapsed, as the eviction lands: neither library can write only if absent, so that marker
+  replaces the eviction's.
 - A stale entry is served only while a handler run is under way for it (`staleWhileRevalidate`) or once one
   failed (`staleIfError`). Nothing refreshes an entry in the background.
 - A `HEAD` that misses stores nothing, and carries no `ETag` when the server dropped its body before the cache saw

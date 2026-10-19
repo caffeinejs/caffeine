@@ -234,21 +234,11 @@ function resolveETagGenerator(
  */
 export function cachePlugin(deps: CacheDeps): FastifyPluginAsync {
   const plugin: FastifyPluginAsync = async instance => {
-    if (!instance.hasRequestDecorator('responseCached')) {
-      instance.decorateRequest('responseCached', false)
-    }
-
-    if (!instance.hasRequestDecorator('cacheKey')) {
-      instance.decorateRequest('cacheKey', null)
-    }
-
-    if (!instance.hasRequestDecorator('cacheFlight')) {
-      instance.decorateRequest('cacheFlight', null)
-    }
-
-    if (!instance.hasRequestDecorator('cacheStale')) {
-      instance.decorateRequest('cacheStale', null)
-    }
+    // Fastify refuses a decoration the context already has, which is what refuses a second install on it.
+    instance.decorateRequest('responseCached', false)
+    instance.decorateRequest('cacheKey', null)
+    instance.decorateRequest('cacheFlight', null)
+    instance.decorateRequest('cacheStale', null)
 
     instance.addHook('onRoute', routeOptions => {
       const routeDef = routeOptions as AdapterRouteOptions

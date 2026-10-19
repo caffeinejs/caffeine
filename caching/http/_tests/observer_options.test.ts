@@ -4,8 +4,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching } from '../index.js'
-import type { CacheMissEvent, CacheObserver } from '../observer.js'
+import { CacheControl, HTTPCaching, type CacheMissEvent, type CacheObserver } from '../index.js'
 
 class MissCounter implements CacheObserver {
   readonly misses: CacheMissEvent[] = []

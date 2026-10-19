@@ -15,23 +15,7 @@ import {
   type HTTPCachePutOptions,
   type HTTPCacheStore,
 } from '../index.js'
-
-/** A handler that waits to be let go, so requests pile up behind it on purpose. */
-function gate() {
-  let open!: () => void
-  let entered!: () => void
-  const opened = new Promise<void>(resolve => (open = resolve))
-  const seen = new Promise<void>(resolve => (entered = resolve))
-
-  return {
-    open,
-    seen,
-    async hold() {
-      entered()
-      await opened
-    },
-  }
-}
+import { WatchedStore, counter, gate, turn } from './_latch.js'
 
 class Recording {
   readonly hits: CacheHitEvent[] = []
@@ -61,8 +45,6 @@ class RetentionSpy implements HTTPCacheStore {
     return this.inner.evictByTag(tags)
   }
 }
-
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 // Only the clock the cache reads an entry's age from is moved; the store's own ttl and the flight's timer run on
 // real time, and the handler never waits on a faked timer.
@@ -134,7 +116,7 @@ describe('stale-while-revalidate, served by the store', () => {
   })
 
   it('serves nobody stale on a route without the lock: every request runs the handler', async () => {
-    let calls = 0
+    const runs = counter()
     const g = gate()
 
     @Controller('/swr-unlocked')
@@ -142,11 +124,11 @@ describe('stale-while-revalidate, served by the store', () => {
       @CacheControl({ ttl: 60, staleWhileRevalidate: 30, lock: false })
       @Get('/data')
       async data() {
-        calls++
-        if (calls > 1) {
+        runs.tick()
+        if (runs.count > 1) {
           await g.hold()
         }
-        return { n: calls }
+        return { n: runs.count }
       }
     }
     void [UnlockedController]
@@ -162,12 +144,13 @@ describe('stale-while-revalidate, served by the store', () => {
     const first = app.fetch('/swr-unlocked/data')
     await g.seen
     const second = app.fetch('/swr-unlocked/data')
-    await sleep(10)
+    // The second request is in the handler while the first is still held there.
+    await runs.reached(3)
     g.open()
     const responses = await Promise.all([first, second])
 
     expect(responses.map(res => res.headers.get('x-cache'))).toEqual(['MISS', 'MISS'])
-    expect(calls).toBe(3)
+    expect(runs.count).toBe(3)
   })
 
   it('makes followers wait once the window is over, and forbids it under mustRevalidate', async () => {
@@ -199,8 +182,9 @@ describe('stale-while-revalidate, served by the store', () => {
     void [LimitsController]
 
     const spy = new RetentionSpy()
+    const store = new WatchedStore(spy)
     const recording = new Recording()
-    const app = createWebApplication().with(HTTPCaching(b => b.store(spy).observer(recording.observer)))
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -211,7 +195,8 @@ describe('stale-while-revalidate, served by the store', () => {
     const overLeader = app.fetch('/swr-limits/over')
     await gates.over.seen
     const overFollower = app.fetch('/swr-limits/over')
-    await sleep(10)
+    await store.reads.reached(3)
+    await turn()
     gates.over.open()
     const [, overFollowed] = await Promise.all([overLeader, overFollower])
     expect(overFollowed.headers.get('x-cache')).toBe('HIT')
@@ -221,10 +206,12 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.fetch('/swr-limits/forbidden')
     age(70)
     calls = 1
+    const reads = store.reads.count
     const forbiddenLeader = app.fetch('/swr-limits/forbidden')
     await gates.forbidden.seen
     const forbiddenFollower = app.fetch('/swr-limits/forbidden')
-    await sleep(10)
+    await store.reads.reached(reads + 2)
+    await turn()
     gates.forbidden.open()
     const [, forbiddenFollowed] = await Promise.all([forbiddenLeader, forbiddenFollower])
     expect(forbiddenFollowed.headers.get('x-cache')).toBe('HIT')
@@ -351,10 +338,9 @@ describe('stale-while-revalidate, served by the store', () => {
     }
     void [RequestController]
 
+    const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -372,8 +358,10 @@ describe('stale-while-revalidate, served by the store', () => {
     await g.seen
     const impatient = await app.fetch('/swr-request/data', { headers: { 'cache-control': 'only-if-cached' } })
     // Too old for this request: it waits for the leader's fresh entry rather than take the stale one.
+    const reads = store.reads.count
     const strict = app.fetch('/swr-request/data', { headers: { 'cache-control': 'max-age=10' } })
-    await sleep(10)
+    await store.reads.reached(reads + 1)
+    await turn()
     g.open()
     await leader
     const waited = await strict
@@ -650,10 +638,9 @@ describe('stale-if-error, served by the store', () => {
     }
     void [SIEFollowersController]
 
+    const store = new WatchedStore()
     const recording = new Recording()
-    const app = createWebApplication().with(
-      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).observer(recording.observer)),
-    )
+    const app = createWebApplication().with(HTTPCaching(b => b.store(store).observer(recording.observer)))
     close = () => app.close()
     await app.bootstrap()
 
@@ -664,7 +651,8 @@ describe('stale-if-error, served by the store', () => {
     const leader = app.fetch('/sie-followers/data')
     await g.seen
     const follower = app.fetch('/sie-followers/data')
-    await sleep(10)
+    await store.reads.reached(3)
+    await turn()
     g.open()
     const [led, followed] = await Promise.all([leader, follower])
 

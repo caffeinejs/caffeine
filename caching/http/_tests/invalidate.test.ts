@@ -1,4 +1,4 @@
-import { CaffeineIoC } from '@caffeinejs/di'
+import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, Post, Put, Router, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -158,9 +158,10 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
     expect([list, one]).toEqual([3, 2])
   })
 
-  // The store is bound under the token so anything can inject it: a consumer of a message, a job, another
-  // route. What it evicts is seen by the next request.
-  it('is what a service evicting through the bound store does, seen by the next request', async () => {
+  // The store is provided under the token so anything can inject it: a consumer of a message, a job, another
+  // route. What a service evicts through it is seen by the next request. Wired the way the README shows it; the
+  // profile keeps these decorated classes out of the other containers this file starts.
+  it('is what a service evicting through the provided store does, seen by the next request', async () => {
     let count = 0
 
     @Controller('/inv-service')
@@ -171,19 +172,37 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
         return { count: ++count }
       }
     }
-    void [ServiceController]
 
-    const container = new CaffeineIoC()
-    container.bind(kHTTPCacheStore, t => t.toValue(new MemoryHTTPCacheStore()))
-    const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(kHTTPCacheStore)))
+    @Configuration()
+    @Profile('inv-service')
+    class CacheConfig {
+      @Provides(kHTTPCacheStore)
+      httpCacheStore(): HTTPCacheStore {
+        return new MemoryHTTPCacheStore()
+      }
+    }
+
+    @Injectable([kHTTPCacheStore])
+    @Profile('inv-service')
+    class ReportsConsumer {
+      constructor(private readonly cache: HTTPCacheStore) {}
+
+      async onReportChanged() {
+        await this.cache.evictByTag('reports')
+      }
+    }
+    void [ServiceController, CacheConfig]
+
+    const app = createWebApplication({ container: new CaffeineIoC({ profiles: ['inv-service'] }) }).with(
+      HTTPCaching(b => b.store(kHTTPCacheStore)),
+    )
     close = () => app.close()
     await app.bootstrap()
 
     await app.fetch('/inv-service/report')
     expect((await app.fetch('/inv-service/report')).headers.get('x-cache')).toBe('HIT')
 
-    const store: HTTPCacheStore = app.container.get(kHTTPCacheStore)
-    await store.evictByTag('reports')
+    await app.container.get(ReportsConsumer).onReportChanged()
 
     expect((await app.fetch('/inv-service/report')).headers.get('x-cache')).toBe('MISS')
     expect(count).toBe(2)
