@@ -71,6 +71,7 @@ export function parseDuration(text: string): Duration {
   while (rest !== '') {
     const part = readPart(text, rest)
 
+    // Exact, so this also refuses a single part past 2^63.
     total += part.span
     if (total > LIMIT) {
       throw new ErrInvalidDuration(text, OUT_OF_RANGE)
@@ -265,12 +266,7 @@ function readPart(text: string, rest: string): { span: bigint; rest: string } {
     throw new ErrInvalidDuration(text, OUT_OF_RANGE)
   }
 
-  const span = whole * unit + fractionOf(fraction, unit)
-  if (span > LIMIT) {
-    throw new ErrInvalidDuration(text, OUT_OF_RANGE)
-  }
-
-  return { span, rest: rest.slice(unitEnd) }
+  return { span: whole * unit + fractionOf(fraction, unit), rest: rest.slice(unitEnd) }
 }
 
 // The digits before the point, or `undefined` past 2^63. Leading zeros are dropped first, so a long run of them
@@ -290,8 +286,9 @@ function wholeNumber(digits: string): bigint | undefined {
   return value > LIMIT ? undefined : value
 }
 
-// The fraction's share of the unit, in whole nanoseconds, as Go's `leadingFraction` computes it: digits are kept
-// while their value stays within 2^63, the rest ignored, and the share is taken in floating point and truncated.
+// The fraction's share of the unit, in whole nanoseconds, as Go's `leadingFraction` computes it: a digit is kept
+// while the value before it is at most (2^63 - 1) / 10, the rest ignored, and the share is taken in floating point
+// and truncated.
 function fractionOf(fraction: string, unit: bigint): bigint {
   let value = 0n
   let scale = 1
@@ -301,12 +298,7 @@ function fractionOf(fraction: string, unit: bigint): bigint {
       break
     }
 
-    const next = value * 10n + BigInt(fraction.charAt(at))
-    if (next > LIMIT) {
-      break
-    }
-
-    value = next
+    value = value * 10n + BigInt(fraction.charAt(at))
     scale *= 10
   }
 

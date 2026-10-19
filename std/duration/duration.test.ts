@@ -137,16 +137,24 @@ describe('parseDuration', () => {
     '9223372036854776us',
     '9223372036854775.808us',
     '9223372036854ms775us808ns',
+    // A sum one past the bound either way, though no part is.
+    '9223372036854ms775us809ns',
+    '-9223372036854ms775us809ns',
+    // A fraction carrying one part past it.
+    '9223372036854775.809us',
+    '-9223372036854775.809us',
   ])('refuses %o, one past the bound', text => {
     expect(() => parseDuration(text)).toThrow(`Cannot parse duration "${text}": out of range`)
   })
 
-  it.each(['-9223372036854775808ns', '-9223372036854775.808us', '-9223372036s854ms775us808ns'])(
-    'reads %o, the bound going back',
-    text => {
-      expect(parseDuration(text)).toBe(-(2 ** 63) / 1e6)
-    },
-  )
+  it.each([
+    '-9223372036854775808ns',
+    '-9223372036854775.808us',
+    '-9223372036s854ms775us808ns',
+    '-2562047h47m16.854775808s',
+  ])('reads %o, the bound going back', text => {
+    expect(parseDuration(text)).toBe(-(2 ** 63) / 1e6)
+  })
 
   it('refuses a span past Go’s bound of 2^63 nanoseconds, and a run of digits too long to be finite', () => {
     expect(() => parseDuration('2562048h')).toThrow(ErrInvalidDuration)
