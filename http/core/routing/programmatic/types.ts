@@ -60,9 +60,9 @@ type ContextTypesOf<T extends IAdapterTypes> = [T] extends [never] ? AnyAdapterT
  * What a route's handler is called with: the context, then the dependencies the route and its enclosing groups
  * injected — `undefined` when none did.
  *
- * The return value is whatever a decorated handler may return: a body to serialize, a `Responder`, a stream, or
- * nothing at all when the handler answered through the context. It is a type parameter so that a route can carry
- * what its handler answers with — see {@link DeclaredRoute}.
+ * The return value is whatever a decorated handler may return: a body to serialize, bytes, a `Blob`, a stream, a
+ * `Response`, a `Responder`, or nothing at all when the handler answered through the context. It is a type parameter
+ * so that a route can carry what its handler answers with — see {@link DeclaredRoute}.
  */
 export type RouteHandler<
   S extends RouteValidationSchema,

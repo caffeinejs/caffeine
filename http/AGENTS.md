@@ -247,5 +247,13 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Do not add a Fastify-named member to `IContext` or cast one to `Context`; `ctx.platform` is the escape
   hatch.
 - Do not invent a second "stream scope"; fix how the adapter awaits the request.
-- `Responder` is special-cased; a Fetch `Response` on `ActionResult` is passed to Fastify `send()` unwrapped, so
-  `return new Response(stream)` does not work. `@Produces` only sets `Content-Type`.
+- `payloadOf` (`platform/fastify/response.ts`) is the one place an answer becomes what Fastify sends: a handler's, a
+  `Responder`'s, a catch handler's, `ctx.body(...)`'s and an `ErrHTTP`'s body. A new send site calls it; never hand
+  Fastify a raw answer, which sends a `Blob` or an `ArrayBuffer` as `{}`. A `Blob` is streamed under its size, a
+  stream labelled `application/octet-stream`, and a returned `Response` taken apart there, its status and headers on
+  the reply before the `onSend` hooks and its body streamed, so `return new Response(stream)` works and `HEAD` answers
+  it. A route that streams needs no `ctx.platform.reply.hijack()`, which skips the `onSend` hooks and so cookies,
+  caching and compression.
+- `Responder` is unwrapped once. `@Produces` only sets `Content-Type`, and the reply's type wins over a `Blob`'s own.
+- Node's `Blob.slice` aborts the process on an offset past 2^32 - 1: nothing slices a larger `Blob`, and `Attachment`
+  sends one whole. `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32.

@@ -407,6 +407,57 @@ const one = owner.get('/:id').handler(find)
 export const petsRouter = blend(all, one)
 ```
 
+## Responses
+
+What a handler returns is what the client gets, and the same holds for a `Responder`, a catch handler and
+`ctx.body(...)`:
+
+| A handler returns                                     | The client gets                                        |
+| ----------------------------------------------------- | ------------------------------------------------------ |
+| a plain object, an array, a number, a boolean, `null` | JSON                                                   |
+| a string                                              | text                                                   |
+| a `Blob` or a `File`                                  | its bytes, streamed, with its size as `Content-Length` |
+| an `ArrayBuffer`, a `Uint8Array` or any typed array   | its bytes                                              |
+| a web `ReadableStream` or a Node `Readable`           | its bytes as the stream produces them, chunked         |
+| a `Response`                                          | its status, its headers and its body, streamed         |
+| `Attachment(body, options)`                           | a download, named, served in ranges: see below         |
+| nothing                                               | an empty `200`                                         |
+
+- Bytes and streams go out under the type the route declared with `.produces(...)` or `@Produces`, or the handler
+  set with `ctx.header('content-type', ...)`; failing that a `Blob`'s own type; failing that
+  `application/octet-stream`. A `Response` keeps the headers it was built with, and takes the route's type only when
+  it carries none.
+- A `File` from an upload carries the type its client claimed. Return it through `Attachment(...)`, or name its type,
+  rather than as it is: `text/html` from a client is a page on your origin.
+- A `HEAD` is answered as the `GET` would be, without the body.
+
+### Downloads
+
+`Attachment(body, { name, type, etag, lastModified })` sends a `Blob`, bytes or a stream as a download:
+
+```ts
+import { Attachment, Router } from '@caffeinejs/http'
+
+const exports = new Router('/exports').get('/q3').handler(async () => {
+  const report = await reports.q3()
+  return Attachment(report.csv, { name: 'relatório Q3.csv', type: 'text/csv', etag: `"${report.version}"` })
+})
+```
+
+- `Content-Disposition` names the file twice: a plain `filename`, and the exact name as UTF-8 in `filename*`, which
+  current clients prefer. A `File` is named after itself when `name` is not given.
+- A `Blob` or bytes are served in ranges, so a large download cut off part-way resumes. A `GET` with one `Range` gets
+  `206` and that part, or `416` past the end, and every answer says `Accept-Ranges: bytes`. Several ranges, a
+  malformed one, another unit, a `HEAD`, or a status other than `200` get the whole body.
+- `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
+  `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
+- An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
+  `ErrConfiguration`: either would be a validator no client can match.
+- A stream is sent whole, since its length is not known. So is a `Blob` past 4 GiB: Node's `Blob.slice` cannot cut a
+  part out of one.
+- `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file from disk
+  with `@caffeinejs/static`'s `sendFile` or `download`.
+
 ## Plugins without Fastify
 
 A `.with(...)` factory may return an `HTTPPlugin` instead of a Fastify plugin: a class whose `register(context)`
@@ -641,7 +692,7 @@ await client.pets.post({ body: { name: 'Rex' } })
 - Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
   `Content-Disposition` (the UTF-8 `filename*` first, made a plain file name on any system: never a path, a drive, a
   stream or a device) and typed from `Content-Type`. `client.$filename(res)` names a download streamed from
-  `res.body` without reading it.
+  `res.body` without reading it. A route answers one with `Attachment(...)` ([Downloads](#downloads)).
 - `client.$progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body`
   through it for a download, or send `file.stream().pipeThrough(client.$progress(...))` as an upload. Browsers
   stream an upload only over HTTP/2, and Firefox and Safari not at all.

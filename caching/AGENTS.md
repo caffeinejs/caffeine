@@ -87,4 +87,6 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   keeps its entry: the line above, in a narrower window. Closing it needs a write-if-absent the two-method seam
   does not have.
 - On a `HEAD`, Fastify's HEAD route runs ahead of the cache's `onSend` and takes the body: it resumes a Node
-  stream rather than closing it, and answers a `Response` with 500 (Fastify 5.12), with or without the cache.
+  stream rather than closing it, with or without the cache.
+- A `206` is outside the default `statusCodes`, so a part is neither stored nor answered `304`: a `Range` request
+  carrying a matching `If-None-Match` gets its part.
