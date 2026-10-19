@@ -421,6 +421,22 @@ describe.each(transports)('brewer through interceptors, %s', (_transport, connec
 
       expect(opens).toBe(0)
     })
+
+    // A caller that left before the call was sent gets the reason it left with, not an answer: the cached response
+    // nobody will read is cancelled.
+    it('should reject with the reason a call aborted with before it was sent, and cancel the answer', async () => {
+      const cancelled = Promise.withResolvers<unknown>()
+      const cached: Interceptor = async () =>
+        new Response(new ReadableStream<Uint8Array>({ cancel: reason => cancelled.resolve(reason) }))
+      const client = connect({ interceptors: [cached] })
+      const controller = new AbortController()
+      controller.abort(new Error('the user left the page'))
+
+      await expect(client.api.echo.post({ body: { amount: 10 }, signal: controller.signal })).rejects.toThrow(
+        'the user left the page',
+      )
+      await cancelled.promise
+    })
   })
 
   describe('given an interceptor that hands on a request of its own', () => {

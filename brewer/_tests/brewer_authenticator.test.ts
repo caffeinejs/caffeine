@@ -788,6 +788,23 @@ describe.each(transports)('brewer answering a 401, %s', (_transport, connect) =>
       expect(res.status).toBe(401)
       expect(kept!.bodyUsed).toBe(true)
     })
+
+    // A HEAD's 401 has no body to keep whole: the caller still gets the challenge when the authenticator gives up.
+    it("should resolve with a HEAD's 401, which has no body, when the authenticator gives up", async () => {
+      const handed: Array<string | null> = []
+      const client = connect({
+        authenticator: (_request, response) => {
+          handed.push(response.headers.get('www-authenticate'))
+          return null
+        },
+      })
+
+      const res = await client.secure.peek.head()
+
+      expect(res.status).toBe(401)
+      expect(res.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"')
+      expect(handed).toEqual(['Bearer error="invalid_token"'])
+    })
   })
 
   describe('given 401 after 401', () => {
