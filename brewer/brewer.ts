@@ -348,6 +348,8 @@ type Opener = () => ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Arr
 // Node's fetch stops reading a request body it aborts without cancelling it, which would leave a file or a socket open.
 function opened(open: Opener, signal: AbortSignal | null | undefined): ReadableStream<Uint8Array> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  // A cancel that came while `open` was running: what it opened is cancelled as it arrives, with the same reason.
+  let cancelled: { reason: unknown } | undefined
   const release = (): void => {
     reader?.cancel(signal?.reason).catch(() => undefined)
   }
@@ -359,6 +361,10 @@ function opened(open: Opener, signal: AbortSignal | null | undefined): ReadableS
         try {
           if (reader === undefined) {
             reader = (await open()).getReader()
+            if (cancelled !== undefined) {
+              await reader.cancel(cancelled.reason)
+              return
+            }
             signal?.addEventListener('abort', release, { once: true })
             if (signal?.aborted) {
               release()
@@ -379,6 +385,7 @@ function opened(open: Opener, signal: AbortSignal | null | undefined): ReadableS
       },
       cancel: reason => {
         settle()
+        cancelled = { reason }
         return reader?.cancel(reason)
       },
     },
