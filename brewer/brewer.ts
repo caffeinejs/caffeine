@@ -1,7 +1,9 @@
+import { discard } from './_discard.js'
 import { encodeParam } from './_path.js'
 import { fileOf, filenameOf } from './download.js'
 import type { FileHelpers } from './files.js'
 import { formData } from './form.js'
+import { intercept, type Interceptor } from './interceptor.js'
 import type { HeaderValues, RawBody } from './platform.js'
 import { progress } from './progress.js'
 import type { BrewClient } from './tree.js'
@@ -19,8 +21,20 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
-  /** The `fetch` to call. Defaults to the global one; supply another for a test or a non-global implementation. */
+  /**
+   * The `fetch` to call. Defaults to the global one; supply another for a test or a non-global implementation.
+   *
+   * It is called with the URL and the init, or, on a client with interceptors, with one `Request` carrying both.
+   */
   fetch?: Fetchable['fetch']
+
+  /**
+   * Run around every request, the first listed seeing the request first and the response last.
+   *
+   * They are handed a `Request`, whose URL is absolute: a base URL that is only a path is resolved against the page,
+   * so outside a browser such a client rejects every call.
+   */
+  interceptors?: readonly Interceptor[]
 }
 
 /**
@@ -212,7 +226,7 @@ async function send(
     merged.delete('content-type')
   }
 
-  const { headers: _clientHeaders, fetch: fetchImpl, ...clientRest } = options
+  const { headers: _clientHeaders, fetch: fetchImpl, interceptors = [], ...clientRest } = options
 
   // `duplex` is not in the DOM lib's `RequestInit`, so the init is typed with it rather than passed as a literal.
   const request: RequestInit & { duplex?: 'half' } = {
@@ -228,7 +242,52 @@ async function send(
     request.duplex = 'half'
   }
 
-  return (fetchImpl ?? globalThis.fetch)(url, request)
+  const transport = fetchImpl ?? globalThis.fetch
+
+  if (interceptors.length === 0) {
+    return transport(url, request)
+  }
+
+  // Each call builds its own `Request`, so what an interceptor sets on one never reaches another.
+  const chain = intercept(interceptors, sent => transport(sent))
+
+  return untilAborted(chain(new Request(url, request)), request.signal)
+}
+
+// The call as its caller sees it: rejected with the signal's reason the moment it aborts, whatever an interceptor still
+// waits on. What is left winds down on the same signal: a response it still resolves with is cancelled, and a failure
+// it still rejects with is nobody's to handle.
+function untilAborted(call: Promise<Response>, signal: AbortSignal | null | undefined): Promise<Response> {
+  if (signal === null || signal === undefined) {
+    return call
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason)
+      call.then(
+        response => discard(response),
+        () => undefined,
+      )
+    }
+
+    if (signal.aborted) {
+      abort()
+      return
+    }
+
+    signal.addEventListener('abort', abort, { once: true })
+    call.then(
+      response => {
+        signal.removeEventListener('abort', abort)
+        resolve(response)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort)
+        reject(error)
+      },
+    )
+  })
 }
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {

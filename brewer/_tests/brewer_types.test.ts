@@ -6,6 +6,7 @@ import { describe, expectTypeOf, it } from 'vitest'
 import { brewer, type Fetchable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
 import type { FormDataOf } from '../form.js'
+import type { Interceptor } from '../interceptor.js'
 import type { BrewResponse } from '../response.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -665,6 +666,37 @@ describe('what the client can be typed from', () => {
       const client = brewer<App>(stub)
 
       expectTypeOf(await (await client.pets({ id: 1 }).get()).json()).toEqualTypeOf<Pet>()
+    })
+  })
+})
+
+describe('the client options', () => {
+  it('take interceptors written on the platform types alone', () => {
+    typeOnly(() => {
+      const stamp: Interceptor = async (request, next) => {
+        expectTypeOf(request).toEqualTypeOf<Request>()
+        expectTypeOf(next).returns.toEqualTypeOf<Promise<Response>>()
+        request.headers.set('x-request-id', '1')
+        return next(request)
+      }
+
+      // Still typed from the application it is handed, with interceptors beside it.
+      const client = brewer(app, { interceptors: [stamp] })
+
+      expectTypeOf(client.pets.post).toBeCallableWith({ body: { id: 1, name: 'Rex' } })
+    })
+  })
+
+  it('refuse an interceptor that resolves with nothing, the forgotten return', () => {
+    typeOnly(() => {
+      brewer(app, {
+        interceptors: [
+          // @ts-expect-error -- an interceptor resolves with the response it hands back
+          async (request, next) => {
+            await next(request)
+          },
+        ],
+      })
     })
   })
 })

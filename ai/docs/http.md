@@ -651,6 +651,25 @@ await client.pets.post({ body: { name: 'Rex' } })
   it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
   which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
   or plain JavaScript, reaches the parent route instead. `$request` rejects the same call with `ErrBrewPathParam`.
+- Interceptors run around every request, on the platform's own `Request` and `Response`. The first listed sees the
+  request first and the response last; `next` sends it on, and not calling it answers without the server:
+
+  ```ts
+  const client = brewer<App>('https://api.example', {
+    interceptors: [
+      async (request, next) => {
+        request.headers.set('x-request-id', crypto.randomUUID())
+        return next(request)
+      },
+    ],
+  })
+  ```
+
+  Set a header on `request` itself: `new Request(request, { headers })` replaces every header it had. A body is read
+  as it is sent, so an interceptor that sends again, such as a retry, hands `next` a `request.clone()` on every attempt
+  but the last. A client with interceptors hands its `fetch` one `Request`, and an aborted call rejects at once with
+  the signal's reason, whatever an interceptor still waits on.
+
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
 - Escape hatch for a path built at run time, a segment named after a verb or `then` (or `$request`, at the root), or

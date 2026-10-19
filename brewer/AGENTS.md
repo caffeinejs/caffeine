@@ -22,3 +22,5 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`application/schema/t.ts`) does: the body itself,
   or one level of its properties, each a file or a list of files and nothing else, so a union holding one is no
   upload, and a union body is JSON whatever its members hold. Change them together.
+- `send()` builds a `Request` only for a client with interceptors; without them it hands the transport `(url, init)`,
+  as a custom `fetch` and the transport tests expect. Every call builds its own, so nothing set on one reaches another.
