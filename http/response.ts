@@ -22,7 +22,7 @@ export type ActionResultTypes =
   | Buffer
   | Blob
   | ArrayBuffer
-  | ArrayBufferView
+  | ArrayBufferView<ArrayBuffer>
   | Response
   | Readable
   | ReadableStream

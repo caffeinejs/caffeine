@@ -430,6 +430,8 @@ What a handler returns is what the client gets, and the same holds for a `Respon
 - A `File` from an upload carries the type its client claimed. Return it through `Attachment(...)`, or name its type,
   rather than as it is: `text/html` from a client is a page on your origin.
 - A `HEAD` is answered as the `GET` would be, without the body.
+- A `Response` from `fetch(...)` holds its body decoded but keeps the upstream's `Content-Encoding` and
+  `Content-Length`: delete both from its headers before returning it.
 
 ### Downloads
 
