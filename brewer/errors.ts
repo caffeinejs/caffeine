@@ -46,3 +46,57 @@ export class ErrBrewPathValue extends ErrBrew {
     this.name = 'ErrBrewPathValue'
   }
 }
+
+/** A request as an error names it: the method and the URL without its query, which can carry a credential. */
+function labelOf(request: Request): string {
+  const { origin, pathname } = new URL(request.url)
+
+  return `${request.method} ${origin}${pathname}`
+}
+
+/**
+ * An authenticator answered a 401 with a follow-up the client cannot send: one to another origin than the call's, or
+ * one for a call whose body is a stream it read as it sent it.
+ *
+ * The authenticator was asked all the same, so credentials it refreshed serve the calls that follow.
+ */
+export class ErrBrewFollowUpNotSent extends ErrBrew {
+  override readonly code = 'ERR_BREW_FOLLOW_UP_NOT_SENT'
+
+  constructor(request: Request, problem: 'origin' | 'stream') {
+    const first = `Cannot send the follow-up to the 401 from "${labelOf(request)}"`
+    // Names the call's own origin only: the URL the authenticator built may carry anything.
+    const message =
+      problem === 'origin'
+        ? errMessage(`${first}: it does not target "${new URL(request.url).origin}"`).solutions(
+            'Set the credentials on the request the authenticator is given, and return that request',
+          )
+        : errMessage(`${first}: its body is a stream, read as it was sent`).solutions(
+            'Pass the body as a function that returns the stream: { body: () => stream }',
+            "Send the credentials with the first request, from the client's headers",
+          )
+
+    super(message.reference('@caffeinejs/brewer', ErrBrewFollowUpNotSent).build())
+    this.name = 'ErrBrewFollowUpNotSent'
+  }
+}
+
+/** A call's follow-ups all met a 401, and the next would pass `maxFollowUps`. */
+export class ErrBrewTooManyFollowUps extends ErrBrew {
+  override readonly code = 'ERR_BREW_TOO_MANY_FOLLOW_UPS'
+
+  constructor(request: Request, sent: number, limit: number) {
+    super(
+      errMessage(
+        `Cannot answer the 401 to "${labelOf(request)}": the call already sent ${sent} follow-ups, and maxFollowUps allows ${limit}`,
+      )
+        .solutions(
+          'Return null from the authenticator once the server refuses the credentials it holds',
+          'Raise maxFollowUps to the rounds the authentication scheme needs',
+        )
+        .reference('@caffeinejs/brewer', ErrBrewTooManyFollowUps)
+        .build(),
+    )
+    this.name = 'ErrBrewTooManyFollowUps'
+  }
+}

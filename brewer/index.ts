@@ -1,3 +1,4 @@
+export type { Authenticator } from './authenticator.js'
 export * from './brewer.js'
 export type * from './contract.js'
 export * from './errors.js'

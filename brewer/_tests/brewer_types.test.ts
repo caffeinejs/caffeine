@@ -3,6 +3,7 @@ import { Responder, Router, blend, type RouteDef, type RoutesOf } from '@caffein
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { describe, expectTypeOf, it } from 'vitest'
 
+import type { Authenticator } from '../authenticator.js'
 import { brewer, type Fetchable } from '../brewer.js'
 import type { RouteContract } from '../contract.js'
 import type { FormDataOf } from '../form.js'
@@ -697,6 +698,50 @@ describe('the client options', () => {
           },
         ],
       })
+    })
+  })
+
+  it('take an authenticator answering with a request or nothing, and a follow-up limit', () => {
+    typeOnly(() => {
+      const refresh: Authenticator = async (request, response, attempt) => {
+        expectTypeOf(request).toEqualTypeOf<Request>()
+        expectTypeOf(response).toEqualTypeOf<Response>()
+        expectTypeOf(attempt).toEqualTypeOf<number>()
+        return attempt > 1 ? null : request
+      }
+
+      const client = brewer(app, { authenticator: refresh, maxFollowUps: 2 })
+
+      expectTypeOf(client.pets.post).toBeCallableWith({ body: { id: 1, name: 'Rex' } })
+    })
+  })
+
+  it('refuse an authenticator answering with anything but a request', () => {
+    typeOnly(() => {
+      brewer(app, {
+        // @ts-expect-error -- a follow-up is a request, not the URL to send one to
+        authenticator: () => 'https://elsewhere.example/login',
+      })
+    })
+  })
+})
+
+describe('a body a function opens', () => {
+  it('is taken for a body the route does not declare, through $request too', () => {
+    typeOnly(() => {
+      const uploads = new Router('/uploads').post('/raw').handler(() => ({ stored: true }))
+      const files = brewer<typeof uploads>('http://localhost')
+
+      void files.uploads.raw.post({ body: () => new Blob(['upload']).stream() })
+      void files.uploads.raw.post({ body: async () => new Blob(['upload']).stream() })
+      void files.$request('POST', '/uploads/raw', { body: () => new Blob(['upload']).stream() })
+    })
+  })
+
+  it('is refused for a body the route declares, which goes as JSON or a form', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- a declared body is never streamed
+      void client.pets.post({ body: () => new Blob(['upload']).stream() })
     })
   })
 })

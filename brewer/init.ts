@@ -44,8 +44,9 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * the same schema.
  *
  * A body the route does not declare may be a function that returns a `ReadableStream`, or a promise of one. It is
- * called when the request is sent, not when it is built, so a call answered without the server opens nothing.
- * Browsers send a stream only over HTTP/2, and Firefox and Safari not at all.
+ * called when the request is sent, not when it is built, and again for each follow-up an authenticator sends, where a
+ * stream passed as it is can be read only once: return a new stream on every call. A call answered without the server
+ * opens nothing. Browsers send a stream only over HTTP/2, and Firefox and Safari not at all.
  *
  * Path parameters are absent by construction: the segment calls supplied them.
  */

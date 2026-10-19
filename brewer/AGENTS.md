@@ -22,5 +22,11 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`application/schema/t.ts`) does: the body itself,
   or one level of its properties, each a file or a list of files and nothing else, so a union holding one is no
   upload, and a union body is JSON whatever its members hold. Change them together.
-- `send()` builds a `Request` only for a client with interceptors; without them it hands the transport `(url, init)`,
-  as a custom `fetch` and the transport tests expect. Every call builds its own, so nothing set on one reaches another.
+- `send()` builds a `Request` only for a client with interceptors or an authenticator; without either it hands the
+  transport `(url, init)`, as a custom `fetch` and the transport tests expect. Every call builds its own, so nothing
+  set on one reaches another.
+- The authenticator's copy is `new Request(sent, { headers, body })`, its body extracted anew from what the call gave,
+  never `request.clone()`: a clone tees the body into memory, opens a function body early, and in Node 22 drops an
+  undici `dispatcher`. A `FormData` copy drops `content-type`, so the platform writes the new boundary.
+- `discard()` cancels every body it is given at once: a body and its `clone()` share a tee, which settles the cancel
+  of one only once the other is cancelled too, so cancelling them in turn never returns.

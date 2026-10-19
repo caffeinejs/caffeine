@@ -638,7 +638,8 @@ await client.pets.post({ body: { name: 'Rex' } })
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
   another. A function that returns a `ReadableStream`, or a promise of one, is called when the request is sent —
-  `body: () => file.stream()` — so a call answered without the server opens nothing.
+  `body: () => file.stream()` — and again for each follow-up an authenticator sends, so a call answered without the
+  server opens nothing. It returns a new stream every time.
 - Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
   `Content-Disposition` (the UTF-8 `filename*` first, made a plain file name on any system: never a path, a drive, a
   stream or a device) and typed from `Content-Type`. `client.$filename(res)` names a download streamed from
@@ -668,8 +669,37 @@ await client.pets.post({ body: { name: 'Rex' } })
 
   Set a header on `request` itself: `new Request(request, { headers })` replaces every header it had. A body is read
   as it is sent, so an interceptor that sends again, such as a retry, hands `next` a `request.clone()` on every attempt
-  but the last. A client with interceptors hands its `fetch` one `Request`, and an aborted call rejects at once with
-  the signal's reason, whatever an interceptor still waits on.
+  but the last. A client with interceptors or an authenticator hands its `fetch` one `Request`, and an aborted call
+  rejects at once with the signal's reason, whatever an interceptor still waits on.
+
+- An authenticator answers a 401. Handed a copy of the request that got it, the 401 and the attempt, it returns the
+  request to send in its place, or `null` to let the call resolve with the 401. It runs around the interceptors, so
+  the follow-up goes through them again, and the copy is rebuilt from the call's own body, so nothing is held in
+  memory for it. A call sends at most `maxFollowUps` follow-ups, 3 unless set, then rejects with
+  `ErrBrewTooManyFollowUps`:
+
+  ```ts
+  const client = brewer<App>('https://api.example', {
+    headers: () => ({ authorization: `Bearer ${tokens.access}` }),
+    authenticator: async (request, _response, attempt) => {
+      if (attempt > 1) {
+        return null // a token just refreshed and still refused will not do better
+      }
+      // Every call refused at once comes here: refresh once, and only for the token the call carried.
+      if (request.headers.get('authorization') === `Bearer ${tokens.access}`) {
+        await tokens.refreshOnce()
+      }
+      request.headers.set('authorization', `Bearer ${tokens.access}`)
+      return request
+    },
+  })
+  ```
+
+  Keep a credential the authenticator compares in `headers`, which a follow-up does not resolve again: it never sees
+  what an interceptor set. It answers the call's own server only: a 401 that `fetch` reached by a redirect to another
+  origin goes to the caller, and a follow-up to another origin rejects with `ErrBrewFollowUpNotSent`. A stream passed
+  as the body is read as it is sent, so its follow-up rejects with the same error; given as `body: () => file.stream()`,
+  it is opened anew for each send. An aborted call rejects at once, even while the refresh it waits on goes on.
 
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
