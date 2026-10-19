@@ -1,5 +1,5 @@
+import type { AnySchema } from '@caffeinejs/application/schema'
 import { kRouteConstraints, type ResolvedRouteConstraint, type IRoute } from '@caffeinejs/http'
-import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type { ParameterLocation, ParameterObject, SchemaObject } from '../spec/spec.js'
 import type { ComponentRegistry } from './components.js'

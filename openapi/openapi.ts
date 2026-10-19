@@ -11,7 +11,7 @@ import {
   type IRouteGroup,
 } from '@caffeinejs/http'
 import { collectRouteGroups, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { parse as fromYAML, stringify as toYAML } from 'yaml'

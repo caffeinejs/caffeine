@@ -1,7 +1,7 @@
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
+import { kHealthRegistryOptions } from '@caffeinejs/application/health'
 import { type Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
-import { kHealthRegistryOptions } from '@caffeinejs/std/health'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrHealthConfiguration } from './errors.js'
 import { mergeHealthConfig, type HealthConfig, type HealthOptions } from './options.js'

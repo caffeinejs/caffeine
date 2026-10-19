@@ -1,5 +1,5 @@
+import type { BaseGuard } from '@caffeinejs/application/framework'
 import type { InjectionToken } from '@caffeinejs/di'
-import type { BaseGuard } from '@caffeinejs/std/framework'
 
 import { UseGuards, type Guard, type GuardInput } from '../index.js'
 

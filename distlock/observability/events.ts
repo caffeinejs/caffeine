@@ -1,7 +1,7 @@
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import { EventEmitter, captureRejectionSymbol } from 'node:events'
 
-import type { Logger } from '@caffeinejs/std/logger'
+import type { Logger } from '@caffeinejs/application/logger'
 
 import type { DistLock } from '../distlock.js'
 import { DIST_LOCK_CHANNELS, type LockEventBase, type LockEventMap } from './channels.js'

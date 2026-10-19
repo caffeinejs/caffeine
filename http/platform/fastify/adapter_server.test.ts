@@ -1,8 +1,8 @@
-import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/std'
-import { CONFIG_REFRESH_LABEL, type ConfigSource, type InferConfig } from '@caffeinejs/std/config'
-import { EnvConfigSource } from '@caffeinejs/std/config/env'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { $t } from '@caffeinejs/std/schema'
+import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/application'
+import { CONFIG_REFRESH_LABEL, type ConfigSource, type InferConfig } from '@caffeinejs/application/config'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Controller, Get, WebApplication } from '../../index.js'

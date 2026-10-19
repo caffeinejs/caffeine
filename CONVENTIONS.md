@@ -30,6 +30,7 @@ When editing a first-party package, also read that package’s `AGENTS.md`:
 | [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
 | [`messaging/`](messaging/AGENTS.md)                                                 | `@caffeinejs/messaging`                  |
 | [`std/`](std/AGENTS.md)                                                             | `@caffeinejs/std`                        |
+| [`application/`](application/AGENTS.md)                                             | `@caffeinejs/application`                |
 | [`static/`](static/AGENTS.md)                                                       | `@caffeinejs/static`                     |
 | [`view/`](view/AGENTS.md)                                                           | `@caffeinejs/view`                       |
 | [`multipart/`](multipart/AGENTS.md)                                                 | `@caffeinejs/multipart`                  |
@@ -147,10 +148,10 @@ Do not re-export a symbol (type or value) from another module or package just to
 
 ```ts
 // wrong
-export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
+export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 
 // correct
-import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 
 import type { ThingConfig } from './config.js'
 ```
@@ -224,7 +225,7 @@ export interface Feature<C = unknown> {
 - `[kFeatureName]` is the identity `.install` deduplicates on. A feature accepting an instance name folds it in (`kafka` vs `kafka:orders`). Built-in names (`shutdown`, `logger`, `error-handling`, `cookie`) enter the same set, so a colliding user feature is refused, and `hasFeature(name)` answers for them too.
 - `[kFeatureConfigure]` runs after configuration has resolved and before the container initializes: `config` is readable and binding is open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings there. Its kit carries the application's logger.
 - A feature never touches a server. There is no server hook on the contract: server wiring is a plugin factory's, registered with `.with(...)`. A feature whose plugin needs what it resolved binds it (`OIDCRoutesRef`), and the plugin reads it from the container.
-- Most features extend `FeatureBuilder<C>` from `@caffeinejs/std`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
+- Most features extend `FeatureBuilder<C>` from `@caffeinejs/application`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
 - The application's callback is `(builder, kit)`. The kit is the `FeatureConfigureKit` the feature's own `configure` receives: `config`, `store`, and `container.bind(...)`, but no `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` and is handed the `HTTPSetupContext`, where the container resolves and binding is closed.
 
 ```ts
@@ -284,7 +285,7 @@ A person reads the message in a terminal and a coding agent reads it in a log. B
 
 ### Solutions and links
 
-Build a message that carries solutions or links with `errMessage(...)` from `@caffeinejs/std/framework/err`. Never hand-write a `Possible Solutions` block, a bullet or a URL.
+Build a message that carries solutions or links with `errMessage(...)` from `@caffeinejs/std/err`. Never hand-write a `Possible Solutions` block, a bullet or a URL.
 
 ```ts
 // correct
@@ -306,7 +307,7 @@ throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start 
 - An `ErrHTTP` message is the response body a client reads, so neither an `ErrHTTP` nor any subclass of it (`ErrCSRFCrossOrigin`, `ErrRefreshTokenRejected`) carries solutions or a reference.
 - On a hot path, a class may build its footer once, in a static field, and append it to the text it writes: `ErrCallNotPermitted` does, because refusals come in bulk.
 - `.links(...)` adds further reading.
-- The builder lives in `std/framework/err/message.ts` and imports nothing. A package that cannot depend on `std` gets a generated copy, a `*.gen.ts` file whose path [`tools/copy-err-message.json`](tools/copy-err-message.json) gives. Never edit a copy: change the source and run `make err-message`, which `make check` also runs. A change to the source changes every package with a copy, so it takes `make check`.
+- The builder lives in `std/err/message.ts` and imports nothing. A package that cannot depend on `std` gets a generated copy, a `*.gen.ts` file whose path [`tools/copy-err-message.json`](tools/copy-err-message.json) gives. Never edit a copy: change the source and run `make err-message`, which `make check` also runs. A change to the source changes every package with a copy, so it takes `make check`.
 
 ## Documentation
 

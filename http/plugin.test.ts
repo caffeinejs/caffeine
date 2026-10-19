@@ -1,4 +1,3 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
   FeatureBuilder,
   kFeatureName,
@@ -6,10 +5,11 @@ import {
   type Feature,
   type FeatureConfigureKit,
   type FeatureConfigurer,
-} from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
-import { EnvConfigSource } from '@caffeinejs/std/config/env'
-import { $t } from '@caffeinejs/std/schema'
+} from '@caffeinejs/application'
+import type { InferConfig } from '@caffeinejs/application/config'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { $t } from '@caffeinejs/application/schema'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import { ErrConfiguration } from './index.js'

@@ -1,8 +1,8 @@
+import { newConfiguration } from '@caffeinejs/application'
+import { CONFIG_REFRESH_LABEL, type InferConfig, type ConfigSource } from '@caffeinejs/application/config'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { type InferSchema, $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { newConfiguration } from '@caffeinejs/std'
-import { CONFIG_REFRESH_LABEL, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { type InferSchema, $t } from '@caffeinejs/std/schema'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import { type MiddlewareFn, Router } from '../index.js'

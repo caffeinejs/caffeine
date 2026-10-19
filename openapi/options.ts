@@ -1,6 +1,6 @@
+import type { ReadonlyConfig } from '@caffeinejs/application/config'
+import type { AnySchema } from '@caffeinejs/application/schema'
 import type { IRoute, RouteAuthzOptions, IRouteGroup } from '@caffeinejs/http'
-import type { ReadonlyConfig } from '@caffeinejs/std/config'
-import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type {
   ComponentsObject,

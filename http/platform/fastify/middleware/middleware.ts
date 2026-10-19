@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrConfiguration } from '../../../core/error/common.js'

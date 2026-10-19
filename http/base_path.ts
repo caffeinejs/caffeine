@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfiguration } from './core/error/common.js'
 import { normalizeGroupPath } from './core/routing/builder.js'

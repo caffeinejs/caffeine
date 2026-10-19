@@ -1,5 +1,5 @@
+import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
 import {
   context,
   diag,

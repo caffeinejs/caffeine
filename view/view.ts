@@ -1,5 +1,5 @@
 import { Responder, ActionResult, type IContext, ErrConfiguration } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import { type FastifyViewOptions } from '@fastify/view'
 
 /**

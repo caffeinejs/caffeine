@@ -1,5 +1,5 @@
 import { Ctor, ErrInvalidDecorator, Injectable, Injection, Tag, type InjectionsFor } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { CatchMetadata, kErrorHandler } from '../core/error/index.js'
 import { configureControllerErrorHandler } from './registrar/registrar.js'

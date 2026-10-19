@@ -1,5 +1,5 @@
+import type { BaseGuard, GuardDenial, GuardOutcome } from '@caffeinejs/application/framework'
 import { Ctor } from '@caffeinejs/di'
-import type { BaseGuard, GuardDenial, GuardOutcome } from '@caffeinejs/std/framework'
 
 import type { IContext } from '../../context.js'
 import { ErrHTTPForbidden, ErrHTTPUnauthorized } from '../error/http.js'

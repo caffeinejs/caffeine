@@ -1,5 +1,5 @@
+import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
-import { ErrFeatureNotInstalled } from '@caffeinejs/std'
 import type { FastifyPluginAsync, FastifyRequest, RouteOptions } from 'fastify'
 import fp from 'fastify-plugin'
 

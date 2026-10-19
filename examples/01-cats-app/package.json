@@ -8,8 +8,8 @@
     "start": "tsx index.ts"
   },
   "dependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
-    "@caffeinejs/std": "*",
     "@caffeinejs/http": "*",
     "fastify": "^5.12.5"
   },

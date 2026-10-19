@@ -1,5 +1,5 @@
-import { createApplication } from '@caffeinejs/std'
-import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std/health'
+import { createApplication } from '@caffeinejs/application'
+import { HealthIndicator, type HealthReport, up } from '@caffeinejs/application/health'
 
 import { registerWattChecks } from '../watt.js'
 

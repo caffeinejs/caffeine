@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type {
   HTTPCacheCallOptions,

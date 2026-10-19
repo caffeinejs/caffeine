@@ -23,8 +23,8 @@ Do not implement Nest microservices RPC (reply topics, `@MessagePattern`).
 ## Shape
 
 ```ts
+import { createApplication } from '@caffeinejs/application'
 import { Kafka, KafkaHandler, KafkaListener, KafkaParams, KafkaTemplate, $k } from '@caffeinejs/kafka'
-import { createApplication } from '@caffeinejs/std'
 
 const app = createApplication().install(Kafka(k => k.brokers('localhost:9092').groupId('svc')))
 

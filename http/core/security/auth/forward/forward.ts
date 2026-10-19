@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { IContext } from '../../../../context.js'
 import { ErrAuthConfiguration, ErrAuthSchemeNotFound } from '../errors.js'

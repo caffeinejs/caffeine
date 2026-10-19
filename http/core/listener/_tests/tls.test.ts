@@ -1,7 +1,7 @@
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
 
-import { ErrShutdownTimeout } from '@caffeinejs/std/shutdown'
+import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { testTLS, testTLSCertificate } from '@caffeinejs/testing/tls'
 import { afterEach, describe, expect, it } from 'vitest'
 

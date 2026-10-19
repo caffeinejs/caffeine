@@ -8,6 +8,9 @@
       "path": "./std"
     },
     {
+      "path": "./application"
+    },
+    {
       "path": "./http"
     },
     {

@@ -1,6 +1,6 @@
+import { $t } from '@caffeinejs/application/schema'
 import { Responder, Router, blend, type RouteDef, type RoutesOf } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import { brewer, type Fetchable } from '../brewer.js'

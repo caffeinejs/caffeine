@@ -1,5 +1,5 @@
 import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { getRouteGroup } from '../../../decorators/registrar/registrar.js'
 import { Keys } from '../../../symbols.js'

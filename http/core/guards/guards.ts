@@ -1,5 +1,5 @@
+import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/application'
 import { Scopes, type InjectionToken } from '@caffeinejs/di'
-import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { Guard } from './guard.js'
 import { kGlobalGuards } from './keys.js'

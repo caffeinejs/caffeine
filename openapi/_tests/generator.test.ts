@@ -1,6 +1,6 @@
+import { $t } from '@caffeinejs/application/schema'
 import { $p, type IRoute } from '@caffeinejs/http'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { ErrOpenAPIOperationConflict } from '../errors.js'

@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
+import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
 import { html } from '@caffeinejs/html'
 import { Claim, Identity, Principal, Authentication } from '@caffeinejs/http'
@@ -7,7 +8,6 @@ import { createWebApplication, authentication, healthProbes } from '@caffeinejs/
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { GITHUB_SESSION_COOKIE, GITHUB_STATE_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'

@@ -1,4 +1,4 @@
-import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { HTTPSetupContext } from '../../../../adapter.js'

@@ -23,6 +23,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/messaging": "*",
     "@caffeinejs/std": "*",

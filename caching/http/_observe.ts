@@ -1,5 +1,5 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import type { AdapterRouteOptions } from '@caffeinejs/http/fastify'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { routeMethods } from './_util.js'
 import { observerMethods, type CacheObserver, type CacheOperation, type CacheRoute } from './observer.js'

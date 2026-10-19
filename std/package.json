@@ -1,91 +1,22 @@
 {
   "name": "@caffeinejs/std",
   "version": "0.0.0",
-  "description": "Caffeine http package",
+  "description": "Dependency-free utilities for CaffeineJS: durations, byte sizes and error messages",
   "license": "MIT",
   "private": true,
   "type": "module",
-  "types": "dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
     "./bytes": {
       "types": "./dist/bytes/index.d.ts",
       "default": "./dist/bytes/index.js"
-    },
-    "./config": {
-      "types": "./dist/config/index.d.ts",
-      "default": "./dist/config/index.js"
-    },
-    "./config/argv": {
-      "types": "./dist/config/sources/argv/index.d.ts",
-      "default": "./dist/config/sources/argv/index.js"
-    },
-    "./config/env": {
-      "types": "./dist/config/sources/env/index.d.ts",
-      "default": "./dist/config/sources/env/index.js"
-    },
-    "./config/file": {
-      "types": "./dist/config/sources/file/index.d.ts",
-      "default": "./dist/config/sources/file/index.js"
-    },
-    "./config/inline": {
-      "types": "./dist/config/sources/inline/index.d.ts",
-      "default": "./dist/config/sources/inline/index.js"
-    },
-    "./config/json": {
-      "types": "./dist/config/sources/json/index.d.ts",
-      "default": "./dist/config/sources/json/index.js"
-    },
-    "./config/nodejs": {
-      "types": "./dist/config/nodejs/index.d.ts",
-      "default": "./dist/config/nodejs/index.js"
-    },
-    "./config/spring": {
-      "types": "./dist/config/sources/spring/index.d.ts",
-      "default": "./dist/config/sources/spring/index.js"
-    },
-    "./config/yaml": {
-      "types": "./dist/config/sources/yaml/index.d.ts",
-      "default": "./dist/config/sources/yaml/index.js"
     },
     "./duration": {
       "types": "./dist/duration/index.d.ts",
       "default": "./dist/duration/index.js"
     },
-    "./framework": {
-      "types": "./dist/framework/index.d.ts",
-      "default": "./dist/framework/index.js"
-    },
-    "./framework/err": {
-      "types": "./dist/framework/err/index.d.ts",
-      "default": "./dist/framework/err/index.js"
-    },
-    "./health": {
-      "types": "./dist/health/index.d.ts",
-      "default": "./dist/health/index.js"
-    },
-    "./logger": {
-      "types": "./dist/logger/index.d.ts",
-      "default": "./dist/logger/index.js"
-    },
-    "./logger/console": {
-      "types": "./dist/logger/console/index.d.ts",
-      "default": "./dist/logger/console/index.js"
-    },
-    "./logger/pino": {
-      "types": "./dist/logger/pino/index.d.ts",
-      "default": "./dist/logger/pino/index.js"
-    },
-    "./schema": {
-      "types": "./dist/schema/index.d.ts",
-      "default": "./dist/schema/index.js"
-    },
-    "./shutdown": {
-      "types": "./dist/shutdown/index.d.ts",
-      "default": "./dist/shutdown/index.js"
+    "./err": {
+      "types": "./dist/err/index.d.ts",
+      "default": "./dist/err/index.js"
     },
     "./package.json": "./package.json"
   },
@@ -97,25 +28,5 @@
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
-  },
-  "dependencies": {
-    "@caffeinejs/di": "*",
-    "@sinclair/typebox": "^0.34.52",
-    "@standard-schema/spec": "^1.1.0",
-    "yaml": "^2.9.1"
-  },
-  "peerDependencies": {
-    "pino": "^10.3.1"
-  },
-  "peerDependenciesMeta": {
-    "pino": {
-      "optional": true
-    }
-  },
-  "devDependencies": {
-    "dotenv": "^17.4.2",
-    "json5": "^2.2.3",
-    "pino": "^10.3.1",
-    "zod": "^4.6.5"
   }
 }

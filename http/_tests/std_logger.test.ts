@@ -1,5 +1,5 @@
-import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
-import { ConsoleLogger } from '@caffeinejs/std/logger/console'
+import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
+import { ConsoleLogger } from '@caffeinejs/application/logger/console'
 import type { FastifyBaseLogger } from 'fastify'
 import { describe, expect, it } from 'vitest'
 

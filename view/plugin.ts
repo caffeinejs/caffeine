@@ -1,6 +1,6 @@
 import { ErrConfiguration } from '@caffeinejs/http'
 import { type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import { fastifyView } from '@fastify/view'
 import { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'

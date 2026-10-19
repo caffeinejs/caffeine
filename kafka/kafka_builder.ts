@@ -1,6 +1,6 @@
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit, type FeatureConfigurer } from '@caffeinejs/application'
+import { HealthIndicator } from '@caffeinejs/application/health'
 import type { Container, Ctor } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit, type FeatureConfigurer } from '@caffeinejs/std'
-import { HealthIndicator } from '@caffeinejs/std/health'
 
 import { defaultDeserializers, defaultSerializers } from './clients.js'
 import {

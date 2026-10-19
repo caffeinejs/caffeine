@@ -1,8 +1,8 @@
 import type { IncomingMessage } from 'node:http'
 
-import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
-import { $t } from '@caffeinejs/std/schema'
+import { ErrApplicationStarted, newConfiguration } from '@caffeinejs/application'
+import type { InferConfig } from '@caffeinejs/application/config'
+import { $t } from '@caffeinejs/application/schema'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'

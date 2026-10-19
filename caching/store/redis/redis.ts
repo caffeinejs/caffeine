@@ -1,5 +1,5 @@
 import { parseDuration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import { RESP_TYPES } from '@redis/client'
 
 import type {

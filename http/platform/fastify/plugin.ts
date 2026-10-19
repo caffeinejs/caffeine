@@ -79,7 +79,7 @@ export type HTTPPluginFactory<C = unknown> = AdapterExtensionFactory<Extension, 
  * it resolves out of the container.
  *
  * Runs while the factory builds the plugin, after `container.init()`, so `container.get(...)` is legal and
- * `container.bind(...)` is not. A feature's callback is `FeatureConfigurer` from `@caffeinejs/std` instead,
+ * `container.bind(...)` is not. A feature's callback is `FeatureConfigurer` from `@caffeinejs/application` instead,
  * which runs earlier and binds rather than resolves.
  *
  * ```ts

@@ -1,8 +1,8 @@
+import { createApplication, ErrFeatureAlreadyInstalled, newConfiguration } from '@caffeinejs/application'
+import type { InferConfig } from '@caffeinejs/application/config'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC, type OnDestroy } from '@caffeinejs/di'
-import { createApplication, ErrFeatureAlreadyInstalled, newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
-import { EnvConfigSource } from '@caffeinejs/std/config/env'
-import { $t } from '@caffeinejs/std/schema'
 import { DataSource, type DataSourceOptions, type Repository } from 'typeorm'
 import { afterEach, describe, expect, it } from 'vitest'
 

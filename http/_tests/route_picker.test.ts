@@ -1,4 +1,4 @@
-import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/application/framework'
 import { describe, expect, it } from 'vitest'
 
 function compose<R>(req: R, ...fns: Array<(req: R) => Array<unknown>>): Array<unknown> {

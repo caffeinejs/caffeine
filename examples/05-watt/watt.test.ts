@@ -1,6 +1,6 @@
-import { createApplication } from '@caffeinejs/std'
-import { HealthIndicator, down, type HealthReport } from '@caffeinejs/std/health'
-import { newNoopLogger } from '@caffeinejs/std/logger'
+import { createApplication } from '@caffeinejs/application'
+import { HealthIndicator, down, type HealthReport } from '@caffeinejs/application/health'
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { getGlobal, updateGlobals } from '@platformatic/globals'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

@@ -1,5 +1,5 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import { toMillis, type Duration } from '@caffeinejs/std/duration'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { extendChannel, publishLost, releaseChannel, traced, type Writable } from './_channels.js'
 import type { Backend, LockLease } from './backend.js'

@@ -1,10 +1,10 @@
 import type { EventEmitter } from 'node:events'
 
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
+import { logToken, newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 import { toMillis, type Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
-import { logToken, newNoopLogger, type Logger } from '@caffeinejs/std/logger'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backend } from './backend.js'
 import { CaffeineDistLock } from './distlock.js'

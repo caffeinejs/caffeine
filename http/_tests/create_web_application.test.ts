@@ -1,4 +1,3 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
   ErrApplicationStarted,
   kFeatureBootstrap,
@@ -6,7 +5,8 @@ import {
   kFeatureName,
   type Feature,
   type FeatureConfigureKit,
-} from '@caffeinejs/std'
+} from '@caffeinejs/application'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import { Controller, Get, Authentication, Authorization, Guards } from '../index.js'

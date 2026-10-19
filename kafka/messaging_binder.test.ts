@@ -1,3 +1,4 @@
+import { createApplication } from '@caffeinejs/application'
 import {
   Consume,
   MessageBus,
@@ -6,7 +7,6 @@ import {
   MessageParams,
   Messaging,
 } from '@caffeinejs/messaging'
-import { createApplication } from '@caffeinejs/std'
 import { describe, expect, it } from 'vitest'
 
 import { deferred, FakeBroker } from './broker.testkit.js'

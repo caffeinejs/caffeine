@@ -5,8 +5,8 @@ import {
   type ApplicationOptions,
   type FeatureConfigurer,
   type RunInfo,
-} from '@caffeinejs/std'
-import { errMessage } from '@caffeinejs/std/framework/err'
+} from '@caffeinejs/application'
+import { errMessage } from '@caffeinejs/std/err'
 
 import {
   type IAdapter,

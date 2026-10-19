@@ -1,6 +1,6 @@
+import { $t } from '@caffeinejs/application/schema'
 import { Router, WebApplication, version } from '@caffeinejs/http'
 import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
-import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { apiGroup, operation } from '../decorators/index.js'

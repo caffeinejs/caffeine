@@ -9,7 +9,7 @@ import {
 } from '@caffeinejs/http'
 import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
 import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { CacheControlOptions, ETagGenerator } from './cache_control.js'
 

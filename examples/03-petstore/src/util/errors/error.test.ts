@@ -1,3 +1,4 @@
+import { $t } from '@caffeinejs/application/schema'
 import { html } from '@caffeinejs/html'
 import {
   Catch,
@@ -13,7 +14,6 @@ import {
   type ActionResult,
 } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import { FallbackErrorHandler, HTTPErrorHandler, type ErrorBody } from './error.handlers.js'

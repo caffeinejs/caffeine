@@ -9,6 +9,7 @@
   "workspaces": [
     "di",
     "std",
+    "application",
     "http",
     "caching",
     "html",

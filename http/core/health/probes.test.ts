@@ -8,7 +8,7 @@ import {
   defaultHealthRegistryOptions,
   down,
   up,
-} from '@caffeinejs/std/health'
+} from '@caffeinejs/application/health'
 import { describe, it, expect } from 'vitest'
 
 import { renderProbe } from './probes.js'

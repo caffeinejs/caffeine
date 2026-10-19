@@ -1,5 +1,5 @@
 import { type InjectionToken, Scopes } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { HTTPSetupContext } from '../../adapter.js'
 import { ErrConfiguration } from '../error/common.js'

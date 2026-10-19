@@ -1,5 +1,5 @@
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { Scopes, type InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import { kCookieSettings, type CookiePluginOptions } from './keys.js'
 import type { CookieParseOptions } from './options.js'

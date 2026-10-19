@@ -9,7 +9,7 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Install and build the whole monorepo (di, std, http, cli, ...).
+# Install and build the whole monorepo (di, std, application, http, cli, ...).
 COPY . .
 RUN npm ci
 RUN npm run build

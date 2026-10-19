@@ -56,6 +56,9 @@
       "path": "./std/tsconfig.build.json"
     },
     {
+      "path": "./application/tsconfig.build.json"
+    },
+    {
       "path": "./cli/tsconfig.build.json"
     },
     {

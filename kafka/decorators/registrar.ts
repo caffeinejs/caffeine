@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 
 import type { KafkaDeserializers, KafkaMessage } from '../config.js'
 import type { DeadLetterOptions, RetryPolicy } from '../error_handling.js'

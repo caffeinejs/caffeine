@@ -1,4 +1,4 @@
-import type { JSONSchema } from '@caffeinejs/std/schema'
+import type { JSONSchema } from '@caffeinejs/application/schema'
 
 /** Keywords that are not scoped to a single type, and so cannot be merged onto a type array safely. */
 const TYPE_AGNOSTIC = ['enum', 'const'] as const

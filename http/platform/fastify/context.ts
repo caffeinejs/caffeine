@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 
-import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
+import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { kRawBasePath, resolveAppURL, type BasePathCarrier } from '../../base_path.js'

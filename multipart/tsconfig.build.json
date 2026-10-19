@@ -8,7 +8,7 @@
       "path": "../http/tsconfig.build.json"
     },
     {
-      "path": "../std/tsconfig.build.json"
+      "path": "../application/tsconfig.build.json"
     }
   ],
   "exclude": [

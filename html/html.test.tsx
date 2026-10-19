@@ -1,3 +1,7 @@
+import { newConfiguration } from '@caffeinejs/application'
+import type { InferConfig } from '@caffeinejs/application/config'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t } from '@caffeinejs/application/schema'
 import {
   $p,
   Args,
@@ -10,10 +14,6 @@ import {
   type IContext,
 } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import { HTML, html, type HTMLDefaults } from './index.js'

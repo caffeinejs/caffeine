@@ -1,5 +1,5 @@
 import type { InjectionToken } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import type { EntityTarget, ObjectLiteral } from 'typeorm'
 
 /** Base error for the TypeORM integration. */

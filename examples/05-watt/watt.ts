@@ -1,5 +1,5 @@
-import type { Application } from '@caffeinejs/std'
-import type { ProbeResult } from '@caffeinejs/std/health'
+import type { Application } from '@caffeinejs/application'
+import type { ProbeResult } from '@caffeinejs/application/health'
 import { getGlobal, hasField, setCustomHealthCheck, setCustomReadinessCheck } from '@platformatic/globals'
 
 /** What Watt reads from a check: `status`, and for a failure the status code and body its probe server answers. */

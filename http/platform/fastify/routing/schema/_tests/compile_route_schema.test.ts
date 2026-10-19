@@ -1,4 +1,4 @@
-import { ErrSchemaConversion, $t } from '@caffeinejs/std/schema'
+import { ErrSchemaConversion, $t } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 

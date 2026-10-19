@@ -26,8 +26,8 @@
     "@fastify/multipart": "^10.1.1"
   },
   "peerDependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
     "fastify": "^5.0.0"
   },
   "devDependencies": {

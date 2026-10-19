@@ -1,4 +1,4 @@
-import type { Feature, FeatureConfigurer } from '@caffeinejs/std'
+import type { Feature, FeatureConfigurer } from '@caffeinejs/application'
 
 import { defaultKafkaClients } from './clients.js'
 import type { KafkaClients } from './config.js'

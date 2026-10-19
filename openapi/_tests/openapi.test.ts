@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { $t } from '@caffeinejs/application/schema'
 import {
   $p,
   AllowAnonymous,
@@ -18,7 +19,6 @@ import {
 } from '@caffeinejs/http'
 import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
 import { $multipart } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std/schema'
 import { type FastifyInstance } from 'fastify'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'

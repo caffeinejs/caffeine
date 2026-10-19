@@ -1,6 +1,6 @@
+import { $t } from '@caffeinejs/application/schema'
 import { HTML } from '@caffeinejs/html'
 import { Catch, type ActionResult, type IContext, ErrHTTP, ErrorHandler } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std/schema'
 
 import { ErrorPage } from './html/ErrorPage.js'
 

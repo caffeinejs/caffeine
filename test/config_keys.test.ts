@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-import * as std from '@caffeinejs/std'
-import { EnvConfigSource } from '@caffeinejs/std/config/env'
+import * as application from '@caffeinejs/application'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { globbySync } from 'globby'
 import { describe, expect, it } from 'vitest'
 
@@ -20,7 +20,7 @@ const specs = globbySync('**/_spec/*.gen.json', { cwd: root, ignore: ['**/node_m
 const schemas: Array<[string, unknown]> = [
   ...specs.map((file): [string, unknown] => [file, JSON.parse(readFileSync(`${root}${file}`, 'utf8'))]),
   // The framework's own block, which is not a feature's.
-  ['std.caffeineConfigSchema', std.caffeineConfigSchema],
+  ['application.caffeineConfigSchema', application.caffeineConfigSchema],
 ]
 
 interface DeclaredKey {

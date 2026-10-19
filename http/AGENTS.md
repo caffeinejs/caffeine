@@ -139,7 +139,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - The `healthProbes()` plugin resolves `ApplicationHealth` before checking `enabled`, since building it rejects a
   non-singleton indicator; nothing invalidates the cache at shutdown. The budgets are the `Health()` feature's.
-- `ErrShutdownTimeout` lives in `@caffeinejs/std/shutdown`, not `core/error/common.ts`.
+- `ErrShutdownTimeout` lives in `@caffeinejs/application/shutdown`, not `core/error/common.ts`.
 - No second adapter type for TLS or HTTP/2: TLS is switched by configuration at `bootstrap()`.
 - `protocolOf(request)` (`platform/fastify/protocol.ts`) is the only reader of Fastify's `request.protocol`, which
   carries a trusted proxy's `X-Forwarded-Proto` as written (`HTTPS`) and is `undefined` without a socket; it answers

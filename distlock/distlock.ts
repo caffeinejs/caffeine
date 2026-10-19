@@ -1,6 +1,6 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import { type OnDestroy } from '@caffeinejs/di'
 import { toMillis, type Duration } from '@caffeinejs/std/duration'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
 import { HeldLock, type LockHost } from './_lock.js'
@@ -130,7 +130,7 @@ export interface DistLock {
  * Construct one directly to use the package without an application. Its options are the defaults a call falls
  * back to when it carries none of its own, already resolved and in milliseconds — a builder normalizes the
  * `'30s'` spellings before it binds, so nothing here parses a duration. Pass `newNoopLogger()` from
- * `@caffeinejs/std/logger` as `log` to keep it silent.
+ * `@caffeinejs/application/logger` as `log` to keep it silent.
  *
  * Waiting, retrying, backoff and jitter all happen here rather than in the backend, which only ever makes one
  * attempt.

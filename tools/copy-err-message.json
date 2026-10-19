@@ -1,5 +1,5 @@
 {
-  "source": "std/framework/err/message.ts",
+  "source": "std/err/message.ts",
   "copies": {
     "@caffeinejs/di": "internal/util/errutil/errutil.gen.ts",
     "@caffeinejs/resilience": "err_message.gen.ts",

@@ -1,5 +1,5 @@
 import type { Provider } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../../../context.js'
 import { parseAuthorizationHeader } from '../authorization_header.js'

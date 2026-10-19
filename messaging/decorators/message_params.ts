@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 
 import type { Message } from '../message.js'
 import { $m, type MessagePickers } from '../pickers.js'

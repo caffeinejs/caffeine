@@ -316,9 +316,9 @@ The second way to declare routes. Same compilation as a controller — same guar
 handling — with the configuration written as a chain instead of decorators.
 
 ```ts
+import { $t } from '@caffeinejs/application/schema'
 import { $i } from '@caffeinejs/di'
 import { Router } from '@caffeinejs/http'
-import { $t } from '@caffeinejs/std/schema'
 
 const pets = new Router('/pets')
   .inject({ svc: PetService }) // every route of the group, and of groups nested in it
@@ -488,7 +488,7 @@ declarations **add up**: none replaces another, on one route or across the level
 ## Health
 
 `.with(healthProbes())` mounts `/livez`, `/readyz` and `/startupz`. The probes answer from `ApplicationHealth`
-(`@caffeinejs/std/health`), which every application has — headless ones too — so any other caller, such as a
+(`@caffeinejs/application/health`), which every application has — headless ones too — so any other caller, such as a
 readiness check a host polls, a custom route or a test, reads the same instance as `app.health`, or injects it, and
 shares one evaluation with the routes. The evaluation budgets are the `Health()` feature's:
 `.install(Health(h => h.cacheTTL('2s')))` tunes them with or without the probes mounted.

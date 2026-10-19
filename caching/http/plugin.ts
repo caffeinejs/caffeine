@@ -1,10 +1,10 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
 import { ErrConfiguration, type HTTPSetupContext } from '@caffeinejs/http'
 import { type AdapterRouteOptions, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
-import type { Logger } from '@caffeinejs/std/logger'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyPluginAsync } from 'fastify'
 
 import './_fastify.js'

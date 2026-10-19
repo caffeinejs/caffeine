@@ -1,5 +1,5 @@
 import { ErrConfiguration } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { ViewEngineBuilder } from './engine_builder.js'
 import { kBuild } from './keys.js'

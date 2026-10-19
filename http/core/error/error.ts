@@ -1,5 +1,5 @@
+import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/application'
 import { Scopes } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type BootstrapKit, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import { buildCatchByMap, ErrorHandlerProvider, type ErrorHandlerRef } from './handler.js'
 import { kErrorHandlingOptions } from './keys.js'

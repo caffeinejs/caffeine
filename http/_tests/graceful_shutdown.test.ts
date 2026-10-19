@@ -1,6 +1,6 @@
+import { ErrApplicationClosed, ErrApplicationRunning } from '@caffeinejs/application'
+import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/application/shutdown'
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
-import { ErrApplicationClosed, ErrApplicationRunning } from '@caffeinejs/std'
-import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/std/shutdown'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import type { WebApplication } from '../application.js'

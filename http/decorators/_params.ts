@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 
 import { $p, type HTTPPickers } from '../core/routing/picker.js'
 

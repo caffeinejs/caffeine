@@ -1,6 +1,6 @@
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
+import type { AnySchema } from '@caffeinejs/application/schema'
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
-import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type { AdapterExtensionFactory } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'

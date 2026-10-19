@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 export class ErrNoRouter extends Error {
   readonly code = 'CAFFEINE_ERR_NO_ROUTER'

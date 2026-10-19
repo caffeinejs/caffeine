@@ -1,4 +1,4 @@
-import type { ConfigSnapshot } from '@caffeinejs/std/config'
+import type { ConfigSnapshot } from '@caffeinejs/application/config'
 
 import type { AnyAdapterTypes, IAdapterTypes } from './adapter.js'
 import type { AuthenticationState } from './core/security/auth/authentication_state.js'

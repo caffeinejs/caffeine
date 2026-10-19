@@ -1,7 +1,7 @@
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 
+import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend } from './backend.js'

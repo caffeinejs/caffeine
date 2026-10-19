@@ -1,5 +1,5 @@
 import { isValidKey } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 import type {
   FastifyInstance,
   FastifyPluginAsync,

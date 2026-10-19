@@ -1,4 +1,4 @@
-import type { LogLevel, Logger } from '@caffeinejs/std/logger'
+import type { LogLevel, Logger } from '@caffeinejs/application/logger'
 
 import type { CacheObserver } from './observer.js'
 

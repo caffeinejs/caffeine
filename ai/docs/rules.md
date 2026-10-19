@@ -46,4 +46,4 @@ gates requests where it is written.
 
 ## Config
 
-Application config goes through `@caffeinejs/std/config` (schema + providers), not `process.env` as the public API.
+Application config goes through `@caffeinejs/application/config` (schema + providers), not `process.env` as the public API.

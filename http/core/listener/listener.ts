@@ -1,11 +1,11 @@
-import { token } from '@caffeinejs/di'
 import {
   FeatureBuilder,
   kFeatureName,
   type Feature,
   type FeatureConfigureKit,
   type FeatureConfigurer,
-} from '@caffeinejs/std'
+} from '@caffeinejs/application'
+import { token } from '@caffeinejs/di'
 
 import type { AdapterExtensionFactory, AnyAdapterExtension, AnyAdapterTypes, ServerConfigurer } from '../../adapter.js'
 import type { HTTPPlugin } from '../../plugin.js'

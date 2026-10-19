@@ -1,9 +1,14 @@
-import { newConfiguration } from '@caffeinejs/std'
-import { CONFIG_REFRESH_LABEL, ErrConfigValidation, type InferConfig, type ConfigSource } from '@caffeinejs/std/config'
-import { EnvConfigSource } from '@caffeinejs/std/config/env'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { kHealthRegistryOptions } from '@caffeinejs/std/health'
-import { type InferSchema, $t } from '@caffeinejs/std/schema'
+import { newConfiguration } from '@caffeinejs/application'
+import {
+  CONFIG_REFRESH_LABEL,
+  ErrConfigValidation,
+  type InferConfig,
+  type ConfigSource,
+} from '@caffeinejs/application/config'
+import { EnvConfigSource } from '@caffeinejs/application/config/env'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { kHealthRegistryOptions } from '@caffeinejs/application/health'
+import { type InferSchema, $t } from '@caffeinejs/application/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Health, WebApplication } from '../../index.js'

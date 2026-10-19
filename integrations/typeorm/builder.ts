@@ -1,5 +1,5 @@
+import { FeatureBuilder, type FeatureConfigureKit, type FeatureConfigurer, kFeatureName } from '@caffeinejs/application'
 import type { InjectionToken } from '@caffeinejs/di'
-import { FeatureBuilder, type FeatureConfigureKit, type FeatureConfigurer, kFeatureName } from '@caffeinejs/std'
 import { DataSource, type DataSourceOptions } from 'typeorm'
 
 import { ErrMissingDataSourceOptions } from './errors.js'

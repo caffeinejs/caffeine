@@ -1,4 +1,4 @@
-import type { Feature, FeatureConfigurer } from '@caffeinejs/std'
+import type { Feature, FeatureConfigurer } from '@caffeinejs/application'
 
 import { TypeORMBuilder } from './builder.js'
 import { DEFAULT_INSTANCE } from './keys.js'

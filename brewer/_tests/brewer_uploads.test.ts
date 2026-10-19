@@ -3,10 +3,10 @@ import { mkdtempSync, openAsBlob, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { multipart, multipartPlugin } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'

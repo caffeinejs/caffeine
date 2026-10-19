@@ -1,7 +1,7 @@
 import { createServer } from 'node:net'
 
-import { ErrApplicationNotReady } from '@caffeinejs/std'
-import { ErrShutdownTimeout } from '@caffeinejs/std/shutdown'
+import { ErrApplicationNotReady } from '@caffeinejs/application'
+import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'

@@ -1,4 +1,4 @@
-import { $t } from '@caffeinejs/std/schema'
+import { $t } from '@caffeinejs/application/schema'
 
 export const ProjectSchema = $t.Object({
   id: $t.String(),
