@@ -1,4 +1,5 @@
 import { $t } from '@caffeinejs/application/schema'
+import type { Authenticator, Interceptor } from '@caffeinejs/brewer'
 import { Router, blend } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { describe, expectTypeOf, it } from 'vitest'
@@ -217,10 +218,52 @@ describe('the options an application cannot take', () => {
     })
   })
 
-  it('still takes the request init and a binding hook', () => {
+  it('still takes request options and a binding hook', () => {
     typeOnly(() => {
-      testClient(app, { init: { headers: { 'x-tenant': 't1' } } })
+      testClient(app, { headers: { 'x-tenant': 't1' } })
       testClient(app, { bind: container => void container })
+    })
+  })
+})
+
+describe('the request options', () => {
+  it("takes brewer's own, on an application and on routers", () => {
+    typeOnly(() => {
+      const stamp: Interceptor = (request, next) => next(request)
+      const refresh: Authenticator = request => request
+
+      testClient(app, {
+        headers: { 'x-tenant': 't1' },
+        signal: new AbortController().signal,
+        interceptors: [stamp],
+        authenticator: refresh,
+        maxFollowUps: 2,
+      })
+      testClient(pets, {
+        headers: () => ({ 'x-tenant': 't1' }),
+        interceptors: [
+          async (request, next) => {
+            expectTypeOf(request).toEqualTypeOf<Request>()
+            return next(request)
+          },
+        ],
+      })
+    })
+  })
+
+  it('never takes a fetch of its own, since the application is the transport', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- the application is the transport
+      testClient(app, { fetch: globalThis.fetch })
+    })
+  })
+
+  it('takes no method or body, which the verb and the call decide', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- the verb decides the method
+      testClient(pets, { method: 'DELETE' })
+      // @ts-expect-error -- the call carries the body
+      testClient(pets, { body: '{}' })
     })
   })
 })

@@ -5,16 +5,15 @@ import { Router, type DepsOf } from '@caffeinejs/http'
 import { Harness, type AnyRouter, type TestApplication } from './_test_app.js'
 import { ErrTestClientTarget } from './error.js'
 
-/** How the client shapes the requests it sends. */
-export interface FetchOptions {
-  /**
-   * Applied to every request the client makes.
-   *
-   * `method` and `body` are ignored: the route and the call decide those. `headers` are sent with every request
-   * and a per-call `headers` wins over them, so a token that changes between assertions belongs on the call.
-   */
-  init?: RequestInit
-}
+/**
+ * How the client shapes the requests it sends: brewer's own options, all but `fetch`.
+ *
+ * The application is the transport, and a `fetch` of its own would skip the readying the client does on the way
+ * through. `headers` go with every request, a per-call `headers` winning over them; given as a function, they are
+ * read per request, so a token changed between two assertions is the one sent. Interceptors and the authenticator run
+ * around every typed call and `$request`; `$fetch` sends as it is.
+ */
+export type FetchOptions = Omit<BrewOptions, 'fetch'>
 
 /** What a client over any target takes. */
 export interface AppTestClientOptions<D> extends FetchOptions {
@@ -54,7 +53,10 @@ export interface TestClientControls {
 
   readonly $container: Container
 
-  /** A request by path rather than by route, for whatever the typed surface cannot say. */
+  /**
+   * A request by path rather than by route, for whatever the typed surface cannot say. It is sent as it is: the
+   * client's headers, interceptors and authenticator do not apply.
+   */
   $fetch(input: Request | string | URL, init?: RequestInit): Promise<Response>
 
   /** Readies the application. Called for you by the first request; here for a test that wants it earlier. */
@@ -132,7 +134,7 @@ export function testClient(
   options: TestClientOptions<Record<string, unknown>> = {},
 ): unknown {
   const harness = harnessFor(target, options)
-  const client = brewer(harness, brewOptionsFrom(options.init))
+  const client = brewer(harness, brewOptionsFrom(options))
 
   return controls(client as object, harness)
 }
@@ -168,19 +170,17 @@ function harnessFor(
 }
 
 /**
- * Turns the per-client `RequestInit` into what `brewer` takes.
+ * The options `brewer` takes: all but the harness's own.
  *
- * `method` and `body` are dropped because the route and the call set them; `fetch` is never forwarded, because
- * the transport is the application and replacing it would skip the readying the client does on the way through.
+ * `fetch` is never forwarded, not even one a cast let through, because the transport is the application and
+ * replacing it would skip the readying the client does on the way through.
  */
-function brewOptionsFrom(init: RequestInit | undefined): BrewOptions {
-  if (init === undefined) {
-    return {}
-  }
+function brewOptionsFrom(
+  options: TestClientOptions<Record<string, unknown>> & Pick<BrewOptions, 'fetch'>,
+): BrewOptions {
+  const { inject: _inject, bind: _bind, container: _container, configure: _configure, fetch: _fetch, ...brew } = options
 
-  const { method: _method, body: _body, headers, ...rest } = init
-
-  return headers === undefined ? rest : { ...rest, headers: new Headers(headers) }
+  return brew
 }
 
 /**
