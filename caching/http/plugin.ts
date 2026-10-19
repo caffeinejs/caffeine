@@ -82,7 +82,7 @@ function resolveTimeout(
     return fallback
   }
 
-  if (!Number.isFinite(value) || !(value > 0)) {
+  if (!Number.isFinite(value) || value <= 0) {
     throw new ErrConfiguration(
       errMessage(
         `Cannot install HTTP caching: ${option} must be a positive duration such as 250 * Millisecond, got "${formatDuration(value)}"`,

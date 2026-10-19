@@ -60,7 +60,7 @@ export function exponential(options: ExponentialOptions = {}): Backoff {
 
   return attempt => {
     const raw = initialDelay * multiplier ** (attempt - 1)
-    const base = raw < maxDelay ? raw : maxDelay
+    const base = Math.min(raw, maxDelay)
     if (jitter === 0) {
       return base
     }
@@ -68,7 +68,7 @@ export function exponential(options: ExponentialOptions = {}): Backoff {
     // The band is cut at the cap instead of collapsing onto it, so capped delays still differ between clients.
     const low = base * (1 - jitter)
     const high = base * (1 + jitter)
-    const top = high < maxDelay ? high : maxDelay
+    const top = Math.min(high, maxDelay)
     const delay = low + Math.random() * (top - low)
     return delay < top ? delay : top
   }

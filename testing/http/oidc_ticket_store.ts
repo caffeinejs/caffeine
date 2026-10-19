@@ -37,34 +37,38 @@ export class TestOIDCTicketStore implements RemoteAuthenticationTicketStore {
     this.#now = options?.clock?.now ?? (() => performance.now())
   }
 
-  async store(key: string, ticket: RemoteAuthenticationTicket, ttl: Duration): Promise<void> {
+  store(key: string, ticket: RemoteAuthenticationTicket, ttl: Duration): Promise<void> {
     this.#tickets.set(key, { ticket, expiresAt: this.#now() + ttl })
+    return Promise.resolve()
   }
 
-  async retrieve(key: string): Promise<RemoteAuthenticationTicket | undefined> {
+  retrieve(key: string): Promise<RemoteAuthenticationTicket | undefined> {
     const stored = this.#tickets.get(key)
     if (!stored) {
-      return undefined
+      return Promise.resolve(undefined)
     }
 
     if (this.#now() >= stored.expiresAt) {
       this.#tickets.delete(key)
-      return undefined
+      return Promise.resolve(undefined)
     }
 
-    return stored.ticket
+    return Promise.resolve(stored.ticket)
   }
 
-  async remove(key: string): Promise<void> {
+  remove(key: string): Promise<void> {
     this.#tickets.delete(key)
+    return Promise.resolve()
   }
 
-  async removeBySubject(subject: string): Promise<void> {
+  removeBySubject(subject: string): Promise<void> {
     for (const [key, stored] of this.#tickets) {
       if (stored.ticket.subject === subject) {
         this.#tickets.delete(key)
       }
     }
+
+    return Promise.resolve()
   }
 
   /** Live ticket count, expired entries dropped. For assertions. */

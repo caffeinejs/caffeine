@@ -13,7 +13,7 @@ import { ErrBFFInvalidTimeout, ErrBFFTimeout } from './errors.js'
  * every call.
  */
 export function timeout<T>(limit: Duration): (call: Call<T>) => Call<T> {
-  if (!Number.isFinite(limit) || !(limit > 0)) {
+  if (!Number.isFinite(limit) || limit <= 0) {
     throw new ErrBFFInvalidTimeout(limit)
   }
 
