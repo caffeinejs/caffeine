@@ -105,7 +105,7 @@ cookies are parsed when first read, so a hook or a plugin reads them wherever it
 
 ```ts
 ctx.req.cookie('theme') // string | undefined
-ctx.cookie('theme', 'dark', { maxAge: 3600 })
+ctx.cookie('theme', 'dark', { maxAge: 1 * Hour }) // a Duration, from @caffeinejs/std/duration; Max-Age=3600
 ctx.deleteCookie('theme') // with the domain and path it was set with
 
 ctx.cookie('cart', id, { signed: true }) // signed as the response goes out

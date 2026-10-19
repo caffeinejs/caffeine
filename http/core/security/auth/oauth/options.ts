@@ -1,3 +1,4 @@
+import { type Duration, Hour } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../../../context.js'
@@ -8,7 +9,7 @@ import type { TokenEndpointAuthMethod } from '../internal/remote/client_auth.js'
 import {
   assertSecureEndpoint,
   cookieName,
-  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_HTTP_TIMEOUT,
   defaultSecureCookie,
   isSafeReturnPath,
   remoteCookieViolation,
@@ -25,10 +26,10 @@ type DefaultedKey =
   | 'scopes'
   | 'sessionCookieName'
   | 'stateCookieName'
-  | 'sessionCookieTtlSeconds'
+  | 'sessionCookieTTL'
   | 'secureCookie'
   | 'roleClaimType'
-  | 'httpTimeoutMs'
+  | 'httpTimeout'
   | 'showPii'
   | 'challengeMode'
   | 'usePKCE'
@@ -62,7 +63,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
    */
   sessionSecret: CookieSecret
   sessionCookieName: string
-  sessionCookieTtlSeconds: number
+  sessionCookieTTL: Duration
   stateCookieName: string
   secureCookie: boolean
   /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
@@ -72,7 +73,7 @@ export interface ResolvedOAuth2AuthenticationOptions {
   cookiePriority?: CookiePriority
 
   roleClaimType: string
-  httpTimeoutMs: number
+  httpTimeout: Duration
   showPii: boolean
   challengeMode: RemoteChallengeMode
   /**
@@ -273,8 +274,8 @@ export function resolveOAuth2Options(
     secureCookie,
     sessionCookieName,
     stateCookieName,
-    sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
-    httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
+    sessionCookieTTL: input.sessionCookieTTL ?? 1 * Hour,
+    httpTimeout: input.httpTimeout ?? DEFAULT_HTTP_TIMEOUT,
     showPii: input.showPii ?? false,
     challengeMode: input.challengeMode ?? 'auto',
     usePKCE: input.usePKCE ?? true,
@@ -346,8 +347,8 @@ export class OAuth2AuthenticationOptionsBuilder {
     return this
   }
 
-  sessionCookieTtlSeconds(seconds: number): this {
-    this.#options.sessionCookieTtlSeconds = seconds
+  sessionCookieTTL(ttl: Duration): this {
+    this.#options.sessionCookieTTL = ttl
     return this
   }
 
@@ -378,8 +379,8 @@ export class OAuth2AuthenticationOptionsBuilder {
     return this
   }
 
-  httpTimeoutMs(ms: number): this {
-    this.#options.httpTimeoutMs = ms
+  httpTimeout(timeout: Duration): this {
+    this.#options.httpTimeout = timeout
     return this
   }
 

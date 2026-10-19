@@ -1,3 +1,4 @@
+import { Minute } from '@caffeinejs/std/duration'
 import { describe, expect, it, vi } from 'vitest'
 
 import { SCHEME_CONFIG, applyScheme, type AuthSchemeConfig } from './config.js'
@@ -11,12 +12,12 @@ describe('applyScheme', () => {
 
     applyScheme(builder as unknown as CookieAuthenticationOptionsBuilder, SCHEME_CONFIG.cookie, {
       secure: false,
-      maxAge: 60,
+      maxAge: 1 * Minute,
       cookieName: undefined,
     })
 
     expect(builder.secure).toHaveBeenCalledWith(false)
-    expect(builder.maxAge).toHaveBeenCalledWith(60)
+    expect(builder.maxAge).toHaveBeenCalledWith(1 * Minute)
     expect(builder.cookieName).not.toHaveBeenCalled()
   })
 

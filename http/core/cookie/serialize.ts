@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import { parseCookie, stringifySetCookie, type SetCookie } from 'cookie'
 
@@ -68,7 +69,7 @@ export function prepareCookie(
     domain: merged.domain,
     path: merged.path,
     expires: op === 'delete' ? EPOCH : expiry(op, name, merged.expires),
-    maxAge: op === 'delete' ? 0 : merged.maxAge,
+    maxAge: op === 'delete' ? 0 : merged.maxAge === undefined ? undefined : merged.maxAge / Second,
     httpOnly: Boolean(merged.httpOnly),
     secure: Boolean(secure),
     sameSite,
@@ -231,7 +232,7 @@ export function describeCookie(name: string): string {
 const REASONS: ReadonlyArray<readonly [prefix: string, reason: string]> = [
   ['argument name', 'its name may hold only printable US-ASCII characters other than ";" and "="'],
   ['argument val', 'its value, once encoded, holds characters a cookie cannot carry'],
-  ['option maxAge', 'its Max-Age is not a whole number of seconds'],
+  ['option maxAge', 'its maxAge, a Duration in milliseconds, is not a whole number of seconds'],
   ['option domain', 'its Domain is not a valid domain name'],
   ['option path', 'its Path may hold only spaces and printable US-ASCII characters other than ";" and "<"'],
   ['option expires', 'its expiry is not a valid date'],

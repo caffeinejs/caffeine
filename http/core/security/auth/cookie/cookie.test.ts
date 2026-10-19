@@ -1,3 +1,4 @@
+import { Day, Hour, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
@@ -13,8 +14,8 @@ const SECRET = 'session-secret-that-is-at-least-32-bytes!'
 // that arrives without `Secure`, the clearing one included. `signed: false` holds against a server-wide
 // `parseOptions({ signed: true })`, since the sealed session is read back unsigned.
 const CLEARED_WITH = { httpOnly: true, secure: true, sameSite: 'lax', path: '/', signed: false }
-const EIGHT_HOURS = 8 * 60 * 60
-const THIRTY_DAYS = 30 * 24 * 60 * 60
+const EIGHT_HOURS = 8 * Hour
+const THIRTY_DAYS = 30 * Day
 
 function makeHandler(configure: (o: CookieAuthenticationOptionsBuilder) => void = () => {}) {
   const b = new CookieAuthenticationOptionsBuilder().sessionSecret(SECRET)
@@ -133,7 +134,11 @@ describe('CookieAuthenticationHandler', () => {
       const { value } = await sealedFor(false)
       const { ctx } = makeCtx(value)
       expect((await makeHandler().authenticate(ctx)).succeeded).toBe(true)
-      void EIGHT_HOURS
+
+      // `exp` counts seconds and `maxAge` is a Duration: eight hours sealed as written would be eight thousand.
+      const left = (await openSession(value, SECRET, 'Cookie')).exp - Math.floor(Date.now() / 1000)
+      expect(left).toBeGreaterThan(EIGHT_HOURS / Second - 5)
+      expect(left).toBeLessThanOrEqual(EIGHT_HOURS / Second)
     })
   })
 
@@ -613,7 +618,7 @@ describe('CookieAuthenticationHandler', () => {
       await rotated().authenticate(ctx)
 
       const opts = setCookie.mock.calls[0]![2] as { maxAge: number }
-      expect(opts.maxAge).toBeGreaterThan(THIRTY_DAYS - 5)
+      expect(opts.maxAge).toBeGreaterThan(THIRTY_DAYS - 5 * Second)
       expect(opts.maxAge).toBeLessThanOrEqual(THIRTY_DAYS)
     })
 
@@ -649,7 +654,7 @@ describe('CookieAuthenticationHandler', () => {
         { scheme: 'Cookie', claims: [{ type: 'sub', value: 'u1', issuer: '' }], roleClaimType: 'roles' },
         SECRET,
         'Cookie',
-        THIRTY_DAYS,
+        THIRTY_DAYS / Second,
       )
       const { ctx, setCookie } = makeCtx(legacy)
 

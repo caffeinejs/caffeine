@@ -1,3 +1,4 @@
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { SignJWT, decodeJwt, jwtVerify } from 'jose'
 import type { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, CryptoKey } from 'jose'
 
@@ -8,9 +9,9 @@ export interface JWTSignOptions {
   issuer?: string
   audience?: string | string[]
   subject?: string
-  // A number is seconds FROM NOW; a string is a duration ('15m', '1h', '7d').
-  expiresIn?: string | number
-  notBefore?: string | number
+  // From the moment the token is signed.
+  expiresIn?: Duration
+  notBefore?: Duration
   jwtid?: string
   header?: Record<string, unknown>
 }
@@ -142,7 +143,8 @@ export class JWTService {
       algorithms: [this.#algorithm],
       issuer: this.#options.issuer,
       audience: this.#options.audience,
-      clockTolerance: this.#options.clockTolerance,
+      // jose counts seconds.
+      clockTolerance: this.#options.clockTolerance === undefined ? undefined : this.#options.clockTolerance / Second,
       ...options,
       requiredClaims: withExpiry(options.requiredClaims),
     }
@@ -231,17 +233,17 @@ export class JWTServiceBuilder {
     return this
   }
 
-  expiresIn(expiresIn: string | number): this {
+  expiresIn(expiresIn: Duration): this {
     this.#options.expiresIn = expiresIn
     return this
   }
 
-  notBefore(notBefore: string | number): this {
+  notBefore(notBefore: Duration): this {
     this.#options.notBefore = notBefore
     return this
   }
 
-  clockTolerance(clockTolerance: string | number): this {
+  clockTolerance(clockTolerance: Duration): this {
     this.#options.clockTolerance = clockTolerance
     return this
   }
@@ -251,10 +253,9 @@ export class JWTServiceBuilder {
   }
 }
 
-// jose's setExpirationTime/setNotBefore read a number as an absolute epoch; reinterpret it as
-// seconds from now (a string duration like '15m' passes through unchanged).
-function relativeTime(value: string | number): string | Date {
-  return typeof value === 'number' ? new Date(Date.now() + value * 1000) : value
+// jose's setExpirationTime/setNotBefore read a number as an absolute epoch, so a span from now goes over as a date.
+function relativeTime(value: Duration): Date {
+  return new Date(Date.now() + value)
 }
 
 /**

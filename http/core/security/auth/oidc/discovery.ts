@@ -1,6 +1,7 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { assertSecureEndpoint, DEFAULT_HTTP_TIMEOUT_MS } from '../internal/remote/config.js'
+import { assertSecureEndpoint, DEFAULT_HTTP_TIMEOUT } from '../internal/remote/config.js'
 import { ErrOIDCDiscovery } from './errors.js'
 
 export interface OIDCDiscoveryDocument {
@@ -32,14 +33,14 @@ const STRING_ARRAY_FIELDS = ['code_challenge_methods_supported', 'token_endpoint
 
 export async function fetchDiscovery(
   discoveryURL: string,
-  timeoutMs = DEFAULT_HTTP_TIMEOUT_MS,
+  timeout: Duration = DEFAULT_HTTP_TIMEOUT,
 ): Promise<OIDCDiscoveryDocument> {
   const url = discoveryURL.endsWith(WELL_KNOWN) ? discoveryURL : `${discoveryURL.replace(/\/$/, '')}${WELL_KNOWN}`
 
   let response: Response
   try {
     // Without a deadline a hung provider pins the request for as long as it likes.
-    response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+    response = await fetch(url, { signal: AbortSignal.timeout(Math.ceil(timeout)) })
   } catch (e) {
     throw new ErrOIDCDiscovery(
       errMessage(`Cannot fetch OIDC discovery document: "${url}": ${(e as Error).message}`)

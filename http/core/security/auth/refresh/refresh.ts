@@ -1,3 +1,4 @@
+import { Day, type Duration, Minute, Second } from '@caffeinejs/std/duration'
 import type { JWTPayload } from 'jose'
 
 import { ErrHTTPUnauthorized } from '../../../error/http.js'
@@ -26,12 +27,12 @@ export interface RefreshTokenPair {
   accessToken: string
   /** Opaque `series:token` refresh credential. Rotated on every {@link RefreshTokenService.refresh}. */
   refreshToken: string
-  /** Access-token lifetime, echoed for the client (seconds or a duration string). */
-  expiresIn: string | number
+  /** Access-token lifetime, echoed for the client. OAuth's `expires_in` is `Math.floor(expiresIn / Second)`. */
+  expiresIn: Duration
 }
 
-const DEFAULT_ACCESS_TTL = '15m'
-const DEFAULT_REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60
+const DEFAULT_ACCESS_TTL = 15 * Minute
+const DEFAULT_REFRESH_TTL = 30 * Day
 
 /**
  * Bearer refresh-token grant: issues an access JWT paired with a durable, server-side, rotating
@@ -43,7 +44,7 @@ export class RefreshTokenService {
   readonly #jwt: JWTService
   readonly #store: RefreshTokenStore
   readonly #resolve: RefreshPrincipalResolver
-  readonly #accessTTL: string | number
+  readonly #accessTTL: Duration
   readonly #policy: SeriesTokenPolicy
   readonly #claims: (principal: Principal) => JWTPayload
 
@@ -54,8 +55,9 @@ export class RefreshTokenService {
     this.#accessTTL = options.accessTTL ?? DEFAULT_ACCESS_TTL
     this.#claims = options.claims ?? defaultClaims
     this.#policy = {
-      idleSeconds: options.refreshTTL != null ? toSeconds(options.refreshTTL) : DEFAULT_REFRESH_TTL_SECONDS,
-      absoluteSeconds: options.absoluteTTL != null ? toSeconds(options.absoluteTTL) : undefined,
+      // A series records epoch seconds.
+      idleSeconds: Math.floor((options.refreshTTL ?? DEFAULT_REFRESH_TTL) / Second),
+      absoluteSeconds: options.absoluteTTL != null ? Math.floor(options.absoluteTTL / Second) : undefined,
       // Strict single use (RFC 9700 §4.14.2). A request that lost the race has no new refresh token to be handed,
       // so there is nothing a grace window could give it.
       graceSeconds: 0,
@@ -152,21 +154,4 @@ function defaultClaims(principal: Principal): JWTPayload {
   }
 
   return payload
-}
-
-// Duration → seconds for the store's absolute `expiresAt`. `jose` parses the access-token duration on
-// its own; this covers the refresh-token side.
-function toSeconds(ttl: string | number): number {
-  if (typeof ttl === 'number') {
-    return ttl
-  }
-
-  const match = /^(\d+)\s*(s|m|h|d|w)$/.exec(ttl.trim())
-  if (!match) {
-    throw new Error(`Cannot parse refresh token duration: "${ttl}"`)
-  }
-
-  const value = Number(match[1])
-  const unit = { s: 1, m: 60, h: 3600, d: 86400, w: 604800 }[match[2]]!
-  return value * unit
 }

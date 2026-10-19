@@ -1,3 +1,4 @@
+import { type Duration, Hour, Minute } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import type { JWTVerifyGetKey } from 'jose'
 
@@ -11,7 +12,7 @@ import {
   cookieName,
   defaultSecureCookie,
   isSafeReturnPath,
-  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_HTTP_TIMEOUT,
   remoteCookieViolation,
   sessionSecretViolation,
 } from '../internal/remote/config.js'
@@ -38,7 +39,8 @@ export interface OIDCTokens {
   accessToken?: string
   refreshToken?: string
   tokenType?: string
-  expiresIn?: number
+  /** How long the access token lasts, from the token response's `expires_in`. */
+  expiresIn?: Duration
   scope?: string
 }
 
@@ -53,13 +55,13 @@ type DefaultedKey =
   | 'scopes'
   | 'sessionCookieName'
   | 'stateCookieName'
-  | 'sessionCookieTtlSeconds'
+  | 'sessionCookieTTL'
   | 'secureCookie'
   | 'roleClaimType'
   | 'allowPlainPKCE'
-  | 'clockToleranceSeconds'
-  | 'httpTimeoutMs'
-  | 'discoveryCacheTtlSeconds'
+  | 'clockTolerance'
+  | 'httpTimeout'
+  | 'discoveryCacheTTL'
   | 'tokenEndpointAuthMethod'
   | 'showPii'
   | 'challengeMode'
@@ -92,7 +94,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    */
   sessionSecret: CookieSecret
   sessionCookieName: string
-  sessionCookieTtlSeconds: number
+  sessionCookieTTL: Duration
   stateCookieName: string
   secureCookie: boolean
   /** The cookies' `Domain`. A derived cookie name takes `__Secure-` rather than `__Host-` with one. */
@@ -105,9 +107,9 @@ export interface ResolvedOIDCAuthenticationOptions {
   /** Permits the `plain` PKCE method against providers that do not advertise S256. */
   allowPlainPKCE: boolean
   /** Leeway for provider clock drift when validating id_token time claims. */
-  clockToleranceSeconds: number
+  clockTolerance: Duration
   /** Ceiling on discovery and token-exchange requests, so a hung provider cannot pin a request. */
-  httpTimeoutMs: number
+  httpTimeout: Duration
   /**
    * How long a fetched discovery document stays authoritative. `0` refetches every time.
    *
@@ -117,7 +119,7 @@ export interface ResolvedOIDCAuthenticationOptions {
    * When the provider cannot be reached for a refresh, the document in hand keeps being used and the fetch is
    * tried again half a minute later. A document that was fetched and refused fails the request instead.
    */
-  discoveryCacheTtlSeconds: number
+  discoveryCacheTTL: Duration
   /** `auto` negotiates from discovery, preferring `client_secret_basic`. */
   tokenEndpointAuthMethod: TokenEndpointAuthMethod | 'auto'
   /**
@@ -210,14 +212,14 @@ export interface ResolvedOIDCAuthenticationOptions {
   acrValues?: string[]
 
   /**
-   * The maximum age, in seconds, of the user's authentication at the provider.
+   * The maximum age of the user's authentication at the provider, sent as `max_age` in whole seconds.
    *
    * OIDC Core §2 makes `auth_time` REQUIRED in the id_token once this is sent, and the handler
    * enforces it: an id_token with no `auth_time`, or one older than this, is rejected.
    * Requesting a fresh authentication and then not checking that one happened is weaker than
    * never asking, because it looks like a control while enforcing nothing.
    */
-  maxAgeSeconds?: number
+  maxAge?: Duration
 
   /**
    * Extra authorization parameters, for provider-specific extensions.
@@ -445,12 +447,12 @@ export function resolveOIDCOptions(
     // adds a second IdP later would break the first without touching its configuration.
     sessionCookieName,
     stateCookieName,
-    sessionCookieTtlSeconds: input.sessionCookieTtlSeconds ?? 3600,
+    sessionCookieTTL: input.sessionCookieTTL ?? 1 * Hour,
     roleClaimType: input.roleClaimType ?? 'roles',
     allowPlainPKCE: input.allowPlainPKCE ?? false,
-    clockToleranceSeconds: input.clockToleranceSeconds ?? 60,
-    httpTimeoutMs: input.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
-    discoveryCacheTtlSeconds: input.discoveryCacheTtlSeconds ?? 3600,
+    clockTolerance: input.clockTolerance ?? 1 * Minute,
+    httpTimeout: input.httpTimeout ?? DEFAULT_HTTP_TIMEOUT,
+    discoveryCacheTTL: input.discoveryCacheTTL ?? 1 * Hour,
     tokenEndpointAuthMethod: input.tokenEndpointAuthMethod ?? 'auto',
     showPii: input.showPii ?? false,
     challengeMode: input.challengeMode ?? 'auto',
@@ -528,8 +530,8 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
-  sessionCookieTtlSeconds(seconds: number): this {
-    this.#options.sessionCookieTtlSeconds = seconds
+  sessionCookieTTL(ttl: Duration): this {
+    this.#options.sessionCookieTTL = ttl
     return this
   }
 
@@ -582,22 +584,22 @@ export class OIDCAuthenticationOptionsBuilder {
     return this
   }
 
-  clockToleranceSeconds(seconds: number): this {
-    this.#options.clockToleranceSeconds = seconds
+  clockTolerance(tolerance: Duration): this {
+    this.#options.clockTolerance = tolerance
     return this
   }
 
-  httpTimeoutMs(ms: number): this {
-    this.#options.httpTimeoutMs = ms
+  httpTimeout(timeout: Duration): this {
+    this.#options.httpTimeout = timeout
     return this
   }
 
   /**
-   * How long a fetched discovery document stays authoritative, in seconds. `0` refetches on
-   * every use. Defaults to one hour.
+   * How long a fetched discovery document stays authoritative. `0` refetches on every use. Defaults to one
+   * hour.
    */
-  discoveryCacheTtlSeconds(seconds: number): this {
-    this.#options.discoveryCacheTtlSeconds = seconds
+  discoveryCacheTTL(ttl: Duration): this {
+    this.#options.discoveryCacheTTL = ttl
     return this
   }
 
@@ -737,8 +739,8 @@ export class OIDCAuthenticationOptionsBuilder {
    * The handler then requires `auth_time` in the id_token and rejects a stale one — asking
    * for freshness without checking it would be a control in name only.
    */
-  maxAgeSeconds(seconds: number): this {
-    this.#options.maxAgeSeconds = seconds
+  maxAge(maxAge: Duration): this {
+    this.#options.maxAge = maxAge
     return this
   }
 

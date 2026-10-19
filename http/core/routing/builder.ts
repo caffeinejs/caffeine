@@ -1,5 +1,6 @@
 import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { AdapterExtensionFactory } from '../../adapter.js'
 import type { ErrorHandlerRef } from '../error/handler.js'
@@ -26,7 +27,7 @@ export class RouteGroupBuilder {
   #produces: string = ''
   #routes?: RouteBuilder[]
   #bodyLimit?: number
-  #timeout?: number
+  #timeout?: Duration
   #authorize?: RouteAuthz
   #config?: Map<string, unknown>
   #options?: Map<string, unknown>
@@ -86,8 +87,8 @@ export class RouteGroupBuilder {
     return this
   }
 
-  timeout(ms: number) {
-    this.#timeout = ms
+  timeout(timeout: Duration) {
+    this.#timeout = timeout
     return this
   }
 
@@ -194,7 +195,7 @@ export class RouteBuilder {
   #produces: string = ''
   #schema?: RouteValidationSchema
   #bodyLimit?: number
-  #timeout?: number
+  #timeout?: Duration
   #statusCode?: number
   #bodyAs?: BodyMode
   #authorize?: RouteAuthz
@@ -258,8 +259,8 @@ export class RouteBuilder {
     return this
   }
 
-  timeout(ms: number): this {
-    this.#timeout = ms
+  timeout(timeout: Duration): this {
+    this.#timeout = timeout
     return this
   }
 

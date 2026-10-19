@@ -1,3 +1,4 @@
+import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect } from 'vitest'
 
 import { OIDCAuthenticationOptionsBuilder } from './options.js'
@@ -113,13 +114,13 @@ describe('OIDCAuthenticationOptionsBuilder.build(SCHEME)', () => {
     const opts = minimal().build(SCHEME)
     // https callback -> secure -> __Host- prefixed names
     expect(opts.sessionCookieName).toBe('__Host-oidc_OIDC_session')
-    expect(opts.sessionCookieTtlSeconds).toBe(3600)
+    expect(opts.sessionCookieTTL).toBe(1 * Hour)
     expect(opts.stateCookieName).toBe('__Host-oidc_OIDC_state')
     expect(opts.defaultRedirectPath).toBe('/')
     expect(opts.roleClaimType).toBe('roles')
     expect(opts.allowPlainPKCE).toBe(false)
-    expect(opts.clockToleranceSeconds).toBe(60)
-    expect(opts.httpTimeoutMs).toBe(5000)
+    expect(opts.clockTolerance).toBe(1 * Minute)
+    expect(opts.httpTimeout).toBe(5 * Second)
     // Data minimisation: profile and email are opt-in, not default.
     expect(opts.scopes).toEqual(['openid'])
     // PII stays out of diagnostics unless explicitly revealed.

@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import { JWTPayload, JWTVerifyOptions, type CryptoKey } from 'jose'
 
 import { IContext } from '../../../../context.js'
@@ -99,7 +100,7 @@ export class JWTAuthenticationOptionsBuilder {
     return this
   }
 
-  expiresIn(expiresIn: string | number): this {
+  expiresIn(expiresIn: Duration): this {
     this.#service.expiresIn = expiresIn
     return this
   }

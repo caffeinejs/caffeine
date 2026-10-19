@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import type { JWSHeaderParameters, JWTPayload, CryptoKey } from 'jose'
 
 // Chooses a key per operation — enables rotation, JWKS, or per-tenant keys. A resolver may delegate to
@@ -25,10 +26,10 @@ export interface JWTServiceOptions {
   issuer?: string
   audience?: string | string[]
   subject?: string
-  // Token lifetime. A number is seconds FROM NOW; a string is a duration ('15m', '1h', '7d').
-  expiresIn?: string | number
-  // Not-before. A number is seconds FROM NOW; a string is a duration.
-  notBefore?: string | number
-  // Verification clock skew tolerance, in seconds or a duration string.
-  clockTolerance?: string | number
+  // Token lifetime, from the moment a token is signed.
+  expiresIn?: Duration
+  // How long after it is signed a token starts to be accepted. Negative backdates it.
+  notBefore?: Duration
+  // Verification clock skew tolerance.
+  clockTolerance?: Duration
 }

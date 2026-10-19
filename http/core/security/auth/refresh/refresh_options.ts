@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import type { JWTPayload } from 'jose'
 
 import type { Principal } from '../../identity.js'
@@ -15,18 +16,18 @@ export type RefreshPrincipalResolver = (
 
 export interface RefreshTokenOptions {
   resolve: RefreshPrincipalResolver
-  /** Access-token lifetime. Number is seconds; string is a duration ('15m'). Default '15m'. */
-  accessTTL?: string | number
+  /** Access-token lifetime. Default 15 minutes. */
+  accessTTL?: Duration
   /**
-   * How long a refresh token stays good after it was last used. Number is seconds; string is a duration ('30d').
-   * Default '30d'. Every refresh pushes it back, so by itself it lets a client that keeps refreshing do so forever.
+   * How long a refresh token stays good after it was last used. Default 30 days. Every refresh pushes it back, so
+   * by itself it lets a client that keeps refreshing do so forever.
    */
-  refreshTTL?: string | number
+  refreshTTL?: Duration
   /**
    * How long a refresh token family may live from the sign-in that issued it, however often it is refreshed.
-   * Number is seconds; string is a duration ('90d'). Unset by default: no limit.
+   * Unset by default: no limit.
    */
-  absoluteTTL?: string | number
+  absoluteTTL?: Duration
   /** Maps the reloaded principal to the access-token payload. Default: every claim as `type: value`. */
   claims?: (principal: Principal) => JWTPayload
 }
@@ -39,18 +40,18 @@ export class RefreshTokenOptionsBuilder {
     return this
   }
 
-  accessTTL(ttl: string | number): this {
+  accessTTL(ttl: Duration): this {
     this.#options.accessTTL = ttl
     return this
   }
 
-  refreshTTL(ttl: string | number): this {
+  refreshTTL(ttl: Duration): this {
     this.#options.refreshTTL = ttl
     return this
   }
 
   /** Caps how long a client can keep refreshing without signing in again. Unset: no limit. */
-  absoluteTTL(ttl: string | number): this {
+  absoluteTTL(ttl: Duration): this {
     this.#options.absoluteTTL = ttl
     return this
   }

@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { JWTVerifyGetKey } from 'jose'
@@ -129,8 +130,8 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     if (this.options.acrValues?.length) {
       params.acr_values = this.options.acrValues.join(' ')
     }
-    if (this.options.maxAgeSeconds !== undefined) {
-      params.max_age = String(this.options.maxAgeSeconds)
+    if (this.options.maxAge !== undefined) {
+      params.max_age = String(Math.floor(this.options.maxAge / Second))
     }
 
     return params
@@ -168,7 +169,8 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
         issuer: discovery.issuer,
         audience: this.options.clientID,
         algorithms: ID_TOKEN_ALGORITHMS,
-        clockTolerance: this.options.clockToleranceSeconds,
+        // jose counts seconds.
+        clockTolerance: this.options.clockTolerance / Second,
         // OIDC Core §2: both are REQUIRED. jose checks a time claim only when there is one, so an id_token without
         // `exp` would otherwise be good forever.
         requiredClaims: ['exp', 'iat'],
@@ -200,16 +202,17 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     // OIDC Core §2: auth_time is REQUIRED in the id_token when max_age was requested. Sending
     // the parameter and not checking the answer is worse than never sending it — it reads as
     // a freshness control while a provider that ignores max_age passes silently.
-    if (this.options.maxAgeSeconds !== undefined) {
+    if (this.options.maxAge !== undefined) {
       if (typeof payload.auth_time !== 'number') {
         throw this.callbackFailure('id_token has no auth_time claim, which is required when max_age is requested')
       }
 
+      // `auth_time` and `max_age` count whole seconds.
+      const maxAge = Math.floor(this.options.maxAge / Second)
       const age = Math.floor(Date.now() / 1000) - payload.auth_time
-      if (age > this.options.maxAgeSeconds + this.options.clockToleranceSeconds) {
+      if (age > maxAge + this.options.clockTolerance / Second) {
         throw this.callbackFailure(
-          `the provider authenticated the user ${age}s ago, older than the requested max_age` +
-            ` of ${this.options.maxAgeSeconds}s`,
+          `the provider authenticated the user ${age}s ago, older than the requested max_age of ${maxAge}s`,
         )
       }
     }
@@ -336,7 +339,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
     let userInfo: Record<string, unknown>
     try {
       userInfo = await fetchUserInfo(endpoint, tokens.accessToken, {
-        timeoutMs: this.options.httpTimeoutMs,
+        timeout: this.options.httpTimeout,
       })
     } catch (e) {
       throw this.callbackFailure((e as Error).message)
@@ -386,7 +389,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
         method: 'POST',
         headers,
         body,
-        signal: AbortSignal.timeout(this.options.httpTimeoutMs),
+        signal: AbortSignal.timeout(Math.ceil(this.options.httpTimeout)),
       })
     } catch (e) {
       throw this.callbackFailure(`token exchange failed: ${(e as Error).message}`)
@@ -437,7 +440,8 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       tokenType: tokenResponse.token_type,
-      expiresIn: tokenResponse.expires_in,
+      // RFC 6749 §5.1: seconds.
+      expiresIn: tokenResponse.expires_in === undefined ? undefined : tokenResponse.expires_in * Second,
       scope: tokenResponse.scope,
     }
   }
@@ -522,7 +526,7 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
   async #fetchDiscovery(): Promise<OIDCDiscoveryDocument> {
     let doc: OIDCDiscoveryDocument
     if (this.options.discoveryURL) {
-      doc = await fetchDiscovery(this.options.discoveryURL, this.options.httpTimeoutMs)
+      doc = await fetchDiscovery(this.options.discoveryURL, this.options.httpTimeout)
 
       // OIDC Discovery §4.3: the issuer in the document must match the expected issuer.
       // Without this, a compromised or misconfigured discovery endpoint gets to define the
@@ -577,14 +581,16 @@ export class OIDCAuthenticationHandler extends RemoteAuthenticationHandler<Resol
       return false
     }
 
-    const ttlMs = this.options.discoveryCacheTtlSeconds * 1000
-    return ttlMs === 0 || Date.now() - this.#discoveryFetchedAt >= ttlMs
+    const ttl = this.options.discoveryCacheTTL
+    return ttl === 0 || Date.now() - this.#discoveryFetchedAt >= ttl
   }
 
   #resolveJwks(jwksURI: string): JWTVerifyGetKey {
     return (this.#jwks ??=
       this.options.jwksResolver?.(jwksURI) ??
-      (createRemoteJWKSet(new URL(jwksURI), { timeoutDuration: this.options.httpTimeoutMs }) as JWTVerifyGetKey))
+      (createRemoteJWKSet(new URL(jwksURI), {
+        timeoutDuration: Math.ceil(this.options.httpTimeout),
+      }) as JWTVerifyGetKey))
   }
 }
 

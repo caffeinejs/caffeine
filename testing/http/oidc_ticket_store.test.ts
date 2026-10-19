@@ -1,4 +1,5 @@
 import type { RemoteAuthenticationTicket } from '@caffeinejs/http'
+import { Hour, Minute } from '@caffeinejs/std/duration'
 import { describe, it, expect } from 'vitest'
 
 import { TestOIDCTicketStore } from './oidc_ticket_store.js'
@@ -26,7 +27,7 @@ function ticket(subject: string): RemoteAuthenticationTicket {
 describe('TestOIDCTicketStore', () => {
   it('round-trips a stored ticket', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('k1', ticket('u1'), 3600)
+    await store.store('k1', ticket('u1'), 1 * Hour)
 
     expect(await store.retrieve('k1')).toEqual(ticket('u1'))
   })
@@ -38,7 +39,7 @@ describe('TestOIDCTicketStore', () => {
 
   it('returns undefined after remove', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('k1', ticket('u1'), 3600)
+    await store.store('k1', ticket('u1'), 1 * Hour)
     await store.remove('k1')
 
     expect(await store.retrieve('k1')).toBeUndefined()
@@ -51,8 +52,8 @@ describe('TestOIDCTicketStore', () => {
 
   it('clear() forgets everything', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('a', ticket('u1'), 3600)
-    await store.store('b', ticket('u2'), 3600)
+    await store.store('a', ticket('u1'), 1 * Hour)
+    await store.store('b', ticket('u2'), 1 * Hour)
 
     store.clear()
 
@@ -65,7 +66,7 @@ describe('TestOIDCTicketStore expiry', () => {
   it('stops returning a ticket once its ttl has passed', async () => {
     const clock = manualClock()
     const store = new TestOIDCTicketStore({ clock })
-    await store.store('k1', ticket('u1'), 60)
+    await store.store('k1', ticket('u1'), 1 * Minute)
 
     clock.advance(59_000)
     expect(await store.retrieve('k1')).toBeDefined()
@@ -77,8 +78,8 @@ describe('TestOIDCTicketStore expiry', () => {
   it('drops expired tickets from the count', async () => {
     const clock = manualClock()
     const store = new TestOIDCTicketStore({ clock })
-    await store.store('a', ticket('u1'), 60)
-    await store.store('b', ticket('u2'), 600)
+    await store.store('a', ticket('u1'), 1 * Minute)
+    await store.store('b', ticket('u2'), 10 * Minute)
 
     clock.advance(61_000)
 
@@ -90,7 +91,7 @@ describe('TestOIDCTicketStore expiry', () => {
     const store = new TestOIDCTicketStore({ clock })
 
     for (let i = 0; i < 50; i++) {
-      await store.store(`k${i}`, ticket(`u${i}`), 60)
+      await store.store(`k${i}`, ticket(`u${i}`), 1 * Minute)
       clock.advance(61_000)
     }
 
@@ -103,9 +104,9 @@ describe('TestOIDCTicketStore.removeBySubject()', () => {
   // self-contained session cookie can never do.
   it('revokes every session belonging to the subject', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('a', ticket('u1'), 3600)
-    await store.store('b', ticket('u1'), 3600)
-    await store.store('c', ticket('u1'), 3600)
+    await store.store('a', ticket('u1'), 1 * Hour)
+    await store.store('b', ticket('u1'), 1 * Hour)
+    await store.store('c', ticket('u1'), 1 * Hour)
 
     await store.removeBySubject('u1')
 
@@ -116,8 +117,8 @@ describe('TestOIDCTicketStore.removeBySubject()', () => {
 
   it('leaves other subjects untouched', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('a', ticket('u1'), 3600)
-    await store.store('b', ticket('u2'), 3600)
+    await store.store('a', ticket('u1'), 1 * Hour)
+    await store.store('b', ticket('u2'), 1 * Hour)
 
     await store.removeBySubject('u1')
 
@@ -127,7 +128,7 @@ describe('TestOIDCTicketStore.removeBySubject()', () => {
 
   it('is a no-op for an unknown subject', async () => {
     const store = new TestOIDCTicketStore()
-    await store.store('a', ticket('u1'), 3600)
+    await store.store('a', ticket('u1'), 1 * Hour)
 
     await expect(store.removeBySubject('nobody')).resolves.toBeUndefined()
     expect(await store.retrieve('a')).toBeDefined()

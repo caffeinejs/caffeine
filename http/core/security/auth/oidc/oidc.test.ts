@@ -1,3 +1,4 @@
+import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -28,7 +29,7 @@ function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OI
     callbackURL: CALLBACK_URL,
     sessionSecret: SESSION_SECRET,
     sessionCookieName: '__oidc_session',
-    sessionCookieTtlSeconds: 3600,
+    sessionCookieTTL: 1 * Hour,
     stateCookieName: '__oidc_state',
     defaultRedirectPath: '/',
     scopes: ['openid', 'profile', 'email'],
@@ -1076,7 +1077,7 @@ describe('OIDCAuthenticationHandler', () => {
           'OIDC',
           makeBaseOptions({
             jwksResolver,
-            discoveryCacheTtlSeconds: 0,
+            discoveryCacheTTL: 0,
           }),
         )
 
@@ -1111,7 +1112,7 @@ describe('OIDCAuthenticationHandler', () => {
               seen.push(uri)
               return jwksResolver(uri)
             },
-            discoveryCacheTtlSeconds: 0,
+            discoveryCacheTTL: 0,
           }),
         )
 
@@ -1162,7 +1163,7 @@ describe('OIDCAuthenticationHandler', () => {
               seen.push(uri)
               return jwksResolver(uri)
             },
-            discoveryCacheTtlSeconds: 0,
+            discoveryCacheTTL: 0,
           }),
         )
 
@@ -1220,7 +1221,7 @@ describe('OIDCAuthenticationHandler', () => {
           'OIDC',
           makeBaseOptions({
             jwksResolver,
-            discoveryCacheTtlSeconds: 0,
+            discoveryCacheTTL: 0,
           }),
         )
         await expect(handler.challenge(makeCtx().ctx)).resolves.toBeUndefined()
@@ -1265,10 +1266,7 @@ describe('OIDCAuthenticationHandler', () => {
 
         it.each(outages)('goes on with the document in hand when the provider %s', async (_, failure) => {
           const provider = providerThatGoesDown(failure)
-          const handler = new OIDCAuthenticationHandler(
-            'OIDC',
-            makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
-          )
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, discoveryCacheTTL: 0 }))
 
           await handler.challenge(makeCtx().ctx)
           provider.down = true
@@ -1298,7 +1296,7 @@ describe('OIDCAuthenticationHandler', () => {
             const provider = providerThatGoesDown(() => ({ ok: false, status: 503 }))
             const handler = new OIDCAuthenticationHandler(
               'OIDC',
-              makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
+              makeBaseOptions({ jwksResolver, discoveryCacheTTL: 0 }),
             )
 
             await handler.challenge(makeCtx().ctx)
@@ -1333,10 +1331,7 @@ describe('OIDCAuthenticationHandler', () => {
             })),
           )
 
-          const handler = new OIDCAuthenticationHandler(
-            'OIDC',
-            makeBaseOptions({ jwksResolver, discoveryCacheTtlSeconds: 0 }),
-          )
+          const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver, discoveryCacheTTL: 0 }))
           await handler.challenge(makeCtx().ctx)
 
           pkce = ['plain']
@@ -1441,6 +1436,22 @@ describe('OIDCAuthenticationHandler', () => {
 
         await expect(callbackWithToken(undated, nonce)).rejects.toThrow(/id_token validation failed.*"iat"/)
       })
+
+      // `clockTolerance` is a Duration and jose counts seconds: the default minute handed over as it is written would
+      // be sixty thousand seconds, and an id_token expired for half a day would still be let in.
+      it('rejects an id_token that expired longer ago than the clock tolerance', async () => {
+        const nonce = 'expired'
+        const now = Math.floor(Date.now() / 1000)
+        const expired = await new SignJWT({ sub: 'user123', nonce })
+          .setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+          .setIssuer(ISSUER)
+          .setAudience(CLIENT_ID)
+          .setIssuedAt(now - 3600)
+          .setExpirationTime(now - 120)
+          .sign(privateKey)
+
+        await expect(callbackWithToken(expired, nonce)).rejects.toThrow(/id_token validation failed.*"exp"/)
+      })
     })
 
     // OIDC Core §3.1.3.3. The access token goes on to be presented at the UserInfo endpoint as a bearer token,
@@ -1510,7 +1521,7 @@ describe('OIDCAuthenticationHandler', () => {
           prompt: 'login',
           loginHint: 'jane@example.com',
           acrValues: ['urn:mace:incommon:iap:silver', 'phr'],
-          maxAgeSeconds: 300,
+          maxAge: 5 * Minute,
         })
 
         expect(url.searchParams.get('prompt')).toBe('login')
@@ -1619,7 +1630,7 @@ describe('OIDCAuthenticationHandler', () => {
           'OIDC',
           makeBaseOptions({
             jwksResolver,
-            maxAgeSeconds: 300,
+            maxAge: 5 * Minute,
             ...options,
           }),
         )
@@ -1647,11 +1658,11 @@ describe('OIDCAuthenticationHandler', () => {
       })
 
       it('allows clock drift within the configured tolerance', async () => {
-        await expect(callbackWith({ auth_time: now() - 330 }, { clockToleranceSeconds: 60 })).resolves.toBeUndefined()
+        await expect(callbackWith({ auth_time: now() - 330 }, { clockTolerance: 1 * Minute })).resolves.toBeUndefined()
       })
 
       it('does not require auth_time when max_age was not requested', async () => {
-        await expect(callbackWith({}, { maxAgeSeconds: undefined })).resolves.toBeUndefined()
+        await expect(callbackWith({}, { maxAge: undefined })).resolves.toBeUndefined()
       })
     })
 
@@ -1947,6 +1958,30 @@ describe('OIDCAuthenticationHandler', () => {
       expect(redirect).toHaveBeenCalledWith('/dashboard', 302)
     })
 
+    // `sessionCookieTTL` is a Duration and the sealed session's `exp` counts seconds: the hour sealed as it is written
+    // would last a thousand.
+    it('seals the session for sessionCookieTTL, and keeps the cookie as long', async () => {
+      const nonce = 'ttl-nonce'
+      const stateCookieJWT = await makeStateCookie(nonce)
+      mockFetch(nonce)
+
+      const handler = new OIDCAuthenticationHandler('OIDC', makeBaseOptions({ jwksResolver }))
+      const { ctx, cookie } = makeCtx({
+        url: CALLBACK_PATH + '?code=auth-code&state=st',
+        cookies: { '__oidc_state.st': stateCookieJWT },
+        query: { code: 'auth-code', state: 'st' },
+      })
+
+      await handler.processCallback(ctx)
+
+      const [, value, opts] = cookie.mock.calls[0] as [string, string, Record<string, unknown>]
+      const left = (await openSessionCookie(value, SESSION_SECRET, SCHEME)).exp - Math.floor(Date.now() / 1000)
+
+      expect(opts.maxAge).toBe(1 * Hour)
+      expect(left).toBeGreaterThan(3600 - 5)
+      expect(left).toBeLessThanOrEqual(3600)
+    })
+
     it('deletes state cookie during callback', async () => {
       const nonce = 'n1'
       const stateCookieJWT = await makeStateCookie(nonce)
@@ -2133,7 +2168,7 @@ describe('OIDCAuthenticationHandler', () => {
         expect(tokens.accessToken).toBe('the-access-token')
         expect(tokens.refreshToken).toBe('the-refresh-token')
         expect(tokens.tokenType).toBe('Bearer')
-        expect(tokens.expiresIn).toBe(3599)
+        expect(tokens.expiresIn).toBe(3599 * Second)
         expect(tokens.scope).toBe('openid email')
         expect(typeof tokens.idToken).toBe('string')
       })

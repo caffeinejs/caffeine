@@ -1,4 +1,5 @@
 import type { RemoteAuthenticationTicket, RemoteAuthenticationTicketStore } from '@caffeinejs/http'
+import type { Duration } from '@caffeinejs/std/duration'
 
 export interface TestOIDCTicketStoreOptions {
   /**
@@ -36,8 +37,8 @@ export class TestOIDCTicketStore implements RemoteAuthenticationTicketStore {
     this.#now = options?.clock?.now ?? (() => performance.now())
   }
 
-  async store(key: string, ticket: RemoteAuthenticationTicket, ttlSeconds: number): Promise<void> {
-    this.#tickets.set(key, { ticket, expiresAt: this.#now() + ttlSeconds * 1000 })
+  async store(key: string, ticket: RemoteAuthenticationTicket, ttl: Duration): Promise<void> {
+    this.#tickets.set(key, { ticket, expiresAt: this.#now() + ttl })
   }
 
   async retrieve(key: string): Promise<RemoteAuthenticationTicket | undefined> {

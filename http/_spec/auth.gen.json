@@ -41,14 +41,8 @@
               "type": "string"
             },
             "expiresIn": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "number"
-                }
-              ]
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "roleClaimType": {
               "type": "string"
@@ -84,11 +78,13 @@
             "rememberMeCookieName": {
               "type": "string"
             },
-            "rememberMeRotationGraceSeconds": {
-              "type": "number"
+            "rememberMeRotationGrace": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "rememberMeAbsoluteMaxAge": {
-              "type": "number"
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "challengeMode": {
               "anyOf": [
@@ -116,10 +112,12 @@
               "type": "string"
             },
             "maxAge": {
-              "type": "number"
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "rememberMeMaxAge": {
-              "type": "number"
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "secure": {
               "type": "boolean"
@@ -195,8 +193,9 @@
             "sessionCookieName": {
               "type": "string"
             },
-            "sessionCookieTtlSeconds": {
-              "type": "number"
+            "sessionCookieTtl": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "stateCookieName": {
               "type": "string"
@@ -226,8 +225,9 @@
                 }
               ]
             },
-            "httpTimeoutMs": {
-              "type": "number"
+            "httpTimeout": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "showPii": {
               "type": "boolean"
@@ -287,11 +287,13 @@
             "allowPlainPkce": {
               "type": "boolean"
             },
-            "clockToleranceSeconds": {
-              "type": "number"
+            "clockTolerance": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
-            "discoveryCacheTtlSeconds": {
-              "type": "number"
+            "discoveryCacheTtl": {
+              "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+              "type": "string"
             },
             "getClaimsFromUserInfoEndpoint": {
               "type": "boolean"
@@ -334,9 +336,6 @@
                 "type": "string"
               }
             },
-            "maxAgeSeconds": {
-              "type": "number"
-            },
             "extraAuthorizationParams": {
               "type": "object",
               "patternProperties": {
@@ -364,34 +363,16 @@
       "type": "object",
       "properties": {
         "accessTtl": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+          "type": "string"
         },
         "refreshTtl": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+          "type": "string"
         },
         "absoluteTtl": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "number"
-            }
-          ]
+          "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+          "type": "string"
         }
       }
     }

@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto'
 
+import { type Duration, Second, truncate } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { resolveAppURL } from '../../../../../base_path.js'
@@ -39,7 +40,8 @@ export interface RemoteAuthenticationTokens {
   accessToken?: string
   refreshToken?: string
   tokenType?: string
-  expiresIn?: number
+  /** How long the access token lasts, from the token response's `expires_in`. */
+  expiresIn?: Duration
   scope?: string
   /** Present only for OpenID Connect providers. */
   idToken?: string
@@ -90,7 +92,7 @@ export interface RemoteAuthenticationOptions {
   /** One secret, or several: the first seals, and any of them opens. */
   sessionSecret: CookieSecret
   sessionCookieName: string
-  sessionCookieTtlSeconds: number
+  sessionCookieTTL: Duration
   stateCookieName: string
   secureCookie: boolean
   cookieDomain?: string
@@ -98,7 +100,7 @@ export interface RemoteAuthenticationOptions {
   cookiePriority?: CookiePriority
 
   roleClaimType: string
-  httpTimeoutMs: number
+  httpTimeout: Duration
   showPii: boolean
   challengeMode: RemoteChallengeMode
 
@@ -280,7 +282,7 @@ export abstract class RemoteAuthenticationHandler<
     // session has run out.
     const ttl = reseal === undefined ? 0 : reseal.exp - Math.floor(Date.now() / 1000)
     if (reseal !== undefined && ttl > 0) {
-      ctx.cookie(this.options.sessionCookieName, await reseal.seal(ttl), this.cookieOpts(ttl))
+      ctx.cookie(this.options.sessionCookieName, await reseal.seal(ttl), this.cookieOpts(ttl * Second))
       noStore(ctx)
     }
 
@@ -424,7 +426,7 @@ export abstract class RemoteAuthenticationHandler<
       this.options.sessionSecret,
       this.name,
     )
-    ctx.cookie(this.#stateCookieNameFor(state), sealed, this.cookieOpts(STATE_TTL_SECONDS))
+    ctx.cookie(this.#stateCookieNameFor(state), sealed, this.cookieOpts(STATE_TTL_SECONDS * Second))
 
     const authURL = new URL(endpoint)
     authURL.searchParams.set('client_id', this.options.clientID)
@@ -559,7 +561,7 @@ export abstract class RemoteAuthenticationHandler<
    * session stops working everywhere immediately, and `RemoteAuthenticationTicketStore.removeBySubject` ends
    * every session the user holds. Without one the sealed cookie *is* the session: this clears
    * the responding browser's copy and nothing more, so any other copy — a synced profile, a
-   * captured header — stays valid until `sessionCookieTtlSeconds` elapses.
+   * captured header — stays valid until `sessionCookieTTL` elapses.
    *
    * The cookie is cleared unconditionally: a store that throws must not leave the browser
    * holding something that still looks like a session. The store failure is propagated, since
@@ -734,7 +736,8 @@ export abstract class RemoteAuthenticationHandler<
    * self-contained sealed cookie.
    */
   protected async writeSession(ctx: IContext, identity: RemoteAuthenticationIdentity): Promise<void> {
-    const ttl = this.options.sessionCookieTtlSeconds
+    // The sealed cookie counts whole seconds, and the ticket lasts as long as the cookie.
+    const ttl = truncate(this.options.sessionCookieTTL, Second)
     const session = claimsToSession(identity.claims, this.name)
     const store = this.options.ticketStore
 
@@ -751,9 +754,9 @@ export abstract class RemoteAuthenticationHandler<
       // session, so its entropy cannot be left to the store implementation.
       const key = randomBytes(32).toString('base64url')
       await store.store(key, { session, subject: identity.subject, tokens: identity.tokens }, ttl)
-      cookieValue = await encodeTicketRef(key, this.options.sessionSecret, this.name, ttl)
+      cookieValue = await encodeTicketRef(key, this.options.sessionSecret, this.name, ttl / Second)
     } else {
-      cookieValue = await encodeSession(session, this.options.sessionSecret, this.name, ttl)
+      cookieValue = await encodeSession(session, this.options.sessionSecret, this.name, ttl / Second)
     }
 
     ctx.cookie(this.options.sessionCookieName, cookieValue, this.cookieOpts(ttl))
@@ -763,7 +766,7 @@ export abstract class RemoteAuthenticationHandler<
   // Every attribute is the strategy's own, one it leaves unset written as `undefined`: that clears whatever the
   // server's `parseOptions` default, so an application-wide domain or `signed` never reaches these cookies. `encode`
   // stays the server's: every read decodes with the server's `decode`, and the two have to match.
-  protected cookieOpts(maxAge?: number): CookieSerializeOptions {
+  protected cookieOpts(maxAge?: Duration): CookieSerializeOptions {
     return {
       httpOnly: true,
       sameSite: 'lax',

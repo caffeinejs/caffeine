@@ -1,3 +1,4 @@
+import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { ErrInvalidCookie } from './errors.js'
@@ -77,7 +78,7 @@ describe('the attributes a cookie goes out with', () => {
 
   // What the cookie schemes clear their cookies with, and what tests across the repository read back.
   it('clears a cookie with an empty value, Max-Age=0 and the epoch', () => {
-    expect(line('delete', 'n', 'ignored', { maxAge: 60, expires: Date.now() + 60_000, signed: true })).toBe(
+    expect(line('delete', 'n', 'ignored', { maxAge: 1 * Minute, expires: Date.now() + 60_000, signed: true })).toBe(
       'n=; Max-Age=0; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax',
     )
   })
@@ -86,7 +87,7 @@ describe('the attributes a cookie goes out with', () => {
     expect(
       line('set', 'id', 'v', {
         domain: 'example.com',
-        maxAge: 60,
+        maxAge: 1 * Minute,
         httpOnly: true,
         secure: true,
         partitioned: true,
@@ -94,6 +95,11 @@ describe('the attributes a cookie goes out with', () => {
         sameSite: 'none',
       }),
     ).toBe('id=v; Max-Age=60; Domain=example.com; Path=/; HttpOnly; Secure; Partitioned; Priority=High; SameSite=None')
+  })
+
+  // `maxAge` is a Duration and `Max-Age` counts seconds: written as it was given, an hour would last a thousand.
+  it('writes maxAge in seconds', () => {
+    expect(line('set', 'id', 'v', { maxAge: 1 * Hour })).toBe('id=v; Max-Age=3600; Path=/; SameSite=Lax')
   })
 })
 
@@ -121,8 +127,12 @@ describe('what a cookie is refused for', () => {
     )
   })
 
+  // `maxAge` is a Duration: a count of seconds written in its place reads as milliseconds, and 3600 is not whole seconds.
   it('a Max-Age that is not whole seconds', () => {
-    expect(() => line('set', 'id', 'v', { maxAge: 1.5 })).toThrow('its Max-Age is not a whole number of seconds')
+    expect(() => line('set', 'id', 'v', { maxAge: 1.5 * Second })).toThrow(
+      'Cannot set cookie "id": its maxAge, a Duration in milliseconds, is not a whole number of seconds',
+    )
+    expect(() => line('set', 'id', 'v', { maxAge: 3600 })).toThrow('is not a whole number of seconds')
   })
 
   // cookie@2 repeats a value it refuses in its message, and a message — or a cause — can reach a client.

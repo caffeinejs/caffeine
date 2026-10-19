@@ -1,3 +1,4 @@
+import { Day, Minute, Hour, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import { Claim, Identity, Principal } from '../../index.js'
@@ -46,7 +47,7 @@ function principal(sub = 'u1', roles: string[] = ['admin']): Principal {
 
 function make(resolve = vi.fn<RefreshPrincipalResolver>(async (sub: string) => principal(sub))) {
   const store = new FakeStore()
-  const service = new RefreshTokenService(jwt, store, { resolve, accessTTL: '15m', refreshTTL: '30d' })
+  const service = new RefreshTokenService(jwt, store, { resolve, accessTTL: 15 * Minute, refreshTTL: 30 * Day })
   return { store, service, resolve }
 }
 
@@ -179,8 +180,8 @@ describe('RefreshTokenService', () => {
       const store = new FakeStore()
       const service = new RefreshTokenService(jwt, store, {
         resolve: () => principal(),
-        refreshTTL: 3600,
-        absoluteTTL: 5000,
+        refreshTTL: 1 * Hour,
+        absoluteTTL: 5000 * Second,
       })
       const first = await service.issue(principal())
 
