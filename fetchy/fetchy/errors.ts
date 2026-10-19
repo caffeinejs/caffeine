@@ -1,4 +1,5 @@
-import { errMessage, type ErrMessageBuilder } from './_err_message.gen.js'
+import { errMessage, type ErrMessageBuilder } from '@caffeinejs/std/err'
+
 import type { FetchyRequest } from './request.js'
 import type { FetchyResponse } from './response.js'
 

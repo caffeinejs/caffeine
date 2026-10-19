@@ -1,5 +1,6 @@
 import type { ConnectionOptions } from 'node:tls'
 
+import type { Duration } from '@caffeinejs/std/duration'
 import type { Dispatcher, Pool } from 'undici'
 
 /**
@@ -8,14 +9,14 @@ import type { Dispatcher, Pool } from 'undici'
 export class PoolOptionsBuilder {
   private _connections: number | undefined
   private _socketPath: string | undefined
-  private _keepAliveTimeout: number | undefined
-  private _keepAliveMaxTimeout: number | undefined
-  private _keepAliveTimeoutThreshold: number | undefined
+  private _keepAliveTimeout: Duration | undefined
+  private _keepAliveMaxTimeout: Duration | undefined
+  private _keepAliveTimeoutThreshold: Duration | undefined
   private _pipelining: number | undefined
   private _connect: ConnectionOptions | undefined
   private _maxHeaderSize: number | undefined
-  private _headersTimeout: number | undefined
-  private _bodyTimeout: number | undefined
+  private _headersTimeout: Duration | undefined
+  private _bodyTimeout: Duration | undefined
   private _factory: ((origin: URL, opts: object) => Dispatcher) | undefined
 
   static newBuilder(): PoolOptionsBuilder {
@@ -32,18 +33,18 @@ export class PoolOptionsBuilder {
     return this
   }
 
-  keepAliveTimeout(ms: number): this {
-    this._keepAliveTimeout = ms
+  keepAliveTimeout(timeout: Duration): this {
+    this._keepAliveTimeout = timeout
     return this
   }
 
-  keepAliveMaxTimeout(ms: number): this {
-    this._keepAliveMaxTimeout = ms
+  keepAliveMaxTimeout(timeout: Duration): this {
+    this._keepAliveMaxTimeout = timeout
     return this
   }
 
-  keepAliveTimeoutThreshold(ms: number): this {
-    this._keepAliveTimeoutThreshold = ms
+  keepAliveTimeoutThreshold(threshold: Duration): this {
+    this._keepAliveTimeoutThreshold = threshold
     return this
   }
 
@@ -62,13 +63,13 @@ export class PoolOptionsBuilder {
     return this
   }
 
-  headersTimeout(ms: number): this {
-    this._headersTimeout = ms
+  headersTimeout(timeout: Duration): this {
+    this._headersTimeout = timeout
     return this
   }
 
-  bodyTimeout(ms: number): this {
-    this._bodyTimeout = ms
+  bodyTimeout(timeout: Duration): this {
+    this._bodyTimeout = timeout
     return this
   }
 
@@ -90,8 +91,9 @@ export class PoolOptionsBuilder {
       pipelining: this._pipelining,
       connect: this._connect,
       maxHeaderSize: this._maxHeaderSize,
-      headersTimeout: this._headersTimeout,
-      bodyTimeout: this._bodyTimeout,
+      // undici takes these two in whole milliseconds.
+      headersTimeout: this._headersTimeout === undefined ? undefined : Math.ceil(this._headersTimeout),
+      bodyTimeout: this._bodyTimeout === undefined ? undefined : Math.ceil(this._bodyTimeout),
       factory: this._factory,
     }
   }

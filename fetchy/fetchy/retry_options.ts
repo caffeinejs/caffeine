@@ -1,3 +1,5 @@
+import { type Duration, Millisecond } from '@caffeinejs/std/duration'
+
 export interface RetryOptions {
   limit: number
   methods: string[]
@@ -8,7 +10,8 @@ export interface RetryOptions {
    * coded error itself.
    */
   errorCodes: string[]
-  delay: number
+  /** The wait between attempts. */
+  delay: Duration
 }
 
 export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
@@ -25,5 +28,5 @@ export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
     'UND_ERR_CONNECT_TIMEOUT',
     'UND_ERR_HEADERS_TIMEOUT',
   ],
-  delay: 500,
+  delay: 500 * Millisecond,
 }
