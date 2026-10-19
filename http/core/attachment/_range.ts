@@ -15,22 +15,13 @@ export function byteRange(
     return undefined
   }
 
-  // Empty list elements are skipped, as a list's recipient must.
-  let spec: string | undefined
-  for (const element of header.slice(equals + 1).split(',')) {
-    const trimmed = element.trim()
-    if (trimmed === '') {
-      continue
-    }
-
-    if (spec !== undefined) {
-      return undefined
-    }
-
-    spec = trimmed
-  }
-
-  const match = spec === undefined ? null : /^(\d*)-(\d*)$/.exec(spec)
+  // Empty list elements are skipped, as a list's recipient must; more than one range is sent whole.
+  const specs = header
+    .slice(equals + 1)
+    .split(',')
+    .map(spec => spec.trim())
+    .filter(spec => spec !== '')
+  const match = specs.length === 1 ? /^(\d*)-(\d*)$/.exec(specs[0]) : null
   if (match === null) {
     return undefined
   }

@@ -2,49 +2,49 @@ import { Blob } from 'node:buffer'
 
 import { errorCodes } from 'fastify'
 
-import type { IContext } from '../../context.js'
 import { MediaType } from '../../media.js'
 import { Responder } from '../../response.js'
+import type { Context } from './context.js'
 
-/** The part of a reply {@link payloadOf} writes to, so a reply of any server parameterization fits. */
-export interface PayloadReply {
+/** The part of a reply this module writes to, so a reply of any server parameterization fits. */
+interface Reply {
   code(statusCode: number): unknown
   header(name: string, value: string): unknown
   hasHeader(name: string): boolean
   type(contentType: string): unknown
-}
-
-/** The reply {@link answer} sends an empty answer on, and hands back for the server to wait on. */
-export interface AnswerReply extends PayloadReply {
   send(): unknown
 }
 
 /**
- * What the adapter hands Fastify for what a route's handler or a catch handler answered with: a `Responder`'s own
- * answer in its place, shaped by {@link payloadOf}. The reply itself once `sent` says the request was answered
- * through the context, so the server waits on that send rather than starting another, and once the empty answer
- * of an answer with no body is on its way.
- *
- * An answer given later — a `Responder`'s promise, or any other thenable — is handled the same once it settles,
- * `sent` asked again then: a `Responder` may have answered through the context meanwhile.
+ * Whether the request is answered already, so nothing more is sent: through the context, or by Fastify's own 503 for
+ * a handler that outlived its timeout. Built once per route or error handler, never per request.
  */
-export function answer(reply: AnswerReply, ctx: IContext, result: unknown, sent: () => boolean): unknown {
-  const value = result instanceof Responder ? result.respond(ctx) : result
+type Answered = (ctx: Context) => boolean
 
-  // The reply is a thenable too: handed back, the server waits on it, which is what it is for.
-  if (value !== reply && typeof (value as PromiseLike<unknown> | null)?.then === 'function') {
-    return Promise.resolve(value).then(settled => settle(reply, settled, sent))
-  }
-
-  return settle(reply, value, sent)
-}
-
-function settle(reply: AnswerReply, value: unknown, sent: () => boolean): unknown {
-  if (sent()) {
+/**
+ * What the adapter hands Fastify for what a route's handler or a catch handler answered with: the answer a
+ * `Responder` gives in its place, unwrapped once, and an answer given later once it settles, shaped by
+ * {@link payloadOf}.
+ *
+ * The reply itself once `answered`, which is asked before anything runs and again after every wait, so the server
+ * waits on the send in flight instead of starting a second over it; and the reply once the empty answer of an answer
+ * with no body is on its way.
+ */
+export function answer(reply: Reply, ctx: Context, result: unknown, answered: Answered, unwrapped = false): unknown {
+  if (answered(ctx)) {
     return reply
   }
 
-  const payload = payloadOf(reply, value)
+  // The reply is a thenable too: handed back, the server waits on it, which is what it is for.
+  if (result !== reply && typeof (result as PromiseLike<unknown> | null)?.then === 'function') {
+    return Promise.resolve(result).then(settled => answer(reply, ctx, settled, answered, unwrapped))
+  }
+
+  if (!unwrapped && result instanceof Responder) {
+    return answer(reply, ctx, result.respond(ctx), answered, true)
+  }
+
+  const payload = payloadOf(reply, result)
 
   if (payload === undefined) {
     reply.send()
@@ -66,14 +66,19 @@ function settle(reply: AnswerReply, value: unknown, sent: () => boolean): unknow
  * headers reach the reply before the `onSend` hooks run, so they see what goes out, and Fastify's HEAD route, which
  * cannot measure a `Response`, gets a body it can drop.
  */
-export function payloadOf(reply: PayloadReply, value: unknown): unknown {
+export function payloadOf(reply: Reply, value: unknown): unknown {
   if (typeof value !== 'object' || value === null) {
     return value
   }
 
-  // The common answer, a plain object or an array, is JSON: nothing below could match it.
+  // The common answers need nothing here: a plain object or an array is JSON, and Fastify sends a view of bytes.
   const prototype: unknown = Object.getPrototypeOf(value)
-  if (prototype === Object.prototype || prototype === Array.prototype || prototype === null) {
+  if (
+    prototype === Object.prototype ||
+    prototype === Array.prototype ||
+    prototype === null ||
+    ArrayBuffer.isView(value)
+  ) {
     return value
   }
 
@@ -101,7 +106,7 @@ export function payloadOf(reply: PayloadReply, value: unknown): unknown {
   return value
 }
 
-function unwrap(reply: PayloadReply, response: Response): unknown {
+function unwrap(reply: Reply, response: Response): unknown {
   // Refused before the reply is touched, so whatever answers instead does not inherit half of this one.
   if (response.bodyUsed) {
     throw new errorCodes.FST_ERR_REP_RESPONSE_BODY_CONSUMED()
@@ -124,7 +129,7 @@ function unwrap(reply: PayloadReply, response: Response): unknown {
 }
 
 /** Writes `type` unless the route, the handler or the answer already gave the reply one. */
-function defaultType(reply: PayloadReply, type: string): void {
+function defaultType(reply: Reply, type: string): void {
   if (!reply.hasHeader('content-type')) {
     reply.type(type)
   }

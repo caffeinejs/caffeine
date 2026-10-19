@@ -127,8 +127,13 @@ class AttachmentResult extends Responder {
 
     // Ranges are a GET's, served in place of a 200: a HEAD is answered as the whole GET would be, and a status the
     // route or the handler set is kept.
-    const ranged = ctx.req.method === 'GET' && ctx.statusCode === 200 && matches(ctx.req.header('if-range'), options)
-    const range = ranged ? byteRange(ctx.req.header('range'), size) : undefined
+    const header = ctx.req.header('range')
+    const ranged =
+      header !== undefined &&
+      ctx.req.method === 'GET' &&
+      ctx.statusCode === 200 &&
+      matches(ctx.req.header('if-range'), options)
+    const range = ranged ? byteRange(header, size) : undefined
 
     if (range === undefined) {
       return body
@@ -142,30 +147,15 @@ class AttachmentResult extends Responder {
     const [start, end] = range
     ctx.status(206).header('content-range', `bytes ${start}-${end}/${size}`)
 
-    // A part goes out as a stream either way, so a cache in front, which hashes and keeps bytes, never takes it for
-    // the whole. Bytes are not copied for it: the one chunk is a view of the same memory.
-    if (sized instanceof NodeBlob) {
-      return sized.slice(start, end + 1, sized.type)
-    }
-
-    ctx.header('content-length', String(end - start + 1))
-    return chunk(sized.subarray(start, end + 1))
+    // Bytes are not copied for a part of them: Fastify sends the view as it is.
+    return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
   }
-}
-
-/** `bytes` as a stream of one chunk. */
-function chunk(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes)
-      controller.close()
-    },
-  })
 }
 
 /**
  * The body as something with a length to take ranges of, or `undefined` for one to send whole: a stream, or a Blob
- * past 4 GiB, which Node cannot cut a part out of — its `slice` takes 32-bit offsets and aborts the process past them.
+ * past 4 GiB, which Node cannot cut a part out of: its `slice` takes 32-bit offsets and aborts the process past
+ * them.
  */
 function sizedOf(body: AttachmentBody): NodeBlob | Uint8Array<ArrayBuffer> | undefined {
   if (body instanceof NodeBlob) {
@@ -193,7 +183,7 @@ function matches(ifRange: string | undefined, options: AttachmentOptions): boole
   }
 
   if (ifRange.startsWith('"') || ifRange.startsWith('W/')) {
-    return options.etag !== undefined && !options.etag.startsWith('W/') && ifRange === options.etag
+    return ifRange === options.etag && !ifRange.startsWith('W/')
   }
 
   if (options.lastModified === undefined) {

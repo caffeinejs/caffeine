@@ -12,6 +12,7 @@ import {
 } from 'fastify'
 
 import type { IRouteCompilers, IRouteGroup, RouteGroupScope } from '../../../core/routing/route.js'
+import type { Context } from '../context.js'
 import { installRouteGroupErrorHandler, type GlobalErrorHandler } from '../error/error.js'
 import { attachGuardHook } from '../guards/guards.js'
 import { answer } from '../response.js'
@@ -76,6 +77,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // Only a timed route reads `req.signal` below: on any other, the read would create a controller per request.
         // Fastify creates no timer for a `handlerTimeout` of 0, so that server is not timed either.
         const timed = route.timeout !== undefined || (handlerTimeout !== undefined && handlerTimeout > 0)
+        const answered = timed ? answeredOrTimedOut : answeredThroughContext
 
         // Route Config
         // https://fastify.dev/docs/latest/Reference/Routes/#config
@@ -158,24 +160,12 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
 
             if (result instanceof Promise) {
               return result.then(
-                r => {
-                  // The handler outlived its timeout: Fastify has answered 503 and is sending it. Handed the reply
-                  // itself, the server waits for that send to end instead of starting another with this result.
-                  if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
-                    return res
-                  }
-
-                  // The handler answered the request itself — `ctx.redirect(...)`, then whatever it returned. The
-                  // reply is handed back so the server waits on the send already in flight instead of starting a
-                  // second over it, which is what `undefined` here would do, and what a value or a `Responder`
-                  // would do too, while an `onSend` hook that awaits keeps `reply.sent` false. On a reply already
-                  // out it returns at once.
-                  if (req.httpContext.sent) {
-                    return res
-                  }
-
-                  return answer(res, req.httpContext, r, () => req.httpContext.sent)
-                },
+                // The handler outlived its timeout, and Fastify has answered 503 and is sending it; or the handler
+                // answered the request itself, `ctx.redirect(...)` and then whatever it returned. Either way `answer`
+                // hands back the reply, so the server waits on the send in flight instead of starting a second over
+                // it, which is what `undefined` here would do, and what a value or a `Responder` would do too, while
+                // an `onSend` hook that awaits keeps `reply.sent` false. On a reply already out it returns at once.
+                r => answer(res, req.httpContext, r, answered),
                 (err: unknown) => {
                   // A rejection after the timeout is the late result too: the 503 is what answers the request.
                   if (timed && req.signal.aborted && isHandlerTimeout(req.signal.reason)) {
@@ -189,14 +179,10 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
             }
 
             // As above, minus the reply: the server sends nothing of its own over a handler that returned
-            // synchronously, so there is no second send here to make it wait for.
-            if (req.httpContext.sent) {
-              return
-            }
-
-            // Fastify sends nothing for a synchronous `undefined`, so an answer with no body — a Responder that
-            // answered nothing, a Response without one — is sent empty here rather than left waiting.
-            return answer(res, req.httpContext, result, () => req.httpContext.sent)
+            // synchronously, so there is no second send to make it wait for. Fastify sends nothing for a synchronous
+            // `undefined` either, so `answer` sends an answer with no body itself.
+            const answering = answer(res, req.httpContext, result, answered)
+            return answering === res ? undefined : answering
           },
         }
 
@@ -266,6 +252,16 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
     },
     { prefix: router.prefix },
   )
+}
+
+/** The request was answered through the context: `ctx.redirect(...)`, `ctx.body(...)`. */
+function answeredThroughContext(ctx: Context): boolean {
+  return ctx.sent
+}
+
+/** As {@link answeredThroughContext}, or by Fastify's 503 for a handler that outlived its timeout. */
+function answeredOrTimedOut(ctx: Context): boolean {
+  return ctx.sent || (ctx.signal.aborted && isHandlerTimeout(ctx.signal.reason))
 }
 
 /** Whether a request signal was aborted by Fastify's handler timeout, rather than by the client leaving. */
