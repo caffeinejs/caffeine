@@ -5,6 +5,11 @@
     "types": [],
     "lib": ["esnext", "dom"]
   },
+  "references": [
+    {
+      "path": "../std/tsconfig.build.json"
+    }
+  ],
   "exclude": [
     "dist",
     "node_modules",

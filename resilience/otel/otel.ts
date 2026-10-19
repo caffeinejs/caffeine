@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import {
   diag,
   metrics,
@@ -90,18 +91,18 @@ export function instrumentCircuitBreaker(
   const unsubscribers = [
     breaker.on(
       'success',
-      guarded('success', event => duration.record(event.durationMs / 1000, successful)),
+      guarded('success', event => duration.record(event.duration / Second, successful)),
     ),
     breaker.on(
       'failure',
       guarded('failure', event => {
         const attributes: Attributes = { ...failed, 'error.type': 'error' in event ? errorType(event.error) : '_OTHER' }
-        duration.record(event.durationMs / 1000, attributes)
+        duration.record(event.duration / Second, attributes)
       }),
     ),
     breaker.on(
       'ignored',
-      guarded('ignored', event => duration.record(event.durationMs / 1000, ignored)),
+      guarded('ignored', event => duration.record(event.duration / Second, ignored)),
     ),
   ]
 

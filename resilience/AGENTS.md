@@ -8,7 +8,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Time is `clock.now()` from `timers.ts`, never `Date.now()`.
 - A test that fakes time calls `useFakeClock()` from `fake_clock.testkit.ts`; fake timers alone miss the captured
   `performance`.
-- Only `otel/` imports a dependency (`@opentelemetry/api`, an optional peer), and `index.ts` does not reach it.
+- Besides `@caffeinejs/std`, itself dependency-free and runtime-agnostic, only `otel/` imports a dependency
+  (`@opentelemetry/api`, an optional peer), and `index.ts` does not reach it.
 
 ## Hot path
 

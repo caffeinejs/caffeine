@@ -1,7 +1,7 @@
 # @caffeinejs/resilience
 
-Circuit breaker and retry for any JavaScript runtime, composed as plain functions. No dependencies; the
-OpenTelemetry binding is an optional subpath.
+Circuit breaker and retry for any JavaScript runtime, composed as plain functions. Its one dependency is
+`@caffeinejs/std`, which has none; the OpenTelemetry binding is an optional subpath.
 
 ```sh
 npm install @caffeinejs/resilience
@@ -14,6 +14,7 @@ dependency and share it. A breaker created per call never sees a second call and
 
 ```ts
 import { circuitBreaker, exponential, retry, runWith } from '@caffeinejs/resilience'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 
 // module scope
 const breaker = circuitBreaker({
@@ -24,7 +25,7 @@ const breaker = circuitBreaker({
 const retries = retry({
   name: 'inventory',
   maxAttempts: 3,
-  backoff: exponential({ initialDelayMs: 100, maxDelayMs: 2_000, jitter: 0.5 }),
+  backoff: exponential({ initialDelay: 100 * Millisecond, maxDelay: 2 * Second, jitter: 0.5 }),
 })
 
 const fetchStock = (id: string, signal?: AbortSignal) =>
@@ -35,6 +36,9 @@ const stock = await runWith(() => fetchStock(id), retries, breaker) // Promise<S
 ```
 
 The result is always a promise. A synchronous operation is fine: its value or its throw settles the promise.
+
+Every delay, wait and threshold is a `Duration` from `@caffeinejs/std/duration`, a number of milliseconds written
+with its constants: `2 * Second`, `500 * Millisecond`.
 
 ## Order of strategies
 
@@ -91,11 +95,11 @@ const stock = await runWith(() => fetchStock(id), retries, breaker).catch(error 
 })
 ```
 
-`ErrCallNotPermitted.retryAfterMs` tells an HTTP layer what to put in `Retry-After`:
+`ErrCallNotPermitted.retryAfter` tells an HTTP layer what to put in `Retry-After`, which counts seconds:
 
 ```ts
-if (error instanceof ErrCallNotPermitted && error.retryAfterMs !== undefined) {
-  reply.header('retry-after', Math.ceil(error.retryAfterMs / 1000)).code(503)
+if (error instanceof ErrCallNotPermitted && error.retryAfter !== undefined) {
+  reply.header('retry-after', Math.ceil(error.retryAfter / Second)).code(503)
 }
 ```
 
@@ -124,31 +128,31 @@ shared.
 ```ts
 const breaker = circuitBreaker({
   name: 'payments',
-  slidingWindow: { type: 'time', seconds: 30 },
+  slidingWindow: { type: 'time', duration: 30 * Second },
   minimumNumberOfCalls: 20,
-  slowCallDurationThresholdMs: 2_000,
+  slowCallDurationThreshold: 2 * Second,
   slowCallRateThreshold: 80,
   recordResult: res => res instanceof Response && res.status >= 500,
   ignoreError: err => err instanceof ValidationError,
 })
 ```
 
-| Option                                  | Default                        | Meaning                                                                                   |
-| --------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------- |
-| `name`                                  | required                       | Names the breaker in errors, events and metrics                                           |
-| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                             |
-| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                           |
-| `slowCallDurationThresholdMs`           | `60_000`                       | A call longer than this is slow                                                           |
-| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', seconds }` for the calls of the last seconds   |
-| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                   |
-| `waitDurationInOpenStateMs`             | `60_000`                       | Time spent open; a function of how many times in a row it opened, such as `exponential()` |
-| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                   |
-| `maxWaitDurationInHalfOpenStateMs`      | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                               |
-| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                            |
-| `recordError`                           | every error                    | Whether an error is a failure; `false` counts it as a success                             |
-| `ignoreError`                           | none                           | Errors that neither count nor affect the state; checked first                             |
-| `recordResult`                          | none                           | Whether a returned value is a failure                                                     |
-| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                          |
+| Option                                  | Default                        | Meaning                                                                                                       |
+| --------------------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `name`                                  | required                       | Names the breaker in errors, events and metrics                                                               |
+| `failureRateThreshold`                  | `50`                           | Failure rate, in percent, at or above which the breaker opens                                                 |
+| `slowCallRateThreshold`                 | `100`                          | Slow-call rate, in percent, at or above which the breaker opens                                               |
+| `slowCallDurationThreshold`             | `1 * Minute`                   | A call longer than this is slow                                                                               |
+| `slidingWindow`                         | `{ type: 'count', size: 100 }` | The last `size` calls, or `{ type: 'time', duration }` for the calls of the last `duration`, in whole seconds |
+| `minimumNumberOfCalls`                  | `100`                          | Calls needed before a rate is computed; capped at a count window's size                                       |
+| `waitDurationInOpenState`               | `1 * Minute`                   | Time spent open; a function of how many times in a row it opened, such as `exponential()`                     |
+| `permittedNumberOfCallsInHalfOpenState` | `10`                           | Trial calls let through while half open                                                                       |
+| `maxWaitDurationInHalfOpenState`        | `0` (forever)                  | Re-opens a half-open breaker whose trial calls never settle                                                   |
+| `automaticTransitionFromOpenToHalfOpen` | `false`                        | Moves to half open when the wait elapses, not on the next call                                                |
+| `recordError`                           | every error                    | Whether an error is a failure; `false` counts it as a success                                                 |
+| `ignoreError`                           | none                           | Errors that neither count nor affect the state; checked first                                                 |
+| `recordResult`                          | none                           | Whether a returned value is a failure                                                                         |
+| `captureStackTrace`                     | `false`                        | Whether a refusal's `ErrCallNotPermitted` captures a stack trace                                              |
 
 How it moves:
 
@@ -158,7 +162,7 @@ How it moves:
   half open.
 - **half_open**: `permittedNumberOfCallsInHalfOpenState` trial calls run, the rest are refused. Their outcome
   closes the breaker or opens it again, for a wait computed from how many times in a row it opened. With
-  `maxWaitDurationInHalfOpenStateMs`, once every trial slot has been held that long, the next call re-opens the
+  `maxWaitDurationInHalfOpenState`, once every trial slot has been held that long, the next call re-opens the
   breaker. Time with a free slot does not count.
 - **forced_open**, **disabled**, **metrics_only**: manual states entered with `forceOpen()`, `disable()` and
   `metricsOnly()`, left with `reset()`. Disabled lets everything through and records nothing; metrics-only
@@ -180,8 +184,8 @@ const retries = retry({
   retryOnResult: res => res instanceof Response && res.status === 503,
   backoff: (attempt, error, result) =>
     result instanceof Response && result.headers.has('retry-after')
-      ? Number(result.headers.get('retry-after')) * 1_000
-      : 200 * 2 ** (attempt - 1),
+      ? Number(result.headers.get('retry-after')) * Second
+      : 200 * Millisecond * 2 ** (attempt - 1),
   failAfterMaxAttempts: true,
 })
 ```
@@ -190,7 +194,7 @@ const retries = retry({
 | ---------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | `name`                 | required                                 | Names the retry in errors, events and metrics                                         |
 | `maxAttempts`          | `3`                                      | Attempts in total, the first call included                                            |
-| `backoff`              | `500`                                    | Milliseconds between attempts, or `(attempt, error, result) => ms`                    |
+| `backoff`              | `500 * Millisecond`                      | The wait between attempts, or `(attempt, error, result) => Duration`                  |
 | `retryOn`              | every error except `ErrCallNotPermitted` | Whether an error is worth another attempt; a function given here replaces the default |
 | `retryOnResult`        | none                                     | Whether a returned value is worth another attempt                                     |
 | `failAfterMaxAttempts` | `false`                                  | Reject with `ErrMaxRetriesExceeded` instead of returning the last retryable value     |
@@ -206,17 +210,17 @@ are clamped to what timers can hold (about 24.8 days); a delay that is not a fin
 
 ## Backoff
 
-`exponential({ initialDelayMs = 500, multiplier = 2, maxDelayMs = 30_000, jitter = 0 })` returns
-`attempt => delay`: `initialDelayMs · multiplier^(attempt−1)`, capped at `maxDelayMs`, then randomized to within
+`exponential({ initialDelay = 500 * Millisecond, multiplier = 2, maxDelay = 30 * Second, jitter = 0 })` returns
+`attempt => delay`: `initialDelay · multiplier^(attempt−1)`, capped at `maxDelay`, then randomized to within
 `±jitter` of itself for `jitter` in `[0, 1)` without passing the cap. A delay that reached the cap is spread over
-`[maxDelayMs·(1−jitter), maxDelayMs]`, so clients that back off for long still wait different times. It fits both
-`retry({ backoff })` and `circuitBreaker({ waitDurationInOpenStateMs })`.
+`[maxDelay·(1−jitter), maxDelay]`, so clients that back off for long still wait different times. It fits both
+`retry({ backoff })` and `circuitBreaker({ waitDurationInOpenState })`.
 
 ## Errors
 
 | Error                   | `code`                     | When                                                                                      |
 | ----------------------- | -------------------------- | ----------------------------------------------------------------------------------------- |
-| `ErrCallNotPermitted`   | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfterMs` when `state` is `open` |
+| `ErrCallNotPermitted`   | `ERR_CALL_NOT_PERMITTED`   | A breaker refused the call. `breaker`, `state`, and `retryAfter` when `state` is `open`   |
 | `ErrMaxRetriesExceeded` | `ERR_MAX_RETRIES_EXCEEDED` | `failAfterMaxAttempts` and the last value was still retryable. `attempts`, `result`       |
 | `ErrInvalidOption`      | `ERR_INVALID_OPTION`       | A factory, `compose()` or `runWith()` got a bad argument; or a computed delay is unusable |
 
@@ -230,7 +234,7 @@ a stack costs several times the rest of the refusal, and `breaker` and `state` a
 
 ```ts
 const off = breaker.on('stateChange', e => log.warn({ breaker: e.name, from: e.from, to: e.to }, 'circuit breaker'))
-retries.on('retry', e => log.info({ retry: e.name, attempt: e.attempt, delayMs: e.delayMs }, 'retrying'))
+retries.on('retry', e => log.info({ retry: e.name, attempt: e.attempt, delayMs: e.delay }, 'retrying'))
 off()
 ```
 
