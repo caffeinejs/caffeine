@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./attachment": {
+      "types": "./dist/core/attachment/index.d.ts",
+      "default": "./dist/core/attachment/index.js"
+    },
     "./constraints": {
       "types": "./dist/core/constraints/index.d.ts",
       "default": "./dist/core/constraints/index.js"
