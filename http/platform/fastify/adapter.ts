@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { IncomingMessage, Server, ServerOptions } from 'node:http'
-import type { SecureServerOptions } from 'node:http2'
+import type { SecureServerOptions, ServerHttp2Session } from 'node:http2'
 import type { ServerOptions as HTTPSServerOptions } from 'node:https'
 import type { Socket } from 'node:net'
 import { Server as TLSServer } from 'node:tls'
@@ -240,23 +240,28 @@ export class Adapter implements IAdapter<AdapterTypes> {
       withBasePath(withApplicationLogger(factory, input.context.logger), input.basePath) as FastifyHttpOptions<Server>,
     )
 
-    // An HTTP/2 server has no `closeAllConnections()`, so the server keeps its connections for `forceTeardown()`.
-    // `close()` ends HTTP/2 sessions only gracefully — Node's own and Fastify's `forceCloseConnections` alike
-    // call `session.close()`, which waits for the streams still open — so a stream that overran the budget is
-    // cut there or not at all. A socket is what an HTTP/2 session and an `allowHTTP1` connection both run on, and
-    // destroying it ends either.
-    let sockets: Set<Socket> | undefined
+    // An HTTP/2 server has no `closeAllConnections()`, so the adapter keeps its connections itself. Node 22's
+    // `close()` leaves its sessions open, an idle one until `http2SessionTimeout`, so `teardown()` closes them:
+    // `session.close()` refuses new streams and ends the session once those still open have. A stream that overran
+    // the budget is cut by `forceTeardown()` destroying its socket, which is what an HTTP/2 session and an
+    // `allowHTTP1` connection both run on.
+    let open: OpenConnections | undefined
     if (typeof fastify.server.closeAllConnections !== 'function') {
-      const open = new Set<Socket>()
+      const sockets = new Set<Socket>()
+      const sessions = new Set<ServerHttp2Session>()
       fastify.server.on('connection', (socket: Socket) => {
-        open.add(socket)
-        socket.once('close', () => open.delete(socket))
+        sockets.add(socket)
+        socket.once('close', () => sockets.delete(socket))
       })
-      sockets = open
+      fastify.server.on('session', (session: ServerHttp2Session) => {
+        sessions.add(session)
+        session.once('close', () => sessions.delete(session))
+      })
+      open = { sockets, sessions }
     }
 
     // Copied and read once: `listen()` writes into what it is handed, and a frozen configuration node refuses that.
-    const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, sockets)
+    const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, open)
 
     try {
       await this.#wire(fastify, input)
@@ -462,18 +467,26 @@ export class Adapter implements IAdapter<AdapterTypes> {
   }
 }
 
+/** What a server with no `closeAllConnections()` has open, kept by the adapter so that it can end it. */
+interface OpenConnections {
+  /** What {@link AdapterServer.forceTeardown} cuts. */
+  readonly sockets: Set<Socket>
+  /** What {@link AdapterServer.teardown} closes. */
+  readonly sessions: Set<ServerHttp2Session>
+}
+
 /** One server {@link Adapter} built. */
 class AdapterServer implements IAdapterServer<AdapterTypes> {
   readonly #fastify: FastifyInstance
   /** The `listener` section `.server(...)` returned, copied. `undefined` when none was given. */
   readonly #listener: FastifyListenOptions | undefined
-  /** What {@link forceTeardown} cuts on a server with no `closeAllConnections()`. `undefined` on one that has it. */
-  readonly #sockets: Set<Socket> | undefined
+  /** `undefined` on a server that has `closeAllConnections()`. */
+  readonly #open: OpenConnections | undefined
 
-  constructor(fastify: FastifyInstance, listener: FastifyListenOptions | undefined, sockets: Set<Socket> | undefined) {
+  constructor(fastify: FastifyInstance, listener: FastifyListenOptions | undefined, open: OpenConnections | undefined) {
     this.#fastify = fastify
     this.#listener = listener
-    this.#sockets = sockets
+    this.#open = open
   }
 
   /**
@@ -493,6 +506,15 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
   }
 
   async teardown(): Promise<void> {
+    if (this.#open !== undefined) {
+      // A session opening from here on, before the server stops listening or from a handshake that ends after, is
+      // closed as it opens.
+      this.#fastify.server.on('session', (session: ServerHttp2Session) => session.close())
+      for (const session of this.#open.sessions) {
+        session.close()
+      }
+    }
+
     await this.#fastify.close()
   }
 
@@ -502,10 +524,10 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
    * interrupted mid-request by the orchestrator.
    */
   forceTeardown(): Promise<void> {
-    if (this.#sockets === undefined) {
+    if (this.#open === undefined) {
       this.#fastify.server.closeAllConnections()
     } else {
-      for (const socket of this.#sockets) {
+      for (const socket of this.#open.sockets) {
         socket.destroy()
       }
     }
