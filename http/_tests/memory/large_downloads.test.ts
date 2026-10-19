@@ -20,6 +20,8 @@ const MiB = 1024 * 1024
 const SIZE = 1024 * MiB
 const BOUND = SIZE / 4
 const ABANDONED = 256 * MiB
+// Far enough into a download that the server is streaming it; any point before its end tests the release.
+const ABANDON_AFTER = 8 * MiB
 
 let dir: string
 let path: string
@@ -39,10 +41,15 @@ async function peakWhileReading(url: string, headers: Record<string, string> = {
   let peak = before
   let received = 0
 
+  // Sampled once a megabyte: reading the process's memory on every chunk would slow the reader being measured.
+  let sampleAt = 0
   const res = await fetch(url, { headers })
   for await (const chunk of res.body!) {
     received += chunk.length
-    peak = Math.max(peak, process.memoryUsage().arrayBuffers)
+    if (received >= sampleAt) {
+      peak = Math.max(peak, process.memoryUsage().arrayBuffers)
+      sampleAt = received + MiB
+    }
   }
 
   return { status: res.status, received, growth: peak - before }
@@ -54,9 +61,9 @@ routes.get('/attachment').handler(async () => Attachment(await openAsBlob(path),
 routes.get('/abandoned').handler(async () => openAsBlob(abandonedPath))
 
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
-// graceful close would otherwise wait out (caffeinejs/caffeine#131): a connection quiet for a second is dropped.
+// graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 }, listener: { host: '127.0.0.1', port: 0 } }))
+  .server(() => ({ factory: { forceCloseConnections: true }, listener: { host: '127.0.0.1', port: 0 } }))
   .mount(routes)
 
 beforeAll(async () => {
@@ -110,26 +117,28 @@ describe('a large download', () => {
     expect(growth).toBeLessThan(BOUND)
   })
 
-  it('leaves nothing held after 20 downloads abandoned half-way', async ({ skip }) => {
+  it('leaves nothing held after 20 downloads abandoned part-way', async ({ skip }) => {
     skip(!sparse, unsparse)
 
     await collect()
     const before = process.memoryUsage().arrayBuffers
 
-    for (let i = 0; i < 20; i++) {
-      const controller = new AbortController()
-      const res = await fetch(`${app.address!.origin}/memory/abandoned`, { signal: controller.signal })
-      const reader = res.body!.getReader()
-      for (let received = 0; received < ABANDONED / 2;) {
-        const { done, value } = await reader.read()
-        if (done) {
-          break
+    await Promise.all(
+      Array.from({ length: 20 }, async () => {
+        const controller = new AbortController()
+        const res = await fetch(`${app.address!.origin}/memory/abandoned`, { signal: controller.signal })
+        const reader = res.body!.getReader()
+        for (let received = 0; received < ABANDON_AFTER;) {
+          const { done, value } = await reader.read()
+          if (done) {
+            break
+          }
+          received += value.length
         }
-        received += value.length
-      }
-      controller.abort()
-      await reader.cancel().catch(() => undefined)
-    }
+        controller.abort()
+        await reader.cancel().catch(() => undefined)
+      }),
+    )
 
     // The server answers a new request once it has let the abandoned ones go.
     expect((await fetch(`${app.address!.origin}/memory/blob`, { method: 'HEAD' })).status).toBe(200)

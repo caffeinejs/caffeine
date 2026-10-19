@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect } from 'vitest'
 
 import { Attachment, Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
-import { firstMismatch, patterned } from './patterned.js'
+import { expectRangeAnswer, extendedName, NAMED_DOWNLOAD, type RangeAnswer } from './bodies.js'
+import { patterned } from './patterned.js'
 
 /**
  * What a client gets back from an `Attachment`, over names and range headers no one wrote down, checked against
@@ -15,9 +16,7 @@ import { firstMismatch, patterned } from './patterned.js'
  * ranges: one byte range of a body that has bytes, every other request answered whole (§14.2: a server MAY
  * ignore Range).
  */
-type Expected = { status: 206; start: number; end: number } | { status: 416 } | { status: 200 }
-
-function rangeModel(header: string, size: number): Expected {
+function rangeModel(header: string, size: number): RangeAnswer {
   if (size === 0) {
     return { status: 200 }
   }
@@ -66,12 +65,6 @@ function rangeModel(header: string, size: number): Expected {
   }
 
   return { status: 200 }
-}
-
-/** The name `filename*` carries, decoded as RFC 8187 has a recipient decode it. */
-function extendedName(disposition: string): string | undefined {
-  const encoded = /filename\*=UTF-8''([^;]*)/.exec(disposition)?.[1]
-  return encoded === undefined ? undefined : decodeURIComponent(encoded)
 }
 
 // What the next request is answered with: properties run their requests one at a time.
@@ -134,9 +127,7 @@ describe('Attachment() over any name (property)', () => {
         return
       }
 
-      expect(disposition).toMatch(
-        /^attachment; filename="[\x20\x21\x23-\x5b\x5d-\x7e]*"; filename\*=UTF-8''[\x21-\x7e]*$/,
-      )
+      expect(disposition).toMatch(NAMED_DOWNLOAD)
       expect(extendedName(disposition)).toBe(next.toWellFormed())
     },
   )
@@ -150,27 +141,10 @@ describe('Attachment() over any range (property)', () => {
       kind = nextKind
 
       const res = await app.fetch('/prop/sized', { headers: { range } })
-      const body = new Uint8Array(await res.arrayBuffer())
-      // RFC 9110 §5.5: a field value arrives without the whitespace around it.
-      const expected = rangeModel(range.trim(), nextSize)
 
-      expect(res.status).toBe(expected.status)
       expect(res.headers.get('accept-ranges')).toBe('bytes')
-
-      if (expected.status === 206) {
-        expect(res.headers.get('content-range')).toBe(`bytes ${expected.start}-${expected.end}/${nextSize}`)
-        expect(body.length).toBe(expected.end - expected.start + 1)
-        expect(firstMismatch(body, expected.start)).toBe(-1)
-      } else if (expected.status === 416) {
-        expect(res.headers.get('content-range')).toBe(`bytes */${nextSize}`)
-        expect(body.length).toBe(0)
-      } else {
-        expect(res.headers.get('content-range')).toBeNull()
-        expect(body.length).toBe(nextSize)
-        expect(firstMismatch(body, 0)).toBe(-1)
-      }
-
-      expect(res.headers.get('content-length')).toBe(String(body.length))
+      // RFC 9110 §5.5: a field value arrives without the whitespace around it.
+      await expectRangeAnswer(res, rangeModel(range.trim(), nextSize), nextSize)
     },
   )
 })

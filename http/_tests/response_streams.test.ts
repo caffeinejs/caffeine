@@ -4,33 +4,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
+import { expectPatternedBody, streamOf } from './bodies.js'
 import { firstMismatch, patterned } from './patterned.js'
 
 const OCTET = 'application/octet-stream'
 const BYTES = patterned(0, 1000)
-
-/** `bytes` as a web stream, handed out `chunk` bytes at a time as the reader asks. */
-function streamOf(bytes: Uint8Array, chunk = 256): ReadableStream<Uint8Array> {
-  let offset = 0
-
-  return new ReadableStream({
-    pull(controller) {
-      if (offset >= bytes.length) {
-        controller.close()
-        return
-      }
-
-      controller.enqueue(bytes.slice(offset, offset + chunk))
-      offset += chunk
-    },
-  })
-}
-
-async function expectBytes(res: Response, offset = 0, length = BYTES.length) {
-  const body = new Uint8Array(await res.arrayBuffer())
-  expect(body.length).toBe(length)
-  expect(firstMismatch(body, offset)).toBe(-1)
-}
 
 describe('a stream a handler returns goes out labelled as bytes, unless something declared its type', () => {
   // The HEAD route reports whether the stream behind it was released, rather than read to the end.
@@ -118,7 +96,7 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe(OCTET)
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('sends a Readable of strings as application/octet-stream too: nothing declared it text', async () => {
@@ -144,28 +122,28 @@ describe('a stream a handler returns goes out labelled as bytes, unless somethin
     const res = await app.fetch(path)
 
     expect(res.headers.get('content-type')).toMatch(/^text\/csv/)
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('sends a stream under the type its handler set on the reply', async () => {
     const res = await app.fetch('/streams/handler-type')
 
     expect(res.headers.get('content-type')).toBe('text/event-stream')
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('keeps the type a Response was built with', async () => {
     const res = await app.fetch('/streams/response-typed')
 
     expect(res.headers.get('content-type')).toBe('text/csv')
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('keeps the type a Response takes from the Blob it was built around', async () => {
     const res = await app.fetch('/streams/response-blob')
 
     expect(res.headers.get('content-type')).toBe('application/pdf')
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('releases the stream behind a HEAD request instead of reading it: a cursor or an upstream call can close', async () => {
@@ -254,7 +232,7 @@ describe('over a socket, a returned stream', () => {
     expect(res.headers.get('content-type')).toBe(OCTET)
     expect(res.headers.get('content-length')).toBeNull()
     expect(res.headers.get('transfer-encoding')).toBe('chunked')
-    await expectBytes(res)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('fails the download when its source fails mid-way, rather than ending it as if it were complete', async () => {
@@ -266,6 +244,6 @@ describe('over a socket, a returned stream', () => {
     // And the server goes on serving.
     const next = await fetch(`${app.address!.origin}/live/whole`)
     expect(next.status).toBe(200)
-    await expectBytes(next)
+    await expectPatternedBody(next, 0, BYTES.length)
   })
 })

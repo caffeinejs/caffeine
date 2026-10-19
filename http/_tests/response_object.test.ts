@@ -2,18 +2,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { type ActionResult, Catch, type ErrorHandler, Router, version } from '../index.js'
 import { constraints, createWebApplication } from '../platform/fastify/index.js'
-import { firstMismatch, patterned } from './patterned.js'
+import { expectPatternedBody, streamOf } from './bodies.js'
+import { patterned } from './patterned.js'
 
 const BYTES = patterned(0, 1000)
-
-function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes.slice())
-      controller.close()
-    },
-  })
-}
 
 describe('a Response a handler returns is sent as its status, its headers and its body', () => {
   class ErrTeapot extends Error {}
@@ -98,9 +90,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
 
     expect(res.status).toBe(201)
     expect(res.headers.get('x-answer')).toBe('yes')
-    const body = new Uint8Array(await res.arrayBuffer())
-    expect(body.length).toBe(BYTES.length)
-    expect(firstMismatch(body, 0)).toBe(-1)
+    await expectPatternedBody(res, 0, BYTES.length)
   })
 
   it('leaves a 206 a handler wrote itself exactly as written', async () => {

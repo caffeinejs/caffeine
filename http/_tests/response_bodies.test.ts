@@ -15,7 +15,8 @@ import {
   Router,
 } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
-import { firstMismatch, patterned } from './patterned.js'
+import { expectPatternedBody } from './bodies.js'
+import { patterned } from './patterned.js'
 
 const OCTET = 'application/octet-stream'
 const PDF = 'application/pdf'
@@ -35,16 +36,9 @@ interface Expected {
 /** That `res` carries exactly the pattern's bytes from `offset`, under `type`, and says how many there are. */
 async function expectPatterned(res: Response, { status = 200, type, offset = 0, length = BYTES.length }: Expected) {
   expect(res.status).toBe(status)
-  if (typeof type === 'string') {
-    expect(res.headers.get('content-type')).toBe(type)
-  } else {
-    expect(res.headers.get('content-type')).toMatch(type)
-  }
+  expect(res.headers.get('content-type')).toEqual(typeof type === 'string' ? type : expect.stringMatching(type))
   expect(res.headers.get('content-length')).toBe(String(length))
-
-  const body = new Uint8Array(await res.arrayBuffer())
-  expect(body.length).toBe(length)
-  expect(firstMismatch(body, offset)).toBe(-1)
+  await expectPatternedBody(res, offset, length)
 }
 
 describe('a handler that returns a Blob, a File or an ArrayBuffer sends the bytes it holds', () => {

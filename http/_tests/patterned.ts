@@ -8,7 +8,7 @@ const WORD = 8
 const HIGH = 2 ** 32
 
 /** The byte of the pattern at `offset`. */
-export function byteAt(offset: number): number {
+function byteAt(offset: number): number {
   const word = offset - (offset % WORD)
   const index = offset % WORD
   const half = index < 4 ? Math.floor(word / HIGH) : word % HIGH
@@ -52,7 +52,24 @@ export function fillPatterned(bytes: Uint8Array, offset: number): void {
  * two buffers that may be megabytes long.
  */
 export function firstMismatch(bytes: Uint8Array, offset: number): number {
-  for (let i = 0; i < bytes.length; i++) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  let i = 0
+
+  for (; i < bytes.length && (offset + i) % WORD !== 0; i++) {
+    if (bytes[i] !== byteAt(offset + i)) {
+      return i
+    }
+  }
+
+  // A word at a time while the words match; the first that does not is gone through byte by byte below.
+  for (; i + WORD <= bytes.length; i += WORD) {
+    const word = offset + i
+    if (view.getUint32(i) !== Math.floor(word / HIGH) || view.getUint32(i + 4) !== word % HIGH) {
+      break
+    }
+  }
+
+  for (; i < bytes.length; i++) {
     if (bytes[i] !== byteAt(offset + i)) {
       return i
     }

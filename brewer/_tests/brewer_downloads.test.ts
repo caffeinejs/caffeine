@@ -57,6 +57,15 @@ const CHUNK = 64 * 1024
 // Bytes no two positions of a chunk share with the start of the next, so a byte out of place shows.
 const byteAt = (offset: number) => offset % 251
 
+/** Fails at the first byte of `chunk` that is not the one `byteAt` puts at its place in the body. */
+function expectPatternAt(chunk: Uint8Array, offset: number): void {
+  for (let i = 0; i < chunk.byteLength; i++) {
+    if (chunk[i] !== byteAt(offset + i)) {
+      throw new Error(`byte ${offset + i} is ${chunk[i]}, not ${byteAt(offset + i)}`)
+    }
+  }
+}
+
 /** A large body made as it is read, never held whole. */
 function large(): ReadableStream<Uint8Array> {
   let offset = 0
@@ -328,11 +337,7 @@ describe('brewer streaming a large download a route built in memory, over a sock
     const res = await client.downloads.archive.get()
     let offset = 0
     for await (const chunk of res.body!.pipeThrough(client.$progress(loaded => reported.push(loaded)))) {
-      for (let i = 0; i < chunk.byteLength; i++) {
-        if (chunk[i] !== byteAt(offset + i)) {
-          throw new Error(`byte ${offset + i} is ${chunk[i]}, not ${byteAt(offset + i)}`)
-        }
-      }
+      expectPatternAt(chunk, offset)
       offset += chunk.byteLength
     }
 
@@ -368,11 +373,7 @@ describe('brewer streaming a download over a socket', () => {
     let chunks = 0
     for await (const chunk of res.body!.pipeThrough(client.$progress(loaded => reported.push(loaded)))) {
       chunks++
-      for (let i = 0; i < chunk.byteLength; i++) {
-        if (chunk[i] !== byteAt(offset + i)) {
-          throw new Error(`byte ${offset + i} is ${chunk[i]}, not ${byteAt(offset + i)}`)
-        }
-      }
+      expectPatternAt(chunk, offset)
       offset += chunk.byteLength
     }
 

@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Attachment, Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
+import { expectPatternedBody } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
 /**
@@ -37,9 +38,9 @@ const LARGEST_RANGED = 2 ** 32 - 1
 const HUGE_SIZE = 5 * GiB
 const WINDOW = 64 * KiB
 
-// One buffer for the in-memory routes: a view into the middle of it is what goes out.
+// One buffer for the in-memory routes: a view into the middle of it is what goes out, or a copy of its start.
 const HOLDER = patterned(0, 40 * MiB)
-const ARRAY_BUFFER = patterned(0, 32 * MiB).buffer
+const ARRAY_BUFFER = HOLDER.slice(0, 32 * MiB).buffer
 
 let dir: string
 let filePath: string
@@ -47,8 +48,8 @@ let fileDigest: string
 let huge: Blob[] = []
 let edge: Blob[] = []
 let sparse = false
-// The content a resumed download is checked against; the test replaces it between two attempts.
-let current: { blob: Blob; etag: string; digest: string }
+// What a resumed download is served instead of the file, once the test has replaced the content.
+let replacement: { blob: Blob; etag: string } | undefined
 
 function sha256(...parts: Uint8Array[]): string {
   const hash = createHash('sha256')
@@ -77,36 +78,29 @@ function generated(size: number): ReadableStream<Uint8Array> {
   })
 }
 
-/** A CSV export of about `size` bytes: text a compressor shrinks, unlike the pattern. */
-function csv(size: number): Uint8Array<ArrayBuffer> {
-  const lines: string[] = ['region,order,total\n']
-  let length = lines[0].length
-  for (let i = 0; length < size; i++) {
-    const line = `region-${i % 17},${i},${(i * 7919) % 100_000}\n`
-    lines.push(line)
-    length += line.length
-  }
-
-  return new TextEncoder().encode(lines.join(''))
-}
-
-const CSV = csv(32 * MiB)
+const bigFile = async () => Attachment(await openAsBlob(filePath), { name: 'big.bin', etag: FILE_ETAG })
 
 const routes = new Router('/big')
-routes.get('/file').handler(async () => Attachment(await openAsBlob(filePath), { name: 'big.bin', etag: FILE_ETAG }))
+routes.get('/file').handler(bigFile)
 routes.get('/file-plain').handler(async () => openAsBlob(filePath))
 routes.get('/huge').handler(() => Attachment(new Blob(huge), { name: 'disk.img', etag: '"disk-v1"' }))
 routes.get('/huge-plain').handler(() => new Blob(huge))
 routes.get('/edge').handler(() => Attachment(new Blob(edge), { name: 'edge.img', etag: '"edge-v1"' }))
-routes.get('/versioned').handler(() => Attachment(current.blob, { name: 'report.bin', etag: current.etag }))
+routes
+  .get('/versioned')
+  .handler(async () =>
+    replacement === undefined
+      ? Attachment(await openAsBlob(filePath), { name: 'report.bin', etag: FILE_ETAG })
+      : Attachment(replacement.blob, { name: 'report.bin', etag: replacement.etag }),
+  )
 routes.get('/view').handler(() => HOLDER.subarray(4 * MiB, 36 * MiB))
 routes.get('/array-buffer').handler(() => ARRAY_BUFFER)
 routes.get('/stream').handler(() => generated(FILE_SIZE))
 
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
-// graceful close would otherwise wait out (caffeinejs/caffeine#131): a connection quiet for a second is dropped.
+// graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 }, listener: { host: '127.0.0.1', port: 0 } }))
+  .server(() => ({ factory: { forceCloseConnections: true }, listener: { host: '127.0.0.1', port: 0 } }))
   .mount(routes)
 
 let origin: string
@@ -151,8 +145,6 @@ beforeAll(async () => {
 
   const { blocks } = await stat(join(dir, 'huge-4.img'))
   sparse = blocks * 512 < 16 * MiB
-
-  current = { blob: await openAsBlob(filePath), etag: FILE_ETAG, digest: fileDigest }
 
   await app.run()
   origin = app.address!.origin
@@ -224,11 +216,9 @@ describe('a large download over a socket', { timeout: 60_000 }, () => {
 
   it('sends 32 MiB of bytes viewed out of a larger buffer, exactly the view', async () => {
     const res = await fetch(`${origin}/big/view`)
-    const body = new Uint8Array(await res.arrayBuffer())
 
     expect(res.headers.get('content-length')).toBe(String(32 * MiB))
-    expect(body.length).toBe(32 * MiB)
-    expect(firstMismatch(body, 4 * MiB)).toBe(-1)
+    await expectPatternedBody(res, 4 * MiB, 32 * MiB)
   })
 
   it('sends a 32 MiB ArrayBuffer as its bytes', async () => {
@@ -274,7 +264,7 @@ describe('a large download resumed and read in parts', { timeout: 60_000 }, () =
   it('sends the new content whole when it changed between attempts, rather than splicing two versions', async () => {
     const prefix = await readThenAbort('/big/versioned', 3 * MiB)
     const next = patterned(3, 16 * MiB)
-    current = { blob: new Blob([next]), etag: '"report-v2"', digest: sha256(next) }
+    replacement = { blob: new Blob([next]), etag: '"report-v2"' }
 
     try {
       const res = await fetch(`${origin}/big/versioned`, {
@@ -283,9 +273,9 @@ describe('a large download resumed and read in parts', { timeout: 60_000 }, () =
 
       expect(res.status).toBe(200)
       expect(res.headers.get('etag')).toBe('"report-v2"')
-      expect(await digestOf(res)).toEqual({ digest: current.digest, length: next.length })
+      expect(await digestOf(res)).toEqual({ digest: sha256(next), length: next.length })
     } finally {
-      current = { blob: await openAsBlob(filePath), etag: FILE_ETAG, digest: fileDigest }
+      replacement = undefined
     }
   })
 
@@ -300,9 +290,7 @@ describe('a large download resumed and read in parts', { timeout: 60_000 }, () =
 
         expect(res.status).toBe(206)
         expect(res.headers.get('content-range')).toBe(`bytes ${start}-${start + segment - 1}/${FILE_SIZE}`)
-        const body = new Uint8Array(await res.arrayBuffer())
-        expect(firstMismatch(body, start)).toBe(-1)
-        return body
+        return expectPatternedBody(res, start, segment)
       }),
     )
 
@@ -321,7 +309,7 @@ describe('a large download resumed and read in parts', { timeout: 60_000 }, () =
     const tail = await fetch(`${origin}/big/file`, { headers: { range: 'bytes=-1024' } })
     expect(tail.status).toBe(206)
     expect(tail.headers.get('content-range')).toBe(`bytes ${FILE_SIZE - 1024}-${FILE_SIZE - 1}/${FILE_SIZE}`)
-    expect(firstMismatch(new Uint8Array(await tail.arrayBuffer()), FILE_SIZE - 1024)).toBe(-1)
+    await expectPatternedBody(tail, FILE_SIZE - 1024, 1024)
   })
 })
 
@@ -390,17 +378,36 @@ describe('a download at and past the 32-bit limit', { timeout: 60_000 }, () => {
   })
 })
 
+/** A CSV export of about `size` bytes: text a compressor shrinks, unlike the pattern. */
+function csv(size: number): Uint8Array<ArrayBuffer> {
+  const lines: string[] = ['region,order,total\n']
+  let length = lines[0].length
+  for (let i = 0; length < size; i++) {
+    const line = `region-${i % 17},${i},${(i * 7919) % 100_000}\n`
+    lines.push(line)
+    length += line.length
+  }
+
+  return new TextEncoder().encode(lines.join(''))
+}
+
 describe('a large CSV export behind a compressor', { timeout: 60_000 }, () => {
   const compress: FastifyPluginAsync = async instance => {
     await instance.register(fastifyCompress)
   }
 
+  // Built here, so a run that filters this suite out does not pay for 32 MiB of text.
+  let csvBytes: Uint8Array<ArrayBuffer>
+  let report: Blob
+
   const compressing = createWebApplication()
     .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
     .with(() => fp(compress, { name: 'compress' }))
-    .mount(new Router('/export').get('/q3').handler(() => new Blob([CSV], { type: 'text/csv' })))
+    .mount(new Router('/export').get('/q3').handler(() => report))
 
   beforeAll(async () => {
+    csvBytes = csv(32 * MiB)
+    report = new Blob([csvBytes], { type: 'text/csv' })
     await compressing.run()
   })
 
@@ -429,16 +436,16 @@ describe('a large CSV export behind a compressor', { timeout: 60_000 }, () => {
     if (headers['content-length'] !== undefined) {
       expect(Number(headers['content-length'])).toBe(body.length)
     }
-    expect(body.length).toBeLessThan(CSV.length / 2)
-    expect(sha256(gunzipSync(body))).toBe(sha256(CSV))
+    expect(body.length).toBeLessThan(csvBytes.length / 2)
+    expect(gunzipSync(body).equals(csvBytes)).toBe(true)
   })
 
   it('sends it as it is to a client that accepts no encoding, with its exact length', async () => {
     const { headers, body } = await raw({ 'accept-encoding': 'identity' })
 
     expect(headers['content-encoding']).toBeUndefined()
-    expect(headers['content-length']).toBe(String(CSV.length))
-    expect(sha256(body)).toBe(sha256(CSV))
+    expect(headers['content-length']).toBe(String(csvBytes.length))
+    expect(body.equals(csvBytes)).toBe(true)
   })
 })
 
@@ -448,11 +455,7 @@ describe('a large download over HTTP/2', { timeout: 60_000 }, () => {
 
   const secure = createWebApplication()
     .server(() => ({ factory: { http2: true, https: { key, cert } }, listener: { host: '127.0.0.1', port: 0 } }))
-    .mount(
-      new Router('/h2')
-        .get('/file')
-        .handler(async () => Attachment(await openAsBlob(filePath), { name: 'big.bin', etag: FILE_ETAG })),
-    )
+    .mount(new Router('/h2').get('/file').handler(bigFile))
 
   beforeAll(async () => {
     await secure.run()

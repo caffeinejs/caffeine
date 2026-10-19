@@ -2,7 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Attachment, Controller, ErrConfiguration, Get, Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
-import { firstMismatch, patterned } from './patterned.js'
+import {
+  expectPatternedBody,
+  expectRangeAnswer,
+  extendedName,
+  NAMED_DOWNLOAD,
+  streamOf,
+  type RangeAnswer,
+} from './bodies.js'
+import { patterned } from './patterned.js'
 
 /**
  * A download a route builds itself — an export, a generated report, bytes read from object storage — named for the
@@ -16,21 +24,6 @@ const BODY = patterned(0, SIZE)
 const ETAG = '"report-v1"'
 // Milliseconds included on purpose: Last-Modified carries seconds, and If-Range is compared at that precision.
 const MODIFIED = new Date('2026-10-01T12:34:56.789Z')
-
-function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes.slice())
-      controller.close()
-    },
-  })
-}
-
-/** The name `filename*` carries, decoded as RFC 8187 has a recipient decode it. */
-function extendedName(disposition: string): string | undefined {
-  const encoded = /filename\*=UTF-8''([^;]*)/.exec(disposition)?.[1]
-  return encoded === undefined ? undefined : decodeURIComponent(encoded)
-}
 
 const names = [
   'report.pdf',
@@ -119,10 +112,7 @@ describe('Attachment() names the download', () => {
 
       const disposition = res.headers.get('content-disposition')!
       expect(res.status).toBe(200)
-      // The fallback is a quoted-string holding neither a quote nor a backslash, which clients unescape unevenly.
-      expect(disposition).toMatch(
-        /^attachment; filename="[\x20\x21\x23-\x5b\x5d-\x7e]*"; filename\*=UTF-8''[\x21-\x7e]*$/,
-      )
+      expect(disposition).toMatch(NAMED_DOWNLOAD)
       expect(extendedName(disposition)).toBe(name)
     },
   )
@@ -177,8 +167,7 @@ describe('Attachment() names the download', () => {
       `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
     )
     expect(res.headers.get('content-type')).toBe(PDF)
-    const body = new Uint8Array(await res.arrayBuffer())
-    expect(firstMismatch(body, 0)).toBe(-1)
+    await expectPatternedBody(res, 0, SIZE)
   })
 })
 
@@ -216,9 +205,7 @@ describe('Attachment() decides the Content-Type', () => {
   })
 })
 
-type Expected = { status: 206; start: number; end: number } | { status: 416 } | { status: 200 }
-
-const ranges: Array<[string, Expected]> = [
+const ranges: Array<[string, RangeAnswer]> = [
   ['bytes=0-4', { status: 206, start: 0, end: 4 }],
   ['bytes=0-0', { status: 206, start: 0, end: 0 }],
   ['bytes=-1', { status: 206, start: 999, end: 999 }],
@@ -252,24 +239,8 @@ describe.each([
   it.each(ranges)('%s with %o', async (range, expected) => {
     const res = await app.fetch(path, { headers: { range } })
 
-    expect(res.status).toBe(expected.status)
     expect(res.headers.get('accept-ranges')).toBe('bytes')
-    const body = new Uint8Array(await res.arrayBuffer())
-
-    if (expected.status === 206) {
-      const length = expected.end - expected.start + 1
-      expect(res.headers.get('content-range')).toBe(`bytes ${expected.start}-${expected.end}/${SIZE}`)
-      expect(res.headers.get('content-length')).toBe(String(length))
-      expect(body.length).toBe(length)
-      expect(firstMismatch(body, expected.start)).toBe(-1)
-    } else if (expected.status === 416) {
-      expect(res.headers.get('content-range')).toBe(`bytes */${SIZE}`)
-      expect(body.length).toBe(0)
-    } else {
-      expect(res.headers.get('content-range')).toBeNull()
-      expect(body.length).toBe(SIZE)
-      expect(firstMismatch(body, 0)).toBe(-1)
-    }
+    await expectRangeAnswer(res, expected, SIZE)
   })
 })
 
@@ -312,9 +283,7 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
     expect(res.headers.get('content-range')).toBeNull()
     expect(res.headers.get('content-disposition')).toBe(`attachment; filename="live.bin"; filename*=UTF-8''live.bin`)
     expect(res.headers.get('etag')).toBe(ETAG)
-    const body = new Uint8Array(await res.arrayBuffer())
-    expect(body.length).toBe(SIZE)
-    expect(firstMismatch(body, 0)).toBe(-1)
+    await expectPatternedBody(res, 0, SIZE)
   })
 })
 
@@ -332,16 +301,9 @@ describe('Attachment() resumes only the body the client already holds part of (I
   ])('given %s', async (_validator, path, ifRange, status) => {
     const res = await app.fetch(path, { headers: { range: 'bytes=10-19', 'if-range': ifRange } })
 
-    expect(res.status).toBe(status)
-    const body = new Uint8Array(await res.arrayBuffer())
-    if (status === 206) {
-      expect(res.headers.get('content-range')).toBe(`bytes 10-19/${SIZE}`)
-      expect(firstMismatch(body, 10)).toBe(-1)
-    } else {
-      // The whole current body: what the client holds is stale, so a part of the new one would corrupt it.
-      expect(body.length).toBe(SIZE)
-      expect(firstMismatch(body, 0)).toBe(-1)
-    }
+    // Short of a 206, the whole current body: what the client holds is stale, and a part of the new one would
+    // corrupt it.
+    await expectRangeAnswer(res, status === 206 ? { status, start: 10, end: 19 } : { status: 200 }, SIZE)
   })
 
   it('has no effect without a Range', async () => {
