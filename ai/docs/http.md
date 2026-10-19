@@ -607,7 +607,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 
 - Static segments are properties; a parameterised segment is a call taking that one parameter. The path is never
   written out.
-- A verb ends the chain. Returns a `Response` whose `.json()` is typed — checking `res.ok` is yours.
+- A verb ends the chain. Returns a `Response` whose `.json()` is typed — checking `res.ok` is yours. A route that
+  answers with text, bytes, a file, a stream or a whole `Response` sends it as it is, so its `.json()` is
+  `unknown`: read it with `text()`, `bytes()`, `blob()` or `body`.
 - `brewer<typeof app>`, `brewer<typeof someRouter>` and `brewer<RoutesOf<typeof app>>` all work, so a package can
   ship a client for just its own routes.
 - The routes are the ones the application declares. An application served under a `.basePath(...)` puts the base
@@ -615,7 +617,7 @@ await client.pets.post({ body: { name: 'Rex' } })
   against.
 - Given the application instead of a URL, requests go through its own `fetch` and never reach a socket — which is
   how to test one. Both the routes and the transport come from the argument, so neither the type argument nor the
-  URL is written. The application must be `bootstrap()` first, or every call answers 404:
+  URL is written. The application must be `bootstrap()` first, or every call rejects with `ErrApplicationNotReady`:
 
   ```ts
   await app.bootstrap()
@@ -628,8 +630,29 @@ await client.pets.post({ body: { name: 'Rex' } })
   The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
   wins over it.
 
+- Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
+  `FormData`, which `fetch` encodes as multipart. Build it with `client.$formData({ caption, avatar })` and the call
+  checks its fields against the route. A plain `FormData` is checked on neither side, since the server leaves an upload
+  unvalidated, so the handler checks the parts it reads. A declared object goes as JSON, or as a `URLSearchParams`
+  form when every field is text, a number, a boolean or a list of those.
+  A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
+  the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
+  another.
+- Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
+  `Content-Disposition` (the UTF-8 `filename*` first, made a plain file name on any system: never a path, a drive, a
+  stream or a device) and typed from `Content-Type`. `client.$filename(res)` names a download streamed from
+  `res.body` without reading it.
+- `client.$progress(onProgress)` is a `TransformStream` that counts the bytes going through it: pipe `res.body`
+  through it for a download, or send `file.stream().pipeThrough(client.$progress(...))` as an upload. Browsers
+  stream an upload only over HTTP/2, and Firefox and Safari not at all.
+- The file helpers hang off the client's root, `$`-prefixed like `$request`, so they seldom share a name with a
+  route segment. A root segment that does is reached through `$request`.
+- `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
+  it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
+  which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
+  or plain JavaScript, reaches the parent route instead. `$request` rejects the same call with `ErrBrewPathParam`.
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
-- Escape hatch for a path built at run time, or a segment named after a verb:
-  `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
+- Escape hatch for a path built at run time, a segment named after a verb or `then` (or `$request`, at the root), or
+  a method with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
 - Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`. That serves files. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.

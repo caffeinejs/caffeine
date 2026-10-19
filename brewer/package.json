@@ -25,6 +25,8 @@
   "devDependencies": {
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
+    "@caffeinejs/multipart": "*",
+    "@caffeinejs/static": "*",
     "@caffeinejs/std": "*",
     "fastify": "^5.12.5"
   }

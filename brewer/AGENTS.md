@@ -2,8 +2,9 @@
 
 Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
-- Zero runtime dependencies, and it must stay that way: no Node imports and nothing beyond `fetch`, `URL`,
-  `URLSearchParams` and `Proxy`, because it runs in a browser. `@caffeinejs/http` is a devDependency for tests
+- Zero runtime dependencies, and it must stay that way: no Node imports and nothing beyond `fetch` and the classes it
+  works with (`Headers`, `FormData`, `Blob`, `File`, web streams), `URL`, `URLSearchParams` and `Proxy`, because it
+  runs in a browser. `@caffeinejs/http` is a devDependency for tests
   only; never import it from source.
 - `RouteContract` is a structural copy of `@caffeinejs/http`'s `RouteDef`, deliberately not an import. A type
   test guards the copy; if you change one, change both.
@@ -14,5 +15,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   carry the answer.
 - The open member of `BrewResponseOf` stays `BrewResponse<never>`: give it a body and every declared member stops
   narrowing. A wildcard response key (`'4xx'`, `'5xx'`, `'default'`) is not read.
-- Do not widen the `Verb` exclusion in `StaticChildren`; `Verb` is the runtime's list, and hiding more would hide
-  segments the proxy can reach.
+- `StaticChildren` hides exactly the names the proxy answers itself: a verb (`Verb`, the runtime's list), `then`,
+  which it never answers so that a client is not taken for a promise, and at the root `$request` and the
+  `FileHelpers` names (`files.ts`), which `BrewClient` passes to `Node` as reserved. Hiding more would hide segments
+  the proxy can reach.
+- `BodyArg` (`init.ts`) reads an upload the way `hasFileSchema` (`std/schema/t.ts`) does: the body itself, or one
+  level of its properties, each a file or a list of files and nothing else, so a union holding one is no upload,
+  and a union body is JSON whatever its members hold. Change them together.
