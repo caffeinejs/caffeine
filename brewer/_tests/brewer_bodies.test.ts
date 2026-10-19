@@ -517,6 +517,74 @@ describe('brewer sending a body', () => {
       }
     })
   })
+
+  describe('given a function that opens a stream', () => {
+    // A stream from a file or a socket is opened as the request leaves, and goes under no type the client guessed.
+    it.each([
+      ['a function', () => new Blob([everyByte]).stream()],
+      ['an async function', async () => new Blob([everyByte]).stream()],
+    ])('should send every chunk of the stream %s opens', async (_how, open) => {
+      const client = brewer(app)
+
+      const res = await client.echo.raw.post({ body: open, headers: { 'content-type': 'application/octet-stream' } })
+
+      expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: Array.from(everyByte) })
+    })
+
+    // Opened lazily is still streamed: the second chunk exists only once the server has read the first.
+    it('should send the stream it opens as it is read', async () => {
+      const client = brewer<typeof app>(origin)
+      const seen = Promise.withResolvers<void>()
+      firstChunk = seen.resolve
+      let pulls = 0
+      const open = () =>
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            pulls++
+            if (pulls === 1) {
+              controller.enqueue(new Uint8Array(1024).fill(1))
+            } else if (pulls === 2) {
+              await seen.promise
+              controller.enqueue(new Uint8Array(1024).fill(2))
+            } else {
+              controller.close()
+            }
+          },
+        })
+
+      try {
+        const res = await client.echo.stream.post({ body: open })
+
+        expect(await res.json()).toEqual({ size: 2048 })
+      } finally {
+        firstChunk = undefined
+      }
+    })
+
+    // A file that cannot be opened fails the call: it must not go out as an empty upload under its name.
+    it('should reject with what the function throws, in process', async () => {
+      const client = brewer(app)
+
+      await expect(
+        client.echo.raw.post({
+          body: () => {
+            throw new Error('the file is gone')
+          },
+        }),
+      ).rejects.toThrow('the file is gone')
+    })
+
+    it('should reject with what the function throws as its cause, over a socket', async () => {
+      const client = brewer<typeof app>(origin)
+
+      await expect(
+        client.echo.raw.post({
+          body: async () => Promise.reject(new Error('the file is gone')),
+          headers: { 'content-type': 'application/octet-stream' },
+        }),
+      ).rejects.toMatchObject({ name: 'TypeError', cause: { message: 'the file is gone' } })
+    })
+  })
 })
 
 describe('brewer reading a body', () => {

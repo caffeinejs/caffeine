@@ -13,6 +13,8 @@ export const bodies: ReadonlyArray<readonly [string, () => unknown]> = [
   ['a slice of a larger buffer', () => new Uint8Array(everyByte.buffer, 16, 32)],
   ['a Blob with a type', () => new Blob([everyByte], { type: 'image/png' })],
   ['a URLSearchParams form', () => new URLSearchParams({ name: 'Rex', note: 'a & b = c' })],
+  ['a stream a function opens', () => () => new Blob([everyByte]).stream()],
+  ['a stream an async function opens', () => async () => new Blob([everyByte]).stream()],
 ]
 
 /** A profile upload: text fields, two files, and a file name beyond ASCII. */

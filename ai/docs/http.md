@@ -637,7 +637,8 @@ await client.pets.post({ body: { name: 'Rex' } })
   form when every field is text, a number, a boolean or a list of those.
   A `FormData`, `URLSearchParams`, `Blob`, string, bytes or `ReadableStream` is sent as it is: a form always under
   the content type the platform writes for it, and a `Blob` that has a type under its own unless the call names
-  another.
+  another. A function that returns a `ReadableStream`, or a promise of one, is called when the request is sent —
+  `body: () => file.stream()` — so a call answered without the server opens nothing.
 - Downloads are read with the platform's own readers. `client.$file(res)` turns one into a `File`, named from its
   `Content-Disposition` (the UTF-8 `filename*` first, made a plain file name on any system: never a path, a drive, a
   stream or a device) and typed from `Content-Type`. `client.$filename(res)` names a download streamed from

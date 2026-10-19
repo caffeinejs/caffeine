@@ -43,6 +43,10 @@ type Slot<Name extends string, T, Optional extends boolean> = Optional extends t
  * list of those, as a `URLSearchParams`, which goes as a classic form that every server reads and checks against
  * the same schema.
  *
+ * A body the route does not declare may be a function that returns a `ReadableStream`, or a promise of one. It is
+ * called when the request is sent, not when it is built, so a call answered without the server opens nothing.
+ * Browsers send a stream only over HTTP/2, and Firefox and Safari not at all.
+ *
  * Path parameters are absent by construction: the segment calls supplied them.
  */
 export type CallInit<R extends RouteContract> = Omit<RequestInit, 'method' | 'body' | 'headers'> &

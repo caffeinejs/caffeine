@@ -191,7 +191,9 @@ async function send(
 ): Promise<Response> {
   const { params: _params, query, body, headers, ...rest } = init
   const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
-  const brand = brandOf(body)
+  // A body given as a function is a stream it opens when the request is sent.
+  const opens = typeof body === 'function'
+  const brand = opens ? 'ReadableStream' : brandOf(body)
 
   const merged = headersOf(await resolveHeaders(options.headers))
   const own = headersOf(headers)
@@ -209,7 +211,9 @@ async function send(
   // A body the platform already knows how to send is passed through untouched, so an upload keeps its own
   // content type and its own encoding. Everything else is JSON.
   let payload: RawBody | undefined
-  if (body !== undefined && body !== null) {
+  if (opens) {
+    payload = opened(body as Opener)
+  } else if (body !== undefined && body !== null) {
     if (isRawBody(body, brand)) {
       payload = body
     } else {
@@ -288,6 +292,31 @@ function untilAborted(call: Promise<Response>, signal: AbortSignal | null | unde
       },
     )
   })
+}
+
+/** A body given as a function: what it returns is the stream to send. */
+type Opener = () => ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Array>>
+
+// A stream that calls `open` on its first read, not before: a request built and never sent opens nothing. A high-water
+// mark of 0 keeps the stream from pulling ahead of its reader.
+function opened(open: Opener): ReadableStream<Uint8Array> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        reader ??= (await open()).getReader()
+        const { done, value } = await reader.read()
+        if (done) {
+          controller.close()
+        } else {
+          controller.enqueue(value)
+        }
+      },
+      cancel: reason => reader?.cancel(reason),
+    },
+    { highWaterMark: 0 },
+  )
 }
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {

@@ -541,6 +541,21 @@ describe.each(transports)('brewer through interceptors, %s', (_transport, connec
       expect(await res.json()).toEqual({ offline: true })
       expect(seen).toEqual([])
     })
+
+    // The upload's source, a file or a socket, is opened only for a request that leaves.
+    it('should never open a body a function would have opened', async () => {
+      let opens = 0
+      const client = connect({ interceptors: [async () => Response.json({ offline: true })] })
+
+      await client.api.echo.post({
+        body: () => {
+          opens++
+          return new Blob(['upload']).stream()
+        },
+      })
+
+      expect(opens).toBe(0)
+    })
   })
 
   describe('given an interceptor that hands on a request of its own', () => {
