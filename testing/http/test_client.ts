@@ -179,6 +179,8 @@ function brewOptionsFrom(
   options: TestClientOptions<Record<string, unknown>> & Pick<BrewOptions, 'fetch'>,
 ): BrewOptions {
   const { inject: _inject, bind: _bind, container: _container, configure: _configure, fetch: _fetch, ...brew } = options
+  // A harness option added to the options and not taken off above would reach every `Request`: it fails to compile.
+  const _onlyBrewOptions: [Exclude<keyof typeof brew, keyof BrewOptions>] extends [never] ? true : false = true
 
   return brew
 }
