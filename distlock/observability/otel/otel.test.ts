@@ -1,3 +1,5 @@
+import { tracingChannel } from 'node:diagnostics_channel'
+
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Minute } from '@caffeinejs/std/duration'
@@ -26,6 +28,7 @@ import { MemoryLockBackend } from '../../backend/memory/index.js'
 import type { DistLock } from '../../distlock.js'
 import { kDistLock } from '../../keys.js'
 import { DistributedLock } from '../../plugin.js'
+import { DIST_LOCK_CHANNELS } from '../channels.js'
 import { instrumentDistLock, type DistLockInstrumentationOptions } from './otel.js'
 
 const contextManager = new AsyncLocalStorageContextManager()
@@ -240,6 +243,21 @@ describe('instrumentDistLock metrics', () => {
         value: 1,
       }),
     ])
+  })
+
+  // The channels are public: a context another publisher ends without its measurements records a wait of zero and no
+  // hold, never NaN.
+  it('records a zero wait, and no hold, for a context ended without them', async () => {
+    const otel = instrument()
+    const service = await newLock()
+
+    tracingChannel(DIST_LOCK_CHANNELS.acquire).asyncEnd.publish({ service, key: 'a', mode: 'try', outcome: 'held' })
+    tracingChannel(DIST_LOCK_CHANNELS.release).asyncEnd.publish({ service, key: 'a' })
+
+    expect(await otel.points('distlock.acquire.duration')).toEqual([
+      expect.objectContaining({ value: expect.objectContaining({ count: 1, sum: 0 }) }),
+    ])
+    expect(await otel.points('distlock.hold.duration')).toEqual([])
   })
 
   it('counts lost leases and backend failures', async () => {

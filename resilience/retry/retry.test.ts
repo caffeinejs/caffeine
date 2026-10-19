@@ -1,3 +1,4 @@
+import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runWith } from '../compose.js'
@@ -358,6 +359,21 @@ describe('retry', () => {
 
     expect(seen).toEqual([
       ['retry', { name: 'inventory', attempt: 1, delay: 25, error: new Error('failure 1') }],
+      ['success', { name: 'inventory', attempts: 2 }],
+    ])
+  })
+
+  it('reports a retry for a result with the delay it waits, then the outcome', async () => {
+    const retries = retryOf({ backoff: 25 * Millisecond, retryOnResult: result => result === 'busy' })
+    const seen = listen(retries, 'retry', 'success')
+    const results = ['busy', 'done']
+
+    const call = runWith(() => results.shift(), retries)
+    await vi.advanceTimersByTimeAsync(25)
+    await expect(call).resolves.toBe('done')
+
+    expect(seen).toEqual([
+      ['retry', { name: 'inventory', attempt: 1, delay: 25 * Millisecond, result: 'busy' }],
       ['success', { name: 'inventory', attempts: 2 }],
     ])
   })

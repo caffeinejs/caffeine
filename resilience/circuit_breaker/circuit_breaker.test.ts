@@ -1,4 +1,4 @@
-import { Second } from '@caffeinejs/std/duration'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { compose, runWith } from '../compose.js'
@@ -203,6 +203,18 @@ describe('circuitBreaker, closed', () => {
 
     expect(breaker.state).toBe('closed')
     expect(breaker.metrics()).toMatchObject({ bufferedCalls: 4, successfulCalls: 4, failedCalls: 0 })
+  })
+
+  it('reports an error that recordError declines as a success, with how long the call took', async () => {
+    const breaker = breakerOf({ recordError: error => !(error instanceof TypeError) })
+    const seen = listen(breaker, 'success', 'failure')
+
+    await runWith(() => {
+      vi.advanceTimersByTime(100)
+      throw new TypeError('bad input')
+    }, breaker).catch(() => undefined)
+
+    expect(seen).toEqual([['success', { name: 'inventory', duration: 100 * Millisecond, slow: false }]])
   })
 
   // A 503 response is a failure of the dependency even though fetch resolved.
