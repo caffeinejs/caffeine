@@ -1,4 +1,4 @@
-import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
+import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
 
 /** One record a {@link RecordingLogger} was asked to write, with the bindings of the logger it went through. */
 export interface Written {

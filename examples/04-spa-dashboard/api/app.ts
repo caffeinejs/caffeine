@@ -1,8 +1,8 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import type { Container } from '@caffeinejs/di'
 import { Authentication, Authorization } from '@caffeinejs/http'
 import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
 import { openapi } from '@caffeinejs/openapi'
-import type { Logger } from '@caffeinejs/std/logger'
 
 import { SESSION_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'

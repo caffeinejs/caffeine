@@ -1,6 +1,6 @@
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit, type FeatureConfigurer } from '@caffeinejs/application'
+import { type AnySchema } from '@caffeinejs/application/schema'
 import type { Container, Ctor } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit, type FeatureConfigurer } from '@caffeinejs/std'
-import { type AnySchema } from '@caffeinejs/std/schema'
 
 import type { Binder } from './binder.js'
 import type { ConsumerBinding, ProducerBinding } from './binding.js'

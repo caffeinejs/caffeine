@@ -1,4 +1,4 @@
-import { ApplicationHealth } from '@caffeinejs/std/health'
+import { ApplicationHealth } from '@caffeinejs/application/health'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 

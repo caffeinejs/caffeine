@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { createApplication } from '@caffeinejs/application'
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC } from '@caffeinejs/di'
 import {
   CaffeineDistLock,
@@ -12,8 +14,6 @@ import {
   type Lock,
 } from '@caffeinejs/distlock'
 import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
-import { createApplication } from '@caffeinejs/std'
-import { newNoopLogger } from '@caffeinejs/std/logger'
 import { createClient } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

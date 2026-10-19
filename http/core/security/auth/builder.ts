@@ -1,6 +1,6 @@
+import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { isValidKey, Provider, type InjectionToken, type NamedToken } from '@caffeinejs/di'
-import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/std'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { IContext } from '../../../context.js'
 import type { PrincipalMapper } from '../identity.js'

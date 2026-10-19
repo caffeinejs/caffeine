@@ -2,9 +2,9 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+import { $t } from '@caffeinejs/application/schema'
 import { AllowAnonymous, Controller, Get, Header, Produces, Schema, WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { openapi } from '../openapi.js'

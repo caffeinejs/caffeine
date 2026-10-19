@@ -59,7 +59,7 @@ function targets(root, copies) {
     const { dependencies = {}, peerDependencies = {} } = readJSON(join(root, dir, 'package.json'))
 
     if (STD in dependencies || STD in peerDependencies) {
-      throw refuse(`it depends on "${STD}", so it imports the builder from "${STD}/framework/err" instead`)
+      throw refuse(`it depends on "${STD}", so it imports the builder from "${STD}/err" instead`)
     }
 
     return file

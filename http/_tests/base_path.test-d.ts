@@ -1,5 +1,5 @@
-import { newConfiguration } from '@caffeinejs/std'
-import { $t } from '@caffeinejs/std/schema'
+import { newConfiguration } from '@caffeinejs/application'
+import { $t } from '@caffeinejs/application/schema'
 import { expectTypeOf } from 'vitest'
 
 import { type IContext } from '../index.js'

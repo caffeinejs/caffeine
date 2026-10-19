@@ -1,4 +1,4 @@
-import type { Feature, FeatureConfigurer } from '@caffeinejs/std'
+import type { Feature, FeatureConfigurer } from '@caffeinejs/application'
 
 import { MessagingBuilder } from './builder.js'
 import { DEFAULT_BINDER } from './symbols.js'

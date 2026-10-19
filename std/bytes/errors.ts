@@ -1,14 +1,15 @@
-import { ErrCaffeine } from '../error.js'
-import { errMessage } from '../framework/err/index.js'
+import { errMessage } from '../err/index.js'
 
 /** A value reached `bytes` that its grammar does not accept, or one whose size cannot be held exactly. */
-export class ErrInvalidByteSize extends ErrCaffeine {
+export class ErrInvalidByteSize extends Error {
+  readonly code = 'ERR_INVALID_BYTE_SIZE'
+
   constructor(value: number | string, reason: string) {
     super(
       errMessage(`Cannot parse byte size "${value}": ${reason}`)
         .reference('@caffeinejs/std', ErrInvalidByteSize)
         .build(),
-      'ERR_INVALID_BYTE_SIZE',
     )
+    this.name = 'ErrInvalidByteSize'
   }
 }

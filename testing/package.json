@@ -51,6 +51,7 @@
     }
   },
   "devDependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/brewer": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",

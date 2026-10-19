@@ -23,11 +23,11 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/multipart": "*",
     "@caffeinejs/static": "*",
-    "@caffeinejs/std": "*",
     "fastify": "^5.12.5"
   }
 }

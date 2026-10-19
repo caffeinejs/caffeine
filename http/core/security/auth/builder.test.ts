@@ -1,5 +1,5 @@
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 import { token } from '@caffeinejs/di'
-import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/std'
 import { describe, it, expect, vi } from 'vitest'
 
 import { AuthenticationBuilder } from './builder.js'

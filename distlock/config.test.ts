@@ -1,8 +1,8 @@
+import { createApplication, newConfiguration } from '@caffeinejs/application'
+import { ErrConfigValidation, type InferConfig } from '@caffeinejs/application/config'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { createApplication, newConfiguration } from '@caffeinejs/std'
-import { ErrConfigValidation, type InferConfig } from '@caffeinejs/std/config'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { $t, type InferSchema } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DistLockConfigSchema } from './_spectypes/index.js'

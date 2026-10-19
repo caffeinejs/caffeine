@@ -1,5 +1,5 @@
 import { ErrConfiguration } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { kBuild } from './keys.js'
 import type { ViewOptions } from './view.js'

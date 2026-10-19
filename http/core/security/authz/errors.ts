@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrCaffeineWebApplication } from '../../error/common.js'
 

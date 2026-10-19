@@ -1,6 +1,6 @@
+import { $t } from '@caffeinejs/application/schema'
 import type { Ctor, Provider } from '@caffeinejs/di'
 import { Injectable, Lifetime, Named, Primary, Scopes, token } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import {

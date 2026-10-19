@@ -1,4 +1,4 @@
-import type { IndicatorOutcome, ProbeResult } from '@caffeinejs/std/health'
+import type { IndicatorOutcome, ProbeResult } from '@caffeinejs/application/health'
 
 /** The query a probe request carries. Both parameters are honoured only when enabled in `HealthOptions`. */
 export interface ProbeQuery {

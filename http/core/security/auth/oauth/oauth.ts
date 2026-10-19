@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../../../context.js'
 import { Claim } from '../../identity.js'

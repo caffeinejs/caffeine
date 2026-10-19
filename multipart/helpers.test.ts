@@ -1,7 +1,7 @@
+import { $t } from '@caffeinejs/application/schema'
 import { $p, Args, Controller, Post, Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import type { Context } from '@caffeinejs/http/fastify'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, it, expect } from 'vitest'
 
 import { multipart, multipartPlugin } from './index.js'

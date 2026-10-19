@@ -1,7 +1,7 @@
+import type { ConfigDefinition } from '@caffeinejs/application/config'
 import type { Container } from '@caffeinejs/di'
 import { type WebApplicationOptions } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { ConfigDefinition } from '@caffeinejs/std/config'
 
 /**
  * Starts an application on a real socket for the authentication e2e specs.

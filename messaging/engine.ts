@@ -1,4 +1,4 @@
-import { validateSchema } from '@caffeinejs/std/schema'
+import { validateSchema } from '@caffeinejs/application/schema'
 
 import type { BoundConsumer, DeliveryControl } from './binder.js'
 import type { ConsumerBinding } from './binding.js'

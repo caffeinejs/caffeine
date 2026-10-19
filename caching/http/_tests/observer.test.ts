@@ -1,6 +1,6 @@
+import type { Logger } from '@caffeinejs/application/logger'
 import { Controller, Get, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
-import type { Logger } from '@caffeinejs/std/logger'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 

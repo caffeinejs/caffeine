@@ -1,4 +1,4 @@
-import type { ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import { FastifyRequest, FastifyReply } from 'fastify'
 
 type Picker<REQ extends FastifyRequest = FastifyRequest, RES extends FastifyReply = FastifyReply> = (

@@ -1,4 +1,4 @@
-import { createApplication } from '@caffeinejs/std'
+import { createApplication } from '@caffeinejs/application'
 import { describe, expect, it } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'

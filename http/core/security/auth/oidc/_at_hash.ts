@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto'
 
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { redactPii } from '../internal/remote/pii.js'
 import { ErrOIDCCallback } from './errors.js'

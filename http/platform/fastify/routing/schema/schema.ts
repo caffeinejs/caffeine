@@ -1,4 +1,4 @@
-import { type AnySchema, type JSONSchema, hasFileSchema, toJSONSchema } from '@caffeinejs/std/schema'
+import { type AnySchema, type JSONSchema, hasFileSchema, toJSONSchema } from '@caffeinejs/application/schema'
 import type { FastifySchema } from 'fastify'
 
 import type { RouteValidationSchema } from '../../../../core/routing/spec.js'

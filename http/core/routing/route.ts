@@ -1,5 +1,5 @@
+import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/application/framework'
 import { Ctor, Provider } from '@caffeinejs/di'
-import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/std/framework'
 
 import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../error/handler.js'

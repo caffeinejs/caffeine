@@ -1,4 +1,4 @@
-// Generated from std/framework/err/message.ts by tools/copy-err-message.mjs. Do not edit: change the source and
+// Generated from std/err/message.ts by tools/copy-err-message.mjs. Do not edit: change the source and
 // run `make err-message`, which `make check` also runs.
 
 // Imports nothing on purpose: a package that cannot depend on `std` gets a generated copy of this file, listed in

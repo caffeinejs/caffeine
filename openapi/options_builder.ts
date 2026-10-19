@@ -1,5 +1,5 @@
+import type { AnySchema } from '@caffeinejs/application/schema'
 import type { IRoute, IRouteGroup } from '@caffeinejs/http'
-import type { AnySchema } from '@caffeinejs/std/schema'
 
 import {
   defaultOpenAPIOptions,

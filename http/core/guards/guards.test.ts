@@ -1,5 +1,5 @@
+import { ErrGuardConfiguration } from '@caffeinejs/application/framework'
 import { CaffeineIoC, ErrInvalidDecorator, Injectable, Lifetime, Scopes, reflect, token } from '@caffeinejs/di'
-import { ErrGuardConfiguration } from '@caffeinejs/std/framework'
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 

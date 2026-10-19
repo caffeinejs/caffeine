@@ -1,6 +1,6 @@
+import { createApplication } from '@caffeinejs/application'
+import { HealthIndicator, type HealthReport, up } from '@caffeinejs/application/health'
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
-import { HealthIndicator, type HealthReport, up } from '@caffeinejs/std/health'
 import { describe, expect, it } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, ProducerClient } from './config.js'

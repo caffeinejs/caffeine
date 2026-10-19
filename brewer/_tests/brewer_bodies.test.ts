@@ -1,9 +1,9 @@
 import { runInNewContext } from 'node:vm'
 
+import { $t } from '@caffeinejs/application/schema'
 import { Router, bodyAsBuffer, bodyAsStream } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { multipart, multipartPlugin } from '@caffeinejs/multipart'
-import { $t } from '@caffeinejs/std/schema'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { brewer } from '../index.js'

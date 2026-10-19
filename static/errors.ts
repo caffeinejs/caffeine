@@ -1,5 +1,5 @@
 import { ErrCaffeineWebApplication } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 /**
  * ErrSendFileUnavailable is thrown when {@link sendFile} or {@link download} is called and no static mount

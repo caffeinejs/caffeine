@@ -1,4 +1,4 @@
-import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/std/health'
+import { HealthIndicator, type HealthReport, down, up } from '@caffeinejs/application/health'
 import { newTestContainer } from '@caffeinejs/testing'
 import { afterEach, describe, expect, it } from 'vitest'
 

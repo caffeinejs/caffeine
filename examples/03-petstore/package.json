@@ -14,13 +14,13 @@
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/di": "*",
     "@caffeinejs/html": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/multipart": "*",
     "@caffeinejs/openapi": "*",
     "@caffeinejs/static": "*",
-    "@caffeinejs/std": "*",
     "@fastify/multipart": "^10.1.1",
     "@fastify/static": "^10.1.3",
     "@kitajs/html": "^4.2.13",

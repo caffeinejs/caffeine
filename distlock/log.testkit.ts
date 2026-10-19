@@ -1,4 +1,4 @@
-import type { Bindings, EmitLevel, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
+import type { Bindings, EmitLevel, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
 
 export interface LogRecord {
   readonly level: EmitLevel

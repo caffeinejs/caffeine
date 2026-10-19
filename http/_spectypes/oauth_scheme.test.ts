@@ -1,4 +1,4 @@
-import { validateSchema } from '@caffeinejs/std/schema'
+import { validateSchema } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 
 import { OAuthSchemeConfigSchema } from './oauth_scheme.js'

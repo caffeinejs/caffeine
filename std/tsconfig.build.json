@@ -3,11 +3,6 @@
   "compilerOptions": {
     "noEmit": false
   },
-  "references": [
-    {
-      "path": "../di/tsconfig.build.json"
-    }
-  ],
   "exclude": [
     "dist",
     "node_modules",

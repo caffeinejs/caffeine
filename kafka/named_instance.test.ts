@@ -1,4 +1,4 @@
-import { createApplication } from '@caffeinejs/std'
+import { createApplication } from '@caffeinejs/application'
 import { describe, it, expect } from 'vitest'
 
 import type { ConsumerClient, KafkaClients, KafkaMessage, KafkaOutboundMessage } from './config.js'

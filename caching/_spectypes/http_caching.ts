@@ -1,6 +1,6 @@
-import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
+import type { InferConfig, SchemaSatisfies } from '@caffeinejs/application/config'
+import { $t } from '@caffeinejs/application/schema'
 import { DURATION_PATTERN } from '@caffeinejs/std/duration'
-import { $t } from '@caffeinejs/std/schema'
 
 import type { HTTPCachingOptions } from '../http/options.js'
 

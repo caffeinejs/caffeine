@@ -1,4 +1,4 @@
-import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/std/logger'
+import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
 import { describe, expect, it } from 'vitest'
 
 import { loggingCacheObserver, type CacheRoute } from '../index.js'

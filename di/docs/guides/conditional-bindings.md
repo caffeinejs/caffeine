@@ -228,7 +228,7 @@ di.bindConfig<AppConfig>({ payments: { newFlow: true } })
 await di.init()
 ```
 
-An application built with `@caffeinejs/std` binds its configuration for you.
+An application built with `@caffeinejs/application` binds its configuration for you.
 
 - The test reads the values once, when the container compiles. A later reload of the configuration does not
   register or remove the binding.

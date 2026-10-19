@@ -1,4 +1,4 @@
-import { isKubernetes } from '@caffeinejs/std/shutdown'
+import { isKubernetes } from '@caffeinejs/application/shutdown'
 
 import { mergeHealthConfig, type HealthConfig, type HealthOptions, type HealthPaths } from './options.js'
 

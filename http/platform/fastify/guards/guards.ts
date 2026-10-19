@@ -1,4 +1,4 @@
-import { runGuards, type CompiledGuard } from '@caffeinejs/std/framework'
+import { runGuards, type CompiledGuard } from '@caffeinejs/application/framework'
 import type { FastifyRequest } from 'fastify'
 
 import { httpGuardDenial, type Guard, type GuardContext, type GuardTarget } from '../../../core/guards/guard.js'

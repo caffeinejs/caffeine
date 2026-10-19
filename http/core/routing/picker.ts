@@ -1,4 +1,4 @@
-import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/application/framework'
 
 export interface HTTPPickers {
   param<R = unknown>(name?: string): ParameterPickOptions<R>

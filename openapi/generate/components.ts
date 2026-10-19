@@ -1,4 +1,4 @@
-import { type AnySchema, type SchemaIO, toJSONSchema } from '@caffeinejs/std/schema'
+import { type AnySchema, type SchemaIO, toJSONSchema } from '@caffeinejs/application/schema'
 
 import { ErrOpenAPISchemaConflict } from '../errors.js'
 import type { SchemaObject } from '../spec/spec.js'

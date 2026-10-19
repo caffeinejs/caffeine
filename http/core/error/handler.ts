@@ -1,5 +1,5 @@
 import { Container, Ctor, InjectionToken, Provider } from '@caffeinejs/di'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { IContext } from '../../context.js'
 import { ActionResult } from '../../response.js'

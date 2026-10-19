@@ -1,4 +1,4 @@
-import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/std/framework'
+import type { ParameterPicker, ParameterPickOptions } from '@caffeinejs/application/framework'
 
 import type { KafkaMessage } from './config.js'
 

@@ -1,7 +1,7 @@
+import { createApplication } from '@caffeinejs/application'
+import { $t } from '@caffeinejs/application/schema'
+import type { SchemaIssue } from '@caffeinejs/application/schema'
 import { ErrInvalidDecorator } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
-import { $t } from '@caffeinejs/std/schema'
-import type { SchemaIssue } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { InMemoryBroker, inMemoryBinder } from './binder.testkit.js'

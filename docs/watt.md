@@ -37,8 +37,8 @@ of each snippet: an HTTP entrypoint, an internal HTTP application and a headless
 Every application already has an `ApplicationHealth`, `app.health`, so answering Watt is a mapping:
 
 ```ts
-import type { Application } from '@caffeinejs/std'
-import type { ProbeResult } from '@caffeinejs/std/health'
+import type { Application } from '@caffeinejs/application'
+import type { ProbeResult } from '@caffeinejs/application/health'
 import { getGlobal, hasField, setCustomHealthCheck, setCustomReadinessCheck } from '@platformatic/globals'
 
 interface WattCheckResult {
@@ -175,7 +175,7 @@ export async function close(): Promise<void> {
 ```
 
 A headless application tunes its budgets with `.install(Health(h => …))` or runs on the defaults: 2 s per indicator, 3 s
-per probe, results reused for 1 s. To change them, bind `kHealthRegistryOptions` from `@caffeinejs/std/health`
+per probe, results reused for 1 s. To change them, bind `kHealthRegistryOptions` from `@caffeinejs/application/health`
 before `bootstrap()`.
 
 ## Shutting down
@@ -316,6 +316,6 @@ How it would be built:
 
 - on `@platformatic/globals`' getters with `{ throwOnMissing: false }`, so that under plain Node every part stands
   down;
-- depending on `@caffeinejs/std` alone, with the HTTP parts behind a subpath, so a headless worker does not load
+- depending on `@caffeinejs/application` alone, with the HTTP parts behind a subpath, so a headless worker does not load
   Fastify;
 - verified by running `examples/05-watt` under each Watt release it supports.

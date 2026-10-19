@@ -1,4 +1,3 @@
-import { Scopes, type Ctor } from '@caffeinejs/di'
 import {
   ApplicationHealth,
   ErrHealthIndicatorNotSingleton,
@@ -6,7 +5,8 @@ import {
   type HealthReport,
   down,
   up,
-} from '@caffeinejs/std/health'
+} from '@caffeinejs/application/health'
+import { Scopes, type Ctor } from '@caffeinejs/di'
 import { describe, it, expect } from 'vitest'
 
 import type { WebApplication } from '../application.js'

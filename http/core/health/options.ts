@@ -1,6 +1,6 @@
+import { defaultHealthRegistryOptions } from '@caffeinejs/application/health'
+import { isKubernetes } from '@caffeinejs/application/shutdown'
 import { type Duration, toMillis } from '@caffeinejs/std/duration'
-import { defaultHealthRegistryOptions } from '@caffeinejs/std/health'
-import { isKubernetes } from '@caffeinejs/std/shutdown'
 
 interface EnvLike {
   [key: string]: string | undefined

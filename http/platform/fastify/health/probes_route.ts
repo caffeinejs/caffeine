@@ -1,5 +1,5 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
-import type { ApplicationHealth, ProbeOptions, ProbeResult } from '@caffeinejs/std/health'
+import type { ApplicationHealth, ProbeOptions, ProbeResult } from '@caffeinejs/application/health'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { ErrHealthConfiguration } from '../../../core/health/errors.js'

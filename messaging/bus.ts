@@ -1,4 +1,4 @@
-import { validateSchema } from '@caffeinejs/std/schema'
+import { validateSchema } from '@caffeinejs/application/schema'
 
 import type { BoundProducer } from './binder.js'
 import { ErrMessageValidation, ErrUnknownBinder, ErrUnknownBinding } from './errors.js'

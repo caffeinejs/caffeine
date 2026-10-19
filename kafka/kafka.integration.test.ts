@@ -1,6 +1,6 @@
 import { connect } from 'node:net'
 
-import { createApplication } from '@caffeinejs/std'
+import { createApplication } from '@caffeinejs/application'
 import { Admin } from '@platformatic/kafka'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 

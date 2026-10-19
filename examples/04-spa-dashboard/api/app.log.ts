@@ -1,5 +1,5 @@
-import type { Logger } from '@caffeinejs/std/logger'
-import { PinoLogger } from '@caffeinejs/std/logger/pino'
+import type { Logger } from '@caffeinejs/application/logger'
+import { PinoLogger } from '@caffeinejs/application/logger/pino'
 
 /**
  * The application logger.

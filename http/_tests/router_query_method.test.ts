@@ -1,5 +1,5 @@
+import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, expect, it } from 'vitest'
 
 import { Router } from '../index.js'

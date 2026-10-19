@@ -71,7 +71,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Errors
 
-- `internal/util/errutil/errutil.gen.ts` is generated from `std/framework/err/message.ts`, the error message
+- `internal/util/errutil/errutil.gen.ts` is generated from `std/err/message.ts`, the error message
   builder, because `di` cannot depend on `std`. Never edit it: change the source and run `make err-message`.
 
 ## Process-wide registration

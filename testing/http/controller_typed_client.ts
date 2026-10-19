@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { controllerClient } from './controller_client.js'
 import { ErrFetchFailed } from './error.js'

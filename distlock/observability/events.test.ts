@@ -1,8 +1,8 @@
 import { tracingChannel } from 'node:diagnostics_channel'
 import { once } from 'node:events'
 
+import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC, Scopes, type OnBootstrap } from '@caffeinejs/di'
-import { createApplication } from '@caffeinejs/std'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryLockBackend } from '../backend/memory/index.js'

@@ -1,4 +1,3 @@
-import { CaffeineIoC, token } from '@caffeinejs/di'
 import {
   FeatureBuilder,
   kFeatureConfigure,
@@ -6,10 +5,11 @@ import {
   newConfiguration,
   type Feature,
   type FeatureConfigurer,
-} from '@caffeinejs/std'
-import type { ConfigSnapshot, InferConfig } from '@caffeinejs/std/config'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { $t, type InferSchema } from '@caffeinejs/std/schema'
+} from '@caffeinejs/application'
+import type { ConfigSnapshot, InferConfig } from '@caffeinejs/application/config'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import type { FastifyPluginAsync, FastifyReply } from 'fastify'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 

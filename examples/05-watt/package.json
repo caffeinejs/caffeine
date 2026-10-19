@@ -9,8 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@caffeinejs/application": "*",
     "@caffeinejs/http": "*",
-    "@caffeinejs/std": "*",
     "@platformatic/globals": "^3.70.0",
     "@platformatic/node": "^3.70.0",
     "fastify": "^5.12.5",

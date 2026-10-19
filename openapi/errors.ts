@@ -1,5 +1,5 @@
 import { ErrCaffeineWebApplication } from '@caffeinejs/http'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 /**
  * A configuration that cannot produce a correct document, detected while the application is starting.

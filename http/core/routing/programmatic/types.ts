@@ -1,4 +1,4 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/std/schema'
+import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
 
 import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'

@@ -27,11 +27,11 @@
     "ws": "^8.21.3"
   },
   "peerDependencies": {
-    "@caffeinejs/std": "*",
+    "@caffeinejs/application": "*",
     "@caffeinejs/http": "*"
   },
   "peerDependenciesMeta": {
-    "@caffeinejs/std": {
+    "@caffeinejs/application": {
       "optional": true
     },
     "@caffeinejs/http": {

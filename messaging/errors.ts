@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 /** Base error for the portable messaging layer. */
 export class ErrMessaging extends Error {

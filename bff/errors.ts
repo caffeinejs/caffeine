@@ -1,5 +1,5 @@
 import type { Duration } from '@caffeinejs/std/duration'
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 export class ErrBFF extends Error {
   readonly code: string

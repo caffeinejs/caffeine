@@ -1,5 +1,5 @@
+import { ErrFeatureNotInstalled } from '@caffeinejs/application'
 import { Injectable } from '@caffeinejs/di'
-import { ErrFeatureNotInstalled } from '@caffeinejs/std'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'

@@ -1,6 +1,6 @@
+import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
 import { Scopes } from '@caffeinejs/di'
-import { kFeatureConfigure, kFeatureName, type Feature, type FeatureConfigureKit } from '@caffeinejs/std'
 
 import type { IRouteGroup } from '../../routing/route.js'
 import {

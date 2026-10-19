@@ -1,5 +1,5 @@
+import type { BootstrapKit } from '@caffeinejs/application'
 import type { Container } from '@caffeinejs/di'
-import type { BootstrapKit } from '@caffeinejs/std'
 
 import type {
   MiddlewareFactory,

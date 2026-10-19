@@ -1,11 +1,11 @@
-import { token } from '@caffeinejs/di'
 import {
   kFeatureBootstrap,
   kFeatureConfigure,
   kFeatureName,
   type Feature,
   type FeatureConfigureKit,
-} from '@caffeinejs/std'
+} from '@caffeinejs/application'
+import { token } from '@caffeinejs/di'
 import { SignJWT } from 'jose'
 import { afterEach, describe, expect, it } from 'vitest'
 

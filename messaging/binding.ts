@@ -1,5 +1,5 @@
+import type { AnySchema } from '@caffeinejs/application/schema'
 import type { Ctor } from '@caffeinejs/di'
-import type { AnySchema } from '@caffeinejs/std/schema'
 
 import type { ErrorClassifier, RetryPolicy } from './error_handling.js'
 

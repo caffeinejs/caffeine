@@ -1,4 +1,4 @@
-import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/std/framework'
+import type { ParameterPickOptions, ParameterPicker } from '@caffeinejs/application/framework'
 import type { FastifyRequest } from 'fastify'
 
 import {

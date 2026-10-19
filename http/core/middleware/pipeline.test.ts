@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { type AddressInfo, connect } from 'node:net'
 
+import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
+import { newNoopLogger } from '@caffeinejs/application/logger'
 import { CaffeineIoC, token, type Container } from '@caffeinejs/di'
-import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/std/config'
-import { newNoopLogger } from '@caffeinejs/std/logger'
 import fastify, { type FastifyInstance, type FastifyReply } from 'fastify'
 import { describe, expect, it } from 'vitest'
 

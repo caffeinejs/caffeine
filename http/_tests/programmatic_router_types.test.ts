@@ -1,5 +1,5 @@
+import { $t } from '@caffeinejs/application/schema'
 import { $i, type Provider } from '@caffeinejs/di'
-import { $t } from '@caffeinejs/std/schema'
 import { describe, expectTypeOf, it } from 'vitest'
 
 import type { DepsOf, PathParams, ResponsesOf, RoutesOf } from '../core/routing/programmatic/types.js'

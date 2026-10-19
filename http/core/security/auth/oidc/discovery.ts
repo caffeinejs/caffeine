@@ -1,4 +1,4 @@
-import { errMessage } from '@caffeinejs/std/framework/err'
+import { errMessage } from '@caffeinejs/std/err'
 
 import { assertSecureEndpoint, DEFAULT_HTTP_TIMEOUT_MS } from '../internal/remote/config.js'
 import { ErrOIDCDiscovery } from './errors.js'

@@ -1,5 +1,5 @@
-import type { InferConfig, SchemaSatisfies } from '@caffeinejs/std/config'
-import { $t } from '@caffeinejs/std/schema'
+import type { InferConfig, SchemaSatisfies } from '@caffeinejs/application/config'
+import { $t } from '@caffeinejs/application/schema'
 import type { DataSourceOptions } from 'typeorm'
 
 /**

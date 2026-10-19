@@ -1,8 +1,8 @@
+import { newConfiguration } from '@caffeinejs/application'
+import type { InferConfig } from '@caffeinejs/application/config'
+import { InlineConfigSource } from '@caffeinejs/application/config/inline'
+import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
-import { newConfiguration } from '@caffeinejs/std'
-import type { InferConfig } from '@caffeinejs/std/config'
-import { InlineConfigSource } from '@caffeinejs/std/config/inline'
-import { $t } from '@caffeinejs/std/schema'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {

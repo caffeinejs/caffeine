@@ -69,7 +69,7 @@ export async function load(entries) {
  * and the transforms' functions, so `$t.Duration()` is a patterned string and `$t.List()` a string-or-array union.
  */
 export async function toJSONSchema(entries) {
-  const { toJSONSchema: asJSONSchema } = await import('@caffeinejs/std/schema')
+  const { toJSONSchema: asJSONSchema } = await import('@caffeinejs/application/schema')
 
   return entries.map(entry => ({
     ...entry,
