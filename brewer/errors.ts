@@ -81,22 +81,26 @@ export class ErrBrewFollowUpNotSent extends ErrBrew {
   }
 }
 
-/** A call's follow-ups all met a 401, and the next would pass `maxFollowUps`. */
+/**
+ * A call's follow-ups all met a 401, and the next would pass `maxFollowUps`.
+ *
+ * A `maxFollowUps` that is not a finite number, `NaN` or `Infinity`, allows none: the first 401 rejects with this.
+ */
 export class ErrBrewTooManyFollowUps extends ErrBrew {
   override readonly code = 'ERR_BREW_TOO_MANY_FOLLOW_UPS'
 
   constructor(request: Request, sent: number, limit: number) {
-    super(
-      errMessage(
-        `Cannot answer the 401 to "${labelOf(request)}": the call already sent ${sent} follow-ups, and maxFollowUps allows ${limit}`,
-      )
-        .solutions(
+    const first = `Cannot answer the 401 to "${labelOf(request)}"`
+    const message = Number.isFinite(limit)
+      ? errMessage(`${first}: the call already sent ${sent} follow-ups, and maxFollowUps allows ${limit}`).solutions(
           'Return null from the authenticator once the server refuses the credentials it holds',
           'Raise maxFollowUps to the rounds the authentication scheme needs',
         )
-        .reference('@caffeinejs/brewer', ErrBrewTooManyFollowUps)
-        .build(),
-    )
+      : errMessage(`${first}: maxFollowUps is ${limit}, and only a finite number of follow-ups is sent`).solutions(
+          'Set maxFollowUps to the rounds the authentication scheme needs',
+        )
+
+    super(message.reference('@caffeinejs/brewer', ErrBrewTooManyFollowUps).build())
     this.name = 'ErrBrewTooManyFollowUps'
   }
 }

@@ -836,8 +836,21 @@ describe.each(transports)('brewer answering a 401, %s', (_transport, connect) =>
       const { authenticator, attempts } = counting(neverRight)
       const client = connect({ authenticator, maxFollowUps: Number('three') })
 
-      await expect(client.secure.pets.get()).rejects.toThrow(/maxFollowUps allows NaN/)
+      await expect(client.secure.pets.get()).rejects.toThrow(/maxFollowUps is NaN, and only a finite number/)
       expect(attempts).toEqual([])
+    })
+
+    // No limit is no cap on a server that refuses every credential: an authenticator that never gives up would loop.
+    it('should reject rather than loop when maxFollowUps is Infinity', async () => {
+      const { authenticator, attempts } = counting(neverRight)
+      const client = connect({ authenticator, maxFollowUps: Number.POSITIVE_INFINITY })
+
+      const failure = await client.secure.pets.get().catch((error: unknown) => error)
+
+      expect(failure).toBeInstanceOf(ErrBrewTooManyFollowUps)
+      expect((failure as Error).message).toMatch(/maxFollowUps is Infinity, and only a finite number/)
+      expect(attempts).toEqual([])
+      expect(hits).toHaveLength(1)
     })
   })
 

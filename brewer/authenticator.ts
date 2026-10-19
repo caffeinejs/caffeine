@@ -76,7 +76,7 @@ export async function authenticate(
 
     try {
       answering.signal?.throwIfAborted()
-      if (!(attempt <= answering.limit)) {
+      if (!Number.isFinite(answering.limit) || attempt > answering.limit) {
         throw new ErrBrewTooManyFollowUps(first, attempt - 1, answering.limit)
       }
 
