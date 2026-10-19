@@ -21,15 +21,15 @@
       }
     },
     "indicatorTimeout": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "probeDeadline": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "cacheTtl": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "verbose": {

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { Backend, LockLease } from '../../backend.js'
 
 interface Held {
@@ -17,24 +19,24 @@ interface Held {
 export class MemoryLockBackend implements Backend {
   readonly #held = new Map<string, Held>()
 
-  async tryAcquire(key: string, ttlMs: number): Promise<LockLease | undefined> {
+  async tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
     if (this.#live(key) !== undefined) {
       return undefined
     }
 
-    const lease = { key, token: randomUUID(), expiresAt: Date.now() + ttlMs }
+    const lease = { key, token: randomUUID(), expiresAt: Date.now() + ttl }
     this.#held.set(key, { token: lease.token, expiresAt: lease.expiresAt })
 
     return lease
   }
 
-  async extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
     const held = this.#live(lease.key)
     if (held === undefined || held.token !== lease.token) {
       return undefined
     }
 
-    held.expiresAt = Date.now() + ttlMs
+    held.expiresAt = Date.now() + ttl
 
     return { key: lease.key, token: lease.token, expiresAt: held.expiresAt }
   }

@@ -8,7 +8,7 @@ import { WATCH_DEBOUNCE_MS, WATCH_RETRY_MS, pollDelay } from '../triggers.js'
 import type { ConfigDefinition, ConfigLayer, ConfigSource } from '../types.js'
 
 function definition(sources: ConfigSource[]): ConfigDefinition {
-  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 beforeEach(() => {
@@ -107,7 +107,7 @@ describe('polling', () => {
           : []
       },
     }
-    const store = await loadConfig({ ...definition([source]), loadTimeoutMs: 500 }, { logger })
+    const store = await loadConfig({ ...definition([source]), loadTimeout: 500 }, { logger })
     const stillRunning = 'Cannot load config source "remote": the load that timed out is still running'
 
     // The poll at 1 000 times out at 1 500. The polls at 3 500, 7 500 and 15 500 find it still running.

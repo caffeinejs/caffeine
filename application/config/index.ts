@@ -24,7 +24,7 @@ export type {
 export type { DotenvLoader, DotenvOptions } from './dotenv.js'
 export { ErrConfig, ErrConfigValidation } from './errors.js'
 export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
-export { DEFAULT_LOAD_TIMEOUT_MS, loadConfig, type LoadConfigOptions } from './load.js'
+export { DEFAULT_LOAD_TIMEOUT, loadConfig, type LoadConfigOptions } from './load.js'
 export { expandKeys } from './merge.js'
 export {
   CONFIG_CHANNELS,

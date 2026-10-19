@@ -32,7 +32,7 @@ function context(profiles: string[] = []): ConfigLoadContext {
 }
 
 function definition(...sources: ConfigSource[]): ConfigDefinition {
-  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 async function names(path: string): Promise<string[]> {

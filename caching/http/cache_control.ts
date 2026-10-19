@@ -6,7 +6,7 @@ import {
   type AdapterRouteOptions,
   type ContextRequest,
 } from '@caffeinejs/http/fastify'
-import type { Duration } from '@caffeinejs/std/duration'
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import type { FastifyRequest } from 'fastify'
 
 import './_fastify.js'
@@ -154,18 +154,18 @@ export interface CacheDeps {
    */
   observer?: CacheObserver
   /**
-   * Milliseconds a store call may take before the cache goes on without it, reported like a rejection.
-   * `HTTPCaching` sets `2s` unless told otherwise; left out here, a call is bounded by the request alone.
+   * How long a store call may take before the cache goes on without it, reported like a rejection.
+   * `HTTPCaching` sets two seconds unless told otherwise; left out here, a call is bounded by the request alone.
    */
-  storeTimeoutMs?: number
+  storeTimeout?: Duration
   /** The query parameters a store key carries, for a route that does not list its own. Unset: the whole query. */
   varyByQuery?: readonly string[]
   /** Bytes. A larger payload is not stored, and `observer.onSkip` is told. Unset: no limit. */
   maxEntrySizeBytes?: number
-  /** The install's flights, one table per install. Absent, with `lockTimeoutMs`, concurrent misses each run the handler. */
+  /** The install's flights, one table per install. Absent, with `lockTimeout`, concurrent misses each run the handler. */
   flights?: FlightTable
-  /** How long a follower waits on a flight, in milliseconds. */
-  lockTimeoutMs?: number
+  /** How long a follower waits on a flight. */
+  lockTimeout?: Duration
 }
 
 /**
@@ -209,8 +209,7 @@ export function attachCacheHooks(
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer, storeTimeoutMs, maxEntrySizeBytes, flights, lockTimeoutMs } =
-    deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeout, maxEntrySizeBytes, flights, lockTimeout } = deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
@@ -270,7 +269,7 @@ export function attachCacheHooks(
   const lockable =
     read.lock !== false &&
     flights !== undefined &&
-    lockTimeoutMs !== undefined &&
+    lockTimeout !== undefined &&
     ttlSeconds !== undefined &&
     !read.noStore
 
@@ -350,7 +349,7 @@ export function attachCacheHooks(
     let cached: HTTPCacheEntry | undefined
     let readFailed = false
     try {
-      cached = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
+      cached = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
     } catch (error) {
       // The request is over — the client left, or Fastify has answered its handler timeout: nothing to serve,
       // nothing to report.
@@ -455,7 +454,7 @@ export function attachCacheHooks(
 
       // A HEAD never leads: its response is never stored, so it would release its followers to nothing.
       if (request.method !== 'HEAD') {
-        request.cacheFlight = new Flight(flights!, key, lockTimeoutMs!)
+        request.cacheFlight = new Flight(flights!, key, lockTimeout!)
       }
     }
 
@@ -483,7 +482,7 @@ export function attachCacheHooks(
     if (outcome !== 'not-stored') {
       let again: HTTPCacheEntry | undefined
       try {
-        again = await withStoreSignal('get', request.signal, storeTimeoutMs, signal => store.get(key, { tags, signal }))
+        again = await withStoreSignal('get', request.signal, storeTimeout, signal => store.get(key, { tags, signal }))
       } catch (error) {
         if (request.signal.aborted) {
           return
@@ -536,12 +535,26 @@ export function attachCacheHooks(
       cached.statusCode < 300 &&
       isNotModified(request, cached.etag, cached.lastModified)
     ) {
-      observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: true, ageSeconds: age, coalesced, stale })
+      observer?.onHit?.({
+        route: route!,
+        key: request.cacheKey!,
+        revalidated: true,
+        age: age * Second,
+        coalesced,
+        stale,
+      })
       applyStoredHeaders(reply, cached.headers, 'revalidation')
       return reply.code(304).header(statusHeader, status).header('Age', String(age)).send()
     }
 
-    observer?.onHit?.({ route: route!, key: request.cacheKey!, revalidated: false, ageSeconds: age, coalesced, stale })
+    observer?.onHit?.({
+      route: route!,
+      key: request.cacheKey!,
+      revalidated: false,
+      age: age * Second,
+      coalesced,
+      stale,
+    })
     applyStoredHeaders(reply, cached.headers, 'hit')
     reply.status(cached.statusCode).header(statusHeader, status).header('Age', String(age))
 
@@ -616,7 +629,7 @@ export function attachCacheHooks(
     applyStoredHeaders(reply, stale.headers, 'replacement')
     reply.header(statusHeader, CACHE_STALE).header('Age', String(age))
     request.cacheFlight?.settle('rescued')
-    observer?.onStaleIfError?.({ route: route!, key: request.cacheKey!, ageSeconds: age, replaced })
+    observer?.onStaleIfError?.({ route: route!, key: request.cacheKey!, age: age * Second, replaced })
 
     if (
       (request.method === 'GET' || request.method === 'HEAD') &&
@@ -707,7 +720,7 @@ export function attachCacheHooks(
 
         // Bounded by `storeTimeout` alone: the entry is for the requests that follow, whatever became of this one.
         try {
-          await withStoreSignal('put', undefined, storeTimeoutMs, signal =>
+          await withStoreSignal('put', undefined, storeTimeout, signal =>
             store.put(
               key,
               {
@@ -718,12 +731,12 @@ export function attachCacheHooks(
                 storedAt: Date.now(),
                 headers: storedHeadersOf(reply, statusHeaderName),
               },
-              { ttl: retentionSeconds!, tags, signal },
+              { ttl: retentionSeconds! * Second, tags, signal },
             ),
           )
 
           request.cacheFlight?.settle('stored')
-          observer?.onStore?.({ route: route!, key, bytes, ttlSeconds, tags })
+          observer?.onStore?.({ route: route!, key, bytes, ttl: read.ttl!, tags })
         } catch (error) {
           // Nothing was stored; the response the handler produced still goes out.
           observer?.onError?.({ route: route!, operation: 'put', error })

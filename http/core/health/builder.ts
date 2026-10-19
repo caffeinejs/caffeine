@@ -1,6 +1,6 @@
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { kHealthRegistryOptions } from '@caffeinejs/application/health'
-import { type Duration } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrHealthConfiguration } from './errors.js'
@@ -62,9 +62,9 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
     kit.container.bind(kHealthRegistryOptions, t =>
       t
         .toValue({
-          indicatorTimeoutMs: options.indicatorTimeoutMs,
-          probeDeadlineMs: options.probeDeadlineMs,
-          cacheTTLMs: options.cacheTTLMs,
+          indicatorTimeout: options.indicatorTimeout,
+          probeDeadline: options.probeDeadline,
+          cacheTTL: options.cacheTTL,
         })
         .internal(),
     )
@@ -83,25 +83,25 @@ export class HealthBuilder<C = unknown> extends FeatureBuilder<C> {
 // A budget of 0 aborts every indicator that awaits on the next turn: readiness would fail for the life of the
 // process, with nothing said at start-up.
 function assertBudgets(options: HealthOptions): void {
-  const { indicatorTimeoutMs, probeDeadlineMs } = options
+  const { indicatorTimeout, probeDeadline } = options
 
-  if (!(indicatorTimeoutMs > 0)) {
+  if (!(indicatorTimeout > 0)) {
     throw new ErrHealthConfiguration(
       errMessage(
-        `Cannot configure health: an indicator timeout of "${indicatorTimeoutMs}ms" cancels every indicator that awaits`,
+        `Cannot configure health: an indicator timeout of "${indicatorTimeout}ms" cancels every indicator that awaits`,
       )
-        .solutions("Set a budget above 0, such as '2s'")
+        .solutions('Set a budget above 0, such as .indicatorTimeout(2 * Second)')
         .reference('@caffeinejs/http', ErrHealthConfiguration)
         .build(),
     )
   }
 
-  if (!(probeDeadlineMs > 0)) {
+  if (!(probeDeadline > 0)) {
     throw new ErrHealthConfiguration(
       errMessage(
-        `Cannot configure health: a probe deadline of "${probeDeadlineMs}ms" cancels every indicator that awaits`,
+        `Cannot configure health: a probe deadline of "${probeDeadline}ms" cancels every indicator that awaits`,
       )
-        .solutions("Set a budget above 0, such as '3s'")
+        .solutions('Set a budget above 0, such as .probeDeadline(3 * Second)')
         .reference('@caffeinejs/http', ErrHealthConfiguration)
         .build(),
     )

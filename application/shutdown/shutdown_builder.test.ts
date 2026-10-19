@@ -1,4 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -38,10 +39,10 @@ describe('ShutdownBuilder', () => {
     await app.bootstrap()
 
     const policy = policyOf(app)
-    expect(policy.drainDelayMs).toBe(0)
+    expect(policy.drainDelay).toBe(0)
     // The suite is a test runner — the one case where the default is not ['SIGTERM', 'SIGINT'].
     expect(policy.signals).toBe(false)
-    expect(policy.terminationGracePeriodMs).toBe(30_000)
+    expect(policy.terminationGracePeriod).toBe(30_000)
   })
 
   // Declaring `shutdown` in the schema is not on its own an instruction to configure the drain from it.
@@ -52,7 +53,7 @@ describe('ShutdownBuilder', () => {
     const app = headless(conf)
     await app.bootstrap()
 
-    expect(policyOf(app).drainDelayMs).toBe(0)
+    expect(policyOf(app).drainDelay).toBe(0)
     await app.close()
   })
 
@@ -62,10 +63,10 @@ describe('ShutdownBuilder', () => {
     const conf = newConfiguration(appSchema)
       .source(new InlineConfigSource({ shutdown: { drainDelay: '90ms' } }))
       .build().config
-    const app = headless(conf).shutdown((s, { config }) => s.drainDelay('10s').config(config.shutdown))
+    const app = headless(conf).shutdown((s, { config }) => s.drainDelay(10 * Second).config(config.shutdown))
     await app.bootstrap()
 
-    expect(policyOf(app).drainDelayMs).toBe(10_000)
+    expect(policyOf(app).drainDelay).toBe(10_000)
   })
 
   it('reads durations and the signal list from the environment', async () => {
@@ -80,7 +81,7 @@ describe('ShutdownBuilder', () => {
     await app.bootstrap()
 
     const policy = policyOf(app)
-    expect(policy.drainDelayMs).toBe(40)
+    expect(policy.drainDelay).toBe(40)
     // `$t.List`, so the comma-separated value is two signals, not one with a comma in its name.
     expect(policy.signals).toEqual(['SIGTERM', 'SIGINT'])
   })
@@ -107,7 +108,7 @@ describe('ShutdownBuilder', () => {
 
     const policy = policyOf(app)
     expect(policy.dispatcher).toBe(noopSignalDispatcher)
-    expect(policy.drainDelayMs).toBe(30)
+    expect(policy.drainDelay).toBe(30)
   })
 
   it('does not follow a config refresh after the policy is bound', async () => {
@@ -123,25 +124,30 @@ describe('ShutdownBuilder', () => {
     await app.bootstrap()
 
     const policy = policyOf(app)
-    expect(policy.shutdownTimeoutMs).toBe(9_000)
+    expect(policy.shutdownTimeout).toBe(9_000)
 
     shutdownTimeout = '12s'
     await app.container.refresher.refresh(CONFIG_REFRESH_LABEL as symbol)
 
     // The policy was read once, when the feature configured: a later refresh does not reach it.
     expect(policyOf(app)).toBe(policy)
-    expect(policy.shutdownTimeoutMs).toBe(9_000)
+    expect(policy.shutdownTimeout).toBe(9_000)
   })
 
   it('clamps a shutdown timeout that would outlive the grace period', async () => {
-    const app = headless().shutdown(s => s.drainDelay('5s').shutdownTimeout('60s').terminationGracePeriod('30s'))
+    const app = headless().shutdown(s =>
+      s
+        .drainDelay(5 * Second)
+        .shutdownTimeout(60 * Second)
+        .terminationGracePeriod(30 * Second),
+    )
     await app.bootstrap()
 
-    expect(policyOf(app).shutdownTimeoutMs).toBe(23_000)
+    expect(policyOf(app).shutdownTimeout).toBe(23_000)
   })
 
   it('rejects at bootstrap() when the drain delay cannot fit the grace period at all', async () => {
-    const app = headless().shutdown(s => s.drainDelay('30s').terminationGracePeriod('20s'))
+    const app = headless().shutdown(s => s.drainDelay(30 * Second).terminationGracePeriod(20 * Second))
 
     await expect(app.bootstrap()).rejects.toThrow('does not fit in a termination grace period')
   })
@@ -209,7 +215,7 @@ describe('the zero-drain warning under Kubernetes', () => {
     )
     await app.bootstrap()
 
-    expect(policyOf(app).drainDelayMs).toBe(0)
+    expect(policyOf(app).drainDelay).toBe(0)
     expect(warnings).toEqual([])
     await app.close()
   })
@@ -217,11 +223,14 @@ describe('the zero-drain warning under Kubernetes', () => {
   it('says nothing when code sets a delay over a configured 0', async () => {
     const { dispatcher, warnings } = recording()
     const app = headless(configured('0s')).shutdown((s, { config }) =>
-      s.dispatcher(dispatcher).config(config.shutdown).drainDelay('5s'),
+      s
+        .dispatcher(dispatcher)
+        .config(config.shutdown)
+        .drainDelay(5 * Second),
     )
     await app.bootstrap()
 
-    expect(policyOf(app).drainDelayMs).toBe(5_000)
+    expect(policyOf(app).drainDelay).toBe(5_000)
     expect(warnings).toEqual([])
     await app.close()
   })

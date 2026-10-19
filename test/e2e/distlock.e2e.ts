@@ -14,6 +14,7 @@ import {
   type Lock,
 } from '@caffeinejs/distlock'
 import { RedisLockBackend } from '@caffeinejs/distlock/backend/redis'
+import { Second } from '@caffeinejs/std/duration'
 import { createClient } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -180,7 +181,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
 
                   inside--
                 },
-                { wait: '30s', retryDelay: 5 },
+                { wait: 30 * Second, retryDelay: 5 },
               )
             }
           }),
@@ -194,7 +195,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         const k = key('storm')
 
         const leases = await Promise.all(
-          Array.from({ length: CLIENTS * 4 }, (_, i) => locks[i % CLIENTS].tryAcquire(k, { ttl: '5s' })),
+          Array.from({ length: CLIENTS * 4 }, (_, i) => locks[i % CLIENTS].tryAcquire(k, { ttl: 5 * Second })),
         )
         const winners = leases.filter(lease => lease !== undefined)
 
@@ -212,7 +213,8 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
           await sleep(20)
         }
 
-        const wave = () => Promise.all(locks.flatMap(lock => [1, 2, 3].map(() => lock.once(k, action, { ttl: '10s' }))))
+        const wave = () =>
+          Promise.all(locks.flatMap(lock => [1, 2, 3].map(() => lock.once(k, action, { ttl: 10 * Second }))))
 
         const first = await wave()
         const second = await wave()
@@ -269,7 +271,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
         await Promise.all(
           locks.map(async lock => {
             try {
-              const held = await lock.acquire(k, { wait: '3s', ttl: '10s', retryDelay: 20 })
+              const held = await lock.acquire(k, { wait: 3 * Second, ttl: 10 * Second, retryDelay: 20 })
               won.push({ lock: held, at: Date.now() })
             } catch (error) {
               failed.push(error)
@@ -298,7 +300,7 @@ describe.each(targets)('distlock over $name', ({ name, url, up }) => {
                 await sleep(10)
                 sections.push({ client, enter, exit: performance.now() })
               },
-              { wait: '30s', retryDelay: 5 },
+              { wait: 30 * Second, retryDelay: 5 },
             ),
           ),
         )

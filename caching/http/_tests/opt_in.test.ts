@@ -1,6 +1,7 @@
 import { token } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -37,7 +38,7 @@ describe('caching is opt-in', () => {
   it('fails at bootstrap() when a route is decorated but the plugin is not installed', async () => {
     @Controller('/optin-missing')
     class MissingController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -91,7 +92,7 @@ describe('caching is opt-in', () => {
   it('honors .statusHeader(...)', async () => {
     @Controller('/optin-header')
     class HeaderController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }

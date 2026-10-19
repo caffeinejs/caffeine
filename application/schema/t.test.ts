@@ -199,11 +199,25 @@ describe('$t.JSON', () => {
 })
 
 describe('$t.Duration', () => {
-  it('decodes duration text to whole milliseconds', () => {
+  it('decodes duration text to milliseconds', () => {
     expect(Value.Decode($t.Duration(), '5s')).toBe(5_000)
     expect(Value.Decode($t.Duration(), '1h30m')).toBe(5_400_000)
     expect(Value.Decode($t.Duration(), '300ms')).toBe(300)
     expect(Value.Decode($t.Duration(), '1.5h')).toBe(5_400_000)
+    expect(Value.Decode($t.Duration(), '7d')).toBe(604_800_000)
+    expect(Value.Decode($t.Duration(), '1.5µs')).toBe(0.0015)
+    expect(Value.Decode($t.Duration(), '0')).toBe(0)
+  })
+
+  it('encodes a span back to text that decodes to it', () => {
+    expect(Value.Encode($t.Duration(), 5_400_000)).toBe('1h30m0s')
+    expect(Value.Decode($t.Duration(), Value.Encode($t.Duration(), 604_800_000))).toBe(604_800_000)
+  })
+
+  // A configured timeout or lifetime is never negative, although `parseDuration` reads a sign.
+  it('rejects a signed span', () => {
+    expect(() => Value.Decode($t.Duration(), '-5s')).toThrow()
+    expect(() => Value.Decode($t.Duration(), '+5s')).toThrow()
   })
 
   it('decodes inside an object', () => {
@@ -213,8 +227,7 @@ describe('$t.Duration', () => {
   })
 
   it('rejects a string that is not a duration', () => {
-    // The pattern is the whole point: without it parseDuration would read these as 0 and the misconfiguration
-    // would reach a timer silently.
+    // The pattern turns these into validation issues on the field, before parseDuration would refuse them.
     expect(() => Value.Decode($t.Duration(), '5 hours')).toThrow()
     expect(() => Value.Decode($t.Duration(), '')).toThrow()
     expect(() => Value.Decode($t.Duration(), '10x')).toThrow()

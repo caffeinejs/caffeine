@@ -1,6 +1,6 @@
 import { defaultHealthRegistryOptions } from '@caffeinejs/application/health'
 import { isKubernetes } from '@caffeinejs/application/shutdown'
-import { type Duration, toMillis } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 
 interface EnvLike {
   [key: string]: string | undefined
@@ -17,17 +17,17 @@ export interface HealthPaths {
   startup: string
 }
 
-/** The resolved, millisecond-normalized health configuration. Resolved once, when `health()` configures. */
+/** The resolved health configuration. Resolved once, when `health()` configures. */
 export interface HealthOptions {
   /** Whether the probe routes are mounted at all. */
   enabled: boolean
   paths: HealthPaths
   /** Per-indicator budget. An indicator exceeding it is aborted and reported `down`. */
-  indicatorTimeoutMs: number
+  indicatorTimeout: Duration
   /** Whole-probe budget. Bounds the response time regardless of how many indicators are registered. */
-  probeDeadlineMs: number
+  probeDeadline: Duration
   /** How long an evaluation is reused. Bounds the load probes place on the dependencies they check. */
-  cacheTTLMs: number
+  cacheTTL: Duration
   /** Whether `?verbose` may expand the response body. Off by default — the body names your dependencies. */
   verbose: boolean
   /** Whether `?exclude=<name>` may skip an indicator. Off by default — it lets a caller make readiness lie. */
@@ -60,8 +60,8 @@ export function defaultHealthOptions(env: EnvLike = hostEnv()): HealthOptions {
 
 /**
  * The health slice of the configuration tree. There, a duration is written as text — `'5s'`, `'1h30m'` — and a
- * bare number is refused, because its unit would be ambiguous. An object handed to `config(...)` from code may give
- * milliseconds instead.
+ * bare number is refused, because its unit would be ambiguous; an object handed to `config(...)` from code gives a
+ * `Duration`, `5 * Second`.
  *
  * Every key is spelled the way its environment variable folds, so `HEALTH__CACHE_TTL` sets `cacheTtl`: that is
  * the key the builder's `cacheTTL(...)` stands for.
@@ -77,7 +77,7 @@ export interface HealthConfig {
 }
 
 /**
- * Folds a resolved health slice onto the defaults, producing the millisecond-normalized options.
+ * Folds a resolved health slice onto the defaults.
  *
  * `enabledDefault` is what the builder decides `enabled` falls back to: on once `health()` is installed, or the
  * Kubernetes auto-detection after `.k8s()`. An explicit `enabled` wins over both, so with the block wired through
@@ -89,14 +89,10 @@ export function mergeHealthConfig(config: HealthConfig, options: { enabledDefaul
   return {
     enabled: config.enabled ?? options.enabledDefault ?? defaults.enabled,
     paths: { ...defaults.paths, ...config.paths },
-    indicatorTimeoutMs: pick(config.indicatorTimeout, defaults.indicatorTimeoutMs),
-    probeDeadlineMs: pick(config.probeDeadline, defaults.probeDeadlineMs),
-    cacheTTLMs: pick(config.cacheTtl, defaults.cacheTTLMs),
+    indicatorTimeout: config.indicatorTimeout ?? defaults.indicatorTimeout,
+    probeDeadline: config.probeDeadline ?? defaults.probeDeadline,
+    cacheTTL: config.cacheTtl ?? defaults.cacheTTL,
     verbose: config.verbose ?? defaults.verbose,
     exclude: config.exclude ?? defaults.exclude,
   }
-}
-
-function pick(value: Duration | undefined, fallback: number): number {
-  return value === undefined ? fallback : toMillis(value)
 }

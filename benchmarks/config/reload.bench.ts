@@ -69,7 +69,7 @@ const store = await loadConfig<Tree>(
       new EnvConfigSource({ env: { SECTION0__GROUP0__KEY0: 'env', SECTION3__GROUP2__KEY5: 'env' } }),
       written,
     ],
-    loadTimeoutMs: 30_000,
+    loadTimeout: 30_000,
   },
   { start: false },
 )

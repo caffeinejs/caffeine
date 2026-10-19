@@ -58,6 +58,7 @@
     "@caffeinejs/fetchy-undici": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/resilience": "*",
+    "@caffeinejs/std": "*",
     "@caffeinejs/testing": "*",
     "@elysiajs/node": "^1.4.5",
     "@fastify/fetch": "^0.1.0",

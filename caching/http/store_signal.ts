@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { CacheOperation } from './observer.js'
@@ -6,9 +7,9 @@ import type { CacheOperation } from './observer.js'
 export class ErrCacheStoreTimeout extends Error {
   readonly code = 'ERR_CACHE_STORE_TIMEOUT'
 
-  constructor(operation: CacheOperation, ms: number) {
+  constructor(operation: CacheOperation, timeout: Duration) {
     super(
-      errMessage(`Cannot wait for the cache store: "${operation}" did not settle within ${ms}ms`)
+      errMessage(`Cannot wait for the cache store: "${operation}" did not settle within ${timeout}ms`)
         .reference('@caffeinejs/caching', ErrCacheStoreTimeout)
         .build(),
     )
@@ -29,10 +30,10 @@ export class ErrCacheStoreTimeout extends Error {
 export function withStoreSignal<T>(
   operation: CacheOperation,
   requestSignal: AbortSignal | undefined,
-  timeoutMs: number | undefined,
+  timeout: Duration | undefined,
   call: (signal?: AbortSignal) => Promise<T>,
 ): Promise<T> {
-  if (timeoutMs === undefined) {
+  if (timeout === undefined) {
     return call(requestSignal)
   }
 
@@ -42,7 +43,7 @@ export function withStoreSignal<T>(
 
   const controller = new AbortController()
   const { signal } = controller
-  const timer = setTimeout(() => controller.abort(new ErrCacheStoreTimeout(operation, timeoutMs)), timeoutMs)
+  const timer = setTimeout(() => controller.abort(new ErrCacheStoreTimeout(operation, timeout)), timeout)
   timer.unref()
 
   const onRequestAbort = () => controller.abort(requestSignal!.reason)

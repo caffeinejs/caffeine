@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import type { DotenvLoader, InferConfig } from './config/index.js'
@@ -945,7 +946,7 @@ describe('headless application shutdown', () => {
 
     expect(error).toBeInstanceOf(AggregateError)
     expect(error.errors[0]).toBeInstanceOf(ErrShutdownTimeout)
-    expect((error.errors[0] as ErrShutdownTimeout).timeoutMs).toBe(100)
+    expect((error.errors[0] as ErrShutdownTimeout).timeout).toBe(100)
   })
 
   it('still disposes the container when a destroy hook throws', async () => {
@@ -1105,7 +1106,7 @@ describe('closing at any point of the lifecycle', () => {
   })
 
   it('skips the drain delay for an application that never served', async () => {
-    const app = createApplication().shutdown(s => s.drainDelay('5s'))
+    const app = createApplication().shutdown(s => s.drainDelay(5 * Second))
     await app.bootstrap()
 
     const startedAt = Date.now()

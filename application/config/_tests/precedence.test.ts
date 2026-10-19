@@ -33,7 +33,7 @@ async function write(name: string, content: string): Promise<string> {
 }
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>) {
-  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 // `server` is set in every scenario. `db` and `app` may be absent from every source, so they carry a default.

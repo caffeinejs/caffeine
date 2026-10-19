@@ -1,5 +1,6 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Minute } from '@caffeinejs/std/duration'
 import {
   context,
   diag,
@@ -155,7 +156,7 @@ describe('instrumentDistLock spans', () => {
   it('marks a timed-out acquisition as an error, and an aborted one as not', async () => {
     const otel = instrument()
     const lock = await newLock()
-    await lock.acquire('a', { ttl: '1m' })
+    await lock.acquire('a', { ttl: 1 * Minute })
 
     await lock.acquire('a', { wait: 10, retryDelay: 5 }).catch(() => undefined)
     await lock.acquire('a', { signal: AbortSignal.abort() }).catch(() => undefined)
@@ -192,7 +193,7 @@ describe('instrumentDistLock spans', () => {
     const backend = new FaultyBackend()
     const lock = await newLock(backend)
 
-    const held = await lock.acquire('a', { ttl: '1m' })
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
     backend.stolen = true
     await held.extend()
 
@@ -208,7 +209,7 @@ describe('instrumentDistLock metrics', () => {
     const otel = instrument({ keyLabel: key => key.split(':')[0] })
     const lock = await newLock()
 
-    const held = await lock.acquire('orders:1', { ttl: '1m' })
+    const held = await lock.acquire('orders:1', { ttl: 1 * Minute })
     await lock.tryAcquire('orders:1')
     await held.release()
     await lock.once('jobs:nightly', () => 'ran')

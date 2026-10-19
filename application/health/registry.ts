@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import { type HealthGroup, type HealthIndicator, type HealthReport, type HealthStatus } from './indicator.js'
 
 /** One indicator's outcome for a single evaluation. */
@@ -7,7 +9,7 @@ export interface IndicatorOutcome {
   critical: boolean
   detail?: string
   data?: Record<string, unknown>
-  durationMs: number
+  duration: Duration
 }
 
 /** The aggregate verdict for one probe group. */
@@ -20,9 +22,9 @@ export interface GroupOutcome {
 }
 
 export interface HealthRegistryOptions {
-  indicatorTimeoutMs: number
-  probeDeadlineMs: number
-  cacheTTLMs: number
+  indicatorTimeout: Duration
+  probeDeadline: Duration
+  cacheTTL: Duration
 }
 
 interface CacheEntry {
@@ -40,7 +42,7 @@ const EMPTY_OUTCOME: GroupOutcome = { ok: true, degraded: false, outcomes: [] }
  * - **It always answers.** An indicator that ignores its {@link AbortSignal} is raced against the deadline and
  *   reported `down`, rather than holding the response open until the kubelet's own timeout fires.
  * - **It coalesces.** Concurrent probes share one evaluation, so N in-flight requests are never N dependency calls.
- * - **It caches.** Within `cacheTTLMs` an evaluation is reused, which is what keeps
+ * - **It caches.** Within `cacheTTL` an evaluation is reused, which is what keeps
  *   `replicas × probeInterval` from turning into that many queries per second against a shared dependency.
  *
  * Caching and coalescing are skipped when the caller excludes indicators, since exclusions change the answer.
@@ -91,7 +93,7 @@ export class HealthRegistry {
     }
 
     const cached = this.#cache.get(group)
-    if (cached !== undefined && Date.now() - cached.at < this.#options.cacheTTLMs) {
+    if (cached !== undefined && Date.now() - cached.at < this.#options.cacheTTL) {
       return Promise.resolve(cached.outcome)
     }
 
@@ -120,7 +122,7 @@ export class HealthRegistry {
     }
 
     const deadline = new AbortController()
-    const timer = setTimeout(() => deadline.abort(new Error('deadline')), this.#options.probeDeadlineMs)
+    const timer = setTimeout(() => deadline.abort(new Error('deadline')), this.#options.probeDeadline)
     timer.unref?.()
 
     try {
@@ -158,7 +160,7 @@ export class HealthRegistry {
       deadline.addEventListener('abort', () => abort(deadline.reason), { once: true })
     }
 
-    const timer = setTimeout(() => abort(new Error('timeout')), this.#options.indicatorTimeoutMs)
+    const timer = setTimeout(() => abort(new Error('timeout')), this.#options.indicatorTimeout)
     timer.unref?.()
 
     // An indicator is not obliged to honour the signal, so the deadline is enforced by racing it rather than by
@@ -187,7 +189,7 @@ export class HealthRegistry {
         critical,
         detail: report.detail,
         data: report.data,
-        durationMs: Date.now() - started,
+        duration: Date.now() - started,
       }
     } catch (error) {
       return {
@@ -195,7 +197,7 @@ export class HealthRegistry {
         status: 'down',
         critical,
         detail: reasonOf(error),
-        durationMs: Date.now() - started,
+        duration: Date.now() - started,
       }
     } finally {
       settled = true

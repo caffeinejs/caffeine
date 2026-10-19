@@ -1,5 +1,5 @@
 import { BYTES_PATTERN, bytes } from '@caffeinejs/std/bytes'
-import { DURATION_PATTERN, parseDuration } from '@caffeinejs/std/duration'
+import { type Duration, DURATION_PATTERN, formatDuration, parseDuration } from '@caffeinejs/std/duration'
 import {
   type SchemaOptions,
   type Static,
@@ -195,19 +195,20 @@ const caffeineT = {
       .Encode(value => JSON.stringify(value)) as never,
 
   /**
-   * A time span written as duration text — `'5s'`, `'1h30m'`, `'300ms'` — decoded to whole milliseconds.
+   * A time span written as duration text — `'5s'`, `'1h30m'`, `'7d'` — decoded to a `Duration`, in milliseconds.
    *
-   * The value is checked against {@link DURATION_PATTERN} first, so `'5 hours'` fails configuration validation
-   * rather than being read as `0`. Only the string form is accepted; a bare number is rejected, because its unit
-   * would be ambiguous.
+   * The value is checked against {@link DURATION_PATTERN} first, so `'5 hours'` and `'-5s'` fail configuration
+   * validation: the grammar is Go's, with `d` for a day, and a configured span is never negative. Only the string
+   * form is accepted; a bare number is rejected, because its unit would be ambiguous.
    *
    * The decoded number needs no re-check the way {@link caffeineT.List} and {@link caffeineT.JSON} do: the pattern
-   * has already constrained the input and {@link parseDuration} maps every such string to a finite number.
+   * has already constrained the input, and {@link parseDuration} reads every such string or refuses a span too long
+   * to hold.
    */
-  Duration: (options: SchemaOptions = {}): TTransform<TString, number> =>
+  Duration: (options: SchemaOptions = {}): TTransform<TString, Duration> =>
     Type.Transform(Type.String({ ...options, pattern: DURATION_PATTERN }))
-      .Decode(text => Math.round(parseDuration(text) * 1000))
-      .Encode(ms => `${ms}ms`) as never,
+      .Decode(text => parseDuration(text))
+      .Encode(d => formatDuration(d)) as never,
 
   /**
    * A size written as byte text — `'512kb'`, `'10MB'`, `'2g'`, or a bare `'1024'` — decoded to a count of bytes.

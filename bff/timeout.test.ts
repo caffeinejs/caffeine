@@ -1,3 +1,4 @@
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import type { Call } from './call.js'
@@ -12,20 +13,18 @@ function untilAbort(): Call<string> {
 }
 
 describe('timeout', () => {
-  it('lets a fast call through for a millisecond number, the same duration string, and a longer deadline', async () => {
+  it('lets a fast call through', async () => {
     const signal = new AbortController().signal
     const fast: Call<string> = async () => 'ok'
 
-    await expect(timeout(50)(fast)(signal)).resolves.toBe('ok')
-    await expect(timeout('50ms')(fast)(signal)).resolves.toBe('ok')
-    await expect(timeout('1s')(fast)(signal)).resolves.toBe('ok')
+    await expect(timeout(50 * Millisecond)(fast)(signal)).resolves.toBe('ok')
+    await expect(timeout(1 * Second)(fast)(signal)).resolves.toBe('ok')
   })
 
-  it('aborts a call that outlives a millisecond deadline and the same duration string', async () => {
+  it('aborts a call that outlives its deadline', async () => {
     const signal = new AbortController().signal
 
-    await expect(timeout(50)(untilAbort())(signal)).rejects.toBeInstanceOf(ErrBFFTimeout)
-    await expect(timeout('50ms')(untilAbort())(signal)).rejects.toBeInstanceOf(ErrBFFTimeout)
+    await expect(timeout(50 * Millisecond)(untilAbort())(signal)).rejects.toBeInstanceOf(ErrBFFTimeout)
   })
 
   it('reads a number as milliseconds, so 1 aborts a call that would still be running after 1ms', async () => {
@@ -55,8 +54,11 @@ describe('timeout', () => {
     }
 
     expect(() => timeout(0)(call)).toThrow(ErrBFFInvalidTimeout)
-    expect(() => timeout('nope')(call)).toThrow(ErrBFFInvalidTimeout)
-    expect(() => timeout('0s')(call)).toThrow(ErrBFFInvalidTimeout)
+    expect(() => timeout(-1 * Second)(call)).toThrow(ErrBFFInvalidTimeout)
+    expect(() => timeout(Number.NaN)(call)).toThrow(ErrBFFInvalidTimeout)
+    expect(() => timeout(Number.POSITIVE_INFINITY)(call)).toThrow(ErrBFFInvalidTimeout)
+    // A caller without types handing over text is refused too, rather than read as a deadline of 0.
+    expect(() => timeout('5s' as unknown as number)(call)).toThrow(ErrBFFInvalidTimeout)
     expect(called).toBe(false)
   })
 })

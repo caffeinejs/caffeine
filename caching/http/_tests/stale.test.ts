@@ -1,5 +1,6 @@
 import { $p, Args, Controller, Get, Header, type IContext } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -67,7 +68,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-followers')
     class FollowersController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30 })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -121,7 +122,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-unlocked')
     class UnlockedController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, lock: false })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second, lock: false })
       @Get('/data')
       async data() {
         runs.tick()
@@ -159,7 +160,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-limits')
     class LimitsController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30 })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second })
       @Get('/over')
       async over() {
         calls++
@@ -169,7 +170,7 @@ describe('stale-while-revalidate, served by the store', () => {
         return { n: calls }
       }
 
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, mustRevalidate: true })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second, mustRevalidate: true })
       @Get('/forbidden')
       async forbidden() {
         calls++
@@ -218,7 +219,7 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(recording.hits.at(-1)).toMatchObject({ coalesced: true, stale: false })
 
     // The store keeps an entry for the freshness lifetime and the stale window; none under mustRevalidate.
-    expect(spy.retentions).toEqual([90, 90, 60, 60])
+    expect(spy.retentions).toEqual([90 * Second, 90 * Second, 60 * Second, 60 * Second])
   })
 
   // The other two directives that require revalidation: the same rule, and the window is not announced either.
@@ -227,13 +228,18 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-revalidate')
     class RevalidateController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300, proxyRevalidate: true })
+      @CacheControl({
+        ttl: 60 * Second,
+        staleWhileRevalidate: 30 * Second,
+        staleIfError: 300 * Second,
+        proxyRevalidate: true,
+      })
       @Get('/proxy')
       proxy() {
         return { n: ++calls.proxy }
       }
 
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300, noCache: true })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second, staleIfError: 300 * Second, noCache: true })
       @Get('/nocache')
       nocache() {
         return { n: ++calls.nocache }
@@ -263,7 +269,7 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(recording.hits).toEqual([])
 
     // Kept for the freshness lifetime alone.
-    expect(spy.retentions).toEqual([60, 60, 60, 60])
+    expect(spy.retentions).toEqual([60 * Second, 60 * Second, 60 * Second, 60 * Second])
   })
 
   it('keeps an entry for the longer of the two windows when a route declares both', async () => {
@@ -273,7 +279,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-sie')
     class BothController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 30, staleIfError: 300 })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 30 * Second, staleIfError: 300 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -316,7 +322,7 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(await rescued.json()).toEqual({ n: 2 })
 
     expect(recording.rescues).toHaveLength(1)
-    expect(spy.retentions).toEqual([360, 360])
+    expect(spy.retentions).toEqual([360 * Second, 360 * Second])
   })
 
   it('never serves stale to a request the entry does not satisfy, nor to only-if-cached', async () => {
@@ -326,7 +332,7 @@ describe('stale-while-revalidate, served by the store', () => {
 
     @Controller('/swr-request')
     class RequestController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 300 })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 300 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -390,19 +396,19 @@ describe('max-stale, asked for by the client', () => {
 
     @Controller('/max-stale')
     class MaxStaleController {
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 300 })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 300 * Second })
       @Get('/window')
       window() {
         return { n: ++calls.window }
       }
 
-      @CacheControl({ ttl: 60, staleWhileRevalidate: 300, mustRevalidate: true })
+      @CacheControl({ ttl: 60 * Second, staleWhileRevalidate: 300 * Second, mustRevalidate: true })
       @Get('/strict')
       strict() {
         return { n: ++calls.strict }
       }
 
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/plain')
       plain() {
         return { n: ++calls.plain }
@@ -429,7 +435,7 @@ describe('max-stale, asked for by the client', () => {
     expect(any.headers.get('x-cache')).toBe('STALE')
     expect(any.headers.get('age')).toBe('70')
     expect(await any.json()).toEqual({ n: 1 })
-    expect(recording.hits.at(-1)).toMatchObject({ stale: true, coalesced: false, ageSeconds: 70 })
+    expect(recording.hits.at(-1)).toMatchObject({ stale: true, coalesced: false, age: 70 * Second })
 
     const cached = await fetch('window', 'only-if-cached, max-stale=100')
     expect(cached.status).toBe(200)
@@ -466,7 +472,7 @@ describe('stale-if-error, served by the store', () => {
 
   @Controller('/sie')
   class SIEController {
-    @CacheControl({ ttl: 60, staleIfError: 300 })
+    @CacheControl({ ttl: 60 * Second, staleIfError: 300 * Second })
     @Header('Content-Language', 'en')
     @Get('/data')
     data() {
@@ -476,7 +482,7 @@ describe('stale-if-error, served by the store', () => {
       return { ok: true }
     }
 
-    @CacheControl({ ttl: 60, staleIfError: 300 })
+    @CacheControl({ ttl: 60 * Second, staleIfError: 300 * Second })
     @Get('/gateway')
     @Args([$p.context()])
     gateway(ctx: IContext) {
@@ -489,7 +495,7 @@ describe('stale-if-error, served by the store', () => {
       return { ok: true }
     }
 
-    @CacheControl({ ttl: 60, staleIfError: 300 })
+    @CacheControl({ ttl: 60 * Second, staleIfError: 300 * Second })
     @Get('/missing')
     @Args([$p.context()])
     missing(ctx: IContext) {
@@ -500,7 +506,7 @@ describe('stale-if-error, served by the store', () => {
       return { ok: true }
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/plain')
     plain() {
       if (failing) {
@@ -544,7 +550,7 @@ describe('stale-if-error, served by the store', () => {
 
     expect(recording.stores).toHaveLength(1)
     expect(recording.misses.map(miss => miss.reason)).toEqual(['absent', 'expired'])
-    expect(recording.rescues).toMatchObject([{ route: { url: '/sie/data' }, ageSeconds: 100, replaced: 500 }])
+    expect(recording.rescues).toMatchObject([{ route: { url: '/sie/data' }, age: 100 * Second, replaced: 500 }])
     expect(recording.hits).toEqual([])
   })
 
@@ -625,7 +631,7 @@ describe('stale-if-error, served by the store', () => {
 
     @Controller('/sie-followers')
     class SIEFollowersController {
-      @CacheControl({ ttl: 60, staleIfError: 300 })
+      @CacheControl({ ttl: 60 * Second, staleIfError: 300 * Second })
       @Get('/data')
       async data() {
         calls++

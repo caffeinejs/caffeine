@@ -491,11 +491,11 @@ declarations **add up**: none replaces another, on one route or across the level
 (`@caffeinejs/application/health`), which every application has — headless ones too — so any other caller, such as a
 readiness check a host polls, a custom route or a test, reads the same instance as `app.health`, or injects it, and
 shares one evaluation with the routes. The evaluation budgets are the `Health()` feature's:
-`.install(Health(h => h.cacheTTL('2s')))` tunes them with or without the probes mounted.
+`.install(Health(h => h.cacheTTL(2 * Second)))` tunes them with or without the probes mounted.
 
 ```ts
 const app = createWebApplication()
-  .install(Health(h => h.cacheTTL('2s')))
+  .install(Health(h => h.cacheTTL(2 * Second)))
   .with(healthProbes())
 await app.run()
 

@@ -1,6 +1,5 @@
 import type { InferConfig, SchemaSatisfies } from '@caffeinejs/application/config'
 import { $t } from '@caffeinejs/application/schema'
-import { DURATION_PATTERN } from '@caffeinejs/std/duration'
 
 import type { HTTPCachingOptions } from '../http/options.js'
 
@@ -10,15 +9,14 @@ import type { HTTPCachingOptions } from '../http/options.js'
  *
  * The store, the ETag generator and the observer are objects or container tokens, and stay in code.
  *
- * The timeouts stay duration text, checked against the pattern `$t.Duration()` uses, and `maxEntrySize` is
- * `$t.Bytes()`: a bare number, whose unit would be ambiguous, fails validation at `bootstrap()`. The timeouts are
- * not `$t.Duration()`, which decodes to milliseconds: `HTTPCaching` reads a bare number as seconds. `varyByQuery`
- * is a `$t.List`, so `CACHE__VARY_BY_QUERY=page,sort` is two parameters.
+ * The timeouts are `$t.Duration()` and `maxEntrySize` is `$t.Bytes()`: a bare number, whose unit would be
+ * ambiguous, fails validation at `bootstrap()`. `varyByQuery` is a `$t.List`, so `CACHE__VARY_BY_QUERY=page,sort`
+ * is two parameters.
  */
 export const HTTPCachingConfigSchema = $t.Object({
   statusHeader: $t.Optional($t.String()),
-  storeTimeout: $t.Optional($t.String({ pattern: DURATION_PATTERN })),
-  lockTimeout: $t.Optional($t.String({ pattern: DURATION_PATTERN })),
+  storeTimeout: $t.Optional($t.Duration()),
+  lockTimeout: $t.Optional($t.Duration()),
   varyByQuery: $t.Optional($t.List($t.String())),
   maxEntrySize: $t.Optional($t.Bytes()),
 })

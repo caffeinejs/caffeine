@@ -1,3 +1,10 @@
+import { randomUUID } from 'node:crypto'
+import { connect as dial } from 'node:net'
+import { setTimeout as sleep } from 'node:timers/promises'
+
+import { CaffeineIoC } from '@caffeinejs/di'
+import { Router } from '@caffeinejs/http'
+import { createWebApplication } from '@caffeinejs/http/fastify'
 /**
  * `RedisHTTPCacheStore` against real servers: Redis and Valkey, each as one server and as a cluster. The cluster rows are
  * what prove the store never names keys from two slots — a one-node cluster still answers CROSSSLOT.
@@ -7,13 +14,7 @@
  * It lives beside the store, not under `test/e2e`, so it can run the contract every `HTTPCacheStore` passes; the
  * e2e Vitest project picks up every `*.e2e.ts` in the repository.
  */
-import { randomUUID } from 'node:crypto'
-import { connect as dial } from 'node:net'
-import { setTimeout as sleep } from 'node:timers/promises'
-
-import { CaffeineIoC } from '@caffeinejs/di'
-import { Router } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { createClient, createCluster } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -162,7 +163,7 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const { store, sent: commands } = newStore()
       await Promise.all(
         Array.from({ length: 50 }, (_, i) =>
-          store.put(`/pets/${i}`, httpEntry(`pet ${i}`), { ttl: 60, tags: ['pets'] }),
+          store.put(`/pets/${i}`, httpEntry(`pet ${i}`), { ttl: 60 * Second, tags: ['pets'] }),
         ),
       )
       commands.length = 0
@@ -181,8 +182,8 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const reader = new RedisHTTPCacheStore(client, { prefix })
       const stranger = new RedisHTTPCacheStore(client, { prefix: `${prefix}other:` })
 
-      await writer.put('k', httpEntry('shared'), { ttl: 60, tags: ['pets'] })
-      await stranger.put('k', httpEntry('theirs'), { ttl: 60, tags: ['pets'] })
+      await writer.put('k', httpEntry('shared'), { ttl: 60 * Second, tags: ['pets'] })
+      await stranger.put('k', httpEntry('theirs'), { ttl: 60 * Second, tags: ['pets'] })
       expect((await reader.get('k', { tags: ['pets'] }))?.payload).toBe('shared')
 
       await writer.evictByTag('pets')
@@ -197,7 +198,7 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const { store } = newStore()
       const keys = Array.from({ length: 40 }, (_, i) => `/scattered/${i}`)
 
-      await Promise.all(keys.map(key => store.put(key, httpEntry(key), { ttl: 60, tags: ['scattered', key] })))
+      await Promise.all(keys.map(key => store.put(key, httpEntry(key), { ttl: 60 * Second, tags: ['scattered', key] })))
       expect(
         (await Promise.all(keys.map(key => store.get(key, { tags: ['scattered', key] })))).map(r => r?.payload),
       ).toEqual(keys)
@@ -211,12 +212,12 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
 
     it('sends nothing for a call whose signal is already aborted', async () => {
       const { store, sent: commands } = newStore()
-      await store.put('k', httpEntry('v'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', httpEntry('v'), { ttl: 60 * Second, tags: ['pets'] })
       commands.length = 0
       const signal = AbortSignal.abort()
 
       await expect(store.get('k', { tags: ['pets'], signal })).rejects.toThrow()
-      await expect(store.put('k', httpEntry('w'), { ttl: 60, signal })).rejects.toThrow()
+      await expect(store.put('k', httpEntry('w'), { ttl: 60 * Second, signal })).rejects.toThrow()
       await expect(store.evictByTag('pets', { signal })).rejects.toThrow()
 
       expect(commands).toEqual([])
@@ -230,7 +231,7 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       const pets = new Router('/pets')
       pets
         .get('/')
-        .extend(cacheControl({ ttl: 60, tags: ['pets'] }))
+        .extend(cacheControl({ ttl: 60 * Second, tags: ['pets'] }))
         .handler(() => ({ calls: ++calls }))
       pets
         .post('/')

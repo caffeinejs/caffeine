@@ -3,6 +3,7 @@ import { ErrConfigValidation, type InferConfig } from '@caffeinejs/application/c
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { DistLockConfigSchema } from './_spectypes/index.js'
@@ -23,13 +24,13 @@ class SpyBackend implements Backend {
 
   readonly #inner = new MemoryLockBackend()
 
-  tryAcquire(key: string, ttlMs: number): Promise<LockLease | undefined> {
-    this.ttls.push(ttlMs)
-    return this.#inner.tryAcquire(key, ttlMs)
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    this.ttls.push(ttl)
+    return this.#inner.tryAcquire(key, ttl)
   }
 
-  extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
-    return this.#inner.extend(lease, ttlMs)
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.extend(lease, ttl)
   }
 
   release(lease: LockLease): Promise<void> {
@@ -97,7 +98,7 @@ describe('distlock configuration', () => {
   // overrule it. Without this a deployment could silently shorten a lease an author pinned on purpose.
   it('lets a fluent method win over the same setting in the tree', async () => {
     const backend = new SpyBackend()
-    const lock = await newLock(backend, { ttl: '45s' }, d => d.ttl('10s'))
+    const lock = await newLock(backend, { ttl: '45s' }, d => d.ttl(10 * Second))
 
     await lock.tryAcquire('k')
 

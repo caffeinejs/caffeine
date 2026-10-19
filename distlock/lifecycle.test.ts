@@ -1,5 +1,6 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Minute, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -23,15 +24,15 @@ class CountingBackend implements Backend {
 
   readonly #inner = new MemoryLockBackend()
 
-  tryAcquire(key: string, ttlMs: number): Promise<LockLease | undefined> {
-    return this.#inner.tryAcquire(key, ttlMs)
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.tryAcquire(key, ttl)
   }
 
-  async extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
     this.extensions += 1
     await sleep(50)
 
-    const next = await this.#inner.extend(lease, ttlMs)
+    const next = await this.#inner.extend(lease, ttl)
     this.settled += 1
 
     return next
@@ -99,7 +100,7 @@ describe('distlock lifecycle', () => {
     const backend = new MemoryLockBackend()
     const { lock, close } = await newApp(backend)
 
-    await lock.once('nightly-report', () => 'done', { ttl: '1m' })
+    await lock.once('nightly-report', () => 'done', { ttl: 1 * Minute })
     await close()
 
     expect(await backend.tryAcquire('nightly-report', 1_000)).toBeUndefined()

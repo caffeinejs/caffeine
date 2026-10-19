@@ -1,5 +1,6 @@
 import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 
+import { Second } from '@caffeinejs/std/duration'
 import {
   context,
   diag,
@@ -183,7 +184,7 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
     on<AcquireContext>(`tracing:${DIST_LOCK_CHANNELS.acquire}:asyncEnd`, ctx => {
       const attributes = { 'distlock.outcome': ctx.outcome ?? 'error', 'distlock.mode': ctx.mode, ...label(ctx.key) }
 
-      acquireDuration.record((ctx.waitedMs ?? 0) / 1000, attributes)
+      acquireDuration.record((ctx.waited ?? 0) / Second, attributes)
       acquireAttempts.record(ctx.attempts ?? 0, attributes)
 
       if (ctx.outcome === 'error') {
@@ -198,8 +199,8 @@ export function instrumentDistLock(options: DistLockInstrumentationOptions = {})
     })
 
     on<ReleaseContext>(`tracing:${DIST_LOCK_CHANNELS.release}:asyncEnd`, ctx => {
-      if (ctx.heldMs !== undefined) {
-        holdDuration.record(ctx.heldMs / 1000, { 'distlock.lapsed': ctx.lapsed === true, ...label(ctx.key) })
+      if (ctx.held !== undefined) {
+        holdDuration.record(ctx.held / Second, { 'distlock.lapsed': ctx.lapsed === true, ...label(ctx.key) })
       }
 
       if (ctx.error !== undefined) {

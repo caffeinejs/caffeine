@@ -8,6 +8,7 @@ import { createWebApplication, authentication, healthProbes } from '@caffeinejs/
 import { multipartPlugin } from '@caffeinejs/multipart'
 import { openapi } from '@caffeinejs/openapi'
 import { staticFiles } from '@caffeinejs/static'
+import { Second } from '@caffeinejs/std/duration'
 
 import { GITHUB_SESSION_COOKIE, GITHUB_STATE_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'
@@ -60,7 +61,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
         if (process.env.VITEST !== undefined) {
           s.drainDelay(0).shutdownTimeout(200)
         } else {
-          s.drainDelay('5s')
+          s.drainDelay(5 * Second)
         }
       })
 

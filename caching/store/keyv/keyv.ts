@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 
-import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { type Duration, formatDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type {
@@ -22,8 +22,6 @@ export class ErrKeyvCache extends Error {
 }
 
 const DEFAULT_PREFIX = 'caffeine:cache:'
-
-const DURATION = new RegExp(DURATION_PATTERN)
 
 /**
  * The part of a `Keyv` this store calls. A `Keyv` satisfies it, and so does a cache-manager `Cache`, whose stores
@@ -152,7 +150,7 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
   async put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions): Promise<void> {
     options.signal?.throwIfAborted()
 
-    const ms = Math.ceil(parseDuration(options.ttl) * 1000)
+    const ms = Math.ceil(options.ttl)
     if (!(ms > 0) || !Number.isFinite(ms)) {
       return
     }
@@ -206,19 +204,19 @@ export class KeyvHTTPCacheStore implements HTTPCacheStore {
   }
 }
 
-// `parseDuration` reads what it cannot parse as 0, and `-5s` as 5: either would pass for a marker lifetime.
 function tagTtlOf(tagTtl: Duration | undefined): number {
   if (tagTtl === undefined) {
     return 0
   }
 
   // Checked before rounding: a negative fraction of a millisecond would round to 0, which means never expires.
-  const seconds = parseDuration(tagTtl)
-  if (!((typeof tagTtl === 'number' || DURATION.test(tagTtl)) && Number.isFinite(seconds) && seconds >= 0)) {
+  if (!(Number.isFinite(tagTtl) && tagTtl >= 0)) {
     throw new ErrKeyvCache(
-      errMessage(`Cannot create a Keyv cache with the tagTtl "${String(tagTtl)}": it is not a non-negative duration`)
+      errMessage(
+        `Cannot create a Keyv cache with the tagTtl "${formatDuration(tagTtl)}": it is not a non-negative duration`,
+      )
         .solutions(
-          'Write tagTtl as duration text such as "1h", or as a number of seconds',
+          'Write tagTtl as a Duration, such as 1 * Hour',
           'Leave tagTtl unset, or set it to 0, for markers that never expire',
         )
         .reference('@caffeinejs/caching', ErrKeyvCache)
@@ -226,7 +224,7 @@ function tagTtlOf(tagTtl: Duration | undefined): number {
     )
   }
 
-  return seconds === 0 ? 0 : Math.ceil(seconds * 1000)
+  return Math.ceil(tagTtl)
 }
 
 // An absent marker — never written, lapsed, or dropped by the backend — reads as `undefined`, which no entry

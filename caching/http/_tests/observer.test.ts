@@ -1,6 +1,7 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { Controller, Get, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -70,7 +71,7 @@ describe('bypass events', () => {
   it('reports a method the route does not cache, though no status header says so', async () => {
     @Controller('/obs-method')
     class MethodController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Post('/data')
       data() {
         return { ok: true }
@@ -90,13 +91,13 @@ describe('bypass events', () => {
   it('tells an Authorization bypass from a route declared private', async () => {
     @Controller('/obs-private')
     class PrivateController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/implicit')
       implicit() {
         return { ok: true }
       }
 
-      @CacheControl({ ttl: 60, privacy: 'private' })
+      @CacheControl({ ttl: 60 * Second, privacy: 'private' })
       @Get('/declared')
       declared() {
         return { ok: true }
@@ -116,7 +117,7 @@ describe('bypass events', () => {
   it('reports Vary: * as vary-any', async () => {
     @Controller('/obs-vary-any')
     class VaryAnyController {
-      @CacheControl({ ttl: 60, vary: ['*'] })
+      @CacheControl({ ttl: 60 * Second, vary: ['*'] })
       @Get('/data')
       data() {
         return { ok: true }
@@ -135,7 +136,7 @@ describe('bypass events', () => {
   it('names the client directive that bypassed, in the order the cache tests them', async () => {
     @Controller('/obs-directive')
     class DirectiveController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -186,7 +187,7 @@ describe('miss events', () => {
   it('reports a cold cache as absent, with the store key', async () => {
     @Controller('/obs-cold')
     class ColdController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -216,7 +217,7 @@ describe('miss events', () => {
   it('reports only-if-cached on a cold cache, which no status header reports', async () => {
     @Controller('/obs-only-if-cached')
     class OnlyIfCachedController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -251,7 +252,7 @@ describe('miss events', () => {
 
     @Controller('/obs-stale')
     class StaleController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -274,7 +275,7 @@ describe('hit events', () => {
   it('reports a served body as a hit that was not revalidated', async () => {
     @Controller('/obs-hit')
     class HitController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -291,19 +292,19 @@ describe('hit events', () => {
     await app.fetch('/obs-hit/data')
 
     expect(observer.hits).toHaveLength(1)
-    expect(observer.hits[0]).toMatchObject({ key: observer.misses[0].key, revalidated: false, ageSeconds: 2 })
+    expect(observer.hits[0]).toMatchObject({ key: observer.misses[0].key, revalidated: false, age: 2 * Second })
   })
 
   it('reports a 304 answered from If-None-Match or If-Modified-Since as revalidated', async () => {
     @Controller('/obs-revalidate')
     class RevalidateController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/etag')
       etag() {
         return { ok: true }
       }
 
-      @CacheControl({ ttl: 60, etag: false })
+      @CacheControl({ ttl: 60 * Second, etag: false })
       @Get('/modified')
       modified() {
         return { ok: true }
@@ -327,16 +328,16 @@ describe('hit events', () => {
 })
 
 describe('store events', () => {
-  it('reports the stored bytes and the ttl in seconds, fractional above one', async () => {
+  it("reports the stored bytes and the route's ttl", async () => {
     @Controller('/obs-store')
     class StoreController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/minute')
       minute() {
         return { ok: true }
       }
 
-      @CacheControl({ ttl: '1500ms' })
+      @CacheControl({ ttl: 1500 * Millisecond })
       @Get('/brief')
       brief() {
         return { ok: true }
@@ -350,16 +351,16 @@ describe('store events', () => {
     const body = await (await app.fetch('/obs-store/minute')).text()
     await app.fetch('/obs-store/brief')
 
-    expect(observer.stores.map(e => [e.bytes, e.ttlSeconds])).toEqual([
-      [Buffer.byteLength(body), 60],
-      [Buffer.byteLength(body), 1.5],
+    expect(observer.stores.map(e => [e.bytes, e.ttl])).toEqual([
+      [Buffer.byteLength(body), 60 * Second],
+      [Buffer.byteLength(body), 1_500 * Millisecond],
     ])
   })
 
   it('reports nothing stored when the status is not cacheable', async () => {
     @Controller('/obs-uncacheable')
     class UncacheableController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Status(500)
       @Get('/data')
       data() {
@@ -390,7 +391,7 @@ describe('store events', () => {
 
     @Controller('/obs-store-fails')
     class StoreFailsController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -448,7 +449,7 @@ describe('route identity', () => {
   it('carries the tags on the store event of a tagged route', async () => {
     @Controller('/obs-tags')
     class TagsController {
-      @CacheControl({ ttl: 60, tags: ['pets'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['pets'] })
       @Get('/data')
       data() {
         return { ok: true }
@@ -471,7 +472,7 @@ describe('route identity', () => {
   it('hands every event from one route the same frozen object', async () => {
     @Controller('/obs-identity')
     class IdentityController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -500,7 +501,7 @@ describe('route identity', () => {
   it('reports a HEAD request under the HEAD twin of the route', async () => {
     @Controller('/obs-head')
     class HeadController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -525,7 +526,7 @@ describe('a throwing observer', () => {
   it('never reaches the response', async () => {
     @Controller('/obs-throws')
     class ThrowsController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -556,7 +557,7 @@ describe('a throwing observer', () => {
   it('is reported once per method on the application logger', async () => {
     @Controller('/obs-throws-logged')
     class ThrowsLoggedController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
