@@ -210,6 +210,19 @@ Every feature a user can tune from the tree has one schema describing its option
 - **Nothing is defaulted in it.** The feature owns its defaults; a default in the schema would be a second place to change it.
 - Every key is one an environment variable folds to (`test/config_keys.test.ts`), which is why an option spelled `cacheTTL` in code is `cacheTtl` in the schema.
 
+## Durations
+
+A span of time in a public API (an option, a builder method, an SPI parameter, an event or error field) is a `Duration` from `@caffeinejs/std/duration`: a number of milliseconds, as Go's `time.Duration` is a number of nanoseconds.
+
+- **It is named without a unit**: `timeout`, `ttl`, `waited`, never `timeoutMs` or `ttlSeconds`. The identifier follows the acronym rules (`sessionCookieTTL`), the configuration key the environment folding (`sessionCookieTtl`).
+- **Code writes it with the constants**: `5 * Second`, `100 * Millisecond`, `30 * Day`. A default is written the same way, never as a bare count.
+- **Text is read in two places only**: `$t.Duration()` in a configuration schema, and `parseDuration` or `duration(...)` in code. No option takes `Duration | string`. The grammar is Go's plus `d` for a day (`'90s'`, `'1h30m'`, `'7d'`); configuration refuses a sign and a bare number.
+- **Seconds exist only on the wire**, converted where they are written: `Math.floor(d / Second)` for `Max-Age`, `Cache-Control`, a token's `exp` and OIDC `max_age`, and `d / Second` for an OpenTelemetry histogram in seconds. A value read off the wire in seconds, such as `expires_in`, becomes a `Duration` at once.
+- **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Fastify's `handlerTimeout`, Redis `PX`, undici's headers and body timeouts.
+- **A message prints it with `formatDuration(d)`**, or as `${d}ms`; a solution names code: `such as 30 * Second`. A log line keeps its key and the unit the key names (`ttlMs`, `ageSeconds`), with the value converted from the `Duration`.
+- **A library's own option shape keeps the library's type and unit** (Fastify, jose, undici, `@fastify/static`). An application fills it with the constants, or with `duration('7d')` for text.
+- `kafka/` and `messaging/` still take bare numbers (`nackDelay`, `idleTimeout`). Do not copy them.
+
 ## Writing a feature
 
 A feature is one interface with three members, all symbol-keyed so none of it shows on a fluent surface:

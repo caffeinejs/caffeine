@@ -47,3 +47,20 @@ gates requests where it is written.
 ## Config
 
 Application config goes through `@caffeinejs/application/config` (schema + providers), not `process.env` as the public API.
+
+## Durations
+
+Every span of time Caffeine takes is a `Duration` from `@caffeinejs/std/duration`: a number of milliseconds. Write it with the constants, never as a bare count or as text:
+
+```ts
+import { duration, Minute, Second, seconds } from '@caffeinejs/std/duration'
+
+app.shutdown(s => s.drainDelay(5 * Second))
+auth.addJWTBearer(b => b.secret(secret).expiresIn(15 * Minute))
+
+// An option Caffeine does not type keeps its library's unit: milliseconds for @fastify/static, seconds for jose.
+staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
+jwtVerify(token, key, { clockTolerance: seconds(duration('30s')) })
+```
+
+In a configuration schema, declare the field `$t.Duration()`: it reads Go's duration text plus `d` for a day (`'30s'`, `'1h30m'`, `'7d'`) and refuses a bare number.
