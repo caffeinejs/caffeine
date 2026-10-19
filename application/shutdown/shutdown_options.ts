@@ -67,7 +67,7 @@ export interface ShutdownOptions {
 
 /**
  * The shutdown slice of the configuration tree. There, a duration is written as text — `'5s'`, `'1h30m'` — and a
- * bare number is refused, because its unit would be ambiguous; an object handed to `config(...)` from code gives a
+ * bare number such as `'5000'` is refused; an object handed to `config(...)` from code gives a
  * `Duration`, `5 * Second`. The dispatcher is not here — a function cannot travel a configuration tree, so it stays
  * on the builder.
  */

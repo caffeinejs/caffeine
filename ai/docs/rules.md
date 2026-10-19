@@ -63,4 +63,8 @@ staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
 jwtVerify(token, key, { clockTolerance: seconds(duration('30s')) })
 ```
 
+A bare number is milliseconds: `expiresIn(900)` is 900 ms, not 15 minutes. Options that took seconds before (`expiresIn`, a cookie's `maxAge`, `sessionCookieTTL`, the `ttl` an HTTP cache store is handed) take milliseconds like every other.
+
+`@caffeinejs/kafka` and `@caffeinejs/messaging` still type their spans (`nackDelay`, `idleTimeout`) as a bare number of milliseconds; the constants work there as well.
+
 In a configuration schema, declare the field `$t.Duration()`: it reads duration text such as `'30s'`, `'1h30m'` or `'7d'`, and refuses a bare number.

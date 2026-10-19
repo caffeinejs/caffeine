@@ -29,7 +29,7 @@ export const DEFAULT_DIST_LOCK_OPTIONS: DistLockOptions = {
 
 /**
  * What `DistLockBuilder.config` accepts. In a configuration tree a duration is written as text — `'30s'`,
- * `'1m'` — and a bare number is refused, because its unit would be ambiguous; an object handed to `config(...)`
+ * `'1m'` — and a bare number such as `'30000'` is refused; an object handed to `config(...)`
  * from code gives a `Duration`, `30 * Second`.
  *
  * The backend is not here: it is an object with methods, and stays on the builder.

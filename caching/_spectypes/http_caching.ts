@@ -9,9 +9,9 @@ import type { HTTPCachingOptions } from '../http/options.js'
  *
  * The store, the ETag generator and the observer are objects or container tokens, and stay in code.
  *
- * The timeouts are `$t.Duration()` and `maxEntrySize` is `$t.Bytes()`: a bare number, whose unit would be
- * ambiguous, fails validation at `bootstrap()`. `varyByQuery` is a `$t.List`, so `CACHE__VARY_BY_QUERY=page,sort`
- * is two parameters.
+ * The timeouts are `$t.Duration()`, so `CACHE__STORE_TIMEOUT=250` fails validation at `bootstrap()` where `250ms`
+ * passes, and `maxEntrySize` is `$t.Bytes()`. `varyByQuery` is a `$t.List`, so `CACHE__VARY_BY_QUERY=page,sort` is
+ * two parameters.
  */
 export const HTTPCachingConfigSchema = $t.Object({
   statusHeader: $t.Optional($t.String()),

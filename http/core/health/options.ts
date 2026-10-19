@@ -60,7 +60,7 @@ export function defaultHealthOptions(env: EnvLike = hostEnv()): HealthOptions {
 
 /**
  * The health slice of the configuration tree. There, a duration is written as text — `'5s'`, `'1h30m'` — and a
- * bare number is refused, because its unit would be ambiguous; an object handed to `config(...)` from code gives a
+ * bare number such as `'5000'` is refused; an object handed to `config(...)` from code gives a
  * `Duration`, `5 * Second`.
  *
  * Every key is spelled the way its environment variable folds, so `HEALTH__CACHE_TTL` sets `cacheTtl`: that is
