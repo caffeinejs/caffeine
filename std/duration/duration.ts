@@ -1,7 +1,7 @@
 import { ErrInvalidDuration } from './errors.js'
 
 /**
- * A span of time in milliseconds: Go's `time.Duration`, counted in the unit timers take.
+ * A span of time, in milliseconds: the unit timers take.
  *
  * Write one with the unit constants, `5 * Second` or `90 * Minute`, read one from text with {@link parseDuration} or
  * {@link duration}, and print one with {@link formatDuration}. A span shorter than a millisecond is a fraction:
@@ -45,8 +45,8 @@ const MAX_NANOSECONDS = 2 ** 63
 const GRAMMAR = 'expected a sequence of decimal numbers, each with a unit: ns, us, µs, ms, s, m, h or d'
 
 /**
- * Reads a duration written the way Go writes one, as a {@link Duration}: `'300ms'`, `'1.5h'`, `'-2h45m'`, plus `d`
- * for a day of exactly 24 hours, `'7d'`.
+ * Reads duration text as a {@link Duration}: `'300ms'`, `'1.5h'`, `'-2h45m'` or `'7d'`, a `d` being exactly 24
+ * hours.
  *
  * A possibly signed sequence of decimal numbers, each with an optional fraction and a unit: `ns`, `us` (or `µs`),
  * `ms`, `s`, `m`, `h` or `d`. `'0'` alone needs no unit. No spaces.
@@ -148,8 +148,7 @@ export function duration(value: Duration | string): Duration {
 }
 
 /**
- * Writes a {@link Duration} the way Go's `Duration.String()` does, with days in front: `'72h3m0.5s'` is
- * `'3d0h3m0.5s'` here.
+ * Writes a {@link Duration} as text, from days down to seconds: `'3d0h3m0.5s'`, `'1h30m0s'`.
  *
  * Leading zero units are left out. A span under a second takes the unit that keeps its leading digit non-zero,
  * `'1.5µs'` or `'300ms'`, and zero is `'0s'`. The output is rounded to the nanosecond and reads back with

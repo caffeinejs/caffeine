@@ -198,8 +198,8 @@ const caffeineT = {
    * A time span written as duration text — `'5s'`, `'1h30m'`, `'7d'` — decoded to a `Duration`, in milliseconds.
    *
    * The value is checked against {@link DURATION_PATTERN} first, so `'5 hours'` and `'-5s'` fail configuration
-   * validation: the grammar is Go's, with `d` for a day, and a configured span is never negative. Only the string
-   * form is accepted; a bare number is rejected, because its unit would be ambiguous.
+   * validation: the grammar is {@link parseDuration}'s, and a configured span is never negative. Only the string form
+   * is accepted; a bare number is rejected, because its unit would be ambiguous.
    *
    * The decoded number needs no re-check the way {@link caffeineT.List} and {@link caffeineT.JSON} do: the pattern
    * has already constrained the input, and {@link parseDuration} reads every such string or refuses a span too long

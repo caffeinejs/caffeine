@@ -63,4 +63,4 @@ staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
 jwtVerify(token, key, { clockTolerance: seconds(duration('30s')) })
 ```
 
-In a configuration schema, declare the field `$t.Duration()`: it reads Go's duration text plus `d` for a day (`'30s'`, `'1h30m'`, `'7d'`) and refuses a bare number.
+In a configuration schema, declare the field `$t.Duration()`: it reads duration text such as `'30s'`, `'1h30m'` or `'7d'`, and refuses a bare number.
