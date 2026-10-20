@@ -1,3 +1,4 @@
+import { MiB } from '@caffeinejs/std/bytes'
 import { describe, it, expect } from 'vitest'
 
 import { $p } from '../../../core/routing/picker.js'
@@ -195,7 +196,7 @@ describe('form url-encoded body', () => {
   })
 
   it('accepts a body over the 1 MiB default when the route bodyLimit allows it', async () => {
-    @BodyLimit('2mb')
+    @BodyLimit(2 * MiB)
     @Controller('/form-route-raised')
     class FormRouteRaisedController {
       @Post('/echo')
@@ -206,7 +207,7 @@ describe('form url-encoded body', () => {
     }
 
     const app = await appWith(FormRouteRaisedController)
-    const value = 'x'.repeat(1024 * 1024)
+    const value = 'x'.repeat(1 * MiB)
     const res = await app.fetch('/form-route-raised/echo', {
       method: 'POST',
       headers: { 'content-type': FORM },
@@ -217,23 +218,25 @@ describe('form url-encoded body', () => {
     expect(await res.json()).toEqual({ length: value.length })
   })
 
-  it('rejects a body over 1 MiB when the route sets no bodyLimit', async () => {
+  it('holds a body to exactly 1 MiB when the route sets no bodyLimit', async () => {
     @Controller('/form-default-limit')
     class FormDefaultLimitController {
       @Post('/echo')
       @Args([$p.body()])
-      echo(b: Record<string, unknown>) {
-        return b
+      echo(b: Record<string, string>) {
+        return { length: b.name!.length }
       }
     }
 
     const app = await appWith(FormDefaultLimitController)
-    const res = await app.fetch('/form-default-limit/echo', {
-      method: 'POST',
-      headers: { 'content-type': FORM },
-      body: `name=${'x'.repeat(1024 * 1024)}`,
-    })
+    const post = (body: string) =>
+      app.fetch('/form-default-limit/echo', { method: 'POST', headers: { 'content-type': FORM }, body })
+    const field = 'name='
 
-    expect(res.status).toBe(413)
+    const atLimit = await post(field + 'x'.repeat(1 * MiB - field.length))
+    const over = await post(field + 'x'.repeat(1 * MiB - field.length + 1))
+
+    expect(atLimit.status).toBe(200)
+    expect(over.status).toBe(413)
   })
 })

@@ -351,7 +351,7 @@ describe('store events', () => {
     const body = await (await app.fetch('/obs-store/minute')).text()
     await app.fetch('/obs-store/brief')
 
-    expect(observer.stores.map(e => [e.bytes, e.ttl])).toEqual([
+    expect(observer.stores.map(e => [e.size, e.ttl])).toEqual([
       [Buffer.byteLength(body), 60 * Second],
       [Buffer.byteLength(body), 1_500 * Millisecond],
     ])

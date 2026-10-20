@@ -1,5 +1,6 @@
 import type { ConnectionOptions } from 'node:tls'
 
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 import type { Dispatcher, Pool } from 'undici'
 
@@ -14,7 +15,7 @@ export class PoolOptionsBuilder {
   private _keepAliveTimeoutThreshold: Duration | undefined
   private _pipelining: number | undefined
   private _connect: ConnectionOptions | undefined
-  private _maxHeaderSize: number | undefined
+  private _maxHeaderSize: ByteSize | undefined
   private _headersTimeout: Duration | undefined
   private _bodyTimeout: Duration | undefined
   private _factory: ((origin: URL, opts: object) => Dispatcher) | undefined
@@ -58,8 +59,8 @@ export class PoolOptionsBuilder {
     return this
   }
 
-  maxHeaderSize(n: number): this {
-    this._maxHeaderSize = n
+  maxHeaderSize(size: ByteSize): this {
+    this._maxHeaderSize = size
     return this
   }
 

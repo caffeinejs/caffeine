@@ -1,3 +1,4 @@
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { Value } from '@sinclair/typebox/value'
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
@@ -258,23 +259,39 @@ describe('$t.Bytes', () => {
     expect(Value.Decode(schema, { bodyLimit: '512kb' })).toEqual({ bodyLimit: 524_288 })
   })
 
+  it('encodes a size back to the text that decodes to it', () => {
+    expect(Value.Encode($t.Bytes(), 1_048_576)).toBe('1mb')
+    expect(Value.Encode($t.Bytes(), 1_536)).toBe('1536b')
+    expect(Value.Decode($t.Bytes(), Value.Encode($t.Bytes(), 524_288))).toBe(524_288)
+  })
+
+  // What is not a whole number of bytes encodes to text the pattern refuses, as a bad span does for `$t.Duration`.
+  it.each([1.5, -1, Number.NaN])('refuses to encode %o', value => {
+    expect(() => Value.Encode($t.Bytes(), value)).toThrow()
+  })
+
   it('rejects a string that is not a byte size', () => {
-    // The pattern is what keeps `bytes` from throwing out of Decode: these fail validation as a misconfigured
-    // field rather than as a decode error.
+    // The pattern turns these into validation issues on the field, before parseBytes would refuse them.
     expect(() => Value.Decode($t.Bytes(), '1KiB')).toThrow()
     expect(() => Value.Decode($t.Bytes(), '1 KB')).toThrow()
     expect(() => Value.Decode($t.Bytes(), '1.5GB')).toThrow()
+    expect(() => Value.Decode($t.Bytes(), '-1kb')).toThrow()
     expect(() => Value.Decode($t.Bytes(), '')).toThrow()
   })
 
-  it('rejects a bare number, whose unit would be ambiguous', () => {
+  it('rejects text past the largest safe size, which the pattern admits and parseBytes refuses', () => {
+    expect(() => Value.Decode($t.Bytes(), '8pb')).toThrow('out of range')
+  })
+
+  // Configuration turns a number a source gives into text before it validates; `Value.Decode` alone does not.
+  it('takes text only', () => {
     expect(() => Value.Decode($t.Bytes(), 1024)).toThrow()
   })
 
-  it('types as a number, since that is what a consumer reads back', () => {
+  it('types as a ByteSize, since that is what a consumer reads back', () => {
     const schema = $t.Object({ bodyLimit: $t.Bytes() })
 
-    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ bodyLimit: number }>()
+    expectTypeOf<InferSchema<typeof schema>>().toEqualTypeOf<{ bodyLimit: ByteSize }>()
   })
 })
 

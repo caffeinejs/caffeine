@@ -1,5 +1,6 @@
 import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/application/framework'
 import { Ctor, Provider } from '@caffeinejs/di'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import type { IContext } from '../../context.js'
@@ -98,7 +99,7 @@ export interface IRoute<R = unknown> {
   /** Builds the function this route dispatches to. Called once, while the route is being registered. */
   dispatch: RouteDispatch<R, unknown>
   schema?: RouteValidationSchema
-  bodyLimit?: number
+  bodyLimit?: ByteSize
   timeout?: Duration
   header: Map<string, string | string[]>
   hasHeader?: boolean

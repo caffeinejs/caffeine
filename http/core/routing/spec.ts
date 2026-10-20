@@ -1,6 +1,7 @@
 import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import type { AnySchema } from '@caffeinejs/application/schema'
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import type { AdapterExtensionFactory } from '../../adapter.js'
@@ -19,7 +20,7 @@ export interface RouteGroupSpec<R> {
   accept: string[]
   contentType: string
   header?: Map<string, string | string[]>
-  bodyLimit?: number
+  bodyLimit?: ByteSize
   timeout?: Duration
   authz?: RouteAuthz
   config?: Map<string, unknown>
@@ -48,7 +49,7 @@ export interface RouteSpec<R> {
    */
   handle?: RouteInvoker
   schema?: RouteValidationSchema
-  bodyLimit?: number
+  bodyLimit?: ByteSize
   timeout?: Duration
   header?: Map<string, string | string[]>
   statusCode?: number

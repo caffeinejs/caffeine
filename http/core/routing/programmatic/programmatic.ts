@@ -5,6 +5,7 @@ import {
   type InjectionToken,
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import type { AdapterExtensionFactory, IAdapterTypes } from '../../../adapter.js'
@@ -418,8 +419,8 @@ export class Router<
     return this
   }
 
-  bodyLimit(bytes: number): this {
-    this.#state.builder.bodyLimit(bytes)
+  bodyLimit(limit: ByteSize): this {
+    this.#state.builder.bodyLimit(limit)
     return this
   }
 
