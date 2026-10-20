@@ -1,5 +1,6 @@
 import { Blob as NodeBlob } from 'node:buffer'
 
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import {
@@ -395,7 +396,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   // Timed, so a request that is never answered fails as Fastify's 503 rather than as a hung test.
   routes
     .get('/silent')
-    .timeout(1_000)
+    .timeout(1 * Second)
     .handler(() => new SilentResult())
 
   const caught = new Router('/caught').catchBy([GroupCatcher])

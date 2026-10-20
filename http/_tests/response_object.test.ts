@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { connect as connectH2 } from 'node:http2'
 import { brotliCompressSync, deflateSync, gzipSync, zstdCompressSync } from 'node:zlib'
 
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { type ActionResult, Catch, ErrHTTP, type ErrorHandler, Router, version } from '../index.js'
@@ -74,7 +75,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   // Timed, so a request left unanswered fails as Fastify's 503 rather than as a hung test.
   routes
     .get('/consumed-context')
-    .timeout(1_000)
+    .timeout(1 * Second)
     .handler(async ctx => {
       const response = new Response('read already')
       await response.text()
@@ -87,7 +88,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
     })
   routes
     .get('/consumed-not-found')
-    .timeout(1_000)
+    .timeout(1 * Second)
     .handler(async ctx => {
       const response = new Response('read already')
       await response.text()

@@ -127,7 +127,7 @@ describe('a handler that outlives its timeout', () => {
     const timed = new Router('/timed-responder')
     timed
       .get('/slow')
-      .timeout(30)
+      .timeout(30 * Millisecond)
       .handler(() => new Late())
 
     const runs = { n: 0 }
