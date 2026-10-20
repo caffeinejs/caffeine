@@ -146,15 +146,7 @@ export class Context<
   }
 
   body(body?: unknown): this {
-    // Shaped first: an answer that cannot be sent at all — a Response whose body was read — throws with nothing in
-    // flight, and the context stays unanswered for a catch handler to answer instead.
-    const payload = payloadOf(this.#reply, body)
-    // Before the send, so a send that throws still leaves the context answered.
-    this.#answered = true
-    // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
-    reopenCookieFlush(this.#reply)
-    this.#reply.send(payload)
-    return this
+    return this.#send(body)
   }
 
   badRequest(body?: unknown): this {
@@ -197,7 +189,24 @@ export class Context<
    * error shape from `@Catch` and a different one from `ctx.notFound()`.
    */
   #fail(statusCode: number, code: string, body?: unknown): this {
-    return this.status(statusCode).body(body ?? statusErrorBody(statusCode, code))
+    return this.#send(body ?? statusErrorBody(statusCode, code), statusCode)
+  }
+
+  /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */
+  #send(body: unknown, statusCode?: number): this {
+    // Shaped first: an answer that cannot be sent at all — a Response whose body was read — throws with nothing in
+    // flight and no status written, and the context stays unanswered for a catch handler to answer instead.
+    const payload = payloadOf(this.#reply, body, statusCode !== undefined)
+
+    if (statusCode !== undefined) {
+      this.#reply.code(statusCode)
+    }
+    // Before the send, so a send that throws still leaves the context answered.
+    this.#answered = true
+    // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
+    reopenCookieFlush(this.#reply)
+    this.#reply.send(payload)
+    return this
   }
 }
 

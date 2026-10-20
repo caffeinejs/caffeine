@@ -1,11 +1,23 @@
+import { readFileSync } from 'node:fs'
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { connect as connectH2 } from 'node:http2'
+import { brotliCompressSync, deflateSync, gzipSync, zstdCompressSync } from 'node:zlib'
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { type ActionResult, Catch, type ErrorHandler, Router, version } from '../index.js'
+import { type ActionResult, Catch, ErrHTTP, type ErrorHandler, Router, version } from '../index.js'
 import { constraints, createWebApplication } from '../platform/fastify/index.js'
 import { expectPatternedBody, streamOf } from './bodies.js'
 import { patterned } from './patterned.js'
 
 const BYTES = patterned(0, 1000)
+
+const helpers = [
+  ['badRequest', 400],
+  ['notFound', 404],
+  ['unprocessableEntity', 422],
+  ['internalServerError', 500],
+] as const
 
 describe('a Response a handler returns is sent as its status, its headers and its body', () => {
   class ErrTeapot extends Error {}
@@ -45,6 +57,14 @@ describe('a Response a handler returns is sent as its status, its headers and it
     await response.text()
     return response
   })
+  routes.get('/helpers/:name').handler(ctx => {
+    const name = ctx.req.param().name as (typeof helpers)[number][0]
+    ctx[name](new Response(name, { headers: { 'x-kept': 'yes' } }))
+  })
+  routes.get('/err-http').handler(() => {
+    throw new ErrHTTP(404, 'Not Found', { body: new Response('gone') })
+  })
+  routes.get('/created-via-body').handler(ctx => ctx.body(new Response('made', { status: 201 })))
   routes
     .get('/teapot')
     .catchBy([TeapotCatcher])
@@ -61,6 +81,19 @@ describe('a Response a handler returns is sent as its status, its headers and it
 
       try {
         return ctx.body(response)
+      } catch {
+        return { fallback: true }
+      }
+    })
+  routes
+    .get('/consumed-not-found')
+    .timeout(1_000)
+    .handler(async ctx => {
+      const response = new Response('read already')
+      await response.text()
+
+      try {
+        return ctx.notFound(response)
       } catch {
         return { fallback: true }
       }
@@ -141,11 +174,39 @@ describe('a Response a handler returns is sent as its status, its headers and it
     expect(res.status).toBe(500)
   })
 
-  it('leaves the context unanswered when ctx.body(...) refuses a Response, so the handler can answer otherwise', async () => {
-    const res = await app.fetch('/answers/consumed-context')
+  it.each([
+    ['ctx.body(...)', '/answers/consumed-context'],
+    ['an error helper', '/answers/consumed-not-found'],
+  ])(
+    'leaves the context unanswered, its status untouched, when %s refuses a Response, so the handler can answer otherwise',
+    async (_sender, path) => {
+      const res = await app.fetch(path)
 
-    expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ fallback: true })
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ fallback: true })
+    },
+  )
+
+  it.each(helpers)("keeps ctx.%s(...)'s status over a Response given as its body", async (name, status) => {
+    const res = await app.fetch(`/answers/helpers/${name}`)
+
+    expect(res.status).toBe(status)
+    expect(res.headers.get('x-kept')).toBe('yes')
+    expect(await res.text()).toBe(name)
+  })
+
+  it("keeps an ErrHTTP's status over a Response given as its body", async () => {
+    const res = await app.fetch('/answers/err-http')
+
+    expect(res.status).toBe(404)
+    expect(await res.text()).toBe('gone')
+  })
+
+  it('sends a Response handed to ctx.body(...) as the whole answer, its status included', async () => {
+    const res = await app.fetch('/answers/created-via-body')
+
+    expect(res.status).toBe(201)
+    expect(await res.text()).toBe('made')
   })
 
   describe('on HEAD', () => {
@@ -191,5 +252,136 @@ describe("a Response's headers join the ones the server adds, rather than replac
     expect(await res.text()).toBe('v1')
     const vary = (res.headers.get('vary') ?? '').split(',').map(name => name.trim().toLowerCase())
     expect(vary).toEqual(expect.arrayContaining(['accept-version', 'accept-language']))
+  })
+})
+
+describe('a Response fetched from upstream and returned is sent as the bytes the handler holds', () => {
+  const PLAIN = Buffer.from('region,total\nnorth,12\n'.repeat(400))
+  const encoders: Record<string, (bytes: Buffer) => Buffer> = {
+    gzip: gzipSync,
+    'x-gzip': gzipSync,
+    deflate: deflateSync,
+    br: brotliCompressSync,
+    zstd: zstdCompressSync,
+    // A coding fetch does not know: it hands the body over as it came, still gzip.
+    'x-unknown': gzipSync,
+    identity: bytes => bytes,
+  }
+
+  // An upstream answering compressed under its compressed length, with a header its Connection names hop-by-hop.
+  function answerCompressed(req: IncomingMessage, res: ServerResponse) {
+    const coding = req.url!.slice(1)
+    const body = encoders[coding](PLAIN)
+    res.writeHead(200, {
+      'content-type': 'text/csv',
+      ...(coding === 'identity' ? {} : { 'content-encoding': coding }),
+      'content-length': body.length,
+      connection: 'keep-alive, x-hop',
+      'x-hop': '1',
+    })
+    res.end(body)
+  }
+
+  const upstream = createServer(answerCompressed)
+  let upstreamOrigin: string
+
+  const proxy = new Router('/proxy')
+  proxy.get('/:coding').handler(ctx => fetch(`${upstreamOrigin}/${ctx.req.param().coding}`))
+  proxy
+    .get('/precompressed')
+    .handler(
+      () => new Response(gzipSync(PLAIN), { headers: { 'content-encoding': 'gzip', 'content-type': 'text/csv' } }),
+    )
+
+  const app = createWebApplication().mount(proxy)
+
+  const key = readFileSync(new URL('./_testdata/tls/localhost.key', import.meta.url))
+  const cert = readFileSync(new URL('./_testdata/tls/localhost.crt', import.meta.url))
+  const secure = createWebApplication()
+    .server(() => ({ factory: { http2: true, https: { key, cert } }, listener: { host: '127.0.0.1', port: 0 } }))
+    .mount(new Router('/h2').get('/gzip').handler(() => fetch(`${upstreamOrigin}/gzip`)))
+
+  beforeAll(async () => {
+    await new Promise<void>(resolve => upstream.listen(0, '127.0.0.1', resolve))
+    const address = upstream.address() as { port: number }
+    upstreamOrigin = `http://127.0.0.1:${address.port}`
+    await app.bootstrap()
+    await secure.run()
+  })
+
+  afterAll(async () => {
+    await secure.close()
+    await app.close()
+    await new Promise(resolve => upstream.close(resolve))
+  })
+
+  /** Whether this runtime's `fetch` hands back `coding` decoded: what the proxied answer has to agree with. */
+  async function fetchDecodes(coding: string): Promise<boolean> {
+    const direct = await fetch(`${upstreamOrigin}/${coding}`)
+    return Buffer.from(await direct.arrayBuffer()).equals(PLAIN)
+  }
+
+  it.each(['gzip', 'x-gzip', 'deflate', 'br', 'zstd', 'x-unknown'])(
+    'labels a %s upstream body as fetch hands it over: decoded and unlabelled, or as sent and labelled',
+    async coding => {
+      const res = await app.fetch(`/proxy/${coding}`)
+      const body = Buffer.from(await res.arrayBuffer())
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('text/csv')
+      if (await fetchDecodes(coding)) {
+        expect(body.equals(PLAIN)).toBe(true)
+        expect(res.headers.get('content-encoding')).toBeNull()
+        expect([null, String(PLAIN.length)]).toContain(res.headers.get('content-length'))
+      } else {
+        expect(body.equals(encoders[coding](PLAIN))).toBe(true)
+        expect(res.headers.get('content-encoding')).toBe(coding)
+        expect(res.headers.get('content-length')).toBe(String(body.length))
+      }
+    },
+  )
+
+  it('keeps the length of an upstream body sent with no coding, which fetch hands over as it came', async () => {
+    const res = await app.fetch('/proxy/identity')
+
+    expect(res.headers.get('content-encoding')).toBeNull()
+    expect(res.headers.get('content-length')).toBe(String(PLAIN.length))
+    expect(Buffer.from(await res.arrayBuffer()).equals(PLAIN)).toBe(true)
+  })
+
+  it("leaves the upstream's hop-by-hop headers behind, the ones its Connection names included", async () => {
+    const res = await app.fetch('/proxy/gzip')
+
+    expect(res.headers.get('x-hop')).toBeNull()
+    expect(res.headers.get('keep-alive')).toBeNull()
+    expect(res.headers.get('connection') ?? '').not.toContain('x-hop')
+  })
+
+  it('keeps the coding of a Response the handler built from bytes it compressed itself', async () => {
+    const res = await app.fetch('/proxy/precompressed')
+
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(Buffer.from(await res.arrayBuffer()).equals(gzipSync(PLAIN))).toBe(true)
+  })
+
+  it('answers a proxied upstream over HTTP/2, which refuses a Connection header', async () => {
+    const answered = await new Promise<{ status: number; body: Buffer }>((resolve, reject) => {
+      const session = connectH2(secure.address!.origin, { ca: cert })
+      session.on('error', reject)
+      const stream = session.request({ ':path': '/h2/gzip' })
+      const chunks: Buffer[] = []
+      let status = 0
+      stream.on('response', headers => (status = Number(headers[':status'])))
+      stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+      stream.on('end', () => {
+        session.close()
+        resolve({ status, body: Buffer.concat(chunks) })
+      })
+      stream.on('error', reject)
+      stream.end()
+    })
+
+    expect(answered.status).toBe(200)
+    expect(answered.body.equals(PLAIN)).toBe(true)
   })
 })

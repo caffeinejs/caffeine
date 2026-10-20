@@ -99,7 +99,8 @@ export function installGlobalErrorHandler(
       // so there is nothing to add a stack trace to.
       const body = err.body !== undefined ? err.body : withStacktrace(httpErrorBody(err), err)
 
-      return reply.send(payloadOf(reply, body))
+      // The error's status stands over a Response given as its body.
+      return reply.send(payloadOf(reply, body, true))
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
