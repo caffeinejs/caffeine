@@ -1,5 +1,6 @@
 import { Attachment, Controller, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -15,26 +16,26 @@ const ETAG = '"report-v1"'
 
 @Controller('/cached-downloads')
 class CachedDownloadsController {
-  @CacheControl({ ttl: 60 })
+  @CacheControl({ ttl: 60 * Second })
   @Get('/bytes')
   bytes() {
     return Attachment(REPORT, { name: 'report.bin', etag: ETAG })
   }
 
-  @CacheControl({ ttl: 60 })
+  @CacheControl({ ttl: 60 * Second })
   @Get('/blob')
   blob() {
     return Attachment(new Blob([REPORT]), { name: 'report.bin', etag: ETAG })
   }
 
   // A route that asked for parts to be kept: a part is still never stored under the whole's key.
-  @CacheControl({ ttl: 60, statusCodes: [200, 206] })
+  @CacheControl({ ttl: 60 * Second, statusCodes: [200, 206] })
   @Get('/parts-listed')
   partsListed() {
     return Attachment(REPORT, { name: 'report.bin', etag: ETAG })
   }
 
-  @CacheControl({ ttl: 60 })
+  @CacheControl({ ttl: 60 * Second })
   @Get('/own-policy')
   ownPolicy() {
     return new Response('fresh', { headers: { 'cache-control': 'no-store' } })
