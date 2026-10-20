@@ -182,6 +182,69 @@ describe('a cached route that serves ranges', () => {
     expect(await bytesOf(warm)).toEqual(REPORT)
   })
 
+  it('sends several ranges past the store as one multipart answer, and keeps none of it', async () => {
+    const app = await start()
+
+    const parts = await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-9,100-109' } })
+    expect(parts.status).toBe(206)
+    expect(parts.headers.get('content-type')).toMatch(/^multipart\/byteranges; boundary=/)
+    expect(parts.headers.get('x-cache')).toBe('BYPASS')
+    await parts.arrayBuffer()
+
+    const whole = await app.fetch('/cached-downloads/bytes')
+    expect(whole.headers.get('x-cache')).toBe('MISS')
+    expect(await bytesOf(whole)).toEqual(REPORT)
+  })
+
+  // RFC 9111 §4.3.2: If-Match and If-Unmodified-Since are not a cache's to evaluate. Answered from the store, a
+  // stale precondition would get the stored 200 instead of the handler's 412.
+  it('takes a request carrying a precondition past the store, so a stale one is refused even while it holds the content', async () => {
+    const bypasses: CacheBypassEvent[] = []
+    const app = await start({ onBypass: event => void bypasses.push(event) })
+    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
+    expect((await app.fetch('/cached-downloads/bytes')).headers.get('x-cache')).toBe('HIT')
+
+    const stale = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })
+    expect(stale.status).toBe(412)
+    expect(stale.headers.get('x-cache')).toBe('BYPASS')
+
+    const current = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': ETAG } })
+    expect(current.status).toBe(200)
+    expect(await bytesOf(current)).toEqual(REPORT)
+
+    const unmodified = await app.fetch('/cached-downloads/bytes', {
+      headers: { 'if-unmodified-since': new Date().toUTCString() },
+    })
+    expect(unmodified.headers.get('x-cache')).toBe('BYPASS')
+
+    expect(bypasses.map(event => event.reason)).toEqual(['precondition', 'precondition', 'precondition'])
+  })
+
+  // RFC 9111 §5.2.1.7: a request for the store alone never reaches the handler; a cache leaves If-Match alone (§4.3.2).
+  it('answers a precondition asked of the store alone from what it holds, or 504 when it holds nothing', async () => {
+    const app = await start()
+    const headers = { 'if-match': ETAG, 'cache-control': 'only-if-cached' }
+
+    const cold = await app.fetch('/cached-downloads/bytes', { headers })
+    expect(cold.status).toBe(504)
+
+    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
+    const warm = await app.fetch('/cached-downloads/bytes', { headers })
+    expect(warm.status).toBe(200)
+    expect(warm.headers.get('x-cache')).toBe('HIT')
+    expect(await bytesOf(warm)).toEqual(REPORT)
+  })
+
+  it('stores nothing from a request it refused with 412', async () => {
+    const app = await start()
+
+    expect((await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })).status).toBe(412)
+
+    const whole = await app.fetch('/cached-downloads/bytes')
+    expect(whole.headers.get('x-cache')).toBe('MISS')
+    expect(await bytesOf(whole)).toEqual(REPORT)
+  })
+
   it("sends the Cache-Control a returned Response carries rather than the route's", async () => {
     const app = await start()
 
