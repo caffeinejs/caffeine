@@ -430,8 +430,15 @@ What a handler returns is what the client gets, and the same holds for a `Respon
 - A `File` from an upload carries the type its client claimed. Return it through `Attachment(...)`, or name its type,
   rather than as it is: `text/html` from a client is a page on your origin.
 - A `HEAD` is answered as the `GET` would be, without the body.
-- A `Response` from `fetch(...)` holds its body decoded but keeps the upstream's `Content-Encoding` and
-  `Content-Length`: delete both from its headers before returning it.
+- A `Response` loses the headers that describe one connection: `Connection`, the ones it names, `Keep-Alive`,
+  `Transfer-Encoding` and the rest of RFC 9110's list. A `Response` from `fetch(...)` holds its body decoded, so it
+  also loses the `Content-Encoding` and `Content-Length` of the bytes it was sent as. One built in the handler keeps
+  both: `new Response(gzipped, { headers: { 'content-encoding': 'gzip' } })` sends the bytes as they are. So does
+  `new Response(upstream.body, upstream)`, which copies a fetched one: delete both from the copy's headers.
+- `ctx.body(...)` takes a value, never a promise: it throws `ErrConfiguration` for one, which would go out as `{}`.
+  Await it first, or return the promise from the handler.
+- `ctx.notFound(...)`, `ctx.badRequest(...)` and the other error helpers, and an `ErrHTTP`'s `body`, keep their own
+  status over a `Response`'s: `ctx.notFound(new Response('gone'))` is a `404`.
 
 ### Downloads
 
@@ -448,9 +455,16 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 
 - `Content-Disposition` names the file twice: a plain `filename`, and the exact name as UTF-8 in `filename*`, which
   current clients prefer. A `File` is named after itself when `name` is not given.
+- A name is one file, never a place: `../../etc/passwd` is saved as `passwd`, and `C:\reports\q3.pdf` as `q3.pdf`.
+  Control characters and the marks that reorder text are dropped, and a name that leaves nothing, `..` or `dir/`,
+  names no file.
+- A `GET` or a `HEAD` from a client that holds the content already gets `304` and no body, before any range: an
+  `If-None-Match` listing `etag`, compared weakly, or `*`; or, without `If-None-Match`, an `If-Modified-Since` not
+  before `lastModified`. A stream the `304` leaves unread is closed.
 - A `Blob` or bytes are served in ranges, so a large download cut off part-way resumes. A `GET` with one `Range` gets
   `206` and that part, or `416` past the end, and every answer says `Accept-Ranges: bytes`. Several ranges, a
-  malformed one, another unit, a `HEAD`, or a status other than `200` get the whole body.
+  malformed one, another unit, a `HEAD`, or a status other than `200` get the whole body. Under `HTTPCaching`, a
+  `Range` request skips the store and reaches the handler, and a part is never stored.
 - `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
   `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
 - An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
