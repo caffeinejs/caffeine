@@ -458,13 +458,22 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 - A name is one file, never a place: `../../etc/passwd` is saved as `passwd`, and `C:\reports\q3.pdf` as `q3.pdf`.
   Control characters and the marks that reorder text are dropped, and a name that leaves nothing, `..` or `dir/`,
   names no file.
-- A `GET` or a `HEAD` from a client that holds the content already gets `304` and no body, before any range: an
-  `If-None-Match` listing `etag`, compared weakly, or `*`; or, without `If-None-Match`, an `If-Modified-Since` not
-  before `lastModified`. A stream the `304` leaves unread is closed.
-- A `Blob` or bytes are served in ranges, so a large download cut off part-way resumes. A `GET` with one `Range` gets
-  `206` and that part, or `416` past the end, and every answer says `Accept-Ranges: bytes`. Several ranges, a
-  malformed one, another unit, a `HEAD`, or a status other than `200` get the whole body. Under `HTTPCaching`, a
-  `Range` request skips the store and reaches the handler, and a part is never stored.
+- Preconditions come before any range, in RFC 9110's order, on a `GET` or a `HEAD` that would get `200`:
+  - An `If-Match` listing no tag that matches `etag` strongly, so never a weak one, or, without `If-Match`, an
+    `If-Unmodified-Since` before `lastModified`, is refused: `Attachment` throws `ErrHTTPPreconditionFailed`, and
+    error handling answers `412`, through a `@Catch` handler when one names it.
+  - A client that holds the content already gets `304` and no body: an `If-None-Match` listing `etag`, compared
+    weakly, or `*`; or, without `If-None-Match`, an `If-Modified-Since` not before `lastModified`.
+  - A date that is not an HTTP-date, in any of RFC 9110's three forms, is ignored.
+  - A stream the `412` or the `304` leaves unread is closed. Another method is the handler's to guard: it has acted
+    by the time `Attachment` answers.
+- A `Blob` or bytes are served in ranges, so a large download cut off part-way resumes, and every answer says
+  `Accept-Ranges: bytes`. A `GET` with one `Range` gets `206` and that part. Several go out together as
+  `multipart/byteranges`, in the order asked for, each part under the type the whole body would carry. A range past
+  the end is left out, and `416` answers when none is left.
+- A malformed range, another unit, more than 100 ranges, ranges adding up to more than the body, a `HEAD`, or a status
+  other than `200` get the whole body. Under `HTTPCaching`, a `Range`, `If-Match` or `If-Unmodified-Since` request
+  skips the store and reaches the handler, and a part is never stored.
 - `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
   `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
 - An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
