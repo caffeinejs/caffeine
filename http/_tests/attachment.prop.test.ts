@@ -67,15 +67,34 @@ function rangeModel(header: string, size: number): RangeAnswer {
   return { status: 200 }
 }
 
-// What the next request is answered with: properties run their requests one at a time.
-let name = ''
-let size = 0
-let kind: 'blob' | 'bytes' = 'blob'
+/**
+ * The file name RFC 6266 has a client given `name` save: its last `/` or `\\` segment, without control characters or
+ * the marks that reorder how it reads. `undefined` when nothing is left a file could be named.
+ */
+function savedName(name: string): string | undefined {
+  const last = name.toWellFormed().split(/[/\\]/).at(-1)!
+  const saved = last.replaceAll(/[\p{Cc}\p{Bidi_Control}\uFEFF]/gu, '')
+
+  return saved === '' || saved === '.' || saved === '..' ? undefined : saved
+}
+
+// Each case is kept under its own id and named in the request, so cases that ever ran at once would not cross.
+const cases = new Map<number, { name?: string; size?: number; kind?: 'blob' | 'bytes' }>()
+let nextID = 0
+
+function caseOf(value: { name?: string; size?: number; kind?: 'blob' | 'bytes' }): number {
+  const id = nextID++
+  cases.set(id, value)
+  return id
+}
 
 const routes = new Router('/prop')
-routes.get('/named').handler(() => Attachment(new Blob(['x']), { name }))
-routes.get('/sized').handler(() => {
-  const body = patterned(0, size)
+routes
+  .get('/named/:id')
+  .handler(ctx => Attachment(new Blob(['x']), { name: cases.get(Number(ctx.req.param().id))!.name }))
+routes.get('/sized/:id').handler(ctx => {
+  const { size, kind } = cases.get(Number(ctx.req.param().id))!
+  const body = patterned(0, size!)
   return Attachment(kind === 'blob' ? new Blob([body]) : body)
 })
 
@@ -105,30 +124,37 @@ const rangeHeader = fc
   )
   .map(([unit, equals, specs, separator]) => `${unit}${equals}${specs.join(separator)}`)
 
-// Lone surrogates included: a name built from bad input still has to be written as a header.
+// Lone surrogates, separators and reordering marks included: a name built from bad input still has to be written as
+// a header, and as a plain file name.
 const anyName = fc.oneof(
   fc.string({ unit: 'binary', maxLength: 40 }),
   fc.string({ unit: 'grapheme', maxLength: 40 }),
-  fc.constantFrom('\uD800', 'a\uDC00b', 'tab\there', 'nul\u0000', 'del\u007f', '"\\"', '%E9', "'*()"),
+  fc
+    .array(fc.constantFrom('a', '.', '..', '/', '\\', '\u0000', '\r\n', '\u202E', '\u2066', '\uFEFF', 'é', ' '), {
+      maxLength: 8,
+    })
+    .map(parts => parts.join('')),
+  fc.constantFrom('\uD800', 'a\uDC00b', 'tab\there', 'nul\u0000', 'del\u007f', '"\\"', '%E9', "'*()", '../x', 'C:\\x'),
 )
 
 describe('Attachment() over any name (property)', () => {
   it.prop([anyName], { numRuns: 300 })(
-    'writes a header of visible ASCII that decodes back to the name, made well-formed',
-    async next => {
-      name = next
-
-      const res = await app.fetch('/prop/named')
+    'writes a header of visible ASCII naming one plain file, or no file when nothing could be named',
+    async name => {
+      const res = await app.fetch(`/prop/named/${caseOf({ name })}`)
       const disposition = res.headers.get('content-disposition')!
+      const saved = savedName(name)
 
       expect(res.status).toBe(200)
-      if (next === '') {
+      if (saved === undefined) {
         expect(disposition).toBe('attachment')
         return
       }
 
       expect(disposition).toMatch(NAMED_DOWNLOAD)
-      expect(extendedName(disposition)).toBe(next.toWellFormed())
+      const decoded = extendedName(disposition)!
+      expect(decoded).toBe(saved)
+      expect(decoded).not.toMatch(/[/\\\p{Cc}\p{Bidi_Control}\uFEFF]/u)
     },
   )
 })
@@ -137,10 +163,7 @@ describe('Attachment() over any range (property)', () => {
   it.prop([fc.nat({ max: 3000 }), fc.constantFrom('blob', 'bytes'), rangeHeader], { numRuns: 400 })(
     'answers with exactly what RFC 9110 has a server answer, and never with bytes its headers do not describe',
     async (nextSize, nextKind, range) => {
-      size = nextSize
-      kind = nextKind
-
-      const res = await app.fetch('/prop/sized', { headers: { range } })
+      const res = await app.fetch(`/prop/sized/${caseOf({ size: nextSize, kind: nextKind })}`, { headers: { range } })
 
       expect(res.headers.get('accept-ranges')).toBe('bytes')
       // RFC 9110 §5.5: a field value arrives without the whitespace around it.

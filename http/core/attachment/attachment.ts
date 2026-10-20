@@ -6,6 +6,7 @@ import { errMessage } from '@caffeinejs/std/err'
 import type { IContext } from '../../context.js'
 import { Responder, type ActionResult } from '../../response.js'
 import { ErrConfiguration } from '../error/common.js'
+import { notModified } from './_conditional.js'
 import { contentDisposition } from './_disposition.js'
 import { byteRange } from './_range.js'
 
@@ -17,7 +18,10 @@ const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 
 /** {@link Attachment}'s options. */
 export interface AttachmentOptions {
-  /** The name the client saves the download under. A `File`'s own name when not given. */
+  /**
+   * The name the client saves the download under. A `File`'s own name when not given. Either is reduced to a plain
+   * file name: its last `/` or `\` segment, without control characters or the marks that reorder how it reads.
+   */
   name?: string
   /**
    * The `Content-Type`, over the route's. Without it, the route's or the handler's type, then a `Blob`'s own, then
@@ -25,11 +29,15 @@ export interface AttachmentOptions {
    */
   type?: string
   /**
-   * A strong entity tag for the content, quoted (`'"v42"'`), written as `ETag` and compared with `If-Range`. A weak
-   * one (`W/"v42"`) is written but never resumes a download: it does not promise the bytes are the same.
+   * A strong entity tag for the content, quoted (`'"v42"'`), written as `ETag` and compared with `If-None-Match` and
+   * `If-Range`. A weak one (`W/"v42"`) still answers `If-None-Match`, but never resumes a download: it does not promise
+   * the bytes are the same.
    */
   etag?: string
-  /** When the content last changed, written as `Last-Modified` and compared with `If-Range` to the second. */
+  /**
+   * When the content last changed, written as `Last-Modified` and compared with `If-Modified-Since` and `If-Range` to
+   * the second.
+   */
   lastModified?: Date
 }
 
@@ -49,7 +57,12 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * otherwise the whole current body goes out. A stream is sent whole, its length not known, and so is a `Blob` past
  * 4 GiB, which Node cannot cut a part out of.
  *
- * A range answers a `200` only: a status the route or the handler set is kept, with the whole body.
+ * A `GET` or a `HEAD` from a client that holds the content already is answered `304` with no body, before any range:
+ * its `If-None-Match` lists `etag`, compared weakly, or is `*`; or, sent without `If-None-Match`, its
+ * `If-Modified-Since` is not before `lastModified`. A stream the `304` leaves unread is closed.
+ *
+ * A range and a `304` answer in place of a `200` only: a status the route or the handler set is kept, with the whole
+ * body.
  *
  * @throws {@link ErrConfiguration} for an `etag` that is not a quoted entity tag, or a `lastModified` that is not a
  * valid date: either would be written as a validator no client can match.
@@ -69,8 +82,8 @@ export function Attachment(body: AttachmentBody, options: AttachmentOptions = {}
     throw new ErrConfiguration(
       errMessage(`Cannot use "${etag}" as an ETag: an entity tag is quoted and holds no space or quote of its own`)
         .solutions(
-          `Write it as "\\"${bare}\\""`,
-          `Write it as "W/\\"${bare}\\"" for a weak tag, which resumes no download`,
+          String.raw`Write it as "\"${bare}\""`,
+          String.raw`Write it as "W/\"${bare}\"" for a weak tag, which resumes no download`,
         )
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
@@ -100,6 +113,27 @@ class AttachmentResult extends Responder {
   respond(ctx: IContext): ActionResult {
     const { body, options } = this
 
+    if (options.etag !== undefined) {
+      ctx.header('etag', options.etag)
+    }
+
+    if (options.lastModified !== undefined) {
+      ctx.header('last-modified', options.lastModified.toUTCString())
+    }
+
+    // RFC 9110 §13.2.2: preconditions before ranges, and only where the answer would be a 200 to a GET or a HEAD. A
+    // 304 carries the validators and nothing that describes a body.
+    const method = ctx.req.method
+    if (
+      (method === 'GET' || method === 'HEAD') &&
+      ctx.statusCode === 200 &&
+      notModified(ctx.req.header('if-none-match'), ctx.req.header('if-modified-since'), options)
+    ) {
+      discard(body)
+      ctx.status(304)
+      return undefined
+    }
+
     ctx.header(
       'content-disposition',
       contentDisposition(options.name ?? (body instanceof NodeFile ? body.name : undefined)),
@@ -107,14 +141,6 @@ class AttachmentResult extends Responder {
 
     if (options.type !== undefined) {
       ctx.header('content-type', options.type)
-    }
-
-    if (options.etag !== undefined) {
-      ctx.header('etag', options.etag)
-    }
-
-    if (options.lastModified !== undefined) {
-      ctx.header('last-modified', options.lastModified.toUTCString())
     }
 
     const sized = sizedOf(body)
@@ -149,6 +175,16 @@ class AttachmentResult extends Responder {
 
     // Bytes are not copied for a part of them: Fastify sends the view as it is.
     return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
+  }
+}
+
+/** Closes a stream a 304 leaves unread, so a file behind it is closed too. */
+function discard(body: AttachmentBody): void {
+  if (body instanceof ReadableStream) {
+    // A stream that fails as it closes has nobody left to tell.
+    body.cancel().catch(() => undefined)
+  } else if ('destroy' in body) {
+    body.destroy()
   }
 }
 

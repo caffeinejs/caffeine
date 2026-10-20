@@ -1,3 +1,5 @@
+import { Readable } from 'node:stream'
+
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Attachment, Controller, ErrConfiguration, Get, Router } from '../index.js'
@@ -25,19 +27,32 @@ const ETAG = '"report-v1"'
 // Milliseconds included on purpose: Last-Modified carries seconds, and If-Range is compared at that precision.
 const MODIFIED = new Date('2026-10-01T12:34:56.789Z')
 
-const names = [
-  'report.pdf',
-  'Q3 report (final).pdf',
-  'say "hi".txt',
-  'back\\slash;semi,comma.txt',
-  "it's 100%.txt",
-  'résumé 2026.pdf',
-  '日本語.pdf',
-  '🎉 party.png',
-  'تقرير.pdf',
-  `${'a'.repeat(996)}.pdf`,
-  'evil\r\nSet-Cookie: stolen=1.txt',
-  '../../etc/passwd',
+// A name as a route gives it, and the plain file name a client is told to save it under; `undefined` for none.
+const names: Array<[given: string, saved: string | undefined]> = [
+  ['report.pdf', 'report.pdf'],
+  ['Q3 report (final).pdf', 'Q3 report (final).pdf'],
+  ['say "hi".txt', 'say "hi".txt'],
+  ['semi;colon,comma.txt', 'semi;colon,comma.txt'],
+  ["it's 100%.txt", "it's 100%.txt"],
+  ['résumé 2026.pdf', 'résumé 2026.pdf'],
+  ['日本語.pdf', '日本語.pdf'],
+  ['🎉 party.png', '🎉 party.png'],
+  ['تقرير.pdf', 'تقرير.pdf'],
+  [`${'a'.repeat(996)}.pdf`, `${'a'.repeat(996)}.pdf`],
+  // A name is one file, never a place: only its last segment is kept, whichever separator it uses.
+  ['../../etc/passwd', 'passwd'],
+  ['C:\\Users\\me\\report.pdf', 'report.pdf'],
+  ['back\\slash;semi,comma.txt', 'slash;semi,comma.txt'],
+  // Nothing that could cut the name short or show it in another order: control characters and reordering marks.
+  ['evil\r\nSet-Cookie: stolen=1.txt', 'evilSet-Cookie: stolen=1.txt'],
+  ['nul\u0000byte.txt', 'nulbyte.txt'],
+  ['invoice\u202Etxt.exe', 'invoicetxt.exe'],
+  ['\uFEFFbom.txt', 'bom.txt'],
+  // Nothing left a file could be named.
+  ['..', undefined],
+  ['.', undefined],
+  ['reports/', undefined],
+  ['\u202E\u0000', undefined],
 ]
 
 const routes = new Router('/files')
@@ -49,9 +64,55 @@ routes
 routes.get('/bytes').handler(() => Attachment(BODY, { name: 'report.pdf', etag: ETAG, lastModified: MODIFIED }))
 routes.get('/array-buffer').handler(() => Attachment(BODY.slice().buffer, { name: 'report.pdf' }))
 routes.get('/stream').handler(() => Attachment(streamOf(BODY), { name: 'live.bin', etag: ETAG }))
+// A stream as a file opens one, so whether each was closed can be seen: a 304 reads none of it.
+const opened: Array<{ kind: string; closed: boolean }> = []
+routes.get('/node-stream').handler(() => {
+  const stream = { kind: 'node', closed: false }
+  opened.push(stream)
+  return Attachment(
+    new Readable({
+      read() {
+        this.push(BODY)
+        this.push(null)
+      },
+      destroy(err, callback) {
+        stream.closed = true
+        callback(err)
+      },
+    }),
+    { etag: ETAG },
+  )
+})
+routes.get('/web-stream').handler(() => {
+  const stream = { kind: 'web', closed: false }
+  opened.push(stream)
+  return Attachment(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.enqueue(BODY)
+        controller.close()
+      },
+      cancel() {
+        stream.closed = true
+      },
+    }),
+    { etag: ETAG },
+  )
+})
+routes.get('/web-stream-failing-close').handler(() =>
+  Attachment(
+    new ReadableStream<Uint8Array>({
+      cancel() {
+        throw new Error('Cannot close the export: the storage connection dropped')
+      },
+    }),
+    { etag: ETAG },
+  ),
+)
 routes.get('/empty').handler(() => Attachment(new Blob([]), { name: 'empty.txt' }))
 routes.get('/unnamed').handler(() => Attachment(new Blob([BODY])))
 routes.get('/file').handler(() => Attachment(new File([BODY], 'relatório Q3.pdf', { type: PDF })))
+routes.get('/file-with-path').handler(() => Attachment(new File([BODY], '../uploads/report.pdf', { type: PDF })))
 routes
   .get('/file-renamed')
   .handler(() => Attachment(new File([BODY], 'tmp-7f3a.pdf', { type: PDF }), { name: 'report.pdf' }))
@@ -69,12 +130,12 @@ routes.post('/blob').handler(() => Attachment(new Blob([BODY], { type: PDF }), {
 routes
   .get('/created')
   .status(201)
-  .handler(() => Attachment(BODY, { name: 'report.pdf' }))
+  .handler(() => Attachment(BODY, { name: 'report.pdf', etag: ETAG, lastModified: MODIFIED }))
 routes.get('/missing').handler(ctx => {
   ctx.status(404)
   return Attachment(new Blob(['no such report']), { name: 'missing.txt' })
 })
-names.forEach((name, i) => routes.get(`/named/${i}`).handler(() => Attachment(new Blob(['x']), { name })))
+names.forEach(([given], i) => routes.get(`/named/${i}`).handler(() => Attachment(new Blob(['x']), { name: given })))
 
 @Controller('/files-controller')
 class ReportsController {
@@ -105,15 +166,27 @@ describe('Attachment() names the download', () => {
     )
   })
 
-  it.each(names.map((name, i) => [JSON.stringify(name), i, name] as const))(
-    'writes %s so that it decodes back exactly, in a header made of visible ASCII alone',
-    async (_label, i, name) => {
+  it.each(
+    names.flatMap(([given, saved], i) => (saved === undefined ? [] : [[JSON.stringify(given), i, saved] as const])),
+  )(
+    'writes %s as a plain file name that decodes back exactly, in a header of visible ASCII alone',
+    async (_label, i, saved) => {
       const res = await app.fetch(`/files/named/${i}`)
 
       const disposition = res.headers.get('content-disposition')!
       expect(res.status).toBe(200)
       expect(disposition).toMatch(NAMED_DOWNLOAD)
-      expect(extendedName(disposition)).toBe(name)
+      expect(extendedName(disposition)).toBe(saved)
+    },
+  )
+
+  it.each(names.flatMap(([given, saved], i) => (saved === undefined ? [[JSON.stringify(given), i] as const] : [])))(
+    'names no file at all for %s, which leaves nothing a file could be called',
+    async (_label, i) => {
+      const res = await app.fetch(`/files/named/${i}`)
+
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-disposition')).toBe('attachment')
     },
   )
 
@@ -127,18 +200,18 @@ describe('Attachment() names the download', () => {
       `attachment; filename="Q3 report (final).pdf"; filename*=UTF-8''Q3%20report%20%28final%29.pdf`,
     ],
   ])('falls back to a name a client without UTF-8 support can still save: %s', async (name, header) => {
-    const res = await app.fetch(`/files/named/${names.indexOf(name)}`)
+    const res = await app.fetch(`/files/named/${names.findIndex(([given]) => given === name)}`)
 
     expect(res.headers.get('content-disposition')).toBe(header)
   })
 
   it('cannot be made to write a header of its own by a name holding a line break', async () => {
-    const res = await app.fetch(`/files/named/${names.indexOf('evil\r\nSet-Cookie: stolen=1.txt')}`)
+    const res = await app.fetch(`/files/named/${names.findIndex(([given]) => given.startsWith('evil'))}`)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('set-cookie')).toBeNull()
     expect(res.headers.get('content-disposition')).toBe(
-      `attachment; filename="evil__Set-Cookie: stolen=1.txt"; filename*=UTF-8''evil%0D%0ASet-Cookie%3A%20stolen%3D1.txt`,
+      `attachment; filename="evilSet-Cookie: stolen=1.txt"; filename*=UTF-8''evilSet-Cookie%3A%20stolen%3D1.txt`,
     )
   })
 
@@ -146,6 +219,12 @@ describe('Attachment() names the download', () => {
     const res = await app.fetch('/files/file')
 
     expect(extendedName(res.headers.get('content-disposition')!)).toBe('relatório Q3.pdf')
+  })
+
+  it("reduces a File's own name to a plain file name too", async () => {
+    const res = await app.fetch('/files/file-with-path')
+
+    expect(extendedName(res.headers.get('content-disposition')!)).toBe('report.pdf')
   })
 
   it("lets the name given win over the File's own", async () => {
@@ -298,6 +377,7 @@ describe('Attachment() resumes only the body the client already holds part of (I
     ['a date a second later', '/files/bytes', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
     ['a date that does not parse', '/files/bytes', 'yesterday', 200],
     ['any validator, when the content has none', '/files/array-buffer', ETAG, 200],
+    ['a date, when the content has no Last-Modified', '/files/array-buffer', MODIFIED.toUTCString(), 200],
   ])('given %s', async (_validator, path, ifRange, status) => {
     const res = await app.fetch(path, { headers: { range: 'bytes=10-19', 'if-range': ifRange } })
 
@@ -345,5 +425,85 @@ describe('Attachment() refuses validators that would fail without a word', () =>
 
   it('refuses a Date that holds no time: the header would read "Invalid Date"', () => {
     expect(() => Attachment(BODY, { lastModified: new Date('not a date') })).toThrow(ErrConfiguration)
+  })
+})
+
+describe('Attachment() answers a client that already holds the content with 304 (If-None-Match, If-Modified-Since)', () => {
+  const later = new Date(MODIFIED.getTime() + 60_000).toUTCString()
+  const earlier = new Date(MODIFIED.getTime() - 1000).toUTCString()
+
+  it.each([
+    ['If-None-Match: *', { 'if-none-match': '*' }],
+    ['its strong tag', { 'if-none-match': ETAG }],
+    ['its tag marked weak: If-None-Match compares weakly', { 'if-none-match': 'W/"report-v1"' }],
+    ['a list holding its tag', { 'if-none-match': '"report-v0", "report-v1"' }],
+    ['a list whose first tag holds a comma', { 'if-none-match': '"v0,v1", "report-v1"' }],
+    ['If-Modified-Since its Last-Modified', { 'if-modified-since': MODIFIED.toUTCString() }],
+    ['If-Modified-Since a later date', { 'if-modified-since': later }],
+    [
+      'a range, with its tag in If-None-Match: preconditions come before ranges',
+      { range: 'bytes=0-9', 'if-none-match': ETAG },
+    ],
+  ])('given %s, on GET and HEAD alike', async (_case, headers) => {
+    for (const method of ['GET', 'HEAD']) {
+      const res = await app.fetch('/files/bytes', { method, headers })
+
+      expect(res.status).toBe(304)
+      expect(res.headers.get('etag')).toBe(ETAG)
+      expect(res.headers.get('last-modified')).toBe(MODIFIED.toUTCString())
+      expect(res.headers.get('content-disposition')).toBeNull()
+      expect(res.headers.get('accept-ranges')).toBeNull()
+      expect(res.headers.get('content-range')).toBeNull()
+      expect(await res.text()).toBe('')
+    }
+  })
+
+  it.each([
+    ['another tag', '/files/bytes', { 'if-none-match': '"report-v2"' }],
+    [
+      'another tag and a later date: If-None-Match decides alone',
+      '/files/bytes',
+      { 'if-none-match': '"report-v2"', 'if-modified-since': later },
+    ],
+    ['If-Modified-Since a second before its Last-Modified', '/files/bytes', { 'if-modified-since': earlier }],
+    ['If-Modified-Since that does not parse', '/files/bytes', { 'if-modified-since': 'yesterday' }],
+    ['a tag sent without its quotes, which names no entity tag', '/files/bytes', { 'if-none-match': 'report-v1' }],
+    ['a tag, to content that has none', '/files/array-buffer', { 'if-none-match': ETAG }],
+    ['a date, to content that has no Last-Modified', '/files/array-buffer', { 'if-modified-since': later }],
+  ])('sends the whole body given %s', async (_case, path, headers) => {
+    const res = await app.fetch(path, { headers })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).not.toBeNull()
+    await expectPatternedBody(res, 0, SIZE)
+  })
+
+  it.each(['node', 'web'])('closes a %s stream it leaves unread, so a file behind one is closed too', async kind => {
+    const changed = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-none-match': '"report-v2"' } })
+    expect(changed.status).toBe(200)
+    await expectPatternedBody(changed, 0, SIZE)
+
+    const res = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-none-match': ETAG } })
+
+    expect(res.status).toBe(304)
+    expect(await res.text()).toBe('')
+    expect(opened.at(-1)).toEqual({ kind, closed: true })
+  })
+
+  // Left to reject, the failed close would be an unhandled rejection, which ends a Node process.
+  it('answers 304 even when the stream it leaves unread fails as it closes', async () => {
+    const res = await app.fetch('/files/web-stream-failing-close', { headers: { 'if-none-match': ETAG } })
+
+    expect(res.status).toBe(304)
+  })
+
+  it('leaves a POST, and a status the route set, to their own answer whatever the validators say', async () => {
+    const posted = await app.fetch('/files/blob', { method: 'POST', headers: { 'if-none-match': ETAG } })
+    expect(posted.status).toBe(200)
+    await expectPatternedBody(posted, 0, SIZE)
+
+    const created = await app.fetch('/files/created', { headers: { 'if-none-match': ETAG } })
+    expect(created.status).toBe(201)
+    await expectPatternedBody(created, 0, SIZE)
   })
 })
