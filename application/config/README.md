@@ -12,7 +12,7 @@ import { EnvConfigSource } from '@caffeinejs/application/config/env'
 One rule runs through all of it: **a fluent method is the last word.** Configuration reaches a feature because the
 application's configure callback wired it (`config(...)`). A value set in code is not a default that a file, the
 environment or an argument quietly outranks. Kafka, messaging and authentication scheme secrets are the named
-exceptions (see `CONVENTIONS.md`).
+exceptions (see `FEATURES.md`).
 
 ---
 

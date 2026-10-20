@@ -1,6 +1,6 @@
 # Contributor coding conventions
 
-How to change **this** monorepo. Behavioral rules for agents live in [`AGENTS.md`](AGENTS.md). User-app and framework-usage agent files live in [`ai/`](ai/). Do not copy this file into application repos.
+How to change **this** monorepo. Agent behavior is in [`AGENTS.md`](AGENTS.md); writing a feature or a plugin is in [`FEATURES.md`](FEATURES.md).
 
 ## Glossary
 
@@ -12,41 +12,9 @@ In this repository these names mean **this project**, not a third-party library:
 | CaffeineIoC                              | `@caffeinejs/di` — the container. Brand spelling `IoC`, not `IOC`. |
 | Caffeine HTTP, the HTTP package          | `@caffeinejs/http` (Fastify adapter).                              |
 
-Package names (`@caffeinejs/kafka`, …) are the npm names. Workspace dirs are in the table below.
+This is not NestJS, Express, or Spring Boot.
 
-This is not NestJS, Express, or Spring Boot. Do not use `experimentalDecorators`, `emitDecoratorMetadata`, `reflect-metadata`, Nest `@Module` / `forRoot`.
-
-When editing a first-party package, also read that package’s `AGENTS.md`:
-
-| Directory                                                                           | Package                                  |
-| ----------------------------------------------------------------------------------- | ---------------------------------------- |
-| [`di/`](di/AGENTS.md)                                                               | `@caffeinejs/di`                         |
-| [`http/`](http/AGENTS.md)                                                           | `@caffeinejs/http`                       |
-| [`caching/`](caching/AGENTS.md)                                                     | `@caffeinejs/caching`                    |
-| [`html/`](html/AGENTS.md)                                                           | `@caffeinejs/html`                       |
-| [`kafka/`](kafka/AGENTS.md)                                                         | `@caffeinejs/kafka`                      |
-| [`distlock/`](distlock/AGENTS.md)                                                   | `@caffeinejs/distlock`                   |
-| [`resilience/`](resilience/AGENTS.md)                                               | `@caffeinejs/resilience`                 |
-| [`openapi/`](openapi/AGENTS.md)                                                     | `@caffeinejs/openapi`                    |
-| [`messaging/`](messaging/AGENTS.md)                                                 | `@caffeinejs/messaging`                  |
-| [`std/`](std/AGENTS.md)                                                             | `@caffeinejs/std`                        |
-| [`application/`](application/AGENTS.md)                                             | `@caffeinejs/application`                |
-| [`static/`](static/AGENTS.md)                                                       | `@caffeinejs/static`                     |
-| [`view/`](view/AGENTS.md)                                                           | `@caffeinejs/view`                       |
-| [`multipart/`](multipart/AGENTS.md)                                                 | `@caffeinejs/multipart`                  |
-| [`cli/`](cli/AGENTS.md)                                                             | `@caffeinejs/cli`                        |
-| [`testing/`](testing/AGENTS.md)                                                     | `@caffeinejs/testing`                    |
-| [`brewer/`](brewer/AGENTS.md)                                                       | `@caffeinejs/brewer`                     |
-| [`devtools/`](devtools/AGENTS.md)                                                   | `@caffeinejs/devtools`                   |
-| [`integrations/typeorm/`](integrations/typeorm/AGENTS.md)                           | `@caffeinejs/typeorm`                    |
-| [`fetchy/fetchy/`](fetchy/fetchy/AGENTS.md)                                         | `@caffeinejs/fetchy`                     |
-| [`fetchy/fetchy-undici/`](fetchy/fetchy-undici/AGENTS.md)                           | `@caffeinejs/fetchy-undici`              |
-| [`fetchy/fetchy-logging-interceptor/`](fetchy/fetchy-logging-interceptor/AGENTS.md) | `@caffeinejs/fetchy-logging-interceptor` |
-| [`plugins/eslint/`](plugins/eslint/AGENTS.md)                                       | `@caffeinejs/eslint-plugin`              |
-| [`plugins/esbuild/`](plugins/esbuild/AGENTS.md)                                     | `@caffeinejs/esbuild-plugin`             |
-| [`plugins/vite/`](plugins/vite/AGENTS.md)                                           | `@caffeinejs/vite-plugin`                |
-
-Workspace membership is the root [`package.json`](package.json) `workspaces` list. Cross-package imports use the package name (`@caffeinejs/di`), not a relative path into another package.
+Package names (`@caffeinejs/kafka`, …) are the npm names; each workspace's `package.json` gives its own. Workspace membership is the root [`package.json`](package.json) `workspaces` list. Cross-package imports use the package name (`@caffeinejs/di`), not a relative path into another package.
 
 ## After every edit
 
@@ -62,9 +30,7 @@ Run checks in this order and fix failures before considering the task complete. 
 - **Anything wider** — two or more workspace packages, or any non-md file outside every package directory (root `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`, root `package.json`, `vitest.config.ts`, `.github/**`):
   1. `make check`, and nothing else. It runs the pin check, the error message copies, `build`, `lint:fix`, `lint:markdown`, `spec:check`, the CLI binary, `build:examples`, `test:typecheck`, `test:memory` and `npm test`, in that order, so running any of them first only runs it twice.
 
-Docs-only does not apply to TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, or a mixed markdown-and-code diff. One non-md file means this is not docs-only.
-
-When in doubt on **code** scope, run `make check`. A README next to a TypeScript change does not make the task docs-only.
+One non-md file means the task is not docs-only: TSDoc inside `.ts`, `ai/llms.txt`, YAML, JSON, and a README next to a TypeScript change all count as code. When in doubt on code scope, run `make check`.
 
 - `npm run build` does not produce the CLI binary. After a clone or a clean, run `npm run build:cli` (or `make build:cli`) before any example test or `caffeine generate`, or `node_modules/.bin/caffeine` is missing.
 - A new production dependency must carry a license in the allowlist in `tools/check-licenses.mjs`; the `license-check` workflow fails the pull request otherwise.
@@ -98,202 +64,70 @@ When in doubt on **code** scope, run `make check`. A README next to a TypeScript
 - Tests resolve `@caffeinejs/*` through package `exports` to `dist/*.d.ts`. There is no `source` condition and no `paths` map, so a type-check needs the dependency `dist/` to exist: build first.
 - The root `.npmrc` sets `ignore-scripts=true`. Never rely on npm `pre*` / `post*` / `postinstall` hooks; they will not fire. Explicit `npm run <name>` still runs.
 
-## Import style
+## Imports and modules
 
-Group all imports from the same module into a single import statement. Enforced by `import/no-duplicates`.
+- One import statement per module (`import/no-duplicates`). Every relative import ends in `.js`, TypeScript sources included.
+- A type from another module comes in through a top-level `import type`, never an inline `import('…')` type.
+- A file prefixed with `_` (`_noop.ts`) is private to its directory: never import it from another one (`no-restricted-imports`).
+- Do not re-export a symbol (type or value) from another module or package just to keep a surface stable or shorten an import path. Import it from its source at every use site. A package's `index.ts` aggregating the package's **own** modules is not a passthrough and is fine.
 
 ```ts
 // correct
 import { Binder, BindTo } from './Binder.js'
+import type { Readable } from 'node:stream'
+import { noop } from './_noop.js'
+import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
+
 // wrong
 import { Binder } from './Binder.js'
 import { BindTo } from './Binder.js'
-```
-
-All imports must include the `.js` extension, including TypeScript source files.
-
-```ts
-// wrong
 import { CaffeineIoC } from './container'
-// correct
-import { CaffeineIoC } from './container.js'
-```
-
-Never use inline dynamic-import syntax as a type reference. Declare a top-level `import type` and use the name.
-
-```ts
-// correct
-import type { Readable } from 'node:stream'
-async upload(stream: Readable) { ... }
-
-// wrong
+import { noop } from '../_noop.js'
+export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
 async upload(stream: import('node:stream').Readable) { ... }
 ```
 
-## Private modules
+### Module layout
 
-Files prefixed with `_` (e.g. `_noop.ts`) are private to their directory. Do not import them from a different directory. Enforced by `no-restricted-imports`.
+A module is a directory of source files in a library package (not `benchmarks/`, `examples/`, `di/examples/` or `devtools/ui`).
 
-```ts
-// wrong
-import { noop } from '../_noop.js'
-// correct — same directory
-import { noop } from './_noop.js'
-```
+- It has a main file named after it (`cache/cache.ts`, `circuit_breaker/circuit_breaker.ts`) and an `index.ts` barrel that only re-exports.
+- A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
+- A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
+- Exempt: a package root, whose `index.ts` is the entry (`std/` has none); a directory holding only subdirectories; `_`-prefixed directories (`_tests/`, `_testdata/`, `_spectypes/`, `_spec/`).
+- A new or moved module follows these rules. An existing one keeps its layout until a change asks to move it.
 
-## Re-exports
+### Renames
 
-Do not re-export a symbol (type or value) from another module or package just to keep a surface stable or shorten an import path. Import from the source at every use site.
-
-```ts
-// wrong
-export { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
-
-// correct
-import { kFeatureConfigure, type FeatureConfigureKit } from '@caffeinejs/application'
-
-import type { ThingConfig } from './config.js'
-```
-
-A package’s `index.ts` barrel aggregating that package’s **own** modules is not a passthrough and is fine.
+Every package is unreleased (`0.0.0`). A rename updates every caller in the same change and leaves no alias, re-export or deprecation shim behind.
 
 ## Features and plugins
 
-Two registration verbs, two kinds of thing:
+Before writing or changing a feature, a plugin factory or a feature's configuration schema, read [`FEATURES.md`](FEATURES.md).
 
-- **`.install(feature)`** — on every `Application`. A feature is a container binder: deduplicated by `[kFeatureName]`, platform-agnostic, and order-free — every feature configures before the container initializes, so where an `.install(...)` sits in the chain does not matter. Feature factories are **PascalCase**: `Kafka()`, `Messaging()`, `DistributedLock()`, `TypeORM()`, `Health()`, `Authentication()`, `Authorization()`, `Guards()`.
-- **`.with(factory)`** — on `WebApplication`, on a listener's builder for that listener alone, `Listener(name, l => l.with(factory))`, and on a router for that router alone, `router.with(factory)`. A factory produces a server plugin, or an `HTTPPlugin`, a plugin written against Caffeine alone whose `register(context)` runs in that slot; factories run at setup, after `container.init()`, and install in the order the `.with(...)` calls are written. Never deduplicated. Either kind of factory mounts routers and adds middleware where its `.with(...)` was written with `context.app`. Plugin factories are **camelCase**: `authentication()`, `healthProbes()`, `staticFiles()`, `openapi()`, `view()`, `HTTPCaching()`.
+## Durations and byte sizes
 
-A capability that binds _and_ wires the server ships both halves under one name, cased apart: `.install(Authentication(configure))` binds the schemes and services, `.with(authentication())` registers the gate. A plugin that depends on a feature asks `context.hasFeature(name)` in its factory (or `instance.$hasFeature(name)` in its body) and throws `ErrFeatureNotInstalled` — loudly, at start-up. The feature alone stays a supported configuration, but where something needs the plugin the feature is not safe without, start-up refuses it: a protected route no gate covers fails with `ErrAuthenticationGateRequired`.
+A span of time in a public API (an option, a builder method, an SPI parameter, a decorator argument, an event or error field) is a `Duration` from `@caffeinejs/std/duration`: a number of milliseconds, as Go's `time.Duration` is a number of nanoseconds. A size in bytes is a `ByteSize` from `@caffeinejs/std/bytes`: a count of bytes. Both follow the same rules:
 
-## Where a feature puts what it produces
+- **Named without a unit**: `timeout`, `ttl`, `waited`, `maxSize`, `bodyLimit`; never `timeoutMs`, `ttlSeconds`, `maxSizeBytes` or `limitKb`. The identifier follows the acronym rules (`sessionCookieTTL`), the configuration key the environment folding (`sessionCookieTtl`).
+- **Code writes it with the constants**: `5 * Second`, `100 * Millisecond`, `30 * Day`, `512 * KiB`, `10 * MiB`. A default is written the same way, never as a bare count (`1048576`, `1024 * 1024`). A test's payload length (`'x'.repeat(n)`, `Buffer.alloc(n)`) is data, not a size an API takes, and this rule does not reach it.
+- **Text is read in two places only**: `$t.Duration()` or `$t.Bytes()` in a configuration schema, and `parseDuration` / `duration(...)` or `parseBytes` / `bytes(...)` in code. No option takes `Duration | string` or `ByteSize | string`.
+- **A message prints it with `formatDuration(d)` or `formatBytes(n)`**, or as `${d}ms` or `${n} bytes`; a solution names code: `such as 30 * Second`, `such as 1 * MiB`. A log line keeps its key and the unit the key names (`ttlMs`, `ageSeconds`, `bytes`), with the value converted.
+- **A library's own option shape keeps the library's type and unit** (Fastify, jose, undici, `@fastify/static`, `@fastify/multipart`'s `limits`, `lru-cache`). An application fills it with the constants, or with `duration('7d')` or `bytes('10mb')` for text.
+- `kafka/` and `messaging/` still take bare-number durations (`nackDelay`, `idleTimeout`). Do not copy them.
 
-Where a value goes depends on who reads it, not on what is convenient:
+### Durations
 
-| The value is…                                         | Goes to                                | Read with                               |
-| ----------------------------------------------------- | -------------------------------------- | --------------------------------------- |
-| a setting a user tunes from the environment or a file | the application's configuration tree   | the configure kit's `config`            |
-| a value the feature runs on                           | an ordinary field on the builder       | the builder reads its own field         |
-| a setting code outside the feature must read          | a container binding, in `configure`    | `container.getOptional(key)`            |
-| something user code injects                           | a container binding, in `configure`    | `container.get` / constructor injection |
-| one of many providers a single consumer collects      | a container binding with `.extends()`  | `container.getManyOptional(Base)`       |
-| start-up wiring the server runs                       | a plugin, from a factory               | `.with(factory)`, in its written slot   |
-| routes or middleware a plugin adds                    | the server or router it registers on   | `context.app`, in its slot              |
-| a plugin's own data                                   | the **closure** the plugin is built in | the captured value                      |
-| a plugin's setting read per request                   | a Fastify decoration the plugin sets   | `request.server[kThing]`                |
-
-Those are the only answers.
-
-- No side channel between a feature and the configuration: a feature registers no slice, publishes no key, and adds no field to the resolved configuration object. A value the application needs once everything is up is either configuration, read out of the tree by the callback, or a binding.
-- A fluent method is the last word: `s.drainDelay(5 * Second)` is what the feature runs on. Configuration reaches a feature only because the application's configure callback handed it over (`.shutdown((s, { config }) => s.config(config.app.shutdown))`). The more specific wins: a setter beats the block `config(...)` handed over.
-- Exceptions, where `config(...)` overlays what the fluent methods set: authentication scheme options (a secret in the tree redirects one written in code); kafka (`brokers`, `clientId`, `groupId`, and every other key `config(...)` carries); messaging binding destinations (and the other binding options `config(...)` carries).
-- The application declares its whole schema itself; a feature's own schema is internal to its package for now. A block with required, undefaulted fields and no source fails validation at `bootstrap()`.
-- A feature nothing wired runs on its own defaults and its builder values alone.
-- What a feature is configured from is a snapshot: `b.config(config.app.thing)` and `b.port(config.app.thing.port)` both hand over the values the application started with, and neither they nor a bound value are reached by a later reload. A feature that must act on a change subscribes with `store.onChange(...)` from the kit; code that must read the newest values injects the configuration's `liveConfigToken`, a `Provider`.
-- A plugin closes over its own options. Do not route them through a container key it reads back at server setup; `instance.register(thingPlugin(options))` inside the factory's plugin is the whole act. State a feature binds for its plugin goes through the container (`OIDCRoutesRef` is the model), never through shared builder fields.
-- The application's own server's construction and listen settings are not a feature: `.server(configure)` hands them to the adapter, which builds the server in `setup()` once the container has initialized. A listener's are its feature's, `Listener(name, l => l.server(configure))`, and the adapter builds it through the same `setup()`.
-- A plugin reaches its parent context only when wrapped in `fastify-plugin`; unwrapped, its hooks and decorations stay inside it. Registered at the root by `.with(...)`, an fp-wrapped plugin covers every route; registered on a route group by `router.with(...)` or `@Use(...)`, it covers that group alone.
-- Plugins install in the order of the `.with(...)` calls of the server they are registered on. There are no stages and nothing is sorted by kind; a plugin that must precede another is registered first. One slot finishes, including what its factory awaited and what its plugin registered without awaiting, before the next starts.
-- Two framework head slots lead, ahead of everything `.with(...)` registers: error handling, then cookies (each server's cookie settings and its `Set-Cookie` writer). The default not-found handler is installed by the adapter after every plugin, and a plugin that set its own keeps it.
-
-## A feature's configuration schema
-
-Every feature a user can tune from the tree has one schema describing its options. The feature never imports it.
-
-- **It satisfies the options.** What the schema decodes, read-only, is assignable to `Partial<Options>`, where `Options` is what the builder's `config(...)` takes (or what the plugin factory takes, for one with no builder). Only the data members are in it: a function, a class, an instance or a schema stays in code. The file asserts it at compile time: `type _Satisfies = SchemaSatisfies<KafkaConfig, InferConfig<typeof KafkaConfigSchema>>`.
-- **The dependency points one way.** A schema imports the feature's option types. Nothing a package ships outside `_spectypes/` imports from it, and no barrel re-exports it; `test/spectypes.test.ts` fails otherwise.
-- **The name is `<Feature>ConfigSchema`**, PascalCase under the acronym rules: `KafkaConfigSchema`, `OpenAPIConfigSchema`, `HTTPCachingConfigSchema`.
-- **It lives in `_spectypes/` at the package root**, one file per schema (`http/_spectypes/health.ts`, `http/_spectypes/auth.ts`, …), with a barrel `index.ts`. A file may declare several top-level schemas to build the one it configures with, and exports only that one. It is internal, on purpose, until its public shape is settled: no `exports` subpath and no package barrel reaches it.
-- **Its JSON Schema is generated into `_spec/`**, mirroring the file: `_spectypes/health.ts` becomes `_spec/health.gen.json`. `make spec` (after `npm run build`) writes it, it is committed, and `make check` fails when it is stale. Never edit it by hand; `tools/generate-spec.mjs` is a pipe of stages, so another output is one more stage.
-- **Tests below the package root restate what they need.** The `_` privacy rule keeps them from importing `../_spectypes`, so they declare the block they configure inline; a test at the package root imports `./_spectypes/index.js`.
-- **Nothing is defaulted in it.** The feature owns its defaults; a default in the schema would be a second place to change it.
-- Every key is one an environment variable folds to (`test/config_keys.test.ts`), which is why an option spelled `cacheTTL` in code is `cacheTtl` in the schema.
-
-## Durations
-
-A span of time in a public API (an option, a builder method, an SPI parameter, an event or error field) is a `Duration` from `@caffeinejs/std/duration`: a number of milliseconds, as Go's `time.Duration` is a number of nanoseconds.
-
-- **It is named without a unit**: `timeout`, `ttl`, `waited`, never `timeoutMs` or `ttlSeconds`. The identifier follows the acronym rules (`sessionCookieTTL`), the configuration key the environment folding (`sessionCookieTtl`).
-- **Code writes it with the constants**: `5 * Second`, `100 * Millisecond`, `30 * Day`. A default is written the same way, never as a bare count.
-- **Text is read in two places only**: `$t.Duration()` in a configuration schema, and `parseDuration` or `duration(...)` in code. No option takes `Duration | string`. The grammar is Go's plus `d` for a day (`'90s'`, `'1h30m'`, `'7d'`); configuration refuses a sign and a bare number.
+- The grammar is Go's plus `d` for a day (`'90s'`, `'1h30m'`, `'7d'`); configuration refuses a sign and a bare number.
 - **Seconds exist only on the wire**, converted where they are written: `Math.floor(d / Second)` for `Max-Age`, `Cache-Control`, a token's `exp` and OIDC `max_age`, and `d / Second` for an OpenTelemetry histogram in seconds. A value read off the wire in seconds, such as `expires_in`, becomes a `Duration` at once.
 - **A lifetime written in whole seconds is at least one**: a scheme truncates its own (`truncate(ttl, Second)`), and refuses one under a second when it is built, where it would go out as `Max-Age=0` or an `exp` already past. `ctx.cookie(...)` refuses a `maxAge` that is not whole seconds. A tolerance on time claims is floored, `Math.floor(d / Second)`, everywhere it is checked.
 - **A sink that takes whole milliseconds gets `Math.ceil(d)`**: `AbortSignal.timeout`, Fastify's `handlerTimeout`, Redis `PX`, undici's headers and body timeouts.
-- **A message prints it with `formatDuration(d)`**, or as `${d}ms`; a solution names code: `such as 30 * Second`. A log line keeps its key and the unit the key names (`ttlMs`, `ageSeconds`), with the value converted from the `Duration`.
-- **A library's own option shape keeps the library's type and unit** (Fastify, jose, undici, `@fastify/static`). An application fills it with the constants, or with `duration('7d')` for text.
-- `kafka/` and `messaging/` still take bare numbers (`nackDelay`, `idleTimeout`). Do not copy them.
 
-## Byte sizes
+### Byte sizes
 
-A size in bytes in a public API (an option, a builder method, a decorator argument, an event or error field) is a `ByteSize` from `@caffeinejs/std/bytes`: a count of bytes.
-
-- **It is named without a unit**: `maxSize`, `bodyLimit`, `maxEntrySize`, never `maxSizeBytes` or `limitKb`.
-- **Code writes it with the constants**: `512 * KiB`, `10 * MiB`, `1 * GiB`. A default is written the same way, never as `1048576` or `1024 * 1024`. A test's payload length (`'x'.repeat(n)`, `Buffer.alloc(n)`) is data, not a size an API takes, and this rule does not reach it.
 - **Every unit is binary**, the constants and the text alike: `'1kb'` is `1 * KiB`. There is no decimal `KB`, which would make `1 * KB` and `bytes('1kb')` disagree.
-- **Text is read in two places only**: `$t.Bytes()` in a configuration schema, and `parseBytes` or `bytes(...)` in code. No option takes `ByteSize | string`. The grammar is Docker Compose's: an integer and an optional `b`, `k`/`kb`, `m`/`mb`, `g`/`gb`, `t`/`tb` or `p`/`pb`, in any case (`'512kb'`, `'1Gb'`). A bare amount is bytes, in configuration too; a sign, a fraction and the Kubernetes spellings (`'1Ki'`, `'1MiB'`) are refused.
-- **A message prints it with `formatBytes(n)`**, or as `${n} bytes`; a solution names code: `such as 1 * MiB`. A log line keeps its key (`bytes`), with the value a count of bytes.
-- **A library's own option shape keeps the library's type** (Fastify's `bodyLimit`, `@fastify/multipart`'s `limits`, undici, `lru-cache`). An application fills it with the constants, or with `bytes('10mb')` for text.
+- The grammar is Docker Compose's: an integer and an optional `b`, `k`/`kb`, `m`/`mb`, `g`/`gb`, `t`/`tb` or `p`/`pb`, in any case (`'512kb'`, `'1Gb'`). A bare amount is bytes, in configuration too; a sign, a fraction and the Kubernetes spellings (`'1Ki'`, `'1MiB'`) are refused.
 - **A limit a specification states keeps the specification's number**: a cookie's 4096 octets, not `4 * KiB`.
-
-## Writing a feature
-
-A feature is one interface with three members, all symbol-keyed so none of it shows on a fluent surface:
-
-```ts
-export interface Feature<C = unknown> {
-  get [kFeatureName](): string
-  [kFeatureConfigure](kit: FeatureConfigureKit<C>): void | Promise<void>
-  [kFeatureBootstrap]?(kit: BootstrapKit<C>): void | Promise<void>
-}
-```
-
-- `[kFeatureName]` is the identity `.install` deduplicates on. A feature accepting an instance name folds it in (`kafka` vs `kafka:orders`). Built-in names (`shutdown`, `logger`, `error-handling`, `cookie`) enter the same set, so a colliding user feature is refused, and `hasFeature(name)` answers for them too.
-- `[kFeatureConfigure]` runs after configuration has resolved and before the container initializes: `config` is readable and binding is open. `[kFeatureBootstrap]` is optional and runs after `container.init()`; look up bindings there. Its kit carries the application's logger.
-- A feature never touches a server. There is no server hook on the contract: server wiring is a plugin factory's, registered with `.with(...)`. A feature whose plugin needs what it resolved binds it (`OIDCRoutesRef`), and the plugin reads it from the container.
-- Most features extend `FeatureBuilder<C>` from `@caffeinejs/application`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
-- The application's callback is `(builder, kit)`. The kit is the `FeatureConfigureKit` the feature's own `configure` receives: `config`, `store`, and `container.bind(...)`, but no `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` and is handed the `HTTPSetupContext`, where the container resolves and binding is closed.
-
-```ts
-export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
-  readonly [kFeatureName] = 'thing'
-
-  #config: Partial<ThingConfig> | undefined
-  #size: number | undefined
-
-  config(config: Partial<ThingConfig>): this {
-    this.#config = config
-    return this
-  }
-
-  size(size: number): this {
-    this.#size = size
-    return this
-  }
-
-  protected configure(kit: FeatureConfigureKit<C>): void {
-    kit.container.bind(kThingOptions, t => t.toValue(this.#size ?? this.#config?.size ?? DEFAULT_SIZE).internal())
-  }
-}
-```
-
-- The package exports a PascalCase factory function, generic over the application configuration type:
-
-```ts
-export function Thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C> {
-  return new ThingBuilder<C>(configure as never)
-}
-```
-
-- A feature taking an instance name overloads on it and folds it into `[kFeatureName]`:
-
-```ts
-export function Thing<C = unknown>(configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
-export function Thing<C = unknown>(instance: string, configure?: FeatureConfigurer<ThingBuilder<C>, C>): Feature<C>
-```
-
-- The plugin half, when the capability has one, is a separate camelCase factory in the same package: `HTTPPluginFactory<C>` built from an `HTTPPluginConfigurer` callback, reading what the feature bound out of the container and refusing a missing feature with `ErrFeatureNotInstalled` (`healthProbes()` and `authentication()` are the models). One that needs nothing from Fastify returns an `HTTPPlugin` instead, its factory typed `AdapterExtensionFactory<HTTPPlugin, C>`, and mounts routers and adds middleware from `register(context)` with `context.app`. A plain `HTTPPlugin` is written for no adapter; one that mounts Fastify-bound routers or names Fastify hooks is `HTTPPlugin<RouterTypes>`.
-- Only the framework's pre-registered builders (shutdown policy, logger, cookies, error handling) hand a callback over with `builder[kAddConfigurer](configure)`, because they are constructed before an application can name one. Nothing else uses that symbol.
-- A feature the application cannot configure from the tree implements `Feature` directly, not `FeatureBuilder`: `AuthorizationBuilder` and `GuardsBuilder`, whose factories (`Authorization(fn)`, `Guards(fn)`) run their callback immediately with no kit. Having nothing to read from the configuration is what decides it, not how much work the phases do.
 
 ## Error messages
 
@@ -336,19 +170,15 @@ throw new ErrConfiguration(`Cannot set the base path: "${value}" does not start 
 
 ## Documentation
 
-TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller. Summary sentence first; details after a blank line. Do not document every export. Do not add internal implementation details in the TSDocs.
+TSDoc is the **published contract** (`.d.ts` / hover), not git history. Write for the caller: a summary sentence first, details after a blank line.
 
-Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter’s meaning is not its name, or a generic/overload is non-obvious.
-
-Do not restate the type, narrate the implementation, or TSDoc tests and obvious getters. Private `_` modules: do not document.
-
-No design history in hover (“we rejected Nest”). Do document observable why when it **is** the contract (headers stay open because Ajv `removeAdditional` would strip `host`).
-
-Do not analogize to Nest, Spring, ASP.NET, or Express in docs or TSDoc. Naming this package’s real peer (Fastify in `@caffeinejs/http`) is allowed when the reader must know it.
-
-Tags: `{@link Symbol}`; `@param name -` only when the name is insufficient; `@throws`; `@example` only for call shapes types hide. Skip `@returns` unless the meaning is not the type. No `@class`, `@function`, or `@type`.
-
-Voice: sentence case; complete sentences; same acronym rules as identifiers. No `NOTE:`, `IMPORTANT:`, or changelogs.
+- Write it when behavior surprises, sibling APIs look alike, callers must handle a specific `Err*` (`@throws`), a parameter's meaning is not its name, or a generic or overload is not obvious. Do not document every export.
+- Do not restate the type, narrate the implementation or add internal details. Do not document tests, obvious getters or private `_` modules.
+- No design history in hover ("we rejected Nest"). Do document an observable why when it **is** the contract (headers stay open because Ajv `removeAdditional` would strip `host`).
+- Do not analogize to Nest, Spring, ASP.NET, or Express in docs or TSDoc. Naming this package's real peer (Fastify in `@caffeinejs/http`) is allowed when the reader must know it.
+- Every API an `@example`, a README or a doc page shows exists today, with the signature shown: TC39 decorators have no parameter form, and a token an example injects is one a package exports.
+- Tags: `{@link Symbol}`; `@param name -` only when the name is insufficient; `@throws`; `@example` only for call shapes types hide. Skip `@returns` unless the meaning is not the type. No `@class`, `@function`, or `@type`.
+- Voice: sentence case; complete sentences; same acronym rules as identifiers. No `NOTE:`, `IMPORTANT:`, or changelogs.
 
 ```ts
 // correct — contract + why it surprises
@@ -371,7 +201,7 @@ Before relying on the API of a third-party library, call the Context7 MCP server
 2. `query-docs` with the chosen `/org/project` id. One concept per call.
 3. Answer from those docs. Prefer Context7 over web search for a library API.
 
-Skip Context7 for `@caffeinejs/*`, language builtins, and code already in the conversation. First-party behavior is in this file, [`AGENTS.md`](AGENTS.md), and the package `AGENTS.md`.
+Skip Context7 for `@caffeinejs/*`, language builtins, and code already in the conversation. First-party behavior is in this file, [`FEATURES.md`](FEATURES.md), [`AGENTS.md`](AGENTS.md), and the package `AGENTS.md`.
 
 ## Analysis servers
 
@@ -411,27 +241,30 @@ Exceptions:
 
 ## Decorators
 
-TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]`. Never add `experimentalDecorators` or `emitDecoratorMetadata` to main-package tsconfigs. The NestJS benchmark configs use the legacy flags for comparison only — do not copy them.
+TC39 ECMAScript decorators only. Root `tsconfig.json` sets `"lib": ["Decorators", "esnext.decorators"]`. Never add `experimentalDecorators` or `emitDecoratorMetadata` to main-package tsconfigs, and never use `reflect-metadata` or Nest's `@Module` / `forRoot`. The NestJS benchmark configs use the legacy flags for comparison only — do not copy them.
 
-That rule holds for this repository without exception. An **application** that must use a library shipping only legacy decorators (TypeORM, class-validator) reaches for the library's decorator-free API, or compiles those files as a separate TypeScript project and consumes only its output — [`ai/docs/mixing-decorators.md`](ai/docs/mixing-decorators.md).
+An **application** that must use a library shipping only legacy decorators (TypeORM, class-validator) reaches for the library's decorator-free API, or compiles those files as a separate TypeScript project and consumes only its output — [`ai/docs/mixing-decorators.md`](ai/docs/mixing-decorators.md).
 
-## Time in tests
+## Tests
+
+- **Test behavior, not implementation.** A test calls what the module exports, the way its caller does, and asserts what that caller observes: a return value, a thrown `Err*` and its `code`, a response, a bound value, an event. It never reads a private field or symbol, spies on a function the caller cannot reach, or pins the order of internal calls. A refactor that keeps behavior keeps every test green.
+- **Every assertion can fail.** Assert the exact value: `toBe(null)`, not `toBeDefined()` on something that can be `null`; the exact count, not `> 0`. A test that still passes with the behavior it names broken is wrong. Name a test after the behavior and why it matters, not after the function it calls.
+- **A test of one module sits beside it, named after it**: `cache.ts`, `cache.test.ts`. A variant keeps the stem: `cache.prop.test.ts`, `cache.test-d.ts`.
+- **A wider test goes in `_tests/`** of the nearest directory that holds everything it exercises: one that crosses modules, or boots a container, an application or a server. Its helpers sit beside it in `_tests/` and its fixtures in `_testdata/`. A test across packages, or of the repository itself, goes in the root `test/`. The directory is `_tests/`, the name every exclude above carries: a helper outside it, unless it is a `*.testkit.ts`, ships in `dist/`.
+- **Fix a bug test-first.** Before changing code for a bug, or for an issue a review or a tool reports, write the test that reproduces it and run it. It must fail, and for the reason reported, not a typo or a missing import. A test you cannot make fail means the issue is not what you thought: stop, say so, and change nothing. Then fix it, see the same test pass, and keep the test in the change.
+- An existing test keeps its place. Move one only when asked.
+
+### Time in tests
 
 A test that sleeps for something to happen fails once the machine is busy: a full run executes many files at once, and a timer can fire hundreds of milliseconds late. Wait on what the test asserts, never on a stretch of time standing in for it.
 
 - That something happened (a request reached its handler, a hook ran) is a latch: the code resolves `started` and awaits `held`, which the test releases at the end (`http/core/listener/_tests/lifecycle.test.ts`).
-- That time passed is a driven clock: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })`, with `'Date'` added when the code compares `Date.now()` with a deadline, then `await vi.advanceTimersByTimeAsync(ms)`. A test that also runs a server, a socket or a third-party SDK fakes that list and nothing else; `resilience/` uses its `useFakeClock()`.
+- That time passed is a driven clock: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })`, with `'Date'` added when the code compares `Date.now()` with a deadline, then `await vi.advanceTimersByTimeAsync(ms)`. A test that also runs a server, a socket or a third-party SDK fakes that list and nothing else.
 - Fake after `bootstrap()` or `run()`, and fake `setTimeout` only after the file's first global `fetch`: undici builds its own clock on first use, and one built fake never ticks again in that file.
 - `vi.useRealTimers()` drops every pending fake timer for good: advance past each one a close waits on before restoring. `afterEach` restores before it closes anything, and runs `await vi.runOnlyPendingTimersAsync()` first when its close could join one a failed test left waiting.
 - Where a timer must stay real, such as an SDK's export callback, freeze the clock instead: `toFake: ['Date']` alone, with the test's own deadlines on `performance.now()`. A frozen clock proves nothing about time passing: a claim that something lapses, or is kept from lapsing, drives the clock.
 - Never `vi.waitFor` or `expect.poll` with anything faked: every attempt moves the fake clock.
 - A wait no clock stands in for, such as a worker thread starting, gets a budget in seconds (`describe(name, { timeout: 30_000 }, ...)`) and fails as soon as the other side exits.
-
-## Git discipline
-
-Never use `git stash`. If uncommitted changes exist and you need to switch state, stop and ask.
-
-Never revert, discard, or `git checkout --` a file outside the current task’s scope — including files a tool (e.g. `oxlint --fix` / `oxfmt`) modified as a side effect. That uncommitted state is other in-progress work. Stop and report it; do not revert it yourself.
 
 ## Security
 
