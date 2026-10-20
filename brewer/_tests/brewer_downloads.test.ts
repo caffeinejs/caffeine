@@ -142,9 +142,9 @@ const downloads = new Router('/downloads')
   .handler(() => Attachment(archive(), { name: 'archive.bin' }))
 
 // A client that stops a download part-way can leave the server a connection with no request on it, which its
-// graceful close would otherwise wait out (caffeinejs/caffeine#131): a connection quiet for a second is dropped.
+// graceful close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
+  .server(() => ({ factory: { forceCloseConnections: true } }))
   .with(staticFiles(s => s.serve(dir, { prefix: '/files' })))
   .mount(downloads)
 
