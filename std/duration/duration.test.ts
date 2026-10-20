@@ -243,7 +243,7 @@ describe('formatDuration', () => {
   })
 
   // It is the formatter of error messages, which must not throw on the bad value they describe.
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('writes %p as JavaScript does', value => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('writes %o as JavaScript does', value => {
     expect(formatDuration(value)).toBe(String(value))
   })
 })
@@ -265,7 +265,7 @@ describe('duration', () => {
   })
 
   // A third-party option handed `NaN` would read it as it pleases, often as "no limit at all".
-  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('refuses the number %p', value => {
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])('refuses the number %o', value => {
     expect(() => duration(value)).toThrow('expected a finite number of milliseconds')
   })
 })
