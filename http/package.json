@@ -15,6 +15,10 @@
       "types": "./dist/core/attachment/index.d.ts",
       "default": "./dist/core/attachment/index.js"
     },
+    "./bff": {
+      "types": "./dist/core/bff/index.d.ts",
+      "default": "./dist/core/bff/index.js"
+    },
     "./constraints": {
       "types": "./dist/core/constraints/index.d.ts",
       "default": "./dist/core/constraints/index.js"
@@ -90,6 +94,7 @@
     "path-to-regexp": "^8.4.2"
   },
   "devDependencies": {
+    "@caffeinejs/resilience": "*",
     "@caffeinejs/testing": "*",
     "@fastify/compress": "^9.2.0",
     "@fastify/cookie": "^11.1.2",

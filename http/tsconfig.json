@@ -8,5 +8,5 @@
   },
   "include": ["**/*.ts"],
   "exclude": ["dist", "node_modules"],
-  "references": [{ "path": "./tsconfig.build.json" }]
+  "references": [{ "path": "./tsconfig.build.json" }, { "path": "../resilience/tsconfig.build.json" }]
 }

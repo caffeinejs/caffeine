@@ -17,7 +17,7 @@ export class ErrBFFTimeout extends ErrBFF {
 
   constructor(timeout: Duration) {
     super(
-      errMessage(`The call exceeded ${timeout}ms`).reference('@caffeinejs/bff', ErrBFFTimeout).build(),
+      errMessage(`The call exceeded ${timeout}ms`).reference('@caffeinejs/http', ErrBFFTimeout).build(),
       'ERR_BFF_TIMEOUT',
     )
     this.timeout = timeout
@@ -29,7 +29,7 @@ export class ErrBFFInvalidTimeout extends ErrBFF {
   constructor(limit: Duration) {
     super(
       errMessage(`Cannot set a timeout of ${formatDuration(limit)}: a timeout must be a positive duration`)
-        .reference('@caffeinejs/bff', ErrBFFInvalidTimeout)
+        .reference('@caffeinejs/http', ErrBFFInvalidTimeout)
         .build(),
       'ERR_BFF_INVALID_TIMEOUT',
     )
