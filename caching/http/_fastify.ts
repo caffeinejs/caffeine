@@ -11,5 +11,7 @@ declare module 'fastify' {
     cacheFlight: Flight | null
     /** A stale entry the read hook found within `staleIfError`, for the store hook to replay over a 5xx. */
     cacheStale: HTTPCacheEntry | null
+    /** The validators a miss kept from the handler, so it answers whole; the store hook puts them back to answer them. */
+    cacheConditionals: Partial<Record<'if-none-match' | 'if-modified-since', string>> | null
   }
 }

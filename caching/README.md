@@ -508,7 +508,7 @@ HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics,
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                  |
 | `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use). |
-| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.           |
+| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.  |
 | `onStore`        | A response was stored, with its size in bytes and its tags.                                                                                                                   |
 | `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                    |
 | `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                      |

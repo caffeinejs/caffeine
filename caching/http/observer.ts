@@ -22,6 +22,8 @@ export type CacheBypassReason =
   | 'authenticated'
   /** The route varies on `*`, which no stored response can match. */
   | 'vary-any'
+  /** The request carried `Range`: a stored whole response does not answer a request for part of one. */
+  | 'range'
   | 'no-cache'
   | 'no-store'
   | 'max-age-0'
