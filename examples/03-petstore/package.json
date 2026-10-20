@@ -38,7 +38,7 @@
     "@caffeinejs/cli": "*",
     "@caffeinejs/testing": "*",
     "@types/node": "^26.6.4",
-    "prisma": "^7.10.0",
+    "prisma": "^7.10.1",
     "tsx": "^4.23.15"
   }
 }
