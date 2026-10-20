@@ -8,6 +8,8 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import type { FastifyInstance } from 'fastify'
+import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { type NodeMiddleware, type WebApplication } from '../index.js'
@@ -289,6 +291,81 @@ describe('a server serving TLS or HTTP/2', () => {
 
       const startedAt = Date.now()
       await app.close()
+      app = undefined
+
+      expect(Date.now() - startedAt).toBeLessThan(1_000)
+    })
+
+    it('closes promptly with an idle cleartext session still open', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { http2: true }, listener }))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const client = session(app.address!.origin)
+      await getH2(client, '/echo')
+
+      const startedAt = Date.now()
+      await app.close()
+      app = undefined
+
+      expect(Date.now() - startedAt).toBeLessThan(1_000)
+    })
+
+    // Closing a session refuses new streams but lets the open ones finish, so a client mid-request still gets its
+    // answer from a server going down within the budget.
+    it('lets a stream in flight finish while the server closes', async () => {
+      const { router, inFlight, release } = holding()
+      app = createWebApplication()
+        .server(() => ({ factory: { http2: true, https: { key, cert } }, listener }))
+        .mount(router) as WebApplication
+
+      await app.run()
+      const client = session(app.address!.origin)
+      const request = getH2(client, '/slow')
+      await inFlight
+      const goaway = new Promise(resolve => client.once('goaway', resolve))
+
+      const closed = app.close()
+      await goaway
+      release()
+
+      expect(await request).toEqual({ status: 200, body: { ok: true } })
+      await expect(closed).resolves.toBeUndefined()
+      app = undefined
+    })
+
+    // The server listens until its `preClose` hooks have run, so a client can still connect once closing has begun.
+    it('closes a session that opens while the server is closing', async () => {
+      let closing!: () => void
+      let resume!: () => void
+      const preClose = new Promise<void>(resolve => (closing = resolve))
+      const held = new Promise<void>(resolve => (resume = resolve))
+
+      app = createWebApplication()
+        .server(() => ({ factory: { http2: true, https: { key, cert } }, listener }))
+        .with(() =>
+          fp(async (instance: FastifyInstance) => {
+            instance.addHook('preClose', async () => {
+              closing()
+              await held
+            })
+          }),
+        )
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const origin = app.address!.origin
+
+      const closed = app.close()
+      await preClose
+      const late = session(origin)
+      // The server's settings arrive once it has taken the connection on as a session.
+      await new Promise(resolve => late.once('remoteSettings', resolve))
+
+      const startedAt = Date.now()
+      resume()
+      await expect(closed).resolves.toBeUndefined()
       app = undefined
 
       expect(Date.now() - startedAt).toBeLessThan(1_000)
