@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { Attachment, Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
-import { expectPatternedBody } from './bodies.js'
+import { expectPatternedBody, expectRangeAnswer } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
 /**
@@ -297,6 +297,42 @@ describe('a large download resumed and read in parts', { timeout: 60_000 }, () =
     expect(sha256(...parts)).toBe(fileDigest)
   })
 
+  it('serves pieces spread across the file in one answer: its first byte, a span across a megabyte, its last byte', async () => {
+    const res = await fetch(`${origin}/big/file`, {
+      headers: { range: `bytes=0-0,${MiB - 6}-${MiB + 9},${FILE_SIZE - 1}-${FILE_SIZE - 1}`, 'if-range': FILE_ETAG },
+    })
+
+    await expectRangeAnswer(
+      res,
+      {
+        status: 206,
+        parts: [
+          [0, 0],
+          [MiB - 6, MiB + 9],
+          [FILE_SIZE - 1, FILE_SIZE - 1],
+        ],
+      },
+      FILE_SIZE,
+    )
+  })
+
+  it('serves two 8 MiB pieces of the file in one answer, every byte where its part says', async () => {
+    const tail = FILE_SIZE - 8 * MiB
+    const res = await fetch(`${origin}/big/file`, { headers: { range: `bytes=0-${8 * MiB - 1},${tail}-` } })
+
+    await expectRangeAnswer(
+      res,
+      {
+        status: 206,
+        parts: [
+          [0, 8 * MiB - 1],
+          [tail, FILE_SIZE - 1],
+        ],
+      },
+      FILE_SIZE,
+    )
+  })
+
   it('serves a media player seeking: the start, a jump to the middle, then the trailing index', async () => {
     const start = await readThenAbort('/big/file', MiB, { range: 'bytes=0-' })
     expect(firstMismatch(start, 0)).toBe(-1)
@@ -345,7 +381,7 @@ describe('a download at and past the 32-bit limit', { timeout: 60_000 }, () => {
     const head = await fetch(`${origin}/big/huge`, { method: 'HEAD' })
     expect(head.headers.get('accept-ranges')).toBeNull()
 
-    for (const range of ['bytes=0-', `bytes=${2 ** 32 - 6}-${2 ** 32 + 9}`, 'bytes=-16']) {
+    for (const range of ['bytes=0-', `bytes=${2 ** 32 - 6}-${2 ** 32 + 9}`, 'bytes=-16', 'bytes=0-9,100-109']) {
       const controller = new AbortController()
       const res = await fetch(`${origin}/big/huge`, { headers: { range }, signal: controller.signal })
 
@@ -375,6 +411,23 @@ describe('a download at and past the 32-bit limit', { timeout: 60_000 }, () => {
       expect(res.headers.get('content-range')).toBe(`bytes ${first}-${LARGEST_RANGED - 1}/${LARGEST_RANGED}`)
       expect(firstMismatch(body, first)).toBe(-1)
     }
+  })
+
+  it('serves several ranges of that Blob together, at offsets past 31 bits and up to its very last byte', async ({
+    skip,
+  }) => {
+    skip(!sparse, unsparse)
+
+    const parts = [
+      [0, 99],
+      [2 ** 32 - 1000, 2 ** 32 - 901],
+      [LARGEST_RANGED - 1, LARGEST_RANGED - 1],
+    ] as const
+    const res = await fetch(`${origin}/big/edge`, {
+      headers: { range: `bytes=${parts.map(([start, end]) => `${start}-${end}`).join(',')}` },
+    })
+
+    await expectRangeAnswer(res, { status: 206, parts }, LARGEST_RANGED)
   })
 })
 

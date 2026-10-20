@@ -117,6 +117,22 @@ describe('a large download', () => {
     expect(growth).toBeLessThan(BOUND)
   })
 
+  // A part is a slice of the Blob, read from disk as it is sent: a copy of 512 MiB would show as growth past the bound.
+  it('streams several ranges adding up to 512 MiB of a 1 GiB Attachment while holding a fraction of them', async ({
+    skip,
+  }) => {
+    skip(!sparse, unsparse)
+
+    const { status, received, growth } = await peakWhileReading(`${app.address!.origin}/memory/attachment`, {
+      range: `bytes=0-${256 * MiB - 1},${512 * MiB}-${768 * MiB - 1}`,
+    })
+
+    expect(status).toBe(206)
+    expect(received).toBeGreaterThan(512 * MiB)
+    expect(received).toBeLessThan(512 * MiB + 1024)
+    expect(growth).toBeLessThan(BOUND)
+  })
+
   it('leaves nothing held after 20 downloads abandoned part-way', async ({ skip }) => {
     skip(!sparse, unsparse)
 
