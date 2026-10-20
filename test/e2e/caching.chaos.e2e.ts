@@ -1,12 +1,3 @@
-/**
- * The HTTP cache through a Redis or Valkey outage: replies that stop coming, connections that drop, and the way
- * back. Every request is asserted to go on without the cache, and the cache to work again once the server does.
- *
- *   make redis-up && npx vitest run --config test/e2e/vitest.config.ts caching.chaos
- *
- * The outage is staged by a TCP relay the client dials instead of the server, so no container is touched. The
- * one-node clusters are not rows: a cluster client dials the addresses the nodes announce, past any relay.
- */
 import { randomUUID } from 'node:crypto'
 import { connect } from 'node:net'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -23,6 +14,16 @@ import {
 } from '@caffeinejs/caching/http'
 import { RedisHTTPCacheStore } from '@caffeinejs/caching/store/redis'
 import { Router } from '@caffeinejs/http'
+/**
+ * The HTTP cache through a Redis or Valkey outage: replies that stop coming, connections that drop, and the way
+ * back. Every request is asserted to go on without the cache, and the cache to work again once the server does.
+ *
+ *   make redis-up && npx vitest run --config test/e2e/vitest.config.ts caching.chaos
+ *
+ * The outage is staged by a TCP relay the client dials instead of the server, so no container is touched. The
+ * one-node clusters are not rows: a cluster client dials the addresses the nodes announce, past any relay.
+ */
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { createClient } from '@redis/client'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -78,7 +79,7 @@ function routes(calls: { n: number }) {
   const pets = new Router('/pets')
   pets
     .get('/')
-    .extend(cacheControl({ ttl: 60, tags: ['pets'], staleWhileRevalidate: 30 }))
+    .extend(cacheControl({ ttl: 60 * Second, tags: ['pets'], staleWhileRevalidate: 30 * Second }))
     .handler(() => ({ calls: ++calls.n }))
   pets
     .put('/:id')
@@ -119,7 +120,14 @@ describe.each(targets)('the HTTP cache under a $name outage', ({ name, url, up }
       const { pets, plain } = routes(calls)
       running = await startApp(app =>
         app
-          .with(HTTPCaching(b => b.store(store).storeTimeout('200ms').observer(recording.observer)))
+          .with(
+            HTTPCaching(b =>
+              b
+                .store(store)
+                .storeTimeout(200 * Millisecond)
+                .observer(recording.observer),
+            ),
+          )
           .mount(pets)
           .mount(plain),
       )

@@ -17,7 +17,7 @@ function load(options: ConstructorParameters<typeof EnvConfigSource>[0], logger?
 }
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>) {
-  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 describe('EnvConfigSource', () => {

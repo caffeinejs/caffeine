@@ -1,5 +1,5 @@
 import type { Logger } from '@caffeinejs/application/logger'
-import { toMillis, type Duration } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import { extendChannel, publishLost, releaseChannel, traced, type Writable } from './_channels.js'
 import type { Backend, LockLease } from './backend.js'
@@ -32,7 +32,7 @@ export class HeldLock implements Lock {
 
   readonly #host: LockHost
 
-  #ttlMs: number
+  #ttl: Duration
   #lease: LockLease
   #released = false
   #taken = false
@@ -40,13 +40,13 @@ export class HeldLock implements Lock {
   #timer: ReturnType<typeof setTimeout> | undefined
   #renewal: Promise<void> | undefined
 
-  constructor(host: LockHost, lease: LockLease, ttlMs: number, renew: boolean) {
+  constructor(host: LockHost, lease: LockLease, ttl: Duration, renew: boolean) {
     this.key = lease.key
     this.leaseID = ++nextLeaseID
     this.acquiredAt = Date.now()
     this.#host = host
     this.#lease = lease
-    this.#ttlMs = ttlMs
+    this.#ttl = ttl
 
     if (renew) {
       host.track(this)
@@ -77,12 +77,12 @@ export class HeldLock implements Lock {
       return false
     }
 
-    const ttlMs = ttl === undefined ? this.#ttlMs : toMillis(ttl)
+    const span = ttl ?? this.#ttl
 
     return traced(
       extendChannel,
-      () => this.#extendContext(ttlMs, false),
-      ctx => this.#extendLease(ttlMs, false, ctx),
+      () => this.#extendContext(span, false),
+      ctx => this.#extendLease(span, false, ctx),
     )
   }
 
@@ -159,15 +159,15 @@ export class HeldLock implements Lock {
       return
     }
 
-    const ttlMs = this.#ttlMs
+    const ttl = this.#ttl
 
     // A renewal that cannot reach the backend is a lost lease, not a crash in whatever the holder is doing.
     // Marked lost here, once the extend channel has settled, so the loss is published after the failure that
     // caused it.
     const renewed = await traced(
       extendChannel,
-      () => this.#extendContext(ttlMs, true),
-      ctx => this.#extendLease(ttlMs, true, ctx),
+      () => this.#extendContext(ttl, true),
+      ctx => this.#extendLease(ttl, true, ctx),
     ).catch(() => {
       this.#lose('error', true)
       return false
@@ -179,17 +179,17 @@ export class HeldLock implements Lock {
     }
   }
 
-  #extendContext(ttlMs: number, renewal: boolean): Writable<ExtendContext> {
-    return { service: this.#host, key: this.key, leaseID: this.leaseID, ttlMs, renewal }
+  #extendContext(ttl: Duration, renewal: boolean): Writable<ExtendContext> {
+    return { service: this.#host, key: this.key, leaseID: this.leaseID, ttl, renewal }
   }
 
   // Every state change an extension makes happens here, before the promise settles, so a subscriber reading the
   // lock at `asyncEnd` sees it as it now is. The one exception is the loss a failed renewal causes: `#renew`
   // marks that after the channel has settled, so the loss is published after the failure.
-  async #extendLease(ttlMs: number, renewal: boolean, ctx: Writable<ExtendContext> | undefined): Promise<boolean> {
+  async #extendLease(ttl: Duration, renewal: boolean, ctx: Writable<ExtendContext> | undefined): Promise<boolean> {
     let next: LockLease | undefined
     try {
-      next = await this.#host.backend.extend(this.#lease, ttlMs)
+      next = await this.#host.backend.extend(this.#lease, ttl)
     } catch (error) {
       this.#host.log.warn(
         { err: error, key: this.key, leaseID: this.leaseID, operation: 'extend' },
@@ -222,7 +222,7 @@ export class HeldLock implements Lock {
     // Every renewal from here on runs on what an explicit extend asked for. A renewal leaves it alone: one
     // that left before an explicit extend landed would otherwise put the old duration back.
     if (!renewal) {
-      this.#ttlMs = ttlMs
+      this.#ttl = ttl
     }
 
     if (ctx !== undefined) {
@@ -230,7 +230,7 @@ export class HeldLock implements Lock {
       ctx.expiresAt = next.expiresAt
     }
 
-    this.#host.log.debug({ key: this.key, leaseID: this.leaseID, ttlMs, renewal }, 'lock extended')
+    this.#host.log.debug({ key: this.key, leaseID: this.leaseID, ttlMs: ttl, renewal }, 'lock extended')
 
     return true
   }
@@ -251,12 +251,12 @@ export class HeldLock implements Lock {
   }
 
   async #releaseLease(ctx: Writable<ReleaseContext> | undefined): Promise<void> {
-    const heldMs = Date.now() - this.acquiredAt
+    const held = Date.now() - this.acquiredAt
     const lapsed = this.#taken || Date.now() >= this.#lease.expiresAt
     const unreported = this.lapsedUnreported
 
     if (ctx !== undefined) {
-      ctx.heldMs = heldMs
+      ctx.held = held
       ctx.lapsed = lapsed
     }
 
@@ -273,7 +273,7 @@ export class HeldLock implements Lock {
       throw error
     }
 
-    const fields = { key: this.key, leaseID: this.leaseID, heldMs }
+    const fields = { key: this.key, leaseID: this.leaseID, heldMs: held }
     if (unreported) {
       this.#host.log.warn(fields, 'lock released after its lease lapsed')
     } else {

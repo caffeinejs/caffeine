@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, Get, Post, type WebApplication } from '@caffeinejs/http'
 import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Minute } from '@caffeinejs/std/duration'
 import { type RouteOptions } from 'fastify'
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 
@@ -22,7 +23,7 @@ class HookController {
     return { ok: true }
   }
 
-  @CacheControl({ ttl: '5m' })
+  @CacheControl({ ttl: 5 * Minute })
   @Get('/cached')
   cached() {
     return { ok: true }

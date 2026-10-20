@@ -1,4 +1,5 @@
 import type { LogLevel, Logger } from '@caffeinejs/application/logger'
+import { Second } from '@caffeinejs/std/duration'
 
 import type { CacheObserver } from './observer.js'
 
@@ -28,7 +29,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
         {
           route: event.route,
           revalidated: event.revalidated,
-          ageSeconds: event.ageSeconds,
+          ageSeconds: event.age / Second,
           coalesced: event.coalesced,
           stale: event.stale,
           ...(includeKeys && { key: event.key }),
@@ -50,7 +51,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
         {
           route: event.route,
           bytes: event.bytes,
-          ttlSeconds: event.ttlSeconds,
+          ttlSeconds: event.ttl / Second,
           tags: event.tags,
           ...(includeKeys && { key: event.key }),
         },
@@ -73,7 +74,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
       log[level](
         {
           route: event.route,
-          ageSeconds: event.ageSeconds,
+          ageSeconds: event.age / Second,
           replaced: event.replaced,
           ...(includeKeys && { key: event.key }),
         },

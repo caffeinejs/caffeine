@@ -1,3 +1,4 @@
+import { Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { runWith } from '../compose.js'
@@ -46,8 +47,8 @@ describe('retry options', () => {
   it.each([
     [{ maxAttempts: 0 }, 'maxAttempts must be an integer of at least 1, got 0'],
     [{ maxAttempts: 2.5 }, 'maxAttempts must be an integer of at least 1, got 2.5'],
-    [{ backoff: -1 }, 'backoff must be a finite number of at least 0 or a function, got -1'],
-    [{ backoff: Number.NaN }, 'backoff must be a finite number of at least 0 or a function, got NaN'],
+    [{ backoff: -1 }, 'backoff must be a finite Duration of at least 0s or a function, got -1ms'],
+    [{ backoff: Number.NaN }, 'backoff must be a finite Duration of at least 0s or a function, got NaN'],
     [{ retryOn: 'all' }, 'retryOn must be a function, got string'],
     [{ retryOnResult: 1 }, 'retryOnResult must be a function, got number'],
     [{ failAfterMaxAttempts: 'yes' }, 'failAfterMaxAttempts must be a boolean, got string'],
@@ -344,7 +345,7 @@ describe('retry', () => {
     await vi.advanceTimersByTimeAsync(0)
 
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2_147_483_647)
-    expect(seen[0][1]).toMatchObject({ attempt: 1, delayMs: 2_147_483_647 })
+    expect(seen[0][1]).toMatchObject({ attempt: 1, delay: 2_147_483_647 })
   })
 
   it('reports each retry before sleeping, then the outcome', async () => {
@@ -357,7 +358,22 @@ describe('retry', () => {
     await call
 
     expect(seen).toEqual([
-      ['retry', { name: 'inventory', attempt: 1, delayMs: 25, error: new Error('failure 1') }],
+      ['retry', { name: 'inventory', attempt: 1, delay: 25, error: new Error('failure 1') }],
+      ['success', { name: 'inventory', attempts: 2 }],
+    ])
+  })
+
+  it('reports a retry for a result with the delay it waits, then the outcome', async () => {
+    const retries = retryOf({ backoff: 25 * Millisecond, retryOnResult: result => result === 'busy' })
+    const seen = listen(retries, 'retry', 'success')
+    const results = ['busy', 'done']
+
+    const call = runWith(() => results.shift(), retries)
+    await vi.advanceTimersByTimeAsync(25)
+    await expect(call).resolves.toBe('done')
+
+    expect(seen).toEqual([
+      ['retry', { name: 'inventory', attempt: 1, delay: 25 * Millisecond, result: 'busy' }],
       ['success', { name: 'inventory', attempts: 2 }],
     ])
   })

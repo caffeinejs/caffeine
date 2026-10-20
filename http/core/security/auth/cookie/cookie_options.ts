@@ -1,3 +1,4 @@
+import { Day, type Duration, Hour, Minute } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../../../context.js'
@@ -5,6 +6,7 @@ import type { CookiePriority, CookieSameSite } from '../../../cookie/options.js'
 import { cookieRuleViolation } from '../../../cookie/rules.js'
 import type { Principal } from '../../identity.js'
 import { ErrAuthConfiguration } from '../errors.js'
+import { lifetimeViolation } from '../internal/lifetime.js'
 import { sessionSecretViolation, type ChallengeMode } from '../internal/remote/config.js'
 import type { SealingSecrets } from '../internal/sealed_jwt.js'
 
@@ -27,20 +29,20 @@ export interface CookieAuthenticationOptions {
   /** Remember-me cookie name (durable mode). Default `'caf.remember'`. */
   rememberMeCookieName?: string
   /**
-   * How long a durable remember-me credential may live from the sign-in that issued it, in seconds, however often
-   * it is used. Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
+   * How long a durable remember-me credential may live from the sign-in that issued it, however often it is used.
+   * At least one second. Unset by default: no limit, and a browser that keeps coming back stays remembered for good.
    */
-  rememberMeAbsoluteMaxAge?: number
+  rememberMeAbsoluteMaxAge?: Duration
   /**
-   * How long a just-rotated remember-me token stays acceptable, in seconds. Default 60.
+   * How long a just-rotated remember-me token stays acceptable. Default one minute.
    *
    * Rotation is single-use, so a superseded token normally means theft. But a browser fires requests in
    * parallel and every one of them carries the cookie as it stood when the batch began, so without a
    * window the first response to rotate turns its own siblings into apparent thefts. The window bounds
-   * how long a spent token remains useful to someone who captured it; `0` disables the tolerance and
-   * restores strict single-use.
+   * how long a spent token remains useful to someone who captured it; `0`, or anything under a second, disables
+   * the tolerance and restores strict single-use.
    */
-  rememberMeRotationGraceSeconds?: number
+  rememberMeRotationGrace?: Duration
   /**
    * Path to redirect to on challenge for browser apps. When unset, challenge returns a bare 401.
    *
@@ -92,16 +94,16 @@ export interface CookieAuthenticationOptions {
    * either way; this is what makes it observable.
    */
   onFail?: (ctx: IContext, error: Error) => Promise<void> | void
-  /** Absolute session lifetime, in seconds, for a non-persistent (session) cookie. Default 8 hours. */
-  maxAge?: number
+  /** Absolute session lifetime for a non-persistent (session) cookie. At least one second. Default 8 hours. */
+  maxAge?: Duration
   /**
-   * How long remember-me lasts, in seconds. Default 30 days.
+   * How long remember-me lasts. At least one second. Default 30 days.
    *
    * Without the durable store it is the lifetime of the persistent session cookie, fixed at sign-in. With it, it is
    * how long the credential stays good after it was last used: every use pushes it back, so it is not a limit on
    * the whole — {@link rememberMeAbsoluteMaxAge} is.
    */
-  rememberMeMaxAge?: number
+  rememberMeMaxAge?: Duration
   /** `Secure` cookie flag. Default `true`. */
   secure?: boolean
   /** `SameSite` cookie flag. Default `'lax'`. */
@@ -133,8 +135,8 @@ export interface CookieAuthenticationOptions {
   onChallenge?: (ctx: IContext, loginURL: string | undefined) => Promise<void> | void
 }
 
-const EIGHT_HOURS = 8 * 60 * 60
-const THIRTY_DAYS = 30 * 24 * 60 * 60
+const EIGHT_HOURS = 8 * Hour
+const THIRTY_DAYS = 30 * Day
 
 export class CookieAuthenticationOptionsBuilder {
   readonly #options: Partial<CookieAuthenticationOptions> = {}
@@ -161,14 +163,14 @@ export class CookieAuthenticationOptionsBuilder {
   }
 
   /** Caps how long a remember-me credential lives from sign-in, however often it is used. Unset: no limit. */
-  rememberMeAbsoluteMaxAge(seconds: number): this {
-    this.#options.rememberMeAbsoluteMaxAge = seconds
+  rememberMeAbsoluteMaxAge(maxAge: Duration): this {
+    this.#options.rememberMeAbsoluteMaxAge = maxAge
     return this
   }
 
-  /** How long a just-rotated remember-me token stays acceptable. Default 60s; `0` is strict single-use. */
-  rememberMeRotationGraceSeconds(seconds: number): this {
-    this.#options.rememberMeRotationGraceSeconds = seconds
+  /** How long a just-rotated remember-me token stays acceptable. Default one minute; `0` is strict single-use. */
+  rememberMeRotationGrace(grace: Duration): this {
+    this.#options.rememberMeRotationGrace = grace
     return this
   }
 
@@ -212,13 +214,13 @@ export class CookieAuthenticationOptionsBuilder {
     return this
   }
 
-  maxAge(seconds: number): this {
-    this.#options.maxAge = seconds
+  maxAge(maxAge: Duration): this {
+    this.#options.maxAge = maxAge
     return this
   }
 
-  rememberMeMaxAge(seconds: number): this {
-    this.#options.rememberMeMaxAge = seconds
+  rememberMeMaxAge(maxAge: Duration): this {
+    this.#options.rememberMeMaxAge = maxAge
     return this
   }
 
@@ -284,6 +286,22 @@ export class CookieAuthenticationOptionsBuilder {
       )
     }
 
+    for (const [option, lifetime, example] of [
+      ['maxAge', this.#options.maxAge, '8 * Hour'],
+      ['rememberMeMaxAge', this.#options.rememberMeMaxAge, '30 * Day'],
+      ['rememberMeAbsoluteMaxAge', this.#options.rememberMeAbsoluteMaxAge, '90 * Day'],
+    ] as const) {
+      const violation = lifetimeViolation(option, lifetime)
+      if (violation !== undefined) {
+        throw new ErrAuthConfiguration(
+          errMessage(`Cannot build CookieAuthenticationOptions: ${violation}`)
+            .solutions(`Write it with the constants, such as ${example}`)
+            .reference('@caffeinejs/http', ErrAuthConfiguration)
+            .build(),
+        )
+      }
+    }
+
     // Both are written as the application sees them and get the base path in front already. Written with `~/`, a path
     // would reach the browser as it is, which resolves it against whatever page it is on.
     for (const [option, path] of [
@@ -345,7 +363,7 @@ export class CookieAuthenticationOptionsBuilder {
       rememberMe: this.#options.rememberMe ?? false,
       rememberMeCookieName,
       rememberMeAbsoluteMaxAge: this.#options.rememberMeAbsoluteMaxAge,
-      rememberMeRotationGraceSeconds: this.#options.rememberMeRotationGraceSeconds ?? 60,
+      rememberMeRotationGrace: this.#options.rememberMeRotationGrace ?? 1 * Minute,
       loginPath: this.#options.loginPath,
       challengeMode: this.#options.challengeMode ?? 'auto',
       accessDeniedPath: this.#options.accessDeniedPath,

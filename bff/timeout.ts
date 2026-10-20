@@ -1,44 +1,23 @@
-import { DURATION_PATTERN, toMillis, type Duration } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { Call } from './call.js'
 import { ErrBFFInvalidTimeout, ErrBFFTimeout } from './errors.js'
 
-const durationText = new RegExp(DURATION_PATTERN)
-
 /**
- * Bounds one call. A number is already milliseconds; a duration string is converted with {@link toMillis}.
+ * Bounds one call, `timeout(2 * Second)`.
  *
  * The timer stays referenced. It is what settles a call that ignores the signal, and it is cleared when the
  * call settles, so it does not hold the process afterwards.
  *
- * @throws {@link ErrBFFInvalidTimeout} when `limit` is not a positive duration. A string `parseDuration` would
- * read as `0` is refused here, because a `0`ms timer would abort every call.
+ * @throws {@link ErrBFFInvalidTimeout} when `limit` is not a finite duration above zero: a `0`ms timer would abort
+ * every call.
  */
 export function timeout<T>(limit: Duration): (call: Call<T>) => Call<T> {
-  const ms = deadlineMs(limit)
-
-  return call => signal => deadline(call, signal, ms)
-}
-
-function deadlineMs(limit: Duration): number {
-  if (typeof limit === 'number') {
-    if (!Number.isFinite(limit) || limit <= 0) {
-      throw new ErrBFFInvalidTimeout(limit)
-    }
-
-    return limit
-  }
-
-  if (!durationText.test(limit)) {
+  if (!Number.isFinite(limit) || limit <= 0) {
     throw new ErrBFFInvalidTimeout(limit)
   }
 
-  const ms = toMillis(limit)
-  if (ms <= 0) {
-    throw new ErrBFFInvalidTimeout(limit)
-  }
-
-  return ms
+  return call => signal => deadline(call, signal, limit)
 }
 
 function deadline<T>(call: Call<T>, signal: AbortSignal, ms: number): Promise<T> {

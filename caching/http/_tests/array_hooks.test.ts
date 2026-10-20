@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -36,7 +37,7 @@ describe('a route that declares its hooks as arrays', () => {
       url: '/data',
       onRequest: [async () => {}, async () => {}],
       onSend: [async (_request, _reply, payload) => payload, async (_request, _reply, payload) => payload],
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60 * Second } },
       handler: () => ({ ok: true }),
     })
     await server.ready()

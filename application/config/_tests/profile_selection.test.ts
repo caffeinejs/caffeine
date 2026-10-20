@@ -29,7 +29,7 @@ async function write(name: string, content: unknown): Promise<string> {
 }
 
 function definition(sources: ConfigSource[]) {
-  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema: passthroughConfigSchema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 describe('profile selection', () => {

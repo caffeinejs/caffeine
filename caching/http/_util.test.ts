@@ -1,5 +1,6 @@
 import { ErrConfiguration, kRouteConstraints } from '@caffeinejs/http'
 import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import {
@@ -159,17 +160,17 @@ describe('assertConstraintsKeyed', () => {
   it('wants a host-constrained route to vary on Host', () => {
     const constrained = route({ constraints: { host: 'a.example' } })
 
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 })).toThrow(ErrConfiguration)
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 })).toThrow('constrained on "Host"')
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['host'] })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow(ErrConfiguration)
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow('constrained on "Host"')
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['host'] })).not.toThrow()
   })
 
   // Fastify's own version constraint, written on the route with no declaration, reads `Accept-Version`.
   it('wants a route under the version constraint Fastify ships to vary on Accept-Version', () => {
     const constrained = route({ constraints: { version: '1.x' } })
 
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 })).toThrow('constrained on "Accept-Version"')
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['accept-version'] })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second })).toThrow('constrained on "Accept-Version"')
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['accept-version'] })).not.toThrow()
   })
 
   // A custom constraint may read anything, a header or not. Nothing in `vary` can stand for it, so only a key
@@ -177,11 +178,11 @@ describe('assertConstraintsKeyed', () => {
   it('wants a key from a route under a constraint it does not know', () => {
     const constrained = route({ constraints: { tenant: 'a' } })
 
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['tenant'] })).toThrow(
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['tenant'] })).toThrow(
       'constraint "tenant" reads no header the cache key can vary on',
     )
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, key: () => 'tenant-a' })).not.toThrow()
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, key: () => 'a:pets' })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, key: () => 'tenant-a' })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, key: () => 'a:pets' })).not.toThrow()
   })
 
   // The constraints plugin copies a declared constraint onto the route as well. The declaration knows the header
@@ -193,8 +194,8 @@ describe('assertConstraintsKeyed', () => {
       config: { [kRouteConstraints]: declared } as never,
     })
 
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['X-API-Version'] })).not.toThrow()
-    expect(() => assertConstraintsKeyed(constrained, { ttl: 60, vary: ['Accept-Version'] })).toThrow(
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['X-API-Version'] })).not.toThrow()
+    expect(() => assertConstraintsKeyed(constrained, { ttl: 60 * Second, vary: ['Accept-Version'] })).toThrow(
       'constrained on "X-API-Version"',
     )
   })
@@ -204,15 +205,20 @@ describe('buildCacheControl', () => {
   // The entry is gone from the store when its ttl is up. A lifetime rounded up tells a cache downstream to keep
   // serving what the origin has already dropped.
   it('never tells a cache downstream a lifetime longer than the one given', () => {
-    expect(buildCacheControl({ ttl: '1500ms' })).toBe('public, max-age=1')
+    expect(buildCacheControl({ ttl: 1500 * Millisecond })).toBe('public, max-age=1')
     expect(
-      buildCacheControl({ ttl: 2.9, sharedMaxAge: '2500ms', staleWhileRevalidate: 0.9, staleIfError: '1900ms' }),
+      buildCacheControl({
+        ttl: 2.9 * Second,
+        sharedMaxAge: 2500 * Millisecond,
+        staleWhileRevalidate: 0.9 * Second,
+        staleIfError: 1900 * Millisecond,
+      }),
     ).toBe('public, max-age=2, s-maxage=2, stale-while-revalidate=0, stale-if-error=1')
   })
 
   // RFC 9111 §4.2.4 — the store serves nothing stale under these, so a cache downstream is not told to either.
   it('announces no stale window on a route that must be revalidated', () => {
-    const windows = { ttl: 60, staleWhileRevalidate: 30, staleIfError: 300 }
+    const windows = { ttl: 60 * Second, staleWhileRevalidate: 30 * Second, staleIfError: 300 * Second }
 
     expect(buildCacheControl({ ...windows, mustRevalidate: true })).toBe('public, must-revalidate, max-age=60')
     expect(buildCacheControl({ ...windows, proxyRevalidate: true })).toBe('public, proxy-revalidate, max-age=60')

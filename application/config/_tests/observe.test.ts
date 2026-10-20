@@ -9,7 +9,7 @@ import { testTokens } from '../tokens.testkit.js'
 import type { ConfigDefinition, ConfigSchema, ConfigSource } from '../types.js'
 
 function definition<T>(sources: ConfigSource[], schema: ConfigSchema<T>): ConfigDefinition<T> {
-  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 const schema = $t.Object({

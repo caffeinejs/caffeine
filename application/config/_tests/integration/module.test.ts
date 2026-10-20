@@ -23,7 +23,7 @@ function remote(initial: Record<string, unknown>, name = 'remote') {
 }
 
 function definitionOf<T>(schemaOf: ConfigSchema<T>, ...sources: ConfigSource[]): ConfigDefinition<T> {
-  return { schema: schemaOf, ...testTokens<T>(), sources, loadTimeoutMs: 30_000 }
+  return { schema: schemaOf, ...testTokens<T>(), sources, loadTimeout: 30_000 }
 }
 
 async function containerWith<T>(definition: ConfigDefinition<T>, bind?: (container: CaffeineIoC) => void) {

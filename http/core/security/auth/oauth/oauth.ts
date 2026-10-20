@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../../../context.js'
@@ -118,7 +119,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
           ...authorization,
         },
         body,
-        signal: AbortSignal.timeout(this.options.httpTimeoutMs),
+        signal: AbortSignal.timeout(Math.ceil(this.options.httpTimeout)),
       })
     } catch (e) {
       throw this.callbackFailure(`token exchange failed: ${(e as Error).message}`)
@@ -160,7 +161,8 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
       accessToken: tokenResponse.access_token,
       refreshToken: tokenResponse.refresh_token,
       tokenType: tokenResponse.token_type,
-      expiresIn: tokenResponse.expires_in,
+      // RFC 6749 §5.1: seconds.
+      expiresIn: tokenResponse.expires_in === undefined ? undefined : tokenResponse.expires_in * Second,
       scope: tokenResponse.scope,
     }
   }
@@ -168,7 +170,7 @@ export class OAuth2AuthenticationHandler extends RemoteAuthenticationHandler<Res
   async #fetchUserInfo(accessToken: string): Promise<Record<string, unknown>> {
     try {
       return await fetchUserInfo(this.options.userInfoEndpoint, accessToken, {
-        timeoutMs: this.options.httpTimeoutMs,
+        timeout: this.options.httpTimeout,
         headers: this.options.userInfoHeaders,
       })
     } catch (e) {

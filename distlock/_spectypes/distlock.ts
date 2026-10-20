@@ -14,8 +14,8 @@ import type { DistLockConfig } from '../options.js'
  * $t.Object({ distlock: $t.Object(DistLockConfigSchema.properties, { default: {} }) })
  * ```
  *
- * The durations are `$t.Duration()`: `DISTLOCK__TTL=30000` fails validation at `bootstrap()` rather than becoming a
- * lease of 0.
+ * The durations are `$t.Duration()`: `DISTLOCK__TTL=30s` is thirty seconds, and `DISTLOCK__TTL=30000` fails
+ * validation at `bootstrap()`.
  */
 export const DistLockConfigSchema = $t.Object({
   ttl: $t.Optional($t.Duration()),

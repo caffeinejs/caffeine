@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { CookieSecret } from './signer.js'
 
 /** The `SameSite` values, as the attribute takes them. */
@@ -21,8 +23,11 @@ export interface CookieSerializeOptions {
   /** A date, or milliseconds since the epoch. */
   expires?: Date | number
 
-  /** Seconds. */
-  maxAge?: number
+  /**
+   * How long the cookie lasts, a `Duration`: `1 * Hour` is written `Max-Age=3600`. A span that is not a whole number
+   * of seconds is refused.
+   */
+  maxAge?: Duration
 
   httpOnly?: boolean
 

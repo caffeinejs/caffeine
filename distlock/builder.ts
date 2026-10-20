@@ -3,7 +3,7 @@ import type { EventEmitter } from 'node:events'
 import { FeatureBuilder, kFeatureName, type FeatureConfigureKit } from '@caffeinejs/application'
 import { logToken, newNoopLogger, type Logger } from '@caffeinejs/application/logger'
 import { isValidKey, Scopes, type ContainerOps, type InjectionToken } from '@caffeinejs/di'
-import { toMillis, type Duration } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Backend } from './backend.js'
@@ -119,9 +119,9 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
     }
 
     const options: DistLockOptions = {
-      ttlMs: msOf(this.#ttl ?? this.#config?.ttl) ?? DEFAULT_DIST_LOCK_OPTIONS.ttlMs,
-      waitMs: msOf(this.#wait ?? this.#config?.wait) ?? DEFAULT_DIST_LOCK_OPTIONS.waitMs,
-      retryDelayMs: msOf(this.#retryDelay ?? this.#config?.retryDelay) ?? DEFAULT_DIST_LOCK_OPTIONS.retryDelayMs,
+      ttl: this.#ttl ?? this.#config?.ttl ?? DEFAULT_DIST_LOCK_OPTIONS.ttl,
+      wait: this.#wait ?? this.#config?.wait ?? DEFAULT_DIST_LOCK_OPTIONS.wait,
+      retryDelay: this.#retryDelay ?? this.#config?.retryDelay ?? DEFAULT_DIST_LOCK_OPTIONS.retryDelay,
       retryJitter: this.#retryJitter ?? this.#config?.retryJitter ?? DEFAULT_DIST_LOCK_OPTIONS.retryJitter,
     }
 
@@ -161,10 +161,6 @@ export class DistLockBuilder<C = unknown> extends FeatureBuilder<C> {
         .internal(),
     )
   }
-}
-
-function msOf(value: Duration | undefined): number | undefined {
-  return value === undefined ? undefined : toMillis(value)
 }
 
 // Resolved inside the factory, at `init()`, so it reads the logger `.logger(...)` on the application settled on

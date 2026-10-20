@@ -2,6 +2,7 @@ import { Readable } from 'node:stream'
 
 import { Controller, Get, Header, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -37,7 +38,7 @@ describe('what a request may ask of the cache', () => {
 
     @Controller('/req-no-store')
     class NoStoreRequestController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { n: ++calls }
@@ -61,7 +62,7 @@ describe('what a request may ask of the cache', () => {
 
     @Controller('/req-case')
     class CaseController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { n: ++calls }
@@ -84,7 +85,7 @@ describe('what a request may ask of the cache', () => {
   it('ignores Pragma next to a Cache-Control header', async () => {
     @Controller('/req-pragma')
     class PragmaController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -108,7 +109,7 @@ describe('what a request may ask of the cache', () => {
 
     @Controller('/req-only-if-cached')
     class OnlyIfCachedController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { n: ++calls }
@@ -149,19 +150,19 @@ describe('what of the query the key carries', () => {
 
   @Controller('/query')
   class QueryController {
-    @CacheControl({ ttl: 60, varyByQuery: ['page'] })
+    @CacheControl({ ttl: 60 * Second, varyByQuery: ['page'] })
     @Get('/listed')
     listed() {
       return { n: ++calls.listed }
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/unlisted')
     unlisted() {
       return { n: ++calls.unlisted }
     }
 
-    @CacheControl({ ttl: 60, varyByQuery: [] })
+    @CacheControl({ ttl: 60 * Second, varyByQuery: [] })
     @Get('/none')
     none() {
       return { n: ++calls.none }
@@ -219,32 +220,32 @@ describe('a response left out of the store', () => {
 
   @Controller('/skip')
   class SkipController {
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/large')
     large() {
       return 'x'.repeat(200)
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/small')
     small() {
       return 'x'.repeat(20)
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Header('Set-Cookie', 'session=1')
     @Get('/cookie')
     cookie() {
       return { ok: true }
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/stream')
     stream() {
       return Readable.from(['str', 'eam'])
     }
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Get('/empty')
     empty() {}
   }
@@ -412,7 +413,7 @@ describe('a store that rejects', () => {
 
   @Controller('/store-down')
   class StoreDownController {
-    @CacheControl({ ttl: 60, tags: ['pets'] })
+    @CacheControl({ ttl: 60 * Second, tags: ['pets'] })
     @Get('/data')
     data() {
       return { ok: true }
@@ -530,7 +531,7 @@ describe('a store that never answers', () => {
 
   @Controller('/store-hung')
   class StoreHungController {
-    @CacheControl({ ttl: 60, tags: ['pets'] })
+    @CacheControl({ ttl: 60 * Second, tags: ['pets'] })
     @Get('/data')
     data() {
       return { ok: true }
@@ -550,7 +551,7 @@ describe('a store that never answers', () => {
       HTTPCaching(b =>
         b
           .store(new HungStore())
-          .storeTimeout('20ms')
+          .storeTimeout(20 * Millisecond)
           .observer({ onError: event => errors.push(event) }),
       ),
     )
@@ -602,7 +603,7 @@ describe('an entry the application put in the store itself', () => {
 
     @Controller('/store-warm')
     class WarmStoreController {
-      @CacheControl({ ttl: 60, key: () => 'store-warm' })
+      @CacheControl({ ttl: 60 * Second, key: () => 'store-warm' })
       @Get('/data')
       data() {
         return { n: ++calls }
@@ -613,7 +614,7 @@ describe('an entry the application put in the store itself', () => {
     await store.put(
       'store-warm',
       { payload: '{"warm":true}', statusCode: 200, headers: { 'content-type': 'application/json' } },
-      { ttl: 60 },
+      { ttl: 60 * Second },
     )
 
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
@@ -646,7 +647,7 @@ describe('a store that hands back an entry past the route ttl', () => {
 
     @Controller('/store-stale')
     class StaleStoreController {
-      @CacheControl({ ttl: '1s' })
+      @CacheControl({ ttl: 1 * Second })
       @Get('/data')
       data() {
         return { n: ++calls }

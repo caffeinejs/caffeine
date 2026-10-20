@@ -46,13 +46,13 @@ export interface HTTPCachingOptions {
    * How long one store call may take. Past it the request goes on without the cache — a read is a miss, a write
    * or an eviction is skipped — and `observer.onError` is handed an `ErrCacheStoreTimeout`. Must be positive.
    *
-   * Defaults to `2s`: a store that neither answers nor rejects, such as a client queueing commands while its
+   * Defaults to two seconds: a store that neither answers nor rejects, such as a client queueing commands while its
    * server is away, holds a request that long at most.
    */
   storeTimeout?: Duration
   /**
    * How long a request waits for another's handler run on the same key before running the handler itself.
-   * Defaults to `10s`. Concurrent misses for one key run the handler once: the first leads, the rest wait for
+   * Defaults to ten seconds. Concurrent misses for one key run the handler once: the first leads, the rest wait for
    * what it stores. `@CacheControl({ lock: false })` takes a route out of it.
    */
   lockTimeout?: Duration

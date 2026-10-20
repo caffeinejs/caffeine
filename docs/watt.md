@@ -253,7 +253,7 @@ These need no change to Caffeine, only code that knows Watt: the next section.
 - **The drain delay.** 0 for every application but the entrypoint, which Watt's `isEntrypoint` tells apart.
 - **The shutdown budget.** Watt gives each application `gracefulShutdown.application` (10 s) to stop in, a limit
   Caffeine's boot-time check does not know. Until something reads it, mirror it:
-  `.shutdown(s => s.terminationGracePeriod('10s'))`, and the check clamps the teardown to fit.
+  `.shutdown(s => s.terminationGracePeriod(10 * Second))`, and the check clamps the teardown to fit.
 - **The logger.** Watt wraps Caffeine's console output in log records of its own, at `info`, or at `error` from
   stderr, so the levels are lost. Watt's own logger is Pino, and a Pino logger is a Caffeine `Logger` as it is: until
   something does it for you, hand `getLogger()` from `@platformatic/globals` to `createApplication({ logger })`.

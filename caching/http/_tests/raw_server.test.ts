@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream'
 
+import { Second } from '@caffeinejs/std/duration'
 import fastify, { type FastifyInstance } from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -72,7 +73,7 @@ describe('cachePlugin on a server the application does not drive', () => {
       s.route({
         method: 'GET',
         url: '/file',
-        config: { cache: { ttl: 60 } },
+        config: { cache: { ttl: 60 * Second } },
         handler: (_request, reply) =>
           reply.header(validator, validator === 'etag' ? '"v1"' : lastModified).send(streamed.body),
       }),
@@ -100,7 +101,7 @@ describe('cachePlugin on a server the application does not drive', () => {
         s.route({
           method: 'GET',
           url: '/file',
-          config: { cache: { ttl: 60 } },
+          config: { cache: { ttl: 60 * Second } },
           handler: (_request, reply) => reply.header('etag', '"v1"').send(streamed.body),
         }),
       )
@@ -123,7 +124,7 @@ describe('cachePlugin on a server the application does not drive', () => {
       s.route({
         method: 'GET',
         url: '/flaky',
-        config: { cache: { ttl: 60, staleIfError: 300 } },
+        config: { cache: { ttl: 60 * Second, staleIfError: 300 * Second } },
         handler: (_request, reply) => (++calls === 1 ? reply.send('fresh') : reply.code(503).send(streamed.body)),
       }),
     )
@@ -147,7 +148,7 @@ describe('cachePlugin on a server the application does not drive', () => {
       s.route({
         method: 'GET',
         url: '/blob',
-        config: { cache: { ttl: 60, staleIfError: 300 } },
+        config: { cache: { ttl: 60 * Second, staleIfError: 300 * Second } },
         handler: (_request, reply) =>
           ++calls === 1 ? reply.type('application/octet-stream').send(bytes) : reply.code(503).send('down'),
       }),
@@ -181,7 +182,7 @@ describe('cachePlugin on a server the application does not drive', () => {
     server.route({
       method: 'GET',
       url: '/blob',
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60 * Second } },
       handler: (_request, reply) => reply.type('application/octet-stream').send(bytes),
     })
     await server.ready()
@@ -218,7 +219,7 @@ describe('cachePlugin on a server the application does not drive', () => {
     server.route({
       method: 'GET',
       url: '/item',
-      config: { cache: { ttl: 60, tags: ['item'] } },
+      config: { cache: { ttl: 60 * Second, tags: ['item'] } },
       handler: () => ({ n: ++calls }),
     })
     server.route({

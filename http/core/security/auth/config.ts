@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { CookiePriority, CookieSameSite } from '../../cookie/options.js'
 import type { BasicAuthenticationOptionsBuilder } from './basic/basic_options.js'
 import type { CookieAuthenticationOptionsBuilder } from './cookie/cookie_options.js'
@@ -18,7 +20,7 @@ export interface JWTSchemeConfig {
   issuer?: string
   audience?: string | readonly string[]
   algorithm?: string
-  expiresIn?: string | number
+  expiresIn?: Duration
   roleClaimType?: string
   includeErrorDetails?: boolean
 }
@@ -41,14 +43,14 @@ export interface CookieSchemeConfig {
   cookieName?: string
   rememberMe?: boolean
   rememberMeCookieName?: string
-  rememberMeRotationGraceSeconds?: number
-  rememberMeAbsoluteMaxAge?: number
+  rememberMeRotationGrace?: Duration
+  rememberMeAbsoluteMaxAge?: Duration
   challengeMode?: ChallengeMode
   loginPath?: string
   accessDeniedPath?: string
   returnUrlParameter?: string
-  maxAge?: number
-  rememberMeMaxAge?: number
+  maxAge?: Duration
+  rememberMeMaxAge?: Duration
   secure?: boolean
   sameSite?: CookieSameSite
   path?: string
@@ -74,7 +76,7 @@ export interface OIDCSchemeConfig {
   defaultRedirectPath?: string
   scopes?: readonly string[]
   sessionCookieName?: string
-  sessionCookieTtlSeconds?: number
+  sessionCookieTtl?: Duration
   stateCookieName?: string
   secureCookie?: boolean
   cookieDomain?: string
@@ -82,9 +84,9 @@ export interface OIDCSchemeConfig {
   cookiePriority?: CookiePriority
   roleClaimType?: string
   allowPlainPkce?: boolean
-  clockToleranceSeconds?: number
-  httpTimeoutMs?: number
-  discoveryCacheTtlSeconds?: number
+  clockTolerance?: Duration
+  httpTimeout?: Duration
+  discoveryCacheTtl?: Duration
   tokenEndpointAuthMethod?: 'auto' | 'client_secret_basic' | 'client_secret_post'
   showPii?: boolean
   challengeMode?: ChallengeMode
@@ -96,7 +98,7 @@ export interface OIDCSchemeConfig {
   prompt?: 'none' | 'login' | 'consent' | 'select_account'
   loginHint?: string
   acrValues?: readonly string[]
-  maxAgeSeconds?: number
+  maxAge?: Duration
   extraAuthorizationParams?: Readonly<Record<string, string>>
 }
 
@@ -113,14 +115,14 @@ export interface OAuthSchemeConfig {
   defaultRedirectPath?: string
   scopes?: readonly string[]
   sessionCookieName?: string
-  sessionCookieTtlSeconds?: number
+  sessionCookieTtl?: Duration
   stateCookieName?: string
   secureCookie?: boolean
   cookieDomain?: string
   cookiePartitioned?: boolean
   cookiePriority?: CookiePriority
   roleClaimType?: string
-  httpTimeoutMs?: number
+  httpTimeout?: Duration
   showPii?: boolean
   challengeMode?: ChallengeMode
   loginPath?: string
@@ -154,9 +156,9 @@ export interface AuthCredentialsConfig {
 
 /** `refresh.*`: the three token lifetimes. The resolver and the claim mapper are functions. */
 export interface RefreshTokenConfig {
-  accessTtl?: string | number
-  refreshTtl?: string | number
-  absoluteTtl?: string | number
+  accessTtl?: Duration
+  refreshTtl?: Duration
+  absoluteTtl?: Duration
 }
 
 /**
@@ -245,7 +247,7 @@ const cookie: SchemeAppliers<CookieAuthenticationOptionsBuilder, CookieSchemeCon
   cookieName: (b, v) => b.cookieName(v),
   rememberMe: (b, v) => b.rememberMe(v),
   rememberMeCookieName: (b, v) => b.rememberMeCookieName(v),
-  rememberMeRotationGraceSeconds: (b, v) => b.rememberMeRotationGraceSeconds(v),
+  rememberMeRotationGrace: (b, v) => b.rememberMeRotationGrace(v),
   rememberMeAbsoluteMaxAge: (b, v) => b.rememberMeAbsoluteMaxAge(v),
   challengeMode: (b, v) => b.challengeMode(v),
   loginPath: (b, v) => b.loginPath(v),
@@ -276,7 +278,7 @@ const oidc: SchemeAppliers<OIDCAuthenticationOptionsBuilder, OIDCSchemeConfig> =
   defaultRedirectPath: (b, v) => b.defaultRedirectPath(v),
   scopes: (b, v) => b.scopes(...v),
   sessionCookieName: (b, v) => b.sessionCookieName(v),
-  sessionCookieTtlSeconds: (b, v) => b.sessionCookieTtlSeconds(v),
+  sessionCookieTtl: (b, v) => b.sessionCookieTTL(v),
   stateCookieName: (b, v) => b.stateCookieName(v),
   secureCookie: (b, v) => b.secureCookie(v),
   cookieDomain: (b, v) => b.cookieDomain(v),
@@ -284,9 +286,9 @@ const oidc: SchemeAppliers<OIDCAuthenticationOptionsBuilder, OIDCSchemeConfig> =
   cookiePriority: (b, v) => b.cookiePriority(v),
   roleClaimType: (b, v) => b.roleClaimType(v),
   allowPlainPkce: (b, v) => b.allowPlainPKCE(v),
-  clockToleranceSeconds: (b, v) => b.clockToleranceSeconds(v),
-  httpTimeoutMs: (b, v) => b.httpTimeoutMs(v),
-  discoveryCacheTtlSeconds: (b, v) => b.discoveryCacheTtlSeconds(v),
+  clockTolerance: (b, v) => b.clockTolerance(v),
+  httpTimeout: (b, v) => b.httpTimeout(v),
+  discoveryCacheTtl: (b, v) => b.discoveryCacheTTL(v),
   tokenEndpointAuthMethod: (b, v) => b.tokenEndpointAuthMethod(v),
   showPii: (b, v) => b.showPii(v),
   challengeMode: (b, v) => b.challengeMode(v),
@@ -298,7 +300,7 @@ const oidc: SchemeAppliers<OIDCAuthenticationOptionsBuilder, OIDCSchemeConfig> =
   prompt: (b, v) => b.prompt(v),
   loginHint: (b, v) => b.loginHint(v),
   acrValues: (b, v) => b.acrValues(...v),
-  maxAgeSeconds: (b, v) => b.maxAgeSeconds(v),
+  maxAge: (b, v) => b.maxAge(v),
   extraAuthorizationParams: (b, v) => b.extraAuthorizationParams(v),
 }
 
@@ -313,14 +315,14 @@ const oauth: SchemeAppliers<OAuth2AuthenticationOptionsBuilder, OAuthSchemeConfi
   defaultRedirectPath: (b, v) => b.defaultRedirectPath(v),
   scopes: (b, v) => b.scopes(...v),
   sessionCookieName: (b, v) => b.sessionCookieName(v),
-  sessionCookieTtlSeconds: (b, v) => b.sessionCookieTtlSeconds(v),
+  sessionCookieTtl: (b, v) => b.sessionCookieTTL(v),
   stateCookieName: (b, v) => b.stateCookieName(v),
   secureCookie: (b, v) => b.secureCookie(v),
   cookieDomain: (b, v) => b.cookieDomain(v),
   cookiePartitioned: (b, v) => b.cookiePartitioned(v),
   cookiePriority: (b, v) => b.cookiePriority(v),
   roleClaimType: (b, v) => b.roleClaimType(v),
-  httpTimeoutMs: (b, v) => b.httpTimeoutMs(v),
+  httpTimeout: (b, v) => b.httpTimeout(v),
   showPii: (b, v) => b.showPii(v),
   challengeMode: (b, v) => b.challengeMode(v),
   loginPath: (b, v) => b.loginPath(v),

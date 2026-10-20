@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 /** A route's cache identity, built once when the route registers and shared, frozen, by every event it emits. */
 export interface CacheRoute {
   /** The methods the route registered under, joined with `|`: `GET`, `HEAD`, `GET|POST`. */
@@ -73,8 +75,11 @@ export interface CacheHitEvent {
   readonly key: string
   /** `true` when the hit was answered `304`, `false` when the stored body was served. */
   readonly revalidated: boolean
-  /** Apparent age of the served entry, in whole seconds. `0` when the store did not record `storedAt`. */
-  readonly ageSeconds: number
+  /**
+   * Apparent age of the served entry, a whole number of seconds as the `Age` header carries it. `0` when the store
+   * did not record `storedAt`.
+   */
+  readonly age: Duration
   /** `true` when the request waited on another's handler run and was served what it stored. */
   readonly coalesced: boolean
   /** `true` when the entry was past the route's `ttl` and served under `staleWhileRevalidate` or `staleIfError`. */
@@ -86,8 +91,8 @@ export interface CacheStaleIfErrorEvent {
   readonly route: CacheRoute
   /** The store key; see {@link CacheMissEvent.key}. */
   readonly key: string
-  /** Apparent age of the entry served, in whole seconds. */
-  readonly ageSeconds: number
+  /** Apparent age of the entry served, a whole number of seconds as the `Age` header carries it. */
+  readonly age: Duration
   /** The status the handler answered with. */
   readonly replaced: number
 }
@@ -98,9 +103,8 @@ export interface CacheStoreEvent {
   readonly key: string
   /** Byte length of the stored payload, headers excluded. */
   readonly bytes: number
-  /** The route's `ttl` in seconds, fractional above one second. */
-
-  readonly ttlSeconds: number
+  /** The route's `ttl`. */
+  readonly ttl: Duration
   /** The tags the entry was stored under, when the route declares any. */
   readonly tags?: readonly string[]
 }

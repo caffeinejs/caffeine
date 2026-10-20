@@ -65,7 +65,7 @@ async function configOf(tree: Tree): Promise<{ snapshot: Tree; live: Provider<Tr
       schema: { '~standard': { version: 1, vendor: 'bench', validate: value => ({ value: value as Tree }) } },
       ...tokens,
       sources: [new InlineConfigSource(tree as unknown as Record<string, unknown>)],
-      loadTimeoutMs: 30_000,
+      loadTimeout: 30_000,
     },
     { start: false },
   )
@@ -87,7 +87,7 @@ const cleaned = await loadConfig<Tree>(
     schema: $t.Object({ app: $t.Object({ server: serverSchema, replica: serverSchema }) }) as ConfigSchema<Tree>,
     ...tokens,
     sources: [new InlineConfigSource(trees[0] as unknown as Record<string, unknown>)],
-    loadTimeoutMs: 30_000,
+    loadTimeout: 30_000,
   },
   { start: false },
 )

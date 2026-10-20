@@ -47,7 +47,7 @@ function server(overrides: Partial<SpringCloudConfigSourceOptions> = {}): Spring
     app: 'caffeine',
     baseURLs: [CONFIGSERVER_URL],
     basicAuth: { username: CONFIGSERVER_USERNAME, password: CONFIGSERVER_PASSWORD },
-    timeoutMs: TIMEOUT_MS,
+    timeout: TIMEOUT_MS,
     retries: 0,
     ...overrides,
   })
@@ -55,7 +55,7 @@ function server(overrides: Partial<SpringCloudConfigSourceOptions> = {}): Spring
 
 function load(sources: ConfigSource[], profiles: string[]) {
   return loadConfig<CaffeineConfig>(
-    { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 },
+    { schema, ...testTokens(), sources, loadTimeout: 30_000 },
     { profiles, start: false },
   )
 }
@@ -120,7 +120,7 @@ describe('a config server behind a container refresh', () => {
     }
     const tokens = testTokens<CaffeineConfig>()
     const store = await loadConfig<CaffeineConfig>(
-      { schema, ...tokens, sources: [server(), overrides], loadTimeoutMs: 30_000 },
+      { schema, ...tokens, sources: [server(), overrides], loadTimeout: 30_000 },
       { profiles: ['default'], start: false },
     )
     const container = new CaffeineIoC({ decorators: false })

@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { DistLock } from '../distlock.js'
 
 /**
@@ -53,9 +55,9 @@ export interface TracedFailure {
 
 export interface AcquireContext extends LockEventBase, TracedFailure {
   readonly mode: AcquireMode
-  readonly ttlMs: number
+  readonly ttl: Duration
   /** `0` for a single attempt. */
-  readonly waitMs: number
+  readonly wait: Duration
   /**
    * The `withLock` or `once` call this acquisition ran inside, when there was one and its channel had
    * subscribers — what lets a span for this call nest under the span for that one.
@@ -64,7 +66,8 @@ export interface AcquireContext extends LockEventBase, TracedFailure {
   /** Absent in `start`; set by the time the call settles. */
   readonly outcome?: AcquireOutcome
   readonly attempts?: number
-  readonly waitedMs?: number
+  /** How long the call spent acquiring, from its first attempt to its outcome. */
+  readonly waited?: Duration
   /** Present when `outcome` is `acquired`. */
   readonly leaseID?: number
   readonly expiresAt?: number
@@ -74,13 +77,13 @@ export interface WithLockContext extends LockEventBase, TracedFailure {
   /** Present once the key was taken. */
   readonly leaseID?: number
   /** How long the action ran with the key held, measured when it returned or threw. */
-  readonly heldMs?: number
+  readonly held?: Duration
   /** Whether the lease was already gone when the action ended: the critical section outran it. */
   readonly lapsed?: boolean
 }
 
 export interface OnceContext extends LockEventBase, TracedFailure {
-  readonly ttlMs: number
+  readonly ttl: Duration
   readonly outcome?: OnceOutcome
   readonly leaseID?: number
   /** Whether the lease was already gone when the action ended. */
@@ -90,7 +93,7 @@ export interface OnceContext extends LockEventBase, TracedFailure {
 export interface ExtendContext extends LockEventBase, TracedFailure {
   /** Ties every event of one lease together, from acquisition to release. */
   readonly leaseID: number
-  readonly ttlMs: number
+  readonly ttl: Duration
   /** `true` for a background renewal, `false` for an explicit `Lock.extend`. */
   readonly renewal: boolean
   readonly outcome?: ExtendOutcome
@@ -101,7 +104,7 @@ export interface ReleaseContext extends LockEventBase, TracedFailure {
   readonly leaseID: number
   /** The `withLock` call this release ran inside, when there was one and its channel had subscribers. */
   readonly parent?: WithLockContext
-  readonly heldMs?: number
+  readonly held?: Duration
   /** Whether the lease was already gone when it was released. */
   readonly lapsed?: boolean
 }

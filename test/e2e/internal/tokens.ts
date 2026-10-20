@@ -1,4 +1,5 @@
 import { type JWTAuthenticationOptionsBuilder, JWTService } from '@caffeinejs/http'
+import { Minute } from '@caffeinejs/std/duration'
 import { SignJWT } from 'jose'
 
 /**
@@ -10,7 +11,7 @@ const SECRET = 'e2e-hs256-secret-with-more-than-32-bytes-of-text'
 const ISSUER = 'https://issuer.e2e.test'
 const AUDIENCE = 'e2e-api'
 
-const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIENCE, expiresIn: '5m' })
+const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIENCE, expiresIn: 5 * Minute })
 
 /** Configures a JWT bearer scheme that accepts what {@link bearer} mints. */
 export function localJWT(j: JWTAuthenticationOptionsBuilder): JWTAuthenticationOptionsBuilder {

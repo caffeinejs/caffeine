@@ -1,4 +1,3 @@
-import { parseDuration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import { RESP_TYPES } from '@redis/client'
 
@@ -169,7 +168,8 @@ export class RedisHTTPCacheStore implements HTTPCacheStore {
   async put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions): Promise<void> {
     options.signal?.throwIfAborted()
 
-    const ms = Math.ceil(parseDuration(options.ttl) * 1000)
+    // `PX` takes whole milliseconds.
+    const ms = Math.ceil(options.ttl)
     if (!(ms > 0) || !Number.isFinite(ms)) {
       return
     }

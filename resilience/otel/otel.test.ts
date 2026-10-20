@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { diag, DiagLogLevel, metrics, type DiagLogger, type MeterProvider } from '@opentelemetry/api'
 import { DataPointType, type Histogram } from '@opentelemetry/sdk-metrics'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -188,7 +189,7 @@ describe('instrumentCircuitBreaker', () => {
   it('reports an empty window once an idle gap outlasts a time window', async () => {
     useFakeClock({ toFake: ['performance'] })
     const h = harness()
-    const breaker = breakerOf({ slidingWindow: { type: 'time', seconds: 2 } })
+    const breaker = breakerOf({ slidingWindow: { type: 'time', duration: 2 * Second } })
     instrumentCircuitBreaker(breaker, { meterProvider: h.meterProvider })
     const window = async (): Promise<unknown[]> =>
       (await h.points('resilience.circuit_breaker.buffered_calls')).map(point => [

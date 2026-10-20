@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 /**
  * A lease one holder owns on a key.
  *
@@ -35,22 +37,22 @@ export interface LockLease {
  */
 export interface Backend {
   /** One attempt, no waiting: the lease, or `undefined` when the key is already held. */
-  tryAcquire(key: string, ttlMs: number, signal?: AbortSignal): Promise<LockLease | undefined>
+  tryAcquire(key: string, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined>
 
   /**
-   * Sets the key's validity to `ttlMs` from now, only while its token still matches. `undefined` means the
+   * Sets the key's validity to `ttl` from now, only while its token still matches. `undefined` means the
    * lease was lost.
    *
    * It is compare-and-expire, never a write that could put the key back: a key that lapsed or was released
    * stays gone, and this reports the loss instead. A renewal can be in flight when its holder releases, and
    * one that recreated the key would leave it taken for a whole further lease with nobody holding it.
    *
-   * A smaller `ttlMs` than the lease has left shortens it — this sets the validity rather than adding to it.
+   * A smaller `ttl` than the lease has left shortens it — this sets the validity rather than adding to it.
    *
    * The returned lease supersedes the one passed in. A backend may rotate the token here; the holder carries
    * the new one from then on, release included.
    */
-  extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined>
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined>
 
   /** Releases the key only while the lease's token still matches. */
   release(lease: LockLease): Promise<void>

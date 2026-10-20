@@ -130,7 +130,7 @@ export interface ConfigDefinition<T = unknown> {
   /** Lowest precedence first: a later source wins a conflicting value. */
   readonly sources: readonly ConfigSource[]
   /** Bounds each load of each source. */
-  readonly loadTimeoutMs: number
+  readonly loadTimeout: Duration
   /** Dotenv files loaded into `process.env` before any source. */
   readonly dotenv?: DotenvOptions
 }
@@ -198,7 +198,8 @@ export interface ConfigSourceStatus {
   readonly keys: number
   /** In milliseconds since the epoch. `0` when no load has succeeded yet. */
   readonly lastLoadedAt: number
-  readonly lastLoadMs: number
+  /** How long the last load that succeeded took. */
+  readonly lastLoadDuration: Duration
   readonly consecutiveFailures: number
   readonly lastError?: unknown
 }

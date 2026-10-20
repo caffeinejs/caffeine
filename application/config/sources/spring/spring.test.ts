@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { mergeLayers } from '../../merge.js'
@@ -108,9 +109,9 @@ describe('SpringCloudConfigSource', () => {
   })
 
   it('is live, and carries what the store reads off it', () => {
-    const polled: ConfigSource = source({ optional: true, pollInterval: '30s', name: 'remote' })
+    const polled: ConfigSource = source({ optional: true, pollInterval: 30 * Second, name: 'remote' })
 
-    expect(polled).toMatchObject({ name: 'remote', live: true, optional: true, pollInterval: '30s' })
+    expect(polled).toMatchObject({ name: 'remote', live: true, optional: true, pollInterval: 30 * Second })
     expect(source()).toMatchObject({ name: 'spring-cloud-config', optional: false, pollInterval: undefined })
   })
 

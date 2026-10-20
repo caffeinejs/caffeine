@@ -36,7 +36,7 @@ function changing(data: Record<string, unknown>) {
 async function setup() {
   const { source, state } = changing({ server: { port: 3000 } })
   const store = await loadConfig<App>(
-    { schema, ...testTokens(), sources: [source], loadTimeoutMs: 30_000 },
+    { schema, ...testTokens(), sources: [source], loadTimeout: 30_000 },
     { start: false },
   )
   return { store, state }
@@ -114,7 +114,7 @@ describe('reading configuration', () => {
     }
     const { source, state } = changing({})
     const store = await loadConfig<Validated>(
-      { schema: validating, ...testTokens(), sources: [source], loadTimeoutMs: 30_000 },
+      { schema: validating, ...testTokens(), sources: [source], loadTimeout: 30_000 },
       { start: false },
     )
 
@@ -148,7 +148,7 @@ describe('reading configuration', () => {
       schema: $t.Object({ current: $t.String(), live: $t.String(), snapshot: $t.String() }),
       ...testTokens(),
       sources: [source],
-      loadTimeoutMs: 30_000,
+      loadTimeout: 30_000,
     })
 
     expect(store.current).toEqual({ current: 'c', live: 'l', snapshot: 's' })

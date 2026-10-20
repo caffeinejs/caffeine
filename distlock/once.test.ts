@@ -1,5 +1,6 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Minute, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -18,15 +19,15 @@ class SlowRenewalBackend implements Backend {
 
   readonly #inner = new MemoryLockBackend()
 
-  tryAcquire(key: string, ttlMs: number): Promise<LockLease | undefined> {
-    return this.#inner.tryAcquire(key, ttlMs)
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.tryAcquire(key, ttl)
   }
 
-  async extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
     this.extensions += 1
     await sleep(50)
 
-    const next = await this.#inner.extend(lease, ttlMs)
+    const next = await this.#inner.extend(lease, ttl)
     this.settled += 1
 
     return next
@@ -85,11 +86,11 @@ describe('once', () => {
         await finish.wait
         return 'report'
       },
-      { ttl: '1m' },
+      { ttl: 1 * Minute },
     )
 
     await started.wait
-    const loser = await lock.once('nightly-report', () => 'never', { ttl: '1m' })
+    const loser = await lock.once('nightly-report', () => 'never', { ttl: 1 * Minute })
 
     expect(loser.executed).toBe(false)
     expect(loser.result).toBeUndefined()
@@ -104,12 +105,12 @@ describe('once', () => {
   it('keeps turning callers away after the action already finished, until the window closes', async () => {
     const lock = await newLock()
 
-    await expect(lock.once('nightly-report', () => 'first', { ttl: '1m' })).resolves.toEqual({
+    await expect(lock.once('nightly-report', () => 'first', { ttl: 1 * Minute })).resolves.toEqual({
       executed: true,
       result: 'first',
     })
 
-    await expect(lock.once('nightly-report', () => 'second', { ttl: '1m' })).resolves.toEqual({ executed: false })
+    await expect(lock.once('nightly-report', () => 'second', { ttl: 1 * Minute })).resolves.toEqual({ executed: false })
   })
 
   it('runs again once the window has closed', async () => {
@@ -129,9 +130,9 @@ describe('once', () => {
     const lock = await newLock()
     const boom = new Error('boom')
 
-    await expect(lock.once('nightly-report', () => Promise.reject(boom), { ttl: '1m' })).rejects.toBe(boom)
+    await expect(lock.once('nightly-report', () => Promise.reject(boom), { ttl: 1 * Minute })).rejects.toBe(boom)
 
-    await expect(lock.once('nightly-report', () => 'retried', { ttl: '1m' })).resolves.toEqual({
+    await expect(lock.once('nightly-report', () => 'retried', { ttl: 1 * Minute })).resolves.toEqual({
       executed: true,
       result: 'retried',
     })
@@ -142,10 +143,12 @@ describe('once', () => {
     const boom = new Error('boom')
 
     await expect(
-      lock.once('nightly-report', () => Promise.reject(boom), { ttl: '1m', releaseOnError: false }),
+      lock.once('nightly-report', () => Promise.reject(boom), { ttl: 1 * Minute, releaseOnError: false }),
     ).rejects.toBe(boom)
 
-    await expect(lock.once('nightly-report', () => 'retried', { ttl: '1m' })).resolves.toEqual({ executed: false })
+    await expect(lock.once('nightly-report', () => 'retried', { ttl: 1 * Minute })).resolves.toEqual({
+      executed: false,
+    })
   })
 
   // Without renewal an action outliving its window reopens it underneath itself, and a second replica starts
@@ -206,8 +209,8 @@ describe('once', () => {
     const two = await newLock(backend)
 
     const results = await Promise.all([
-      one.once('migrate', () => 'one', { ttl: '1m' }),
-      two.once('migrate', () => 'two', { ttl: '1m' }),
+      one.once('migrate', () => 'one', { ttl: 1 * Minute }),
+      two.once('migrate', () => 'two', { ttl: 1 * Minute }),
     ])
 
     expect(results.filter(r => r.executed)).toHaveLength(1)

@@ -1,3 +1,4 @@
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { SignJWT, decodeJwt, jwtVerify } from 'jose'
 import type { JWTPayload, JWTVerifyGetKey, JWTVerifyOptions, CryptoKey } from 'jose'
 
@@ -8,11 +9,22 @@ export interface JWTSignOptions {
   issuer?: string
   audience?: string | string[]
   subject?: string
-  // A number is seconds FROM NOW; a string is a duration ('15m', '1h', '7d').
-  expiresIn?: string | number
-  notBefore?: string | number
+  // From the moment the token is signed.
+  expiresIn?: Duration
+  notBefore?: Duration
   jwtid?: string
   header?: Record<string, unknown>
+}
+
+/**
+ * Per-call checks for {@link JWTService.verify}: jose's verify options, with `clockTolerance` and `maxTokenAge` as
+ * {@link Duration}s. Both count whole seconds, a part of a second dropped.
+ */
+export type JWTServiceVerifyOptions = Omit<JWTVerifyOptions, 'clockTolerance' | 'maxTokenAge'> & {
+  /** How far past `exp`, or before `nbf`, a token is still accepted. Overrides the service's. */
+  clockTolerance?: Duration
+  /** How old a token may be, by its `iat`, which it then has to carry. */
+  maxTokenAge?: Duration
 }
 
 /** RFC 7518 §3.2: an HMAC key has to be at least as long as the hash it feeds. */
@@ -131,19 +143,22 @@ export class JWTService {
 
   /**
    * Verifies a token's signature and claims, returning its payload. Rejects on any failure
-   * (bad signature, expiry, issuer/audience mismatch). `options` merge over the service defaults.
+   * (bad signature, expiry, issuer/audience mismatch). `options` merge over the service defaults, and their
+   * `clockTolerance` and `maxTokenAge` are {@link Duration}s, like the service's.
    *
    * A token with no `exp` is rejected: jose checks an expiry only when there is one, so without this a token minted
    * without a lifetime is good forever. `requiredClaims` adds to that and does not replace it: asking for `sub`
    * asks for `sub` and `exp`. Pass `requiredClaims: []`, and nothing else, to accept a token with no expiry.
    */
-  async verify<T extends JWTPayload = JWTPayload>(token: string, options: JWTVerifyOptions = {}): Promise<T> {
+  async verify<T extends JWTPayload = JWTPayload>(token: string, options: JWTServiceVerifyOptions = {}): Promise<T> {
+    const { clockTolerance = this.#options.clockTolerance, maxTokenAge, ...rest } = options
     const verifyOptions: JWTVerifyOptions = {
       algorithms: [this.#algorithm],
       issuer: this.#options.issuer,
       audience: this.#options.audience,
-      clockTolerance: this.#options.clockTolerance,
-      ...options,
+      ...rest,
+      clockTolerance: wholeSeconds(clockTolerance),
+      maxTokenAge: wholeSeconds(maxTokenAge),
       requiredClaims: withExpiry(options.requiredClaims),
     }
 
@@ -231,17 +246,17 @@ export class JWTServiceBuilder {
     return this
   }
 
-  expiresIn(expiresIn: string | number): this {
+  expiresIn(expiresIn: Duration): this {
     this.#options.expiresIn = expiresIn
     return this
   }
 
-  notBefore(notBefore: string | number): this {
+  notBefore(notBefore: Duration): this {
     this.#options.notBefore = notBefore
     return this
   }
 
-  clockTolerance(clockTolerance: string | number): this {
+  clockTolerance(clockTolerance: Duration): this {
     this.#options.clockTolerance = clockTolerance
     return this
   }
@@ -251,10 +266,14 @@ export class JWTServiceBuilder {
   }
 }
 
-// jose's setExpirationTime/setNotBefore read a number as an absolute epoch; reinterpret it as
-// seconds from now (a string duration like '15m' passes through unchanged).
-function relativeTime(value: string | number): string | Date {
-  return typeof value === 'number' ? new Date(Date.now() + value * 1000) : value
+// jose counts the tolerance and the maximum age in seconds; a part of one would read as a whole one.
+function wholeSeconds(span: Duration | undefined): number | undefined {
+  return span === undefined ? undefined : Math.floor(span / Second)
+}
+
+// jose's setExpirationTime/setNotBefore read a number as an absolute epoch, so a span from now goes over as a date.
+function relativeTime(value: Duration): Date {
+  return new Date(Date.now() + value)
 }
 
 /**

@@ -47,3 +47,24 @@ gates requests where it is written.
 ## Config
 
 Application config goes through `@caffeinejs/application/config` (schema + providers), not `process.env` as the public API.
+
+## Durations
+
+Every span of time Caffeine takes is a `Duration` from `@caffeinejs/std/duration`: a number of milliseconds. Write it with the constants, never as a bare count or as text:
+
+```ts
+import { duration, Minute, Second, seconds } from '@caffeinejs/std/duration'
+
+app.shutdown(s => s.drainDelay(5 * Second))
+auth.addJWTBearer(b => b.secret(secret).expiresIn(15 * Minute))
+
+// An option Caffeine does not type keeps its library's unit: milliseconds for @fastify/static, seconds for jose.
+staticFiles(s => s.serve(dir, { maxAge: duration('7d') }))
+jwtVerify(token, key, { clockTolerance: seconds(duration('30s')) })
+```
+
+A bare number is milliseconds: `expiresIn(900)` is 900 ms, not 15 minutes. Options that took seconds before (`expiresIn`, a cookie's `maxAge`, `sessionCookieTTL`, the `ttl` an HTTP cache store is handed) take milliseconds like every other.
+
+`@caffeinejs/kafka` and `@caffeinejs/messaging` still type their spans (`nackDelay`, `idleTimeout`) as a bare number of milliseconds; the constants work there as well.
+
+In a configuration schema, declare the field `$t.Duration()`: it reads duration text such as `'30s'`, `'1h30m'` or `'7d'`, and refuses a bare number.

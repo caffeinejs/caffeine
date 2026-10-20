@@ -135,7 +135,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
           // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
           schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
           bodyLimit: route.bodyLimit,
-          handlerTimeout: route.timeout,
+          // Fastify takes whole milliseconds.
+          handlerTimeout: route.timeout === undefined ? undefined : Math.ceil(route.timeout),
           config,
           ...options,
           handler: function (req, res) {

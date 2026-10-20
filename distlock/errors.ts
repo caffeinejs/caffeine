@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 /** Base error for the distributed lock integration. */
@@ -21,11 +22,11 @@ export class ErrDistLockConfiguration extends ErrDistLock {
 
 /** Thrown when `acquire` spent its whole `wait` budget without taking the key. */
 export class ErrLockNotAcquired extends ErrDistLock {
-  constructor(key: string, waitMs: number) {
+  constructor(key: string, wait: Duration) {
     super(
-      errMessage(`Cannot acquire lock "${key}": still held after ${waitMs}ms`)
+      errMessage(`Cannot acquire lock "${key}": still held after ${wait}ms`)
         .solutions(
-          'Raise the wait budget with { wait: "30s" }',
+          'Raise the wait budget with { wait: 30 * Second }',
           'Or use tryAcquire and handle the undefined it returns',
         )
         .reference('@caffeinejs/distlock', ErrLockNotAcquired)

@@ -1,5 +1,6 @@
 import { $p, Args, Controller, Get, Head, Header, Post, Principal, Status, type IContext } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -21,7 +22,7 @@ describe('what the cache says about a response', () => {
   it('replays a stored 404 as a 404', async () => {
     @Controller('/resp-status')
     class StatusController {
-      @CacheControl({ ttl: 60, statusCodes: [200, 404] })
+      @CacheControl({ ttl: 60 * Second, statusCodes: [200, 404] })
       @Status(404)
       @Get('/missing')
       missing() {
@@ -51,7 +52,7 @@ describe('what the cache says about a response', () => {
   // An error marked `public, max-age=60` is an error a CDN keeps serving after the fault is fixed.
   it('says nothing permissive about a response the route does not cache', async () => {
     @Controller('/resp-noncacheable')
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     class NonCacheableController {
       @Get('/boom')
       boom() {
@@ -147,7 +148,7 @@ describe('what the cache says about a response', () => {
 
     @Controller('/resp-handler-cc')
     class HandlerDecidesController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Header('Cache-Control', 'private, no-store')
       @Get('/secret')
       secret() {
@@ -171,7 +172,7 @@ describe('what the cache says about a response', () => {
   it('keeps the validators the handler set, stores them, and revalidates against them', async () => {
     @Controller('/resp-handler-validators')
     class HandlerValidatorsController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Header('ETag', '"v42"')
       @Header('Last-Modified', 'Mon, 01 Jan 2024 00:00:00 GMT')
       @Get('/doc')
@@ -201,7 +202,7 @@ describe('what the cache says about a response', () => {
   it('replays the headers of the stored response', async () => {
     @Controller('/resp-headers')
     class HeadersController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Header('X-Total-Count', '42')
       @Header('Content-Language', 'en')
       @Get('/list')
@@ -231,7 +232,7 @@ describe('what the cache says about a response', () => {
 
     @Controller('/resp-cookie')
     class CookieController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Header('Set-Cookie', 'session=1')
       @Get('/start')
       start() {
@@ -259,7 +260,7 @@ describe('what the cache says about a response', () => {
 
     @Controller('/resp-ctx-cookie')
     class ContextCookieController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/start')
       @Args([$p.context()])
       start(ctx: IContext) {
@@ -285,7 +286,7 @@ describe('what the cache says about a response', () => {
   it('stores it on a route that declares itself public, and never replays the cookie', async () => {
     @Controller('/resp-cookie-public')
     class PublicCookieController {
-      @CacheControl({ ttl: 60, privacy: 'public' })
+      @CacheControl({ ttl: 60 * Second, privacy: 'public' })
       @Header('Set-Cookie', 'visit=1')
       @Get('/list')
       list() {
@@ -310,7 +311,7 @@ describe('what the cache says about a response', () => {
   it('does not replace a header an earlier hook set for this request, and merges Vary', async () => {
     @Controller('/resp-vary')
     class VaryController {
-      @CacheControl({ ttl: 60, vary: ['Accept-Language'] })
+      @CacheControl({ ttl: 60 * Second, vary: ['Accept-Language'] })
       @Get('/page')
       page() {
         return { ok: true }
@@ -342,7 +343,7 @@ describe('what the cache says about a response', () => {
   it('gives a HEAD hit the Content-Length of the GET, and no body', async () => {
     @Controller('/resp-head')
     class HeadController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { value: 'x'.repeat(100) }
@@ -366,7 +367,7 @@ describe('what the cache says about a response', () => {
   // RFC 9111 §4: a response to a HEAD never answers a GET. GET and HEAD share a key, and a route's own HEAD
   // handler has no body to offer.
   it('does not store the response to a HEAD, so a GET is never answered with it', async () => {
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Controller('/resp-head-own')
     class OwnHeadController {
       @Head('/data')
@@ -398,7 +399,7 @@ describe('what the cache says about a response', () => {
   it('answers a revalidation with the validators and the policy, not the content type', async () => {
     @Controller('/resp-304')
     class NotModifiedController {
-      @CacheControl({ ttl: 60, vary: ['Accept-Language'] })
+      @CacheControl({ ttl: 60 * Second, vary: ['Accept-Language'] })
       @Get('/data')
       data() {
         return { ok: true }
@@ -486,7 +487,7 @@ describe('a request authenticated without an Authorization header', () => {
 
     @Controller('/auth-private')
     class PrivateController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/me')
       me() {
         return { n: ++calls }
@@ -516,7 +517,7 @@ describe('a request authenticated without an Authorization header', () => {
 
     @Controller('/auth-public')
     class PublicController {
-      @CacheControl({ ttl: 60, privacy: 'public' })
+      @CacheControl({ ttl: 60 * Second, privacy: 'public' })
       @Get('/catalog')
       catalog() {
         return { n: ++calls }

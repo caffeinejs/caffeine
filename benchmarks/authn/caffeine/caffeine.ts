@@ -1,5 +1,6 @@
 import { Authorize, Controller, Get, JWTService, Post, Status, Authentication } from '@caffeinejs/http'
 import { createWebApplication, authentication } from '@caffeinejs/http/fastify'
+import { Hour } from '@caffeinejs/std/duration'
 
 import { AUDIENCE, ISSUER, ROLE, SECRET } from '../shared.js'
 
@@ -26,7 +27,15 @@ void [AppController]
 
 const app = createWebApplication()
   .install(
-    Authentication(auth => auth.addJWTBearer(b => b.secret(SECRET).issuer(ISSUER).audience(AUDIENCE).expiresIn('1h'))),
+    Authentication(auth =>
+      auth.addJWTBearer(b =>
+        b
+          .secret(SECRET)
+          .issuer(ISSUER)
+          .audience(AUDIENCE)
+          .expiresIn(1 * Hour),
+      ),
+    ),
   )
   .with(authentication())
 

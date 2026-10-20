@@ -1,6 +1,6 @@
 import { setTimeout as delay } from 'node:timers/promises'
 
-import type { Duration } from '@caffeinejs/std/duration'
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrConfig, messageOf } from '../../errors.js'
@@ -27,8 +27,8 @@ export interface SpringCloudConfigSourceOptions {
   beforeRequest?: (url: string, init: RequestInit) => RequestInit | Promise<RequestInit>
   /** Attempts per URL after the first, for a network error or a 5xx. A 4xx is not retried. Defaults to 3. */
   retries?: number
-  /** Budget of one HTTP call. Defaults to 10 000 ms. */
-  timeoutMs?: number
+  /** Budget of one HTTP call. Defaults to ten seconds. */
+  timeout?: Duration
   /** Start-up proceeds without the server when it cannot be reached; the source is retried like any live one. */
   optional?: boolean
   /** Reload on this period. Without it the source reloads only when asked. */
@@ -57,7 +57,7 @@ export class SpringCloudConfigSource implements ConfigSource {
   readonly live = true
   readonly optional: boolean
   readonly pollInterval: Duration | undefined
-  readonly #options: SpringCloudConfigSourceOptions & { retries: number; timeoutMs: number; includeMetadata: boolean }
+  readonly #options: SpringCloudConfigSourceOptions & { retries: number; timeout: Duration; includeMetadata: boolean }
 
   constructor(options: SpringCloudConfigSourceOptions) {
     this.name = options.name ?? 'spring-cloud-config'
@@ -73,7 +73,7 @@ export class SpringCloudConfigSource implements ConfigSource {
         return url.slice(0, end)
       }),
       retries: options.retries ?? 3,
-      timeoutMs: options.timeoutMs ?? 10_000,
+      timeout: options.timeout ?? 10 * Second,
       includeMetadata: options.includeMetadata ?? true,
     }
   }
@@ -110,7 +110,7 @@ export class SpringCloudConfigSource implements ConfigSource {
   }
 
   async #fetch(url: string, signal: AbortSignal): Promise<ConfigServerResponse> {
-    const { retries, timeoutMs, dispatcher, beforeRequest } = this.#options
+    const { retries, timeout, dispatcher, beforeRequest } = this.#options
     let lastError: unknown
 
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -129,7 +129,7 @@ export class SpringCloudConfigSource implements ConfigSource {
       const init = beforeRequest === undefined ? base : await beforeRequest(url, base)
 
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const timer = setTimeout(() => controller.abort(), timeout)
 
       let response: Response
       try {
@@ -142,7 +142,7 @@ export class SpringCloudConfigSource implements ConfigSource {
         lastError = error
         continue
       } finally {
-        clearTimeout(timeout)
+        clearTimeout(timer)
       }
 
       if (response.ok) {

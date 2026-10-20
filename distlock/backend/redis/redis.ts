@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { Backend, LockLease } from '../../backend.js'
 
 /**
@@ -34,13 +36,15 @@ export class RedisLockBackend implements Backend {
     this.#client = client
   }
 
-  async tryAcquire(key: string, ttlMs: number, signal?: AbortSignal): Promise<LockLease | undefined> {
+  async tryAcquire(key: string, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
     signal?.throwIfAborted()
 
+    // `PX` takes whole milliseconds.
+    const px = Math.ceil(ttl)
     const token = randomUUID()
     const start = Date.now()
     const reply = await this.#client.set(key, token, {
-      expiration: { type: 'PX', value: ttlMs },
+      expiration: { type: 'PX', value: px },
       condition: 'NX',
     })
     if (reply !== 'OK') {
@@ -48,17 +52,18 @@ export class RedisLockBackend implements Backend {
     }
 
     // The key was written at or after `start`, so this is the earliest the server can expire it.
-    return { key, token, expiresAt: start + ttlMs }
+    return { key, token, expiresAt: start + px }
   }
 
-  async extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
+  async extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    const px = Math.ceil(ttl)
     const start = Date.now()
-    const reply = await this.#client.eval(EXTEND, { keys: [lease.key], arguments: [lease.token, String(ttlMs)] })
+    const reply = await this.#client.eval(EXTEND, { keys: [lease.key], arguments: [lease.token, String(px)] })
     if (reply !== 1) {
       return undefined
     }
 
-    return { key: lease.key, token: lease.token, expiresAt: start + ttlMs }
+    return { key: lease.key, token: lease.token, expiresAt: start + px }
   }
 
   async release(lease: LockLease): Promise<void> {

@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 /**
  * Fetches a provider's user information endpoint with a bearer access token.
  *
@@ -8,7 +10,7 @@
 export async function fetchUserInfo(
   endpoint: string,
   accessToken: string,
-  options: { timeoutMs: number; headers?: Record<string, string> },
+  options: { timeout: Duration; headers?: Record<string, string> },
 ): Promise<Record<string, unknown>> {
   let response: Response
   try {
@@ -22,7 +24,7 @@ export async function fetchUserInfo(
         // identity against whatever static token was configured, i.e. the same account.
         Authorization: `Bearer ${accessToken}`,
       },
-      signal: AbortSignal.timeout(options.timeoutMs),
+      signal: AbortSignal.timeout(Math.ceil(options.timeout)),
     })
   } catch (e) {
     throw new Error(`user info request failed: ${(e as Error).message}`, { cause: e })

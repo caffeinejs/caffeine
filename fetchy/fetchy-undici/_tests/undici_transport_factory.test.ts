@@ -1,5 +1,6 @@
 import { FetchyHeaders, FetchyRequest, newClient, type Transport } from '@caffeinejs/fetchy'
-import { errors, Pool } from 'undici'
+import { Microsecond, Millisecond, Second } from '@caffeinejs/std/duration'
+import { Client, errors, Pool } from 'undici'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PoolOptionsBuilder } from '../pool_options_builder.js'
@@ -159,14 +160,14 @@ describe('PoolOptionsBuilder', () => {
     const options = PoolOptionsBuilder.newBuilder()
       .connections(4)
       .socketPath('/tmp/api.sock')
-      .keepAliveTimeout(1_000)
-      .keepAliveMaxTimeout(2_000)
-      .keepAliveTimeoutThreshold(500)
+      .keepAliveTimeout(1 * Second)
+      .keepAliveMaxTimeout(2 * Second)
+      .keepAliveTimeoutThreshold(500 * Millisecond)
       .pipelining(2)
       .tls(tls)
       .maxHeaderSize(8_192)
-      .headersTimeout(3_000)
-      .bodyTimeout(4_000)
+      .headersTimeout(3 * Second)
+      .bodyTimeout(4 * Second)
       .factory(factory)
       .build()
 
@@ -183,5 +184,17 @@ describe('PoolOptionsBuilder', () => {
       bodyTimeout: 4_000,
       factory,
     })
+  })
+
+  // undici refuses a headers or body timeout that is not a whole number of milliseconds, and a Duration may be one.
+  it('rounds the headers and body timeouts up to whole milliseconds', () => {
+    const options = PoolOptionsBuilder.newBuilder()
+      .headersTimeout(1.5 * Millisecond)
+      .bodyTimeout(2 * Second + 1 * Microsecond)
+      .build()
+
+    expect(options).toMatchObject({ headersTimeout: 2, bodyTimeout: 2_001 })
+    // A pool hands its options to the client of each connection, and the client is what checks them.
+    expect(() => new Client('http://localhost', options).destroy()).not.toThrow()
   })
 })
