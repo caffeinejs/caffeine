@@ -6,6 +6,7 @@ import {
   type ActionResult,
   Catch,
   Controller,
+  ErrConfiguration,
   ErrHTTP,
   type ErrorHandler,
   Get,
@@ -349,6 +350,30 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   routes.get('/context').handler(ctx => {
     ctx.body(pdf())
   })
+  routes.get('/context-promise').handler(ctx => {
+    ctx.body(Promise.resolve(pdf()))
+  })
+  // Refused, the promise leaves the context unanswered: the handler can still answer with what it resolves to.
+  let refusal: unknown
+  routes.get('/context-promise-recovered').handler(async ctx => {
+    const pending = Promise.resolve(pdf())
+    try {
+      ctx.body(pending)
+    } catch (err) {
+      refusal = err
+    }
+    return await pending
+  })
+  // An error helper refuses one alike, before its status is written: what the handler answers instead keeps its own.
+  let helperRefusal: unknown
+  routes.get('/context-not-found-promise-recovered').handler(ctx => {
+    try {
+      ctx.notFound(Promise.resolve(pdf()))
+    } catch (err) {
+      helperRefusal = err
+    }
+    return 'recovered'
+  })
   routes.get('/responder').handler(() => new BlobResult(pdf()))
   routes.get('/responder-async').handler(async () => new BlobResult(pdf()))
   routes.get('/responder-stored').handler(() => new StoredBlobResult())
@@ -423,6 +448,24 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     for (const res of responses) {
       await expectPatterned(res, { type: PDF })
     }
+  })
+
+  it('refuses a promise handed to ctx.body(...), which would go out as {}, with an error that says to await it', async () => {
+    const res = await app.fetch('/sites/context-promise')
+
+    expect(res.status).toBe(500)
+    expect(await res.text()).not.toBe('{}')
+
+    const recovered = await app.fetch('/sites/context-promise-recovered')
+    expect(refusal).toBeInstanceOf(ErrConfiguration)
+    expect((refusal as Error).message).toMatch(/^Cannot send a promise with ctx\.body\(\.\.\.\)/)
+    await expectPatterned(recovered, { type: PDF })
+
+    const helper = await app.fetch('/sites/context-not-found-promise-recovered')
+    expect(helperRefusal).toBeInstanceOf(ErrConfiguration)
+    expect((helperRefusal as Error).message).toMatch(/^Cannot send a promise with ctx\.notFound\(\.\.\.\)/)
+    expect(helper.status).toBe(200)
+    expect(await helper.text()).toBe('recovered')
   })
 
   it('answers a Responder that answers nothing with an empty body, rather than leaving the request hanging', async () => {

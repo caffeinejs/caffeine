@@ -141,6 +141,15 @@ export interface IContext<
    */
   deleteCookie(name: string, opts?: T['cookieOptions']): this
 
+  /**
+   * Sends `body` as the answer, shaped as a value the handler returns is: a `Blob`, bytes, a stream or a `Response` go
+   * out as what they hold.
+   *
+   * It takes a value, never a promise: await it first, or return the promise from the handler, which waits for it.
+   * The error helpers below take a value alike, and send it under their own status, a `Response`'s included.
+   * @throws ErrConfiguration for a promise, or any thenable, which would go out as `{}`. Nothing is sent, so the
+   * handler can still answer.
+   */
   body(body?: unknown): this
 
   notFound(body?: unknown): this
