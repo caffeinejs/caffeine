@@ -3,18 +3,13 @@
 Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 - The adapter is Fastify. Handlers throw `ErrHTTPNotFound` and the other `ErrHTTP*`; there is no Nest `HttpException`.
-- An `ErrHTTP` message is the response body a client reads: never give one, or a subclass, solutions or a
-  reference.
 
 ## Layout
 
 - `http/` is the base: the application, the adapter contract, the request context, servers, plugins and
   `decorators/`. `core/<dir>/` holds what runs on any adapter: routing, middleware, errors and every built-in
   feature. `platform/fastify/` holds the Fastify adapter and each directory's Fastify half, at the same path.
-- Every directory with source files has a main file named after it (`csrf/csrf.ts`, `routing/routing.ts`) and an
-  `index.ts` that only re-exports. A directory of independent files with no main one (`decorators/`, `internal/`,
-  `provider/`) has the barrel alone. The entry roots `http/` and `platform/fastify/`, `_tests/` and `_spectypes/`
-  are exempt. A barrel publishes what its package offers; a helper only the adapter uses is imported by its path.
+- `platform/fastify/` is an entry root like `http/`: neither has a main file named after it.
 - Under `platform/fastify/`, no file is named `fastify_*` and no declaration carries `Fastify`: the directory says
   it. A file takes its core twin's name (`context.ts`, `adapter.ts`) and a type the plain name of the `I*`
   interface it implements (`Context`, `ContextRequest`, `AdapterTypes`). Fastify's own types and `fst` keep theirs.
@@ -35,8 +30,6 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `timeout` stay off it.
 - A new behaviour is another function of the `Call<T>` shape. `join` gains no methods, and there is no list of
   plugins for it to interpret.
-- `timeout` takes a `Duration` from `@caffeinejs/std/duration`, milliseconds, and parses no text: a caller with
-  text reads it with `duration(...)` first.
 - The `timeout` timer is deliberately not unref'd: it is what settles a call that ignores the signal.
 - `core/bff/` imports nothing from the rest of `http/`; `join` takes `{ readonly signal: AbortSignal }` and a
   handler passes `ctx`.

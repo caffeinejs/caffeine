@@ -33,7 +33,6 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A miss that may be stored withholds `If-None-Match` and `If-Modified-Since` from the handler (`withhold`), so it
   answers whole rather than `304`, which would leave nothing to store. `onSend` puts them back first, and `send()`
   answers them from that response. A bypassed request and a `HEAD` keep theirs.
-- What goes out in `Cache-Control` is floored, never rounded.
 - `buildCacheKey` in `_util.ts` is the one key derivation. Nothing else rebuilds a key.
 - Eviction is by tag only. Do not add eviction by path or by key.
 - Never build a `ContextRequest` in this package; a `key` function gets `request.httpContext.req`.
