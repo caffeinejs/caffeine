@@ -53,7 +53,7 @@ export function newStrategies(): { breaker: CircuitBreaker; retries: Retry } {
     name: 'inventory',
     slidingWindow: { type: 'count', size: 4 },
     minimumNumberOfCalls: 4,
-    slowCallDurationThresholdMs: 1,
+    slowCallDurationThreshold: 1,
     slowCallRateThreshold: 100,
   })
   const retries = retry({ name: 'inventory', backoff: 0, retryOn: error => !(error instanceof TypeError) })

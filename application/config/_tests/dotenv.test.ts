@@ -65,7 +65,7 @@ function definition(
     schema: passthroughConfigSchema,
     ...testTokens(),
     sources,
-    loadTimeoutMs: 30_000,
+    loadTimeout: 30_000,
     dotenv,
   }
 }

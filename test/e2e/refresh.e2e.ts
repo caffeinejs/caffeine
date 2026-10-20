@@ -15,6 +15,7 @@ import {
   Authentication,
 } from '@caffeinejs/http'
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { Hour, Minute } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -126,7 +127,12 @@ describe.skipIf(!up)('refresh tokens held in Redis', () => {
               auth
                 .addJWTBearer(localJWT)
                 .addCredentials()
-                .addRefreshTokens(r => r.resolve(principalOf).accessTTL('5m').refreshTTL('1h')),
+                .addRefreshTokens(r =>
+                  r
+                    .resolve(principalOf)
+                    .accessTTL(5 * Minute)
+                    .refreshTTL(1 * Hour),
+                ),
             ),
           )
           .with(authentication())

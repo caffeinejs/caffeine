@@ -1,3 +1,4 @@
+import { Day, Minute, Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import { Claim, Identity, Principal } from '../../index.js'
@@ -46,11 +47,20 @@ function principal(sub = 'u1', roles: string[] = ['admin']): Principal {
 
 function make(resolve = vi.fn<RefreshPrincipalResolver>(async (sub: string) => principal(sub))) {
   const store = new FakeStore()
-  const service = new RefreshTokenService(jwt, store, { resolve, accessTTL: '15m', refreshTTL: '30d' })
+  const service = new RefreshTokenService(jwt, store, { resolve, accessTTL: 15 * Minute, refreshTTL: 30 * Day })
   return { store, service, resolve }
 }
 
 describe('RefreshTokenService', () => {
+  // The refresh cookie and the access token both count whole seconds: under one, a pair would expire as it is issued.
+  it.each(['accessTTL', 'refreshTTL', 'absoluteTTL'] as const)('refuses a %s under one second', option => {
+    const options = { resolve: vi.fn<RefreshPrincipalResolver>(), accessTTL: 15 * Minute, refreshTTL: 30 * Day }
+
+    expect(() => new RefreshTokenService(jwt, new FakeStore(), { ...options, [option]: 500 * Millisecond })).toThrow(
+      `Cannot create RefreshTokenService: ${option} must be a finite Duration of at least 1s, got "500ms"`,
+    )
+  })
+
   it('issue: stores a hashed token and signs a verifiable access JWT', async () => {
     const { store, service } = make()
 
@@ -179,8 +189,8 @@ describe('RefreshTokenService', () => {
       const store = new FakeStore()
       const service = new RefreshTokenService(jwt, store, {
         resolve: () => principal(),
-        refreshTTL: 3600,
-        absoluteTTL: 5000,
+        refreshTTL: 1 * Hour,
+        absoluteTTL: 5000 * Second,
       })
       const first = await service.issue(principal())
 

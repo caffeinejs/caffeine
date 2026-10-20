@@ -1,4 +1,3 @@
-import { toMillis } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { Logger } from '../logger/logger.js'
@@ -47,7 +46,7 @@ export interface SourceState {
   rejected: { readonly layers: readonly ConfigLayer[]; readonly error: ErrConfigValidation } | undefined
   keys: number
   lastLoadedAt: number
-  lastLoadMs: number
+  lastLoadDuration: number
   consecutiveFailures: number
   lastError: unknown
   /** The source's own `load()` is running, possibly one the store stopped waiting for when it timed out. */
@@ -534,7 +533,7 @@ export class ConfigStore<out T> {
     }
 
     const controller = new AbortController()
-    const timeoutMs = this.definition.loadTimeoutMs
+    const timeout = this.definition.loadTimeout
 
     const onClose = (): void => controller.abort(errSource(name, 'the configuration was closed'))
     if (this.#closing.signal.aborted) {
@@ -547,13 +546,13 @@ export class ConfigStore<out T> {
       () =>
         controller.abort(
           new ErrConfig(
-            errMessage(`Cannot load config source "${name}": no answer within ${timeoutMs} ms`)
+            errMessage(`Cannot load config source "${name}": no answer within ${timeout} ms`)
               .reference('@caffeinejs/application', ErrConfig)
               .build(),
             'ERR_CONFIG_SOURCE_TIMEOUT',
           ),
         ),
-      timeoutMs,
+      timeout,
     )
     timer.unref?.()
 
@@ -587,7 +586,7 @@ export class ConfigStore<out T> {
       const layers = await Promise.race([loading, aborted])
       const accepted = this.#accept(state, layers)
       state.lastLoadedAt = Date.now()
-      state.lastLoadMs = performance.now() - started
+      state.lastLoadDuration = performance.now() - started
       return accepted
     } catch (error) {
       throw error instanceof ErrConfig ? error : errSource(name, messageOf(error), error)
@@ -645,7 +644,7 @@ function stateOf(sources: readonly ConfigSource[]): SourceState[] {
     }
     names.add(source.name)
 
-    const pollMs = source.pollInterval === undefined ? undefined : toMillis(source.pollInterval)
+    const pollMs = source.pollInterval
     if (pollMs !== undefined && !(pollMs > 0)) {
       throw new ErrConfig(
         errMessage(`Cannot register config source "${source.name}": the poll interval must be positive`)
@@ -663,7 +662,7 @@ function stateOf(sources: readonly ConfigSource[]): SourceState[] {
       rejected: undefined,
       keys: 0,
       lastLoadedAt: 0,
-      lastLoadMs: 0,
+      lastLoadDuration: 0,
       consecutiveFailures: 0,
       lastError: undefined,
       loading: false,

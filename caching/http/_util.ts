@@ -8,7 +8,7 @@ import {
   type ResolvedRouteConstraint,
 } from '@caffeinejs/http'
 import { type AdapterReply, type AdapterRequest, type AdapterRouteOptions } from '@caffeinejs/http/fastify'
-import { DURATION_PATTERN, parseDuration, type Duration } from '@caffeinejs/std/duration'
+import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { CacheControlOptions, ETagGenerator } from './cache_control.js'
@@ -340,11 +340,11 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
   }
 
   if (opts.ttl !== undefined) {
-    directives.push(`max-age=${Math.floor(parseDuration(opts.ttl))}`)
+    directives.push(`max-age=${Math.floor(opts.ttl / Second)}`)
   }
 
   if (opts.sharedMaxAge !== undefined) {
-    directives.push(`s-maxage=${Math.floor(parseDuration(opts.sharedMaxAge))}`)
+    directives.push(`s-maxage=${Math.floor(opts.sharedMaxAge / Second)}`)
   }
 
   // RFC 9111 §4.2.4 — a response that must be revalidated is never served stale, so the windows are not
@@ -352,40 +352,33 @@ export function buildCacheControl(opts: CacheControlOptions, privacyOverride?: '
   const staleAllowed = !opts.mustRevalidate && !opts.proxyRevalidate && !opts.noCache
 
   if (staleAllowed && opts.staleWhileRevalidate !== undefined) {
-    directives.push(`stale-while-revalidate=${Math.floor(parseDuration(opts.staleWhileRevalidate))}`)
+    directives.push(`stale-while-revalidate=${Math.floor(opts.staleWhileRevalidate / Second)}`)
   }
 
   if (staleAllowed && opts.staleIfError !== undefined) {
-    directives.push(`stale-if-error=${Math.floor(parseDuration(opts.staleIfError))}`)
+    directives.push(`stale-if-error=${Math.floor(opts.staleIfError / Second)}`)
   }
 
   return directives.length > 0 ? directives.join(', ') : null
 }
 
-const DURATION = new RegExp(DURATION_PATTERN)
-
-// `NaN` for a string `parseDuration` would read as 0 rather than refuse.
-export function strictSeconds(value: Duration): number {
-  return typeof value === 'string' && !DURATION.test(value) ? Number.NaN : parseDuration(value)
-}
-
-// `parseDuration` reads what it cannot parse as 0, and a store reads a ttl of 0 as it pleases — `lru-cache` as
-// "never expires". So a duration is refused while the route registers, not discovered in production. A `ttl`
-// below one second is refused too: `max-age` is whole seconds, and it would be sent as `max-age=0`.
+// A store reads a ttl of 0 as it pleases — `lru-cache` as "never expires" — so a duration is refused while the
+// route registers, not discovered in production. A `ttl` below one second is refused too: `max-age` is whole
+// seconds, and it would be sent as `max-age=0`.
 export function durationSeconds(
   routeDef: AdapterRouteOptions,
   option: string,
   value: Duration,
   minimum: 0 | 1,
 ): number {
-  const seconds = strictSeconds(value)
+  const seconds = value / Second
 
   if (!Number.isFinite(seconds) || seconds < minimum) {
     throw new ErrConfiguration(
       errMessage(
         `Cannot install caching on "${routeMethods(routeDef)} ${routeDef.url}": ${option} must be ${
           minimum === 1 ? 'at least one second' : 'a non-negative duration'
-        }, such as ${minimum === 1 ? '60' : '0'} or "5m", got "${String(value)}"`,
+        }, such as ${minimum === 1 ? '5 * Minute' : '0'}, got "${formatDuration(value)}"`,
       )
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),

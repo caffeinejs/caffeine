@@ -25,11 +25,13 @@
     "rememberMeCookieName": {
       "type": "string"
     },
-    "rememberMeRotationGraceSeconds": {
-      "type": "number"
+    "rememberMeRotationGrace": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "rememberMeAbsoluteMaxAge": {
-      "type": "number"
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "challengeMode": {
       "anyOf": [
@@ -57,10 +59,12 @@
       "type": "string"
     },
     "maxAge": {
-      "type": "number"
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "rememberMeMaxAge": {
-      "type": "number"
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "secure": {
       "type": "boolean"

@@ -2,6 +2,7 @@ import { connect } from 'node:net'
 
 import { Controller, Get, Head, Header } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -49,7 +50,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-once')
     class OnceController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -106,7 +107,7 @@ describe('concurrent misses for one key', () => {
     }
 
     @Controller('/sf-nothing')
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     class NothingController {
       @Header('Set-Cookie', 'session=1')
       @Get('/cookie')
@@ -135,7 +136,12 @@ describe('concurrent misses for one key', () => {
     const store = new WatchedStore(new FailingWrites())
     const recording = new Recording()
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(store).observer(recording.observer).storeTimeout('1s')),
+      HTTPCaching(b =>
+        b
+          .store(store)
+          .observer(recording.observer)
+          .storeTimeout(1 * Second),
+      ),
     )
     close = () => app.close()
     await app.bootstrap()
@@ -177,7 +183,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-hung')
     class HungController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -190,7 +196,12 @@ describe('concurrent misses for one key', () => {
     const store = new WatchedStore(new HungWrites())
     const recording = new Recording()
     const app = createWebApplication().with(
-      HTTPCaching(b => b.store(store).observer(recording.observer).storeTimeout('30ms')),
+      HTTPCaching(b =>
+        b
+          .store(store)
+          .observer(recording.observer)
+          .storeTimeout(30 * Millisecond),
+      ),
     )
     close = () => app.close()
     await app.bootstrap()
@@ -222,7 +233,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-oic')
     class OICController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         await g.hold()
@@ -250,7 +261,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-off')
     class OffController {
-      @CacheControl({ ttl: 60, lock: false })
+      @CacheControl({ ttl: 60 * Second, lock: false })
       @Get('/unlocked')
       async a() {
         runs.unlocked.tick()
@@ -303,7 +314,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-down')
     class DownController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         runs.tick()
@@ -342,7 +353,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-gone')
     class GoneController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -378,7 +389,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-fresh')
     class FreshController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -435,7 +446,7 @@ describe('concurrent misses for one key', () => {
 
     @Controller('/sf-reread')
     class RereadController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         calls++
@@ -489,7 +500,7 @@ describe('a HEAD and the flight', () => {
 
     @Controller('/sf-head-leads')
     class HeadLeadsController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         runs.tick()
@@ -523,7 +534,7 @@ describe('a HEAD and the flight', () => {
 
     @Controller('/sf-head-follows')
     class HeadFollowsController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       async data() {
         await g.hold()
@@ -555,7 +566,7 @@ describe('a HEAD and the flight', () => {
   it('leaves a route with its own HEAD handler to the HEAD handler', async () => {
     let heads = 0
 
-    @CacheControl({ ttl: 60 })
+    @CacheControl({ ttl: 60 * Second })
     @Controller('/sf-own-head')
     class OwnHeadController {
       @Head('/data')
@@ -596,7 +607,7 @@ describe('a handler run its leader does not report back on in time', () => {
   })
 
   async function start(options: {
-    lockTimeoutMs: number
+    lockTimeout: number
     hijack?: boolean
     handler?: (request: { signal: AbortSignal }) => Promise<unknown>
   }) {
@@ -611,13 +622,13 @@ describe('a handler run its leader does not report back on in time', () => {
         statusHeader: 'X-Cache',
         observer: recording.observer,
         flights: new Map(),
-        lockTimeoutMs: options.lockTimeoutMs,
+        lockTimeout: options.lockTimeout,
       }),
     )
     server.route({
       method: 'GET',
       url: '/data',
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60 * Second } },
       handler: options.hijack
         ? (_request, reply) => {
             reply.hijack()
@@ -632,7 +643,7 @@ describe('a handler run its leader does not report back on in time', () => {
 
   // Hooks do not run after a hijack, so nothing but lockTimeout releases the requests waiting on the run.
   it('releases the requests waiting on a leader that hijacked its reply at lockTimeout, and no sooner', async () => {
-    const { server, store, recording } = await start({ lockTimeoutMs: 50, hijack: true })
+    const { server, store, recording } = await start({ lockTimeout: 50, hijack: true })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     expect((await server.inject('/data')).body).toBe('raw')
@@ -660,7 +671,7 @@ describe('a handler run its leader does not report back on in time', () => {
     const g = gate()
     let calls = 0
     const { server } = await start({
-      lockTimeoutMs: 30,
+      lockTimeout: 30,
       handler: async () => {
         calls++
         if (calls === 1) {
@@ -689,7 +700,7 @@ describe('a handler run its leader does not report back on in time', () => {
     const gates = [gate(), gate()]
     let arrivals = 0
     const { server, store, recording } = await start({
-      lockTimeoutMs: 30,
+      lockTimeout: 30,
       handler: async () => {
         const mine = arrivals++
         if (mine < gates.length) {
@@ -730,7 +741,7 @@ describe('a handler run its leader does not report back on in time', () => {
     const g = gate()
     let leaderSignal: AbortSignal | undefined
     const { server, store, recording } = await start({
-      lockTimeoutMs: 1000,
+      lockTimeout: 1000,
       handler: async request => {
         leaderSignal ??= request.signal
         await g.hold()
@@ -768,7 +779,7 @@ describe('a follower whose request is over', () => {
   })
 
   async function start(options: {
-    lockTimeoutMs: number
+    lockTimeout: number
     handlerTimeout?: number
     hijack?: boolean
     handler?: () => Promise<unknown>
@@ -784,13 +795,13 @@ describe('a follower whose request is over', () => {
         statusHeader: 'X-Cache',
         observer: recording.observer,
         flights: new Map(),
-        lockTimeoutMs: options.lockTimeoutMs,
+        lockTimeout: options.lockTimeout,
       }),
     )
     server.route({
       method: 'GET',
       url: '/data',
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60 * Second } },
       handler: options.hijack
         ? (_request, reply) => {
             reply.hijack()
@@ -809,7 +820,7 @@ describe('a follower whose request is over', () => {
     const runs = counter()
     const g = gate()
     const { server, store, recording } = await start({
-      lockTimeoutMs: 1000,
+      lockTimeout: 1000,
       handler: async () => {
         runs.tick()
         await g.hold()
@@ -873,13 +884,13 @@ describe('a follower whose request is over', () => {
         statusHeader: 'X-Cache',
         observer: { ...recording.observer, onError: event => errors.push(event) },
         flights: new Map(),
-        lockTimeoutMs: 60_000,
+        lockTimeout: 60_000,
       }),
     )
     server.route({
       method: 'GET',
       url: '/data',
-      config: { cache: { ttl: 60 } },
+      config: { cache: { ttl: 60 * Second } },
       handler: async () => {
         calls++
         await g.hold()
@@ -910,7 +921,7 @@ describe('a follower whose request is over', () => {
   // Fastify answers the follower 503 at its handler timeout. The follower's wait ends there: when the flight
   // settles later it is not there to re-read the store, nor to report a miss on a reply already sent.
   it('stops waiting at the handler timeout, and is not heard from when the flight settles', async () => {
-    const { server, store, recording } = await start({ lockTimeoutMs: 200, handlerTimeout: 40, hijack: true })
+    const { server, store, recording } = await start({ lockTimeout: 200, handlerTimeout: 40, hijack: true })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     // The leader hijacks, which clears its own timeout and settles its flight only at lockTimeout.

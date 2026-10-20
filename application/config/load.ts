@@ -1,3 +1,5 @@
+import { type Duration, Second } from '@caffeinejs/std/duration'
+
 import type { Logger } from '../logger/logger.js'
 import { noopLogger } from '../logger/noop.js'
 import { loadDotenv } from './dotenv.js'
@@ -6,7 +8,7 @@ import { ConfigStore, kFirstLoad } from './store.js'
 import type { ConfigDefinition } from './types.js'
 
 /** How long one load of one source may take, unless the definition says otherwise. */
-export const DEFAULT_LOAD_TIMEOUT_MS = 30_000
+export const DEFAULT_LOAD_TIMEOUT: Duration = 30 * Second
 
 export interface LoadConfigOptions {
   /**

@@ -6,6 +6,9 @@
   "references": [
     {
       "path": "../fetchy/tsconfig.build.json"
+    },
+    {
+      "path": "../../std/tsconfig.build.json"
     }
   ],
   "exclude": [

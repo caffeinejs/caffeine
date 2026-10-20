@@ -1,3 +1,4 @@
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi, afterEach } from 'vitest'
 
 import type { IContext } from '../../../../../context.js'
@@ -309,6 +310,20 @@ describe('GitHub email enrichment', () => {
 
     const emailCall = seen.find(s => s.url === GITHUB_ENDPOINTS.emailsEndpoint)
     expect(emailCall!.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  // The deadline takes whole milliseconds, and refuses a fraction: the email would be dropped as if the call failed.
+  it('fetches the email under a timeout that is not a whole number of milliseconds', async () => {
+    stubGithub({ emails: [{ email: 'a@b.com', primary: true, verified: true }] })
+    const handler = new OAuth2AuthenticationHandler(
+      SCHEME,
+      baseOptions({ includeEmail: true, httpTimeout: 5 * Second + 0.5 * Millisecond }),
+    )
+
+    const { cookieValue } = await signIn(handler)
+
+    const result = await handler.authenticate(makeCtx({ cookies: { [handler.sessionCookieName]: cookieValue } }).ctx)
+    expect(result.ticket!.principal.findFirst('email')?.value).toBe('a@b.com')
   })
 
   it('signs the user in anyway when the emails endpoint fails', async () => {

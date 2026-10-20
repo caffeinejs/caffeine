@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { Backend, LockLease } from './backend.js'
 import { MemoryLockBackend } from './backend/memory/index.js'
 
@@ -9,20 +11,20 @@ export class FaultyBackend implements Backend {
 
   readonly #inner = new MemoryLockBackend()
 
-  tryAcquire(key: string, ttlMs: number): Promise<LockLease | undefined> {
+  tryAcquire(key: string, ttl: Duration): Promise<LockLease | undefined> {
     if (this.failAcquire) {
       return Promise.reject(new Error('backend down'))
     }
 
-    return this.#inner.tryAcquire(key, ttlMs)
+    return this.#inner.tryAcquire(key, ttl)
   }
 
-  extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
     if (this.failExtend) {
       return Promise.reject(new Error('backend down'))
     }
 
-    return this.stolen ? Promise.resolve(undefined) : this.#inner.extend(lease, ttlMs)
+    return this.stolen ? Promise.resolve(undefined) : this.#inner.extend(lease, ttl)
   }
 
   release(lease: LockLease): Promise<void> {

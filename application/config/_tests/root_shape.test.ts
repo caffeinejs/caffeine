@@ -9,7 +9,7 @@ import { testTokens } from '../tokens.testkit.js'
 import type { ConfigSchema } from '../types.js'
 
 function definition<T>(data: Record<string, unknown>, schema: ConfigSchema<T>) {
-  return { schema, ...testTokens(), sources: [new InlineConfigSource(data)], loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources: [new InlineConfigSource(data)], loadTimeout: 30_000 }
 }
 
 /**

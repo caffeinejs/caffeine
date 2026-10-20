@@ -1,6 +1,8 @@
+import { Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
+import type { RemoteAuthenticationTokens } from '../internal/remote/remote.js'
 import { decodeState, encodeState, type RemoteAuthenticationState } from '../internal/remote/state_store.js'
 import { OAuth2AuthenticationHandler } from './oauth.js'
 import type { OAuth2AuthenticationOptions } from './options.js'
@@ -460,6 +462,52 @@ describe('OAuth2AuthenticationHandler', () => {
       )
 
       expect(requests[0].headers.Authorization).not.toBe('Basic x')
+    })
+  })
+
+  describe('the tokens a sign-in hands on', () => {
+    function stubProvider(token: Record<string, unknown>): void {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url: string) => ({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(url.endsWith('/token') ? { access_token: 'at', ...token } : { id: 'u1' }),
+        })),
+      )
+    }
+
+    async function tokensOf(overrides: Partial<OAuth2AuthenticationOptions> = {}) {
+      const onTokenValidated = vi.fn()
+      const handler = new OAuth2AuthenticationHandler(SCHEME, options({ ...overrides, onTokenValidated }))
+      const { ctx } = makeCtx({
+        cookies: { [`${STATE_COOKIE}.st`]: await sealed({}) },
+        query: { code: 'c', state: 'st' },
+      })
+      await handler.processCallback(ctx)
+
+      expect(onTokenValidated).toHaveBeenCalledOnce()
+      return (onTokenValidated.mock.calls[0] as [IContext, unknown, RemoteAuthenticationTokens])[2]
+    }
+
+    // `expires_in` is in seconds on the wire; a hook that schedules a refresh reads a Duration.
+    it('carries the lifetime of the access token as a Duration', async () => {
+      stubProvider({ expires_in: 3600 })
+
+      expect((await tokensOf()).expiresIn).toBe(1 * Hour)
+    })
+
+    it('carries no lifetime when the provider sends none', async () => {
+      stubProvider({})
+
+      expect((await tokensOf()).expiresIn).toBeUndefined()
+    })
+
+    // Each request's deadline takes whole milliseconds, and refuses a fraction.
+    it('reaches the token and user info endpoints under a timeout that is not a whole number of milliseconds', async () => {
+      stubProvider({})
+
+      expect((await tokensOf({ httpTimeout: 5 * Second + 0.5 * Millisecond })).accessToken).toBe('at')
     })
   })
 

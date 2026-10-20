@@ -1,4 +1,5 @@
 import { $i, CaffeineIoC, Scopes, type NamedToken, type Provider } from '@caffeinejs/di'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -106,9 +107,17 @@ describe('newConfiguration', () => {
   })
 
   it('bounds each load by 30 seconds unless told otherwise', () => {
-    expect(newConfiguration(schema).build().config.loadTimeoutMs).toBe(30_000)
-    expect(newConfiguration(schema).loadTimeout('5s').build().config.loadTimeoutMs).toBe(5_000)
-    expect(newConfiguration(schema).loadTimeout(250).build().config.loadTimeoutMs).toBe(250)
+    expect(newConfiguration(schema).build().config.loadTimeout).toBe(30_000)
+    expect(
+      newConfiguration(schema)
+        .loadTimeout(5 * Second)
+        .build().config.loadTimeout,
+    ).toBe(5_000)
+    expect(
+      newConfiguration(schema)
+        .loadTimeout(250 * Millisecond)
+        .build().config.loadTimeout,
+    ).toBe(250)
   })
 
   // Data once built, like the sources: what the loader and the paths were when build() ran is what loads.

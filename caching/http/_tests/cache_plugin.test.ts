@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { ErrConfiguration } from '@caffeinejs/http'
 import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -49,7 +50,7 @@ describe('cache plugin wiring', () => {
     const router = newRouter('/group-install').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     router
       .get('/data')
-      .extend(cacheControl({ ttl: 60 }))
+      .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) }).mount(router)
@@ -68,7 +69,7 @@ describe('cache plugin wiring', () => {
       const router = newRouter(`/group-own-${name}`).with(HTTPCaching(b => b.store(stores[name])))
       router
         .get('/data')
-        .extend(cacheControl({ ttl: 60, key: () => 'data' }))
+        .extend(cacheControl({ ttl: 60 * Second, key: () => 'data' }))
         .handler(() => ({ name }))
 
       return router
@@ -94,13 +95,13 @@ describe('cache plugin wiring', () => {
     const served = newRouter('/group-served').with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     served
       .get('/data')
-      .extend(cacheControl({ ttl: 60 }))
+      .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const unserved = newRouter('/group-unserved')
     unserved
       .get('/data')
-      .extend(cacheControl({ ttl: 60 }))
+      .extend(cacheControl({ ttl: 60 * Second }))
       .handler(() => ({ ok: true }))
 
     const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }) })

@@ -13,6 +13,7 @@ import {
   type SeriesTokenRotation,
   type SeriesTokenStore,
 } from '@caffeinejs/http'
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { createClient } from '@redis/client'
 
 /**
@@ -50,9 +51,10 @@ export class RedisTicketStore implements RemoteAuthenticationTicketStore {
     this.#prefix = prefix
   }
 
-  async store(key: string, ticket: RemoteAuthenticationTicket, ttlSeconds: number): Promise<void> {
+  async store(key: string, ticket: RemoteAuthenticationTicket, ttl: Duration): Promise<void> {
     const id = digest(key)
     const index = this.#subject(ticket.subject)
+    const ttlSeconds = Math.ceil(ttl / Second)
 
     await this.#redis
       .multi()

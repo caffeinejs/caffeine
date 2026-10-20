@@ -2,6 +2,7 @@ import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Minute, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend } from './backend.js'
@@ -121,7 +122,7 @@ describe('distlock diagnostics channels', () => {
     await lock.tryAcquire('a')
     await lock.tryAcquire('a')
     await lock.acquire('a', { wait: 20, retryDelay: 5 }).catch(() => undefined)
-    await lock.acquire('a', { wait: '10s', signal: AbortSignal.abort() }).catch(() => undefined)
+    await lock.acquire('a', { wait: 10 * Second, signal: AbortSignal.abort() }).catch(() => undefined)
     backend.failAcquire = true
     await lock.tryAcquire('b').catch(() => undefined)
     backend.failAcquire = false
@@ -139,7 +140,7 @@ describe('distlock diagnostics channels', () => {
 
   it('publishes error before asyncEnd when the call rejects', async () => {
     const { lock } = await newApp()
-    await lock.acquire('a', { ttl: '1m' })
+    await lock.acquire('a', { ttl: 1 * Minute })
     const published = record(lock)
 
     await expect(lock.acquire('a', { wait: 10, retryDelay: 5 })).rejects.toBeInstanceOf(ErrLockNotAcquired)
@@ -155,11 +156,11 @@ describe('distlock diagnostics channels', () => {
   // `attempts` is what an acquisition histogram records; it has to agree with what the contention counter saw.
   it('counts one contended message per failed attempt, and one more attempt for the one that took the key', async () => {
     const { lock } = await newApp()
-    const held = await lock.acquire('a', { ttl: '1m' })
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
     const published = record(lock)
 
     setTimeout(() => void held.release(), 30)
-    await lock.acquire('a', { wait: '2s', retryDelay: 5 })
+    await lock.acquire('a', { wait: 2 * Second, retryDelay: 5 })
 
     const [ctx] = ended<AcquireContext>(published, 'acquire')
     const contended = messages(published, 'contended')
@@ -173,12 +174,12 @@ describe('distlock diagnostics channels', () => {
   it('tells an aborted acquisition apart from a backend failure', async () => {
     const backend = new FaultyBackend()
     const { lock, log } = await newApp(backend)
-    await lock.acquire('a', { ttl: '1m' })
+    await lock.acquire('a', { ttl: 1 * Minute })
     const published = record(lock)
 
     const controller = new AbortController()
     setTimeout(() => controller.abort(new Error('gone')), 20)
-    await lock.acquire('a', { wait: '10s', retryDelay: 5, signal: controller.signal }).catch(() => undefined)
+    await lock.acquire('a', { wait: 10 * Second, retryDelay: 5, signal: controller.signal }).catch(() => undefined)
 
     expect(ended<AcquireContext>(published, 'acquire')[0]!.outcome).toBe('aborted')
     expect(log.at('warn')).toEqual([])
@@ -207,11 +208,11 @@ describe('distlock diagnostics channels', () => {
     const { lock, log } = await newApp()
     const published = record(lock)
 
-    await lock.withLock('a', () => 'done', { ttl: '1m' })
+    await lock.withLock('a', () => 'done', { ttl: 1 * Minute })
 
     const [release] = ended<ReleaseContext>(published, 'release')
     expect(release!.lapsed).toBe(false)
-    expect(release!.heldMs).toBeGreaterThanOrEqual(0)
+    expect(release!.held).toBeGreaterThanOrEqual(0)
     expect(log.at('warn')).toEqual([])
   })
 
@@ -268,7 +269,7 @@ describe('distlock diagnostics channels', () => {
     const { lock } = await newApp()
     const published = record(lock)
 
-    await lock.once('job', () => 'ran', { ttl: '1m' })
+    await lock.once('job', () => 'ran', { ttl: 1 * Minute })
     await lock.once('job', () => 'skipped')
     await lock.once('other', () => Promise.reject(new Error('boom'))).catch(() => undefined)
 
@@ -285,7 +286,7 @@ describe('distlock diagnostics channels', () => {
     const { lock } = await newApp(backend)
     const published = record(lock)
 
-    const held = await lock.acquire('a', { ttl: '1m' })
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
     backend.stolen = true
 
     expect(await held.extend()).toBe(false)
@@ -300,7 +301,7 @@ describe('distlock diagnostics channels', () => {
     const { lock, log } = await newApp(backend)
     const published = record(lock)
 
-    const held = await lock.acquire('a', { ttl: '1m' })
+    const held = await lock.acquire('a', { ttl: 1 * Minute })
     backend.failExtend = true
 
     await expect(held.extend()).rejects.toThrow('backend down')
@@ -356,7 +357,7 @@ describe('distlock logging', () => {
     const { lock, log } = await newApp(undefined, d => d.logger(false))
 
     await lock.withLock('a', () => 'done')
-    await lock.acquire('a', { ttl: '1m' })
+    await lock.acquire('a', { ttl: 1 * Minute })
     await lock.acquire('a', { wait: 10, retryDelay: 5 }).catch(() => undefined)
 
     expect(log.records.filter(r => r.msg.startsWith('lock '))).toEqual([])
@@ -374,7 +375,7 @@ describe('distlock logging', () => {
 
   it('warns once when an acquisition times out, and keeps attempts at trace', async () => {
     const { lock, log } = await newApp()
-    await lock.acquire('a', { ttl: '1m' })
+    await lock.acquire('a', { ttl: 1 * Minute })
 
     await lock.acquire('a', { wait: 20, retryDelay: 5 }).catch(() => undefined)
 

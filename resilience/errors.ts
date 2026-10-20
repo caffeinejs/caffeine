@@ -1,4 +1,5 @@
-import { errMessage } from './err_message.gen.js'
+import type { Duration } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
 
 export class ErrResilience extends Error {
   readonly code: string
@@ -22,7 +23,7 @@ const refusals: Record<NotPermittedState, string> = {
 /**
  * A circuit breaker refused the call; the operation did not run.
  *
- * `retryAfterMs` is the time left before the breaker lets trial calls through again. It is set only when `state`
+ * `retryAfter` is the time left before the breaker lets trial calls through again. It is set only when `state`
  * is `open`: a forced-open breaker stays open until someone resets it, and a half-open one frees a trial slot when
  * a trial call settles.
  */
@@ -34,14 +35,14 @@ export class ErrCallNotPermitted extends ErrResilience {
   /** The name of the circuit breaker that refused the call. */
   readonly breaker: string
   readonly state: NotPermittedState
-  readonly retryAfterMs: number | undefined
+  readonly retryAfter: Duration | undefined
 
-  constructor(breaker: string, state: NotPermittedState, retryAfterMs: number | undefined) {
+  constructor(breaker: string, state: NotPermittedState, retryAfter: Duration | undefined) {
     super(`Cannot call "${breaker}": ${refusals[state]}${ErrCallNotPermitted.#footer}`, 'ERR_CALL_NOT_PERMITTED')
     this.name = 'ErrCallNotPermitted'
     this.breaker = breaker
     this.state = state
-    this.retryAfterMs = retryAfterMs
+    this.retryAfter = retryAfter
   }
 }
 

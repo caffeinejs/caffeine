@@ -5,6 +5,7 @@ import {
   type InjectionToken,
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { IAdapterTypes } from '../../../adapter.js'
 import type { ErrorHandlerRef } from '../../error/handler.js'
@@ -134,8 +135,8 @@ export class RouteChain<
     return this
   }
 
-  timeout(ms: number): this {
-    this.#state.builder.timeout(ms)
+  timeout(timeout: Duration): this {
+    this.#state.builder.timeout(timeout)
     return this
   }
 

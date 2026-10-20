@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises'
 
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -169,5 +170,27 @@ describe('a handler that outlives its timeout', () => {
     })
 
     expect(runs.n).toBe(1)
+  })
+})
+
+// Fastify refuses a handler timeout that is not a whole number of milliseconds when the route is added.
+describe('a route timeout that is not a whole number of milliseconds', () => {
+  it('starts, and the route answers', async () => {
+    const timed = new Router('/fractional')
+    timed
+      .get('/answer')
+      .timeout(1 * Second + 0.5 * Millisecond)
+      .handler(() => 'ok')
+
+    const app = createWebApplication().mount(timed)
+    try {
+      await app.bootstrap()
+
+      const answer = await app.fetch('/fractional/answer')
+      expect(answer.status).toBe(200)
+      expect(await answer.text()).toBe('ok')
+    } finally {
+      await app.close()
+    }
   })
 })

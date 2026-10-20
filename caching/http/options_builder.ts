@@ -67,14 +67,14 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
-  /** How long one store call may take before the request goes on without the cache. Default `2s`. */
+  /** How long one store call may take before the request goes on without the cache. Default two seconds. */
 
   storeTimeout(timeout: Duration): this {
     this.#storeTimeout = timeout
     return this
   }
 
-  /** How long a request waits for another's handler run on the same key before running the handler itself. Default `10s`. */
+  /** How long a request waits for another's handler run on the same key before running the handler itself. Default ten seconds. */
   lockTimeout(timeout: Duration): this {
     this.#lockTimeout = timeout
     return this

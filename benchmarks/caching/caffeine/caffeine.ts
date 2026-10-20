@@ -2,6 +2,7 @@ import { HTTPCaching, cacheControl } from '@caffeinejs/caching/http'
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 
 import { PRODUCTS, TTL_SECONDS } from '../payload.js'
 
@@ -13,7 +14,7 @@ api.get('/health', () => ({ ok: true }))
 
 const products = api.get('/api/products')
 if (cached) {
-  products.extend(cacheControl({ ttl: TTL_SECONDS }))
+  products.extend(cacheControl({ ttl: TTL_SECONDS * Second }))
 }
 products.handler(() => PRODUCTS)
 

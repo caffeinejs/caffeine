@@ -1,8 +1,8 @@
 import { token, type NamedToken, type Provider } from '@caffeinejs/di'
-import { type Duration, toMillis } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import {
-  DEFAULT_LOAD_TIMEOUT_MS,
+  DEFAULT_LOAD_TIMEOUT,
   type ConfigDefinition,
   type ConfigSchema,
   type ConfigSource,
@@ -39,7 +39,7 @@ export interface Configuration<T> {
 export class ConfigurationBuilder<T = unknown> {
   readonly #schema: ConfigSchema<T>
   readonly #sources: ConfigSource[] = []
-  #loadTimeoutMs = DEFAULT_LOAD_TIMEOUT_MS
+  #loadTimeout = DEFAULT_LOAD_TIMEOUT
   #dotenv: DotenvOptions | undefined
 
   constructor(schema: ConfigSchema<T>) {
@@ -68,7 +68,7 @@ export class ConfigurationBuilder<T = unknown> {
 
   /** How long one load of one source may take. Defaults to 30 seconds. */
   loadTimeout(timeout: Duration): this {
-    this.#loadTimeoutMs = toMillis(timeout)
+    this.#loadTimeout = timeout
     return this
   }
 
@@ -99,7 +99,7 @@ export class ConfigurationBuilder<T = unknown> {
         liveConfigToken,
         storeToken,
         sources: Object.freeze([...this.#sources]),
-        loadTimeoutMs: this.#loadTimeoutMs,
+        loadTimeout: this.#loadTimeout,
         dotenv: this.#dotenv === undefined ? undefined : Object.freeze({ ...this.#dotenv }),
       }),
       configToken,

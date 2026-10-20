@@ -1,5 +1,6 @@
 import { createApplication } from '@caffeinejs/application'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Minute, Second, type Duration } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { Backend, LockLease } from './backend.js'
@@ -15,14 +16,14 @@ class RecordingBackend implements Backend {
 
   readonly #inner = new MemoryLockBackend()
 
-  tryAcquire(key: string, ttlMs: number, signal?: AbortSignal): Promise<LockLease | undefined> {
+  tryAcquire(key: string, ttl: Duration, signal?: AbortSignal): Promise<LockLease | undefined> {
     this.signals.push(signal)
 
-    return this.#inner.tryAcquire(key, ttlMs)
+    return this.#inner.tryAcquire(key, ttl)
   }
 
-  extend(lease: LockLease, ttlMs: number): Promise<LockLease | undefined> {
-    return this.#inner.extend(lease, ttlMs)
+  extend(lease: LockLease, ttl: Duration): Promise<LockLease | undefined> {
+    return this.#inner.extend(lease, ttl)
   }
 
   release(lease: LockLease): Promise<void> {
@@ -66,11 +67,11 @@ describe('distributed lock', () => {
 
   it('retries until the holder gives the key back, inside the wait budget', async () => {
     const lock = await newLock()
-    const held = await lock.acquire('orders:rebuild', { ttl: '1m' })
+    const held = await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
     setTimeout(() => void held.release(), 30)
 
-    const second = await lock.acquire('orders:rebuild', { wait: '2s', retryDelay: 5 })
+    const second = await lock.acquire('orders:rebuild', { wait: 2 * Second, retryDelay: 5 })
 
     expect(second.key).toBe('orders:rebuild')
     expect(second.token).not.toBe(held.token)
@@ -79,7 +80,7 @@ describe('distributed lock', () => {
   // Giving up has to be loud and has to say which key, or a caller cannot tell one stuck lock from another.
   it('throws ErrLockNotAcquired naming the key once the wait budget is spent', async () => {
     const lock = await newLock()
-    await lock.acquire('orders:rebuild', { ttl: '1m' })
+    await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
     const error = await lock.acquire('orders:rebuild', { wait: 50, retryDelay: 5 }).catch((e: unknown) => e)
 
@@ -90,7 +91,7 @@ describe('distributed lock', () => {
 
   it('makes a single attempt when the wait budget is zero', async () => {
     const lock = await newLock()
-    await lock.acquire('orders:rebuild', { ttl: '1m' })
+    await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
     await expect(lock.acquire('orders:rebuild', { wait: 0 })).rejects.toBeInstanceOf(ErrLockNotAcquired)
   })
@@ -102,7 +103,7 @@ describe('distributed lock', () => {
 
     const lapsed = await lock.acquire('orders:rebuild', { ttl: 20 })
     await sleep(40)
-    const successor = await lock.acquire('orders:rebuild', { ttl: '1m' })
+    const successor = await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
     await lapsed.release()
 
@@ -115,9 +116,9 @@ describe('distributed lock', () => {
 
     const lapsed = await lock.acquire('orders:rebuild', { ttl: 20 })
     await sleep(40)
-    await lock.acquire('orders:rebuild', { ttl: '1m' })
+    await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
-    expect(await lapsed.extend('1m')).toBe(false)
+    expect(await lapsed.extend(1 * Minute)).toBe(false)
     expect(lapsed.lost).toBe(true)
   })
 
@@ -142,7 +143,7 @@ describe('distributed lock', () => {
     const lock = await newLock()
 
     {
-      await using held = await lock.acquire('orders:rebuild', { ttl: '1m' })
+      await using held = await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
       expect(held.lost).toBe(false)
       expect(await lock.tryAcquire('orders:rebuild')).toBeUndefined()
@@ -192,10 +193,10 @@ describe('distributed lock', () => {
 
   it('stops waiting when the caller aborts', async () => {
     const lock = await newLock()
-    await lock.acquire('orders:rebuild', { ttl: '1m' })
+    await lock.acquire('orders:rebuild', { ttl: 1 * Minute })
 
     const controller = new AbortController()
-    const waiting = lock.acquire('orders:rebuild', { wait: '10s', retryDelay: 5, signal: controller.signal })
+    const waiting = lock.acquire('orders:rebuild', { wait: 10 * Second, retryDelay: 5, signal: controller.signal })
     const reason = new Error('caller went away')
 
     setTimeout(() => controller.abort(reason), 20)

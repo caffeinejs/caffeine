@@ -1,4 +1,5 @@
 import type { Bindings, LevelMapping, LogFn, Logger } from '@caffeinejs/application/logger'
+import { Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { loggingCacheObserver, type CacheRoute } from '../index.js'
@@ -73,9 +74,9 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log)
 
-    observer.onHit!({ route, key: 'secret', revalidated: false, ageSeconds: 1, coalesced: false, stale: false })
+    observer.onHit!({ route, key: 'secret', revalidated: false, age: 1 * Second, coalesced: false, stale: false })
     observer.onMiss!({ route, key: 'secret', reason: 'absent' })
-    observer.onStore!({ route, key: 'secret', bytes: 10, ttlSeconds: 60, tags: ['pets'] })
+    observer.onStore!({ route, key: 'secret', bytes: 10, ttl: 60 * Second, tags: ['pets'] })
     observer.onSkip!({ route, key: 'secret', reason: 'entry-too-large', bytes: 10 })
 
     for (const { args } of log.written) {
@@ -89,10 +90,10 @@ describe('loggingCacheObserver', () => {
     const log = new Recorder()
     const observer = loggingCacheObserver(log, { includeKeys: true })
 
-    observer.onHit!({ route, key: 'k1', revalidated: true, ageSeconds: 1, coalesced: true, stale: false })
+    observer.onHit!({ route, key: 'k1', revalidated: true, age: 1 * Second, coalesced: true, stale: false })
     observer.onSkip!({ route, key: 'k2', reason: 'set-cookie', bytes: 3 })
     observer.onMiss!({ route, key: 'k3', reason: 'absent' })
-    observer.onStore!({ route, key: 'k4', bytes: 10, ttlSeconds: 60 })
+    observer.onStore!({ route, key: 'k4', bytes: 10, ttl: 60 * Second })
 
     expect(log.written[0].args[0]).toMatchObject({ key: 'k1', revalidated: true })
     expect(log.written[1].args[0]).toMatchObject({ key: 'k2', reason: 'set-cookie' })
@@ -110,7 +111,7 @@ describe('loggingCacheObserver', () => {
   // The age says how stale the answer that went out was, `replaced` what the handler had produced instead.
   it('records a stale entry served over a 5xx, with the key only when asked for', () => {
     const log = new Recorder()
-    const event = { route, key: 'k', ageSeconds: 90, replaced: 503 }
+    const event = { route, key: 'k', age: 90 * Second, replaced: 503 }
 
     loggingCacheObserver(log, { level: 'warn' }).onStaleIfError!(event)
     loggingCacheObserver(log, { includeKeys: true }).onStaleIfError!(event)

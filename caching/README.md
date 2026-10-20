@@ -26,10 +26,11 @@ import { CacheControl, CacheInvalidate, HTTPCaching } from '@caffeinejs/caching/
 import { MemoryHTTPCacheStore } from '@caffeinejs/caching/store/memory'
 import { Controller, Get, Put } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Minute } from '@caffeinejs/std/duration'
 
 @Controller('/pets')
 class PetsController {
-  @CacheControl({ ttl: '5m', tags: ['pets'] })
+  @CacheControl({ ttl: 5 * Minute, tags: ['pets'] })
   @Get('/')
   list() {
     return petStore.all()
@@ -57,11 +58,12 @@ decorators, as route extensions:
 ```ts
 import { cacheControl, cacheInvalidate } from '@caffeinejs/caching/http'
 import { Router } from '@caffeinejs/http'
+import { Minute } from '@caffeinejs/std/duration'
 
 const pets = new Router('/pets')
 pets
   .get('/')
-  .extend(cacheControl({ ttl: '5m', tags: ['pets'] }))
+  .extend(cacheControl({ ttl: 5 * Minute, tags: ['pets'] }))
   .handler(() => petStore.all())
 pets
   .post('/')
@@ -69,8 +71,8 @@ pets
   .handler(() => ({ created: true }))
 ```
 
-A duration is a number of seconds or a string such as `'30s'`, `'5m'`, `'1h'`, `'1d'`. A `ttl` is at least one
-second: `max-age` is whole seconds.
+A duration is a `Duration` from `@caffeinejs/std/duration`, a number of milliseconds written with its constants:
+`30 * Second`, `5 * Minute`, `1 * Day`. A `ttl` is at least one second: `max-age` is whole seconds.
 
 ## What is cached
 
@@ -185,7 +187,7 @@ the requests apart.
 ## Keys
 
 The default key is the URL with its query parameters sorted, so `?a=1&b=2` and `?b=2&a=1` share an entry. With
-`varyByQuery`, only the parameters named count: `@CacheControl({ ttl: 60, varyByQuery: ['page', 'q'] })` gives
+`varyByQuery`, only the parameters named count: `@CacheControl({ ttl: 1 * Minute, varyByQuery: ['page', 'q'] })` gives
 `/pets?page=2&utm_source=mail` and `/pets?page=2` one entry. `GET` and `HEAD` share a key; any other method is
 part of it. With `vary`, the value of each listed request header is appended, which gives one entry per
 combination.
@@ -195,7 +197,7 @@ would share a key. Such a route with a `ttl` must list the constraint's header i
 Otherwise `app.bootstrap()` fails.
 
 ```ts
-@CacheControl({ ttl: 60, vary: ['Accept-Version'] })
+@CacheControl({ ttl: 1 * Minute, vary: ['Accept-Version'] })
 ```
 
 ## Invalidation
@@ -204,7 +206,7 @@ Eviction is by tag. A route names the tags its entries are stored under, and a m
 evicts; every entry stored under any of them goes, whatever route stored it, whatever its key or `Vary` variant.
 
 ```ts
-@CacheControl({ ttl: '5m', tags: ['pets', 'catalogue'] })
+@CacheControl({ ttl: 5 * Minute, tags: ['pets', 'catalogue'] })
 @Get('/')
 list() {}
 
@@ -253,7 +255,7 @@ at the latest.
 ## One handler run per miss
 
 Concurrent requests that miss on one key run the handler once. The first to miss leads and runs the handler; the
-requests behind it wait for what it stores, up to `lockTimeout` (default `10s`), and are served that. When the
+requests behind it wait for what it stores, up to `lockTimeout` (default ten seconds), and are served that. When the
 leader stored nothing — a private response, an error, a cookie, a write that failed — they run the handler
 themselves. A `HEAD` never leads, since its response is never stored, but it does wait. The wait is in this
 process: with several replicas, each runs the handler once.
@@ -267,10 +269,10 @@ should: such a response stores nothing and settles nothing before the timeout, s
 Past its `ttl` an entry is not fresh, and by default not served. The two windows a route declares change that,
 for the server-side store as well as for caches downstream:
 
-- `staleWhileRevalidate: '30s'` — for thirty seconds past `ttl`, the first request to find the entry stale runs
+- `staleWhileRevalidate: 30 * Second` — for thirty seconds past `ttl`, the first request to find the entry stale runs
   the handler, and the requests behind it are served the stale entry at once instead of waiting for it. Nobody
   on a route with `lock: false`: there is no leader to wait on, and the entry is a miss.
-- `staleIfError: '10m'` — for ten minutes past `ttl`, a `500`, `502`, `503` or `504` the handler produces goes out
+- `staleIfError: 10 * Minute` — for ten minutes past `ttl`, a `500`, `502`, `503` or `504` the handler produces goes out
   replaced by the entry: its status, its headers over the error's, its payload. The requests waiting on that
   handler run are served it too. Nothing is stored.
 
@@ -296,8 +298,8 @@ context, with the `container` and the application `logger`.
       .statusHeader('X-Cache')
       .varyByQuery(['page', 'q'])
       .maxEntrySize('1MB')
-      .storeTimeout('250ms')
-      .lockTimeout('5s')
+      .storeTimeout(250 * Millisecond)
+      .lockTimeout(5 * Second)
       .observer(loggingCacheObserver(logger)),
   ),
 )
@@ -311,8 +313,8 @@ context, with the `container` and the application `logger`.
 | `statusHeader`  | The cache status header's name. Default `X-Cache`.                                                                                        |
 | `varyByQuery`   | The query parameters a key carries, for every route that does not list its own.                                                           |
 | `maxEntrySize`  | The largest payload stored: `'1MB'`, `'512kb'`, or a number of bytes. A larger response goes out and is not stored, and `onSkip` is told. |
-| `storeTimeout`  | How long one store call may take. Default `2s`. See "When the store fails".                                                               |
-| `lockTimeout`   | How long a request waits for another's handler run. Default `10s`.                                                                        |
+| `storeTimeout`  | How long one store call may take. Default two seconds. See "When the store fails".                                                        |
+| `lockTimeout`   | How long a request waits for another's handler run. Default ten seconds.                                                                  |
 
 `store`, `etagGenerator` and `observer` each take the value or a container token. A token bound to nothing fails
 at `app.bootstrap()`, and so does a missing `store`. Nothing is bound into the container for you.
@@ -481,10 +483,10 @@ A store that never answers is bounded by the signal each call carries. A read is
 signal — the client gone, or the server's handler timeout — and by `storeTimeout`; a write or an eviction by
 `storeTimeout` alone, since the entry is for the requests that follow and the eviction follows a mutation that
 already went through. A call past `storeTimeout` is given up on and reported like a rejection, with an
-`ErrCacheStoreTimeout`. The default is `2s`. A read given up on because the request is over is not reported.
+`ErrCacheStoreTimeout`. The default is two seconds. A read given up on because the request is over is not reported.
 
 ```ts
-HTTPCaching(b => b.store(store).storeTimeout('250ms'))
+HTTPCaching(b => b.store(store).storeTimeout(250 * Millisecond))
 ```
 
 ## Observing
@@ -529,7 +531,7 @@ All of these fail `app.bootstrap()` with `ErrConfiguration`:
 - a route declares `@CacheControl` or `@CacheInvalidate` and the plugin is not installed for it
 - `HTTPCaching` has no `store`, or a `store`, `etagGenerator` or `observer` token is bound to nothing
 - `ttl` is below one second, `storeTimeout` or `lockTimeout` is not a positive duration, another duration option
-  does not parse (`'10 seconds'`), or `maxEntrySize` is not a byte size
+  is negative or not a number, or `maxEntrySize` is not a byte size
 - a tag is not a non-empty string without `{` or `}`, or `@CacheInvalidate` names no tag
 - a constrained route has a `ttl` and nothing in its key tells it from the other routes on its URL
 

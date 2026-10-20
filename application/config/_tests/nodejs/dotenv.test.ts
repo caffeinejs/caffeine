@@ -53,7 +53,7 @@ function definition(sources: ConfigSource[]): ConfigDefinition {
     schema: passthroughConfigSchema,
     ...testTokens(),
     sources,
-    loadTimeoutMs: 30_000,
+    loadTimeout: 30_000,
     dotenv: { loader: loadEnvFiles, path: dir },
   }
 }

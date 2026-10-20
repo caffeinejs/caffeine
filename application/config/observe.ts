@@ -101,7 +101,7 @@ export function logConfigLoaded(logger: Logger, store: ConfigStore<unknown>): vo
       log.debug({ source: source.name, reason: 'no layers' }, 'config source skipped')
     } else {
       log.debug(
-        { source: source.name, layers: source.layers.length, keys: source.keys, ms: roundMs(source.lastLoadMs) },
+        { source: source.name, layers: source.layers.length, keys: source.keys, ms: roundMs(source.lastLoadDuration) },
         'config source loaded',
       )
     }

@@ -74,7 +74,7 @@ createWebApplication({ config }).server(({ config }) => ({ listener: config.serv
 ```
 
 Precedence is registration order alone: a source added later wins a conflicting value. Here the environment
-overrides the file and the command line overrides both. `.loadTimeout('10s')` bounds each load of each source; the
+overrides the file and the command line overrides both. `.loadTimeout(10 * Second)` bounds each load of each source; the
 default is 30 seconds. Every `build()` mints new tokens, so two configurations in one container never answer to each
 other's.
 

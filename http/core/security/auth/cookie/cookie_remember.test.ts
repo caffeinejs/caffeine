@@ -1,3 +1,4 @@
+import { Hour, Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, vi } from 'vitest'
 
 import type { IContext } from '../../../../context.js'
@@ -299,7 +300,7 @@ describe('CookieAuthenticationHandler — durable remember-me', () => {
   it('stops remembering once the absolute lifetime is reached, however recently it was used', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
-      const { handler, store } = makeHandler(o => o.rememberMeMaxAge(3600).rememberMeAbsoluteMaxAge(5000))
+      const { handler, store } = makeHandler(o => o.rememberMeMaxAge(1 * Hour).rememberMeAbsoluteMaxAge(5000 * Second))
       let remember = await remembered(handler)
 
       vi.setSystemTime(Date.now() + 3000_000)

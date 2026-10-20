@@ -1,3 +1,4 @@
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import type { HTTPCacheEntry, HTTPCacheStore } from './store.js'
@@ -45,7 +46,7 @@ export function describeHTTPCacheStoreContract(
         headers: { 'content-type': 'application/json', link: ['</a>; rel="next"', '</b>; rel="prev"'] },
       }
 
-      await store.put('k', full, { ttl: 60, tags: ['pets', 'all'] })
+      await store.put('k', full, { ttl: 60 * Second, tags: ['pets', 'all'] })
 
       expect(await store.get('k')).toEqual(full)
       expect(await store.get('k', { tags: ['pets', 'all'] })).toEqual(full)
@@ -54,10 +55,10 @@ export function describeHTTPCacheStoreContract(
     it('leaves the optional fields of the entry it replaces behind', async () => {
       const store = await factory()
       await store.put('k', entry('old', { etag: '"old"', lastModified: 'Mon, 01 Jan 2024 00:00:00 GMT' }), {
-        ttl: 60,
+        ttl: 60 * Second,
       })
 
-      await store.put('k', entry('new'), { ttl: 60 })
+      await store.put('k', entry('new'), { ttl: 60 * Second })
 
       const read = await store.get('k')
       expect(read?.payload).toBe('new')
@@ -71,8 +72,8 @@ export function describeHTTPCacheStoreContract(
       const store = await factory()
       const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
 
-      await store.put('bin', entry(bytes), { ttl: 60 })
-      await store.put('text', entry('héllo'), { ttl: 60 })
+      await store.put('bin', entry(bytes), { ttl: 60 * Second })
+      await store.put('text', entry('héllo'), { ttl: 60 * Second })
 
       const bin = await store.get('bin')
       expect(Buffer.isBuffer(bin?.payload)).toBe(true)
@@ -89,7 +90,7 @@ export function describeHTTPCacheStoreContract(
 
     it('reads an entry past its ttl as undefined', async () => {
       const store = await factory()
-      await store.put('k', entry('v'), { ttl: '10ms', tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 10 * Millisecond, tags: ['pets'] })
 
       await elapse(40)
 
@@ -101,8 +102,8 @@ export function describeHTTPCacheStoreContract(
       const store = await factory()
 
       await store.put('zero', entry('v'), { ttl: 0 })
-      await store.put('unparsable', entry('v'), { ttl: 'ten seconds' })
-      await store.put('kept', entry('v'), { ttl: 60 })
+      await store.put('unparsable', entry('v'), { ttl: Number.NaN })
+      await store.put('kept', entry('v'), { ttl: 60 * Second })
 
       expect(await store.get('zero')).toBeUndefined()
       expect(await store.get('unparsable')).toBeUndefined()
@@ -111,10 +112,10 @@ export function describeHTTPCacheStoreContract(
 
     it('hides every entry carrying an evicted tag, and no other', async () => {
       const store = await factory()
-      await store.put('pet-1', entry('1'), { ttl: 60, tags: ['pets'] })
-      await store.put('pet-2', entry('2'), { ttl: 60, tags: ['pets'] })
-      await store.put('owner-1', entry('o'), { ttl: 60, tags: ['owners'] })
-      await store.put('plain', entry('p'), { ttl: 60 })
+      await store.put('pet-1', entry('1'), { ttl: 60 * Second, tags: ['pets'] })
+      await store.put('pet-2', entry('2'), { ttl: 60 * Second, tags: ['pets'] })
+      await store.put('owner-1', entry('o'), { ttl: 60 * Second, tags: ['owners'] })
+      await store.put('plain', entry('p'), { ttl: 60 * Second })
 
       await store.evictByTag('pets')
 
@@ -126,23 +127,23 @@ export function describeHTTPCacheStoreContract(
 
     it('takes an entry with several tags down with any one of them', async () => {
       const store = await factory()
-      await store.put('by-a', entry('a'), { ttl: 60, tags: ['a', 'b'] })
-      await store.put('by-b', entry('b'), { ttl: 60, tags: ['a', 'b'] })
+      await store.put('by-a', entry('a'), { ttl: 60 * Second, tags: ['a', 'b'] })
+      await store.put('by-b', entry('b'), { ttl: 60 * Second, tags: ['a', 'b'] })
 
       await store.evictByTag('a')
       expect(await store.get('by-a')).toBeUndefined()
 
-      await store.put('by-b', entry('b2'), { ttl: 60, tags: ['a', 'b'] })
+      await store.put('by-b', entry('b2'), { ttl: 60 * Second, tags: ['a', 'b'] })
       await store.evictByTag(['b'])
       expect(await store.get('by-b')).toBeUndefined()
     })
 
     it('reads an entry put again after an eviction', async () => {
       const store = await factory()
-      await store.put('k', entry('before'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('before'), { ttl: 60 * Second, tags: ['pets'] })
       await store.evictByTag('pets')
 
-      await store.put('k', entry('after'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('after'), { ttl: 60 * Second, tags: ['pets'] })
 
       expect((await store.get('k'))?.payload).toBe('after')
       expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('after')
@@ -151,9 +152,9 @@ export function describeHTTPCacheStoreContract(
     // Every eviction of a tag hides what was stored under it since the last one, not only the first eviction.
     it('hides an entry put again after an eviction once the tag is evicted again', async () => {
       const store = await factory()
-      await store.put('k', entry('first'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('first'), { ttl: 60 * Second, tags: ['pets'] })
       await store.evictByTag('pets')
-      await store.put('k', entry('second'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('second'), { ttl: 60 * Second, tags: ['pets'] })
 
       await store.evictByTag('pets')
 
@@ -163,9 +164,9 @@ export function describeHTTPCacheStoreContract(
 
     it('evicts several tags at once, and nothing for an empty list or a tag nothing carries', async () => {
       const store = await factory()
-      await store.put('a', entry('a'), { ttl: 60, tags: ['a'] })
-      await store.put('b', entry('b'), { ttl: 60, tags: ['b'] })
-      await store.put('c', entry('c'), { ttl: 60, tags: ['c'] })
+      await store.put('a', entry('a'), { ttl: 60 * Second, tags: ['a'] })
+      await store.put('b', entry('b'), { ttl: 60 * Second, tags: ['b'] })
+      await store.put('c', entry('c'), { ttl: 60 * Second, tags: ['c'] })
 
       await store.evictByTag([])
       await store.evictByTag('never-used')
@@ -179,7 +180,7 @@ export function describeHTTPCacheStoreContract(
 
     it('never touches an entry stored without tags', async () => {
       const store = await factory()
-      await store.put('plain', entry('p'), { ttl: 60 })
+      await store.put('plain', entry('p'), { ttl: 60 * Second })
 
       await store.evictByTag(['plain', 'pets', 'all'])
 
@@ -190,7 +191,7 @@ export function describeHTTPCacheStoreContract(
     // it does, must not change the answer.
     it('answers the same whatever the tags hint says', async () => {
       const store = await factory()
-      await store.put('k', entry('v'), { ttl: 60, tags: ['pets', 'all'] })
+      await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets', 'all'] })
 
       expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('v')
       expect((await store.get('k', { tags: ['unrelated'] }))?.payload).toBe('v')
@@ -205,11 +206,11 @@ export function describeHTTPCacheStoreContract(
 
     it('rejects a call whose signal is already aborted, and does nothing for it', async () => {
       const store = await factory()
-      await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets'] })
       const signal = AbortSignal.abort()
 
       await expect(store.get('k', { signal })).rejects.toThrow()
-      await expect(store.put('other', entry('o'), { ttl: 60, signal })).rejects.toThrow()
+      await expect(store.put('other', entry('o'), { ttl: 60 * Second, signal })).rejects.toThrow()
       await expect(store.evictByTag('pets', { signal })).rejects.toThrow()
 
       expect(await store.get('other')).toBeUndefined()
@@ -220,7 +221,7 @@ export function describeHTTPCacheStoreContract(
       const store = await factory()
       const signal = new AbortController().signal
 
-      await store.put('k', entry('v'), { ttl: 60, tags: ['pets'], signal })
+      await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets'], signal })
       expect((await store.get('k', { signal, tags: ['pets'] }))?.payload).toBe('v')
 
       await store.evictByTag('pets', { signal })
@@ -234,7 +235,7 @@ export function describeHTTPCacheStoreContract(
       const signal = new AbortController().signal
       const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80, 0xc3, 0x28, 0x0a])
 
-      await store.put('bin', entry(bytes), { ttl: 60, signal })
+      await store.put('bin', entry(bytes), { ttl: 60 * Second, signal })
       const read = await store.get('bin', { signal })
 
       expect(Buffer.isBuffer(read?.payload)).toBe(true)

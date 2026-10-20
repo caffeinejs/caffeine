@@ -1,4 +1,5 @@
 import type { Provider } from '@caffeinejs/di'
+import { type Duration, Second, truncate } from '@caffeinejs/std/duration'
 
 import type { IContext } from '../../../../context.js'
 import type { CookieSerializeOptions } from '../../../cookie/options.js'
@@ -289,7 +290,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     return { principal: new Principal(true, identity), session }
   }
 
-  async #writeSessionCookie(ctx: IContext, principal: Principal, ttl: number, persistent: boolean): Promise<void> {
+  async #writeSessionCookie(ctx: IContext, principal: Principal, ttl: Duration, persistent: boolean): Promise<void> {
     const payload: SessionPayload = {
       scheme: this.#name,
       claims: principal.claims().map(c => ({ type: c.type, value: c.value, issuer: c.issuer })),
@@ -309,7 +310,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
    */
   async #resealSession(ctx: IContext, session: OpenedJWT<SessionPayload>): Promise<void> {
     const { scheme, claims, roleClaimType, persistent } = session.claims
-    const ttl = session.exp - Math.floor(Date.now() / 1000)
+    const ttl = (session.exp - Math.floor(Date.now() / 1000)) * Second
 
     if (persistent === undefined || ttl <= 0) {
       return
@@ -318,14 +319,21 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     await this.#writeSealed(ctx, { scheme, claims, roleClaimType, persistent }, ttl)
   }
 
-  async #writeSealed(ctx: IContext, payload: SessionPayload, ttl: number): Promise<void> {
-    const sealed = await sealSession(payload as unknown as Record<string, unknown>, this.#secrets, this.#name, ttl)
+  async #writeSealed(ctx: IContext, payload: SessionPayload, ttl: Duration): Promise<void> {
+    // The token's `exp` and the cookie's `Max-Age` count whole seconds.
+    const span = truncate(ttl, Second)
+    const sealed = await sealSession(
+      payload as unknown as Record<string, unknown>,
+      this.#secrets,
+      this.#name,
+      span / Second,
+    )
     // Persistent cookie carries Max-Age; a session cookie omits it and dies with the browser. Either
     // way the sealed token's own `exp` is the hard cap, so a surviving cookie past expiry still fails.
     ctx.cookie(
       this.options.cookieName!,
       sealed,
-      this.#cookieOpts(ctx, this.options.cookieName!, payload.persistent === true ? ttl : undefined),
+      this.#cookieOpts(ctx, this.options.cookieName!, payload.persistent === true ? span : undefined),
     )
     noStore(ctx)
   }
@@ -413,9 +421,13 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
 
   #rememberPolicy(): SeriesTokenPolicy {
     return {
-      idleSeconds: this.options.rememberMeMaxAge!,
-      absoluteSeconds: this.options.rememberMeAbsoluteMaxAge,
-      graceSeconds: this.options.rememberMeRotationGraceSeconds!,
+      // A series records epoch seconds.
+      idleSeconds: Math.floor(this.options.rememberMeMaxAge! / Second),
+      absoluteSeconds:
+        this.options.rememberMeAbsoluteMaxAge === undefined
+          ? undefined
+          : Math.floor(this.options.rememberMeAbsoluteMaxAge / Second),
+      graceSeconds: Math.floor(this.options.rememberMeRotationGrace! / Second),
     }
   }
 
@@ -423,7 +435,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
     ctx.cookie(
       this.options.rememberMeCookieName!,
       token,
-      this.#cookieOpts(ctx, this.options.rememberMeCookieName!, this.options.rememberMeMaxAge),
+      this.#cookieOpts(ctx, this.options.rememberMeCookieName!, truncate(this.options.rememberMeMaxAge!, Second)),
     )
     noStore(ctx)
   }
@@ -443,7 +455,7 @@ export class CookieAuthenticationHandler extends BaseAuthenticationHandler<Cooki
   // Every attribute is the scheme's own, one it leaves unset written as `undefined`: that clears whatever the
   // server's `parseOptions` default, so an application-wide domain or `signed` never reaches a session cookie.
   // `encode` stays the server's: every read decodes with the server's `decode`, and the two have to match.
-  #cookieOpts(ctx: IContext, name: string, maxAge?: number): CookieSerializeOptions {
+  #cookieOpts(ctx: IContext, name: string, maxAge?: Duration): CookieSerializeOptions {
     return {
       httpOnly: true,
       secure: this.options.secure,

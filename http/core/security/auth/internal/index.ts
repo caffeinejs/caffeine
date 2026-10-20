@@ -1,4 +1,5 @@
 export * from './challenge.js'
+export * from './lifetime.js'
 export * from './no_store.js'
 export * from './remote/index.js'
 export * from './sealed_jwt.js'

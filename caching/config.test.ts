@@ -5,6 +5,7 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
 import { createWebApplication, newRouter } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { HTTPCachingConfigSchema } from './_spectypes/index.js'
@@ -74,7 +75,7 @@ async function start(
   const router = newRouter('/cfg')
   router
     .get('/data')
-    .extend(cacheControl({ ttl: 60 }))
+    .extend(cacheControl({ ttl: 60 * Second }))
     .handler(options?.handler ?? (() => options?.body ?? 'payload'))
 
   const app = createWebApplication({ container: new CaffeineIoC({ decorators: false }), config: conf })
@@ -94,8 +95,8 @@ async function start(
 }
 
 describe('HTTP caching configuration', () => {
-  // A duration reaches the cache as the text the tree holds. Decoded to milliseconds and then read as seconds, a
-  // `50ms` store timeout would hold a request for 50 seconds.
+  // `$t.Duration()` decodes the text to milliseconds, the unit `HTTPCaching` reads. Read as seconds anywhere on the
+  // way, a `50ms` store timeout would hold a request for 50 seconds.
   it('gives up on a store call after the storeTimeout the tree sets', async () => {
     const { app, errors } = await start({ storeTimeout: '50ms' }, { store: new HungStore() })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })

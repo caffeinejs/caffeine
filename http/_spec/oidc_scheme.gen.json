@@ -55,8 +55,9 @@
     "sessionCookieName": {
       "type": "string"
     },
-    "sessionCookieTtlSeconds": {
-      "type": "number"
+    "sessionCookieTtl": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "stateCookieName": {
       "type": "string"
@@ -92,14 +93,17 @@
     "allowPlainPkce": {
       "type": "boolean"
     },
-    "clockToleranceSeconds": {
-      "type": "number"
+    "clockTolerance": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
-    "httpTimeoutMs": {
-      "type": "number"
+    "httpTimeout": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
-    "discoveryCacheTtlSeconds": {
-      "type": "number"
+    "discoveryCacheTtl": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "tokenEndpointAuthMethod": {
       "anyOf": [
@@ -180,8 +184,9 @@
         "type": "string"
       }
     },
-    "maxAgeSeconds": {
-      "type": "number"
+    "maxAge": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "extraAuthorizationParams": {
       "type": "object",

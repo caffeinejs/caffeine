@@ -1,6 +1,7 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides, token } from '@caffeinejs/di'
+import { Hour, Minute, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair } from 'jose'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 
 import { JWTService, JWTServiceBuilder } from './jwt_service.js'
 import type { JWTKeyResolver } from './jwt_service_options.js'
@@ -8,7 +9,12 @@ import type { JWTKeyResolver } from './jwt_service_options.js'
 const SECRET = 'test-secret-key-must-be-at-least-32-chars!!'
 
 describe('JWTService (symmetric)', () => {
-  const jwt = new JWTServiceBuilder().secret(SECRET).issuer('caffeine').audience('petstore').expiresIn('1h').build()
+  const jwt = new JWTServiceBuilder()
+    .secret(SECRET)
+    .issuer('caffeine')
+    .audience('petstore')
+    .expiresIn(1 * Hour)
+    .build()
 
   it('signs and verifies a round-trip payload', async () => {
     const token = await jwt.sign({ sub: 'u1', roles: ['write:pets'] })
@@ -29,22 +35,81 @@ describe('JWTService (symmetric)', () => {
     await expect(other.verify(token)).rejects.toThrow()
   })
 
-  it('rejects an expired token (negative expiresIn = seconds in the past)', async () => {
-    const token = await jwt.sign({ sub: 'u3' }, { expiresIn: -10 })
+  it('rejects an expired token (negative expiresIn = in the past)', async () => {
+    const token = await jwt.sign({ sub: 'u3' }, { expiresIn: -10 * Second })
     await expect(jwt.verify(token)).rejects.toThrow()
   })
 
-  it('treats a positive expiresIn number as seconds from now', async () => {
+  // `exp` counts seconds and `expiresIn` is a Duration: an hour that reached it as written would be a thousand.
+  it('treats a positive expiresIn as a span from now', async () => {
     const before = Math.floor(Date.now() / 1000)
-    const token = await jwt.sign({ sub: 'u3b' }, { expiresIn: 3600 })
+    const token = await jwt.sign({ sub: 'u3b' }, { expiresIn: 1 * Hour })
     const payload = await jwt.verify(token)
 
     expect(payload.exp).toBeGreaterThanOrEqual(before + 3600 - 2)
     expect(payload.exp).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 3600 + 2)
   })
 
+  // `clockTolerance` is a Duration and jose counts seconds: thirty seconds handed over as written would forgive eight
+  // hours.
+  it('forgives an expiry within clockTolerance, and no more', async () => {
+    const lenient = new JWTServiceBuilder()
+      .secret(SECRET)
+      .issuer('caffeine')
+      .audience('petstore')
+      .clockTolerance(30 * Second)
+      .build()
+    const justExpired = await lenient.sign({ sub: 'u3d' }, { expiresIn: -10 * Second })
+    const longExpired = await lenient.sign({ sub: 'u3d' }, { expiresIn: -1 * Minute })
+
+    await expect(lenient.verify(justExpired)).resolves.toMatchObject({ sub: 'u3d' })
+    await expect(lenient.verify(longExpired)).rejects.toThrow('"exp" claim timestamp check failed')
+  })
+
+  // The per-call tolerance is a Duration too. Handed to jose as written, thirty seconds would be eight hours.
+  it('takes a per-call clockTolerance as a Duration', async () => {
+    const justExpired = await jwt.sign({ sub: 'u3e' }, { expiresIn: -10 * Second })
+    const longExpired = await jwt.sign({ sub: 'u3e' }, { expiresIn: -1 * Minute })
+
+    await expect(jwt.verify(justExpired, { clockTolerance: 30 * Second })).resolves.toMatchObject({ sub: 'u3e' })
+    await expect(jwt.verify(longExpired, { clockTolerance: 30 * Second })).rejects.toThrow(
+      '"exp" claim timestamp check failed',
+    )
+  })
+
+  // `exp` counts whole seconds, so a tolerance does too: 1.9 seconds forgives what one second forgives, no more.
+  it('counts a tolerance in whole seconds', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const oneSecondPast = await jwt.sign({ sub: 'u3f' }, { expiresIn: -1 * Second })
+
+      await expect(jwt.verify(oneSecondPast, { clockTolerance: 1.9 * Second })).rejects.toThrow(
+        '"exp" claim timestamp check failed',
+      )
+      await expect(jwt.verify(oneSecondPast, { clockTolerance: 2 * Second })).resolves.toMatchObject({ sub: 'u3f' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // jose reads a maximum age in seconds: a minute handed over as written would let a token live for 16 hours.
+  it('takes maxTokenAge as a Duration', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
+      const token = await jwt.sign({ sub: 'u3g' })
+      vi.setSystemTime(new Date('2026-01-01T00:02:00Z'))
+
+      await expect(jwt.verify(token, { maxTokenAge: 1 * Minute })).rejects.toThrow('"iat" claim timestamp check failed')
+      await expect(jwt.verify(token, { maxTokenAge: 5 * Minute })).resolves.toMatchObject({ sub: 'u3g' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('rejects a token whose notBefore is in the future', async () => {
-    const token = await jwt.sign({ sub: 'u3c' }, { notBefore: 60 })
+    const token = await jwt.sign({ sub: 'u3c' }, { notBefore: 1 * Minute })
     await expect(jwt.verify(token)).rejects.toThrow()
   })
 
@@ -75,7 +140,7 @@ describe('JWTService — a token that never expires', () => {
   })
 
   it('signs when the call gives the lifetime the service has no default for', async () => {
-    const token = await jwt.sign({ sub: 'u1' }, { expiresIn: '5m' })
+    const token = await jwt.sign({ sub: 'u1' }, { expiresIn: 5 * Minute })
 
     expect((await jwt.verify(token)).exp).toBeGreaterThan(Date.now() / 1000)
   })
@@ -109,7 +174,7 @@ describe('JWTService — a token that never expires', () => {
   })
 
   it('requires what the caller asked for on top of the expiry', async () => {
-    const withoutSubject = await jwt.sign({ scope: 'read' }, { expiresIn: '5m' })
+    const withoutSubject = await jwt.sign({ scope: 'read' }, { expiresIn: 5 * Minute })
 
     await expect(jwt.verify(withoutSubject, { requiredClaims: ['sub'] })).rejects.toMatchObject({
       code: 'ERR_JWT_CLAIM_VALIDATION_FAILED',
@@ -168,7 +233,11 @@ describe('JWTService — the strength of a symmetric secret', () => {
 describe('JWTService (asymmetric)', () => {
   it('signs with the private key and verifies with the public key', async () => {
     const { privateKey, publicKey } = await generateKeyPair('ES256')
-    const jwt = new JWTServiceBuilder().keys(privateKey, publicKey).algorithm('ES256').expiresIn('1h').build()
+    const jwt = new JWTServiceBuilder()
+      .keys(privateKey, publicKey)
+      .algorithm('ES256')
+      .expiresIn(1 * Hour)
+      .build()
 
     const token = await jwt.sign({ sub: 'u1' })
     expect((await jwt.verify(token)).sub).toBe('u1')
@@ -176,7 +245,7 @@ describe('JWTService (asymmetric)', () => {
 
   it('throws when signing a verify-only (public-key-only) service', async () => {
     const { publicKey } = await generateKeyPair('ES256')
-    const jwt = new JWTService({ publicKey, algorithm: 'ES256', expiresIn: '1h' })
+    const jwt = new JWTService({ publicKey, algorithm: 'ES256', expiresIn: 1 * Hour })
 
     await expect(jwt.sign({ sub: 'u1' })).rejects.toThrow('Cannot sign JWT')
   })
@@ -196,7 +265,11 @@ describe('JWTService (dynamic keys via keyResolver)', () => {
   const resolver: JWTKeyResolver = ctx =>
     Promise.resolve(secrets[String(ctx.operation === 'sign' ? ctx.payload?.tid : ctx.protectedHeader?.kid)])
 
-  const jwt = new JWTServiceBuilder().keyResolver(resolver).algorithm('HS256').expiresIn('1h').build()
+  const jwt = new JWTServiceBuilder()
+    .keyResolver(resolver)
+    .algorithm('HS256')
+    .expiresIn(1 * Hour)
+    .build()
 
   it('signs and verifies with the resolver-selected key', async () => {
     const token = await jwt.sign({ sub: 'u', tid: 'k1' }, { header: { kid: 'k1' } })
@@ -228,7 +301,7 @@ describe('JWTService via @Configuration/@Provides', () => {
       return new JWTServiceBuilder()
         .secret('access-secret-value-for-tests-xxxxxx')
         .issuer('access')
-        .expiresIn('15m')
+        .expiresIn(15 * Minute)
         .build()
     }
 

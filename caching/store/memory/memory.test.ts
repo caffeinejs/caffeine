@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { describe, expect, it } from 'vitest'
 
@@ -23,8 +24,8 @@ describe('MemoryHTTPCacheStore', () => {
     const store = new MemoryHTTPCacheStore({ maxSize: 200 })
     const big = 'x'.repeat(150)
 
-    await store.put('a', entry(big), { ttl: 60, tags: ['pets'] })
-    await store.put('b', entry(big), { ttl: 60, tags: ['pets'] })
+    await store.put('a', entry(big), { ttl: 60 * Second, tags: ['pets'] })
+    await store.put('b', entry(big), { ttl: 60 * Second, tags: ['pets'] })
 
     expect(await store.get('a')).toBeUndefined()
     expect(await store.get('b')).toBeDefined()
@@ -35,8 +36,8 @@ describe('MemoryHTTPCacheStore', () => {
     const store = new MemoryHTTPCacheStore({ maxSize: 200 })
     const big = 'x'.repeat(60)
 
-    await store.put('a', entry('', { link: [big, big] }), { ttl: 60 })
-    await store.put('b', entry(Buffer.alloc(100), { 'x-note': 'y'.repeat(40) }), { ttl: 60 })
+    await store.put('a', entry('', { link: [big, big] }), { ttl: 60 * Second })
+    await store.put('b', entry(Buffer.alloc(100), { 'x-note': 'y'.repeat(40) }), { ttl: 60 * Second })
 
     expect(await store.get('a')).toBeUndefined()
     expect(await store.get('b')).toBeDefined()
@@ -46,8 +47,8 @@ describe('MemoryHTTPCacheStore', () => {
     const lru = new LRUCache<string, MemoryHTTPCacheRecord>({ max: 1 })
     const store = new MemoryHTTPCacheStore(lru)
 
-    await store.put('first', entry('1'), { ttl: 60 })
-    await store.put('second', entry('2'), { ttl: 60 })
+    await store.put('first', entry('1'), { ttl: 60 * Second })
+    await store.put('second', entry('2'), { ttl: 60 * Second })
 
     expect(lru.size).toBe(1)
     expect(await store.get('first')).toBeUndefined()
@@ -58,7 +59,7 @@ describe('MemoryHTTPCacheStore', () => {
     const lru = new LRUCache<string, MemoryHTTPCacheRecord>({ max: 10 })
     const store = new MemoryHTTPCacheStore(lru)
 
-    await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+    await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets'] })
     await store.evictByTag('pets')
     expect(lru.size).toBe(1)
 

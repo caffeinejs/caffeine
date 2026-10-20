@@ -1,4 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Day, Minute } from '@caffeinejs/std/duration'
 import { describe, it, expect } from 'vitest'
 
 import {
@@ -119,8 +120,14 @@ async function buildApp() {
     .install(
       Authentication(a =>
         a
-          .addJWTBearer(o => o.secret(SECRET).issuer(ISSUER).expiresIn('15m').allowAnyAudience())
-          .addRefreshTokens(o => o.refreshTTL('30d').resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
+          .addJWTBearer(o =>
+            o
+              .secret(SECRET)
+              .issuer(ISSUER)
+              .expiresIn(15 * Minute)
+              .allowAnyAudience(),
+          )
+          .addRefreshTokens(o => o.refreshTTL(30 * Day).resolve(sub => (sub === 'alice' ? alicePrincipal() : null))),
       ),
     )
     .with(authentication())

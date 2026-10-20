@@ -3,7 +3,7 @@ import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
 import { ErrConfiguration, type HTTPSetupContext } from '@caffeinejs/http'
 import { type AdapterRouteOptions, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
-import type { Duration } from '@caffeinejs/std/duration'
+import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyPluginAsync } from 'fastify'
 
@@ -11,7 +11,6 @@ import './_fastify.js'
 import fp from 'fastify-plugin'
 
 import { guardObserver, storeErrorLogger } from './_observe.js'
-import { strictSeconds } from './_util.js'
 import { attachCacheHooks, type CacheDeps, type CacheControlOptions, type ETagGenerator } from './cache_control.js'
 import { attachCacheInvalidateHook, type CacheInvalidateOptions } from './cache_invalidate.js'
 import type { FlightTable } from './flight.js'
@@ -34,7 +33,7 @@ export type HTTPCachingConfigurer<C = unknown> = HTTPPluginConfigurer<HTTPCachin
  * An `observer` that throws is caught; its first throw from each method is logged on the application logger. A
  * store that rejects never fails a request: the cache goes on without it, tells `observer.onError`, and logs the
  * failure itself when the observer does not listen for it. A store that never answers is given up on after
- * `storeTimeout`, `2s` unless set.
+ * `storeTimeout`, two seconds unless set.
  *
  * Concurrent misses for one key run the handler once: the first request leads, the others wait, up to
  * `lockTimeout`, for what it stores. The wait is in this process alone.
@@ -61,40 +60,39 @@ export function HTTPCaching<C = unknown>(
       etagGenerator: resolveETagGenerator(resolved.etagGenerator, container),
       statusHeader: resolved.statusHeader ?? DEFAULT_STATUS_HEADER,
       observer: guardObserver(withStoreErrorLogger(observer, logger), logger),
-      storeTimeoutMs: resolveTimeout('storeTimeout', resolved.storeTimeout, DEFAULT_STORE_TIMEOUT_MS),
+      storeTimeout: resolveTimeout('storeTimeout', resolved.storeTimeout, DEFAULT_STORE_TIMEOUT),
       // One table per install: a root install and a group install have stores of their own, and flights too.
       flights: new Map() as FlightTable,
-      lockTimeoutMs: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT_MS),
+      lockTimeout: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT),
       varyByQuery: resolved.varyByQuery === undefined ? undefined : Object.freeze([...resolved.varyByQuery]),
       maxEntrySizeBytes: resolveMaxEntrySize(resolved.maxEntrySize),
     })
   }
 }
 
-const DEFAULT_STORE_TIMEOUT_MS = 2_000
-const DEFAULT_LOCK_TIMEOUT_MS = 10_000
+const DEFAULT_STORE_TIMEOUT = 2 * Second
+const DEFAULT_LOCK_TIMEOUT = 10 * Second
 
-function resolveTimeout<D extends number | undefined>(
+function resolveTimeout(
   option: 'storeTimeout' | 'lockTimeout',
   value: Duration | undefined,
-  fallback: D,
-): number | D {
+  fallback: Duration,
+): Duration {
   if (value === undefined) {
     return fallback
   }
 
-  const seconds = strictSeconds(value)
-  if (!Number.isFinite(seconds) || seconds <= 0) {
+  if (!Number.isFinite(value) || value <= 0) {
     throw new ErrConfiguration(
       errMessage(
-        `Cannot install HTTP caching: ${option} must be a positive duration such as 1 or "250ms", got "${String(value)}"`,
+        `Cannot install HTTP caching: ${option} must be a positive duration such as 250 * Millisecond, got "${formatDuration(value)}"`,
       )
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
     )
   }
 
-  return Math.ceil(seconds * 1000)
+  return value
 }
 
 function resolveMaxEntrySize(value: ByteSize | undefined): number | undefined {

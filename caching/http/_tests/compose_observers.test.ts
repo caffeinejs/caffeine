@@ -1,3 +1,4 @@
+import { Second } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { composeObservers, type CacheHitEvent, type CacheObserver, type CacheRoute } from '../index.js'
@@ -7,7 +8,7 @@ const hit: CacheHitEvent = {
   route,
   key: '%2Fpets%2F1',
   revalidated: false,
-  ageSeconds: 3,
+  age: 3 * Second,
   coalesced: false,
   stale: false,
 }

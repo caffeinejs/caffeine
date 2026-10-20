@@ -1,4 +1,5 @@
 import { token } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 
 import type { HealthRegistryOptions } from './registry.js'
 
@@ -10,5 +11,5 @@ export const kHealthRegistryOptions = token<HealthRegistryOptions>(Symbol('caffe
 
 /** The budgets an application gets when nothing configured them. */
 export function defaultHealthRegistryOptions(): HealthRegistryOptions {
-  return { indicatorTimeoutMs: 2_000, probeDeadlineMs: 3_000, cacheTTLMs: 1_000 }
+  return { indicatorTimeout: 2 * Second, probeDeadline: 3 * Second, cacheTTL: 1 * Second }
 }
