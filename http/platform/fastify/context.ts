@@ -142,6 +142,12 @@ export class Context<
     return this.#reply.hasHeader(key)
   }
 
+  getHeader(key: string): string | undefined {
+    const value = this.#reply.getHeader(key)
+
+    return Array.isArray(value) ? value.join(', ') : value === undefined ? undefined : String(value)
+  }
+
   removeHeader(key: string): this {
     this.#reply.removeHeader(key)
     return this
