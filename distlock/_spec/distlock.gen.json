@@ -4,15 +4,15 @@
   "type": "object",
   "properties": {
     "ttl": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "wait": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "retryDelay": {
-      "pattern": "^(?:\\d+(?:\\.\\d+)?(?:ms|s|m|h|d))+$",
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
       "type": "string"
     },
     "retryJitter": {

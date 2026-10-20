@@ -1,3 +1,4 @@
+import { type Duration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { resolveAppURL } from '../../../../../base_path.js'
@@ -72,7 +73,7 @@ export function remoteCookieViolation(options: {
  * making their own provider calls must use this too — the option that overrides it is not
  * reachable from every one of them.
  */
-export const DEFAULT_HTTP_TIMEOUT_MS = 5000
+export const DEFAULT_HTTP_TIMEOUT: Duration = 5 * Second
 
 /**
  * How an unauthenticated request is challenged by a scheme whose challenge is a redirect.

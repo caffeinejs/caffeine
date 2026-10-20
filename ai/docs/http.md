@@ -105,7 +105,7 @@ cookies are parsed when first read, so a hook or a plugin reads them wherever it
 
 ```ts
 ctx.req.cookie('theme') // string | undefined
-ctx.cookie('theme', 'dark', { maxAge: 3600 })
+ctx.cookie('theme', 'dark', { maxAge: 1 * Hour }) // a Duration, from @caffeinejs/std/duration; Max-Age=3600
 ctx.deleteCookie('theme') // with the domain and path it was set with
 
 ctx.cookie('cart', id, { signed: true }) // signed as the response goes out
@@ -491,11 +491,11 @@ declarations **add up**: none replaces another, on one route or across the level
 (`@caffeinejs/application/health`), which every application has — headless ones too — so any other caller, such as a
 readiness check a host polls, a custom route or a test, reads the same instance as `app.health`, or injects it, and
 shares one evaluation with the routes. The evaluation budgets are the `Health()` feature's:
-`.install(Health(h => h.cacheTTL('2s')))` tunes them with or without the probes mounted.
+`.install(Health(h => h.cacheTTL(2 * Second)))` tunes them with or without the probes mounted.
 
 ```ts
 const app = createWebApplication()
-  .install(Health(h => h.cacheTTL('2s')))
+  .install(Health(h => h.cacheTTL(2 * Second)))
   .with(healthProbes())
 await app.run()
 

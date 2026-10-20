@@ -1,6 +1,7 @@
 import { CaffeineIoC, Configuration, Injectable, Profile, Provides } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get, Post, Put, Router, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -38,7 +39,7 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     @Controller('/inv-tag')
     class TagController {
-      @CacheControl({ ttl: 60, tags: ['items'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['items'] })
       @Get('/items')
       items() {
         return { count: ++count }
@@ -70,13 +71,13 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     @Controller('/inv-variants')
     class VariantsController {
-      @CacheControl({ ttl: 60, vary: ['Accept-Language'], tags: ['products'] })
+      @CacheControl({ ttl: 60 * Second, vary: ['Accept-Language'], tags: ['products'] })
       @Get('/products')
       products() {
         return { count: ++varied }
       }
 
-      @CacheControl({ ttl: 60, tags: ['other'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['other'] })
       @Get('/other')
       other() {
         return { count: ++elsewhere }
@@ -115,13 +116,13 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     @Controller('/inv-many')
     class ManyController {
-      @CacheControl({ ttl: 60, tags: ['pets', 'catalogue'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['pets', 'catalogue'] })
       @Get('/')
       list() {
         return { list: ++list }
       }
 
-      @CacheControl({ ttl: 60, tags: ['pets'], key: req => `pet:${req.param('id')}` })
+      @CacheControl({ ttl: 60 * Second, tags: ['pets'], key: req => `pet:${req.param('id')}` })
       @Get('/:id')
       find() {
         return { one: ++one }
@@ -166,7 +167,7 @@ describe('@CacheInvalidate reaches the entries stored under its tags', () => {
 
     @Controller('/inv-service')
     class ServiceController {
-      @CacheControl({ ttl: 60, tags: ['reports'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['reports'] })
       @Get('/report')
       report() {
         return { count: ++count }
@@ -226,7 +227,7 @@ describe('@CacheInvalidate and the status of the mutation', () => {
 
     @Controller('/inv-status')
     class StatusController {
-      @CacheControl({ ttl: 60, tags: ['items'] })
+      @CacheControl({ ttl: 60 * Second, tags: ['items'] })
       @Get('/items')
       items() {
         return { count: ++count }
@@ -282,7 +283,7 @@ describe('the request a key function is handed', () => {
       .get('/:id')
       .extend(
         cacheControl({
-          ttl: 60,
+          ttl: 60 * Second,
           key: req => {
             seen.push({ by: 'cache key', req })
             return `item:${req.param('id')}`

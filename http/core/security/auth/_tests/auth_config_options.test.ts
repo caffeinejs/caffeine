@@ -3,6 +3,7 @@ import type { InferConfig } from '@caffeinejs/application/config'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Day, Hour, Minute } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -103,7 +104,7 @@ describe('authentication options set from the tree', () => {
 
     const app = createWebApplication({
       container,
-      config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 3600 } } }),
+      config: configured({ schemes: { Cookie: { rememberMeAbsoluteMaxAge: 1 * Hour } } }),
     })
       .install(
         Authentication((a, { config }) =>
@@ -506,7 +507,7 @@ describe('authentication options set from the tree', () => {
 
     const app = createWebApplication({
       container,
-      config: configured({ refresh: { absoluteTtl: 60, refreshTtl: '30d' } }),
+      config: configured({ refresh: { absoluteTtl: 1 * Minute, refreshTtl: 30 * Day } }),
     })
       .install(
         Authentication((a, { config }) =>
@@ -544,7 +545,7 @@ describe('authentication options set from the tree', () => {
 
     const app = createWebApplication({
       container,
-      config: configured({ refresh: { accessTtl: 60 } }),
+      config: configured({ refresh: { accessTtl: 1 * Minute } }),
     })
       .install(
         Authentication((a, { config }) =>

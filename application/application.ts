@@ -1,4 +1,5 @@
 import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type Options } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import {
@@ -155,7 +156,7 @@ export class ErrConfigNotReady extends ErrCaffeine {
  * ```ts
  * createApplication({ config: conf.config })
  *   .install(Kafka((k, { config }) => k.brokers(config.app.kafka.brokers)))
- *   .shutdown(s => s.drainDelay('5s'))
+ *   .shutdown(s => s.drainDelay(5 * Second))
  * ```
  */
 export class Application<TConfig = unknown> {
@@ -663,7 +664,7 @@ export class Application<TConfig = unknown> {
 
     this.#availability.beginDrain()
 
-    for (const error of await this.#teardown(this.shutdownOptions().shutdownTimeoutMs)) {
+    for (const error of await this.#teardown(this.shutdownOptions().shutdownTimeout)) {
       this.#logger.error({ err: error }, 'cannot tear down what a failed bootstrap() brought up')
     }
 
@@ -679,11 +680,11 @@ export class Application<TConfig = unknown> {
     this.#availability.beginDrain()
     await this.beforeDrain()
 
-    if (served && options.drainDelayMs > 0) {
-      await delay(options.drainDelayMs)
+    if (served && options.drainDelay > 0) {
+      await delay(options.drainDelay)
     }
 
-    const errors = await this.#teardown(options.shutdownTimeoutMs)
+    const errors = await this.#teardown(options.shutdownTimeout)
 
     this.#availability.markBroken('closed')
     // Removed last, not first: until the shutdown actually finishes, a second signal must still reach the handler
@@ -701,7 +702,7 @@ export class Application<TConfig = unknown> {
    * {@link defaultShutdownOptions} — the latter only when a shutdown starts before the container has
    * initialized, since the feature is registered unconditionally and binds the key at configure.
    *
-   * `.shutdown(s => s.drainDelay('10s'))` is how an application states its drain; the feature folds that with
+   * `.shutdown(s => s.drainDelay(10 * Second))` is how an application states its drain; the feature folds that with
    * the configuration tree and publishes the resolved policy here.
    */
   protected shutdownOptions(): ShutdownOptions {
@@ -713,14 +714,14 @@ export class Application<TConfig = unknown> {
    * step threw.
    *
    * One budget rather than one each: what the boot-time check validated against the termination grace period is
-   * `drainDelayMs + shutdownTimeoutMs`, so a full budget for disposal on top of one for the platform would put
+   * `drainDelay + shutdownTimeout`, so a full budget for disposal on top of one for the platform would put
    * `SIGKILL` inside the window that check promised. A budget of `0` waits indefinitely.
    *
    * On expiry {@link forceStop} cuts whatever the platform is still waiting on, and the teardown is then awaited
    * so the logs describing the overrun get out — the alternative at that point is `SIGKILL`, which truncates
    * them. The timeout leads the errors because it is the cause; anything the forced teardown then threw follows.
    */
-  async #teardown(budgetMs: number): Promise<unknown[]> {
+  async #teardown(budget: Duration): Promise<unknown[]> {
     const errors: unknown[] = []
 
     // Never rejects: both phases are caught, so the race below needs no rejection handler and disposal still
@@ -743,14 +744,14 @@ export class Application<TConfig = unknown> {
       }
     })()
 
-    if (budgetMs <= 0) {
+    if (budget <= 0) {
       await finished
       return errors
     }
 
     let timer: ReturnType<typeof setTimeout> | undefined
     const expired = new Promise<'expired'>(resolve => {
-      timer = setTimeout(() => resolve('expired'), budgetMs)
+      timer = setTimeout(() => resolve('expired'), budget)
       timer.unref?.()
     })
 
@@ -762,7 +763,7 @@ export class Application<TConfig = unknown> {
       await this.forceStop()
       await finished
 
-      errors.unshift(new ErrShutdownTimeout(budgetMs))
+      errors.unshift(new ErrShutdownTimeout(budget))
       return errors
     } finally {
       clearTimeout(timer)
@@ -878,10 +879,10 @@ export function createApplication<TConfig = unknown>(options?: ApplicationOption
   return new Application(options)
 }
 
-function delay(ms: number): Promise<void> {
+function delay(span: Duration): Promise<void> {
   return new Promise(resolve => {
     // Unreferenced where the runtime supports it, so the wait cannot be the only thing keeping alive a process
     // that is trying to exit.
-    setTimeout(resolve, ms).unref?.()
+    setTimeout(resolve, span).unref?.()
   })
 }

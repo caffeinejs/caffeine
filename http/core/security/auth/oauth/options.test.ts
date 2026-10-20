@@ -1,3 +1,4 @@
+import { Millisecond } from '@caffeinejs/std/duration'
 import { describe, expect, it } from 'vitest'
 
 import { OAuth2AuthenticationOptionsBuilder } from './options.js'
@@ -82,6 +83,11 @@ describe('OAuth2AuthenticationOptionsBuilder.build(SCHEME)', () => {
         'a domain a header cannot carry',
         o => o.cookieDomain('bad domain'),
         'sessionCookieName "__Secure-oauth2_Provider_session": its Domain is not a valid domain name',
+      ],
+      [
+        'a session under one second',
+        o => o.sessionCookieTTL(500 * Millisecond),
+        'sessionCookieTTL must be a finite Duration of at least 1s, got "500ms"',
       ],
     ])('refuses %s', (_what, configure, message) => {
       expect(() => configure(minimal()).build(SCHEME)).toThrow(`Cannot configure OAuth2: ${message}`)

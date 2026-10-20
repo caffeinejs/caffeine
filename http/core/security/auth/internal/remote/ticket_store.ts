@@ -1,3 +1,5 @@
+import type { Duration } from '@caffeinejs/std/duration'
+
 import type { RemoteAuthenticationTokens } from './remote.js'
 import type { RemoteAuthenticationSession } from './session_store.js'
 
@@ -39,7 +41,7 @@ export interface RemoteAuthenticationTicketStore {
    * Implementations must not derive or replace the key. It is a bearer credential and its
    * entropy is the session's security; the handler mints it from `randomBytes(32)`.
    */
-  store(key: string, ticket: RemoteAuthenticationTicket, ttlSeconds: number): Promise<void>
+  store(key: string, ticket: RemoteAuthenticationTicket, ttl: Duration): Promise<void>
 
   /** Returns undefined for an unknown, expired, or revoked key. */
   retrieve(key: string): Promise<RemoteAuthenticationTicket | undefined>

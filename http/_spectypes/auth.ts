@@ -9,8 +9,6 @@ import { OAuthSchemeConfigSchema } from './oauth_scheme.js'
 import { OIDCSchemeConfigSchema } from './oidc_scheme.js'
 import { OpaqueSchemeConfigSchema } from './opaque_scheme.js'
 
-const ttl = (): ReturnType<typeof $t.Union> => $t.Union([$t.String(), $t.Number()])
-
 /** `credentials.*`: the identity stamped on a principal built from a username and password. */
 const credentialsConfigSchema = $t.Object({
   scheme: $t.Optional($t.String()),
@@ -21,9 +19,9 @@ type _CredentialsSatisfies = SchemaSatisfies<AuthCredentialsConfig, InferConfig<
 
 /** `refresh.*`: the three token lifetimes. */
 const refreshConfigSchema = $t.Object({
-  accessTtl: $t.Optional(ttl()),
-  refreshTtl: $t.Optional(ttl()),
-  absoluteTtl: $t.Optional(ttl()),
+  accessTtl: $t.Optional($t.Duration()),
+  refreshTtl: $t.Optional($t.Duration()),
+  absoluteTtl: $t.Optional($t.Duration()),
 })
 
 type _RefreshSatisfies = SchemaSatisfies<RefreshTokenConfig, InferConfig<typeof refreshConfigSchema>>

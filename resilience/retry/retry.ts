@@ -1,6 +1,8 @@
+import { type Duration, formatDuration, Millisecond } from '@caffeinejs/std/duration'
+import { errMessage } from '@caffeinejs/std/err'
+
 import { settled } from '../compose.js'
 import { Emitter } from '../emitter.js'
-import { errMessage } from '../err_message.gen.js'
 import { ErrCallNotPermitted, ErrInvalidOption, ErrMaxRetriesExceeded } from '../errors.js'
 import type { ExecutionContext, Next, StrategyObject } from '../strategy.js'
 import { clampDelay } from '../timers.js'
@@ -10,15 +12,15 @@ import { sleep } from './_sleep.js'
  * The delay before the next attempt. `attempt` is the attempt that just failed, starting at 1; `error` is what it
  * threw, or `result` what it returned when `retryOnResult` asked for another try. A `Backoff` fits.
  */
-export type RetryBackoff = (attempt: number, error: unknown, result: unknown) => number
+export type RetryBackoff = (attempt: number, error: unknown, result: unknown) => Duration
 
 export interface RetryOptions {
   /** Names the retry in errors, events and metrics. */
   name: string
   /** Attempts in total, the first call included. Defaults to 3. */
   maxAttempts?: number
-  /** Milliseconds between attempts, or a function of the failed attempt. Defaults to 500. */
-  backoff?: number | RetryBackoff
+  /** The wait between attempts, or a function of the failed attempt. Defaults to 500 milliseconds. */
+  backoff?: Duration | RetryBackoff
   /**
    * Whether an error is worth another attempt. Defaults to every error except {@link ErrCallNotPermitted}, so an
    * open circuit breaker fails the call at once. A function given here replaces that default entirely.
@@ -49,7 +51,7 @@ export interface RetryEvents {
   retry: {
     readonly name: string
     readonly attempt: number
-    readonly delayMs: number
+    readonly delay: Duration
     readonly error?: unknown
     readonly result?: unknown
   }
@@ -88,7 +90,7 @@ interface RetriedCall<T> {
 export class Retry implements StrategyObject {
   readonly #name: string
   readonly #maxAttempts: number
-  readonly #backoff: number | RetryBackoff
+  readonly #backoff: Duration | RetryBackoff
   readonly #retryOn: (error: unknown, attempt: number) => boolean
   readonly #retryOnResult: ((result: unknown) => boolean) | undefined
   readonly #failAfterMaxAttempts: boolean
@@ -120,9 +122,9 @@ export class Retry implements StrategyObject {
       throw invalid(`maxAttempts must be an integer of at least 1, got ${String(maxAttempts)}`)
     }
 
-    const backoff = options.backoff ?? 500
+    const backoff = options.backoff ?? 500 * Millisecond
     if (typeof backoff !== 'function' && (typeof backoff !== 'number' || !Number.isFinite(backoff) || backoff < 0)) {
-      throw invalid(`backoff must be a finite number of at least 0 or a function, got ${String(backoff)}`)
+      throw invalid(`backoff must be a finite Duration of at least 0s or a function, got ${formatDuration(backoff)}`)
     }
 
     for (const key of ['retryOn', 'retryOnResult'] as const) {
@@ -252,9 +254,9 @@ export class Retry implements StrategyObject {
 
   #wait<T>(call: RetriedCall<T>, error: unknown, result: unknown, failed: boolean): void {
     const attempt = call.attempt
-    let delayMs: number
+    let delay: Duration
     try {
-      delayMs = clampDelay(
+      delay = clampDelay(
         typeof this.#backoff === 'number' ? this.#backoff : this.#backoff(attempt, error, result),
         `retry "${this.#name}"`,
       )
@@ -267,12 +269,12 @@ export class Retry implements StrategyObject {
     if (this.#emitter.has('retry')) {
       this.#emitter.emit(
         'retry',
-        failed ? { name: this.#name, attempt, delayMs, error } : { name: this.#name, attempt, delayMs, result },
+        failed ? { name: this.#name, attempt, delay, error } : { name: this.#name, attempt, delay, result },
       )
     }
 
     // Both handlers settle the caller's promise themselves, so the promise `then` returns is not needed.
-    void sleep(delayMs, call.ctx.signal).then(
+    void sleep(delay, call.ctx.signal).then(
       () => this.#again(call),
       reason => {
         this.#ignored(attempt, reason)

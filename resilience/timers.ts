@@ -1,4 +1,5 @@
-import { errMessage } from './err_message.gen.js'
+import { errMessage } from '@caffeinejs/std/err'
+
 import { ErrInvalidOption } from './errors.js'
 
 // The largest delay `setTimeout` honours; above it, runtimes fire after 1 ms instead.

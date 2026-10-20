@@ -12,6 +12,7 @@ import { $t } from '@caffeinejs/application/schema'
 import { $i, CaffeineIoC, type Provider } from '@caffeinejs/di'
 import { Controller, Get, Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -109,7 +110,7 @@ function buildApp(fileDir: string, overrides: ConfigSource) {
         basicAuth: CONFIG_SERVER_AUTH,
         pollInterval: 250,
         retries: 0,
-        timeoutMs: 3_000,
+        timeout: 3 * Second,
       }),
       new EnvConfigSource({ prefix: 'E2E_', env: { E2E_SERVER__PORT: '8081', E2E_FEATURES__BETA: 'false' } }),
     )

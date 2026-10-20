@@ -1,4 +1,5 @@
 import { CaffeineIoC } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 
 import {
@@ -277,7 +278,7 @@ async function buildDurableApp(graceSeconds?: number) {
           .addCookie(o => {
             o.sessionSecret(SECRET).secure(false).rememberMe()
             if (graceSeconds !== undefined) {
-              o.rememberMeRotationGraceSeconds(graceSeconds)
+              o.rememberMeRotationGrace(graceSeconds * Second)
             }
           })
           .addCredentials(),

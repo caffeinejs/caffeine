@@ -1,5 +1,6 @@
 import { $p, Args, Controller, Get, type IContext, type WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -13,7 +14,7 @@ import { CacheControl, HTTPCaching } from '../index.js'
 
 @Controller('/based')
 class BasedController {
-  @CacheControl({ ttl: 60 })
+  @CacheControl({ ttl: 60 * Second })
   @Get('/page')
   @Args([$p.context()])
   page(ctx: IContext) {

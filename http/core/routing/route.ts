@@ -1,5 +1,6 @@
 import type { CompiledGuard, ParameterPickOptions } from '@caffeinejs/application/framework'
 import { Ctor, Provider } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { IContext } from '../../context.js'
 import type { ErrorHandler } from '../error/handler.js'
@@ -98,7 +99,7 @@ export interface IRoute<R = unknown> {
   dispatch: RouteDispatch<R, unknown>
   schema?: RouteValidationSchema
   bodyLimit?: number
-  timeout?: number
+  timeout?: Duration
   header: Map<string, string | string[]>
   hasHeader?: boolean
   statusCode?: number

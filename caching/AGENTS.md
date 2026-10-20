@@ -49,7 +49,7 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Log on the setup context's `logger`, never `request.log`, which is silent under a caller-supplied `fastify()`.
 - Zero-cost when unobserved is kept by construction; no test proves it: `observer?.onX?.({ … })` at every call
   site, `CacheRoute` built by `cacheRouteOf` once per attach and only with an observer present, per-route event
-  data (`ttlSeconds`) resolved at attach.
+  data (`ttl`) resolved at attach.
 - The observer and the status header are allowed to diverge.
 
 ## Stores

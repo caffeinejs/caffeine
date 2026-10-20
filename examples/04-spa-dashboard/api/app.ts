@@ -3,6 +3,7 @@ import type { Container } from '@caffeinejs/di'
 import { Authentication, Authorization } from '@caffeinejs/http'
 import { createWebApplication, authentication, csrf, healthProbes } from '@caffeinejs/http/fastify'
 import { openapi } from '@caffeinejs/openapi'
+import { Second } from '@caffeinejs/std/duration'
 
 import { SESSION_COOKIE, configuration } from './app.config.js'
 import { createLogger } from './app.log.js'
@@ -37,7 +38,7 @@ export function buildApp(container: Container, options: BuildAppOptions = {}) {
         if (process.env.VITEST !== undefined) {
           s.drainDelay(0).shutdownTimeout(200)
         } else {
-          s.drainDelay('5s')
+          s.drainDelay(5 * Second)
         }
       })
 

@@ -50,7 +50,7 @@ function definition(dotenv: Omit<DotenvOptions, 'path'>): ConfigDefinition {
     schema: passthroughConfigSchema,
     ...testTokens(),
     sources: [new EnvConfigSource({ prefix: 'LOADERS_' })],
-    loadTimeoutMs: 30_000,
+    loadTimeout: 30_000,
     dotenv: { ...dotenv, path: dir },
   }
 }

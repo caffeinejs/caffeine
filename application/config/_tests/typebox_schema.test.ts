@@ -54,7 +54,7 @@ describe('validateConfig with the $t dialect', () => {
       schema,
       ...testTokens(),
       sources: [new InlineConfigSource({ server: { host: '127.0.0.1', port: '1234' } })],
-      loadTimeoutMs: 30_000,
+      loadTimeout: 30_000,
     })
     expect(store.current.server.host).toBe('127.0.0.1')
     expect(store.current.server.port).toBe(1234)

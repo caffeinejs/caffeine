@@ -1,5 +1,4 @@
 import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
-import { parseDuration } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 
 import type {
@@ -95,7 +94,7 @@ export class MemoryHTTPCacheStore implements HTTPCacheStore {
   async put(key: string, entry: HTTPCacheEntry, options: HTTPCachePutOptions): Promise<void> {
     options.signal?.throwIfAborted()
 
-    const ms = parseDuration(options.ttl) * 1000
+    const ms = options.ttl
     if (!(ms > 0) || !Number.isFinite(ms)) {
       return
     }

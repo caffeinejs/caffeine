@@ -148,7 +148,7 @@ describe('FileConfigSource profile files', () => {
       schema: passthroughConfigSchema,
       ...testTokens(),
       sources: [new JSONConfigSource(named)],
-      loadTimeoutMs: 30_000,
+      loadTimeout: 30_000,
     }
     await expect(loadConfig(definition, { profiles: ['x/../../outside'] })).rejects.toThrow(
       expect.objectContaining({ code: 'ERR_CONFIG_PROFILE' }),

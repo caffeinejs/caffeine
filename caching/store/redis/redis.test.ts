@@ -1,3 +1,4 @@
+import { Second, Hour, Millisecond } from '@caffeinejs/std/duration'
 import { AbortError, RESP_TYPES, createClient, type createCluster } from '@redis/client'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 
@@ -151,7 +152,7 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     const server = fakeHTTPServer()
     const { sent } = server
     const store = new RedisHTTPCacheStore(server.client)
-    await store.put('k', httpEntry, { ttl: 60, tags: ['pets', 'all'] })
+    await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['pets', 'all'] })
     server.reset()
 
     expect((await store.get('k', { tags: ['pets', 'all'] }))?.payload).toBe('v')
@@ -167,8 +168,8 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     const server = fakeHTTPServer()
     const { sent } = server
     const store = new RedisHTTPCacheStore(server.client)
-    await store.put('tagged', httpEntry, { ttl: 60, tags: ['pets', 'all'] })
-    await store.put('plain', httpEntry, { ttl: 60 })
+    await store.put('tagged', httpEntry, { ttl: 60 * Second, tags: ['pets', 'all'] })
+    await store.put('plain', httpEntry, { ttl: 60 * Second })
     server.reset()
 
     expect((await store.get('tagged', { tags: ['pets'] }))?.payload).toBe('v')
@@ -192,7 +193,7 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     const { sent } = server
     const store = new RedisHTTPCacheStore(server.client)
 
-    await store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b', 'c'] })
+    await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['a', 'b', 'c'] })
     expect(sent.map(item => item.command)).toEqual(['get', 'get', 'get', 'hSetEx'])
     expect(sent.slice(0, 3).map(item => item.batch)).toEqual([0, 0, 0])
     expect(sent[3].batch).toBe(3)
@@ -212,17 +213,17 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
 
     await store.evictByTag([])
     await store.put('a', httpEntry, { ttl: 0, tags: ['pets'] })
-    await store.put('b', httpEntry, { ttl: 'ten seconds' })
+    await store.put('b', httpEntry, { ttl: Number.NaN })
 
     expect(sent).toEqual([])
   })
 
-  // A `ttl` is seconds and the server is told milliseconds: an hour that became 3.6 seconds, or a second and a
-  // half rounded away, shows as an entry gone too soon or kept too long.
+  // A `ttl` is milliseconds and so is `PX`: an hour that became 3.6 seconds, or a second and a half rounded away,
+  // shows as an entry gone too soon or kept too long.
   it.each([
-    ['1h', 3_600_000],
-    [1.5, 1500],
-    ['1ms', 1],
+    [1 * Hour, 3_600_000],
+    [1.5 * Second, 1500],
+    [1 * Millisecond, 1],
   ])('keeps an entry put with a ttl of %s for %ims, and no longer', async (ttl, ms) => {
     const store = new RedisHTTPCacheStore(fakeHTTPServer().client)
     vi.useFakeTimers({ toFake: ['Date'] })
@@ -243,7 +244,7 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     async function keysWith(prefix?: string) {
       const server = fakeHTTPServer()
       const store = new RedisHTTPCacheStore(server.client, prefix === undefined ? {} : { prefix })
-      await store.put('k', httpEntry, { ttl: 60, tags: ['pets'] })
+      await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['pets'] })
       await store.evictByTag('pets')
 
       return server.sent.map(item => item.key)
@@ -262,7 +263,7 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     expect(() => new RedisHTTPCacheStore(client, { prefix: 'app:{x}:' })).toThrow(ErrRedisCache)
 
     const store = new RedisHTTPCacheStore(client)
-    await expect(store.put('k', httpEntry, { ttl: 60, tags: ['a}b'] })).rejects.toThrow(
+    await expect(store.put('k', httpEntry, { ttl: 60 * Second, tags: ['a}b'] })).rejects.toThrow(
       'Cannot use the tag "a}b" on a Redis cache: it holds a brace',
     )
     await expect(store.evictByTag('{a')).rejects.toThrow(ErrRedisCache)
@@ -279,7 +280,7 @@ describe('RedisHTTPCacheStore and the commands it sends', () => {
     const store = new RedisHTTPCacheStore(fakeHTTPServer('client', reply).client)
 
     await store.evictByTag('pets')
-    await store.put('k', httpEntry, { ttl: 60, tags: ['pets'] })
+    await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['pets'] })
     expect((await store.get('k', { tags: ['pets'] }))?.payload).toBe('v')
 
     await store.evictByTag('pets')
@@ -294,7 +295,7 @@ describe('RedisHTTPCacheStore and a signal', () => {
     const store = new RedisHTTPCacheStore(server.client)
     const signal = new AbortController().signal
     const calls = [
-      () => store.put('k', httpEntry, { ttl: 60, tags: ['a', 'b'], signal }),
+      () => store.put('k', httpEntry, { ttl: 60 * Second, tags: ['a', 'b'], signal }),
       () => store.get('k', { tags: ['a', 'b'], signal }),
       () => store.evictByTag(['a', 'b'], { signal }),
     ]
@@ -317,7 +318,7 @@ describe('RedisHTTPCacheStore and a signal', () => {
     const store = new RedisHTTPCacheStore(client)
     const signal = new AbortController().signal
 
-    await store.put('k', httpEntry, { ttl: 60, tags: ['a'], signal })
+    await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['a'], signal })
     await store.get('k', { tags: ['a'], signal })
 
     expect(sent.length).toBeGreaterThan(0)
@@ -327,14 +328,14 @@ describe('RedisHTTPCacheStore and a signal', () => {
   it('gives up a command the server never answers once the signal aborts', async () => {
     const server = fakeHTTPServer()
     const store = new RedisHTTPCacheStore(server.client)
-    await store.put('k', httpEntry, { ttl: 60, tags: ['pets'] })
+    await store.put('k', httpEntry, { ttl: 60 * Second, tags: ['pets'] })
     server.hold()
     const controller = new AbortController()
     const { signal } = controller
 
     const calls = Promise.allSettled([
       store.get('k', { tags: ['pets'], signal }),
-      store.put('k', httpEntry, { ttl: 60, signal }),
+      store.put('k', httpEntry, { ttl: 60 * Second, signal }),
       store.evictByTag('pets', { signal }),
     ])
     // Every command is out by now, and the server answers none of them.

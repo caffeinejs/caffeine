@@ -1,4 +1,6 @@
-import { DEFAULT_HTTP_TIMEOUT_MS } from '../../internal/remote/config.js'
+import type { Duration } from '@caffeinejs/std/duration'
+
+import { DEFAULT_HTTP_TIMEOUT } from '../../internal/remote/config.js'
 import type { RemoteAuthenticationTokens } from '../../internal/remote/remote.js'
 import type { OAuth2AuthenticationOptions } from '../options.js'
 
@@ -90,8 +92,7 @@ export function githubOAuth2Preset(opts: GithubInput & GithubPresetOptions): OAu
           const withEmail = {
             ...userInfo,
             email:
-              userInfo.email ??
-              (await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS)),
+              userInfo.email ?? (await fetchPrimaryEmail(tokens, userAgent, rest.httpTimeout ?? DEFAULT_HTTP_TIMEOUT)),
           }
 
           return rest.enrichUserInfo === undefined ? withEmail : rest.enrichUserInfo(withEmail, tokens)
@@ -115,7 +116,7 @@ interface GithubEmail {
 async function fetchPrimaryEmail(
   tokens: RemoteAuthenticationTokens,
   userAgent: string,
-  timeoutMs: number,
+  timeout: Duration,
 ): Promise<string | undefined> {
   if (!tokens.accessToken) {
     return undefined
@@ -132,7 +133,7 @@ async function fetchPrimaryEmail(
       // Every other provider call in the flow carries a deadline; without one here a hung
       // endpoint holds the callback request open, and the email is an optional supplement
       // that is not worth blocking a sign-in for.
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(Math.ceil(timeout)),
     })
   } catch {
     return undefined

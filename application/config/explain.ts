@@ -35,7 +35,7 @@ export function describeSource(record: SourceState): ConfigSourceStatus {
     layers: record.layers.map(layer => layer.name),
     keys: record.keys,
     lastLoadedAt: record.lastLoadedAt,
-    lastLoadMs: record.lastLoadMs,
+    lastLoadDuration: record.lastLoadDuration,
     consecutiveFailures: record.consecutiveFailures,
     ...(record.lastError === undefined ? {} : { lastError: record.lastError }),
   }

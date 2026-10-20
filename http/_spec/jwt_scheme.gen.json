@@ -26,14 +26,8 @@
       "type": "string"
     },
     "expiresIn": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "number"
-        }
-      ]
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "roleClaimType": {
       "type": "string"

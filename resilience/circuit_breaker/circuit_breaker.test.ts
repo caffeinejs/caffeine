@@ -1,3 +1,4 @@
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { compose, runWith } from '../compose.js'
@@ -25,7 +26,7 @@ function breakerOf(options: Partial<CircuitBreakerOptions> = {}): CircuitBreaker
     name: 'inventory',
     slidingWindow: { type: 'count', size: 4 },
     minimumNumberOfCalls: 4,
-    waitDurationInOpenStateMs: 1_000,
+    waitDurationInOpenState: 1_000,
     permittedNumberOfCallsInHalfOpenState: 2,
     ...options,
   })
@@ -72,26 +73,26 @@ describe('circuitBreaker options', () => {
   it.each([
     [{ failureRateThreshold: 150 }, 'failureRateThreshold must be greater than 0 and at most 100, got 150'],
     [{ slowCallRateThreshold: 0 }, 'slowCallRateThreshold must be greater than 0 and at most 100, got 0'],
-    [{ slowCallDurationThresholdMs: 0 }, 'slowCallDurationThresholdMs must be a finite number of at least 1, got 0'],
+    [{ slowCallDurationThreshold: 0 }, 'slowCallDurationThreshold must be a finite Duration of at least 1ms, got 0s'],
     [{ slidingWindow: { type: 'count', size: 0 } }, 'slidingWindow.size must be an integer of at least 1, got 0'],
     [
-      { slidingWindow: { type: 'time', seconds: 1.5 } },
-      'slidingWindow.seconds must be an integer of at least 1, got 1.5',
+      { slidingWindow: { type: 'time', duration: 1.5 * Second } },
+      'slidingWindow.duration must be a whole number of seconds and at least 1s, got 1.5s',
     ],
     [
       { slidingWindow: { type: 'count', size: Number.MAX_SAFE_INTEGER } },
       'slidingWindow.size is too large to allocate',
     ],
     [
-      { slidingWindow: { type: 'time', seconds: Number.MAX_SAFE_INTEGER } },
-      'slidingWindow.seconds is too large to allocate',
+      { slidingWindow: { type: 'time', duration: Number.MAX_SAFE_INTEGER * Second } },
+      'slidingWindow.duration is too large to allocate',
     ],
     [
       { slidingWindow: { type: 'calls' } },
-      "slidingWindow must be { type: 'count', size } or { type: 'time', seconds }",
+      "slidingWindow must be { type: 'count', size } or { type: 'time', duration }",
     ],
     [{ minimumNumberOfCalls: 0 }, 'minimumNumberOfCalls must be an integer of at least 1, got 0'],
-    [{ waitDurationInOpenStateMs: -1 }, 'waitDurationInOpenStateMs must be a finite number of at least 0, got -1'],
+    [{ waitDurationInOpenState: -1 }, 'waitDurationInOpenState must be a finite Duration of at least 0s, got -1ms'],
     [
       { permittedNumberOfCallsInHalfOpenState: 0 },
       'permittedNumberOfCallsInHalfOpenState must be an integer of at least 1, got 0',
@@ -101,8 +102,8 @@ describe('circuitBreaker options', () => {
       'permittedNumberOfCallsInHalfOpenState is too large to allocate',
     ],
     [
-      { maxWaitDurationInHalfOpenStateMs: Infinity },
-      'maxWaitDurationInHalfOpenStateMs must be a finite number of at least 0, got Infinity',
+      { maxWaitDurationInHalfOpenState: Infinity },
+      'maxWaitDurationInHalfOpenState must be a finite Duration of at least 0s, got Infinity',
     ],
     [
       { automaticTransitionFromOpenToHalfOpen: 'yes' },
@@ -170,7 +171,7 @@ describe('circuitBreaker, closed', () => {
 
   // A dependency that answers correctly but ever more slowly exhausts callers just as surely as one that fails.
   it('opens on the slow-call rate even when every call succeeds', async () => {
-    const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThresholdMs: 100 })
+    const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThreshold: 100 })
     const seen = listen(breaker, 'slowCallRateExceeded')
 
     await runWith(slowly(150), breaker)
@@ -183,7 +184,7 @@ describe('circuitBreaker, closed', () => {
   })
 
   it('does not count a call that lasts exactly the slow threshold as slow', async () => {
-    const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThresholdMs: 100 })
+    const breaker = breakerOf({ slowCallRateThreshold: 50, slowCallDurationThreshold: 100 })
 
     for (let i = 0; i < 4; i++) {
       await runWith(slowly(100), breaker)
@@ -204,6 +205,18 @@ describe('circuitBreaker, closed', () => {
     expect(breaker.metrics()).toMatchObject({ bufferedCalls: 4, successfulCalls: 4, failedCalls: 0 })
   })
 
+  it('reports an error that recordError declines as a success, with how long the call took', async () => {
+    const breaker = breakerOf({ recordError: error => !(error instanceof TypeError) })
+    const seen = listen(breaker, 'success', 'failure')
+
+    await runWith(() => {
+      vi.advanceTimersByTime(100)
+      throw new TypeError('bad input')
+    }, breaker).catch(() => undefined)
+
+    expect(seen).toEqual([['success', { name: 'inventory', duration: 100 * Millisecond, slow: false }]])
+  })
+
   // A 503 response is a failure of the dependency even though fetch resolved.
   it('counts a returned value as a failure when recordResult says so, and still hands it to the caller', async () => {
     const breaker = breakerOf({ recordResult: result => result === 'unavailable' })
@@ -214,7 +227,7 @@ describe('circuitBreaker, closed', () => {
     }
 
     expect(breaker.state).toBe('open')
-    expect(seen[0]).toEqual(['failure', { name: 'inventory', durationMs: 0, slow: false, result: 'unavailable' }])
+    expect(seen[0]).toEqual(['failure', { name: 'inventory', duration: 0, slow: false, result: 'unavailable' }])
   })
 
   // A caller's own mistake (a validation error) says nothing about the dependency's health.
@@ -251,11 +264,11 @@ describe('circuitBreaker, closed', () => {
 
     await expect(call).rejects.toBe(reason)
     expect(breaker.metrics().bufferedCalls).toBe(0)
-    expect(seen).toEqual([['ignored', { name: 'inventory', durationMs: 0, error: reason, reason: 'aborted' }]])
+    expect(seen).toEqual([['ignored', { name: 'inventory', duration: 0, error: reason, reason: 'aborted' }]])
   })
 
   it('forgets failures older than a time window', async () => {
-    const breaker = breakerOf({ slidingWindow: { type: 'time', seconds: 10 } })
+    const breaker = breakerOf({ slidingWindow: { type: 'time', duration: 10 * Second } })
 
     for (let i = 0; i < 3; i++) {
       await fail(breaker)
@@ -274,7 +287,7 @@ describe('circuitBreaker, closed', () => {
   // A dashboard reading the breaker after a quiet spell must not keep showing failures that left the window.
   it('reports an empty window once an idle gap outlasts a time window', async () => {
     const breaker = breakerOf({
-      slidingWindow: { type: 'time', seconds: 2 },
+      slidingWindow: { type: 'time', duration: 2 * Second },
       minimumNumberOfCalls: 2,
       failureRateThreshold: 100,
     })
@@ -303,7 +316,7 @@ describe('circuitBreaker, open', () => {
     expect(refused).toMatchObject({
       breaker: 'inventory',
       state: 'open',
-      retryAfterMs: 600,
+      retryAfter: 600,
       code: 'ERR_CALL_NOT_PERMITTED',
       message: 'Cannot call "inventory": circuit breaker is open',
     })
@@ -363,7 +376,7 @@ describe('circuitBreaker, half open', () => {
 
     expect(refused).toMatchObject({
       state: 'half_open',
-      retryAfterMs: undefined,
+      retryAfter: undefined,
       message: 'Cannot call "inventory": circuit breaker is half open and every trial call is in use',
     })
     hung.resolve('ok')
@@ -403,9 +416,9 @@ describe('circuitBreaker, half open', () => {
 
   // A dependency that keeps failing its trials should be left alone for longer each time.
   it('lengthens the wait with each consecutive opening, and starts over once closed', async () => {
-    const breaker = breakerOf({ waitDurationInOpenStateMs: openCount => openCount * 1_000 })
+    const breaker = breakerOf({ waitDurationInOpenState: openCount => openCount * 1_000 })
     const retryAfter = async (): Promise<unknown> =>
-      ((await succeed(breaker).catch((error: unknown) => error)) as ErrCallNotPermitted).retryAfterMs
+      ((await succeed(breaker).catch((error: unknown) => error)) as ErrCallNotPermitted).retryAfter
 
     await trip(breaker)
     expect(await retryAfter()).toBe(1_000)
@@ -426,7 +439,7 @@ describe('circuitBreaker, half open', () => {
 
   // Trial calls that never settle would otherwise hold every permit forever, and the breaker with them.
   it('re-opens after the maximum half-open wait even while hung trial calls hold every permit', async () => {
-    const breaker = breakerOf({ maxWaitDurationInHalfOpenStateMs: 500, permittedNumberOfCallsInHalfOpenState: 1 })
+    const breaker = breakerOf({ maxWaitDurationInHalfOpenState: 500, permittedNumberOfCallsInHalfOpenState: 1 })
     await halfOpen(breaker)
     const hung = Promise.withResolvers<string>()
     const trial = runWith(() => hung.promise, breaker)
@@ -434,7 +447,7 @@ describe('circuitBreaker, half open', () => {
     vi.advanceTimersByTime(500)
     const refused = await succeed(breaker).catch((error: unknown) => error)
 
-    expect(refused).toMatchObject({ state: 'open', retryAfterMs: 1_000 })
+    expect(refused).toMatchObject({ state: 'open', retryAfter: 1_000 })
     expect(breaker.state).toBe('open')
 
     hung.resolve('late')
@@ -446,7 +459,7 @@ describe('circuitBreaker, half open', () => {
   it('lets the first call after an idle half-open period through as a trial', async () => {
     const breaker = breakerOf({
       automaticTransitionFromOpenToHalfOpen: true,
-      maxWaitDurationInHalfOpenStateMs: 500,
+      maxWaitDurationInHalfOpenState: 500,
       permittedNumberOfCallsInHalfOpenState: 1,
     })
     await trip(breaker)
@@ -463,7 +476,7 @@ describe('circuitBreaker, half open', () => {
   it('measures the maximum half-open wait from the last trial admitted', async () => {
     const breaker = breakerOf({
       automaticTransitionFromOpenToHalfOpen: true,
-      maxWaitDurationInHalfOpenStateMs: 500,
+      maxWaitDurationInHalfOpenState: 500,
       permittedNumberOfCallsInHalfOpenState: 1,
     })
     await trip(breaker)
@@ -477,7 +490,7 @@ describe('circuitBreaker, half open', () => {
     vi.advanceTimersByTime(1)
     expect(await succeed(breaker).catch((error: unknown) => error)).toMatchObject({
       state: 'open',
-      retryAfterMs: 1_000,
+      retryAfter: 1_000,
     })
 
     hung.resolve('late')
@@ -486,7 +499,7 @@ describe('circuitBreaker, half open', () => {
 
   // A listener that moves the breaker is obeyed: the call is decided by the state the breaker ends up in.
   it('runs the call when a stateChange listener resets the breaker as the half-open wait expires', async () => {
-    const breaker = breakerOf({ maxWaitDurationInHalfOpenStateMs: 500, permittedNumberOfCallsInHalfOpenState: 1 })
+    const breaker = breakerOf({ maxWaitDurationInHalfOpenState: 500, permittedNumberOfCallsInHalfOpenState: 1 })
     await halfOpen(breaker)
     const hung = Promise.withResolvers<string>()
     const trial = runWith(() => hung.promise, breaker)
@@ -561,7 +574,7 @@ describe('circuitBreaker, manual control', () => {
 
     expect(refused).toMatchObject({
       state: 'forced_open',
-      retryAfterMs: undefined,
+      retryAfter: undefined,
       message: 'Cannot call "inventory": circuit breaker is forced open',
     })
     expect(breaker.state).toBe('forced_open')
@@ -607,7 +620,7 @@ describe('circuitBreaker, manual control', () => {
   // is a new crossing.
   it('reports a threshold crossed again after a time window emptied, in metrics-only mode', async () => {
     const breaker = breakerOf({
-      slidingWindow: { type: 'time', seconds: 1 },
+      slidingWindow: { type: 'time', duration: 1 * Second },
       minimumNumberOfCalls: 2,
       failureRateThreshold: 50,
     })
@@ -716,7 +729,7 @@ describe('circuitBreaker, failing predicates and wait functions', () => {
   })
 
   it('stays closed and rejects the tripping call when the wait function returns no usable delay', async () => {
-    const breaker = breakerOf({ waitDurationInOpenStateMs: () => Number.NaN })
+    const breaker = breakerOf({ waitDurationInOpenState: () => Number.NaN })
 
     for (let i = 0; i < 3; i++) {
       await fail(breaker)
@@ -877,9 +890,9 @@ describe('circuitBreaker, run called by hand', () => {
   // A wait function that throws while the breaker re-opens must reach the caller as a rejection, like every failure.
   it('hands a failing wait function back as a rejection when a hand-called run re-opens the breaker', async () => {
     const breaker = breakerOf({
-      maxWaitDurationInHalfOpenStateMs: 500,
+      maxWaitDurationInHalfOpenState: 500,
       permittedNumberOfCallsInHalfOpenState: 1,
-      waitDurationInOpenStateMs: openings => {
+      waitDurationInOpenState: openings => {
         if (openings > 1) {
           throw new Error('bad wait')
         }

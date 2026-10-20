@@ -1,3 +1,4 @@
+import { Hour, Second } from '@caffeinejs/std/duration'
 import { SignJWT, generateKeyPair, exportJWK, createLocalJWKSet } from 'jose'
 import type { JWTVerifyGetKey, CryptoKey } from 'jose'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
@@ -60,7 +61,7 @@ function makeBaseOptions(overrides: Partial<OIDCAuthenticationOptions> = {}): OI
     callbackURL: CALLBACK_URL,
     sessionSecret: SESSION_SECRET,
     sessionCookieName: '__oidc_session',
-    sessionCookieTtlSeconds: 3600,
+    sessionCookieTTL: 1 * Hour,
     stateCookieName: '__oidc_state',
     defaultRedirectPath: '/',
     scopes: ['openid', 'email'],
@@ -265,7 +266,9 @@ describe('OIDCAuthenticationHandler with a ticket store', () => {
       expect(name).toBe('__oidc_session')
       expect(after.key).toBe(before.key)
       expect(after.exp).toBe(before.exp)
-      expect(opts.maxAge).toBeLessThanOrEqual(3600)
+      // What is left of the hour, in milliseconds: a count of seconds here would expire the cookie at once.
+      expect(opts.maxAge).toBeGreaterThan(1 * Hour - 5 * Second)
+      expect(opts.maxAge).toBeLessThanOrEqual(1 * Hour)
     })
 
     it('revoke() drops a ticket whose reference an older secret sealed', async () => {
@@ -754,7 +757,7 @@ describe('RP-initiated logout', () => {
         jwksResolver,
         ticketStore: store,
         saveTokens: true,
-        discoveryCacheTtlSeconds: 0,
+        discoveryCacheTTL: 0,
         endSessionEndpoint: END_SESSION,
       }),
     )

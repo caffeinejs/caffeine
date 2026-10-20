@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { Controller, ErrConfiguration, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -25,7 +26,7 @@ describe('HTTPCaching observer option', () => {
   it('resolves a container-bound observer passed as a token', async () => {
     @Controller('/obs-opt-token')
     class TokenController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }
@@ -70,7 +71,7 @@ describe('HTTPCaching observer option', () => {
   it('takes an observer from the plain options object too', async () => {
     @Controller('/obs-opt-object')
     class ObjectController {
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       @Get('/data')
       data() {
         return { ok: true }

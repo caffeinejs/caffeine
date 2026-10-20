@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { HealthIndicator, type HealthGroup, type HealthReport, down, up } from './indicator.js'
 import { HealthRegistry } from './registry.js'
 
-const OPTIONS = { indicatorTimeoutMs: 50, probeDeadlineMs: 100, cacheTTLMs: 1_000 }
+const OPTIONS = { indicatorTimeout: 50, probeDeadline: 100, cacheTTL: 1_000 }
 
 const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -150,7 +150,7 @@ describe('HealthRegistry', () => {
 
   it('reuses a cached evaluation within the TTL and re-runs after it', async () => {
     const indicator = new Stub('db', up)
-    const registry = new HealthRegistry([indicator], { ...OPTIONS, cacheTTLMs: 30 })
+    const registry = new HealthRegistry([indicator], { ...OPTIONS, cacheTTL: 30 })
 
     await registry.evaluate('readiness')
     await registry.evaluate('readiness')

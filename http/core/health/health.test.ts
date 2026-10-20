@@ -8,7 +8,8 @@ import {
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { kHealthRegistryOptions } from '@caffeinejs/application/health'
-import { type InferSchema, $t } from '@caffeinejs/application/schema'
+import { $t } from '@caffeinejs/application/schema'
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Health, WebApplication } from '../../index.js'
@@ -77,14 +78,20 @@ describe('healthProbes() and Health()', () => {
 
   const schema = $t.Object({
     health: $t.Object({
-      indicatorTimeout: $t.String(),
-      cacheTtl: $t.String(),
+      indicatorTimeout: $t.Duration(),
+      cacheTtl: $t.Duration(),
       verbose: $t.Boolean(),
     }),
   })
-  type AppConfig = InferSchema<typeof schema>
 
-  const source = (health: AppConfig['health']): InlineConfigSource => new InlineConfigSource({ health })
+  // The block as a source carries it: the durations as text, the way a file or the environment writes them.
+  interface HealthBlock {
+    indicatorTimeout: string
+    cacheTtl: string
+    verbose: boolean
+  }
+
+  const source = (health: HealthBlock): InlineConfigSource => new InlineConfigSource({ health })
 
   let app: WebApplication | undefined
 
@@ -134,18 +141,25 @@ describe('healthProbes() and Health()', () => {
 
     await app.bootstrap()
 
-    expect(app.container.get(kHealthRegistryOptions).cacheTTLMs).toBe(5_000)
+    expect(app.container.get(kHealthRegistryOptions).cacheTTL).toBe(5_000)
   })
 
-  it('normalizes every budget to milliseconds and binds them for the whole application', async () => {
-    app = createWebApplication().install(Health(h => h.indicatorTimeout('500ms').probeDeadline(1_500).cacheTTL('1s')))
+  it('binds every budget for the whole application', async () => {
+    app = createWebApplication().install(
+      Health(h =>
+        h
+          .indicatorTimeout(500 * Millisecond)
+          .probeDeadline(1_500)
+          .cacheTTL(1 * Second),
+      ),
+    )
 
     await app.bootstrap()
 
     expect(app.container.get(kHealthRegistryOptions)).toEqual({
-      indicatorTimeoutMs: 500,
-      probeDeadlineMs: 1_500,
-      cacheTTLMs: 1_000,
+      indicatorTimeout: 500,
+      probeDeadline: 1_500,
+      cacheTTL: 1_000,
     })
   })
 
@@ -153,14 +167,14 @@ describe('healthProbes() and Health()', () => {
   // block the callback wired.
   it('keeps a code-set budget and takes the rest from the configured block', async () => {
     app = createWebApplication().install(
-      Health(h => h.cacheTTL('10ms').config({ indicatorTimeout: '30ms', cacheTtl: '9s' })),
+      Health(h => h.cacheTTL(10 * Millisecond).config({ indicatorTimeout: 30 * Millisecond, cacheTtl: 9 * Second })),
     )
 
     await app.bootstrap()
 
     expect(app.container.get(kHealthRegistryOptions)).toMatchObject({
-      cacheTTLMs: 10,
-      indicatorTimeoutMs: 30,
+      cacheTTL: 10,
+      indicatorTimeout: 30,
     })
   })
 
@@ -209,7 +223,7 @@ describe('healthProbes() and Health()', () => {
   })
 
   it('does not follow a config refresh after the options are resolved', async () => {
-    let data: AppConfig['health'] = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: false }
+    let data: HealthBlock = { indicatorTimeout: '30ms', cacheTtl: '9s', verbose: false }
     const mutable: ConfigSource = { name: 'mutable', live: true, load: () => source(data).load() }
 
     const conf = newConfiguration(schema).source(mutable).build().config

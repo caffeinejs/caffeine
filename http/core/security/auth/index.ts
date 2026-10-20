@@ -60,6 +60,7 @@ export {
   JWTService,
   JWTServiceBuilder,
   type JWTServiceOptions,
+  type JWTServiceVerifyOptions,
   type JWTSignOptions,
 } from './jwt/index.js'
 export { kAuthSchemeDescriptors } from './keys.js'

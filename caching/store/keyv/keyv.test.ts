@@ -1,3 +1,4 @@
+import { Day, Hour, Millisecond, Second } from '@caffeinejs/std/duration'
 import { Keyv } from 'keyv'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 
@@ -61,7 +62,7 @@ describe('KeyvHTTPCacheStore', () => {
     const kv = fakeKV()
     const store = new KeyvHTTPCacheStore(kv)
 
-    await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+    await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets'] })
     await store.evictByTag('pets')
 
     expect([...kv.data.keys()].sort()).toEqual(['caffeine:cache:e:k', 'caffeine:cache:t:pets'])
@@ -74,7 +75,7 @@ describe('KeyvHTTPCacheStore', () => {
     const store = new KeyvHTTPCacheStore(kv)
     const bytes = Buffer.from([0x00, 0xff, 0xfe, 0x80])
 
-    await store.put('bin', entry(bytes), { ttl: 60 })
+    await store.put('bin', entry(bytes), { ttl: 60 * Second })
 
     const written = kv.sets.find(set => set.key === 'caffeine:cache:e:bin')!.value
     expect(typeof written).toBe('string')
@@ -87,8 +88,8 @@ describe('KeyvHTTPCacheStore', () => {
     const kv = fakeKV()
     const store = new KeyvHTTPCacheStore(kv)
 
-    await store.put('k', entry('v'), { ttl: 60 })
-    await store.put('sub', entry('v'), { ttl: '250ms' })
+    await store.put('k', entry('v'), { ttl: 60 * Second })
+    await store.put('sub', entry('v'), { ttl: 250 * Millisecond })
 
     expect(kv.sets[0].ttl).toBe(60_000)
     expect(kv.sets[1].ttl).toBe(250)
@@ -101,7 +102,7 @@ describe('KeyvHTTPCacheStore', () => {
     const store = new KeyvHTTPCacheStore(kv)
 
     await store.put('zero', entry('v'), { ttl: 0, tags: ['pets'] })
-    await store.put('unparsable', entry('v'), { ttl: 'ten seconds', tags: ['pets'] })
+    await store.put('unparsable', entry('v'), { ttl: Number.NaN, tags: ['pets'] })
 
     expect(kv.sets).toEqual([])
     expect(kv.gets).toEqual([])
@@ -113,7 +114,7 @@ describe('KeyvHTTPCacheStore', () => {
     expect(kv.sets[0].ttl).toBe(0)
 
     const bounded = fakeKV()
-    await new KeyvHTTPCacheStore(bounded, { tagTtl: '2h' }).evictByTag('pets')
+    await new KeyvHTTPCacheStore(bounded, { tagTtl: 2 * Hour }).evictByTag('pets')
     expect(bounded.sets[0].ttl).toBe(7_200_000)
   })
 
@@ -129,9 +130,9 @@ describe('KeyvHTTPCacheStore', () => {
       ['the fake backend', () => fakeKV()],
       ['a Keyv', () => new Keyv()],
     ])('stays hidden once the marker lapses past tagTtl, on %s', async (_backend, client) => {
-      const store = new KeyvHTTPCacheStore(client(), { tagTtl: '1h' })
+      const store = new KeyvHTTPCacheStore(client(), { tagTtl: 1 * Hour })
       vi.useFakeTimers({ toFake: ['Date'] })
-      await store.put('k', entry('v'), { ttl: '1d', tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 1 * Day, tags: ['pets'] })
       await store.evictByTag('pets')
       expect(await store.get('k')).toBeUndefined()
 
@@ -144,7 +145,7 @@ describe('KeyvHTTPCacheStore', () => {
     it('stays hidden once the backend drops the marker', async () => {
       const kv = fakeKV()
       const store = new KeyvHTTPCacheStore(kv)
-      await store.put('k', entry('v'), { ttl: 60, tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 60 * Second, tags: ['pets'] })
       await store.evictByTag('pets')
 
       kv.data.delete('caffeine:cache:t:pets')
@@ -160,27 +161,32 @@ describe('KeyvHTTPCacheStore', () => {
 
     // Every other duration in the package fails loud. One that is not a duration would otherwise read as
     // "never expires", the opposite of the bound on the marker keyspace that setting it asks for.
-    it.each([-1, -0.0001, Number.NaN, Number.POSITIVE_INFINITY, '1 hour', '-5s', ''])('refuses %s', tagTtl => {
+    it.each([-1, -0.0001, Number.NaN, Number.POSITIVE_INFINITY])('refuses %s', tagTtl => {
       expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).toThrow(ErrKeyvCache)
     })
 
+    // A caller without types handing over text is refused too, rather than read as "never expires".
+    it('refuses text', () => {
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1 hour' as never })).toThrow(ErrKeyvCache)
+    })
+
     it('names the value it refuses', () => {
-      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1 hour' })).toThrow(
-        'Cannot create a Keyv cache with the tagTtl "1 hour": it is not a non-negative duration',
+      expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl: -5 * Second })).toThrow(
+        'Cannot create a Keyv cache with the tagTtl "-5s": it is not a non-negative duration',
       )
     })
 
-    it.each([0, '0s', '2h', 7200])('takes %s', tagTtl => {
+    it.each([0, 2 * Hour, 7200 * Second])('takes %s', tagTtl => {
       expect(() => new KeyvHTTPCacheStore(fakeKV(), { tagTtl })).not.toThrow()
     })
 
     // The documented direction of failure: a marker that lapses while an entry stored under it is still alive
     // takes the entry down with it. A hit is lost; nothing meant to be gone is served.
     it('takes an entry down with the marker it was stored under when that lapses', async () => {
-      const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: '1h' })
+      const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: 1 * Hour })
       vi.useFakeTimers({ toFake: ['Date'] })
       await store.evictByTag('pets')
-      await store.put('k', entry('v'), { ttl: '1d', tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 1 * Day, tags: ['pets'] })
       expect((await store.get('k'))?.payload).toBe('v')
 
       vi.setSystemTime(Date.now() + 3_600_001)
@@ -193,7 +199,7 @@ describe('KeyvHTTPCacheStore', () => {
       const store = new KeyvHTTPCacheStore(fakeKV(), { tagTtl: 0 })
       vi.useFakeTimers({ toFake: ['Date'] })
       await store.evictByTag('pets')
-      await store.put('k', entry('v'), { ttl: '30d', tags: ['pets'] })
+      await store.put('k', entry('v'), { ttl: 30 * Day, tags: ['pets'] })
 
       vi.setSystemTime(Date.now() + 29 * 86_400_000)
 
@@ -203,11 +209,11 @@ describe('KeyvHTTPCacheStore', () => {
 
   it('uses the prefix verbatim, and puts nothing in front for an empty one', async () => {
     const kv = fakeKV()
-    await new KeyvHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(kv, { prefix: 'app|' }).put('k', entry('v'), { ttl: 60 * Second })
     expect(kv.sets[0].key).toBe('app|e:k')
 
     const bare = fakeKV()
-    await new KeyvHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 })
+    await new KeyvHTTPCacheStore(bare, { prefix: '' }).put('k', entry('v'), { ttl: 60 * Second })
     expect(bare.sets[0].key).toBe('e:k')
   })
 })

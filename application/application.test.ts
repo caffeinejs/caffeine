@@ -4,6 +4,7 @@ import { join } from 'node:path'
 
 import { CaffeineIoC, Injectable, Profile, Scopes, token } from '@caffeinejs/di'
 import type { OnBootstrap, OnDestroy } from '@caffeinejs/di'
+import { Hour, Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, it, expect, vi } from 'vitest'
 
 import type { DotenvLoader, InferConfig } from './config/index.js'
@@ -945,7 +946,41 @@ describe('headless application shutdown', () => {
 
     expect(error).toBeInstanceOf(AggregateError)
     expect(error.errors[0]).toBeInstanceOf(ErrShutdownTimeout)
-    expect((error.errors[0] as ErrShutdownTimeout).timeoutMs).toBe(100)
+    expect((error.errors[0] as ErrShutdownTimeout).timeout).toBe(100)
+  })
+
+  // A budget of 0 is no budget: the teardown runs to its end however long it takes, and nothing is cut.
+  it('waits out a slow destroy hook when shutdownTimeout is 0', async () => {
+    const started = Promise.withResolvers<void>()
+    const held = Promise.withResolvers<void>()
+
+    class Slow implements OnDestroy {
+      async onDestroy() {
+        started.resolve()
+        await held.promise
+      }
+    }
+
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Slow, t => t.toSelf())
+
+    const app = createApplication({ container }).shutdown(s => s.drainDelay(0).shutdownTimeout(0))
+    await app.run()
+
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      let settled = false
+      const closing = app.close().finally(() => (settled = true))
+      await started.promise
+
+      await vi.advanceTimersByTimeAsync(1 * Hour)
+      expect(settled).toBe(false)
+
+      held.resolve()
+      await expect(closing).resolves.toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('still disposes the container when a destroy hook throws', async () => {
@@ -1105,7 +1140,7 @@ describe('closing at any point of the lifecycle', () => {
   })
 
   it('skips the drain delay for an application that never served', async () => {
-    const app = createApplication().shutdown(s => s.drainDelay('5s'))
+    const app = createApplication().shutdown(s => s.drainDelay(5 * Second))
     await app.bootstrap()
 
     const startedAt = Date.now()

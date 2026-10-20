@@ -1,6 +1,6 @@
 import type { Logger } from '@caffeinejs/application/logger'
 import { type OnDestroy } from '@caffeinejs/di'
-import { toMillis, type Duration } from '@caffeinejs/std/duration'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
 import { HeldLock, type LockHost } from './_lock.js'
@@ -128,9 +128,8 @@ export interface DistLock {
  * The lock service the `distlock` feature publishes under the `kDistLock` key.
  *
  * Construct one directly to use the package without an application. Its options are the defaults a call falls
- * back to when it carries none of its own, already resolved and in milliseconds — a builder normalizes the
- * `'30s'` spellings before it binds, so nothing here parses a duration. Pass `newNoopLogger()` from
- * `@caffeinejs/application/logger` as `log` to keep it silent.
+ * back to when it carries none of its own. Pass `newNoopLogger()` from `@caffeinejs/application/logger` as `log`
+ * to keep it silent.
  *
  * Waiting, retrying, backoff and jitter all happen here rather than in the backend, which only ever makes one
  * attempt.
@@ -186,12 +185,12 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   }
 
   async tryAcquire(key: string, options: AcquireOptions = {}): Promise<Lock | undefined> {
-    const ttlMs = options.ttl === undefined ? this.options.ttlMs : toMillis(options.ttl)
+    const ttl = options.ttl ?? this.options.ttl
 
     return traced(
       acquireChannel,
-      () => this.#acquireContext(key, 'try', ttlMs, 0),
-      ctx => this.#tryAcquire(key, ttlMs, options.renew === true, options.signal, ctx),
+      () => this.#acquireContext(key, 'try', ttl, 0),
+      ctx => this.#tryAcquire(key, ttl, options.renew === true, options.signal, ctx),
     )
   }
 
@@ -208,29 +207,29 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   }
 
   async once<T>(key: string, fn: () => T | Promise<T>, options: OnceOptions = {}): Promise<OnceResult<T>> {
-    const ttlMs = options.ttl === undefined ? this.options.ttlMs : toMillis(options.ttl)
+    const ttl = options.ttl ?? this.options.ttl
 
     return traced(
       onceChannel,
-      (): Writable<OnceContext> => ({ service: this, key, ttlMs }),
-      ctx => this.#once(key, fn, ttlMs, options, ctx),
+      (): Writable<OnceContext> => ({ service: this, key, ttl }),
+      ctx => this.#once(key, fn, ttl, options, ctx),
     )
   }
 
   #acquireTraced(key: string, options: AcquireOptions, parent?: WithLockContext): Promise<HeldLock> {
-    const ttlMs = options.ttl === undefined ? this.options.ttlMs : toMillis(options.ttl)
-    const waitMs = options.wait === undefined ? this.options.waitMs : toMillis(options.wait)
+    const ttl = options.ttl ?? this.options.ttl
+    const wait = options.wait ?? this.options.wait
 
     return traced(
       acquireChannel,
-      () => this.#acquireContext(key, 'wait', ttlMs, waitMs, parent),
-      ctx => this.#acquire(key, ttlMs, waitMs, options, ctx),
+      () => this.#acquireContext(key, 'wait', ttl, wait, parent),
+      ctx => this.#acquire(key, ttl, wait, options, ctx),
     )
   }
 
   async #tryAcquire(
     key: string,
-    ttlMs: number,
+    ttl: Duration,
     renew: boolean,
     signal: AbortSignal | undefined,
     ctx: Writable<AcquireContext> | undefined,
@@ -239,7 +238,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
 
     let lease: LockLease | undefined
     try {
-      lease = await this.#attempt(key, ttlMs, signal, 1)
+      lease = await this.#attempt(key, ttl, signal, 1)
     } catch (error) {
       this.#settleAcquire(ctx, key, signal?.aborted === true ? 'aborted' : 'error', 1, started)
       throw error
@@ -250,7 +249,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
       return undefined
     }
 
-    const lock = new HeldLock(this, lease, ttlMs, renew)
+    const lock = new HeldLock(this, lease, ttl, renew)
     this.#settleAcquire(ctx, key, 'acquired', 1, started, lock)
 
     return lock
@@ -258,19 +257,19 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
 
   async #acquire(
     key: string,
-    ttlMs: number,
-    waitMs: number,
+    ttl: Duration,
+    wait: Duration,
     options: AcquireOptions,
     ctx: Writable<AcquireContext> | undefined,
   ): Promise<HeldLock> {
-    const retryDelayMs = options.retryDelay === undefined ? this.options.retryDelayMs : toMillis(options.retryDelay)
+    const retryDelay = options.retryDelay ?? this.options.retryDelay
     const started = Date.now()
-    const deadline = started + waitMs
+    const deadline = started + wait
     const tally = { attempts: 0 }
 
     let lease: LockLease | undefined
     try {
-      lease = await this.#retry(key, ttlMs, deadline, retryDelayMs, options.signal, tally)
+      lease = await this.#retry(key, ttl, deadline, retryDelay, options.signal, tally)
     } catch (error) {
       this.#settleAcquire(ctx, key, options.signal?.aborted === true ? 'aborted' : 'error', tally.attempts, started)
       throw error
@@ -278,10 +277,10 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
 
     if (lease === undefined) {
       this.#settleAcquire(ctx, key, 'timeout', tally.attempts, started)
-      throw new ErrLockNotAcquired(key, waitMs)
+      throw new ErrLockNotAcquired(key, wait)
     }
 
-    const lock = new HeldLock(this, lease, ttlMs, options.renew === true)
+    const lock = new HeldLock(this, lease, ttl, options.renew === true)
     this.#settleAcquire(ctx, key, 'acquired', tally.attempts, started, lock)
 
     return lock
@@ -291,9 +290,9 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   // caller that sees it throw still knows how many attempts were made.
   async #retry(
     key: string,
-    ttlMs: number,
+    ttl: Duration,
     deadline: number,
-    retryDelayMs: number,
+    retryDelay: Duration,
     signal: AbortSignal | undefined,
     tally: { attempts: number },
   ): Promise<LockLease | undefined> {
@@ -301,7 +300,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
       signal?.throwIfAborted()
 
       tally.attempts += 1
-      const lease = await this.#attempt(key, ttlMs, signal, tally.attempts)
+      const lease = await this.#attempt(key, ttl, signal, tally.attempts)
       if (lease !== undefined) {
         return lease
       }
@@ -311,20 +310,20 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
         return undefined
       }
 
-      await sleep(Math.min(jittered(retryDelayMs, this.options.retryJitter), deadline - now), signal)
+      await sleep(Math.min(jittered(retryDelay, this.options.retryJitter), deadline - now), signal)
     }
   }
 
   // The one place the backend is asked for a key.
   async #attempt(
     key: string,
-    ttlMs: number,
+    ttl: Duration,
     signal: AbortSignal | undefined,
     attempt: number,
   ): Promise<LockLease | undefined> {
     let lease: LockLease | undefined
     try {
-      lease = await this.backend.tryAcquire(key, ttlMs, signal)
+      lease = await this.backend.tryAcquire(key, ttl, signal)
     } catch (error) {
       // A backend that gave up because the caller aborted did nothing wrong.
       if (signal?.aborted !== true) {
@@ -374,7 +373,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   async #once<T>(
     key: string,
     fn: () => T | Promise<T>,
-    ttlMs: number,
+    ttl: Duration,
     options: OnceOptions,
     ctx: Writable<OnceContext> | undefined,
   ): Promise<OnceResult<T>> {
@@ -382,8 +381,8 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
     try {
       lock = await traced(
         acquireChannel,
-        () => this.#acquireContext(key, 'once', ttlMs, 0, ctx),
-        actx => this.#tryAcquire(key, ttlMs, options.renew === true, options.signal, actx),
+        () => this.#acquireContext(key, 'once', ttl, 0, ctx),
+        actx => this.#tryAcquire(key, ttl, options.renew === true, options.signal, actx),
       )
     } catch (error) {
       this.#settleOnce(ctx, key, 'failed')
@@ -428,11 +427,11 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   #acquireContext(
     key: string,
     mode: AcquireMode,
-    ttlMs: number,
-    waitMs: number,
+    ttl: Duration,
+    wait: Duration,
     parent?: WithLockContext | OnceContext,
   ): Writable<AcquireContext> {
-    return { service: this, key, mode, ttlMs, waitMs, parent }
+    return { service: this, key, mode, ttl, wait, parent }
   }
 
   #settleAcquire(
@@ -443,12 +442,12 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
     started: number,
     lock?: HeldLock,
   ): void {
-    const waitedMs = Date.now() - started
+    const waited = Date.now() - started
 
     if (ctx !== undefined) {
       ctx.outcome = outcome
       ctx.attempts = attempts
-      ctx.waitedMs = waitedMs
+      ctx.waited = waited
 
       if (lock !== undefined) {
         ctx.leaseID = lock.leaseID
@@ -458,14 +457,14 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
 
     switch (outcome) {
       case 'acquired':
-        this.log.debug({ key, leaseID: lock?.leaseID, attempts, waitedMs }, 'lock acquired')
+        this.log.debug({ key, leaseID: lock?.leaseID, attempts, waitedMs: waited }, 'lock acquired')
         return
       case 'timeout':
-        this.log.warn({ key, attempts, waitedMs }, 'lock acquisition timed out')
+        this.log.warn({ key, attempts, waitedMs: waited }, 'lock acquisition timed out')
         return
       default:
         // `held` and `aborted` are ordinary answers; an `error` was already logged as a backend failure.
-        this.log.debug({ key, outcome, attempts, waitedMs }, 'lock not acquired')
+        this.log.debug({ key, outcome, attempts, waitedMs: waited }, 'lock not acquired')
     }
   }
 
@@ -494,7 +493,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
 
 function settleHold(ctx: Writable<WithLockContext> | undefined, lock: HeldLock): void {
   if (ctx !== undefined) {
-    ctx.heldMs = Date.now() - lock.acquiredAt
+    ctx.held = Date.now() - lock.acquiredAt
     ctx.lapsed = lock.lost
   }
 }

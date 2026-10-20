@@ -46,8 +46,9 @@
     "sessionCookieName": {
       "type": "string"
     },
-    "sessionCookieTtlSeconds": {
-      "type": "number"
+    "sessionCookieTtl": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "stateCookieName": {
       "type": "string"
@@ -80,8 +81,9 @@
     "roleClaimType": {
       "type": "string"
     },
-    "httpTimeoutMs": {
-      "type": "number"
+    "httpTimeout": {
+      "pattern": "^(?:0|(?:(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:ns|us|µs|μs|ms|s|m|h|d))+)$",
+      "type": "string"
     },
     "showPii": {
       "type": "boolean"

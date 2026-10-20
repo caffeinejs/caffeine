@@ -37,5 +37,8 @@
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@caffeinejs/std": "*"
   }
 }

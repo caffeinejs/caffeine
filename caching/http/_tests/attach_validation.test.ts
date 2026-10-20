@@ -1,6 +1,7 @@
 import { CaffeineIoC } from '@caffeinejs/di'
 import { ErrConfiguration, Router, constraint, version, type ConstraintStrategy } from '@caffeinejs/http'
 import { constraints, createWebApplication } from '@caffeinejs/http/fastify'
+import { Second, Millisecond } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
@@ -37,32 +38,32 @@ describe('what a route may ask of the cache, checked while it registers', () => 
   // A ttl of 0 used to mean "max-age=0" to the client and "keep forever" to the store.
   it.each([
     ['a ttl of zero', { ttl: 0 }],
-    ['a ttl the parser would read as zero', { ttl: '10 seconds' }],
-    ['a negative ttl', { ttl: -5 }],
-    ['a sharedMaxAge that is not a duration', { ttl: 60, sharedMaxAge: 'an hour' }],
-    ['a negative staleIfError', { ttl: 60, staleIfError: -1 }],
-    ['a ttl below one second, which max-age cannot say', { ttl: '400ms' }],
-    ['an empty tag', { ttl: 60, tags: [''] }],
-    ['a tag holding a brace', { ttl: 60, tags: ['pets', '{x}'] }],
-    ['tags that are not a list', { ttl: 60, tags: 'pets' as never }],
+    ['a ttl given as text by a caller without types', { ttl: '10 seconds' as never }],
+    ['a negative ttl', { ttl: -5 * Second }],
+    ['a sharedMaxAge that is not a number', { ttl: 60 * Second, sharedMaxAge: Number.NaN }],
+    ['a negative staleIfError', { ttl: 60 * Second, staleIfError: -1 * Second }],
+    ['a ttl below one second, which max-age cannot say', { ttl: 400 * Millisecond }],
+    ['an empty tag', { ttl: 60 * Second, tags: [''] }],
+    ['a tag holding a brace', { ttl: 60 * Second, tags: ['pets', '{x}'] }],
+    ['tags that are not a list', { ttl: 60 * Second, tags: 'pets' as never }],
   ] as [string, CacheControlOptions][])('refuses %s', async (_name, options) => {
     await expect(startWith(options)).rejects.toThrow(ErrConfiguration)
   })
 
   it('names the route, the option and the value it refused', async () => {
-    await expect(startWith({ ttl: '10 seconds' })).rejects.toThrow(
-      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 60 or "5m", got "10 seconds"',
+    await expect(startWith({ ttl: '10 seconds' as never })).rejects.toThrow(
+      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 5 * Minute, got "10 seconds"',
     )
-    await expect(startWith({ ttl: 0.5 })).rejects.toThrow(
-      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 60 or "5m", got "0.5"',
+    await expect(startWith({ ttl: 0.5 * Second })).rejects.toThrow(
+      'Cannot install caching on "GET /attach/data": ttl must be at least one second, such as 5 * Minute, got "500ms"',
     )
-    await expect(startWith({ ttl: 60, tags: ['a}b'] })).rejects.toThrow(
+    await expect(startWith({ ttl: 60 * Second, tags: ['a}b'] })).rejects.toThrow(
       'Cannot install caching on "GET /attach/data": a tag must be a non-empty string without "{" or "}", got "a}b"',
     )
   })
 
   it('takes a route without tags, and one whose tags are an empty list', async () => {
-    const app = await startWith({ ttl: 60, tags: [] })
+    const app = await startWith({ ttl: 60 * Second, tags: [] })
 
     await app.fetch('/attach/data')
 
@@ -70,13 +71,13 @@ describe('what a route may ask of the cache, checked while it registers', () => 
   })
 
   it('takes a sharedMaxAge of zero, which tells shared caches not to keep the response', async () => {
-    const app = await startWith({ ttl: 60, sharedMaxAge: 0 })
+    const app = await startWith({ ttl: 60 * Second, sharedMaxAge: 0 })
 
     expect((await app.fetch('/attach/data')).headers.get('cache-control')).toBe('public, max-age=60, s-maxage=0')
   })
 
   it('reads the methods a route lists whatever their case', async () => {
-    const app = await startWith({ ttl: 60, methods: ['get'] })
+    const app = await startWith({ ttl: 60 * Second, methods: ['get'] })
 
     await app.fetch('/attach/data')
 
@@ -132,13 +133,15 @@ describe('constrained routes that share a URL', () => {
     ['caching installed before constraints', true],
     ['caching installed after constraints', false],
   ])('are refused when nothing in the key tells them apart (%s)', async (_name, cachingFirst) => {
-    await expect(start(versioned({ ttl: 60 }, { ttl: 60 }), cachingFirst)).rejects.toThrow(
+    await expect(start(versioned({ ttl: 60 * Second }, { ttl: 60 * Second }), cachingFirst)).rejects.toThrow(
       /constrained on "Accept-Version" and its cache key does not tell it from the other routes/,
     )
   })
 
   it('never serve one version the other, once they vary on the constraint header', async () => {
-    const app = await start(versioned({ ttl: 60, vary: ['Accept-Version'] }, { ttl: 60, vary: ['accept-version'] }))
+    const app = await start(
+      versioned({ ttl: 60 * Second, vary: ['Accept-Version'] }, { ttl: 60 * Second, vary: ['accept-version'] }),
+    )
 
     const v1 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '1.x' } })
     const v2 = await app.fetch('/pets-versioned', { headers: { 'accept-version': '2.x' } })
@@ -152,7 +155,7 @@ describe('constrained routes that share a URL', () => {
 
   it('never serve one version the other, once each has a key of its own', async () => {
     const app = await start(
-      versioned({ ttl: 60, key: req => `v1:${req.url}` }, { ttl: 60, key: req => `v2:${req.url}` }),
+      versioned({ ttl: 60 * Second, key: req => `v1:${req.url}` }, { ttl: 60 * Second, key: req => `v2:${req.url}` }),
     )
 
     await app.fetch('/pets-versioned', { headers: { 'accept-version': '1.x' } })
@@ -194,9 +197,11 @@ describe('constrained routes that share a URL', () => {
       return app.bootstrap()
     }
 
-    await expect(build({ ttl: 60 })).rejects.toThrow(/constraint "tenant" reads no header the cache key can vary on/)
+    await expect(build({ ttl: 60 * Second })).rejects.toThrow(
+      /constraint "tenant" reads no header the cache key can vary on/,
+    )
     await close?.()
     // A rejection here fails the test: the key is what lets the same route start.
-    await build({ ttl: 60, key: req => `acme:${req.url}` })
+    await build({ ttl: 60 * Second, key: req => `acme:${req.url}` })
   })
 })

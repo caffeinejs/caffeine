@@ -5,6 +5,7 @@ import {
   type InjectionToken,
   type ObjectInjectionSpec,
 } from '@caffeinejs/di'
+import type { Duration } from '@caffeinejs/std/duration'
 
 import type { AdapterExtensionFactory, IAdapterTypes } from '../../../adapter.js'
 import type { HTTPPlugin } from '../../../plugin.js'
@@ -422,8 +423,8 @@ export class Router<
     return this
   }
 
-  timeout(ms: number): this {
-    this.#state.builder.timeout(ms)
+  timeout(timeout: Duration): this {
+    this.#state.builder.timeout(timeout)
     return this
   }
 

@@ -1,5 +1,6 @@
+import { errMessage } from '@caffeinejs/std/err'
+
 import { abortReason } from './abort.js'
-import { errMessage } from './err_message.gen.js'
 import { ErrInvalidOption } from './errors.js'
 import type { ExecutionContext, Next, Operation, Resilient, Strategy, StrategyFn } from './strategy.js'
 

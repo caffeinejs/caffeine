@@ -2,6 +2,7 @@ import { connect } from 'node:net'
 
 import { Controller, Get } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { Second } from '@caffeinejs/std/duration'
 import fastify from 'fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -66,7 +67,7 @@ describe('the signal a store call carries', () => {
     close = undefined
   })
 
-  async function start(store: HTTPCacheStore, options: { storeTimeoutMs?: number; handlerTimeout?: number } = {}) {
+  async function start(store: HTTPCacheStore, options: { storeTimeout?: number; handlerTimeout?: number } = {}) {
     const errors: CacheErrorEvent[] = []
     const sends = { n: 0 }
     const handled = { n: 0 }
@@ -84,13 +85,13 @@ describe('the signal a store call carries', () => {
         etagGenerator: undefined,
         statusHeader: 'X-Cache',
         observer: { onError: event => errors.push(event) },
-        storeTimeoutMs: options.storeTimeoutMs,
+        storeTimeout: options.storeTimeout,
       }),
     )
     server.route({
       method: 'GET',
       url: '/data',
-      config: { cache: { ttl: 60, tags: ['data'] } },
+      config: { cache: { ttl: 60 * Second, tags: ['data'] } },
       handler: () => {
         handled.n++
         return { ok: true }
@@ -129,7 +130,7 @@ describe('the signal a store call carries', () => {
     const store = new RecordingStore()
     store.hang = true
     const watched = new WatchedStore(store)
-    const { server, errors } = await start(watched, { storeTimeoutMs: 20 })
+    const { server, errors } = await start(watched, { storeTimeout: 20 })
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     const pending = server.inject('/data')
@@ -167,7 +168,7 @@ describe('the signal a store call carries', () => {
         throw thrown.evict
       },
     }
-    const { server, errors } = await start(store, { storeTimeoutMs: 60_000 })
+    const { server, errors } = await start(store, { storeTimeout: 60_000 })
 
     const read = await server.inject('/data')
     const mutation = await server.inject({ method: 'POST', url: '/data' })
@@ -253,7 +254,7 @@ describe('storeTimeout on HTTPCaching', () => {
     @Controller('/default-timeout')
     class DefaultTimeoutController {
       @Get('/data')
-      @CacheControl({ ttl: 60 })
+      @CacheControl({ ttl: 60 * Second })
       data() {
         return { ok: true }
       }

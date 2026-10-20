@@ -34,7 +34,7 @@ export function attachCacheInvalidateHook(
 ): void {
   assertTags(routeDef, opts.tags, { what: 'cache invalidation', required: true })
 
-  const { store, observer, storeTimeoutMs } = deps
+  const { store, observer, storeTimeout } = deps
   const route = observer === undefined ? undefined : cacheRouteOf(routeDef)
   const tags: readonly string[] = Object.freeze([...opts.tags])
 
@@ -59,7 +59,7 @@ export function attachCacheInvalidateHook(
 
   async function evict(): Promise<void> {
     try {
-      await withStoreSignal('evict', undefined, storeTimeoutMs, signal => store.evictByTag(tags, { signal }))
+      await withStoreSignal('evict', undefined, storeTimeout, signal => store.evictByTag(tags, { signal }))
       observer?.onInvalidate?.({ route: route!, tags })
     } catch (error) {
       observer?.onError?.({ route: route!, operation: 'evict', error })

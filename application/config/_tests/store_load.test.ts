@@ -13,9 +13,9 @@ import { hasFastProperties } from './v8.testkit.js'
 function definition<T = unknown>(
   sources: ConfigSource[],
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
-  loadTimeoutMs = 30_000,
+  loadTimeout = 30_000,
 ): ConfigDefinition<T> {
-  return { schema, ...testTokens(), sources, loadTimeoutMs }
+  return { schema, ...testTokens(), sources, loadTimeout }
 }
 
 function source(name: string, data: Record<string, unknown>, extra: Partial<ConfigSource> = {}): ConfigSource {

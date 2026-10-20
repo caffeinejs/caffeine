@@ -1,5 +1,6 @@
 import { JWTService, type WebApplication, Authentication } from '@caffeinejs/http'
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { Minute } from '@caffeinejs/std/duration'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 
 import { immutableAssets, spaMount, staticFiles } from '../../index.js'
@@ -20,7 +21,7 @@ const SECRET = 'jwt-hs256-secret-with-more-than-32-bytes-of-text'
 const ISSUER = 'https://issuer.test'
 const AUDIENCE = 'spa-api'
 
-const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIENCE, expiresIn: '5m' })
+const signer = new JWTService({ secret: SECRET, issuer: ISSUER, audience: AUDIENCE, expiresIn: 5 * Minute })
 
 /**
  * A public single-page application whose API takes bearer tokens: the page is for everyone, every call it

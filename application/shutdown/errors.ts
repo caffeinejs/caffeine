@@ -1,3 +1,4 @@
+import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { ErrCaffeine } from '../error.js'
@@ -17,15 +18,15 @@ export class ErrShutdownConfiguration extends ErrCaffeine {
  * process can report the overrun instead of being taken out mid-sentence by the orchestrator's `SIGKILL`.
  */
 export class ErrShutdownTimeout extends ErrCaffeine {
-  readonly timeoutMs: number
+  readonly timeout: Duration
 
-  constructor(timeoutMs: number) {
+  constructor(timeout: Duration) {
     super(
-      errMessage(`Cannot complete graceful shutdown: teardown did not finish within ${timeoutMs}ms`)
+      errMessage(`Cannot complete graceful shutdown: teardown did not finish within ${timeout}ms`)
         .reference('@caffeinejs/application', ErrShutdownTimeout)
         .build(),
       'ERR_SHUTDOWN_TIMEOUT',
     )
-    this.timeoutMs = timeoutMs
+    this.timeout = timeout
   }
 }

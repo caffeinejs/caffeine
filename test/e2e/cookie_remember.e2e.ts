@@ -15,6 +15,7 @@ import {
   Authentication,
 } from '@caffeinejs/http'
 import { newRouter, authentication } from '@caffeinejs/http/fastify'
+import { Hour, Second } from '@caffeinejs/std/duration'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { startApp, type RunningApp } from './internal/app.js'
@@ -99,10 +100,13 @@ describe.skipIf(!up)('durable remember-me held in Redis', () => {
             Authentication(auth =>
               auth
                 .addCookie(c => {
-                  c.sessionSecret(SECRET).secure(false).rememberMe().rememberMeRotationGraceSeconds(GRACE_SECONDS)
+                  c.sessionSecret(SECRET)
+                    .secure(false)
+                    .rememberMe()
+                    .rememberMeRotationGrace(GRACE_SECONDS * Second)
 
                   if (absolute !== undefined) {
-                    c.rememberMeMaxAge(3600).rememberMeAbsoluteMaxAge(absolute)
+                    c.rememberMeMaxAge(1 * Hour).rememberMeAbsoluteMaxAge(absolute * Second)
                   }
                 })
                 .addCredentials(),

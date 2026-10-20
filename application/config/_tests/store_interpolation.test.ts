@@ -41,7 +41,7 @@ function definition<T = Record<string, unknown>>(
   sources: ConfigSource[],
   schema: ConfigSchema<T> = passthroughConfigSchema as ConfigSchema<T>,
 ): ConfigDefinition<T> {
-  return { schema, ...testTokens(), sources, loadTimeoutMs: 30_000 }
+  return { schema, ...testTokens(), sources, loadTimeout: 30_000 }
 }
 
 /** A live source over data the test changes. */
