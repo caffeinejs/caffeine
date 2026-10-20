@@ -68,3 +68,24 @@ A bare number is milliseconds: `expiresIn(900)` is 900 ms, not 15 minutes. Optio
 `@caffeinejs/kafka` and `@caffeinejs/messaging` still type their spans (`nackDelay`, `idleTimeout`) as a bare number of milliseconds; the constants work there as well.
 
 In a configuration schema, declare the field `$t.Duration()`: it reads duration text such as `'30s'`, `'1h30m'` or `'7d'`, and refuses a bare number.
+
+## Byte sizes
+
+Every size Caffeine takes is a `ByteSize` from `@caffeinejs/std/bytes`: a count of bytes. Write it with the constants, never as `1024 * 1024` or as text:
+
+```ts
+import { bytes, KiB, MiB } from '@caffeinejs/std/bytes'
+
+@BodyLimit(10 * MiB)
+@Controller('/uploads')
+class UploadsController {}
+
+app.with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore({ maxSize: 64 * MiB })).maxEntrySize(512 * KiB)))
+
+// An option Caffeine does not type keeps its library's shape, in bytes as well.
+multipartPlugin({ limits: { fileSize: bytes('10mb') } })
+```
+
+Every unit is binary: `'1kb'` and `1 * KiB` are both 1024. There is no `KB` constant. Options that took text before (`@BodyLimit('10mb')`, `maxEntrySize('1MB')`, `maxSize: '64MB'`) take a count; wrap text that must stay text in `bytes(...)`.
+
+In a configuration schema, declare the field `$t.Bytes()`: it reads byte text such as `'512kb'`, `'10MB'` or `'1Gb'`, and a bare amount as bytes. It refuses `'1MiB'`, `'1.5gb'` and a sign.

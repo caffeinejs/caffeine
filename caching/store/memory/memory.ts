@@ -1,4 +1,4 @@
-import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { LRUCache } from 'lru-cache'
 
 import type {
@@ -31,9 +31,9 @@ export interface MemoryHTTPCacheStoreOptions {
   /** Maximum number of entries kept. Defaults to 500. */
   max?: number
   /**
-   * Optional cap on the total bytes of stored entries: `'512kb'`, `'10MB'`, or a bare number of bytes. When set,
-   * the store evicts least-recently-used entries once the summed size of stored payloads (plus their headers)
-   * exceeds this budget.
+   * Optional cap on the total size of stored entries, such as `64 * MiB`. When set, the store evicts
+   * least-recently-used entries once the summed size of stored payloads (plus their headers) exceeds this budget.
+   * The constructor throws a `TypeError` for one that is not a whole number of bytes above zero.
    */
   maxSize?: ByteSize
 }
@@ -67,7 +67,7 @@ export class MemoryHTTPCacheStore implements HTTPCacheStore {
 
     this.#cache =
       options?.maxSize !== undefined
-        ? new LRUCache({ max: options.max ?? 500, maxSize: bytes(options.maxSize), sizeCalculation: recordSize })
+        ? new LRUCache({ max: options.max ?? 500, maxSize: options.maxSize, sizeCalculation: recordSize })
         : new LRUCache({ max: options?.max ?? 500 })
   }
 

@@ -30,7 +30,8 @@ interface CachingTree {
   storeTimeout?: string
   lockTimeout?: string
   varyByQuery?: string
-  maxEntrySize?: string
+  // A file source may give a number, which validation reads as text.
+  maxEntrySize?: string | number
 }
 
 /** A store that answers nothing until the cache gives up on the call. */
@@ -178,6 +179,32 @@ describe('HTTP caching configuration', () => {
     await app.fetch('/cfg/data')
 
     expect((await app.fetch('/cfg/data')).headers.get('x-cache')).toBe('MISS')
+  })
+
+  // Every unit is binary, so '1kb' is 1024 bytes, and a bare amount is bytes, given as text or as a number.
+  it.each([
+    ['1kb', 1024, 'HIT'],
+    ['1kb', 1025, 'MISS'],
+    ['1024', 1024, 'HIT'],
+    [1024, 1024, 'HIT'],
+    [1024, 1025, 'MISS'],
+  ] as const)(
+    'reads a maxEntrySize of %o from the tree, for a body of %d bytes',
+    async (maxEntrySize, length, status) => {
+      const { app } = await start({ maxEntrySize }, { body: 'x'.repeat(length) })
+
+      await app.fetch('/cfg/data')
+
+      expect((await app.fetch('/cfg/data')).headers.get('x-cache')).toBe(status)
+    },
+  )
+
+  // A misspelling fails validation on the field, and so does a size too large to count exactly.
+  it.each(['1KiB', '1.5kb', '-1kb', '8pb'])('refuses a maxEntrySize of %o from the tree', async maxEntrySize => {
+    const failed = start({ maxEntrySize })
+
+    await expect(failed).rejects.toThrow(ErrConfigValidation)
+    await expect(failed).rejects.toThrow('app.caching.maxEntrySize')
   })
 
   // A bare number names no unit, so it is refused rather than guessed at.

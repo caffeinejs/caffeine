@@ -6,6 +6,7 @@ import {
   type AdapterRouteOptions,
   type ContextRequest,
 } from '@caffeinejs/http/fastify'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import { type Duration, Second } from '@caffeinejs/std/duration'
 import type { FastifyRequest } from 'fastify'
 
@@ -160,8 +161,8 @@ export interface CacheDeps {
   storeTimeout?: Duration
   /** The query parameters a store key carries, for a route that does not list its own. Unset: the whole query. */
   varyByQuery?: readonly string[]
-  /** Bytes. A larger payload is not stored, and `observer.onSkip` is told. Unset: no limit. */
-  maxEntrySizeBytes?: number
+  /** The largest payload stored. A larger payload is not stored, and `observer.onSkip` is told. Unset: no limit. */
+  maxEntrySize?: ByteSize
   /** The install's flights, one table per install. Absent, with `lockTimeout`, concurrent misses each run the handler. */
   flights?: FlightTable
   /** How long a follower waits on a flight. */
@@ -209,7 +210,7 @@ export function attachCacheHooks(
   opts: CacheControlOptions | false,
   deps: CacheDeps,
 ): void {
-  const { store, etagGenerator, statusHeader, observer, storeTimeout, maxEntrySizeBytes, flights, lockTimeout } = deps
+  const { store, etagGenerator, statusHeader, observer, storeTimeout, maxEntrySize, flights, lockTimeout } = deps
 
   // Resolved here, once per route, and only when someone is listening. Every call site below is
   // `observer?.onX?.({...})`: the optional call short-circuits before its argument is built, so an unobserved
@@ -699,19 +700,19 @@ export function attachCacheHooks(
     // A handler that returned nothing: the server sends an empty body, and there is nothing to hash or replay.
     // Reported, since the route asked for the response to be stored and it will be a miss again next time.
     if (wanted && payload === undefined) {
-      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'empty', bytes: 0 })
+      observer?.onSkip?.({ route: route!, key: request.cacheKey ?? keyOf(request), reason: 'empty', size: 0 })
     }
 
     if (wanted && isStringOrBuffer) {
       // The read hook derived it unless it returned before getting that far.
       const key = request.cacheKey ?? keyOf(request)
-      const bytes = typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length
+      const size = typeof payload === 'string' ? Buffer.byteLength(payload) : (payload as Buffer).length
 
       if (read.privacy !== 'public' && reply.hasHeader('set-cookie')) {
         // A response that sets a cookie is taken for one client's, unless the route said `public`.
-        observer?.onSkip?.({ route: route!, key, reason: 'set-cookie', bytes })
-      } else if (maxEntrySizeBytes !== undefined && bytes > maxEntrySizeBytes) {
-        observer?.onSkip?.({ route: route!, key, reason: 'entry-too-large', bytes })
+        observer?.onSkip?.({ route: route!, key, reason: 'set-cookie', size })
+      } else if (maxEntrySize !== undefined && size > maxEntrySize) {
+        observer?.onSkip?.({ route: route!, key, reason: 'entry-too-large', size })
       } else {
         const lastModified = handlerLastModified ?? new Date().toUTCString()
         if (handlerLastModified === undefined) {
@@ -736,7 +737,7 @@ export function attachCacheHooks(
           )
 
           request.cacheFlight?.settle('stored')
-          observer?.onStore?.({ route: route!, key, bytes, ttl: read.ttl!, tags })
+          observer?.onStore?.({ route: route!, key, size, ttl: read.ttl!, tags })
         } catch (error) {
           // Nothing was stored; the response the handler produced still goes out.
           observer?.onError?.({ route: route!, operation: 'put', error })

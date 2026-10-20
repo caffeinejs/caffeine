@@ -1,3 +1,4 @@
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
 /** A route's cache identity, built once when the route registers and shared, frozen, by every event it emits. */
@@ -101,8 +102,8 @@ export interface CacheStoreEvent {
   readonly route: CacheRoute
   /** The store key; see {@link CacheMissEvent.key}. */
   readonly key: string
-  /** Byte length of the stored payload, headers excluded. */
-  readonly bytes: number
+  /** The size of the stored payload, headers excluded. */
+  readonly size: ByteSize
   /** The route's `ttl`. */
   readonly ttl: Duration
   /** The tags the entry was stored under, when the route declares any. */
@@ -115,8 +116,8 @@ export interface CacheSkipEvent {
   /** The store key; see {@link CacheMissEvent.key}. */
   readonly key: string
   readonly reason: CacheSkipReason
-  /** Byte length of the payload that was not stored. Absent for a stream. */
-  readonly bytes?: number
+  /** The size of the payload that was not stored. Absent for a stream. */
+  readonly size?: ByteSize
 }
 
 /** An eviction a successful mutating request performed: every entry under any of `tags`, from any route. */

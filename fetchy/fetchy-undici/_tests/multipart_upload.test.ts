@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import { Readable } from 'node:stream'
 
 import { FetchyHeaders, FetchyRequest } from '@caffeinejs/fetchy'
+import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { Client, Pool } from 'undici'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -21,7 +22,6 @@ import { UndiciTransport } from '../index.js'
 import { startTestServer, type TestServer } from './test_server.js'
 
 const ALL_BYTES = Uint8Array.from({ length: 256 }, (_, byte) => byte)
-const MiB = 1024 * 1024
 
 interface Received {
   contentType: string
@@ -61,7 +61,7 @@ function generatedFile(size: number, { bytes = size, onCancel = (): void => unde
       value: () =>
         new ReadableStream<Uint8Array>({
           pull(controller) {
-            const length = Math.min(64 * 1024, bytes - read)
+            const length = Math.min(64 * KiB, bytes - read)
 
             if (length === 0) {
               controller.close()
@@ -396,7 +396,7 @@ describe('UndiciTransport on a multipart upload', () => {
   // mix their bytes.
   it('delivers concurrent uploads over one connection intact', async () => {
     const single = new Pool(server.baseURL, { connections: 1 })
-    const files = [1, 2, 3].map(n => new File([randomBytes(512 * 1024)], `file-${n}.bin`))
+    const files = [1, 2, 3].map(n => new File([randomBytes(512 * KiB)], `file-${n}.bin`))
 
     try {
       const sent = await Promise.all(
@@ -579,7 +579,7 @@ describe('UndiciTransport over HTTP/2', () => {
       onStream = (bytes, contentLength) => resolve({ bytes, contentLength })
     })
     const form = new FormData()
-    form.append('file', new File([randomBytes(256 * 1024)], 'report.bin'))
+    form.append('file', new File([randomBytes(256 * KiB)], 'report.bin'))
 
     const response = await new UndiciTransport(client).send(
       new FetchyRequest('POST', baseURL, '/upload', undefined, form),

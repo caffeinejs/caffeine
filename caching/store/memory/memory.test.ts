@@ -1,3 +1,4 @@
+import { KiB } from '@caffeinejs/std/bytes'
 import { Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
 import { describe, expect, it } from 'vitest'
@@ -41,6 +42,29 @@ describe('MemoryHTTPCacheStore', () => {
 
     expect(await store.get('a')).toBeUndefined()
     expect(await store.get('b')).toBeDefined()
+  })
+
+  // The budget is a count of bytes. An entry with no headers counts its payload and one byte more, so two of 511
+  // come to exactly 1 KiB and both stay, and a byte more evicts the older.
+  it('holds stored entries to exactly the maxSize budget', async () => {
+    const exact = new MemoryHTTPCacheStore({ maxSize: 1 * KiB })
+    await exact.put('a', entry('x'.repeat(511)), { ttl: 60 * Second })
+    await exact.put('b', entry('x'.repeat(511)), { ttl: 60 * Second })
+
+    expect(await exact.get('a')).toBeDefined()
+    expect(await exact.get('b')).toBeDefined()
+
+    const over = new MemoryHTTPCacheStore({ maxSize: 1 * KiB })
+    await over.put('a', entry('x'.repeat(511)), { ttl: 60 * Second })
+    await over.put('b', entry('x'.repeat(512)), { ttl: 60 * Second })
+
+    expect(await over.get('a')).toBeUndefined()
+    expect(await over.get('b')).toBeDefined()
+  })
+
+  // Text such as '64MB' was a size before sizes were counts of bytes; one left behind fails as the store is built.
+  it.each([1.5, -1, 0, Number.NaN, '64MB'])('refuses the maxSize %o', size => {
+    expect(() => new MemoryHTTPCacheStore({ maxSize: size as number })).toThrow(TypeError)
   })
 
   it('runs on a pre-built LRUCache as given', async () => {

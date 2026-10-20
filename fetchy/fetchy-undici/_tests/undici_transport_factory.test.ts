@@ -1,4 +1,5 @@
 import { FetchyHeaders, FetchyRequest, newClient, type Transport } from '@caffeinejs/fetchy'
+import { KiB } from '@caffeinejs/std/bytes'
 import { Microsecond, Millisecond, Second } from '@caffeinejs/std/duration'
 import { Client, errors, Pool } from 'undici'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -127,7 +128,9 @@ describe('UndiciTransportFactory', () => {
 
   // A limit that reached the pool is one a server can trip: undici refuses a response whose headers pass it.
   it('hands the options PoolOptionsBuilder built to the pool it creates', async () => {
-    const options = PoolOptionsBuilder.newBuilder().maxHeaderSize(1024).build()
+    const options = PoolOptionsBuilder.newBuilder()
+      .maxHeaderSize(1 * KiB)
+      .build()
     const transport = new UndiciTransportFactory(options).provide(server.baseURL)
 
     await expect(
@@ -165,7 +168,7 @@ describe('PoolOptionsBuilder', () => {
       .keepAliveTimeoutThreshold(500 * Millisecond)
       .pipelining(2)
       .tls(tls)
-      .maxHeaderSize(8_192)
+      .maxHeaderSize(8 * KiB)
       .headersTimeout(3 * Second)
       .bodyTimeout(4 * Second)
       .factory(factory)
@@ -179,7 +182,7 @@ describe('PoolOptionsBuilder', () => {
       keepAliveTimeoutThreshold: 500,
       pipelining: 2,
       connect: tls,
-      maxHeaderSize: 8_192,
+      maxHeaderSize: 8 * KiB,
       headersTimeout: 3_000,
       bodyTimeout: 4_000,
       factory,

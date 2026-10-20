@@ -1,4 +1,4 @@
-import { BYTES_PATTERN, bytes } from '@caffeinejs/std/bytes'
+import { type ByteSize, BYTES_PATTERN, formatBytes, parseBytes } from '@caffeinejs/std/bytes'
 import { type Duration, DURATION_PATTERN, formatDuration, parseDuration } from '@caffeinejs/std/duration'
 import {
   type SchemaOptions,
@@ -207,16 +207,18 @@ const caffeineT = {
       .Encode(d => formatDuration(d)) as never,
 
   /**
-   * A size written as byte text — `'512kb'`, `'10MB'`, `'2g'`, or a bare `'1024'` — decoded to a count of bytes.
+   * A size written as byte text — `'512kb'`, `'10MB'`, `'2g'`, or a bare `'1024'` — decoded to a `ByteSize`, a count
+   * of bytes.
    *
-   * Every prefix is binary, so `'1kb'` is 1024. The value is checked against {@link BYTES_PATTERN} first, which is
-   * what keeps {@link bytes} from throwing out of `Decode`: a misspelling such as `'1KiB'` fails configuration
-   * validation instead. Only the string form is accepted; a bare number is rejected.
+   * Every unit is binary, so `'1kb'` is 1024. The value is checked against {@link BYTES_PATTERN} first, so `'1KiB'`,
+   * `'1.5gb'` and `'-1kb'` fail configuration validation: the grammar is {@link parseBytes}'s, and a size past
+   * `Number.MAX_SAFE_INTEGER` bytes fails validation as well. A bare amount is bytes, so a number a source gives,
+   * such as `1024` from a YAML file, is read as text and passes.
    */
-  Bytes: (options: SchemaOptions = {}): TTransform<TString, number> =>
+  Bytes: (options: SchemaOptions = {}): TTransform<TString, ByteSize> =>
     Type.Transform(Type.String({ ...options, pattern: BYTES_PATTERN }))
-      .Decode(text => bytes(text))
-      .Encode(n => `${n}b`) as never,
+      .Decode(text => parseBytes(text))
+      .Encode(size => formatBytes(size)) as never,
 }
 
 /**

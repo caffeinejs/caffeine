@@ -76,8 +76,8 @@ describe('loggingCacheObserver', () => {
 
     observer.onHit!({ route, key: 'secret', revalidated: false, age: 1 * Second, coalesced: false, stale: false })
     observer.onMiss!({ route, key: 'secret', reason: 'absent' })
-    observer.onStore!({ route, key: 'secret', bytes: 10, ttl: 60 * Second, tags: ['pets'] })
-    observer.onSkip!({ route, key: 'secret', reason: 'entry-too-large', bytes: 10 })
+    observer.onStore!({ route, key: 'secret', size: 10, ttl: 60 * Second, tags: ['pets'] })
+    observer.onSkip!({ route, key: 'secret', reason: 'entry-too-large', size: 10 })
 
     for (const { args } of log.written) {
       expect(args[0]).not.toHaveProperty('key')
@@ -91,9 +91,9 @@ describe('loggingCacheObserver', () => {
     const observer = loggingCacheObserver(log, { includeKeys: true })
 
     observer.onHit!({ route, key: 'k1', revalidated: true, age: 1 * Second, coalesced: true, stale: false })
-    observer.onSkip!({ route, key: 'k2', reason: 'set-cookie', bytes: 3 })
+    observer.onSkip!({ route, key: 'k2', reason: 'set-cookie', size: 3 })
     observer.onMiss!({ route, key: 'k3', reason: 'absent' })
-    observer.onStore!({ route, key: 'k4', bytes: 10, ttl: 60 * Second })
+    observer.onStore!({ route, key: 'k4', size: 10, ttl: 60 * Second })
 
     expect(log.written[0].args[0]).toMatchObject({ key: 'k1', revalidated: true })
     expect(log.written[1].args[0]).toMatchObject({ key: 'k2', reason: 'set-cookie' })

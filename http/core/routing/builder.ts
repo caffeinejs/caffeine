@@ -1,5 +1,6 @@
 import type { ParameterPickOptions } from '@caffeinejs/application/framework'
 import type { Ctor, InjectionToken } from '@caffeinejs/di'
+import type { ByteSize } from '@caffeinejs/std/bytes'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import type { AdapterExtensionFactory } from '../../adapter.js'
@@ -26,7 +27,7 @@ export class RouteGroupBuilder {
   #consumes?: string[]
   #produces: string = ''
   #routes?: RouteBuilder[]
-  #bodyLimit?: number
+  #bodyLimit?: ByteSize
   #timeout?: Duration
   #authorize?: RouteAuthz
   #config?: Map<string, unknown>
@@ -82,8 +83,8 @@ export class RouteGroupBuilder {
     return this
   }
 
-  bodyLimit(bytes: number) {
-    this.#bodyLimit = bytes
+  bodyLimit(limit: ByteSize) {
+    this.#bodyLimit = limit
     return this
   }
 
@@ -194,7 +195,7 @@ export class RouteBuilder {
   #consumes?: string[]
   #produces: string = ''
   #schema?: RouteValidationSchema
-  #bodyLimit?: number
+  #bodyLimit?: ByteSize
   #timeout?: Duration
   #statusCode?: number
   #bodyAs?: BodyMode
@@ -254,8 +255,8 @@ export class RouteBuilder {
     return this
   }
 
-  bodyLimit(bytes: number): this {
-    this.#bodyLimit = bytes
+  bodyLimit(limit: ByteSize): this {
+    this.#bodyLimit = limit
     return this
   }
 

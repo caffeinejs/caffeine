@@ -73,7 +73,7 @@ export interface ContextPlatform<RES extends FastifyReply = FastifyReply> extend
  * What `.server(configure)` returns under the Fastify adapter.
  *
  * ```ts
- * .server(({ config }) => ({ factory: { bodyLimit: 1_048_576 }, listener: config.app.server }))
+ * .server(({ config }) => ({ factory: { bodyLimit: 1 * MiB }, listener: config.app.server }))
  * ```
  */
 export interface ServerSettings {

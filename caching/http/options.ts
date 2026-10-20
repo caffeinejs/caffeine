@@ -63,8 +63,8 @@ export interface HTTPCachingOptions {
    */
   varyByQuery?: readonly string[]
   /**
-   * The largest payload stored, as `'1MB'`, `'512kb'` or a number of bytes. A larger response goes out and is
-   * not stored, reported to `observer.onSkip`. Unset, there is no limit.
+   * The largest payload stored, such as `1 * MiB`. A larger response goes out and is not stored, reported to
+   * `observer.onSkip`. Unset, there is no limit.
    */
   maxEntrySize?: ByteSize
 }

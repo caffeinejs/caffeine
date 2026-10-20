@@ -1,5 +1,7 @@
 import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto'
 
+import { MiB } from '@caffeinejs/std/bytes'
+
 /**
  * Hashes and verifies passwords.
  *
@@ -42,7 +44,7 @@ const SALT_BYTES = 16
 
 // The parameters of a stored hash are read back from storage, and whoever can write there could otherwise make one
 // sign-in attempt allocate without limit. These are well past anything a deployment would choose.
-const MAX_MEMORY_BYTES = 512 * 1024 * 1024
+const MAX_MEMORY = 512 * MiB
 const MAX_P = 16
 const MAX_KEYLEN = 128
 
@@ -152,7 +154,7 @@ export class ScryptPasswordHasher extends PasswordHasher {
     }
 
     const [N, r, p] = [Number(paramMatch[1]), Number(paramMatch[2]), Number(paramMatch[3])]
-    if (N < 2 || r < 1 || p < 1 || p > MAX_P || 128 * N * r > MAX_MEMORY_BYTES) {
+    if (N < 2 || r < 1 || p < 1 || p > MAX_P || 128 * N * r > MAX_MEMORY) {
       return null
     }
 
