@@ -343,6 +343,14 @@ export function attachCacheHooks(
       return
     }
 
+    // RFC 9110 §14.2 — a stored whole response does not answer a request for part of one; the handler does. A
+    // request for the store alone is answered from it whole, which a server may send in place of a part.
+    if (request.headers.range !== undefined && !directives.onlyIfCached) {
+      reply.header(statusHeader, CACHE_BYPASS)
+      observer?.onBypass?.({ route: route!, reason: 'range' })
+      return
+    }
+
     // Derived once and carried to the store hook, so the two cannot disagree on it.
     const key = keyOf(request)
     request.cacheKey = key
@@ -457,6 +465,12 @@ export function attachCacheHooks(
       if (request.method !== 'HEAD') {
         request.cacheFlight = new Flight(flights!, key, lockTimeout!)
       }
+    }
+
+    // RFC 9111 §4.3.1 — a miss that may be stored asks the handler for the whole response, not a 304 of its own,
+    // which would leave nothing to store: the store hook answers the client's validators from that response.
+    if (request.method !== 'HEAD' && ttlSeconds !== undefined && !read.noStore) {
+      request.cacheConditionals = withhold(request)
     }
 
     reply.header(statusHeader, CACHE_MISS)
@@ -582,6 +596,12 @@ export function attachCacheHooks(
       return
     }
 
+    const withheld = request.cacheConditionals
+    if (withheld !== null) {
+      Object.assign(request.raw.headers, withheld)
+      request.cacheConditionals = null
+    }
+
     // RFC 5861 §4 — the stale entry the read hook kept stands in for the handler's 5xx.
     const stale = request.cacheStale
     if (stale !== null && SIE_STATUS.has(reply.statusCode)) {
@@ -602,8 +622,10 @@ export function attachCacheHooks(
     const handlerDecides = reply.hasHeader('cache-control')
 
     // The policy describes the responses the route caches. Anything else — an error, a method the route does not
-    // cache — gets nothing permissive from it, only the one directive that restricts.
-    if (!methods.includes(request.method) || !statusCodes.includes(reply.statusCode)) {
+    // cache, a part of a body, whatever `statusCodes` lists — gets nothing permissive from it, only the one directive
+    // that restricts. A part answers one request only, and stored under the whole's key it would answer the next.
+    const part = reply.statusCode === 206 || reply.hasHeader('content-range')
+    if (!methods.includes(request.method) || !statusCodes.includes(reply.statusCode) || part) {
       if (read.noStore) {
         reply.header('Cache-Control', 'no-store')
       }
@@ -766,6 +788,24 @@ export function attachCacheHooks(
 
   addRouteHook(routeDef, 'onRequest', onRequest)
   addRouteHook(routeDef, 'onSend', onSend)
+}
+
+// Takes the client's validators off the request, and hands back the ones it carried, or `null` for none.
+function withhold(request: AdapterRequest): FastifyRequest['cacheConditionals'] {
+  const headers = request.raw.headers
+  const withheld: NonNullable<FastifyRequest['cacheConditionals']> = {}
+  let any = false
+
+  for (const name of ['if-none-match', 'if-modified-since'] as const) {
+    const value = headers[name]
+    if (value !== undefined) {
+      withheld[name] = value
+      delete headers[name]
+      any = true
+    }
+  }
+
+  return any ? withheld : null
 }
 
 function headerText(value: unknown): string | undefined {

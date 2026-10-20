@@ -1,6 +1,7 @@
 export * from './adapter.js'
 export * from './application.js'
 export * from './context.js'
+export * from './core/attachment/index.js'
 export * from './core/constraints/index.js'
 export * from './core/cookie/index.js'
 export * from './core/csrf/index.js'

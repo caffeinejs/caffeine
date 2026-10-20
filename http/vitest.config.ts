@@ -1,5 +1,5 @@
 import swc from 'unplugin-swc'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [
@@ -19,6 +19,8 @@ export default defineConfig({
     name: 'http',
     pool: 'threads',
     include: ['**/*.test.ts'],
+    // Measured on its own, in a fork with the collector exposed: `npm run test:memory`.
+    exclude: [...configDefaults.exclude, '_tests/memory/**'],
     environment: 'node',
     testTimeout: 30000,
     hookTimeout: 30000,

@@ -7,9 +7,9 @@ import type { GlobalErrorHandlerOptions } from '../../../core/error/error.js'
 import { ErrorHandlerProvider, resolveByErrorChain } from '../../../core/error/handler.js'
 import { ErrHTTP, httpErrorBody, statusErrorBody, type HTTPErrorBody } from '../../../core/error/http.js'
 import { kErrorUnhandled, type IRouteGroup } from '../../../core/routing/route.js'
-import { Responder } from '../../../response.js'
 import type { Context } from '../context.js'
 import { cookieFlushFailed } from '../cookie/cookie.js'
+import { answer, payloadOf } from '../response.js'
 
 export type GlobalErrorHandler = (error: FastifyError, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>
 
@@ -99,7 +99,8 @@ export function installGlobalErrorHandler(
       // so there is nothing to add a stack trace to.
       const body = err.body !== undefined ? err.body : withStacktrace(httpErrorBody(err), err)
 
-      return reply.send(body)
+      // The error's status stands over a Response given as its body.
+      return reply.send(payloadOf(reply, body, true))
     }
 
     // Its message is detail for the log: an issuer, the address a provider could not be reached at.
@@ -234,27 +235,15 @@ function sectionOf(err: Error): string {
   return err.stack ?? `${err.name}: ${err.message}`
 }
 
+// The handler answered from the context. Handed the reply back, the runner waits for that send out rather than
+// sending this over it — `reply.sent` alone is still false while an `onSend` hook holds it open, and this runs inside
+// an async `setErrorHandler`, whose `undefined` the server takes as a request to send. Unless that answer died writing
+// its cookies, which is the error being handled: nothing is in flight to wait for, and the wait would hang the request.
+// An answer from the catch handler itself reopened them first.
+function answeredOnError(ctx: Context): boolean {
+  return ctx.sent && !cookieFlushFailed(ctx.platform.reply)
+}
+
 function respond(ctx: Context, result: unknown): unknown {
-  const reply = ctx.platform.reply
-
-  // The handler answered from the context. Handed the reply back, the runner waits for that send out rather
-  // than sending this over it — `reply.sent` alone is still false while an `onSend` hook holds it open, and
-  // this runs inside an async `setErrorHandler`, whose `undefined` the server takes as a request to send.
-  // Unless that answer died writing its cookies, which is the error being handled: nothing is in flight to wait
-  // for, and the wait would hang the request. An answer from the catch handler itself reopened them first.
-  if (ctx.sent && !cookieFlushFailed(reply)) {
-    return reply
-  }
-
-  if (result instanceof Responder) {
-    return result.respond(ctx)
-  }
-
-  if (result !== undefined) {
-    return result
-  }
-
-  reply.send()
-
-  return reply
+  return answer(ctx.platform.reply, ctx, result, answeredOnError)
 }

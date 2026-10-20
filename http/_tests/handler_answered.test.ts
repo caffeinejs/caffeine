@@ -321,6 +321,32 @@ describe('under an onSend hook that awaits', () => {
     expect(runs.n).toBe(1)
   })
 
+  it('sends once when an asynchronous Responder answers through the context', async () => {
+    const runs = { n: 0 }
+
+    class Rendered extends Responder {
+      async respond(ctx: IContext) {
+        await Promise.resolve()
+        ctx.body('rendered')
+      }
+    }
+
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(newRouter('/held-async-responder').get('/', () => new Rendered()))
+      await app.bootstrap()
+
+      const res = await app.fetch('/held-async-responder')
+
+      expect(await res.text()).toBe('rendered')
+
+      await app.close()
+    })
+
+    expect(runs.n).toBe(1)
+  })
+
   // What the flag adds, and why Fastify's own answer could not have been it.
   it('has answered the request the moment the context sent it', async () => {
     let seen: [boolean, boolean] | undefined

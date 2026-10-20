@@ -25,6 +25,14 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `request.user.authenticated`. Do not narrow this back to the header: a cookie-authenticated response in a
   shared store is a leak.
 - Never compare `If-Modified-Since` with a `Last-Modified` the cache stamped itself.
+- A request carrying `Range` bypasses the store (`'range'`); a whole `200` its handler answers is still stored. A
+  `206`, or any response carrying `Content-Range`, is never stored and gets nothing permissive from the policy,
+  whatever `statusCodes` lists: under the whole's key, a part would answer the next request.
+- A `Blob` goes out as a stream, which is not stored: `@CacheControl` on `Attachment(blob)` never makes the next
+  `GET` a hit.
+- A miss that may be stored withholds `If-None-Match` and `If-Modified-Since` from the handler (`withhold`), so it
+  answers whole rather than `304`, which would leave nothing to store. `onSend` puts them back first, and `send()`
+  answers them from that response. A bypassed request and a `HEAD` keep theirs.
 - What goes out in `Cache-Control` is floored, never rounded.
 - `buildCacheKey` in `_util.ts` is the one key derivation. Nothing else rebuilds a key.
 - Eviction is by tag only. Do not add eviction by path or by key.
@@ -87,4 +95,4 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   keeps its entry: the line above, in a narrower window. Closing it needs a write-if-absent the two-method seam
   does not have.
 - On a `HEAD`, Fastify's HEAD route runs ahead of the cache's `onSend` and takes the body: it resumes a Node
-  stream rather than closing it, and answers a `Response` with 500 (Fastify 5.12), with or without the cache.
+  stream rather than closing it, with or without the cache.

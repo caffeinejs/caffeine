@@ -247,5 +247,24 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - Do not add a Fastify-named member to `IContext` or cast one to `Context`; `ctx.platform` is the escape
   hatch.
 - Do not invent a second "stream scope"; fix how the adapter awaits the request.
-- `Responder` is special-cased; a Fetch `Response` on `ActionResult` is passed to Fastify `send()` unwrapped, so
-  `return new Response(stream)` does not work. `@Produces` only sets `Content-Type`.
+- `payloadOf` (`platform/fastify/response.ts`) is the one place an answer becomes what Fastify sends: a handler's, a
+  `Responder`'s, a catch handler's, `ctx.body(...)`'s and an `ErrHTTP`'s body. A new send site calls it; never hand
+  Fastify a raw answer, which sends a `Blob` or an `ArrayBuffer` as `{}`. A `Blob` is streamed under its size, a
+  stream labelled `application/octet-stream`, and a returned `Response` taken apart there, its status and headers on
+  the reply before the `onSend` hooks and its body streamed, so `return new Response(stream)` works and `HEAD` answers
+  it. A route that streams needs no `ctx.platform.reply.hijack()`, which skips the `onSend` hooks and so cookies,
+  caching and compression.
+- `Responder` is unwrapped once. `@Produces` only sets `Content-Type`, and the reply's type wins over a `Blob`'s own.
+- `unwrap` (`response.ts`) never copies a hop-by-hop header, or one a `Connection` value names. A `Response` of type
+  `basic` or `cors` whose every coding `fetch` decodes (`DECODED_BY_FETCH`: `zstd` only where undici and zlib both
+  decode it) loses `Content-Encoding` and `Content-Length` too; a `default` one, built in a handler, keeps both.
+- An error helper's status and an `ErrHTTP`'s stand over a `Response` given as the body (`keepStatus`); a handler's,
+  a catch handler's and `ctx.body(...)`'s `Response` sets the status.
+- `ctx.body(...)` and the error helpers refuse a thenable with `ErrConfiguration` before anything is written, so the
+  context stays unanswered and the handler can still answer.
+- `Attachment` answers its preconditions before ranges, on a `GET` or `HEAD` still at `200` alone, and closes a
+  stream its `304` leaves unread. `If-None-Match` compares weakly (`_conditional.ts`), `If-Range` strongly
+  (`matches`); never swap them. A name is reduced to its last segment in `_disposition.ts`, for `name` and a
+  `File`'s own alike.
+- Node's `Blob.slice` aborts the process on an offset past 2^32 - 1: nothing slices a larger `Blob`, and `Attachment`
+  sends one whole. `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32.

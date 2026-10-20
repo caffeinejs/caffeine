@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./attachment": {
+      "types": "./dist/core/attachment/index.d.ts",
+      "default": "./dist/core/attachment/index.js"
+    },
     "./constraints": {
       "types": "./dist/core/constraints/index.d.ts",
       "default": "./dist/core/constraints/index.js"
@@ -72,7 +76,8 @@
   "scripts": {
     "build": "tsc --build tsconfig.build.json",
     "clean:dist": "rm -rf dist",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:memory": "vitest run --config vitest.leak.config.ts"
   },
   "dependencies": {
     "@caffeinejs/application": "*",

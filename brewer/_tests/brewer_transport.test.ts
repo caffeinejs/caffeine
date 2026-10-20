@@ -37,9 +37,9 @@ const routes = new Router('/transport')
   .handler(() => ({ here: true }))
 
 // An abort can leave the client a connection it opened and never finished a request on, which the server's graceful
-// close would otherwise wait out: a connection quiet for a second is dropped instead.
+// close would otherwise wait out (caffeinejs/caffeine#131): every connection is closed as the server closes.
 const app = createWebApplication()
-  .server(() => ({ factory: { connectionTimeout: 1000 } }))
+  .server(() => ({ factory: { forceCloseConnections: true } }))
   .mount(routes)
 
 let origin: string

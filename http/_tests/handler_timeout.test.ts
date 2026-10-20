@@ -5,7 +5,7 @@ import type { FastifyPluginAsync } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { Controller, Get, Router } from '../index.js'
+import { Controller, Get, Responder, Router } from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
 
 /**
@@ -110,6 +110,37 @@ describe('a handler that outlives its timeout', () => {
 
       const slow = await app.fetch('/timed-route/slow')
       expect(slow.status).toBe(503)
+    })
+
+    expect(runs.n).toBe(1)
+  })
+
+  // A Responder the handler returned in time can still answer late: its answer is as late as the handler's own.
+  it('is answered 503 once when a Responder answers after its timeout', async () => {
+    class Late extends Responder {
+      async respond() {
+        await sleep(50)
+        return new Blob(['late'], { type: 'text/plain' })
+      }
+    }
+
+    const timed = new Router('/timed-responder')
+    timed
+      .get('/slow')
+      .timeout(30 * Millisecond)
+      .handler(() => new Late())
+
+    const runs = { n: 0 }
+    await sendsOnce(async () => {
+      const app = createWebApplication()
+        .with(() => fp(slowSend(runs), { name: 'slow-send' }))
+        .mount(timed)
+      close = () => app.close()
+      await app.bootstrap()
+
+      const slow = await app.fetch('/timed-responder/slow')
+      expect(slow.status).toBe(503)
+      expect(slow.headers.get('content-type')).not.toBe('text/plain')
     })
 
     expect(runs.n).toBe(1)

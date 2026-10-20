@@ -1,12 +1,14 @@
 import type { IncomingMessage } from 'node:http'
 
 import type { ConfigSnapshot, ConfigStore } from '@caffeinejs/application/config'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyContextConfig, FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 
 import { kRawBasePath, resolveAppURL, type BasePathCarrier } from '../../base_path.js'
 import { ContextState, type IContext } from '../../context.js'
 import type { CookieSerializeOptions } from '../../core/cookie/options.js'
 import type { CookieSecret, CookieUnsignResult } from '../../core/cookie/signer.js'
+import { ErrConfiguration } from '../../core/error/common.js'
 import { statusErrorBody } from '../../core/error/http.js'
 import type { RouteValidationSchema } from '../../core/routing/spec.js'
 import type { AuthenticationState } from '../../core/security/auth/authentication_state.js'
@@ -15,6 +17,7 @@ import type { InferBody, InferHeaders, InferParams, InferQuery, IRequest, Unsign
 import type { ContextPlatform, AdapterTypes } from './adapter.js'
 import { reopenCookieFlush, serverCookies } from './cookie/cookie.js'
 import { protocolOf } from './protocol.js'
+import { payloadOf } from './response.js'
 
 /** The {@link IContext} the Fastify adapter builds for every request, over Fastify's own request and reply. */
 export class Context<
@@ -145,28 +148,23 @@ export class Context<
   }
 
   body(body?: unknown): this {
-    // Before the send, so a send that throws still leaves the context answered.
-    this.#answered = true
-    // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
-    reopenCookieFlush(this.#reply)
-    this.#reply.send(body)
-    return this
+    return this.#send('body', body)
   }
 
   badRequest(body?: unknown): this {
-    return this.#fail(400, 'ERR_HTTP_BAD_REQUEST', body)
+    return this.#fail(400, 'ERR_HTTP_BAD_REQUEST', 'badRequest', body)
   }
 
   notFound(body?: unknown): this {
-    return this.#fail(404, 'ERR_HTTP_NOT_FOUND', body)
+    return this.#fail(404, 'ERR_HTTP_NOT_FOUND', 'notFound', body)
   }
 
   unprocessableEntity(body?: unknown): this {
-    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', body)
+    return this.#fail(422, 'ERR_HTTP_UNPROCESSABLE_ENTITY', 'unprocessableEntity', body)
   }
 
   internalServerError(body?: unknown): this {
-    return this.#fail(500, 'ERR_HTTP_INTERNAL_SERVER_ERROR', body)
+    return this.#fail(500, 'ERR_HTTP_INTERNAL_SERVER_ERROR', 'internalServerError', body)
   }
 
   redirect(url: string, status?: number): this {
@@ -192,8 +190,39 @@ export class Context<
    * Without the default these shorthands answer with an empty body, which leaves an application emitting one
    * error shape from `@Catch` and a different one from `ctx.notFound()`.
    */
-  #fail(statusCode: number, code: string, body?: unknown): this {
-    return this.status(statusCode).body(body ?? statusErrorBody(statusCode, code))
+  #fail(statusCode: number, code: string, method: string, body?: unknown): this {
+    return this.#send(method, body ?? statusErrorBody(statusCode, code), statusCode)
+  }
+
+  /** Sends `body`, under `statusCode` when given, which stands over a Response's own. */
+  #send(method: string, body: unknown, statusCode?: number): this {
+    // Refused before anything is written: a promise would go out as `{}`. The context stays unanswered, so the
+    // handler can still answer with what it resolves to.
+    if (typeof (body as PromiseLike<unknown> | null | undefined)?.then === 'function') {
+      throw new ErrConfiguration(
+        errMessage(`Cannot send a promise with ctx.${method}(...): it would go out as {}`)
+          .solutions(
+            `Await it first: ctx.${method}(await value)`,
+            ...(method === 'body' ? ['Return the promise from the handler instead: the route waits for it'] : []),
+          )
+          .reference('@caffeinejs/http', ErrConfiguration)
+          .build(),
+      )
+    }
+
+    // Shaped first: an answer that cannot be sent at all — a Response whose body was read — throws with nothing in
+    // flight and no status written, and the context stays unanswered for a catch handler to answer instead.
+    const payload = payloadOf(this.#reply, body, statusCode !== undefined)
+
+    if (statusCode !== undefined) {
+      this.#reply.code(statusCode)
+    }
+    // Before the send, so a send that throws still leaves the context answered.
+    this.#answered = true
+    // A send after one whose cookies failed to write — an error handler's — has a pass of its own.
+    reopenCookieFlush(this.#reply)
+    this.#reply.send(payload)
+    return this
   }
 }
 
