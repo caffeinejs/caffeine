@@ -31,7 +31,6 @@ export default defineConfig({
       './kafka/vitest.config.ts',
       './distlock/vitest.config.ts',
       './resilience/vitest.config.ts',
-      './bff/vitest.config.ts',
       './integrations/typeorm/vitest.config.ts',
       './fetchy/fetchy/vitest.config.ts',
       './fetchy/fetchy-logging-interceptor/vitest.config.ts',

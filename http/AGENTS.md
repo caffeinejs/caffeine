@@ -24,9 +24,24 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 - A feature's builder, options, keys and checks live in `core/`, its plugin and hooks in `platform/fastify/`, so
   another adapter re-implements the platform half alone.
 - Subpaths drop `core/` and `platform/`: `@caffeinejs/http/cookie`, `@caffeinejs/http/fastify`. The bare entry
-  exports the base and every core directory; a Fastify-side name comes from `@caffeinejs/http/fastify` alone.
+  exports the base and every core directory but `bff/`; a Fastify-side name comes from `@caffeinejs/http/fastify`
+  alone.
 - The error-handling and cookie features bind their settings (`core/error/keys.ts`, `core/cookie/keys.ts`); the
   Fastify adapter builds both head slots from them, on every server it builds.
+
+## BFF
+
+- `core/bff/` comes from `@caffeinejs/http/bff` alone; the bare entry does not re-export it, so `join`, `map` and
+  `timeout` stay off it.
+- A new behaviour is another function of the `Call<T>` shape. `join` gains no methods, and there is no list of
+  plugins for it to interpret.
+- `timeout` takes a `Duration` from `@caffeinejs/std/duration`, milliseconds, and parses no text: a caller with
+  text reads it with `duration(...)` first.
+- The `timeout` timer is deliberately not unref'd: it is what settles a call that ignores the signal.
+- `core/bff/` imports nothing from the rest of `http/`; `join` takes `{ readonly signal: AbortSignal }` and a
+  handler passes `ctx`.
+- There is no partial screen: a required failure rejects `join`.
+- Production code never imports `@caffeinejs/resilience`; tests are the place that imports it.
 
 ## Plugins
 
