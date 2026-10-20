@@ -129,6 +129,21 @@ describe('a listener with TLS', () => {
     })
   })
 
+  it('closes promptly with an idle HTTP/2 session still open on the listener', async () => {
+    app = createWebApplication()
+      .install(Listener('admin', l => l.server(() => ({ factory: { http2: true, https: testTLS() }, listener }))))
+      .mount(echo('/ops').extend(bindTo('admin'))) as WebApplication
+
+    await app.run()
+    await getH2(session(app.listeners.get('admin')!.address!.origin), '/ops')
+
+    const startedAt = Date.now()
+    await app.close()
+    app = undefined
+
+    expect(Date.now() - startedAt).toBeLessThan(1_000)
+  })
+
   // An HTTP/2 server ends its sessions only gracefully on close, so a stream that overran the budget is cut by the
   // forced teardown or not at all: the listener's must be cut too, not only the application's own.
   it('cuts an overrunning HTTP/2 stream on the listener when the shutdown budget runs out', async () => {

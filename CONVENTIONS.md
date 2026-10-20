@@ -224,6 +224,18 @@ A span of time in a public API (an option, a builder method, an SPI parameter, a
 - **A library's own option shape keeps the library's type and unit** (Fastify, jose, undici, `@fastify/static`). An application fills it with the constants, or with `duration('7d')` for text.
 - `kafka/` and `messaging/` still take bare numbers (`nackDelay`, `idleTimeout`). Do not copy them.
 
+## Byte sizes
+
+A size in bytes in a public API (an option, a builder method, a decorator argument, an event or error field) is a `ByteSize` from `@caffeinejs/std/bytes`: a count of bytes.
+
+- **It is named without a unit**: `maxSize`, `bodyLimit`, `maxEntrySize`, never `maxSizeBytes` or `limitKb`.
+- **Code writes it with the constants**: `512 * KiB`, `10 * MiB`, `1 * GiB`. A default is written the same way, never as `1048576` or `1024 * 1024`. A test's payload length (`'x'.repeat(n)`, `Buffer.alloc(n)`) is data, not a size an API takes, and this rule does not reach it.
+- **Every unit is binary**, the constants and the text alike: `'1kb'` is `1 * KiB`. There is no decimal `KB`, which would make `1 * KB` and `bytes('1kb')` disagree.
+- **Text is read in two places only**: `$t.Bytes()` in a configuration schema, and `parseBytes` or `bytes(...)` in code. No option takes `ByteSize | string`. The grammar is Docker Compose's: an integer and an optional `b`, `k`/`kb`, `m`/`mb`, `g`/`gb`, `t`/`tb` or `p`/`pb`, in any case (`'512kb'`, `'1Gb'`). A bare amount is bytes, in configuration too; a sign, a fraction and the Kubernetes spellings (`'1Ki'`, `'1MiB'`) are refused.
+- **A message prints it with `formatBytes(n)`**, or as `${n} bytes`; a solution names code: `such as 1 * MiB`. A log line keeps its key (`bytes`), with the value a count of bytes.
+- **A library's own option shape keeps the library's type** (Fastify's `bodyLimit`, `@fastify/multipart`'s `limits`, undici, `lru-cache`). An application fills it with the constants, or with `bytes('10mb')` for text.
+- **A limit a specification states keeps the specification's number**: a cookie's 4096 octets, not `4 * KiB`.
+
 ## Writing a feature
 
 A feature is one interface with three members, all symbol-keyed so none of it shows on a fluent surface:

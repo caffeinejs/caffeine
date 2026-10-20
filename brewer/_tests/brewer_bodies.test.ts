@@ -517,7 +517,177 @@ describe('brewer sending a body', () => {
       }
     })
   })
+
+  describe('given a function that opens a stream', () => {
+    // A stream from a file or a socket is opened as the request leaves, and goes under no type the client guessed.
+    it.each([
+      ['a function', () => new Blob([everyByte]).stream()],
+      ['an async function', async () => new Blob([everyByte]).stream()],
+    ])('should send every chunk of the stream %s opens', async (_how, open) => {
+      const client = brewer(app)
+
+      const res = await client.echo.raw.post({ body: open, headers: { 'content-type': 'application/octet-stream' } })
+
+      expect(await res.json()).toEqual({ type: 'application/octet-stream', bytes: Array.from(everyByte) })
+    })
+
+    // Opened lazily is still streamed: the second chunk exists only once the server has read the first.
+    it('should send the stream it opens as it is read', async () => {
+      const client = brewer<typeof app>(origin)
+      const seen = Promise.withResolvers<void>()
+      firstChunk = seen.resolve
+      let pulls = 0
+      const open = () =>
+        new ReadableStream<Uint8Array>({
+          async pull(controller) {
+            pulls++
+            if (pulls === 1) {
+              controller.enqueue(new Uint8Array(1024).fill(1))
+            } else if (pulls === 2) {
+              await seen.promise
+              controller.enqueue(new Uint8Array(1024).fill(2))
+            } else {
+              controller.close()
+            }
+          },
+        })
+
+      try {
+        const res = await client.echo.stream.post({ body: open })
+
+        expect(await res.json()).toEqual({ size: 2048 })
+      } finally {
+        firstChunk = undefined
+      }
+    })
+
+    // A file that cannot be opened fails the call: it must not go out as an empty upload under its name.
+    it('should reject with what the function throws, in process', async () => {
+      const client = brewer(app)
+
+      await expect(
+        client.echo.raw.post({
+          body: () => {
+            throw new Error('the file is gone')
+          },
+        }),
+      ).rejects.toThrow('the file is gone')
+    })
+
+    it('should reject with what the function throws as its cause, over a socket', async () => {
+      const client = brewer<typeof app>(origin)
+
+      await expect(
+        client.echo.raw.post({
+          body: async () => Promise.reject(new Error('the file is gone')),
+          headers: { 'content-type': 'application/octet-stream' },
+        }),
+      ).rejects.toMatchObject({ name: 'TypeError', cause: { message: 'the file is gone' } })
+    })
+
+    // A transport may give up on a body it started to read, as a server that refuses an upload before taking it makes
+    // it do: what the function opens after that must be released, not left holding a file or a socket.
+    it('should cancel the stream it opens once the transport has given up on the body', async () => {
+      const opening = Promise.withResolvers<void>()
+      const givenUp = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<unknown>()
+      const client = brewer<typeof app>(origin, {
+        fetch: async (_input, init) => {
+          const reader = readerOf(init)
+          const first = reader.read()
+          await opening.promise
+          await reader.cancel('refused before the upload')
+          givenUp.resolve()
+          await first
+          return new Response(null, { status: 413 })
+        },
+      })
+
+      const res = await client.echo.raw.post({
+        body: async () => {
+          opening.resolve()
+          await givenUp.promise
+          return new ReadableStream<Uint8Array>({ cancel: reason => released.resolve(reason) })
+        },
+      })
+
+      expect(res.status).toBe(413)
+      expect(await released.promise).toBe('refused before the upload')
+    })
+
+    it('should cancel the stream it opens once the call has aborted', async () => {
+      const controller = new AbortController()
+      const opening = Promise.withResolvers<void>()
+      const aborted = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<unknown>()
+      const client = brewer<typeof app>(origin, {
+        fetch: async (_input, init) => {
+          void readerOf(init).read()
+          return rejectedOnAbort(init)
+        },
+      })
+
+      const call = client.echo.raw.post({
+        signal: controller.signal,
+        body: async () => {
+          opening.resolve()
+          await aborted.promise
+          return new ReadableStream<Uint8Array>({ cancel: reason => released.resolve(reason) })
+        },
+      })
+      await opening.promise
+      controller.abort(new Error('the user left'))
+      aborted.resolve()
+
+      await expect(call).rejects.toThrow('the user left')
+      expect(await released.promise).toEqual(new Error('the user left'))
+    })
+
+    // The source failing to close is no second failure for a call already aborted: it must not escape unhandled.
+    it('should reject with the abort alone when the stream it opened fails to cancel', async () => {
+      const controller = new AbortController()
+      const firstRead = Promise.withResolvers<void>()
+      const cancelling = Promise.withResolvers<void>()
+      const client = brewer<typeof app>(origin, {
+        fetch: async (_input, init) => {
+          await readerOf(init).read()
+          firstRead.resolve()
+          return rejectedOnAbort(init)
+        },
+      })
+
+      const call = client.echo.raw.post({
+        signal: controller.signal,
+        body: () =>
+          new ReadableStream<Uint8Array>({
+            start: stream => stream.enqueue(new Uint8Array(8)),
+            cancel: () => {
+              cancelling.resolve()
+              throw new Error('the handle is already closed')
+            },
+          }),
+      })
+      await firstRead.promise
+      controller.abort(new Error('the user left'))
+
+      await expect(call).rejects.toThrow('the user left')
+      await cancelling.promise
+    })
+  })
 })
+
+/** The body a transport is handed by a client with neither interceptors nor an authenticator, read as `fetch` would. */
+function readerOf(init: RequestInit | undefined): ReadableStreamDefaultReader<Uint8Array> {
+  return (init!.body as ReadableStream<Uint8Array>).getReader()
+}
+
+/** A response that never comes: rejects with the call's reason once it aborts, as `fetch` does. */
+function rejectedOnAbort(init: RequestInit | undefined): Promise<Response> {
+  const signal = init!.signal!
+  return new Promise((_resolve, reject) =>
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true }),
+  )
+}
 
 describe('brewer reading a body', () => {
   describe.each([

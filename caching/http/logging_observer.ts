@@ -50,7 +50,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
       log[level](
         {
           route: event.route,
-          bytes: event.bytes,
+          bytes: event.size,
           ttlSeconds: event.ttl / Second,
           tags: event.tags,
           ...(includeKeys && { key: event.key }),
@@ -61,7 +61,7 @@ export function loggingCacheObserver(log: Logger, options?: LoggingCacheObserver
 
     onSkip(event) {
       log[level](
-        { route: event.route, reason: event.reason, bytes: event.bytes, ...(includeKeys && { key: event.key }) },
+        { route: event.route, reason: event.reason, bytes: event.size, ...(includeKeys && { key: event.key }) },
         'cache skip',
       )
     },

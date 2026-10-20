@@ -1,6 +1,6 @@
 import { Readable } from 'node:stream'
 
-import { Controller, Get, Header, Post, Status } from '@caffeinejs/http'
+import { Controller, ErrConfiguration, Get, Header, Post, Status } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { LRUCache } from 'lru-cache'
@@ -274,8 +274,8 @@ describe('a response left out of the store', () => {
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(small.headers.get('x-cache')).toBe('HIT')
     expect(skips).toMatchObject([
-      { route: { url: '/skip/large' }, reason: 'entry-too-large', bytes: 200 },
-      { route: { url: '/skip/large' }, reason: 'entry-too-large', bytes: 200 },
+      { route: { url: '/skip/large' }, reason: 'entry-too-large', size: 200 },
+      { route: { url: '/skip/large' }, reason: 'entry-too-large', size: 200 },
     ])
   })
 
@@ -289,7 +289,7 @@ describe('a response left out of the store', () => {
 
     await app.fetch('/skip/cookie')
 
-    expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', bytes: 11 }])
+    expect(skips).toMatchObject([{ route: { url: '/skip/cookie' }, reason: 'set-cookie', size: 11 }])
   })
 
   // A compressor installed ahead of the cache hands it a stream on every response: without a report the cache
@@ -314,7 +314,7 @@ describe('a response left out of the store', () => {
         key: expect.any(String),
         reason: 'stream',
       })
-      expect(skip).not.toHaveProperty('bytes')
+      expect(skip).not.toHaveProperty('size')
     }
   })
 
@@ -340,8 +340,8 @@ describe('a response left out of the store', () => {
     expect(second.headers.get('x-cache')).toBe('MISS')
     expect(stores).toEqual([])
     expect(skips).toMatchObject([
-      { route: { url: '/skip/empty' }, reason: 'empty', bytes: 0 },
-      { route: { url: '/skip/empty' }, reason: 'empty', bytes: 0 },
+      { route: { url: '/skip/empty' }, reason: 'empty', size: 0 },
+      { route: { url: '/skip/empty' }, reason: 'empty', size: 0 },
     ])
   })
 
@@ -366,11 +366,57 @@ describe('a response left out of the store', () => {
     expect(skips[3].key).toBe(skips[2].key)
   })
 
-  it('refuses a maxEntrySize that is not a byte size at start-up', async () => {
-    const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize('lots')))
+  // A size is a count of bytes. Text such as '1MB' was one before sizes were counts; one left behind fails loudly.
+  it.each([1.5, -1, Number.NaN, '1MB'])('refuses the maxEntrySize %o at start-up', async size => {
+    const app = createWebApplication().with(
+      HTTPCaching(b => b.store(new MemoryHTTPCacheStore()).maxEntrySize(size as number)),
+    )
     close = () => app.close()
 
-    await expect(app.bootstrap()).rejects.toThrow(/maxEntrySize must be a byte size/)
+    const failed = app.bootstrap()
+
+    await expect(failed).rejects.toThrow(ErrConfiguration)
+    await expect(failed).rejects.toThrow(
+      `Cannot install HTTP caching: maxEntrySize must be a whole number of bytes such as 1 * MiB, got "${size}"`,
+    )
+  })
+
+  it('stores a payload of exactly maxEntrySize and leaves out one a byte larger', async () => {
+    const skips: CacheSkipEvent[] = []
+    const app = createWebApplication().with(
+      HTTPCaching(b =>
+        b
+          .store(new MemoryHTTPCacheStore())
+          .maxEntrySize(20)
+          .observer({ onSkip: e => skips.push(e) }),
+      ),
+    )
+    close = () => app.close()
+    await app.bootstrap()
+
+    // `/skip/small` answers 20 bytes.
+    await app.fetch('/skip/small')
+    expect((await app.fetch('/skip/small')).headers.get('x-cache')).toBe('HIT')
+    expect(skips).toEqual([])
+
+    await app.close()
+    const tighter = createWebApplication().with(
+      HTTPCaching(b =>
+        b
+          .store(new MemoryHTTPCacheStore())
+          .maxEntrySize(19)
+          .observer({ onSkip: e => skips.push(e) }),
+      ),
+    )
+    close = () => tighter.close()
+    await tighter.bootstrap()
+
+    await tighter.fetch('/skip/small')
+    expect((await tighter.fetch('/skip/small')).headers.get('x-cache')).toBe('MISS')
+    expect(skips).toMatchObject([
+      { reason: 'entry-too-large', size: 20 },
+      { reason: 'entry-too-large', size: 20 },
+    ])
   })
 })
 

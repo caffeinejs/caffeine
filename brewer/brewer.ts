@@ -1,7 +1,10 @@
+import { discard } from './_discard.js'
 import { encodeParam } from './_path.js'
+import { authenticate, MAX_FOLLOW_UPS, type Answering, type Authenticator } from './authenticator.js'
 import { fileOf, filenameOf } from './download.js'
 import type { FileHelpers } from './files.js'
 import { formData } from './form.js'
+import { intercept, type Interceptor } from './interceptor.js'
 import type { HeaderValues, RawBody } from './platform.js'
 import { progress } from './progress.js'
 import type { BrewClient } from './tree.js'
@@ -19,8 +22,30 @@ export interface BrewOptions extends Omit<RequestInit, 'method' | 'body' | 'head
    */
   headers?: HeaderValues | (() => HeaderValues | Promise<HeaderValues>)
 
-  /** The `fetch` to call. Defaults to the global one; supply another for a test or a non-global implementation. */
+  /**
+   * The `fetch` to call. Defaults to the global one; supply another for a test or a non-global implementation.
+   *
+   * It is called with the URL and the init, or, on a client with interceptors or an authenticator, with one `Request`
+   * carrying both.
+   */
   fetch?: Fetchable['fetch']
+
+  /**
+   * Run around every request, the first listed seeing the request first and the response last.
+   *
+   * They are handed a `Request`, whose URL is absolute: a base URL that is only a path is resolved against the page,
+   * so outside a browser such a client rejects every call.
+   */
+  interceptors?: readonly Interceptor[]
+
+  /**
+   * Answers a 401 with a follow-up carrying credentials, around the interceptors: see {@link Authenticator}. Like
+   * interceptors, it has the client hand its `fetch` a `Request`.
+   */
+  authenticator?: Authenticator
+
+  /** The follow-ups the authenticator may send in one call: 3 unless set. At 0, the first 401 rejects unasked. */
+  maxFollowUps?: number
 }
 
 /**
@@ -177,7 +202,9 @@ async function send(
 ): Promise<Response> {
   const { params: _params, query, body, headers, ...rest } = init
   const url = `${joinURL(baseURL, path())}${buildQuery(query)}`
-  const brand = brandOf(body)
+  // A body given as a function is a stream it opens when the request is sent.
+  const opens = typeof body === 'function'
+  const brand = opens ? 'ReadableStream' : brandOf(body)
 
   const merged = headersOf(await resolveHeaders(options.headers))
   const own = headersOf(headers)
@@ -195,7 +222,7 @@ async function send(
   // A body the platform already knows how to send is passed through untouched, so an upload keeps its own
   // content type and its own encoding. Everything else is JSON.
   let payload: RawBody | undefined
-  if (body !== undefined && body !== null) {
+  if (body !== undefined && body !== null && !opens) {
     if (isRawBody(body, brand)) {
       payload = body
     } else {
@@ -212,23 +239,158 @@ async function send(
     merged.delete('content-type')
   }
 
-  const { headers: _clientHeaders, fetch: fetchImpl, ...clientRest } = options
+  const {
+    headers: _clientHeaders,
+    fetch: fetchImpl,
+    interceptors = [],
+    authenticator,
+    maxFollowUps = MAX_FOLLOW_UPS,
+    ...clientRest
+  } = options
 
   // `duplex` is not in the DOM lib's `RequestInit`, so the init is typed with it rather than passed as a literal.
-  const request: RequestInit & { duplex?: 'half' } = {
-    ...clientRest,
-    ...rest,
-    method,
-    headers: merged,
-    body: payload as RequestInit['body'],
-  }
+  const request: RequestInit & { duplex?: 'half' } = { ...clientRest, ...rest, method, headers: merged }
 
   // A stream is sent as it is read, which fetch does only for a request it is told is half duplex.
   if (brand === 'ReadableStream') {
     request.duplex = 'half'
   }
 
-  return (fetchImpl ?? globalThis.fetch)(url, request)
+  // The body of one send: a function opens its stream anew, and anything else is extracted again from what the call
+  // gave, so a follow-up never needs a copy held in memory.
+  const bodyOf = (): RequestInit['body'] =>
+    opens ? opened(body as Opener, request.signal) : (payload as RequestInit['body'])
+
+  const transport = fetchImpl ?? globalThis.fetch
+
+  if (interceptors.length === 0 && authenticator === undefined) {
+    return transport(url, { ...request, body: bodyOf() })
+  }
+
+  // Each call builds its own `Request`, so what an interceptor sets on one never reaches another.
+  const first = new Request(url, { ...request, body: bodyOf() })
+  const deliver = (sent: Request) => transport(sent)
+
+  if (authenticator === undefined) {
+    return untilAborted(intercept(interceptors, deliver)(first), request.signal)
+  }
+
+  // A stream passed as the body was read as it was sent, so no copy can carry it.
+  const oneShot = brand === 'ReadableStream' && !opens
+
+  const answering: Answering = {
+    authenticator,
+    limit: maxFollowUps,
+    signal: request.signal,
+    oneShot,
+    copy(sent, sentHeaders) {
+      if (oneShot) {
+        return new Request(url, { ...request, headers: sentHeaders })
+      }
+
+      // A form encoded anew is written under a boundary of its own, which the platform names only when no type is set.
+      if (brand === 'FormData') {
+        sentHeaders.delete('content-type')
+      }
+
+      // Built on `sent` rather than cloned: a clone would hold the body in memory and drop what the platform keeps on
+      // the request beside the standard fields, such as Node's dispatcher.
+      const again: RequestInit & { duplex?: 'half' } = { headers: sentHeaders, body: bodyOf(), duplex: request.duplex }
+
+      return new Request(sent, again)
+    },
+  }
+
+  return untilAborted(authenticate(first, interceptors, deliver, answering), request.signal)
+}
+
+// The call as its caller sees it: rejected with the signal's reason the moment it aborts, whatever an interceptor still
+// waits on. What is left winds down on the same signal: a response it still resolves with is cancelled, and a failure
+// it still rejects with is nobody's to handle.
+function untilAborted(call: Promise<Response>, signal: AbortSignal | null | undefined): Promise<Response> {
+  if (signal === null || signal === undefined) {
+    return call
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    const abort = (): void => {
+      reject(signal.reason)
+      call.then(
+        response => discard(response),
+        () => undefined,
+      )
+    }
+
+    if (signal.aborted) {
+      abort()
+      return
+    }
+
+    signal.addEventListener('abort', abort, { once: true })
+    call.then(
+      response => {
+        signal.removeEventListener('abort', abort)
+        resolve(response)
+      },
+      (error: unknown) => {
+        signal.removeEventListener('abort', abort)
+        reject(error)
+      },
+    )
+  })
+}
+
+/** A body given as a function: what it returns is the stream to send. */
+type Opener = () => ReadableStream<Uint8Array> | Promise<ReadableStream<Uint8Array>>
+
+// A stream that calls `open` on its first read, not before: a request built and never sent opens nothing. A high-water
+// mark of 0 keeps the stream from pulling ahead of its reader. Once open, the call's signal cancels what it opened:
+// Node's fetch stops reading a request body it aborts without cancelling it, which would leave a file or a socket open.
+function opened(open: Opener, signal: AbortSignal | null | undefined): ReadableStream<Uint8Array> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  // A cancel that came while `open` was running: what it opened is cancelled as it arrives, with the same reason.
+  let cancelled: { reason: unknown } | undefined
+  const release = (): void => {
+    reader?.cancel(signal?.reason).catch(() => undefined)
+  }
+  const settle = (): void => signal?.removeEventListener('abort', release)
+
+  return new ReadableStream<Uint8Array>(
+    {
+      async pull(controller) {
+        try {
+          if (reader === undefined) {
+            reader = (await open()).getReader()
+            if (cancelled !== undefined) {
+              await reader.cancel(cancelled.reason)
+              return
+            }
+            signal?.addEventListener('abort', release, { once: true })
+            if (signal?.aborted) {
+              release()
+            }
+          }
+
+          const { done, value } = await reader.read()
+          if (done) {
+            settle()
+            controller.close()
+          } else {
+            controller.enqueue(value)
+          }
+        } catch (error) {
+          settle()
+          throw error
+        }
+      },
+      cancel: reason => {
+        settle()
+        cancelled = { reason }
+        return reader?.cancel(reason)
+      },
+    },
+    { highWaterMark: 0 },
+  )
 }
 
 function resolveHeaders(headers: BrewOptions['headers']): HeaderValues | Promise<HeaderValues> | undefined {

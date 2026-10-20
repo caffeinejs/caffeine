@@ -194,7 +194,7 @@ describe('cachePlugin on a server the application does not drive', () => {
     expect(hit.headers['x-cache']).toBe('HIT')
     expect(Buffer.compare(hit.rawPayload, bytes)).toBe(0)
     expect(hit.headers['content-type']).toBe('application/octet-stream')
-    expect(stored.map(event => event.bytes)).toEqual([bytes.length])
+    expect(stored.map(event => event.size)).toEqual([bytes.length])
   })
 
   // A second install on one context would give every cached route two read hooks and two store hooks over one

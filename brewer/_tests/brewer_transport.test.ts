@@ -208,6 +208,37 @@ describe('brewer handing a call to its transport', () => {
     })
   })
 
+  describe('given a body a function opens', () => {
+    const sink = new Router('/sink').post('/').handler(() => ({ received: true }))
+
+    // The transport gets a stream to read as it sends, and the function runs only once it does: a call never sent
+    // opens nothing.
+    it('should hand it over as a half-duplex stream, opened only when read', async () => {
+      const calls: RequestInit[] = []
+      let opens = 0
+      const client = brewer<typeof sink>('http://localhost', {
+        fetch: async (_input, init = {}) => {
+          calls.push(init)
+          return new Response(null, { status: 204 })
+        },
+      })
+
+      await client.sink.post({
+        body: () => {
+          opens++
+          return new Blob(['upload']).stream()
+        },
+      })
+
+      expect(calls[0]!.body).toBeInstanceOf(ReadableStream)
+      expect(calls[0]).toHaveProperty('duplex', 'half')
+      expect(new Headers(calls[0]!.headers).has('content-type')).toBe(false)
+      expect(opens).toBe(0)
+      expect(await new Response(calls[0]!.body).text()).toBe('upload')
+      expect(opens).toBe(1)
+    })
+  })
+
   describe('given a headers function that fails', () => {
     it.each([
       [

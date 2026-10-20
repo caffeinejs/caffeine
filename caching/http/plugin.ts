@@ -2,7 +2,7 @@ import type { Logger } from '@caffeinejs/application/logger'
 import { isValidKey, type Container, type InjectionToken } from '@caffeinejs/di'
 import { ErrConfiguration, type HTTPSetupContext } from '@caffeinejs/http'
 import { type AdapterRouteOptions, type HTTPPluginConfigurer, type HTTPPluginFactory } from '@caffeinejs/http/fastify'
-import { bytes, type ByteSize } from '@caffeinejs/std/bytes'
+import { type ByteSize, formatBytes } from '@caffeinejs/std/bytes'
 import { type Duration, formatDuration, Second } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyPluginAsync } from 'fastify'
@@ -65,7 +65,7 @@ export function HTTPCaching<C = unknown>(
       flights: new Map() as FlightTable,
       lockTimeout: resolveTimeout('lockTimeout', resolved.lockTimeout, DEFAULT_LOCK_TIMEOUT),
       varyByQuery: resolved.varyByQuery === undefined ? undefined : Object.freeze([...resolved.varyByQuery]),
-      maxEntrySizeBytes: resolveMaxEntrySize(resolved.maxEntrySize),
+      maxEntrySize: resolveMaxEntrySize(resolved.maxEntrySize),
     })
   }
 }
@@ -95,22 +95,22 @@ function resolveTimeout(
   return value
 }
 
-function resolveMaxEntrySize(value: ByteSize | undefined): number | undefined {
+function resolveMaxEntrySize(value: ByteSize | undefined): ByteSize | undefined {
   if (value === undefined) {
     return undefined
   }
 
-  try {
-    return bytes(value)
-  } catch {
+  if (!Number.isSafeInteger(value) || value < 0) {
     throw new ErrConfiguration(
       errMessage(
-        `Cannot install HTTP caching: maxEntrySize must be a byte size such as 1048576 or "1MB", got "${String(value)}"`,
+        `Cannot install HTTP caching: maxEntrySize must be a whole number of bytes such as 1 * MiB, got "${formatBytes(value)}"`,
       )
         .reference('@caffeinejs/http', ErrConfiguration)
         .build(),
     )
   }
+
+  return value
 }
 
 // A store failure is never silent: an observer that listens for it owns the report, otherwise it is logged.

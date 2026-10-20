@@ -294,10 +294,10 @@ context, with the `container` and the application `logger`.
 .with(
   HTTPCaching((b, { logger }) =>
     b
-      .store(new MemoryHTTPCacheStore({ max: 1_000, maxSize: '64MB' }))
+      .store(new MemoryHTTPCacheStore({ max: 1_000, maxSize: 64 * MiB }))
       .statusHeader('X-Cache')
       .varyByQuery(['page', 'q'])
-      .maxEntrySize('1MB')
+      .maxEntrySize(1 * MiB)
       .storeTimeout(250 * Millisecond)
       .lockTimeout(5 * Second)
       .observer(loggingCacheObserver(logger)),
@@ -305,16 +305,16 @@ context, with the `container` and the application `logger`.
 )
 ```
 
-| Option          | Meaning                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `store`         | The `HTTPCacheStore`, or a token it is bound under. Required.                                                                             |
-| `etagGenerator` | The function hashing a payload into an `ETag`, or a token. Defaults to an internal SHA-1 hash.                                            |
-| `observer`      | A `CacheObserver`, or a token. See "Observing".                                                                                           |
-| `statusHeader`  | The cache status header's name. Default `X-Cache`.                                                                                        |
-| `varyByQuery`   | The query parameters a key carries, for every route that does not list its own.                                                           |
-| `maxEntrySize`  | The largest payload stored: `'1MB'`, `'512kb'`, or a number of bytes. A larger response goes out and is not stored, and `onSkip` is told. |
-| `storeTimeout`  | How long one store call may take. Default two seconds. See "When the store fails".                                                        |
-| `lockTimeout`   | How long a request waits for another's handler run. Default ten seconds.                                                                  |
+| Option          | Meaning                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store`         | The `HTTPCacheStore`, or a token it is bound under. Required.                                                                                                 |
+| `etagGenerator` | The function hashing a payload into an `ETag`, or a token. Defaults to an internal SHA-1 hash.                                                                |
+| `observer`      | A `CacheObserver`, or a token. See "Observing".                                                                                                               |
+| `statusHeader`  | The cache status header's name. Default `X-Cache`.                                                                                                            |
+| `varyByQuery`   | The query parameters a key carries, for every route that does not list its own.                                                                               |
+| `maxEntrySize`  | The largest payload stored, a count of bytes such as `1 * MiB`; `'1mb'` in configuration. A larger response goes out and is not stored, and `onSkip` is told. |
+| `storeTimeout`  | How long one store call may take. Default two seconds. See "When the store fails".                                                                            |
+| `lockTimeout`   | How long a request waits for another's handler run. Default ten seconds.                                                                                      |
 
 `store`, `etagGenerator` and `observer` each take the value or a container token. A token bound to nothing fails
 at `app.bootstrap()`, and so does a missing `store`. Nothing is bound into the container for you.
@@ -337,8 +337,8 @@ one tag goes out with every coding; if that matters, pass an `etagGenerator` tha
 
 ### `MemoryHTTPCacheStore`
 
-An LRU in the process. `max` caps the number of entries (default 500); `maxSize` caps the summed bytes of
-payloads and headers (`'512kb'`, `'64MB'`, or a number of bytes). It also takes a pre-built `LRUCache` for the
+An LRU in the process. `max` caps the number of entries (default 500); `maxSize` caps the summed size of
+payloads and headers, a count of bytes such as `64 * MiB`. It also takes a pre-built `LRUCache` for the
 settings those two do not cover. Each replica has its own, so an eviction on one replica does not reach the
 others.
 
@@ -511,7 +511,7 @@ HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics,
 | `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                  |
 | `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use). |
 | `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.  |
-| `onStore`        | A response was stored, with its size in bytes and its tags.                                                                                                                   |
+| `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                 |
 | `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                    |
 | `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                      |
 | `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                               |
@@ -531,7 +531,7 @@ All of these fail `app.bootstrap()` with `ErrConfiguration`:
 - a route declares `@CacheControl` or `@CacheInvalidate` and the plugin is not installed for it
 - `HTTPCaching` has no `store`, or a `store`, `etagGenerator` or `observer` token is bound to nothing
 - `ttl` is below one second, `storeTimeout` or `lockTimeout` is not a positive duration, another duration option
-  is negative or not a number, or `maxEntrySize` is not a byte size
+  is negative or not a number, or `maxEntrySize` is not a whole number of bytes
 - a tag is not a non-empty string without `{` or `}`, or `@CacheInvalidate` names no tag
 - a constrained route has a `ttl` and nothing in its key tells it from the other routes on its URL
 

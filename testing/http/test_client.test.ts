@@ -1,4 +1,5 @@
 import { $t } from '@caffeinejs/application/schema'
+import { ErrBrewTooManyFollowUps, type Authenticator, type Interceptor } from '@caffeinejs/brewer'
 import { $i, CaffeineIoC, Scopes } from '@caffeinejs/di'
 import { Controller, Get, Router, Guards } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
@@ -40,6 +41,19 @@ function newPets() {
     .get('/:id')
     .schema({ params: $t.Object({ id: $t.Integer() }), response: { 200: petSchema } })
     .handler(ctx => ({ id: ctx.req.param().id, name: 'Rex' }))
+}
+
+/** A route behind a bearer token: it answers 401 to anything but `Bearer fresh`, and records what each request carried. */
+function newVault(seen: Array<string | null>) {
+  return new Router('/vault').get('/').handler(ctx => {
+    const authorization = ctx.req.header('authorization') ?? null
+    seen.push(authorization)
+    if (authorization !== 'Bearer fresh') {
+      ctx.status(401).header('www-authenticate', 'Bearer error="invalid_token"')
+      return { open: false }
+    }
+    return { open: true }
+  })
 }
 
 describe('testClient()', () => {
@@ -294,20 +308,106 @@ describe('testClient()', () => {
     })
   })
 
-  describe('given a per-client request init', () => {
+  describe('given request options for every call', () => {
     it('should send its headers on every request, and let a call override them', async () => {
-      await using client = testClient(newPets(), { init: { headers: { 'x-tenant': 'from-init' } } })
+      await using client = testClient(newPets(), { headers: { 'x-tenant': 'from-client' } })
 
-      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-init' })
+      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-client' })
       expect(await (await client.pets.search.get({ headers: { 'x-tenant': 'from-call' } })).json()).toMatchObject({
         tenant: 'from-call',
       })
     })
 
-    it('should ignore a method set there, since the verb decides it', async () => {
-      await using client = testClient(newPets(), { init: { method: 'DELETE' } })
+    // A token that changes between two assertions is read as each request is made, not when the client was.
+    it('should read a headers function on every request, sending what it holds at the time', async () => {
+      let tenant = 'acme'
+      await using client = testClient(newPets(), { headers: () => ({ 'x-tenant': tenant }) })
+
+      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'acme' })
+      tenant = 'globex'
+      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'globex' })
+    })
+
+    // The application is the transport: a fetch of its own would skip the readying, so none is ever used.
+    it('should never send through a fetch of its own, even one a cast let through', async () => {
+      const elsewhere = vi.fn(async () => new Response(null, { status: 418 }))
+      await using client = testClient(newPets(), { fetch: elsewhere } as never)
 
       expect((await client.pets.get()).status).toBe(200)
+      expect(elsewhere).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('given interceptors', () => {
+    const stamp: Interceptor = async (request, next) => {
+      request.headers.set('x-tenant', 'from-interceptor')
+      return next(request)
+    }
+
+    // A test drives the same stack the application's own front end sends through.
+    it('should run them around every typed call and $request', async () => {
+      await using client = testClient(newPets(), { interceptors: [stamp] })
+
+      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-interceptor' })
+      expect(await (await client.$request('GET', '/pets/search')).json()).toMatchObject({ tenant: 'from-interceptor' })
+    })
+
+    // The raw escape hatch sends exactly what the test wrote.
+    it('should leave $fetch as it is', async () => {
+      await using client = testClient(newPets(), { interceptors: [stamp] })
+
+      expect(await (await client.$fetch('/pets/search')).json()).toEqual({ tags: [] })
+    })
+
+    // The readying happens in the transport, under the interceptors: what they hand on finds the application ready.
+    it('should ready an application given unready before the first request they hand on', async () => {
+      await using client = testClient(createWebApplication().mount(newPets()), { interceptors: [stamp] })
+
+      expect(await (await client.pets.search.get()).json()).toMatchObject({ tenant: 'from-interceptor' })
+    })
+  })
+
+  describe('given an authenticator', () => {
+    const refresh: Authenticator = (request, _response, attempt) => {
+      request.headers.set('authorization', 'Bearer fresh')
+      return attempt === 1 ? request : null
+    }
+
+    // A token refresh is tested in process: the application's 401 is answered, and the call resolves with what followed.
+    it("should answer the application's 401 and resolve with the follow-up", async () => {
+      const seen: Array<string | null> = []
+      await using client = testClient(newVault(seen), {
+        headers: { authorization: 'Bearer expired' },
+        authenticator: refresh,
+      })
+
+      expect(await (await client.vault.get()).json()).toEqual({ open: true })
+      expect(seen).toEqual(['Bearer expired', 'Bearer fresh'])
+    })
+
+    // The limit is the client's to set: one allowed a single follow-up stops at the second 401.
+    it('should stop at the maxFollowUps it is given', async () => {
+      const seen: Array<string | null> = []
+      const neverRight: Authenticator = request => {
+        request.headers.set('authorization', 'Bearer still-wrong')
+        return request
+      }
+      await using client = testClient(newVault(seen), { authenticator: neverRight, maxFollowUps: 1 })
+
+      await expect(client.vault.get()).rejects.toBeInstanceOf(ErrBrewTooManyFollowUps)
+      expect(seen).toHaveLength(2)
+    })
+
+    // An application is driven with the same options as the routers it would mount.
+    it('should answer for an application target too', async () => {
+      const seen: Array<string | null> = []
+      await using client = testClient(createWebApplication().mount(newVault(seen)), {
+        headers: { authorization: 'Bearer expired' },
+        authenticator: refresh,
+      })
+
+      expect((await client.vault.get()).status).toBe(200)
+      expect(seen).toEqual(['Bearer expired', 'Bearer fresh'])
     })
   })
 

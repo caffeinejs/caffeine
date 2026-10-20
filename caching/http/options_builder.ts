@@ -86,7 +86,7 @@ export class HTTPCachingOptionsBuilder {
     return this
   }
 
-  /** The largest payload stored; a larger response goes out and is not stored. Unset: no limit. */
+  /** The largest payload stored, such as `1 * MiB`; a larger response goes out and is not stored. Unset: no limit. */
 
   maxEntrySize(size: ByteSize): this {
     this.#maxEntrySize = size

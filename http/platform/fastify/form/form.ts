@@ -1,9 +1,9 @@
-import { bytes } from '@caffeinejs/std/bytes'
+import { MiB } from '@caffeinejs/std/bytes'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 
 import { MediaType } from '../../../media.js'
 
-const FORM_BODY_LIMIT = bytes('1mb')
+const FORM_BODY_LIMIT = 1 * MiB
 
 /**
  * Registers the `application/x-www-form-urlencoded` body parser.
