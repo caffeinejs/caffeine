@@ -1,9 +1,10 @@
-import { brewer, type BrewClient, type BrewOptions } from '@caffeinejs/brewer'
+import { brewer, type BrewClient, type BrewOptions, type Fetchable } from '@caffeinejs/brewer'
 import type { Container } from '@caffeinejs/di'
-import { Router, type DepsOf } from '@caffeinejs/http'
+import { Router, type AnyRouter, type DepsOf } from '@caffeinejs/http'
 
-import { Harness, type AnyRouter, type TestApplication } from './_test_app.js'
+import { Harness } from './_test_app.js'
 import { ErrTestClientTarget } from './error.js'
+import type { TestApplication } from './types.js'
 
 /**
  * How the client shapes the requests it sends: brewer's own options, all but `fetch`.
@@ -78,11 +79,6 @@ type Injectable<D> = [keyof D] extends [never] ? Record<string, never> : { [K in
 
 /** A {@link brewer} client over a local application, plus the controls that application needs. */
 export type TestClient<T> = BrewClient<T> & TestClientControls
-
-/** Anything that answers requests the way an application does. */
-interface Fetchable {
-  fetch(input: Request | string | URL, options?: RequestInit): Promise<Response>
-}
 
 /**
  * A typed client for an application or the routers it would mount, wired and torn down by the test.

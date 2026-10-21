@@ -1,6 +1,4 @@
 export * from './blend.js'
-export * from './flatten.js'
-export * from './route_chain.js'
+export type * from './route_chain.js'
 export * from './programmatic.js'
-export * from './source.js'
 export type * from './types.js'

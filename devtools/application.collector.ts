@@ -1,8 +1,8 @@
 import type { InjectionToken } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 
-import type { DevtoolsStore } from '../store.js'
-import type { RouteSnapshot } from '../types.js'
+import type { DevtoolsStore } from './store.js'
+import type { RouteSnapshot } from './types.js'
 
 export class HTTPCollector {
   constructor(private readonly store: DevtoolsStore) {}

@@ -20,23 +20,9 @@ export { KafkaBuilder } from './kafka_builder.js'
 export { KafkaLifecycle } from './lifecycle.js'
 export { type KafkaContainerStatus, KafkaListenerContainer } from './listener_container.js'
 export { kafkaBinder, type KafkaBinderOptions } from './messaging_binder.js'
-export { $k, type KafkaPickers } from './pickers.js'
+export { $k, type KafkaPickers, type Picks } from './pickers.js'
 export { Kafka, type KafkaConfigurer, type KafkaPluginOptions } from './plugin.js'
-export {
-  type DeadLetterManager,
-  deadLetterManager,
-  type DeadLetterManagerOptions,
-  type DeadLetterRecord,
-} from './retry/dead_letter_manager.js'
-export {
-  blockingRetry,
-  type RetryDelivery,
-  type RetryStrategy,
-  type RetryTopic,
-  type RetryTopicOptions,
-  retryTopics,
-  sharedRetryTopic,
-} from './retry/strategy.js'
+export * from './retry/index.js'
 export type { KafkaRuntime } from './runtime.js'
 export { containerKey, DEFAULT_INSTANCE, kafkaTemplate, Keys, RetryHeaders, runtimeKey } from './symbols.js'
 export { KafkaTemplate, type SendOptions } from './template.js'

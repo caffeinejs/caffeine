@@ -34,6 +34,9 @@ export interface KafkaPickers {
   ): ParameterPickOptions<KafkaMessage>
 }
 
+/** The picks a listener declares, one per handler argument: what `@KafkaParams` takes. */
+export type Picks = ParameterPickOptions<KafkaMessage>[]
+
 function value(): ParameterPickOptions<KafkaMessage> {
   return { type: 'kafka:value' }
 }

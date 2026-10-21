@@ -1,4 +1,4 @@
-import { injectableDeps } from './rules/injectable_deps.js'
+import { injectableDeps } from './rules/index.js'
 
 const plugin = {
   meta: {

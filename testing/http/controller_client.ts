@@ -1,9 +1,9 @@
-import { joinURL } from '@caffeinejs/brewer'
+import { joinURL, type Fetchable } from '@caffeinejs/brewer'
 import { getRouteGroup } from '@caffeinejs/http'
 
 import { mergeRequest, resolveRouteURL, withoutTrailingSlashes } from './_util.js'
 import { ErrNoRouter } from './error.js'
-import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
+import type { HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
 export type ControllerTestClient<C extends RouterCtor> = {
   [H in RouteMethods<C>]: HandlerClient

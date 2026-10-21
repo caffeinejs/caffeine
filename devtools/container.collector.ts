@@ -1,8 +1,8 @@
 import { type HookListener, type InjectionToken, Binding } from '@caffeinejs/di'
 import { buildBindingGraph } from '@caffeinejs/di/graph'
 
-import type { DevtoolsStore } from '../store.js'
-import type { BindingSnapshot, DevtoolsEvent } from '../types.js'
+import type { DevtoolsStore } from './store.js'
+import type { BindingSnapshot, DevtoolsEvent } from './types.js'
 
 function keyLabel(key: InjectionToken): string {
   if (typeof key === 'string') {

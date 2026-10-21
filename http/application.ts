@@ -35,7 +35,7 @@ import {
   type NodeMiddleware,
 } from './core/middleware/index.js'
 import { parseUse } from './core/middleware/middleware.js'
-import { ControllerRouteSource } from './core/routing/decorated/decorated.js'
+import { ControllerRouteSource } from './core/routing/decorated.js'
 import { buildRouting, type RouteSource } from './core/routing/index.js'
 import type { Router } from './core/routing/programmatic/programmatic.js'
 import { ScopedPlugins } from './core/routing/programmatic/scoped_plugins.js'

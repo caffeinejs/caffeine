@@ -16,8 +16,8 @@ import type { Guard } from '../../guards/guard.js'
 import { RouteBuilder, RouteGroupBuilder } from '../builder.js'
 import type { RouteGroupExtension } from '../extension.js'
 import type { RouteAuthzOptions, RouteGroupDetail, RouteValidationSchema } from '../spec.js'
-import { attachState, stateOf, type RouterState } from './_state.js'
 import { RouteChain } from './route_chain.js'
+import { attachState, stateOf, type RouterState } from './state.js'
 import type { DeclaredRoute, JoinPath, MergeDeps, PrefixRoutePaths, RouteHandler, RoutesOf } from './types.js'
 
 const ALL_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
@@ -520,6 +520,9 @@ export class Router<
     return chain.schema(schemaOrHandler as RouteValidationSchema).handler(handler as AnyRouteHandler)
   }
 }
+
+/** Any router, whatever its path, routes and dependencies. */
+export type AnyRouter = Router<any, any, any, any, any, any>
 
 /** A route that has declared no schema yet: every slot falls back to what the path and the adapter give. */
 type Empty = Record<never, never>

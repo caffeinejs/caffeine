@@ -28,7 +28,7 @@ export {
 export { FetchyHeaders } from './headers.js'
 export type { Interceptor, InterceptorFunction } from './interceptor.js'
 export { toInterceptor } from './interceptor.js'
-export type { ParamDescriptor } from './internal/param_descriptor.js'
+export type * from './internal/index.js'
 export { MediaTypes } from './media_types.js'
 export { noop } from './noop.js'
 export { FetchyRequest } from './request.js'

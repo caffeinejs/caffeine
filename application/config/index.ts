@@ -23,7 +23,7 @@ export type {
 } from './types.js'
 export type { DotenvLoader, DotenvOptions } from './dotenv.js'
 export { ErrConfig, ErrConfigValidation } from './errors.js'
-export { CONFIG_REFRESH_LABEL, ConfigModule } from './integration/module.js'
+export * from './integration/index.js'
 export { DEFAULT_LOAD_TIMEOUT, loadConfig, type LoadConfigOptions } from './load.js'
 export { expandKeys } from './merge.js'
 export {

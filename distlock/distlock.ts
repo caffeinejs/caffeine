@@ -3,7 +3,7 @@ import { type OnDestroy } from '@caffeinejs/di'
 import type { Duration } from '@caffeinejs/std/duration'
 
 import { acquireChannel, onceChannel, publishContended, traced, withLockChannel, type Writable } from './_channels.js'
-import { HeldLock, type LockHost } from './_lock.js'
+import { HeldLock } from './_lock.js'
 import { type Backend, type LockLease } from './backend.js'
 import { ErrLockNotAcquired } from './errors.js'
 import type {
@@ -134,7 +134,7 @@ export interface DistLock {
  * Waiting, retrying, backoff and jitter all happen here rather than in the backend, which only ever makes one
  * attempt.
  */
-export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
+export class CaffeineDistLock implements DistLock, OnDestroy {
   readonly backend: Backend
   readonly options: DistLockOptions
   readonly log: Logger
@@ -151,14 +151,6 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
   get events(): LockEvents {
     this.#events ??= new LockEvents(this, this.log)
     return this.#events
-  }
-
-  track(lock: HeldLock): void {
-    this.#renewing.add(lock)
-  }
-
-  untrack(lock: HeldLock): void {
-    this.#renewing.delete(lock)
   }
 
   /**
@@ -249,7 +241,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
       return undefined
     }
 
-    const lock = new HeldLock(this, lease, ttl, renew)
+    const lock = new HeldLock(this, lease, ttl, renew ? this.#renewing : undefined)
     this.#settleAcquire(ctx, key, 'acquired', 1, started, lock)
 
     return lock
@@ -280,7 +272,7 @@ export class CaffeineDistLock implements DistLock, LockHost, OnDestroy {
       throw new ErrLockNotAcquired(key, wait)
     }
 
-    const lock = new HeldLock(this, lease, ttl, options.renew === true)
+    const lock = new HeldLock(this, lease, ttl, options.renew === true ? this.#renewing : undefined)
     this.#settleAcquire(ctx, key, 'acquired', tally.attempts, started, lock)
 
     return lock

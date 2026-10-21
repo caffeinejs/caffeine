@@ -9,7 +9,7 @@ import { inheritGroupSpec } from '../inherit.js'
 import { $p } from '../picker.js'
 import type { RouteGroupScope } from '../route.js'
 import type { RouteGroupSpec, RouteSpec } from '../spec.js'
-import type { RouterState, RouteState } from './_state.js'
+import type { RouterState, RouteState } from './state.js'
 
 /** One group ready to compile: the spec the compiler reads, and the name it is known by. */
 export interface FlatRouteGroup<R> {
