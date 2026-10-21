@@ -14,8 +14,9 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 // Not library packages: their output is not a published surface.
 const NOT_LIBRARIES = ['benchmarks/**', 'examples/**', 'di/examples/**', 'devtools/ui/**', '**/node_modules/**']
 
-// Shipped declarations that already name a private module's type, most of them in a signature users meet. Moving the
-// type to a public module removes its line here, and nothing may be added.
+// Shipped declarations that already name a private module's type, most of them in a signature users meet. A line is a
+// file and the module it imports from: moving that module's types to a public one removes the line, and no line may
+// be added.
 const GRANDFATHERED = [
   'distlock/dist/distlock.d.ts imports ./_lock.js',
   'http/dist/core/routing/programmatic/flatten.d.ts imports ./_state.js',
