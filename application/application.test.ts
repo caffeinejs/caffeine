@@ -28,6 +28,7 @@ import {
   ErrFeatureAlreadyInstalled,
   ErrFeatureNotInstalled,
   FeatureBuilder,
+  type BannerContext,
   type BootstrapKit,
   type FeatureConfigureKit,
   type FeatureConfigurer,
@@ -1429,9 +1430,12 @@ describe('startup banner', () => {
     const conf = newConfiguration(schema)
       .source(new InlineConfigSource({ caffeine: { name: 'orders' }, greeting: 'hi' }))
       .build().config
+    // Written apart from the call, as an application keeping its banner in a module of its own would.
+    const banner = ({ name, profiles, config, version }: BannerContext<InferConfig<typeof schema>>) =>
+      `${name} ${profiles.join(',')} ${config.greeting} ${version}`
     const app = createApplication({ container: new CaffeineIoC({ decorators: false, profiles: ['eu'] }), config: conf })
       .shutdown(s => s.signals(false))
-      .banner(({ name, profiles, config, version }) => `${name} ${profiles.join(',')} ${config.greeting} ${version}`)
+      .banner(banner)
 
     await app.run()
 

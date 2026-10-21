@@ -2,7 +2,7 @@ import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type O
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { printBanner, type Banner } from './_banner.js'
+import { printBanner, type Banner } from './banner.js'
 import {
   ConfigModule,
   loadConfig,
