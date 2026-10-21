@@ -28,7 +28,7 @@ A CaffeineJS HTTP app modelled on the **Modern Petstore OpenAPI 3.2** specificat
 
 ## Architecture
 
-```
+```text
 public/site.css                    static assets, served at /static
 src/main.ts                        bootstrap: builds the container from the generated graph and runs the app
 src/app.ts                         the whole wiring, in install order
@@ -102,10 +102,10 @@ docker compose -f examples/03-petstore/docker-compose.yml up --build
 ```
 
 Postgres comes up, `prisma migrate deploy` applies migrations, the seed adds two pets and a demo user
-(`alice` / `wonderland`), and the API listens on **http://localhost:3000**. Data survives restarts (named volume
+(`alice` / `wonderland`), and the API listens on **<http://localhost:3000>**. Data survives restarts (named volume
 `petstore-pgdata`).
 
-Running it outside Docker (`npm start`) uses the schema default instead — **http://localhost:9999** — because the
+Running it outside Docker (`npm start`) uses the schema default instead — **<http://localhost:9999>** — because the
 port `3000` above comes from `PETSTORE_SERVER__PORT` in `docker-compose.yml`. Substitute it in the commands below
 if that is how you are running it.
 
@@ -232,7 +232,7 @@ name, an avatar URL, an error message — carries it, because none of that text 
 
 Needs a reachable PostgreSQL and `DATABASE_URL` (copy `.env.example` → `.env`).
 
-Open **http://localhost:9999**, not the `http://127.0.0.1:9999` the startup log prints for a wildcard bind. The
+Open **<http://localhost:9999>**, not the `http://127.0.0.1:9999` the startup log prints for a wildcard bind. The
 GitHub callback URL names `localhost`, and the sign-in sets its state cookie for the host the browser is on: a
 sign-in started on `127.0.0.1` comes back to `localhost` without it and fails with `missing state cookie`. The
 log says so with a second line whenever the two differ.

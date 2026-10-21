@@ -41,7 +41,7 @@ with `CAFFEINE_E2E_STRICT=1`, which fails such a spec instead.
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/).
 
-```
+```text
 <type>(<optional scope>): <description>
 ```
 
@@ -49,7 +49,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`.
 
 Examples:
 
-```
+```text
 feat(scopes): add transient scope support
 fix(container): resolve circular dependency detection bug
 docs: update getting started guide
