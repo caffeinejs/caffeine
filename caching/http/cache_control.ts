@@ -345,10 +345,13 @@ export function attachCacheHooks(
 
     // RFC 9111 §4.3.2 — If-Match and If-Unmodified-Since are not a cache's to evaluate: answered from the store, a
     // precondition that no longer holds would get the stored 200 instead of the handler's 412. A request for the store
-    // alone is still answered from it, or with 504, as a cache answers one (§5.2.1.7).
-    const preconditioned =
-      request.headers['if-match'] !== undefined || request.headers['if-unmodified-since'] !== undefined
-    if (preconditioned && !directives.onlyIfCached) {
+    // alone (§5.2.1.7) never reaches the handler that evaluates them, and no stored answer is consistent with them
+    if (request.headers['if-match'] !== undefined || request.headers['if-unmodified-since'] !== undefined) {
+      if (directives.onlyIfCached) {
+        observer?.onMiss?.({ route: route!, key: keyOf(request), reason: 'only-if-cached' })
+        return reply.code(504).send()
+      }
+
       reply.header(statusHeader, CACHE_BYPASS)
       observer?.onBypass?.({ route: route!, reason: 'precondition' })
       return

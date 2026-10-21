@@ -4,7 +4,7 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching, type CacheBypassEvent, type CacheObserver } from '../index.js'
+import { CacheControl, HTTPCaching, type CacheBypassEvent, type CacheMissEvent, type CacheObserver } from '../index.js'
 
 /**
  * A cached route that serves downloads in ranges. A part of a body answers one request only and is never kept; a
@@ -220,19 +220,32 @@ describe('a cached route that serves ranges', () => {
     expect(bypasses.map(event => event.reason)).toEqual(['precondition', 'precondition', 'precondition'])
   })
 
-  // RFC 9111 §5.2.1.7: a request for the store alone never reaches the handler; a cache leaves If-Match alone (§4.3.2).
-  it('answers a precondition asked of the store alone from what it holds, or 504 when it holds nothing', async () => {
-    const app = await start()
-    const headers = { 'if-match': ETAG, 'cache-control': 'only-if-cached' }
+  // RFC 9111 §4.3.2: a cache does not evaluate If-Match or If-Unmodified-Since, and under only-if-cached (§5.2.1.7) it
+  // never reaches the handler that does. No stored answer is consistent with a precondition nobody evaluates.
+  it('answers 504 to a precondition asked of the store alone, whether it holds the content or not', async () => {
+    const misses: CacheMissEvent[] = []
+    const app = await start({ onMiss: event => void misses.push(event) })
+    const storeAlone = (headers: Record<string, string>) =>
+      app.fetch('/cached-downloads/bytes', { headers: { ...headers, 'cache-control': 'only-if-cached' } })
 
-    const cold = await app.fetch('/cached-downloads/bytes', { headers })
-    expect(cold.status).toBe(504)
+    expect((await storeAlone({ 'if-match': ETAG })).status).toBe(504)
 
     await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
-    const warm = await app.fetch('/cached-downloads/bytes', { headers })
-    expect(warm.status).toBe(200)
-    expect(warm.headers.get('x-cache')).toBe('HIT')
-    expect(await bytesOf(warm)).toEqual(REPORT)
+    expect((await storeAlone({})).headers.get('x-cache')).toBe('HIT')
+
+    const preconditions: Array<Record<string, string>> = [
+      { 'if-match': ETAG },
+      { 'if-match': '"report-v0"' },
+      { 'if-unmodified-since': new Date().toUTCString() },
+    ]
+    for (const headers of preconditions) {
+      const res = await storeAlone(headers)
+
+      expect(res.status).toBe(504)
+      expect(await res.text()).toBe('')
+    }
+
+    expect(misses.filter(event => event.reason === 'only-if-cached')).toHaveLength(4)
   })
 
   it('stores nothing from a request it refused with 412', async () => {

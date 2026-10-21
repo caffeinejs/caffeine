@@ -29,8 +29,8 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `206`, or any response carrying `Content-Range`, is never stored and gets nothing permissive from the policy,
   whatever `statusCodes` lists: under the whole's key, a part would answer the next request.
 - A request carrying `If-Match` or `If-Unmodified-Since` bypasses the store (`'precondition'`): the handler
-  evaluates them (RFC 9111 §4.3.2), and a stored `200` would answer one that no longer holds. Under `only-if-cached`,
-  as with `Range`, the store answers, or `504`.
+  evaluates them (RFC 9111 §4.3.2), and a stored `200` would answer one that no longer holds. Under `only-if-cached`
+  it answers `504`, holding the content or not: no stored answer is consistent with a precondition nobody evaluates.
 - A `Blob` goes out as a stream, which is not stored: `@CacheControl` on `Attachment(blob)` never makes the next
   `GET` a hit.
 - A miss that may be stored withholds `If-None-Match` and `If-Modified-Since` from the handler (`withhold`), so it
