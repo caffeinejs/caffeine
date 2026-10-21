@@ -1,14 +1,14 @@
 import { Container, Ctor, InjectionToken, Provider, Scopes } from '@caffeinejs/di'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { getRouteGroup } from '../../../decorators/registrar/registrar.js'
-import { Keys } from '../../../symbols.js'
-import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../../error/index.js'
-import { normalizeGroupPath } from '../builder.js'
-import type { RouteGroupMeta } from '../compile.js'
-import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from '../route.js'
-import type { DeclaredRouteGroup, RouteSource } from '../routing.js'
-import type { RouteSpec, RouteGroupSpec } from '../spec.js'
+import { getRouteGroup } from '../../decorators/registrar/registrar.js'
+import { Keys } from '../../symbols.js'
+import { ErrCaffeineWebApplication, ErrConfiguration, resolveByErrorChain } from '../error/index.js'
+import { normalizeGroupPath } from './builder.js'
+import type { RouteGroupMeta } from './compile.js'
+import { kErrorUnhandled, type RouteDispatch, type RouteGroupErrorHandler } from './route.js'
+import type { DeclaredRouteGroup, RouteSource } from './routing.js'
+import type { RouteSpec, RouteGroupSpec } from './spec.js'
 
 /** The instance a route is dispatched on, as the adapter stashes it for the request. */
 interface RequestWithTarget {
