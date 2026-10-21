@@ -33,8 +33,15 @@ jobs:
       contents: read
       id-token: write
     strategy:
+      # Each Node version reports its own result, rather than a failure on one cancelling the other.
+      fail-fast: false
       matrix:
-        node-version: ['24']
+        # 24 also runs what does not depend on the Node version: lint, type-check, the CLI's Bun tests, and the
+        # coverage reports, whose artifact can be uploaded only once.
+        include:
+          - node-version: '22'
+          - node-version: '24'
+            primary: true
 
     steps:
       - name: Checkout
@@ -65,12 +72,15 @@ jobs:
           npm run build --workspaces --if-present
 
       - name: Lint
+        if: ${{ matrix.primary }}
         run: npm run lint
 
       - name: Type Check
+        if: ${{ matrix.primary }}
         run: npm run test:typecheck
 
       - name: CLI Tests
+        if: ${{ matrix.primary }}
         run: npm test -w @caffeinejs/cli
 
       - name: Memory Leak Test
@@ -80,10 +90,11 @@ jobs:
         run: npm run test:coverage
 
       - name: Coverage Summary
+        if: ${{ matrix.primary }}
         run: node tools/coverage-summary.mjs
 
       - name: Upload Coverage
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.primary }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true
@@ -91,7 +102,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Upload test results
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.primary }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           use_oidc: true
@@ -102,7 +113,7 @@ jobs:
       # Handed to the `sonar` job below, so the analysis reports the coverage this job already computed
       # instead of running the suite a second time.
       - name: Share coverage
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && matrix.primary }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage
