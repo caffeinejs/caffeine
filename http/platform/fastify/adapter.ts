@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { subscribe, unsubscribe } from 'node:diagnostics_channel'
 import type { IncomingMessage, Server, ServerOptions } from 'node:http'
 import type { SecureServerOptions, ServerHttp2Session } from 'node:http2'
 import type { ServerOptions as HTTPSServerOptions } from 'node:https'
@@ -246,6 +247,11 @@ export class Adapter implements IAdapter<AdapterTypes> {
     // the budget is cut by `forceTeardown()` destroying its socket, which is what an HTTP/2 session and an
     // `allowHTTP1` connection both run on.
     let open: OpenConnections | undefined
+    // Node's `close()` ends an HTTP/1 server's idle connections, once, and waits on the rest. It counts a connection
+    // that has not sent a request as active, and stops expiring connections once closing, so one a client opens and
+    // leaves silent (a browser's preconnect, a load balancer's TCP check) would hold `close()` until the client hangs
+    // up. The adapter keeps them, as the socket their requests arrive on, so that `teardown()` can end those.
+    const connections = new Set<Socket>()
     if (typeof fastify.server.closeAllConnections !== 'function') {
       const sockets = new Set<Socket>()
       const sessions = new Set<ServerHttp2Session>()
@@ -258,10 +264,15 @@ export class Adapter implements IAdapter<AdapterTypes> {
         session.once('close', () => sessions.delete(session))
       })
       open = { sockets, sessions }
+    } else {
+      fastify.server.on(connectionEvent(fastify.server), (socket: Socket) => {
+        connections.add(socket)
+        socket.once('close', () => connections.delete(socket))
+      })
     }
 
     // Copied and read once: `listen()` writes into what it is handed, and a frozen configuration node refuses that.
-    const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, open)
+    const server = new AdapterServer(fastify, listener === undefined ? undefined : { ...listener }, open, connections)
 
     try {
       await this.#wire(fastify, input)
@@ -475,6 +486,9 @@ interface OpenConnections {
   readonly sessions: Set<ServerHttp2Session>
 }
 
+/** Node's diagnostics channel for an HTTP/1 response that has finished, on any server: `{ server, socket, … }`. */
+const RESPONSE_FINISH = 'http.server.response.finish'
+
 /** One server {@link Adapter} built. */
 class AdapterServer implements IAdapterServer<AdapterTypes> {
   readonly #fastify: FastifyInstance
@@ -482,11 +496,19 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
   readonly #listener: FastifyListenOptions | undefined
   /** `undefined` on a server that has `closeAllConnections()`. */
   readonly #open: OpenConnections | undefined
+  /** What {@link teardown} ends on an HTTP/1 server. Empty on a server with no `closeAllConnections()`. */
+  readonly #connections: ReadonlySet<Socket>
 
-  constructor(fastify: FastifyInstance, listener: FastifyListenOptions | undefined, open: OpenConnections | undefined) {
+  constructor(
+    fastify: FastifyInstance,
+    listener: FastifyListenOptions | undefined,
+    open: OpenConnections | undefined,
+    connections: ReadonlySet<Socket>,
+  ) {
     this.#fastify = fastify
     this.#listener = listener
     this.#open = open
+    this.#connections = connections
   }
 
   /**
@@ -513,9 +535,36 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
       for (const session of this.#open.sessions) {
         session.close()
       }
+
+      await this.#fastify.close()
+      return
     }
 
-    await this.#fastify.close()
+    // A connection that has not sent a byte carries no request, partial request or upgrade: it is ended now, and one
+    // opening from here on, before the server stops listening or from a handshake that ends after, as it opens.
+    const server = this.#fastify.server
+    server.on(connectionEvent(server), (socket: Socket) => socket.destroy())
+    for (const socket of this.#connections) {
+      if (socket.bytesRead === 0) {
+        socket.destroy()
+      }
+    }
+
+    // A request in flight that finishes after Node's one pass over the idle connections leaves its own idle and
+    // kept alive for the client, so the idle ones are ended again as each response finishes. Subscribed only while
+    // closing: the channel reports every server's responses.
+    const closeIdle = (message: unknown) => {
+      if ((message as { server: unknown }).server === server) {
+        setImmediate(() => server.closeIdleConnections())
+      }
+    }
+
+    subscribe(RESPONSE_FINISH, closeIdle)
+    try {
+      await this.#fastify.close()
+    } finally {
+      unsubscribe(RESPONSE_FINISH, closeIdle)
+    }
   }
 
   /**
@@ -790,6 +839,11 @@ function assertRouteFeaturesInstalled(
         .build(),
     )
   }
+}
+
+/** The event that hands over the socket an HTTP/1 server's requests arrive on: the TLS socket on an HTTPS server. */
+function connectionEvent(server: Server): 'connection' | 'secureConnection' {
+  return server instanceof TLSServer ? 'secureConnection' : 'connection'
 }
 
 /**

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
+import { connect as tlsConnect } from 'node:tls'
 
 import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
@@ -8,6 +9,7 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -179,6 +181,25 @@ describe('a server serving TLS or HTTP/2', () => {
 
       release()
       app = undefined
+    })
+
+    // A browser's TLS preconnect: the handshake completes, and no request follows.
+    it('closes a connection that completed its handshake and never sent a request', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { https: { key, cert } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const secured = new Promise(resolve => app!.instance.server.once('secureConnection', resolve))
+      const client = tlsConnect({ host: '127.0.0.1', port: app.address!.port, ca: cert })
+      client.on('error', () => undefined)
+      const hungUp = new Promise(resolve => client.once('close', resolve))
+      await secured
+
+      await expect(app.close()).resolves.toBeUndefined()
+      app = undefined
+      await hungUp
     })
   })
 
