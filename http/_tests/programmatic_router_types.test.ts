@@ -28,6 +28,65 @@ describe('path parameters', () => {
   it('falls back to an open record for a path that is not a literal', () => {
     expectTypeOf<PathParams<string>>().toEqualTypeOf<Record<string, string>>()
   })
+
+  it('reads every parameter a segment holds, a name ending at - or . as the router ends it', () => {
+    expectTypeOf<PathParams<'/near/:lat-:lng'>>().toEqualTypeOf<{ lat: string; lng: string }>()
+    expectTypeOf<PathParams<'/files/:name.:ext'>>().toEqualTypeOf<{ name: string; ext: string }>()
+    expectTypeOf<PathParams<'/span/:from-:to-:step'>>().toEqualTypeOf<{ from: string; to: string; step: string }>()
+    expectTypeOf<PathParams<'/ver/:major.:minor.:patch'>>().toEqualTypeOf<{
+      major: string
+      minor: string
+      patch: string
+    }>()
+    expectTypeOf<PathParams<'/mixed/:a-:b.:c'>>().toEqualTypeOf<{ a: string; b: string; c: string }>()
+  })
+
+  it('skips a constraint whole, so text after it separates parameters and a colon inside it starts none', () => {
+    expectTypeOf<PathParams<'/at/:hour(^\\d{2})h:minute(^\\d{2})m'>>().toEqualTypeOf<{
+      hour: string
+      minute: string
+    }>()
+    expectTypeOf<PathParams<'/pair/:a(^\\d+)-:b'>>().toEqualTypeOf<{ a: string; b: string }>()
+    expectTypeOf<PathParams<'/two/:a(^\\d+)-:b(^\\d+)'>>().toEqualTypeOf<{ a: string; b: string }>()
+    expectTypeOf<PathParams<'/rgx/:id(^(?:\\d+)$)'>>().toEqualTypeOf<{ id: string }>()
+    expectTypeOf<PathParams<'/esc/:id(^\\(:x$)-:b'>>().toEqualTypeOf<{ id: string; b: string }>()
+    expectTypeOf<PathParams<'/nest/:id(^((\\d)+)$)-:b'>>().toEqualTypeOf<{ id: string; b: string }>()
+  })
+
+  it('leaves text beside a parameter out of its name', () => {
+    expectTypeOf<PathParams<'/doc/:name.json'>>().toEqualTypeOf<{ name: string }>()
+    expectTypeOf<PathParams<'/api/v:version'>>().toEqualTypeOf<{ version: string }>()
+    expectTypeOf<PathParams<'/item/item-:id.json'>>().toEqualTypeOf<{ id: string }>()
+  })
+
+  it('keeps reading the segments after one that holds several parameters', () => {
+    expectTypeOf<PathParams<'/radius/:lat-:lng/r/:r'>>().toEqualTypeOf<{ lat: string; lng: string } & { r: string }>()
+    expectTypeOf<PathParams<'/tail/:id-:rev/*'>>().toEqualTypeOf<{ id: string; rev: string } & { '*': string }>()
+  })
+
+  it('gives the parameters of an optional segment together or not at all, since the router drops it whole', () => {
+    type Both = { lat: string; lng: string } | { lat?: undefined; lng?: undefined }
+
+    expectTypeOf<PathParams<'/opt/:lat-:lng?'>>().toEqualTypeOf<Both>()
+    expectTypeOf<PathParams<'/x/:name.:ext?'>>().toEqualTypeOf<
+      { name: string; ext: string } | { name?: undefined; ext?: undefined }
+    >()
+    expectTypeOf<PathParams<'/x/:name.json?'>>().toEqualTypeOf<{ name?: string }>()
+  })
+
+  it('reads a trailing ? as optional only on a segment that starts with its parameter and holds no constraint', () => {
+    expectTypeOf<PathParams<'/tags/:id(^\\d+)?'>>().toEqualTypeOf<{ id: string }>()
+    expectTypeOf<PathParams<'/item/item-:id?'>>().toEqualTypeOf<{ 'id?': string }>()
+    expectTypeOf<PathParams<'/api/v:version?'>>().toEqualTypeOf<{ 'version?': string }>()
+    expectTypeOf<PathParams<'/two/:a(^\\d+)-:b?'>>().toEqualTypeOf<{ a: string; 'b?': string }>()
+  })
+
+  it('reads a doubled colon as a literal one, and a single colon inside a name as part of it', () => {
+    expectTypeOf<PathParams<'/esc/a::b/:id'>>().toEqualTypeOf<{ id: string }>()
+    expectTypeOf<PathParams<'/esc/a::b'>>().toEqualTypeOf<Record<never, never>>()
+    expectTypeOf<PathParams<'/doc/:name.v::1'>>().toEqualTypeOf<{ name: string }>()
+    expectTypeOf<PathParams<'/k/:lat:lng'>>().toEqualTypeOf<{ 'lat:lng': string }>()
+  })
 })
 
 describe('handler context', () => {
@@ -57,6 +116,39 @@ describe('handler context', () => {
       .schema({ params: $t.Object({ id: $t.Integer() }) })
       .handler(ctx => {
         expectTypeOf(ctx.req.param().id).toEqualTypeOf<number>()
+        return ctx.body()
+      })
+  })
+
+  it('types every parameter a segment holds, under the group path too', () => {
+    const geo = new Router('/geo/:region')
+
+    geo.get('/near/:lat-:lng').handler(ctx => {
+      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ region: string; lat: string; lng: string }>()
+      expectTypeOf(ctx.req.param().lng).toEqualTypeOf<string>()
+      return ctx.body()
+    })
+
+    geo.get('/opt/:lat-:lng?').handler(ctx => {
+      const params = ctx.req.param()
+
+      if (params.lat !== undefined) {
+        expectTypeOf(params.lng).toEqualTypeOf<string>()
+      }
+      expectTypeOf(params.region).toEqualTypeOf<string>()
+      return ctx.body()
+    })
+
+    geo.get('/at/:hour(^\\d{2})h:minute(^\\d{2})m').handler(ctx => {
+      expectTypeOf(ctx.req.param()).toEqualTypeOf<{ region: string; hour: string; minute: string }>()
+      return ctx.body()
+    })
+
+    geo
+      .get('/near/:lat-:lng')
+      .schema({ params: $t.Object({ region: $t.String(), lat: $t.Number(), lng: $t.Number() }) })
+      .handler(ctx => {
+        expectTypeOf(ctx.req.param().lat).toEqualTypeOf<number>()
         return ctx.body()
       })
   })
@@ -281,6 +373,14 @@ describe('route accumulation', () => {
     const outer = new Router('/outer').mount(inner).mount('/v2', inner)
 
     expectTypeOf<RoutesOf<typeof outer>['path']>().toEqualTypeOf<'/outer/inner/ping' | '/outer/v2/inner/ping'>()
+  })
+
+  it('carries every parameter a segment holds, through a mount', () => {
+    const geo = new Router('/geo').get('/radius/:lat-:lng/r/:r').handler(() => ({ ok: true }))
+    const api = new Router('/api').mount('/v1', geo)
+
+    expectTypeOf<RoutesOf<typeof api>['path']>().toEqualTypeOf<'/api/v1/geo/radius/:lat-:lng/r/:r'>()
+    expectTypeOf<RoutesOf<typeof api>['params']>().toEqualTypeOf<{ lat: string; lng: string; r: string }>()
   })
 
   it('folds every mounted router into the application', () => {

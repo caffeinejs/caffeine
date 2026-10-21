@@ -614,6 +614,208 @@ describe('the escape hatch', () => {
   })
 })
 
+describe('a segment holding more than one parameter, or text beside one', () => {
+  const shapes = new Router('/shapes')
+    .get('/near/:lat-:lng')
+    .handler(() => ({ near: true }))
+    .get('/files/:name.:ext')
+    .handler(() => ({ file: true }))
+    .get('/span/:from-:to-:step')
+    .handler(() => ({ span: true }))
+    .get('/ver/:major.:minor.:patch')
+    .handler(() => ({ ver: true }))
+    .get('/mixed/:a-:b.:c')
+    .handler(() => ({ mixed: true }))
+    .get('/at/:hour(^\\d{2})h:minute(^\\d{2})m')
+    .handler(() => ({ at: true }))
+    .get('/pair/:a(^\\d+)-:b')
+    .handler(() => ({ pair: true }))
+    .get('/two/:a(^\\d+)-:b(^\\d+)')
+    .handler(() => ({ two: true }))
+    .get('/doc/:name.json')
+    .handler(() => ({ doc: true }))
+    .get('/api/v:version')
+    .handler(() => ({ api: true }))
+    .get('/item/item-:id.json')
+    .handler(() => ({ item: true }))
+    .get('/radius/:lat-:lng/r/:r')
+    .handler(() => ({ radius: true }))
+    .get('/opt/:lat-:lng?')
+    .handler(() => ({ opt: true }))
+    .get('/rgx/:id(^(?:\\d+)$)')
+    .handler(() => ({ rgx: true }))
+    .get('/esc/a::b/:id')
+    .handler(() => ({ esc: true }))
+    .get('/tail/:id-:rev/*')
+    .handler(() => ({ tail: true }))
+    .get('/k/:lat:lng')
+    .handler(() => ({ named: true }))
+    .get('/tags/:id(^\\d+)?')
+    .handler(() => ({ tags: true }))
+    .get('/item2/item-:id?')
+    .handler(() => ({ item2: true }))
+    .get('/esc2/:id(^\\)x$)')
+    .handler(() => ({ esc2: true }))
+  const geo = new Router('/geo')
+    .get('/:id')
+    .handler(() => ({ lone: true }))
+    .get('/:lat-:lng')
+    .handler(() => ({ shared: true }))
+  const typed = new Router('/typed')
+    .get('/near/:lat-:lng')
+    .schema({ params: $t.Object({ lat: $t.Number(), lng: $t.Number() }) })
+    .handler(() => ({ typed: true }))
+  const shaped = brewer<typeof shapes | typeof geo | typeof typed>('http://localhost')
+
+  it('is addressed through $request, each parameter by its own name', () => {
+    typeOnly(async () => {
+      const near = await shaped.$request('GET', '/shapes/near/:lat-:lng', { params: { lat: '1', lng: '2' } })
+
+      expectTypeOf(await near.json()).toEqualTypeOf<{ near: boolean }>()
+      void shaped.$request('GET', '/shapes/files/:name.:ext', { params: { name: 'a', ext: 'b' } })
+      void shaped.$request('GET', '/shapes/span/:from-:to-:step', { params: { from: '1', to: '9', step: '2' } })
+      void shaped.$request('GET', '/shapes/ver/:major.:minor.:patch', {
+        params: { major: '1', minor: '2', patch: '3' },
+      })
+      void shaped.$request('GET', '/shapes/mixed/:a-:b.:c', { params: { a: 'x', b: 'y', c: 'z' } })
+      void shaped.$request('GET', '/shapes/at/:hour(^\\d{2})h:minute(^\\d{2})m', {
+        params: { hour: '08', minute: '24' },
+      })
+      void shaped.$request('GET', '/shapes/pair/:a(^\\d+)-:b', { params: { a: '12', b: 'x' } })
+      void shaped.$request('GET', '/shapes/two/:a(^\\d+)-:b(^\\d+)', { params: { a: '1', b: '2' } })
+      void shaped.$request('GET', '/shapes/doc/:name.json', { params: { name: 'a' } })
+      void shaped.$request('GET', '/shapes/api/v:version', { params: { version: '2' } })
+      void shaped.$request('GET', '/shapes/item/item-:id.json', { params: { id: '7' } })
+      void shaped.$request('GET', '/shapes/radius/:lat-:lng/r/:r', { params: { lat: '1', lng: '2', r: '3' } })
+      void shaped.$request('GET', '/shapes/rgx/:id(^(?:\\d+)$)', { params: { id: '42' } })
+      void shaped.$request('GET', '/shapes/esc/a::b/:id', { params: { id: '7' } })
+      void shaped.$request('GET', '/shapes/tail/:id-:rev/*', { params: { id: '7', rev: '3', '*': 'a/b' } })
+      void shaped.$request('GET', '/shapes/k/:lat:lng', { params: { 'lat:lng': 'x' } })
+    })
+  })
+
+  it('refuses the segment read as one name, and a parameter left out', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- `lat-:lng` is two parameters, not one
+      void shaped.$request('GET', '/shapes/near/:lat-:lng', { params: { 'lat-:lng': '1-2' } })
+      // @ts-expect-error -- `.json` is text after the parameter, not part of its name
+      void shaped.$request('GET', '/shapes/doc/:name.json', { params: { 'name.json': 'a.json' } })
+      // @ts-expect-error -- `lng` is required as well
+      void shaped.$request('GET', '/shapes/near/:lat-:lng', { params: { lat: '1' } })
+      // @ts-expect-error -- `step` is required as well
+      void shaped.$request('GET', '/shapes/span/:from-:to-:step', { params: { from: '1', to: '9' } })
+      // @ts-expect-error -- `::` is a literal colon, so `:b` is no parameter
+      void shaped.$request('GET', '/shapes/esc/a::b/:id', { params: { id: '7', ':b': 'x' } })
+    })
+  })
+
+  it('lets an optional shared segment be left out whole, and refuses it given only some of its parameters', () => {
+    typeOnly(() => {
+      void shaped.$request('GET', '/shapes/opt/:lat-:lng?')
+      void shaped.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1', lng: '2' } })
+      // @ts-expect-error -- the router drops the segment whole, so `lng` comes with `lat` or neither does
+      void shaped.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1' } })
+    })
+  })
+
+  it('requires a parameter whose ? the router does not read as optional', () => {
+    typeOnly(() => {
+      void shaped.$request('GET', '/shapes/tags/:id(^\\d+)?', { params: { id: '42' } })
+      // @ts-expect-error -- a `?` after a constraint is text, so `id` is required
+      void shaped.$request('GET', '/shapes/tags/:id(^\\d+)?')
+      void shaped.$request('GET', '/shapes/item2/item-:id?', { params: { 'id?': '7' } })
+      // @ts-expect-error -- the segment does not start with its parameter, so the router names it `id?`
+      void shaped.$request('GET', '/shapes/item2/item-:id?', { params: { id: '7' } })
+    })
+  })
+
+  it('takes the types a params schema declares', () => {
+    typeOnly(() => {
+      void shaped.$request('GET', '/typed/near/:lat-:lng', { params: { lat: 1.5, lng: 2.5 } })
+      // @ts-expect-error -- the schema says both are numbers
+      void shaped.$request('GET', '/typed/near/:lat-:lng', { params: { lat: '1.5', lng: '2.5' } })
+    })
+  })
+
+  it('is not offered by the proxy, which never sees the text between and beside parameters', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- two parameters share the segment: `$request` fills it
+      void shaped.shapes.near({ lat: '1', lng: '2' })
+      // @ts-expect-error -- two parameters share the segment: `$request` fills it
+      void shaped.shapes.files({ name: 'a', ext: 'b' })
+      // @ts-expect-error -- three parameters share the segment: `$request` fills it
+      void shaped.shapes.span({ from: '1', to: '9', step: '2' })
+      // @ts-expect-error -- three parameters share the segment: `$request` fills it
+      void shaped.shapes.ver({ major: '1', minor: '2', patch: '3' })
+      // @ts-expect-error -- three parameters share the segment: `$request` fills it
+      void shaped.shapes.mixed({ a: 'x', b: 'y', c: 'z' })
+      // @ts-expect-error -- two constrained parameters share the segment: `$request` fills it
+      void shaped.shapes.at({ hour: '08', minute: '24' })
+      // @ts-expect-error -- two parameters share the segment: `$request` fills it
+      void shaped.shapes.pair({ a: '12', b: 'x' })
+      // @ts-expect-error -- two constrained parameters share the segment, though it ends as a lone one would
+      void shaped.shapes.two({ a: '1' })
+      // @ts-expect-error -- `.json` follows the parameter: `$request` fills it
+      void shaped.shapes.doc({ name: 'a' })
+      // @ts-expect-error -- the shared segment comes first, so `:r` after it is out of reach too
+      void shaped.shapes.radius({ lat: '1', lng: '2' })
+      // @ts-expect-error -- an optional shared segment is still shared: `$request` fills it
+      void shaped.shapes.opt({ lat: '1', lng: '2' })
+      // @ts-expect-error -- two parameters share the segment before the wildcard: `$request` fills it
+      void shaped.shapes.tail({ id: '7', rev: '3' })
+      // @ts-expect-error -- a node holding a shared segment beside a lone one offers only the lone one
+      void shaped.geo({ lat: '1', lng: '2' })
+    })
+  })
+
+  it('offers no static child for a segment that holds a parameter', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- `v:version` holds a parameter, which the proxy would send as text
+      void shaped.shapes.api['v:version'].get()
+      // @ts-expect-error -- `item-:id.json` holds a parameter, which the proxy would send as text
+      void shaped.shapes.item['item-:id.json'].get()
+      // @ts-expect-error -- `a::b` is matched as `a:b`, which the proxy would not send
+      void shaped.shapes.esc['a::b']({ id: '7' }).get()
+    })
+  })
+
+  it('still offers a segment that is one parameter alone, constrained or named with a colon', () => {
+    typeOnly(async () => {
+      expectTypeOf(await (await shaped.shapes.rgx({ id: '42' }).get()).json()).toEqualTypeOf<{ rgx: boolean }>()
+      expectTypeOf(await (await shaped.shapes.k({ 'lat:lng': 'x' }).get()).json()).toEqualTypeOf<{ named: boolean }>()
+      expectTypeOf(await (await shaped.geo({ id: '1' }).get()).json()).toEqualTypeOf<{ lone: boolean }>()
+      // An escaped `)` does not close the constraint, so nothing follows it.
+      expectTypeOf(await (await shaped.shapes.esc2({ id: ')x' }).get()).json()).toEqualTypeOf<{ esc2: boolean }>()
+    })
+  })
+
+  it('does not offer a constrained parameter followed by a ?, which the proxy would send as the query', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- the `?` after the constraint is text: `$request` sends it as `%3F`
+      void shaped.shapes.tags({ id: '42' })
+    })
+  })
+
+  // A params schema that declares no keys says nothing about the path, so the segment's own text decides.
+  it('reads the segment from the path, not from a params schema that declares no keys', () => {
+    const open = new Router('/open')
+      .get('/files/:name.json')
+      .schema({ params: $t.Record($t.String(), $t.String()) })
+      .handler(() => ({ file: true }))
+      .get('/pets/:id')
+      .schema({ params: $t.Record($t.String(), $t.String()) })
+      .handler(() => ({ pet: true }))
+    const opened = brewer<typeof open>('http://localhost')
+
+    typeOnly(async () => {
+      // @ts-expect-error -- `.json` follows the parameter: `$request` fills it
+      void opened.open.files({ name: 'report' })
+      expectTypeOf(await (await opened.open.pets({ id: '1' }).get()).json()).toEqualTypeOf<{ pet: boolean }>()
+      void opened.$request('GET', '/open/files/:name.json', { params: { name: 'report' } })
+    })
+  })
+})
+
 describe('what the client can be typed from', () => {
   it('accepts an application, a router, or the bare union', () => {
     typeOnly(async () => {

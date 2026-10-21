@@ -730,8 +730,9 @@ await client.pets.post({ body: { name: 'Rex' } })
   stream an upload only over HTTP/2, and Firefox and Safari not at all.
 - The file helpers hang off the client's root, `$`-prefixed like `$request`, so they seldom share a name with a
   route segment. A root segment that does is reached through `$request`.
-- `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`: a URL would resolve
-  it as a step along the path and reach another route. A parameter given `undefined` or `null` adds no segment,
+- `.query({ body })` sends QUERY. A path value of `.` or `..` rejects with `ErrBrewPathValue`, as does a segment its
+  values fill as one (`:name.:ext` with two empty values): a URL would resolve it as a step along the path and reach
+  another route. A parameter given `undefined` or `null` adds no segment,
   which is how an optional one is left out, so only the types require one: a call they do not check, through a cast
   or plain JavaScript, reaches the parent route instead. `$request` rejects the same call with `ErrBrewPathParam`.
 - Interceptors run around every request, on the platform's own `Request` and `Response`. The first listed sees the
@@ -786,6 +787,9 @@ await client.pets.post({ body: { name: 'Rex' } })
 
 - Zero runtime dependencies and browser-safe. The front-end needs `@caffeinejs/http` as a **devDependency** only to
   resolve the `App` type — `import type` is erased, so nothing ships.
-- Escape hatch for a path built at run time, a segment named after a verb or `then` (or `$request`, at the root), or
-  a method with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`.
+- Escape hatch for a path built at run time, a segment named after a verb or `then` (or `$request`, at the root), a
+  segment holding more than one parameter or text beside one (`/near/:lat-:lng`, `/files/:name.json`), or a method
+  with no verb: `client.$request('GET', '/pets/:id', { params: { id: 1 } })`. A trailing `?` makes a segment
+  optional only when the segment starts with its parameter and has no constraint (`:id?`, `:lat-:lng?`), and the
+  parameters of such a segment are given together or not at all.
 - Static: `.with(staticFiles(s => s.serve(root, { prefix: '/static' })))`. That serves files. It is not SPA history fallback — for a single-page application see [spa.md](spa.md), which is routing the application writes. Default `@fastify/static` `wildcard: true` will 404 missing files under the prefix, not return `index.html`.
