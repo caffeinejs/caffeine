@@ -1,4 +1,5 @@
 import { Readable } from 'node:stream'
+import { gunzipSync, gzipSync } from 'node:zlib'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -139,6 +140,13 @@ routes.get('/ten').handler(() => Attachment(new TextEncoder().encode('0123456789
 routes.get('/handler-typed').handler(ctx => {
   ctx.header('content-type', 'text/markdown')
   return Attachment(BODY)
+})
+// An export stored compressed, served under its coding: the bytes ranges are taken of are the gzip bytes.
+const CSV = 'region,order,total\n'.repeat(200)
+const GZIPPED = new Uint8Array(gzipSync(CSV))
+routes.get('/gzipped').handler(ctx => {
+  ctx.header('content-encoding', 'gzip')
+  return Attachment(GZIPPED, { name: 'orders.csv', type: 'text/csv' })
 })
 routes.get('/handler-typed-badly').handler(ctx => {
   ctx.header('content-type', 'text/plain\r\nX-Evil: yes')
@@ -561,6 +569,26 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
     const res = await app.fetch('/files/one-byte', { headers: { range: 'bytes=0-0,0-0' } })
 
     await expectRangeAnswer(res, { status: 200 }, 1)
+  })
+})
+
+describe('Attachment() keeps the content coding a body carries (RFC 9110 §8.4)', () => {
+  it('sends a coded body whole to several ranges: a multipart answer cannot carry the coding of what it slices', async () => {
+    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9,20-29' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(res.headers.get('content-type')).toBe('text/csv')
+    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toBe(CSV)
+  })
+
+  it('serves one range of a coded body as a part of its coded bytes, under the same coding', async () => {
+    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9' } })
+
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(res.headers.get('content-range')).toBe(`bytes 0-9/${GZIPPED.length}`)
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(GZIPPED.subarray(0, 10))
   })
 })
 

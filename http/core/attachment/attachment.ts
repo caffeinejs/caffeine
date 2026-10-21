@@ -61,7 +61,8 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * A `Blob` or bytes answer a `GET` carrying `Range` with `206` and that range, and say `Accept-Ranges: bytes`. Several
  * ranges go out together as `multipart/byteranges`, in the order asked for; a range starting past the end is left out,
  * and `416` answers when none is left. A malformed range, another unit, more than 100 ranges, or ranges adding up to
- * more than the body get the whole body. With `If-Range`, ranges are served only while the client's validator still
+ * more than the body get the whole body, and so does a body the reply gives a `Content-Encoding`, to several ranges: a
+ * multipart answer cannot carry that coding. With `If-Range`, ranges are served only while the client's validator still
  * matches `etag` or `lastModified`; otherwise the whole current body goes out. A stream is sent whole, its length not
  * known, and so is a `Blob` past 4 GiB, which Node cannot cut a part out of.
  *
@@ -202,6 +203,12 @@ class AttachmentResult extends Responder {
 
       // Bytes are not copied for a part of them: Fastify sends the view as it is.
       return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
+    }
+
+    // RFC 9110 §8.4: a content coding is the whole representation's, and a multipart envelope of its slices would go
+    // out labelled with a coding it does not have. The coded body goes out whole instead.
+    if (ctx.hasHeader('content-encoding')) {
+      return body
     }
 
     // A fresh boundary per answer, drawn at random, is one no body can be made to hold.
