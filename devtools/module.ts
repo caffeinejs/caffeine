@@ -1,6 +1,6 @@
 import { mod, type Module } from '@caffeinejs/di'
 
-import { ContainerCollector } from './collectors/container.collector.js'
+import { ContainerCollector } from './container.collector.js'
 import { DevtoolsServer, type DevtoolsOptions } from './server/server.js'
 
 /**
