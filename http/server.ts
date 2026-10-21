@@ -10,10 +10,7 @@ import type { AnyAdapterTypes, IAdapterTypes, ServerAddress } from './adapter.js
 export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
   get instance(): T['instance']
 
-  /**
-   * Where the server is listening, or `undefined` when there is no host and port to report: before it runs, once it
-   * has closed, or bound to a unix socket or a named pipe.
-   */
+  /** Where the server is listening, or `undefined` while it is not: before it runs, and once it has closed. */
   get address(): ServerAddress | undefined
 
   /** Answers `request` as it would one off the network, whether or not it is listening. */

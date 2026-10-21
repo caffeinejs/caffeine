@@ -631,7 +631,7 @@ const app = createWebApplication({ config })
 export class MetricsController {}
 
 await app.run()
-app.listeners.get('admin')?.address // { host, port, origin }
+app.listeners.get('admin')?.address // { host, port, path, origin }
 ```
 
 - **Binding is per router.** `@BindTo(name)` on a controller and `router.extend(bindTo(name))` bind every route under
