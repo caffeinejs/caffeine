@@ -28,7 +28,9 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
         return segment
       }
 
-      const optional = segment.endsWith('?')
+      // The router reads a trailing `?` as optional only on a segment that starts with its parameter and holds no
+      // constraint. Anywhere else the `?` is part of a name, as `item-:id?` binds `id?`, or text after a constraint.
+      const optional = segment.startsWith(':') && segment.endsWith('?') && !/[()]/.test(segment)
       const parts = readSegment(optional ? segment.slice(0, -1) : segment)
       const names = parts.filter(part => typeof part !== 'string').map(part => part.name)
       const values = fillParams(path, names, params, optional)
@@ -38,7 +40,9 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
       }
 
       let next = 0
-      const filled = parts.map(part => (typeof part === 'string' ? part : values[next++])).join('')
+      const filled = parts
+        .map((part, index) => (typeof part === 'string' ? escapeText(part, index === 0) : values[next++]))
+        .join('')
 
       // Each value was refused as a step on its own; empty ones can still leave the segment as one.
       if (filled === '.' || filled === '..') {
@@ -49,6 +53,15 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
     })
     .filter(segment => segment !== undefined)
     .join('/')
+}
+
+// Text beside a parameter, written the way find-my-way 9.9.0 matches it. Before the segment's first parameter it is a
+// static node, which takes a `%` as `%25` and every other character as written. After one it is matched by that
+// parameter's expression against the decoded segment, in which the router holds a `%` as `%25`.
+function escapeText(text: string, leading: boolean): string {
+  const held = text.replaceAll('%', '%25')
+
+  return leading ? held : encodeURIComponent(held)
 }
 
 // The encoded value of each name, in order, or `undefined` for an optional segment given none of them: the router

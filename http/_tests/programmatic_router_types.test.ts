@@ -64,9 +64,21 @@ describe('path parameters', () => {
     expectTypeOf<PathParams<'/tail/:id-:rev/*'>>().toEqualTypeOf<{ id: string; rev: string } & { '*': string }>()
   })
 
-  it('makes every parameter of an optional segment optional, since the router drops the segment whole', () => {
-    expectTypeOf<PathParams<'/opt/:lat-:lng?'>>().toEqualTypeOf<{ lat?: string; lng?: string }>()
-    expectTypeOf<PathParams<'/tags/:id(^\\d+)?'>>().toEqualTypeOf<{ id?: string }>()
+  it('gives the parameters of an optional segment together or not at all, since the router drops it whole', () => {
+    type Both = { lat: string; lng: string } | { lat?: undefined; lng?: undefined }
+
+    expectTypeOf<PathParams<'/opt/:lat-:lng?'>>().toEqualTypeOf<Both>()
+    expectTypeOf<PathParams<'/x/:name.:ext?'>>().toEqualTypeOf<
+      { name: string; ext: string } | { name?: undefined; ext?: undefined }
+    >()
+    expectTypeOf<PathParams<'/x/:name.json?'>>().toEqualTypeOf<{ name?: string }>()
+  })
+
+  it('reads a trailing ? as optional only on a segment that starts with its parameter and holds no constraint', () => {
+    expectTypeOf<PathParams<'/tags/:id(^\\d+)?'>>().toEqualTypeOf<{ id: string }>()
+    expectTypeOf<PathParams<'/item/item-:id?'>>().toEqualTypeOf<{ 'id?': string }>()
+    expectTypeOf<PathParams<'/api/v:version?'>>().toEqualTypeOf<{ 'version?': string }>()
+    expectTypeOf<PathParams<'/two/:a(^\\d+)-:b?'>>().toEqualTypeOf<{ a: string; 'b?': string }>()
   })
 
   it('reads a doubled colon as a literal one, and a single colon inside a name as part of it', () => {
@@ -114,6 +126,16 @@ describe('handler context', () => {
     geo.get('/near/:lat-:lng').handler(ctx => {
       expectTypeOf(ctx.req.param()).toEqualTypeOf<{ region: string; lat: string; lng: string }>()
       expectTypeOf(ctx.req.param().lng).toEqualTypeOf<string>()
+      return ctx.body()
+    })
+
+    geo.get('/opt/:lat-:lng?').handler(ctx => {
+      const params = ctx.req.param()
+
+      if (params.lat !== undefined) {
+        expectTypeOf(params.lng).toEqualTypeOf<string>()
+      }
+      expectTypeOf(params.region).toEqualTypeOf<string>()
       return ctx.body()
     })
 

@@ -11,28 +11,45 @@ export type Simplify<T> = { [K in keyof T]: T[K] } & {}
 /**
  * The path parameters a route path declares, as `{ id: string }`.
  *
- * Reads the path the way the router matches it: `:name` is a parameter, `:name?` an optional one, a trailing
- * `(...)` on a parameter is a matching constraint rather than part of the name, and `*` is the wildcard. A segment
- * may hold several parameters, as `/near/:lat-:lng` and `/files/:name.:ext` do: a name ends at `(`, `-` or `.`,
- * and text after it runs to the next `:`. `::` is a literal colon. A path that is not a literal type — one built
- * at runtime — yields the open `Record<string, string>`.
+ * Reads the path the way the router matches it: `:name` is a parameter, a trailing `(...)` on a parameter is a
+ * matching constraint rather than part of the name, and `*` is the wildcard. A segment may hold several parameters,
+ * as `/near/:lat-:lng` and `/files/:name.:ext` do: a name ends at `(`, `-` or `.`, and text after it runs to the
+ * next `:`. `::` is a literal colon. A trailing `?` makes a segment optional only when the segment starts with its
+ * parameter and holds no constraint, as `:id?` and `:lat-:lng?` do; the parameters of such a segment come together
+ * or not at all. Anywhere else the router reads the `?` as part of a name, as `item-:id?` binds `id?`, or as text.
+ * A path that is not a literal type — one built at runtime — yields the open `Record<string, string>`.
  */
 export type PathParams<P extends string> = string extends P ? Record<string, string> : ParamsOfPath<P>
 
-type ParamsOfPath<P extends string> = P extends `${string}:${infer Tail}`
+type ParamsOfPath<P extends string> = P extends `${infer Lead}:${infer Tail}`
   ? Tail extends `:${infer After}`
     ? ParamsOfPath<After>
     : Tail extends `${infer Segment}/${infer Rest}`
-      ? ParamEntry<Segment> & ParamsOfPath<`/${Rest}`>
-      : ParamEntry<Tail>
+      ? ParamEntry<Segment, Lead> & ParamsOfPath<`/${Rest}`>
+      : ParamEntry<Tail, Lead>
   : P extends `${string}*${string}`
     ? { '*': string }
     : Record<never, never>
 
-// The router drops an optional segment whole, so every parameter in it is optional.
-type ParamEntry<Segment extends string> = Segment extends `${infer Body}?`
-  ? { [K in SegmentNames<Body>]?: string }
-  : { [K in SegmentNames<Segment>]: string }
+type ParamEntry<Segment extends string, Lead extends string> = [OptionalBody<Segment, Lead>] extends [never]
+  ? { [K in SegmentNames<Segment>]: string }
+  : OptionalEntry<SegmentNames<OptionalBody<Segment, Lead>>>
+
+// What precedes the `?` of a segment the router reads as optional: one that starts with its parameter, after a `/`,
+// and holds no constraint. `never` for any other segment.
+type OptionalBody<Segment extends string, Lead extends string> = Lead extends `${string}/`
+  ? Segment extends `${infer Body}?`
+    ? Segment extends `${string}${'(' | ')'}${string}`
+      ? never
+      : Body
+    : never
+  : never
+
+// The router drops an optional segment whole, so its parameters are all given or none is.
+type OptionalEntry<Names extends string> =
+  true extends IsUnion<Names> ? { [K in Names]: string } | { [K in Names]?: undefined } : { [K in Names]?: string }
+
+type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never
 
 // The names in what follows a segment's first `:`. After each name, a constraint is skipped whole, and the text up
 // to the next single `:` is literal.

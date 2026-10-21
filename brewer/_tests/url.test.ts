@@ -89,7 +89,7 @@ describe('fillPath', () => {
     ['/opt/:lat-:lng?', { lat: 1, lng: 2 }, '/opt/1-2'],
     ['/rgx/:id(^(?:\\d+)$)', { id: 42 }, '/rgx/42'],
     ['/esc/a::b/:id', { id: 7 }, '/esc/a:b/7'],
-    ['/doc/:name.v::1', { name: 'report' }, '/doc/report.v:1'],
+    ['/doc/:name.v::1', { name: 'report' }, '/doc/report.v%3A1'],
     ['/tail/:id-:rev/*', { id: 7, rev: 3, '*': 'a/b' }, '/tail/7-3/a/b'],
     ['/k/:lat:lng', { 'lat:lng': 'x' }, '/k/x'],
   ])('fills %s, keeping the text beside each parameter', (path, params, expected) => {
@@ -149,6 +149,32 @@ describe('fillPath', () => {
     expect(fillPath('/files/:name.:ext', { name: '', ext: 'pdf' })).toBe('/files/.pdf')
     expect(fillPath('/files/:name.:ext', { name: 'a', ext: '' })).toBe('/files/a.')
     expect(fillPath('/near/:lat-:lng', { lat: '', lng: '' })).toBe('/near/-')
+  })
+
+  it('reads a trailing ? as optional only on a segment that starts with its parameter and holds no constraint', () => {
+    expect(fillPath('/x/:name.json?', {})).toBe('/x')
+    expect(fillPath('/x/:name.json?', { name: 'a' })).toBe('/x/a.json')
+    expect(fillPath('/item/item-:id?', { 'id?': 7 })).toBe('/item/item-7')
+    expect(() => fillPath('/item/item-:id?', {})).toThrow('path parameter "id?"')
+    expect(fillPath('/api/v:version?', { 'version?': 2 })).toBe('/api/v2')
+    expect(() => fillPath('/api/v:version?', {})).toThrow('path parameter "version?"')
+    expect(fillPath('/two/:a(^\\d+)-:b?', { a: 1, 'b?': 2 })).toBe('/two/1-2')
+  })
+
+  // The router reads a `?` after a constraint as text, so it is sent escaped rather than starting the query.
+  it('sends the ? that follows a constraint as text, and requires the parameter before it', () => {
+    expect(fillPath('/tags/:id(^\\d+)?', { id: 42 })).toBe('/tags/42%3F')
+    expect(() => fillPath('/tags/:id(^\\d+)?', {})).toThrow('path parameter "id"')
+  })
+
+  // find-my-way 9.9.0 matches text after a parameter against the decoded segment, its `%` stored doubled, and text
+  // before the first parameter as a static node, which a `%25` reaches.
+  it('escapes the text beside a parameter as the router matches it', () => {
+    expect(fillPath('/near/:a-%:b', { a: 1, b: 2 })).toBe('/near/1-%25252')
+    expect(fillPath('/h/:a-#:b', { a: 1, b: 2 })).toBe('/h/1-%232')
+    expect(fillPath('/x/100%-:id', { id: 7 })).toBe('/x/100%25-7')
+    expect(fillPath('/p/x+-:id', { id: 7 })).toBe('/p/x+-7')
+    expect(fillPath('/p/v::1-:id', { id: 7 })).toBe('/p/v:1-7')
   })
 })
 

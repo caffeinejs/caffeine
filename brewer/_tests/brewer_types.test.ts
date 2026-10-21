@@ -650,6 +650,10 @@ describe('a segment holding more than one parameter, or text beside one', () => 
     .handler(() => ({ tail: true }))
     .get('/k/:lat:lng')
     .handler(() => ({ named: true }))
+    .get('/tags/:id(^\\d+)?')
+    .handler(() => ({ tags: true }))
+    .get('/item2/item-:id?')
+    .handler(() => ({ item2: true }))
   const geo = new Router('/geo')
     .get('/:id')
     .handler(() => ({ lone: true }))
@@ -703,10 +707,23 @@ describe('a segment holding more than one parameter, or text beside one', () => 
     })
   })
 
-  it('lets an optional shared segment be left out whole', () => {
+  it('lets an optional shared segment be left out whole, and refuses it given only some of its parameters', () => {
     typeOnly(() => {
       void shaped.$request('GET', '/shapes/opt/:lat-:lng?')
       void shaped.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1', lng: '2' } })
+      // @ts-expect-error -- the router drops the segment whole, so `lng` comes with `lat` or neither does
+      void shaped.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1' } })
+    })
+  })
+
+  it('requires a parameter whose ? the router does not read as optional', () => {
+    typeOnly(() => {
+      void shaped.$request('GET', '/shapes/tags/:id(^\\d+)?', { params: { id: '42' } })
+      // @ts-expect-error -- a `?` after a constraint is text, so `id` is required
+      void shaped.$request('GET', '/shapes/tags/:id(^\\d+)?')
+      void shaped.$request('GET', '/shapes/item2/item-:id?', { params: { 'id?': '7' } })
+      // @ts-expect-error -- the segment does not start with its parameter, so the router names it `id?`
+      void shaped.$request('GET', '/shapes/item2/item-:id?', { params: { id: '7' } })
     })
   })
 
@@ -765,6 +782,32 @@ describe('a segment holding more than one parameter, or text beside one', () => 
       expectTypeOf(await (await shaped.shapes.rgx({ id: '42' }).get()).json()).toEqualTypeOf<{ rgx: boolean }>()
       expectTypeOf(await (await shaped.shapes.k({ 'lat:lng': 'x' }).get()).json()).toEqualTypeOf<{ named: boolean }>()
       expectTypeOf(await (await shaped.geo({ id: '1' }).get()).json()).toEqualTypeOf<{ lone: boolean }>()
+    })
+  })
+
+  it('does not offer a constrained parameter followed by a ?, which the proxy would send as the query', () => {
+    typeOnly(() => {
+      // @ts-expect-error -- the `?` after the constraint is text: `$request` sends it as `%3F`
+      void shaped.shapes.tags({ id: '42' })
+    })
+  })
+
+  // A params schema that declares no keys says nothing about the path, so the segment's own text decides.
+  it('reads the segment from the path, not from a params schema that declares no keys', () => {
+    const open = new Router('/open')
+      .get('/files/:name.json')
+      .schema({ params: $t.Record($t.String(), $t.String()) })
+      .handler(() => ({ file: true }))
+      .get('/pets/:id')
+      .schema({ params: $t.Record($t.String(), $t.String()) })
+      .handler(() => ({ pet: true }))
+    const opened = brewer<typeof open>('http://localhost')
+
+    typeOnly(async () => {
+      // @ts-expect-error -- `.json` follows the parameter: `$request` fills it
+      void opened.open.files({ name: 'report' })
+      expectTypeOf(await (await opened.open.pets({ id: '1' }).get()).json()).toEqualTypeOf<{ pet: boolean }>()
+      void opened.$request('GET', '/open/files/:name.json', { params: { name: 'report' } })
     })
   })
 })

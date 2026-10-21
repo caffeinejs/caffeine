@@ -158,7 +158,8 @@ describe('brewer (property)', () => {
     'drops an optional shared segment given no value, fills it given every value, and refuses it given some',
     async params => {
       const client = brewer(app)
-      const sent = client.$request('GET', '/echo/opt/:lat-:lng?', { params })
+      // The types take every value or none, so a subset goes through a cast, as an unchecked call would send it.
+      const sent = client.$request('GET', '/echo/opt/:lat-:lng?', { params: params as never })
       const given = Object.keys(params).length
 
       if (given === 1) {

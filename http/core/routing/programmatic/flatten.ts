@@ -270,7 +270,7 @@ function defaultGroupName(path: string): string {
 function pathSegments(path: string): string[] {
   return path
     .split('/')
-    .map(segment => segmentName(segment.replace(/\?$/, '')).replace(/\*/g, 'all'))
+    .map(segment => segmentName(segment.replace(/\?$/, '')).replaceAll('*', 'all'))
     .filter(segment => segment.length > 0)
 }
 

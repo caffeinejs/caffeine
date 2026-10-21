@@ -119,6 +119,16 @@ const shapes = new Router('/shapes')
   .handler(ctx => ctx.req.param())
   .get('/k/:lat:lng')
   .handler(ctx => ctx.req.param())
+  .get('/tags/:id(^\\d+)?')
+  .handler(ctx => ctx.req.param())
+  .get('/item2/item-:id?')
+  .handler(ctx => ctx.req.param())
+  .get('/pct/:a-%:b')
+  .handler(ctx => ctx.req.param())
+  .get('/hash/:a-#:b')
+  .handler(ctx => ctx.req.param())
+  .get('/pre/100%-:id')
+  .handler(ctx => ctx.req.param())
 
 const app = createWebApplication().mount(pets, files, tags, catalog, legacy, hatch, shapes)
 
@@ -282,7 +292,9 @@ describe('brewer against a running server', () => {
 
       expect(await both.json()).toEqual({ lat: '1', lng: '2' })
       expect(await none.json()).toEqual({})
-      await expect(client.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1' } })).rejects.toMatchObject({
+      // Only a call the types do not check can send one of the two: through a cast, or plain JavaScript.
+      const some = client.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1' } as never })
+      await expect(some).rejects.toMatchObject({
         name: 'ErrBrewPathParam',
         message: expect.stringContaining('no value for path parameter "lng"'),
       })
@@ -299,6 +311,29 @@ describe('brewer against a running server', () => {
         message: expect.stringContaining('segment ":name.:ext" is "." once filled'),
       })
       expect(sent).toEqual([])
+    })
+
+    it('should send a ? the router does not read as optional, and the parameter it names', async () => {
+      const { client, sent } = spied()
+
+      const tags = await client.$request('GET', '/shapes/tags/:id(^\\d+)?', { params: { id: '42' } })
+      const item = await client.$request('GET', '/shapes/item2/item-:id?', { params: { 'id?': '7' } })
+
+      expect(await tags.json()).toEqual({ id: '42' })
+      expect(await item.json()).toEqual({ 'id?': '7' })
+      expect(sent).toEqual(['http://localhost/shapes/tags/42%3F', 'http://localhost/shapes/item2/item-7'])
+    })
+
+    it('should escape the text beside a parameter so the router matches it', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const pct = await client.$request('GET', '/shapes/pct/:a-%:b', { params: { a: '1', b: '2' } })
+      const hash = await client.$request('GET', '/shapes/hash/:a-#:b', { params: { a: '1', b: '2' } })
+      const pre = await client.$request('GET', '/shapes/pre/100%-:id', { params: { id: '7' } })
+
+      expect(await pct.json()).toEqual({ a: '1', b: '2' })
+      expect(await hash.json()).toEqual({ a: '1', b: '2' })
+      expect(await pre.json()).toEqual({ id: '7' })
     })
 
     it('should still reach a lone constrained parameter through the proxy', async () => {
