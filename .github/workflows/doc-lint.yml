@@ -4,11 +4,13 @@ on:
   push:
     paths:
       - '**/*.md'
+      - '.markdownlint-cli2.yaml'
   pull_request:
     branches:
       - main
     paths:
       - '**/*.md'
+      - '.markdownlint-cli2.yaml'
 
 permissions:
   contents: read

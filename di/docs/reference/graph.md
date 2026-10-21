@@ -27,7 +27,7 @@ Every renderer takes a container, its `entries()`, or a graph from
 
 ---
 
-### buildBindingGraph
+## buildBindingGraph
 
 ```ts
 buildBindingGraph(bindings: Iterable<[InjectionToken, Binding]>): BindingGraph
@@ -58,7 +58,7 @@ const graph = buildBindingGraph(container)
 
 ---
 
-### graphToText
+## graphToText
 
 ```ts
 graphToText(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string
@@ -73,7 +73,7 @@ console.log(graphToText(container))
 
 Example output:
 
-```
+```text
 UserService(scope=singleton)
   ├─ Logger(scope=singleton)
   └─ Database(scope=singleton)
@@ -86,7 +86,7 @@ Database(scope=singleton)
 
 ---
 
-### graphToMarkdown
+## graphToMarkdown
 
 ```ts
 graphToMarkdown(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string
@@ -101,7 +101,7 @@ console.log(graphToMarkdown(container))
 
 ---
 
-### graphToMermaid
+## graphToMermaid
 
 ```ts
 graphToMermaid(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string
@@ -128,7 +128,7 @@ flowchart LR
 
 ---
 
-### graphToDot
+## graphToDot
 
 ```ts
 graphToDot(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string
@@ -143,7 +143,7 @@ console.log(graphToDot(container))
 
 ---
 
-### graphToJSON
+## graphToJSON
 
 ```ts
 graphToJSON(input: Iterable<[InjectionToken, Binding]> | BindingGraph): string

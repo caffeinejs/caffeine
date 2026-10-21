@@ -2,6 +2,7 @@
 
 - Agent behavior: [`AGENTS.md`](AGENTS.md)
 - Coding conventions: [`CONVENTIONS.md`](CONVENTIONS.md)
+- Writing features and plugins: [`FEATURES.md`](FEATURES.md)
 - AI-assisted contributions: [`AI_POLICY.md`](AI_POLICY.md)
 - MCP servers: [`.mcp.json`](.mcp.json). Export the environment variables it names in the shell that launches the client.
 
@@ -40,7 +41,7 @@ with `CAFFEINE_E2E_STRICT=1`, which fails such a spec instead.
 
 Commits must follow [Conventional Commits](https://www.conventionalcommits.org/).
 
-```
+```text
 <type>(<optional scope>): <description>
 ```
 
@@ -48,7 +49,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`.
 
 Examples:
 
-```
+```text
 feat(scopes): add transient scope support
 fix(container): resolve circular dependency detection bug
 docs: update getting started guide

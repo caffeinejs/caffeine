@@ -23,7 +23,7 @@ else, and every client route is a route the application wrote.
 
 ## Architecture
 
-```
+```text
 examples/04-spa-dashboard/
 ├── Dockerfile                one stage: build the workspace, build web/dist, run api/main.ts
 ├── docker-compose.yml        the whole example in a container, on :9010
@@ -87,7 +87,7 @@ docker compose -f examples/04-spa-dashboard/docker-compose.yml up --build
 ```
 
 One service and no database: the image builds the workspace packages and the front-end bundle, then serves on
-**http://localhost:9010** with the same two accounts. `SPA_SERVER__HOST` is `0.0.0.0` there — the schema
+**<http://localhost:9010>** with the same two accounts. `SPA_SERVER__HOST` is `0.0.0.0` there — the schema
 default `127.0.0.1` binds an interface nothing outside the container can reach.
 
 The healthcheck polls the application's own `/readyz`, so `docker compose ps` calls the container healthy only

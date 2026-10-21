@@ -1,7 +1,16 @@
 # See https://github.com/DavidAnson/markdownlint-cli2
 config:
-  # Disable all rules by default.
-  default: false
+  default: true
+  # oxfmt owns wrapping; the root docs keep one paragraph per line.
+  MD013: false
+  # Each CLAUDE.md is a one-line `@AGENTS.md` import.
+  MD041: false
+  # The README hero and badges, and the link in di/CREDITS.md.
+  MD033:
+    allowed_elements: [a, br, h1, img, p]
+  # A page title may repeat as the heading of its first section.
+  MD024:
+    siblings_only: true
 
 globs:
   - '**/*.md'

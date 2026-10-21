@@ -161,7 +161,7 @@ await server.listen({ port: 3000, host: '0.0.0.0' })
 
 ## How it works
 
-```
+```text
 HTTP request arrives
   │
   ├─ onRequest hook → requestScopeManager.run()

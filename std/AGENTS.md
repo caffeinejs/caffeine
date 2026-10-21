@@ -7,15 +7,10 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   `@caffeinejs/application`, which depends on this package, never the other way round.
 - There is no root entry. Each sub-directory (`duration/`, `bytes/`, `err/`) is its own `package.json` `exports`
   subpath; import it as `@caffeinejs/std/<sub>`.
-- `duration/` is Go's `time.Duration` in milliseconds: `parseDuration` is `ParseDuration` with `d` for a day, and
-  `formatDuration` is `String()` with days. `DURATION_PATTERN` admits exactly the unsigned text the parser reads,
+- `formatDuration` is Go's `String()` with days. `DURATION_PATTERN` admits exactly the unsigned text the parser reads,
   which `duration.prop.test.ts` checks, so change the two together, with the tables in `duration.test.ts`.
-- `bytes/` is a count of bytes, with binary unit constants (`KiB` … `PiB`): `parseBytes` reads Docker Compose's
-  grammar, every unit binary, and `formatBytes` writes the largest exact unit. `BYTES_PATTERN` admits exactly the
-  text the parser reads, except past `Number.MAX_SAFE_INTEGER` bytes, which `bytes.prop.test.ts` checks, so change
-  the two together, with the tables in `bytes.test.ts`.
-- An error class extends `Error` directly and sets its own `name` and `code`: `ErrCaffeine` belongs to
-  `@caffeinejs/application`.
-- `err/message.ts` is the error message builder (`errMessage`), and the only place it is written. It imports nothing:
-  the packages in `tools/copy-err-message.json` do not depend on `std` and get a generated copy, which
-  `make err-message` writes. The reference line is printed only once `REFERENCE_BASE_URL` is set here.
+- `formatBytes` writes the largest exact unit. `BYTES_PATTERN` admits exactly the text the parser reads, except past
+  `Number.MAX_SAFE_INTEGER` bytes, which `bytes.prop.test.ts` checks, so change the two together, with the tables in
+  `bytes.test.ts`.
+- An error class extends `Error` directly: `ErrCaffeine` belongs to `@caffeinejs/application`.
+- The reference line of `errMessage` is printed only once `REFERENCE_BASE_URL` in `err/message.ts` is set.
