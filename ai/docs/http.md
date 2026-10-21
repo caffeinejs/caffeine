@@ -461,7 +461,8 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 - Preconditions come before any range, in RFC 9110's order, on a `GET` or a `HEAD` that would get `200`:
   - An `If-Match` listing no tag that matches `etag` strongly, so never a weak one, or, without `If-Match`, an
     `If-Unmodified-Since` before `lastModified`, is refused: `Attachment` throws `ErrHTTPPreconditionFailed`, and
-    error handling answers `412`, through a `@Catch` handler when one names it.
+    error handling answers `412`, through a `@Catch` handler when one names it. `If-Match: *` holds for any body,
+    one without an `etag` included.
   - A client that holds the content already gets `304` and no body: an `If-None-Match` listing `etag`, compared
     weakly, or `*`; or, without `If-None-Match`, an `If-Modified-Since` not before `lastModified`.
   - A date that is not an HTTP-date, in any of RFC 9110's three forms, is ignored.
@@ -470,14 +471,18 @@ const exports = new Router('/exports').get('/q3').handler(async () => {
 - A `Blob` or bytes are served in ranges, so a large download cut off part-way resumes, and every answer says
   `Accept-Ranges: bytes`. A `GET` with one `Range` gets `206` and that part. Several go out together as
   `multipart/byteranges`, in the order asked for, each part under the type the whole body would carry. A range past
-  the end is left out, and `416` answers when none is left.
+  the end is left out, and `416` answers when none is left. A body the reply gives a `Content-Encoding` is sent whole
+  to several ranges: a multipart answer cannot carry that coding. One range of it is a part of its coded bytes.
 - A malformed range, another unit, more than 100 ranges, ranges adding up to more than the body, a `HEAD`, or a status
   other than `200` get the whole body. Under `HTTPCaching`, a `Range`, `If-Match` or `If-Unmodified-Since` request
-  skips the store and reaches the handler, and a part is never stored.
+  skips the store and reaches the handler, and a part is never stored. With `Cache-Control: only-if-cached`, which
+  forbids reaching the handler, a `Range` gets the stored whole body, or `504` when none is stored, and a
+  precondition gets `504`.
 - `If-Range` resumes only the same content: it must match `etag` exactly, or `lastModified` to the second. A weak
   `etag` never resumes. Otherwise the whole current body goes out, so a client never splices two versions together.
 - An `etag` is quoted, `'"v42"'`. An unquoted one, or a `lastModified` that is not a valid date, throws
-  `ErrConfiguration`: either would be a validator no client can match.
+  `ErrConfiguration`: either would be a validator no client can match. So does a `type` holding a control
+  character, which no header value may.
 - A stream is sent whole, since its length is not known. So is a `Blob` past 4 GiB: Node's `Blob.slice` cannot cut a
   part out of one.
 - `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32 (Node 22 and 24). Serve such a file from disk
