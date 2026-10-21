@@ -7,6 +7,9 @@ import { $m, MessageParams, type Picks } from '../index.js'
 
 const picks: Picks = [$m.payload(), $m.header('trace'), $m.context()]
 
+// @ts-expect-error — a name is not a pick.
+const _named: Picks = ['payload']
+
 class Orders {
   @MessageParams(picks)
   onOrder(_order: unknown, _trace: unknown, _ctx: unknown): void {}

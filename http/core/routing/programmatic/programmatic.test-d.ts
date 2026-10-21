@@ -3,9 +3,8 @@ import { expectTypeOf } from 'vitest'
 import { type AnyRouter, Router } from '../../../index.js'
 
 /**
- * `AnyRouter` is what a site taking routers of every kind names: `mount`, `blend`, a plugin's `context.app.mount` and
- * the test client. A router stays one whatever its path, routes and dependencies type it as. Nothing at run time
- * checks it, so `npm run test:typecheck` is the test.
+ * `AnyRouter` is what a plugin's `context.app.mount` and the test client take: a router stays one whatever its path,
+ * routes and dependencies type it as. Nothing at run time checks it, so `npm run test:typecheck` is the test.
  */
 
 class Greeter {

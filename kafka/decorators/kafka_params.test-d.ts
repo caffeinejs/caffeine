@@ -7,6 +7,9 @@ import { $k, KafkaParams, type Picks } from '../index.js'
 
 const picks: Picks = [$k.value(), $k.key(), $k.header('trace')]
 
+// @ts-expect-error — a name is not a pick.
+const _named: Picks = ['value']
+
 class Orders {
   @KafkaParams(picks)
   onOrder(_order: unknown, _key: string, _trace: string): void {}
