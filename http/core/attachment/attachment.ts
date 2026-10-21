@@ -18,6 +18,10 @@ const LARGEST_SLICEABLE = 2 ** 32 - 1
 // RFC 9110 §8.8.3: an optional weak prefix, then a quoted string holding neither a space nor a quote.
 const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 
+// What Node writes as a header value: tabs, visible ASCII and spaces, and obs-text. Anything else is dropped from the
+// header, and must never reach a part of a multipart body, where a line break would add lines of its own.
+const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
+
 /** {@link Attachment}'s options. */
 export interface AttachmentOptions {
   /**
@@ -27,7 +31,8 @@ export interface AttachmentOptions {
   name?: string
   /**
    * The `Content-Type`, over the route's. Without it, the route's or the handler's type, then a `Blob`'s own, then
-   * `application/octet-stream`. Several ranges go out as `multipart/byteranges`, each part under this type.
+   * `application/octet-stream`. Several ranges go out as `multipart/byteranges`, each part under this type. It holds
+   * no control character, as no header value may.
    */
   type?: string
   /**
@@ -71,7 +76,8 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * with the whole body, and any other method is the handler's own to guard, having acted already.
  *
  * @throws {@link ErrConfiguration} for an `etag` that is not a quoted entity tag, or a `lastModified` that is not a
- * valid date: either would be written as a validator no client can match.
+ * valid date: either would be written as a validator no client can match. Also for a `type` holding a control
+ * character, which no header value may.
  * @example
  * ```ts
  * .get('/exports/q3').handler(async () =>
@@ -80,7 +86,16 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * ```
  */
 export function Attachment(body: AttachmentBody, options: AttachmentOptions = {}): Responder {
-  const { etag, lastModified } = options
+  const { type, etag, lastModified } = options
+
+  if (type !== undefined && !FIELD_VALUE.test(type)) {
+    throw new ErrConfiguration(
+      errMessage(`Cannot use ${JSON.stringify(type)} as a Content-Type: a header value holds no control character`)
+        .solutions('Pass the media type alone, such as "text/csv"')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
 
   if (etag !== undefined && !ENTITY_TAG.test(etag)) {
     const bare = etag.replace(/^W\//i, '').replaceAll('"', '')
@@ -189,16 +204,27 @@ class AttachmentResult extends Responder {
       return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
     }
 
-    // Each part carries the type the whole body would go out under. A fresh boundary per answer, drawn at random,
-    // is one no body can be made to hold.
-    const type =
-      ctx.getHeader('content-type') ??
-      (sized instanceof NodeBlob && sized.type !== '' ? sized.type : MediaType.APPLICATION_OCTET_STREAM)
+    // A fresh boundary per answer, drawn at random, is one no body can be made to hold.
+    const type = partType(ctx, sized)
     const boundary = crypto.randomUUID().replaceAll('-', '')
     ctx.status(206).header('content-type', `multipart/byteranges; boundary=${boundary}`)
 
     return multipartByteRanges(sized, ranges, type, boundary)
   }
+}
+
+/**
+ * The type each part of a multipart answer carries: the one the whole body would go out under. A type Node would not
+ * write as a header value is not one, and the `Blob`'s own stands in, as on the whole body.
+ */
+function partType(ctx: IContext, sized: NodeBlob | Uint8Array<ArrayBuffer>): string {
+  const declared = ctx.getHeader('content-type')
+
+  if (declared !== undefined && FIELD_VALUE.test(declared)) {
+    return declared
+  }
+
+  return sized instanceof NodeBlob && sized.type !== '' ? sized.type : MediaType.APPLICATION_OCTET_STREAM
 }
 
 /** Closes a stream a 304 or a 412 leaves unread, so a file behind it is closed too. */

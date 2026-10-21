@@ -140,6 +140,10 @@ routes.get('/handler-typed').handler(ctx => {
   ctx.header('content-type', 'text/markdown')
   return Attachment(BODY)
 })
+routes.get('/handler-typed-badly').handler(ctx => {
+  ctx.header('content-type', 'text/plain\r\nX-Evil: yes')
+  return Attachment(new Blob([BODY], { type: PDF }))
+})
 routes.get('/async-bytes').handler(async () => {
   await Promise.resolve()
   return Attachment(BODY, { etag: ETAG, lastModified: MODIFIED })
@@ -527,6 +531,16 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
     )
   })
 
+  // Node drops such a value from the header it writes; written into a part, it would add lines of its own.
+  it("never writes a type holding a control character into a part, falling back to the Blob's own", async () => {
+    const res = await app.fetch('/files/handler-typed-badly', { headers: { range: 'bytes=0-4,10-14' } })
+    const body = new Uint8Array(await res.arrayBuffer())
+
+    expect(res.status).toBe(206)
+    expect(Buffer.from(body).toString('latin1')).not.toContain('X-Evil')
+    expect(parseByteRanges(res.headers.get('content-type'), body).map(part => part.type)).toEqual([PDF, PDF])
+  })
+
   it('draws a new boundary for every answer, so no body can be made to hold its own', async () => {
     const [first, second] = await Promise.all(
       [0, 1].map(() => app.fetch('/files/bytes', { headers: { range: 'bytes=0-4,10-14' } })),
@@ -667,7 +681,7 @@ describe('Attachment() answers a range only in place of a 200', () => {
   })
 })
 
-describe('Attachment() refuses validators that would fail without a word', () => {
+describe('Attachment() refuses options that would fail without a word', () => {
   it.each(['v1', '"v1', 'v1"', 'W/v1', 'w/"v1"', '"v 1"', '"v"1"', ''])(
     'refuses %j as an ETag: a client echoes it back, and an unquoted one never matches',
     etag => {
@@ -682,6 +696,26 @@ describe('Attachment() refuses validators that would fail without a word', () =>
   it.each(['"v1"', 'W/"v1"', '""', '"sha-256:9f86d081"'])('takes %j as an ETag', etag => {
     expect(() => Attachment(BODY, { etag })).not.toThrow()
   })
+
+  it.each(['text/plain\r\nX-Evil: yes', 'text/plain\u0000', 'text/plain\u007f'])(
+    'refuses %j as a type: a header value holds no control character',
+    type => {
+      expect(() => Attachment(BODY, { type })).toThrow(ErrConfiguration)
+    },
+  )
+
+  it('names the type it refused with its control characters escaped, so the message stays on one line', () => {
+    expect(() => Attachment(BODY, { type: 'text/plain\r\nX-Evil: yes' })).toThrow(
+      /^Cannot use "text\/plain\\r\\nX-Evil: yes" as a Content-Type: [^\n]*\n/,
+    )
+  })
+
+  it.each(['text/plain; charset=utf-8', 'text/plain;\tcharset=utf-8', 'application/vnd.example+json'])(
+    'takes %j as a type',
+    type => {
+      expect(() => Attachment(BODY, { type })).not.toThrow()
+    },
+  )
 
   it('refuses a Date that holds no time: the header would read "Invalid Date"', () => {
     expect(() => Attachment(BODY, { lastModified: new Date('not a date') })).toThrow(ErrConfiguration)
