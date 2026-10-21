@@ -27,6 +27,7 @@ import {
   ErrFeatureAlreadyInstalled,
   ErrFeatureNotInstalled,
   FeatureBuilder,
+  RunInfoContrib,
   type BootstrapKit,
   type FeatureConfigureKit,
   type FeatureConfigurer,
@@ -34,6 +35,7 @@ import {
   kFeatureConfigure,
   kFeatureName,
   type Feature,
+  type RunInfoEntry,
   createApplication,
   newConfiguration,
 } from './index.js'
@@ -720,7 +722,38 @@ describe('application name and profiles', () => {
     const info = await app.run()
     await app.close()
 
-    expect(info).toEqual({ name: 'petstore', profiles: ['eu'] })
+    expect(info).toEqual({ name: 'petstore', profiles: ['eu'], contrib: [] })
+  })
+
+  // What a caller prints once the application starts: every entry a feature pushed, in push order. Nothing is
+  // deduplicated, so a feature reporting the same thing twice shows twice.
+  it('run() resolves to what features contributed, in push order and duplicates kept', async () => {
+    const pushing = (name: string, ...entries: RunInfoEntry[]): Feature => ({
+      [kFeatureName]: name,
+      [kFeatureConfigure](): void {},
+      [kFeatureBootstrap](kit: BootstrapKit): void {
+        kit.container.get(RunInfoContrib).push(...entries)
+      },
+    })
+
+    const app = createApplication({ container: new CaffeineIoC({ decorators: false }) })
+      .install(pushing('kafka', { source: 'kafka', brokers: ['localhost:9092'] }))
+      .install(
+        pushing(
+          'messaging',
+          { source: 'messaging', destination: 'orders' },
+          { source: 'messaging', destination: 'orders' },
+        ),
+      )
+
+    const info = await app.run()
+    await app.close()
+
+    expect(info.contrib).toEqual([
+      { source: 'kafka', brokers: ['localhost:9092'] },
+      { source: 'messaging', destination: 'orders' },
+      { source: 'messaging', destination: 'orders' },
+    ])
   })
 
   it('deduplicates the active profiles before applying them', async () => {
