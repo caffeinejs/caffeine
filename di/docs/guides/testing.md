@@ -329,7 +329,7 @@ into the data layer.
 To ensure that the core components of your application are "testable",
 we recommend following the structure below, organizing the basic application components into three files with distinct responsibilities:
 
-```
+```text
 src/
   index.ts          ← entry point: wires everything and starts the server. Minimum logic here.
   app.container.ts  ← builds the CaffeineIoC container (no init())

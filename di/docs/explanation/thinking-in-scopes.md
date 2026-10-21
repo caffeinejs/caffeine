@@ -26,7 +26,7 @@ created without a live context.
 
 From longest to shortest:
 
-```
+```text
 SINGLETON  — one instance for the life of the container
 REFRESH    — singleton that can be reset programmatically
 REQUEST    — one instance per async operation
