@@ -13,7 +13,10 @@ type duplicated, a test in another file's test file.
 Run this in a fresh context where your tool offers one, such as a sub-agent or a new session, so the rules are read
 without the author's reasons for bending them. Without one, re-read the rule files before you look at the diff.
 
-## Steps
+## What a review covers
+
+A review is done when it has covered each item below, in order. They are the review's success criteria, not a script
+to recite.
 
 1. **Get the diff.** Run `git fetch origin main`: a clone's `origin/main` lags until it is fetched. Then run
    `git merge-base HEAD origin/main`. It must print a commit. In a shallow clone it can print nothing, and an empty
@@ -31,6 +34,6 @@ without the author's reasons for bending them. Without one, re-read the rule fil
    - a test that still passes with the behavior it names broken.
 5. **Check the checks.** The ones `CONVENTIONS.md` § After every edit names for the scope of the diff ran, and passed.
 6. **Run your tool's own review commands** where it has them, such as `/simplify` and then `/code-review` in Claude
-   Code.
+   Code. On someone else's diff, run only those that change nothing, such as `/code-review` without `--fix`.
 7. **Report** each finding as `file:line`, the rule quoted, and the fix, and say "no findings" only after listing the
    rules you checked. On your own diff, fix what you found before you report it; on someone else's, report it.
