@@ -4,10 +4,7 @@ export type { BinderFactory, InBindingOptions, MessagingBuilder, OutBindingOptio
 export { MessageBus } from './bus.js'
 export type * from './config.js'
 export { type ContextSignals, kSignals, type MessageContext, MessageContextImpl } from './context.js'
-export { Consume } from './decorators/consume.js'
-export { MessageHandler, type MessageHandlerOptions } from './decorators/message_handler.js'
-export { MessageParams } from './decorators/message_params.js'
-export { type ConsumeSpec, getHandlerConsumes } from './decorators/registrar.js'
+export * from './decorators/index.js'
 export { MessagingContainer } from './engine.js'
 export {
   type BackOff,
