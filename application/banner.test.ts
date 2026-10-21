@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 
 import { CaffeineIoC, token } from '@caffeinejs/di'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 
 import { Application, ErrApplicationStarted, createApplication } from './application.js'
 import { InlineConfigSource } from './config/sources/inline/index.js'
@@ -13,10 +13,24 @@ import { $t } from './schema/t.js'
 const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string })
   .version
 
-// The default banner is skipped under a test runner, the way signal handling is; these cases see what a host sees.
+// The default banner is skipped under a test runner, the way signal handling is, and when stdout is not a terminal.
+// Each case sets both the way a host would, whatever the runner itself started with.
 function outsideTestRunner(): void {
   vi.stubEnv('VITEST', undefined)
   vi.stubEnv('NODE_ENV', 'production')
+}
+
+// A pipe or a file leaves `isTTY` unset, not false.
+function stdoutIsTerminal(terminal: boolean): void {
+  const isTTY = Object.getOwnPropertyDescriptor(process.stdout, 'isTTY')
+  Object.defineProperty(process.stdout, 'isTTY', { value: terminal ? true : undefined, configurable: true })
+  onTestFinished(() => {
+    if (isTTY === undefined) {
+      Reflect.deleteProperty(process.stdout, 'isTTY')
+    } else {
+      Object.defineProperty(process.stdout, 'isTTY', isTTY)
+    }
+  })
 }
 
 function headless(logger?: Logger) {
@@ -37,6 +51,7 @@ afterEach(() => {
 describe('the banner', () => {
   it('prints the default banner on run(), naming the Caffeine and Node.js versions', async () => {
     outsideTestRunner()
+    stdoutIsTerminal(true)
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const app = headless()
 
@@ -61,6 +76,21 @@ describe('the banner', () => {
 
   // Every application a suite runs would print it otherwise.
   it('skips the default banner under a test runner', async () => {
+    stdoutIsTerminal(true)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless()
+
+    await app.run()
+
+    expect(log).not.toHaveBeenCalled()
+
+    await app.close()
+  })
+
+  // A pipe, a file or a protocol on stdout, such as an MCP server over stdio, would read the banner as its first line.
+  it('skips the default banner when stdout is not a terminal', async () => {
+    outsideTestRunner()
+    stdoutIsTerminal(false)
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
     const app = headless()
 
@@ -82,14 +112,31 @@ describe('the banner', () => {
     await app.close()
   })
 
+  // Only the default is held back: a banner the application wrote is printed wherever stdout goes.
+  it('prints a banner given as text when stdout is not a terminal', async () => {
+    outsideTestRunner()
+    stdoutIsTerminal(false)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless().banner('hello')
+
+    await app.run()
+
+    expect(log.mock.calls).toEqual([['hello']])
+
+    await app.close()
+  })
+
   it('prints nothing for a banner turned off', async () => {
     outsideTestRunner()
+    stdoutIsTerminal(true)
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const app = headless().banner(false)
+    const warnings: unknown[][] = []
+    const app = headless(recordingLogger(warnings)).banner(false)
 
     await app.run()
 
     expect(log).not.toHaveBeenCalled()
+    expect(warnings).toEqual([])
 
     await app.close()
   })
@@ -178,8 +225,9 @@ describe('the banner', () => {
         throw failure
       })
 
-      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+      await app.run()
 
+      expect(app.availability.started).toBe(true)
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([[{ err: failure }, 'cannot print the banner']])
 
@@ -191,8 +239,9 @@ describe('the banner', () => {
       const warnings: unknown[][] = []
       const app = headless(recordingLogger(warnings)).banner((() => 42) as never)
 
-      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+      await app.run()
 
+      expect(app.availability.started).toBe(true)
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([['cannot print the banner: the banner function did not return a string']])
 
@@ -205,8 +254,9 @@ describe('the banner', () => {
       const warnings: unknown[][] = []
       const app = headless(recordingLogger(warnings)).banner((() => Promise.reject(new Error('later'))) as never)
 
-      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+      await app.run()
 
+      expect(app.availability.started).toBe(true)
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([['cannot print the banner: the banner function did not return a string']])
 
@@ -221,8 +271,9 @@ describe('the banner', () => {
       const warnings: unknown[][] = []
       const app = headless(recordingLogger(warnings)).banner('hello')
 
-      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+      await app.run()
 
+      expect(app.availability.started).toBe(true)
       expect(warnings).toEqual([[{ err: failure }, 'cannot print the banner']])
 
       await app.close()
@@ -240,7 +291,9 @@ describe('the banner', () => {
         throw new Error('no banner today')
       })
 
-      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+      await app.run()
+
+      expect(app.availability.started).toBe(true)
 
       await app.close()
     })

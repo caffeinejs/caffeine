@@ -5,11 +5,13 @@ import { isTestEnvironment } from './shutdown/shutdown_options.js'
 
 /**
  * What `.banner(...)` takes: `false` for none, the text itself, or a function building it from the application's
- * {@link BootstrapKit}. Left unset, the banner is the default one, which names the Caffeine and Node.js versions and is
- * skipped under a test runner (`NODE_ENV=test` or `VITEST`).
+ * {@link BootstrapKit}. Left unset, the banner is the default one, which names the Caffeine and Node.js versions. It is
+ * printed only when stdout is a terminal and no test runner is running (`NODE_ENV=test` or `VITEST`), so a pipe, a
+ * file or a protocol spoken over stdout never reads it. A string or a function given to `.banner(...)` is printed
+ * wherever stdout goes.
  *
  * `run()` prints it to stdout with `console.log` once the application is readied, before it starts: `bootstrap()`
- * alone prints none, and `logger: false` does not silence it. It never stops the application from starting: a
+ * alone prints none, and disabling the logger does not silence it. It never stops the application from starting: a
  * function that throws or returns anything but a string, and a stdout that throws, are logged as a warning.
  *
  * ```ts
@@ -38,7 +40,7 @@ const LABEL = '  :: CaffeineJS ::'
  */
 export function printBanner<C>(banner: Banner<C> | undefined, kit: BootstrapKit<C>): void {
   try {
-    if (banner === false || (banner === undefined && isTestEnvironment())) {
+    if (banner === false || (banner === undefined && (isTestEnvironment() || process.stdout.isTTY !== true))) {
       return
     }
 
@@ -71,14 +73,13 @@ export function printBanner<C>(banner: Banner<C> | undefined, kit: BootstrapKit<
 
 function defaultBanner(): string {
   const version = caffeineVersion()
-  const node = (globalThis as { process?: { version?: string } }).process?.version
-  const detail = [version === undefined ? '' : `(v${version})`, node === undefined ? '' : `Node.js ${node}`]
+  const detail = [version === undefined ? '' : `(v${version})`, `Node.js ${process.version}`]
     .filter(part => part !== '')
     .join('  ')
   // The detail ends where the art does, as long as the line has room for it.
   const gap = ' '.repeat(Math.max(2, WIDTH - LABEL.length - detail.length))
 
-  return [...ART, `  ${'='.repeat(WIDTH - 2)}`, `${LABEL}${gap}${detail}`.trimEnd()].join('\n')
+  return [...ART, `  ${'='.repeat(WIDTH - 2)}`, `${LABEL}${gap}${detail}`].join('\n')
 }
 
 function caffeineVersion(): string | undefined {
