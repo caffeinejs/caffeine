@@ -88,14 +88,14 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/test/pickers?foo=bar')
+      const res = await app.fetch('http://localhost:8080/test/pickers?foo=bar')
 
       expect(res.status).toBe(200)
       expect(await res.json()).toMatchObject({
         url: '/test/pickers?foo=bar',
         path: '/test/pickers',
         hasSignal: true,
-        port: expect.any(Number),
+        port: 8080,
         address: expect.any(String),
       })
     })

@@ -14,8 +14,7 @@ import { brewer } from '../index.js'
  * chunk by chunk and can be stopped part-way.
  *
  * The file is served from disk by `@caffeinejs/static`, so its range, validator and naming headers are the ones a
- * real file server writes. Streams are tested over a socket: an application's own `fetch` reads a whole response
- * before it answers.
+ * real file server writes. Streams are tested over a socket, as a browser reads them.
  */
 
 const dir = mkdtempSync(join(tmpdir(), 'brewer-downloads-'))
