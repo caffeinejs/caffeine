@@ -1,8 +1,9 @@
+import type { Fetchable } from '@caffeinejs/brewer'
 import { errMessage } from '@caffeinejs/std/err'
 
 import { controllerClient } from './controller_client.js'
 import { ErrFetchFailed } from './error.js'
-import type { Fetchable, HandlerClient, RouteMethods, RouterCtor } from './types.js'
+import type { HandlerClient, RouteMethods, RouterCtor } from './types.js'
 
 export type ControllerTypedTestClient<C extends RouterCtor> = {
   [H in RouteMethods<C>]: (

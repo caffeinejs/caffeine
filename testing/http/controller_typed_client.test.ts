@@ -1,10 +1,10 @@
+import type { Fetchable } from '@caffeinejs/brewer'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from 'vitest'
 
 import { ErrFetchFailed, controllerTypedClient } from './index.js'
-import type { Fetchable } from './index.js'
 
 interface Pet {
   id: number
