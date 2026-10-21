@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   Attachment,
@@ -791,12 +791,6 @@ describe('Attachment() answers a client that already holds the content with 304 
     ['If-Modified-Since a second before its Last-Modified', '/files/bytes', { 'if-modified-since': earlier }],
     ['If-Modified-Since that does not parse', '/files/bytes', { 'if-modified-since': 'yesterday' }],
     ['If-Modified-Since that is no HTTP-date, "2030"', '/files/bytes', { 'if-modified-since': '2030' }],
-    // §5.6.7: a two-digit year more than 50 years ahead is the past year with those digits: 99 is 1999, not 2099.
-    [
-      'If-Modified-Since in rfc850 form, year 99',
-      '/files/bytes',
-      { 'if-modified-since': 'Friday, 01-Oct-99 12:34:56 GMT' },
-    ],
     ['a tag sent without its quotes, which names no entity tag', '/files/bytes', { 'if-none-match': 'report-v1' }],
     ['a tag, to content that has none', '/files/array-buffer', { 'if-none-match': ETAG }],
     ['a date, to content that has no Last-Modified', '/files/array-buffer', { 'if-modified-since': later }],
@@ -806,6 +800,27 @@ describe('Attachment() answers a client that already holds the content with 304 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).not.toBeNull()
     await expectPatternedBody(res, 0, SIZE)
+  })
+
+  // RFC 9110 §5.6.7: a two-digit year more than 50 years ahead is the most recent past year with those digits, so one
+  // stamp names another year as the calendar moves on. The clock is fixed here, never left to the day the suite runs.
+  it('reads a two-digit year against the year the request arrives in', async () => {
+    const headers = { 'if-modified-since': 'Friday, 01-Oct-99 12:34:56 GMT' }
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    try {
+      // In 2026, 99 is more than 50 years ahead: it is 1999, before the content last changed.
+      vi.setSystemTime(new Date('2026-10-21T00:00:00Z'))
+      const in2026 = await app.fetch('/files/bytes', { headers })
+      expect(in2026.status).toBe(200)
+      await expectPatternedBody(in2026, 0, SIZE)
+
+      // In 2049 it is not: it is 2099, after.
+      vi.setSystemTime(new Date('2049-06-01T00:00:00Z'))
+      expect((await app.fetch('/files/bytes', { headers })).status).toBe(304)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it.each(['node', 'web'])('closes a %s stream it leaves unread, so a file behind one is closed too', async kind => {
