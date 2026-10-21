@@ -270,10 +270,48 @@ function defaultGroupName(path: string): string {
 function pathSegments(path: string): string[] {
   return path
     .split('/')
-    .map(segment => {
-      const constraint = segment.indexOf('(')
-      const name = constraint === -1 ? segment : segment.slice(0, constraint)
-      return name.replace(/^:/, '').replace(/\?$/, '').replace(/\*/g, 'all')
-    })
+    .map(segment => segmentName(segment.replace(/\?$/, '')).replace(/\*/g, 'all'))
     .filter(segment => segment.length > 0)
+}
+
+// A segment read as the router reads it, every parameter left as its name: a single `:` starts one, whose name ends
+// at `(`, `-` or `.`; a constraint runs to its balancing `)`, a `\` escaping the character after it; `::` is a
+// literal colon, and any other text is kept.
+function segmentName(segment: string): string {
+  let name = ''
+  let i = 0
+
+  while (i < segment.length) {
+    if (segment[i] !== ':') {
+      name += segment[i++]
+    } else if (segment[i + 1] === ':') {
+      name += ':'
+      i += 2
+    } else {
+      i++
+      while (i < segment.length && !'(-.'.includes(segment[i])) {
+        name += segment[i++]
+      }
+      i = segment[i] === '(' ? afterConstraint(segment, i) : i
+    }
+  }
+
+  return name
+}
+
+// The index just past the `)` balancing the `(` at `open`, or the segment's length when none does.
+function afterConstraint(segment: string, open: number): number {
+  let depth = 0
+
+  for (let i = open; i < segment.length; i++) {
+    if (segment[i] === '\\') {
+      i++
+    } else if (segment[i] === '(') {
+      depth++
+    } else if (segment[i] === ')' && --depth === 0) {
+      return i + 1
+    }
+  }
+
+  return segment.length
 }

@@ -25,6 +25,49 @@ describe('default route names', () => {
     expect(groups[0].name).toBe('Pets')
     expect(groups[0].spec.routes.map(route => route.name)).toEqual(['get_id', 'post_name', 'delete_all'])
   })
+
+  // Read as the router reads the segment: every parameter by its name, its marker and constraint dropped, and the
+  // text beside it kept, so routes that differ only in that text keep names of their own.
+  it.each([
+    ['/near/:lat-:lng', 'get_near_lat-lng'],
+    ['/files/:name.:ext', 'get_files_name.ext'],
+    ['/span/:from-:to-:step', 'get_span_from-to-step'],
+    ['/at/:hour(^\\d{2})h:minute(^\\d{2})m', 'get_at_hourhminutem'],
+    ['/pair/:a(^\\d+)-:b', 'get_pair_a-b'],
+    ['/two/:a(^\\d+)-:b(^\\d+)', 'get_two_a-b'],
+    ['/esc/:id(^\\(x$)-:b', 'get_esc_id-b'],
+    ['/doc/:name.json', 'get_doc_name.json'],
+    ['/api/v:version', 'get_api_vversion'],
+    ['/item/item-:id.json', 'get_item_item-id.json'],
+    ['/opt/:lat-:lng?', 'get_opt_lat-lng'],
+    ['/rgx/:id(^(?:\\d+)$)', 'get_rgx_id'],
+    ['/esc/a::b/:id', 'get_esc_a:b_id'],
+    ['/tail/:id-:rev/*', 'get_tail_id-rev_all'],
+    ['/k/:lat:lng', 'get_k_lat:lng'],
+  ])('names %s %s', (path, name) => {
+    const groups = flattenRouter(stateOf(new Router('/').get(path, () => undefined))!, new CaffeineIoC())
+    expect(groups[0].spec.routes[0].name).toBe(name)
+  })
+
+  it('names a group after every parameter its path holds', () => {
+    const router = new Router('/geo/:lat-:lng').get('/', () => undefined)
+    const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
+    expect(groups[0].name).toBe('GeoLat-lng')
+  })
+
+  it('keeps apart routes that differ only in the text beside a parameter', () => {
+    const router = new Router('/doc').get('/:name.json', () => undefined).get('/:name.xml', () => undefined)
+    const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
+    expect(groups[0].spec.routes.map(route => route.name)).toEqual(['get_name.json', 'get_name.xml'])
+  })
+
+  it('reads a second parameter after a long malformed constraint without retrying at every parenthesis', () => {
+    const router = new Router('/pets').get('/:a(' + '('.repeat(100_000) + '-:b', () => undefined)
+    const started = performance.now()
+    const groups = flattenRouter(stateOf(router)!, new CaffeineIoC())
+    expect(groups[0].spec.routes[0].name).toBe('get_a')
+    expect(performance.now() - started).toBeLessThan(1000)
+  })
 })
 
 /**

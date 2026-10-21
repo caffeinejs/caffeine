@@ -26,14 +26,30 @@ type AnyEntry = Entry<readonly string[], RouteContract>
 
 type EntriesOf<R> = R extends RouteContract ? Entry<Split<R['path']>, R> : never
 
-/** The name a parameter segment binds, with the marker, any matching constraint and any `?` stripped. */
-type ParamName<H extends string> = H extends '*' ? '*' : H extends `:${infer Rest}` ? StripMarkers<Rest> : never
+/**
+ * The parameter a segment binds when it is that parameter alone: `*`, or `:id`, which may end in a matching
+ * constraint, a `?` or both. `never` for a segment with a second parameter or text of its own, such as `:lat-:lng`
+ * or `:name.json`.
+ */
+type LoneParam<H extends string, K extends PropertyKey> = H extends '*'
+  ? Extract<K, '*'>
+  : LoneOf<H, Extract<K, string>>
 
-type StripMarkers<S extends string> = S extends `${infer Name}(${string}`
-  ? StripMarkers<Name>
-  : S extends `${infer Name}?`
-    ? Name
-    : S
+type LoneOf<H extends string, K extends string, Key extends string = K> = Key extends string
+  ? H extends `:${Key}` | `:${Key}?` | `:${Key}(${string})` | `:${Key}(${string})?`
+    ? [Exclude<BoundBy<H, K>, Key>] extends [never]
+      ? Key
+      : never
+    : never
+  : never
+
+// The keys a segment binds, each `:name` ended where the router ends a name. It tells `:a(x)-:b(y)`, which reads
+// as one constrained parameter, from a segment that is one.
+type BoundBy<H extends string, K extends string> = K extends string
+  ? H extends `${string}:${K}` | `${string}:${K}${'?' | '(' | '-' | '.'}${string}`
+    ? K
+    : never
+  : never
 
 type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends string, ...string[]] } ? H : never
 
@@ -62,10 +78,11 @@ type Terminal<E extends AnyEntry> = {
  *
  * A segment named after a verb is left out: the proxy reads a verb first, so offering it would promise something
  * the runtime cannot deliver. So is one named `then`, which the proxy never answers, so that a client is never
- * taken for a promise, and one the node reserves, as the root does `$request`. `$request` reaches them all.
+ * taken for a promise, and one the node reserves, as the root does `$request`. So is one holding a `:`: `v:version`
+ * holds a parameter, and the router matches `a::b` as `a:b`. `$request` reaches them all.
  */
 type StaticChildren<E extends AnyEntry, Reserved extends string> = {
-  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
+  [K in Exclude<Extract<Head<E>, string>, `${string}:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
 }
 
 type Advance<E extends AnyEntry, K extends string> = E extends {
@@ -75,11 +92,14 @@ type Advance<E extends AnyEntry, K extends string> = E extends {
   ? Entry<T, R>
   : never
 
-/** Entries whose next segment binds a parameter. */
-type ParamEntries<E extends AnyEntry> = E extends { segs: readonly [infer H extends string, ...string[]] }
-  ? H extends `:${string}` | '*'
-    ? E
-    : never
+/** Entries whose next segment is one parameter alone. */
+type ParamEntries<E extends AnyEntry> = E extends {
+  segs: readonly [infer H extends string, ...string[]]
+  route: infer R extends RouteContract
+}
+  ? [LoneParam<H, keyof R['params']>] extends [never]
+    ? never
+    : E
   : never
 
 /**
@@ -87,6 +107,9 @@ type ParamEntries<E extends AnyEntry> = E extends { segs: readonly [infer H exte
  *
  * `Pick` off the route's own params rather than a rebuilt object, so the value keeps the type *and* the optionality
  * the route's schema gave it: `:id` under an integer schema is a `number`, and `:id?` stays optional.
+ *
+ * Only a segment that is one parameter alone is offered. The proxy sends the value as the whole segment, and never
+ * sees the route's path, so `:lat-:lng`, `:name.json` and what follows them are reached through `$request`.
  */
 type ParamChild<E extends AnyEntry> = [ParamEntries<E>] extends [never]
   ? unknown
@@ -96,7 +119,7 @@ type ParamArg<E extends AnyEntry> = E extends {
   segs: readonly [infer H extends string, ...string[]]
   route: infer R extends RouteContract
 }
-  ? Pick<R['params'], Extract<ParamName<H>, keyof R['params']>>
+  ? Pick<R['params'], LoneParam<H, keyof R['params']>>
   : never
 
 type AdvanceAny<E extends AnyEntry> = E extends {

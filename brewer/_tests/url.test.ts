@@ -65,7 +65,90 @@ describe('fillPath', () => {
   it('finds the parameter before a long malformed constraint', () => {
     const started = performance.now()
     expect(fillPath('/:id' + '('.repeat(100_000) + '\nx', { id: 'a/b' })).toBe('/a%2Fb')
+    expect(fillPath('/:a(' + '('.repeat(100_000) + '-:b', { a: 1, b: 2 })).toBe('/1')
     expect(performance.now() - started).toBeLessThan(1000)
+  })
+
+  // Each path is read as find-my-way reads it: a name ends at `(`, `-` or `.`, a constraint runs to its balancing
+  // `)`, text after it runs to the next single `:`, and `::` is a literal colon.
+  it.each([
+    ['/near/:lat-:lng', { lat: 1.5, lng: 2.5 }, '/near/1.5-2.5'],
+    ['/files/:name.:ext', { name: 'report', ext: 'pdf' }, '/files/report.pdf'],
+    ['/span/:from-:to-:step', { from: 1, to: 9, step: 2 }, '/span/1-9-2'],
+    ['/ver/:major.:minor.:patch', { major: 1, minor: 2, patch: 3 }, '/ver/1.2.3'],
+    ['/mixed/:a-:b.:c', { a: 'x', b: 'y', c: 'z' }, '/mixed/x-y.z'],
+    ['/at/:hour(^\\d{2})h:minute(^\\d{2})m', { hour: '08', minute: '24' }, '/at/08h24m'],
+    ['/pair/:a(^\\d+)-:b', { a: 12, b: 'x' }, '/pair/12-x'],
+    ['/two/:a(^\\d+)-:b(^\\d+)', { a: 1, b: 2 }, '/two/1-2'],
+    ['/esc/:id(^\\(x$)-:b', { id: '(x', b: 'y' }, '/esc/(x-y'],
+    ['/nest/:id(^((\\d)+)$)-:b', { id: 12, b: 'y' }, '/nest/12-y'],
+    ['/doc/:name.json', { name: 'report' }, '/doc/report.json'],
+    ['/api/v:version', { version: 2 }, '/api/v2'],
+    ['/item/item-:id.json', { id: 7 }, '/item/item-7.json'],
+    ['/radius/:lat-:lng/r/:r', { lat: 1, lng: 2, r: 3 }, '/radius/1-2/r/3'],
+    ['/opt/:lat-:lng?', { lat: 1, lng: 2 }, '/opt/1-2'],
+    ['/rgx/:id(^(?:\\d+)$)', { id: 42 }, '/rgx/42'],
+    ['/esc/a::b/:id', { id: 7 }, '/esc/a:b/7'],
+    ['/doc/:name.v::1', { name: 'report' }, '/doc/report.v:1'],
+    ['/tail/:id-:rev/*', { id: 7, rev: 3, '*': 'a/b' }, '/tail/7-3/a/b'],
+    ['/k/:lat:lng', { 'lat:lng': 'x' }, '/k/x'],
+  ])('fills %s, keeping the text beside each parameter', (path, params, expected) => {
+    expect(fillPath(path, params)).toBe(expected)
+  })
+
+  it('encodes each value of a shared segment on its own, and leaves the text between them alone', () => {
+    expect(fillPath('/near/:lat-:lng', { lat: 'a b', lng: 'ø' })).toBe('/near/a%20b-%C3%B8')
+    expect(fillPath('/files/:name.:ext', { name: '?#%', ext: 'a/b' })).toBe('/files/%3F%23%25.a%2Fb')
+  })
+
+  it('names the one parameter of a shared segment that has no value', () => {
+    const error = thrown(() => fillPath('/near/:lat-:lng', { lat: 1 }))
+
+    expect(error).toBeInstanceOf(ErrBrewPathParam)
+    expect(error.message.split('\n')[0]).toBe(
+      'Cannot build a request for "/near/:lat-:lng": no value for path parameter "lng"',
+    )
+    expect(() => fillPath('/span/:from-:to-:step', { from: 1, to: 9 })).toThrow('path parameter "step"')
+    expect(() => fillPath('/at/:hour(^\\d{2})h:minute(^\\d{2})m', { minute: 24 })).toThrow('path parameter "hour"')
+  })
+
+  it('drops an optional shared segment given no value, and requires the rest once one is given', () => {
+    expect(fillPath('/opt/:lat-:lng?', {})).toBe('/opt')
+    expect(fillPath('/opt/:lat-:lng?', { lat: null, lng: undefined })).toBe('/opt')
+    expect(fillPath('/opt/:lat-:lng?', undefined)).toBe('/opt')
+    expect(() => fillPath('/opt/:lat-:lng?', { lat: 1 })).toThrow('path parameter "lng"')
+    expect(() => fillPath('/opt/:lat-:lng?', { lng: 2 })).toThrow('path parameter "lat"')
+  })
+
+  it('refuses . or .. as the value of a parameter that shares its segment', () => {
+    const error = thrown(() => fillPath('/files/:name.:ext', { name: '..', ext: 'pdf' }))
+
+    expect(error).toBeInstanceOf(ErrBrewPathValue)
+    expect(error.message.split('\n')[0]).toBe(
+      'Cannot build a request for "/files/:name.:ext": path parameter "name" is "..", which a URL resolves as a step along the path',
+    )
+    expect(() => fillPath('/near/:lat-:lng', { lat: 1, lng: '.' })).toThrow(ErrBrewPathValue)
+  })
+
+  it('refuses a shared segment that its values fill as . or .., which a URL would resolve the same way', () => {
+    const error = thrown(() => fillPath('/files/:name.:ext', { name: '', ext: '' }))
+
+    expect(error).toBeInstanceOf(ErrBrewPathValue)
+    expect(error).toMatchObject({ name: 'ErrBrewPathValue', code: 'ERR_BREW_PATH_VALUE' })
+    expect(error.message.split('\n')[0]).toBe(
+      'Cannot build a request for "/files/:name.:ext": segment ":name.:ext" is "." once filled, which a URL resolves as a step along the path',
+    )
+    expect(error.message).toContain('Refuse empty values before the call, or send them in the query or the body')
+    expect(() => fillPath('/ver/:major.:minor.:patch', { major: '', minor: '', patch: '' })).toThrow(
+      'segment ":major.:minor.:patch" is ".." once filled',
+    )
+    expect(() => fillPath('/x/:a..:b', { a: '', b: '' })).toThrow('segment ":a..:b" is ".." once filled')
+  })
+
+  it('sends a shared segment holding an empty value when it does not fill as a step', () => {
+    expect(fillPath('/files/:name.:ext', { name: '', ext: 'pdf' })).toBe('/files/.pdf')
+    expect(fillPath('/files/:name.:ext', { name: 'a', ext: '' })).toBe('/files/a.')
+    expect(fillPath('/near/:lat-:lng', { lat: '', lng: '' })).toBe('/near/-')
   })
 })
 

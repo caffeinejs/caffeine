@@ -1,15 +1,16 @@
 import { encodeParam } from './_path.js'
-import { ErrBrewPathParam } from './errors.js'
+import { ErrBrewPathParam, ErrBrewPathValue } from './errors.js'
 
 /**
  * Substitutes a path's parameters, for a path addressed by `$request`.
  *
  * The proxy does not come through here — it has the values already, one segment at a time. A `*` keeps its
  * slashes, since carrying them is the whole point of a wildcard; every part between them is encoded like any other
- * value.
+ * value. A segment may hold several parameters and text of its own, read as the router reads them:
+ * `/near/:lat-:lng` takes `{ lat, lng }`, `/files/:name.json` takes `{ name }`, and `::` is a literal colon.
  *
  * @throws ErrBrewPathParam - A parameter the path requires, a wildcard included, has no value.
- * @throws ErrBrewPathValue - A value is `.` or `..`, or a wildcard holds one as a part.
+ * @throws ErrBrewPathValue - A value is `.` or `..`, a wildcard holds one as a part, or a segment is one once filled.
  */
 export function fillPath(path: string, params: Record<string, unknown> | undefined): string {
   if (!path.includes(':') && !path.includes('*')) {
@@ -19,28 +20,114 @@ export function fillPath(path: string, params: Record<string, unknown> | undefin
   return path
     .split('/')
     .map(segment => {
-      if (segment !== '*' && !segment.startsWith(':')) {
+      if (segment === '*') {
+        return fillParams(path, ['*'], params, false)?.[0]
+      }
+
+      if (!segment.includes(':')) {
         return segment
       }
 
       const optional = segment.endsWith('?')
-      const constraint = segment.indexOf('(')
-      const end = constraint === -1 ? undefined : constraint
-      const name = segment === '*' ? '*' : segment.slice(1, end).replace(/\?$/, '')
-      const value = params?.[name]
+      const parts = readSegment(optional ? segment.slice(0, -1) : segment)
+      const names = parts.filter(part => typeof part !== 'string').map(part => part.name)
+      const values = fillParams(path, names, params, optional)
 
-      if (value === undefined || value === null) {
-        if (optional) {
-          return undefined
-        }
-
-        throw new ErrBrewPathParam(path, name)
+      if (values === undefined) {
+        return undefined
       }
 
-      return encodeParam(path, name, value)
+      let next = 0
+      const filled = parts.map(part => (typeof part === 'string' ? part : values[next++])).join('')
+
+      // Each value was refused as a step on its own; empty ones can still leave the segment as one.
+      if (filled === '.' || filled === '..') {
+        throw new ErrBrewPathValue(path, segment, filled, 'segment')
+      }
+
+      return filled
     })
     .filter(segment => segment !== undefined)
     .join('/')
+}
+
+// The encoded value of each name, in order, or `undefined` for an optional segment given none of them: the router
+// drops such a segment whole, so once one is given, every other one is required.
+function fillParams(
+  path: string,
+  names: readonly string[],
+  params: Record<string, unknown> | undefined,
+  optional: boolean,
+): string[] | undefined {
+  const given = (name: string) => params?.[name] !== undefined && params[name] !== null
+
+  if (optional && !names.some(given)) {
+    return undefined
+  }
+
+  return names.map(name => {
+    if (!given(name)) {
+      throw new ErrBrewPathParam(path, name)
+    }
+
+    return encodeParam(path, name, params?.[name])
+  })
+}
+
+/**
+ * One segment as find-my-way reads it: text, and the parameters within it.
+ *
+ * A single `:` starts a parameter, whose name ends at `(`, `-` or `.`. A `(` opens a constraint, which runs to its
+ * balancing `)`, nested ones counted and a `\` escaping the character after it, or to the end of the segment when
+ * it never closes. Text then runs to the next single `:`; `::` is a literal colon.
+ */
+function readSegment(segment: string): Array<string | { readonly name: string }> {
+  const parts: Array<string | { readonly name: string }> = []
+  let text = ''
+  let i = 0
+
+  while (i < segment.length) {
+    if (segment[i] !== ':') {
+      text += segment[i++]
+      continue
+    }
+
+    if (segment[i + 1] === ':') {
+      text += ':'
+      i += 2
+      continue
+    }
+
+    let end = i + 1
+    while (end < segment.length && !'(-.'.includes(segment[end])) {
+      end++
+    }
+
+    parts.push(text, { name: segment.slice(i + 1, end) })
+    text = ''
+    i = segment[end] === '(' ? afterConstraint(segment, end) : end
+  }
+
+  parts.push(text)
+
+  return parts
+}
+
+// The index just past the `)` balancing the `(` at `open`, or the segment's length when none does.
+function afterConstraint(segment: string, open: number): number {
+  let depth = 0
+
+  for (let i = open; i < segment.length; i++) {
+    if (segment[i] === '\\') {
+      i++
+    } else if (segment[i] === '(') {
+      depth++
+    } else if (segment[i] === ')' && --depth === 0) {
+      return i + 1
+    }
+  }
+
+  return segment.length
 }
 
 /**

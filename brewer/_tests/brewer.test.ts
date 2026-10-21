@@ -85,7 +85,42 @@ const legacy = new Router('/legacy').route('patch', '/lower').handler(ctx => ({ 
 // A root segment named like the escape hatch, which keeps that name for itself.
 const hatch = new Router('/$request').get('/').handler(() => ({ literalRequestRoot: true }))
 
-const app = createWebApplication().mount(pets, files, tags, catalog, legacy, hatch)
+// Segments holding more than one parameter, or text beside one: each answers the parameters the router bound.
+const shapes = new Router('/shapes')
+  .get('/near/:lat-:lng')
+  .handler(ctx => ctx.req.param())
+  .get('/files/:name.:ext')
+  .handler(ctx => ctx.req.param())
+  .get('/span/:from-:to-:step')
+  .handler(ctx => ctx.req.param())
+  .get('/ver/:major.:minor.:patch')
+  .handler(ctx => ctx.req.param())
+  .get('/mixed/:a-:b.:c')
+  .handler(ctx => ctx.req.param())
+  .get('/at/:hour(^\\d{2})h:minute(^\\d{2})m')
+  .handler(ctx => ctx.req.param())
+  .get('/pair/:a(^\\d+)-:b')
+  .handler(ctx => ctx.req.param())
+  .get('/doc/:name.json')
+  .handler(ctx => ctx.req.param())
+  .get('/api/v:version')
+  .handler(ctx => ctx.req.param())
+  .get('/item/item-:id.json')
+  .handler(ctx => ctx.req.param())
+  .get('/radius/:lat-:lng/r/:r')
+  .handler(ctx => ctx.req.param())
+  .get('/opt/:lat-:lng?')
+  .handler(ctx => ctx.req.param())
+  .get('/rgx/:id(^(?:\\d+)$)')
+  .handler(ctx => ctx.req.param())
+  .get('/esc/a::b/:id')
+  .handler(ctx => ctx.req.param())
+  .get('/tail/:id-:rev/*')
+  .handler(ctx => ctx.req.param())
+  .get('/k/:lat:lng')
+  .handler(ctx => ctx.req.param())
+
+const app = createWebApplication().mount(pets, files, tags, catalog, legacy, hatch, shapes)
 
 let origin: string
 
@@ -155,6 +190,121 @@ describe('brewer against a running server', () => {
 
       expect(await (await client.files({ '*': rest }).get()).json()).toEqual({ rest })
       expect(await (await client.$request('GET', '/files/*', { params: { '*': rest } })).json()).toEqual({ rest })
+    })
+  })
+
+  // The server is the oracle: what each route answers is what find-my-way bound from the path the client built.
+  describe('given a segment holding more than one parameter, or text beside one', () => {
+    it('should fill parameters separated by - or ., so each arrives under its own name', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const near = await client.$request('GET', '/shapes/near/:lat-:lng', { params: { lat: '1.5', lng: '2.5' } })
+      const file = await client.$request('GET', '/shapes/files/:name.:ext', { params: { name: 'report', ext: 'pdf' } })
+      const span = await client.$request('GET', '/shapes/span/:from-:to-:step', {
+        params: { from: '1', to: '9', step: '2' },
+      })
+      const ver = await client.$request('GET', '/shapes/ver/:major.:minor.:patch', {
+        params: { major: '1', minor: '2', patch: '3' },
+      })
+      const mixed = await client.$request('GET', '/shapes/mixed/:a-:b.:c', { params: { a: 'x', b: 'y', c: 'z' } })
+
+      expect(await near.json()).toEqual({ lat: '1.5', lng: '2.5' })
+      expect(await file.json()).toEqual({ name: 'report', ext: 'pdf' })
+      expect(await span.json()).toEqual({ from: '1', to: '9', step: '2' })
+      expect(await ver.json()).toEqual({ major: '1', minor: '2', patch: '3' })
+      expect(await mixed.json()).toEqual({ a: 'x', b: 'y', c: 'z' })
+    })
+
+    it('should keep the text a constraint is followed by, and leave a colon inside one alone', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const at = await client.$request('GET', '/shapes/at/:hour(^\\d{2})h:minute(^\\d{2})m', {
+        params: { hour: '08', minute: '24' },
+      })
+      const pair = await client.$request('GET', '/shapes/pair/:a(^\\d+)-:b', { params: { a: '12', b: 'x' } })
+      const rgx = await client.$request('GET', '/shapes/rgx/:id(^(?:\\d+)$)', { params: { id: '42' } })
+
+      expect(await at.json()).toEqual({ hour: '08', minute: '24' })
+      expect(await pair.json()).toEqual({ a: '12', b: 'x' })
+      expect(await rgx.json()).toEqual({ id: '42' })
+    })
+
+    it('should keep the text before and after a parameter, and write a doubled colon as one', async () => {
+      const { client, sent } = spied()
+
+      const doc = await client.$request('GET', '/shapes/doc/:name.json', { params: { name: 'report' } })
+      const api = await client.$request('GET', '/shapes/api/v:version', { params: { version: '2' } })
+      const item = await client.$request('GET', '/shapes/item/item-:id.json', { params: { id: '7' } })
+      const esc = await client.$request('GET', '/shapes/esc/a::b/:id', { params: { id: '7' } })
+      const named = await client.$request('GET', '/shapes/k/:lat:lng', { params: { 'lat:lng': 'x' } })
+
+      expect(await doc.json()).toEqual({ name: 'report' })
+      expect(await api.json()).toEqual({ version: '2' })
+      expect(await item.json()).toEqual({ id: '7' })
+      expect(await esc.json()).toEqual({ id: '7' })
+      expect(await named.json()).toEqual({ 'lat:lng': 'x' })
+      expect(sent).toEqual([
+        'http://localhost/shapes/doc/report.json',
+        'http://localhost/shapes/api/v2',
+        'http://localhost/shapes/item/item-7.json',
+        'http://localhost/shapes/esc/a:b/7',
+        'http://localhost/shapes/k/x',
+      ])
+    })
+
+    it('should keep reading the segments after a shared one, a wildcard included', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const radius = await client.$request('GET', '/shapes/radius/:lat-:lng/r/:r', {
+        params: { lat: '1', lng: '2', r: '3' },
+      })
+      const tail = await client.$request('GET', '/shapes/tail/:id-:rev/*', {
+        params: { id: '7', rev: '3', '*': 'a b/c.txt' },
+      })
+
+      expect(await radius.json()).toEqual({ lat: '1', lng: '2', r: '3' })
+      expect(await tail.json()).toEqual({ id: '7', rev: '3', '*': 'a b/c.txt' })
+    })
+
+    it('should encode each value on its own, so reserved characters arrive as given', async () => {
+      const client = brewer<typeof app>(origin)
+
+      const res = await client.$request('GET', '/shapes/files/:name.:ext', { params: { name: '50% off?#', ext: 'ø' } })
+
+      expect(await res.json()).toEqual({ name: '50% off?#', ext: 'ø' })
+    })
+
+    it('should drop an optional shared segment given no value, and reach the route without it', async () => {
+      const { client, sent } = spied()
+
+      const both = await client.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1', lng: '2' } })
+      const none = await client.$request('GET', '/shapes/opt/:lat-:lng?')
+
+      expect(await both.json()).toEqual({ lat: '1', lng: '2' })
+      expect(await none.json()).toEqual({})
+      await expect(client.$request('GET', '/shapes/opt/:lat-:lng?', { params: { lat: '1' } })).rejects.toMatchObject({
+        name: 'ErrBrewPathParam',
+        message: expect.stringContaining('no value for path parameter "lng"'),
+      })
+      expect(sent).toEqual(['http://localhost/shapes/opt/1-2', 'http://localhost/shapes/opt'])
+    })
+
+    it('should refuse, before sending anything, a shared segment its values fill as a step', async () => {
+      const { client, sent } = spied()
+
+      await expect(
+        client.$request('GET', '/shapes/files/:name.:ext', { params: { name: '', ext: '' } }),
+      ).rejects.toMatchObject({
+        name: 'ErrBrewPathValue',
+        message: expect.stringContaining('segment ":name.:ext" is "." once filled'),
+      })
+      expect(sent).toEqual([])
+    })
+
+    it('should still reach a lone constrained parameter through the proxy', async () => {
+      const client = brewer<typeof app>(origin)
+
+      expect(await (await client.shapes.rgx({ id: '42' }).get()).json()).toEqual({ id: '42' })
     })
   })
 
