@@ -2,7 +2,6 @@
 
 Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
-- `index.ts` exports only the root-level modules: `application`, `configuration`, `feature`, `feature_builder`.
 - Each sub-directory (`config/`, `schema/`, `shutdown/`, …) is its own `package.json` `exports` subpath and is never
   re-exported from `index.ts`; outside `application/`, import it as `@caffeinejs/application/<sub>`.
 - `ErrCaffeine` (`error.ts`) is the base of every error class here, and is internal: no `exports` subpath and no
