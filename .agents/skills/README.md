@@ -7,7 +7,13 @@ These are not the skills shipped to applications. Those live in [`ai/skills/`](.
 apps by `caffeine scaffold`.
 
 Where a skill here conflicts with [`CONVENTIONS.md`](../../CONVENTIONS.md) or a package `AGENTS.md`, the repository
-wins. See "Third-party skills" in [`AGENTS.md`](../../AGENTS.md).
+wins. See "Skills" in [`AGENTS.md`](../../AGENTS.md), which also says which skill to load for which work.
+
+## First-party skills
+
+`plan-change` and `review-change` are written here, not vendored. They are agent docs: "Agent docs" in
+[`AGENTS.md`](../../AGENTS.md) governs every change to them. The CLI does not install them, and they have no source or
+license entry.
 
 ## Vendored from mcollina/skills
 
@@ -33,11 +39,9 @@ wins. See "Third-party skills" in [`AGENTS.md`](../../AGENTS.md).
 - Installed with `skills@1.7.0` from `…/security-audit-skill/tree/<commit>/skills/security-audit`
 - Local patches: none
 
-| Skill            | Upstream directory      | Why it is here                                                                                               |
-| ---------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `security-audit` | `skills/security-audit` | Focused security review of `http/security`, `caching` and other trust boundaries; full audit only when asked |
-
-Start a review of `http/security` from [`http/security/SECURITY-REVIEW.md`](../../http/security/SECURITY-REVIEW.md).
+| Skill            | Upstream directory      | Why it is here                                                                                                    |
+| ---------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `security-audit` | `skills/security-audit` | Focused security review of `http/core/security`, `caching` and other trust boundaries; full audit only when asked |
 
 ## Vendored from trailofbits/skills
 

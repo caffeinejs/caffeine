@@ -9,3 +9,5 @@ yarn.lock linguist-generated=true
 skills-lock.json linguist-generated=true
 .agents/skills/** linguist-generated=true
 .agents/skills/README.md -linguist-generated=true
+.agents/skills/plan-change/** -linguist-generated
+.agents/skills/review-change/** -linguist-generated

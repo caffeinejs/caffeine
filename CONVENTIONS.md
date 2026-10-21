@@ -94,6 +94,7 @@ A module is a directory of source files in a library package (not `benchmarks/`,
 - It has a main file named after it (`cache/cache.ts`, `circuit_breaker/circuit_breaker.ts`) and an `index.ts` barrel that only re-exports.
 - A directory of independent files with no main one (`decorators/`, `internal/`, `provider/`) has the barrel alone.
 - A barrel publishes what the package offers. A helper only the package's own code uses stays out of it and is imported by its path.
+- One capability's code and public types live in one module, and other modules call into it rather than hold parts of it, so the capability is found and changed in one place. A package that splits a capability across layers keeps each layer's half whole, as `http/` does between `core/` and `platform/fastify/`.
 - Exempt: a package root, whose `index.ts` is the entry (`std/` has none); a directory holding only subdirectories; `_`-prefixed directories (`_tests/`, `_testdata/`, `_spectypes/`, `_spec/`).
 - A new or moved module follows these rules. An existing one keeps its layout until a change asks to move it.
 
@@ -249,8 +250,8 @@ An **application** that must use a library shipping only legacy decorators (Type
 
 - **Test behavior, not implementation.** A test calls what the module exports, the way its caller does, and asserts what that caller observes: a return value, a thrown `Err*` and its `code`, a response, a bound value, an event. It never reads a private field or symbol, spies on a function the caller cannot reach, or pins the order of internal calls. A refactor that keeps behavior keeps every test green.
 - **Every assertion can fail.** Assert the exact value: `toBe(null)`, not `toBeDefined()` on something that can be `null`; the exact count, not `> 0`. A test that still passes with the behavior it names broken is wrong. Name a test after the behavior and why it matters, not after the function it calls.
-- **A test of one module sits beside it, named after it**: `cache.ts`, `cache.test.ts`. A variant keeps the stem: `cache.prop.test.ts`, `cache.test-d.ts`.
-- **A wider test goes in `_tests/`** of the nearest directory that holds everything it exercises: one that crosses modules, or boots a container, an application or a server. Its helpers sit beside it in `_tests/` and its fixtures in `_testdata/`. A test across packages, or of the repository itself, goes in the root `test/`. The directory is `_tests/`, the name every exclude above carries: a helper outside it, unless it is a `*.testkit.ts`, ships in `dist/`.
+- **A test of one module sits beside it, named after it**, even when it boots a container, an application or a server to observe that module, so everything that pins one module's behavior is found beside it, under its name: `cache.ts`, `cache.test.ts`. A variant keeps the stem: `cache.prop.test.ts`, `cache.test-d.ts`.
+- **A wider test goes in `_tests/`** of the nearest directory that holds everything it exercises: one that belongs to no single module. Its helpers sit beside it in `_tests/` and its fixtures in `_testdata/`. A test across packages, or of the repository itself, goes in the root `test/`. The directory is `_tests/`, the name every exclude above carries: a helper outside it, unless it is a `*.testkit.ts`, ships in `dist/`.
 - **Fix a bug test-first.** Before changing code for a bug, or for an issue a review or a tool reports, write the test that reproduces it and run it. It must fail, and for the reason reported, not a typo or a missing import. A test you cannot make fail means the issue is not what you thought: stop, say so, and change nothing. Then fix it, see the same test pass, and keep the test in the change.
 - An existing test keeps its place. Move one only when asked.
 

@@ -14,6 +14,10 @@
       "type": "stdio",
       "command": "scorecard-mcp"
     },
+    "context7": {
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp"
+    },
     "github": {
       "type": "http",
       "url": "https://api.githubcopilot.com/mcp/",
