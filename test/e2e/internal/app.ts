@@ -52,9 +52,6 @@ export async function startApp<C = unknown>(
   configure(app)
 
   const { address } = await app.run({ host: '127.0.0.1', port: options.port ?? 0 })
-  if (address === undefined) {
-    throw new Error('Cannot start the e2e application: the server reported no address')
-  }
 
   return {
     app,

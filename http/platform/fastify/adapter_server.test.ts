@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { ErrApplicationNotReady, newConfiguration } from '@caffeinejs/application'
 import { CONFIG_REFRESH_LABEL, type ConfigSource, type InferConfig } from '@caffeinejs/application/config'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
@@ -69,6 +73,27 @@ describe('the server .server(...) configures', () => {
     expect(info.address).toEqual(app.address)
     expect(info.address?.host).toBe('0.0.0.0')
     expect(info.address?.origin).toBe(`http://127.0.0.1:${info.address?.port}`)
+    expect(info.address.path).toBe('')
+  })
+
+  // A running server always has an address: a socket bind has a path where a TCP bind has a host and a port, and
+  // the fields it cannot fill keep their zero values.
+  it('resolves run() to the path of a unix socket bind', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'caffeine-socket-'))
+    const path = join(dir, 'app.sock')
+
+    try {
+      app = createWebApplication()
+
+      const info = await app.run({ path })
+
+      expect(info.address).toEqual({ host: '', port: 0, path, origin: '' })
+      expect(app.address).toEqual(info.address)
+    } finally {
+      await app?.close()
+      app = undefined
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   // No framework default: with nothing said, Fastify's own `localhost` bind stands, whichever family it resolves to.
@@ -227,7 +252,7 @@ describe('the server .server(...) configures', () => {
     expect(app.address?.origin).toBe('http://[fe80::1]:8080')
 
     address.mockReturnValue('/run/app.sock')
-    expect(app.address).toBeUndefined()
+    expect(app.address).toEqual({ host: '', port: 0, path: '/run/app.sock', origin: '' })
 
     address.mockRestore()
   })

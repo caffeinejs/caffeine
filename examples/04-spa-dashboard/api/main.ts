@@ -11,7 +11,5 @@ const app = buildApp(createContainer(rootModule))
 // routing-table lag while still serving, and lets the process exit on its own.
 const { address } = await app.run()
 
-if (address !== undefined) {
-  app.log.info(`SPA dashboard listening on ${address.origin}`)
-  app.log.info('Sign in with admin/admin123 (admin + member) or user/user123 (member)')
-}
+app.log.info(`SPA dashboard listening on ${address.origin}`)
+app.log.info('Sign in with admin/admin123 (admin + member) or user/user123 (member)')

@@ -53,12 +53,8 @@ import { Keys } from './symbols.js'
 
 /** {@link RunInfo} widened with where the HTTP server bound. */
 export interface WebRunInfo extends RunInfo {
-  /**
-   * Where the server is listening, from {@link WebApplication.address}. `undefined` only for a bind
-   * with no host and port to report: a unix socket, a named pipe, or an adapter that opens no socket. A TCP
-   * bind is set by the time {@link WebApplication.run} resolves.
-   */
-  readonly address: ServerAddress | undefined
+  /** Where the server is listening, from {@link WebApplication.address}. */
+  readonly address: ServerAddress
 }
 
 export type WebApplicationOptions<TConfig = unknown> = ApplicationOptions<TConfig>
@@ -521,7 +517,8 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
   }
 
   protected override runInfo(): WebRunInfo {
-    return { ...super.runInfo(), address: this.address }
+    // Read once `start()` has resolved, and a server that has run has an address until it is torn down.
+    return { ...super.runInfo(), address: this.address! }
   }
 
   /**

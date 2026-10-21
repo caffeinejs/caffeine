@@ -574,16 +574,20 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     const server = this.#fastify.server
     const bound = server.address()
 
-    // `null` when nothing is listening; a string when bound to a unix socket or a named pipe, which has no
-    // host/port to report.
-    if (bound == null || typeof bound === 'string') {
+    // `null` when nothing is listening.
+    if (bound == null) {
       return undefined
+    }
+
+    // A string when bound to a unix socket or a named pipe, which has a path and no host, port or origin.
+    if (typeof bound === 'string') {
+      return { host: '', port: 0, path: bound, origin: '' }
     }
 
     // Both HTTPS and HTTP/2 over TLS servers are TLS servers, whether `factory` or its `serverFactory` built them.
     const scheme = server instanceof TLSServer ? 'https' : 'http'
 
-    return { host: bound.address, port: bound.port, origin: originOf(scheme, bound.address, bound.port) }
+    return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
   }
 
   async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
