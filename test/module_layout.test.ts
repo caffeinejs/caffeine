@@ -11,8 +11,9 @@ import { describe, expect, it } from 'vitest'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
-// Not library packages: no module layout applies to them. `cli/` is a binary and the applications it scaffolds.
-const NOT_LIBRARIES = [
+// Not library packages: no module layout applies to them. `cli/` is the `caffeine` command and its scaffolding
+// templates, not a library of modules.
+const NO_MODULE_LAYOUT = [
   'benchmarks/**',
   'examples/**',
   'di/examples/**',
@@ -22,18 +23,26 @@ const NOT_LIBRARIES = [
   '**/dist/**',
 ]
 
-// Files a package does not ship as source: tests, their kits, declarations and test configuration.
-const NOT_SOURCE = /\.(?:test|test-d|spec|e2e|testkit)\.ts$|\.d\.ts$|(?:^|\/)vitest(?:\.\w+)?\.config\.ts$/
+// Files a package does not ship as source: tests, their kits and test configuration.
+const NOT_SOURCE = /\.(?:test|test-d|spec|e2e|testkit)\.ts$|(?:^|\/)vitest(?:\.\w+)?\.config\.ts$/
 
 const isPrivate = (path: string): boolean => path.split('/').some(segment => segment.startsWith('_'))
 
 async function modulesWithoutBarrel(): Promise<{ directories: number; found: string[] }> {
   const { workspaces } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { workspaces: string[] }
-  const packages = new Set(workspaces)
+  // A workspace may be a pattern (`plugins/*`): a package root is a directory holding a `package.json`.
+  const packages = new Set(
+    (
+      await globby(
+        workspaces.map(workspace => `${workspace}/package.json`),
+        { cwd: root, ignore: NO_MODULE_LAYOUT },
+      )
+    ).map(file => dirname(file)),
+  )
   const sources = (
     await globby(
       workspaces.map(workspace => `${workspace}/**/*.ts`),
-      { cwd: root, ignore: NOT_LIBRARIES },
+      { cwd: root, ignore: NO_MODULE_LAYOUT },
     )
   ).filter(file => !NOT_SOURCE.test(file))
 
