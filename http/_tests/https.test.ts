@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { connect, type ClientHttp2Session } from 'node:http2'
 import { get as httpsGet } from 'node:https'
+import { connect as netConnect } from 'node:net'
+import { connect as tlsConnect, type TLSSocket } from 'node:tls'
 
 import { newConfiguration } from '@caffeinejs/application'
 import type { InferConfig } from '@caffeinejs/application/config'
@@ -8,6 +10,7 @@ import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
 import { CaffeineIoC, Scopes } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -79,6 +82,33 @@ function connectH2(origin: string): ClientHttp2Session {
   return connect(origin, { ca: cert })
 }
 
+/**
+ * One HTTP/1.1 request over a TLS connection of its own, kept alive for the caller. `status` resolves once the whole
+ * body has arrived, and rejects when the connection closes with no response.
+ */
+function keptAlive(origin: string, path: string): { socket: TLSSocket; status: Promise<number> } {
+  const { hostname, port } = new URL(origin)
+  const socket = tlsConnect({ host: hostname, port: Number(port), ca: cert, ALPNProtocols: ['http/1.1'] })
+  socket.on('error', () => undefined)
+  socket.setEncoding('utf8')
+
+  const status = new Promise<number>((resolve, reject) => {
+    let received = ''
+    socket.on('data', (chunk: string) => {
+      received += chunk
+      const head = received.indexOf('\r\n\r\n')
+      const length = /\r\ncontent-length: (\d+)/i.exec(received)
+      if (head !== -1 && length !== null && received.length - head - 4 >= Number(length[1])) {
+        resolve(Number(received.slice('HTTP/1.1 '.length, 'HTTP/1.1 '.length + 3)))
+      }
+    })
+    socket.on('close', () => reject(new Error(`The connection to "${path}" closed with no response`)))
+  })
+  socket.write(`GET ${path} HTTP/1.1\r\nHost: localhost\r\n\r\n`)
+
+  return { socket, status }
+}
+
 /** A route whose handler holds until the test releases it, so a request is in flight when the server closes. */
 function holding() {
   let started!: () => void
@@ -93,6 +123,24 @@ function holding() {
   })
 
   return { router, inFlight, release }
+}
+
+/** A plugin whose `preClose` hook holds the close until `resume()`: the server still listens while it does. */
+function holdingClose() {
+  let closing!: () => void
+  let resume!: () => void
+  const preClose = new Promise<void>(resolve => (closing = resolve))
+  const held = new Promise<void>(resolve => (resume = resolve))
+
+  const plugin = () =>
+    fp(async (instance: FastifyInstance) => {
+      instance.addHook('preClose', async () => {
+        closing()
+        await held
+      })
+    })
+
+  return { plugin, preClose, resume }
 }
 
 describe('a server serving TLS or HTTP/2', () => {
@@ -180,6 +228,69 @@ describe('a server serving TLS or HTTP/2', () => {
       release()
       app = undefined
     })
+
+    // A browser's TLS preconnect: the handshake completes, and no request follows.
+    it('closes a connection that completed its handshake and never sent a request', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { https: { key, cert } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const secured = new Promise(resolve => app!.instance.server.once('secureConnection', resolve))
+      const client = tlsConnect({ host: '127.0.0.1', port: app.address!.port, ca: cert })
+      client.on('error', () => undefined)
+      const hungUp = new Promise(resolve => client.once('close', resolve))
+      await secured
+
+      await expect(app.close()).resolves.toBeUndefined()
+      app = undefined
+      await hungUp
+    })
+
+    // A load balancer's TCP check on an HTTPS port: the connection opens, and no handshake follows.
+    it('closes a connection that never started its handshake', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { https: { key, cert } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const accepted = new Promise(resolve => app!.instance.server.once('connection', resolve))
+      const client = netConnect(app.address!.port, '127.0.0.1')
+      client.on('error', () => undefined)
+      const hungUp = new Promise(resolve => client.once('close', resolve))
+      await accepted
+
+      await expect(app.close()).resolves.toBeUndefined()
+      app = undefined
+      await hungUp
+    })
+
+    // A handshake that started carries no request either, but it may yet finish, so only the budget running out
+    // ends it. Node's own timeout for it is two minutes.
+    it('forces a stalled handshake shut when the shutdown budget runs out', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { https: { key, cert } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(200))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const accepted = new Promise(resolve => app!.instance.server.once('connection', resolve))
+      const client = netConnect(app.address!.port, '127.0.0.1')
+      client.on('error', () => undefined)
+      const hungUp = new Promise(resolve => client.once('close', resolve))
+      await accepted
+      // The start of a TLS record header, and nothing after it.
+      client.write(Buffer.from([0x16, 0x03, 0x01]))
+
+      const error = await app.close().catch((error: unknown) => error)
+      app = undefined
+
+      expect(error).toBeInstanceOf(AggregateError)
+      expect((error as AggregateError).errors[0]).toBeInstanceOf(ErrShutdownTimeout)
+      await hungUp
+    })
   })
 
   describe('HTTP/2', () => {
@@ -207,6 +318,48 @@ describe('a server serving TLS or HTTP/2', () => {
 
       expect((await getH2(session(origin), '/echo')).body).toMatchObject({ httpVersion: '2.0' })
       expect((await getHTTPS(`${origin}/echo`)).body).toMatchObject({ httpVersion: '1.1' })
+    })
+
+    // An HTTP/1.1 connection on an HTTP/2 server runs on Node's HTTP/1 server, which closes only idle connections.
+    it('closes an HTTP/1.1 connection that never sent a request', async () => {
+      app = createWebApplication()
+        .server(() => ({ factory: { http2: true, https: { key, cert, allowHTTP1: true } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const secured = new Promise(resolve => app!.instance.server.once('secureConnection', resolve))
+      const client = tlsConnect({ host: '127.0.0.1', port: app.address!.port, ca: cert, ALPNProtocols: ['http/1.1'] })
+      client.on('error', () => undefined)
+      const hungUp = new Promise(resolve => client.once('close', resolve))
+      await secured
+
+      await expect(app.close()).resolves.toBeUndefined()
+      app = undefined
+      await hungUp
+    })
+
+    it('lets an HTTP/1.1 request in flight finish, then closes the connection it kept alive', async () => {
+      const { router, inFlight, release } = holding()
+      app = createWebApplication()
+        .server(() => ({ factory: { http2: true, https: { key, cert, allowHTTP1: true } }, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .mount(echo, router) as WebApplication
+
+      await app.run()
+      const origin = app.address!.origin
+      const idle = keptAlive(origin, '/echo')
+      expect(await idle.status).toBe(200)
+      const slow = keptAlive(origin, '/slow')
+      await inFlight
+
+      // The server ends the idle connection as it stops accepting, so the request in flight finishes after that.
+      idle.socket.once('close', release)
+      const closed = app.close()
+
+      expect(await slow.status).toBe(200)
+      await expect(closed).resolves.toBeUndefined()
+      app = undefined
     })
 
     it('serves cleartext HTTP/2 and reports an http origin', async () => {
@@ -369,6 +522,49 @@ describe('a server serving TLS or HTTP/2', () => {
       app = undefined
 
       expect(Date.now() - startedAt).toBeLessThan(1_000)
+    })
+
+    // `session.close()` does not end a session that never read its preface, so a connection that opens while the
+    // server is closing and stays silent held the close until the budget ran out.
+    it.each([
+      {
+        connection: 'a cleartext connection that sends no preface',
+        factory: { http2: true },
+        accepted: 'connection',
+        connect: (port: number) => netConnect(port, '127.0.0.1'),
+      },
+      {
+        connection: 'a TLS connection that finishes its handshake and sends no preface',
+        factory: { http2: true, https: { key, cert } },
+        accepted: 'secureConnection',
+        connect: (port: number) => tlsConnect({ host: '127.0.0.1', port, ca: cert, ALPNProtocols: ['h2'] }),
+      },
+      {
+        connection: 'a TLS connection that never starts its handshake',
+        factory: { http2: true, https: { key, cert } },
+        accepted: 'connection',
+        connect: (port: number) => netConnect(port, '127.0.0.1'),
+      },
+    ])('closes $connection, opened while the server is closing', async ({ factory, accepted, connect }) => {
+      const { plugin, preClose, resume } = holdingClose()
+      app = createWebApplication()
+        .server(() => ({ factory, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .with(plugin)
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const port = app.address!.port
+
+      const closed = app.close()
+      await preClose
+      const opened = new Promise(resolve => app!.instance.server.once(accepted, resolve))
+      connect(port).on('error', () => undefined)
+      await opened
+      resume()
+
+      await expect(closed).resolves.toBeUndefined()
+      app = undefined
     })
 
     // An HTTP/2 server has no `closeAllConnections()`: calling it anyway failed the forced teardown with a
