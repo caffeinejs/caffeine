@@ -26,14 +26,55 @@ type AnyEntry = Entry<readonly string[], RouteContract>
 
 type EntriesOf<R> = R extends RouteContract ? Entry<Split<R['path']>, R> : never
 
-/** The name a parameter segment binds, with the marker, any matching constraint and any `?` stripped. */
-type ParamName<H extends string> = H extends '*' ? '*' : H extends `:${infer Rest}` ? StripMarkers<Rest> : never
+/**
+ * The name a segment binds when it is that parameter alone, read from the path as the router reads it: `*`, or
+ * `:id` followed by a matching constraint or an optional `?`. `never` for a segment with a second parameter or text
+ * of its own, such as `:lat-:lng`, `:name.json` or `:id(^\d+)?`, whose `?` the router reads as text.
+ *
+ * Read from the path alone, never from the route's params: a schema that declares no keys says nothing about it.
+ */
+type LoneName<H extends string> = H extends '*' ? '*' : H extends `:${infer S}` ? Lone<OptionalBody<S>> : never
 
-type StripMarkers<S extends string> = S extends `${infer Name}(${string}`
-  ? StripMarkers<Name>
-  : S extends `${infer Name}?`
-    ? Name
-    : S
+// The router reads a trailing `?` as optional only on a segment that holds no constraint.
+type OptionalBody<S extends string> = S extends `${infer Body}?`
+  ? S extends `${string}${'(' | ')'}${string}`
+    ? S
+    : Body
+  : S
+
+// The name `S` starts with, when nothing but a constraint follows it.
+type Lone<S extends string> = S extends `${ParamName<S>}${infer Rest}`
+  ? Rest extends ''
+    ? ParamName<S>
+    : IsConstraint<Rest> extends true
+      ? ParamName<S>
+      : never
+  : never
+
+// A name ends at `(`, `-` or `.`, as the router ends it.
+type ParamName<S extends string> = Before<Before<Before<S, '('>, '-'>, '.'>
+
+type Before<S extends string, C extends string> = S extends `${infer Head}${C}${string}` ? Head : S
+
+// Whether `S` is one constraint and nothing after it: its first `(` balanced by its last character, as the router
+// balances parentheses, nested ones counted and a `\` escaping the character after it.
+type IsConstraint<S extends string, Open extends 0[] = []> = S extends `${infer C}${infer Rest}`
+  ? C extends '\\'
+    ? IsConstraint<Rest extends `${string}${infer Escaped}` ? Escaped : '', Open>
+    : C extends '('
+      ? IsConstraint<Rest, [...Open, 0]>
+      : C extends ')'
+        ? Open extends [0]
+          ? Rest extends ''
+            ? true
+            : false
+          : Open extends [0, ...infer Outer extends 0[]]
+            ? IsConstraint<Rest, Outer>
+            : false
+        : Open extends []
+          ? false
+          : IsConstraint<Rest, Open>
+  : false
 
 type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends string, ...string[]] } ? H : never
 
@@ -62,10 +103,11 @@ type Terminal<E extends AnyEntry> = {
  *
  * A segment named after a verb is left out: the proxy reads a verb first, so offering it would promise something
  * the runtime cannot deliver. So is one named `then`, which the proxy never answers, so that a client is never
- * taken for a promise, and one the node reserves, as the root does `$request`. `$request` reaches them all.
+ * taken for a promise, and one the node reserves, as the root does `$request`. So is one holding a `:`: `v:version`
+ * holds a parameter, and the router matches `a::b` as `a:b`. `$request` reaches them all.
  */
 type StaticChildren<E extends AnyEntry, Reserved extends string> = {
-  [K in Exclude<Extract<Head<E>, string>, `:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
+  [K in Exclude<Extract<Head<E>, string>, `${string}:${string}` | '*' | Verb | 'then' | Reserved>]: Node<Advance<E, K>>
 }
 
 type Advance<E extends AnyEntry, K extends string> = E extends {
@@ -75,11 +117,11 @@ type Advance<E extends AnyEntry, K extends string> = E extends {
   ? Entry<T, R>
   : never
 
-/** Entries whose next segment binds a parameter. */
+/** Entries whose next segment is one parameter alone. */
 type ParamEntries<E extends AnyEntry> = E extends { segs: readonly [infer H extends string, ...string[]] }
-  ? H extends `:${string}` | '*'
-    ? E
-    : never
+  ? [LoneName<H>] extends [never]
+    ? never
+    : E
   : never
 
 /**
@@ -87,6 +129,9 @@ type ParamEntries<E extends AnyEntry> = E extends { segs: readonly [infer H exte
  *
  * `Pick` off the route's own params rather than a rebuilt object, so the value keeps the type *and* the optionality
  * the route's schema gave it: `:id` under an integer schema is a `number`, and `:id?` stays optional.
+ *
+ * Only a segment that is one parameter alone is offered. The proxy sends the value as the whole segment, and never
+ * sees the route's path, so `:lat-:lng`, `:name.json` and what follows them are reached through `$request`.
  */
 type ParamChild<E extends AnyEntry> = [ParamEntries<E>] extends [never]
   ? unknown
@@ -96,7 +141,7 @@ type ParamArg<E extends AnyEntry> = E extends {
   segs: readonly [infer H extends string, ...string[]]
   route: infer R extends RouteContract
 }
-  ? Pick<R['params'], Extract<ParamName<H>, keyof R['params']>>
+  ? Pick<R['params'], Extract<LoneName<H>, keyof R['params']>>
   : never
 
 type AdvanceAny<E extends AnyEntry> = E extends {
@@ -123,11 +168,12 @@ export interface RawCall<R extends RouteContract> {
 type RawArgs<R extends RouteContract> =
   Partial<RawInit<R>> extends RawInit<R> ? [init?: RawInit<R>] : [init: RawInit<R>]
 
-// A path whose every parameter is optional may be addressed with no params at all.
+// A path whose parameters may all be left out may be addressed with no params at all. Asked of the empty object
+// rather than of `Partial`, so the parameters of an optional segment stay together: all of them, or none.
 type RawInit<R extends RouteContract> = CallInit<R> &
   ([keyof R['params']] extends [never]
     ? { params?: undefined }
-    : Partial<R['params']> extends R['params']
+    : Record<never, never> extends R['params']
       ? { params?: R['params'] }
       : { params: R['params'] })
 

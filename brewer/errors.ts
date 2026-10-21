@@ -26,7 +26,8 @@ export class ErrBrewPathParam extends ErrBrew {
 }
 
 /**
- * A path parameter's value is `.` or `..`, or a wildcard holds one as a part.
+ * A path parameter's value is `.` or `..`, a wildcard holds one as a part, or a segment holding parameters is one
+ * once filled, as `:name.:ext` is with two empty values.
  *
  * The URL standard resolves either as a step along the path, percent-encoded or not, so the request would reach
  * another route than the one the call names.
@@ -34,15 +35,18 @@ export class ErrBrewPathParam extends ErrBrew {
 export class ErrBrewPathValue extends ErrBrew {
   override readonly code = 'ERR_BREW_PATH_VALUE'
 
-  constructor(path: string, param: string, value: string) {
-    super(
-      errMessage(
-        `Cannot build a request for "${path}": path parameter "${param}" is "${value}", which a URL resolves as a step along the path`,
-      )
-        .solutions('Refuse the value before the call, or send it in the query or the body')
-        .reference('@caffeinejs/brewer', ErrBrewPathValue)
-        .build(),
-    )
+  constructor(path: string, name: string, value: string, kind: 'param' | 'segment' = 'param') {
+    const step = 'which a URL resolves as a step along the path'
+    const message =
+      kind === 'param'
+        ? errMessage(`Cannot build a request for "${path}": path parameter "${name}" is "${value}", ${step}`).solutions(
+            'Refuse the value before the call, or send it in the query or the body',
+          )
+        : errMessage(
+            `Cannot build a request for "${path}": segment "${name}" is "${value}" once filled, ${step}`,
+          ).solutions('Refuse empty values before the call, or send them in the query or the body')
+
+    super(message.reference('@caffeinejs/brewer', ErrBrewPathValue).build())
     this.name = 'ErrBrewPathValue'
   }
 }

@@ -95,6 +95,25 @@ describe('openapi from a programmatic router', () => {
     expect(Object.keys(create?.responses ?? {})).toContain('201')
   })
 
+  it('identifies an unnamed route whose segment holds several parameters by every one of them', async () => {
+    const geo = new Router('/geo').name('Geo')
+
+    geo.get('/near/:lat-:lng').handler(() => ({ near: true }))
+
+    app = createWebApplication({})
+      .with(openapi(o => o.info({ title: 'Geo', version: '1.0.0' }).docs(false).public()))
+      .mount(geo) as WebApplication
+
+    await app.bootstrap()
+
+    const document = (await (await app.fetch('/openapi.json')).json()) as OpenAPIDocument
+    const near = operationAt(document, '/geo/near/{lat}-{lng}')
+
+    expect(near?.operationId).toBe('Geo_get_near_lat-lng')
+    expect(near?.parameters).toContainEqual(expect.objectContaining({ name: 'lat', in: 'path', required: true }))
+    expect(near?.parameters).toContainEqual(expect.objectContaining({ name: 'lng', in: 'path', required: true }))
+  })
+
   it('lists the Accept-Version header parameter for a versioned route, from the compiled constraint', async () => {
     const pets = new Router('/versioned-pets').name('VersionedPets').extend(version('1.0.0'))
     pets

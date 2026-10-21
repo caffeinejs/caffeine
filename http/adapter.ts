@@ -90,14 +90,16 @@ export type AnyAdapterExtension = AnyAdapterTypes['extension']
  * port `0` becomes an OS-assigned port, and a wildcard host stays a wildcard.
  */
 export interface ServerAddress {
-  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. */
+  /** The bound host, verbatim — a wildcard bind reports `0.0.0.0` or `::`. `''` on a unix socket or a named pipe. */
   readonly host: string
-  /** The bound port. Never `0`. */
+  /** The bound port. Never `0` on a TCP bind, and `0` on a unix socket or a named pipe. */
   readonly port: number
+  /** The unix socket or the named pipe the server is bound to. `''` on a TCP bind. */
+  readonly path: string
   /**
    * An origin that can be connected to: `https:` when the server serves TLS, `http:` otherwise. A wildcard
    * {@link host} is rendered as the matching loopback address, since `0.0.0.0` is an address to accept on, not one
-   * to dial.
+   * to dial. `''` on a unix socket or a named pipe, which no URL reaches.
    */
   readonly origin: string
 }
@@ -168,6 +170,8 @@ export interface IAdapterServer<T extends IAdapterTypes> extends IServer<T> {
   /**
    * Starts listening on the settings the server was built with. The application hands its own server what
    * {@link WebApplication.run} was given, untouched, and any other server nothing.
+   *
+   * Once it resolves, `address` is set until {@link teardown}.
    */
   run(...args: T['runArgs']): Promise<void>
 

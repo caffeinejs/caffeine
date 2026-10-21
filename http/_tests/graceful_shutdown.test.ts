@@ -1,6 +1,9 @@
+import { connect, type Socket } from 'node:net'
+
 import { ErrApplicationClosed, ErrApplicationRunning } from '@caffeinejs/application'
 import { ErrShutdownTimeout, type ShutdownBuilder } from '@caffeinejs/application/shutdown'
 import { Injectable, type OnDestroy } from '@caffeinejs/di'
+import { Second } from '@caffeinejs/std/duration'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 import type { WebApplication } from '../application.js'
@@ -68,6 +71,37 @@ function portOf(app: WebApplication): number {
   }
 
   return address.port
+}
+
+/** A client connection that has sent nothing, once the server has accepted it. */
+async function silentConnection(app: WebApplication): Promise<Socket> {
+  const accepted = new Promise(resolve => app.instance.server.once('connection', resolve))
+  const socket = connect(portOf(app), '127.0.0.1')
+  socket.on('error', () => undefined)
+  await accepted
+
+  return socket
+}
+
+/** A keep-alive connection whose one request has been answered, left idle. */
+async function idleConnection(app: WebApplication): Promise<Socket> {
+  const socket = connect(portOf(app), '127.0.0.1')
+  socket.on('error', () => undefined)
+  socket.setEncoding('utf8')
+
+  let received = ''
+  const answered = new Promise<void>(resolve =>
+    socket.on('data', (chunk: string) => {
+      received += chunk
+      if (received.endsWith('{"ok":true}')) {
+        resolve()
+      }
+    }),
+  )
+  socket.write('GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
+  await answered
+
+  return socket
 }
 
 describe('graceful shutdown', () => {
@@ -173,6 +207,122 @@ describe('graceful shutdown', () => {
 
     release()
     await request
+  })
+
+  // Node counts a connection that has not sent a request as active, never idle, and stops expiring it once the
+  // server closes: a browser's preconnect, a load balancer's TCP check or the spare connection `fetch` opens after
+  // an abort held the close until the budget ran out.
+  it('closes a connection that never sent a request instead of waiting out the budget', async () => {
+    const app = await start(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    const client = await silentConnection(app)
+    const hungUp = new Promise(resolve => client.once('close', resolve))
+
+    await expect(app.close()).resolves.toBeUndefined()
+    await hungUp
+  })
+
+  // What a connection had already sent when closing began is a request, not silence, even before the server has
+  // read it: it gets the 503 Fastify answers every request with once closing, not a reset.
+  it('answers a request whose bytes arrived as closing began', async () => {
+    const app = await start(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    const client = await silentConnection(app)
+    client.setEncoding('utf8')
+    let received = ''
+    client.on('data', (chunk: string) => (received += chunk))
+    const hungUp = new Promise(resolve => client.once('close', resolve))
+
+    client.write('GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
+    await expect(app.close()).resolves.toBeUndefined()
+    await hungUp
+
+    expect(received).toMatch(/^HTTP\/1\.1 503 /)
+  })
+
+  // The server listens until its `preClose` hooks have run, so a client can still connect once closing has begun.
+  it('closes a connection that opens while the server is closing', async () => {
+    let closing!: () => void
+    let resume!: () => void
+    const preClose = new Promise<void>(resolve => (closing = resolve))
+    const held = new Promise<void>(resolve => (resume = resolve))
+
+    const app = createWebApplication()
+      .serverCallback((_context, instance) => {
+        instance.addHook('preClose', async () => {
+          closing()
+          await held
+        })
+      })
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    await app.run({ host: '127.0.0.1', port: 0 })
+
+    const closed = app.close()
+    await preClose
+    await silentConnection(app)
+    resume()
+
+    await expect(closed).resolves.toBeUndefined()
+  })
+
+  // One that opens while the server is closing is judged like any other, once the server has read from it: a request
+  // gets the 503 Fastify answers with while closing, not a reset.
+  it('answers a request on a connection that opens while the server is closing', async () => {
+    let closing!: () => void
+    let resume!: () => void
+    const preClose = new Promise<void>(resolve => (closing = resolve))
+    const held = new Promise<void>(resolve => (resume = resolve))
+
+    const app = createWebApplication()
+      .serverCallback((_context, instance) => {
+        instance.addHook('preClose', async () => {
+          closing()
+          await held
+        })
+      })
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    await app.run({ host: '127.0.0.1', port: 0 })
+
+    const closed = app.close()
+    await preClose
+    const client = await silentConnection(app)
+    client.setEncoding('utf8')
+    let received = ''
+    client.on('data', (chunk: string) => (received += chunk))
+    const hungUp = new Promise(resolve => client.once('close', resolve))
+    client.write('GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
+    await hungUp
+    resume()
+
+    expect(received).toMatch(/^HTTP\/1\.1 503 /)
+    await expect(closed).resolves.toBeUndefined()
+  })
+
+  // Node ends the idle connections once, as the server stops accepting. One whose request finished after that was
+  // kept alive for the client, and the close waited on it until the budget ran out.
+  it('lets a request in flight finish, then closes the connection it kept alive', async () => {
+    const app = await start(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    const port = portOf(app)
+
+    let started!: () => void
+    const inFlight = new Promise<void>(resolve => (started = resolve))
+    let release!: () => void
+    const held = new Promise<void>(resolve => (release = resolve))
+    slowHook = () => {
+      started()
+      return held
+    }
+
+    const idle = await idleConnection(app)
+    const request = fetch(`http://127.0.0.1:${port}/drain/slow`)
+    await inFlight
+
+    // The server ends the idle connection as it stops accepting, so the request in flight finishes after that.
+    idle.once('close', release)
+    const closed = app.close()
+
+    const response = await request
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ ok: true })
+    await expect(closed).resolves.toBeUndefined()
   })
 
   it('joins a second close instead of starting another one', async () => {

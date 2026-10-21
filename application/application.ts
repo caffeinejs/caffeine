@@ -64,6 +64,41 @@ export interface RunInfo {
   readonly name: string
   /** The active configuration profiles. */
   readonly profiles: readonly string[]
+  /**
+   * What features reported about what they run, through {@link RunInfoContrib}: in push order, duplicates kept.
+   *
+   * ```ts
+   * for (const entry of info.contrib) app.log.info(entry, 'running')
+   * ```
+   */
+  readonly contrib: readonly RunInfoEntry[]
+}
+
+/** One thing a feature reports it runs, for {@link RunInfo.contrib}. Every key but `source` is the feature's own. */
+export interface RunInfoEntry {
+  /** Who pushed it: a feature's name, such as `kafka` or `kafka:orders`. */
+  readonly source: string
+  readonly [key: string]: unknown
+}
+
+/**
+ * Where features report what they run, for {@link RunInfo.contrib}. The application binds one: a feature pushes from
+ * its bootstrap hook, `kit.container.get(RunInfoContrib).push(...)`, and a plugin factory or a service that injects
+ * it pushes from wherever it learns what it reports. What is pushed once {@link Application.run} has resolved is not
+ * in the info it resolved to.
+ */
+export class RunInfoContrib {
+  readonly #entries: RunInfoEntry[] = []
+
+  /** Adds entries as they are, in order. Nothing is deduplicated. */
+  push(...entries: RunInfoEntry[]): void {
+    this.#entries.push(...entries)
+  }
+
+  /** What has been pushed so far, in push order. */
+  get entries(): readonly RunInfoEntry[] {
+    return [...this.#entries]
+  }
 }
 
 /** Where the framework's own block lives in the configuration tree. */
@@ -165,6 +200,7 @@ export class Application<TConfig = unknown> {
   readonly #features: Feature[] = []
   readonly #installed = new Set<string>()
   readonly #availability = new ApplicationAvailability()
+  readonly #contrib = new RunInfoContrib()
   readonly #definition: ConfigDefinition<unknown>
   readonly #optionProfiles: readonly string[]
 
@@ -499,6 +535,8 @@ export class Application<TConfig = unknown> {
       // The application's own instance, bound before any feature configures so health (and anything else) can
       // inject it rather than closing over a kit field. The lifecycle writes to this object.
       this.#container.bind(ApplicationAvailability, t => t.toValue(this.#availability).internal())
+      // Likewise the one `run()` reads its contributions from, so whatever a feature pushes reaches it.
+      this.#container.bind(RunInfoContrib, t => t.toValue(this.#contrib).internal())
 
       // Every application has one probe service, whether or not anything exposes it: `healthProbes()` serves the
       // HTTP probes from it, and anything else injects the same instance, so every caller shares one evaluation. A
@@ -800,7 +838,7 @@ export class Application<TConfig = unknown> {
 
   /** Assembles the {@link RunInfo} that {@link run} resolves to. Subclasses override to widen it. */
   protected runInfo(): RunInfo {
-    return { name: this.name, profiles: this.profiles }
+    return { name: this.name, profiles: this.profiles, contrib: this.#contrib.entries }
   }
 
   /** The snapshot of the current revision. Readable from {@link setup} onward. */

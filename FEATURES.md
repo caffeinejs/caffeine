@@ -71,6 +71,8 @@ export interface Feature<C = unknown> {
 - A feature never touches a server. There is no server hook on the contract: server wiring is a plugin factory's, registered with `.with(...)`. A feature whose plugin needs what it resolved binds it (`OIDCRoutesRef`), and the plugin reads it from the container.
 - Most features extend `FeatureBuilder<C>` from `@caffeinejs/application`, which does one thing: it runs the application's configure callbacks against the builder, with the resolved configuration, immediately before `configure`. A subclass names itself, holds what its fluent methods set in ordinary fields, and binds in `configure`.
 - The application's callback is `(builder, kit)`. The kit is the `FeatureConfigureKit` the feature's own `configure` receives: `config`, `store`, and `container.bind(...)`, but no `container.get(...)` yet. A plugin's builder callback is `HTTPPluginConfigurer` and is handed the `HTTPSetupContext`, where the container resolves and binding is closed.
+- A start-up callback added to an application, a feature or a plugin takes the kit of the phase it runs in: `FeatureConfigureKit` before the container initializes, `BootstrapKit` after it, `HTTPSetupContext` in a plugin factory. It defines no context type of its own. A per-request callback takes the request's context instead, and the signatures that predate this rule (`bootstrap(configure)`, `Authorization(fn)`, `Guards(fn)`) stay as they are.
+- Output that only decorates start-up, such as a banner or a report, never fails it: what goes wrong is a warning on the application's logger.
 
 ```ts
 export class ThingBuilder<C = unknown> extends FeatureBuilder<C> {
