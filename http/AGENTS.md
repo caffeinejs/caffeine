@@ -122,8 +122,6 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
 
 ## Authentication
 
-- Before a security review of `security/`, read [`security/SECURITY-REVIEW.md`](security/SECURITY-REVIEW.md). Use
-  the `security-audit` skill for vulnerabilities and `sharp-edges` for API and option design.
 - `assertAuthenticationConfigured` refuses a protected route with no scheme configured, not the gate.
 - `assertRoutesGated`, from the adapter's first `onReady` hook, refuses a route a gate would authorize that no gate
   covers. Covered means registered in the context a gate installed on or one beneath it (gates record themselves in
