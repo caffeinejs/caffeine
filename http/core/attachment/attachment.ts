@@ -18,8 +18,8 @@ const LARGEST_SLICEABLE = 2 ** 32 - 1
 // RFC 9110 §8.8.3: an optional weak prefix, then a quoted string holding neither a space nor a quote.
 const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
 
-// What Node writes as a header value: tabs, visible ASCII and spaces, and obs-text. Anything else is dropped from the
-// header, and must never reach a part of a multipart body, where a line break would add lines of its own.
+// What Node writes as a header value: tabs, visible ASCII and spaces, and obs-text. Node refuses anything else in a
+// header, and nothing else may reach a part of a multipart body, where a line break would add lines of its own.
 const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
 
 /** {@link Attachment}'s options. */
@@ -248,8 +248,8 @@ function partial(
 }
 
 /**
- * The type each part of a multipart answer carries: the one the whole body would go out under. A type Node would not
- * write as a header value is not one, and the `Blob`'s own stands in, as on the whole body.
+ * The type each part of a multipart answer carries: the one the whole body would go out under. A type Node would
+ * refuse as a header value is not one, and the `Blob`'s own stands in.
  */
 function partType(ctx: IContext, sized: NodeBlob | Uint8Array<ArrayBuffer>): string {
   const declared = ctx.getHeader('content-type')
