@@ -2,6 +2,7 @@ import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type O
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { printBanner, type Banner } from './_banner.js'
 import {
   ConfigModule,
   loadConfig,
@@ -179,6 +180,9 @@ export class Application<TConfig = unknown> {
   readonly #loggerBuilder = new LoggerBuilder<TConfig>()
   #logger: Logger
 
+  // `undefined` is the default banner.
+  #banner: Banner<TConfig> | undefined
+  #bannerPrinted = false
   #store: ConfigStore<unknown> | undefined
   #name = ''
   #profiles: string[] = []
@@ -381,6 +385,31 @@ export class Application<TConfig = unknown> {
   }
 
   /**
+   * Sets the banner {@link run} prints as the application starts: `false` for none, the text itself, or a function
+   * building it from the application's name, profiles and configuration and the Caffeine version. The default banner
+   * names the Caffeine and Node.js versions.
+   *
+   * The banner is printed once, after configuration has loaded and before any feature configures. It is written to
+   * stdout with `console.log`, beside the logger, so `logger: false` does not silence it. {@link bootstrap} alone
+   * prints none, and neither does the default under a test runner (`NODE_ENV=test` or `VITEST`); a banner set here
+   * prints there too.
+   *
+   * The banner never stops the application from starting: a function that throws, or returns anything but a string,
+   * is logged as a warning and nothing is printed.
+   *
+   * ```ts
+   * .banner(({ name, config }) => `${name} on port ${config.app.server.port}`)
+   * ```
+   *
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
+   */
+  banner(banner: Banner<TConfig>): this {
+    this.assertConfigurable()
+    this.#banner = banner
+    return this
+  }
+
+  /**
    * Refuses configuration once {@link bootstrap} has started: the feature list is read once, so a later change
    * would be dropped rather than applied. The {@link bootstrap} callback is the exception, and it runs before
    * that list is read.
@@ -479,6 +508,12 @@ export class Application<TConfig = unknown> {
         this.beforeConfigure()
       } finally {
         this.#configuring = false
+      }
+
+      // A boot `run()` started prints the banner here, ahead of what the features, the container and the platform
+      // log, and once the callback has had its chance to set one.
+      if (this.#running) {
+        this.#printBanner()
       }
 
       features = this.configurers()
@@ -590,6 +625,9 @@ export class Application<TConfig = unknown> {
     if (this.#closing !== undefined) {
       throw new ErrApplicationClosed()
     }
+
+    // The boot printed it already, unless that boot started before `run()` did.
+    this.#printBanner()
 
     const options = this.shutdownOptions()
 
@@ -768,6 +806,20 @@ export class Application<TConfig = unknown> {
     } finally {
       clearTimeout(timer)
     }
+  }
+
+  /** Prints the banner, once, whichever of the boot and {@link run} gets there first. */
+  #printBanner(): void {
+    if (this.#bannerPrinted) {
+      return
+    }
+    this.#bannerPrinted = true
+
+    printBanner(
+      this.#banner,
+      { name: this.#name, profiles: this.profiles, config: this.configSnapshot as ConfigSnapshot<TConfig> },
+      this.#logger,
+    )
   }
 
   /** Ran once availability has started refusing, before the drain delay. */
