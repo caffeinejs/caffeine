@@ -14,20 +14,6 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 // Not library packages: their output is not a published surface.
 const NOT_LIBRARIES = ['benchmarks/**', 'examples/**', 'di/examples/**', 'devtools/ui/**', '**/node_modules/**']
 
-// Shipped declarations that already name a private module's type, most of them in a signature users meet. A line is a
-// file and the module it imports from: moving that module's types to a public one removes the line, and no line may
-// be added.
-const GRANDFATHERED = [
-  'distlock/dist/distlock.d.ts imports ./_lock.js',
-  'http/dist/core/routing/programmatic/flatten.d.ts imports ./_state.js',
-  'http/dist/core/routing/programmatic/route_chain.d.ts imports ./_state.js',
-  'http/dist/core/routing/programmatic/scoped_plugins.d.ts imports ./_state.js',
-  'http/dist/core/routing/programmatic/source.d.ts imports ./_state.js',
-  'http/dist/decorators/args.d.ts imports ./_params.js',
-  'http/dist/decorators/verbs.d.ts imports ./_params.js',
-  'testing/dist/http/test_client.d.ts imports ./_test_app.js',
-]
-
 // `import { A, type B } from '…'`, `import type { A } from '…'`, `export * from '…'`: a statement that names
 // something. A bare `import '…'` does not match.
 const NAMING =
@@ -66,14 +52,7 @@ describe('private modules', () => {
   it('lend no type to a shipped declaration', async () => {
     const { files, found } = await leaks()
 
-    expect(found.filter(leak => !GRANDFATHERED.includes(leak))).toEqual([])
+    expect(found).toEqual([])
     expect(files).toBeGreaterThan(500)
-  })
-
-  // A fixed leak still listed would let a new one take its place unseen.
-  it('keep the grandfathered list to leaks that still exist', async () => {
-    const { found } = await leaks()
-
-    expect(GRANDFATHERED.filter(leak => !found.includes(leak))).toEqual([])
   })
 })

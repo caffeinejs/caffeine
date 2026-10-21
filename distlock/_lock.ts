@@ -14,8 +14,6 @@ export interface LockHost extends DistLock {
   readonly backend: Backend
   readonly options: DistLockOptions
   readonly log: Logger
-  track(lock: HeldLock): void
-  untrack(lock: HeldLock): void
 }
 
 // Process-wide rather than per service, so a lease ID is unique across every lock service in the process.
@@ -31,6 +29,9 @@ export class HeldLock implements Lock {
   within: WithLockContext | undefined
 
   readonly #host: LockHost
+  // The locks the service renews, when this one renews: it joins on construction and leaves once renewal stops, so
+  // the service's `onDestroy` reaches every renewal still running and nothing else.
+  readonly #renewing: Set<HeldLock> | undefined
 
   #ttl: Duration
   #lease: LockLease
@@ -40,16 +41,17 @@ export class HeldLock implements Lock {
   #timer: ReturnType<typeof setTimeout> | undefined
   #renewal: Promise<void> | undefined
 
-  constructor(host: LockHost, lease: LockLease, ttl: Duration, renew: boolean) {
+  constructor(host: LockHost, lease: LockLease, ttl: Duration, renewing: Set<HeldLock> | undefined) {
     this.key = lease.key
     this.leaseID = ++nextLeaseID
     this.acquiredAt = Date.now()
     this.#host = host
+    this.#renewing = renewing
     this.#lease = lease
     this.#ttl = ttl
 
-    if (renew) {
-      host.track(this)
+    if (renewing !== undefined) {
+      renewing.add(this)
       this.#schedule()
     }
   }
@@ -125,7 +127,7 @@ export class HeldLock implements Lock {
       this.#timer = undefined
     }
 
-    this.#host.untrack(this)
+    this.#renewing?.delete(this)
   }
 
   // Resolves once no renewal is in flight. A renewal that already reached the backend cannot be called back,

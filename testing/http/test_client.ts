@@ -2,8 +2,9 @@ import { brewer, type BrewClient, type BrewOptions } from '@caffeinejs/brewer'
 import type { Container } from '@caffeinejs/di'
 import { Router, type DepsOf } from '@caffeinejs/http'
 
-import { Harness, type AnyRouter, type TestApplication } from './_test_app.js'
+import { Harness } from './_test_app.js'
 import { ErrTestClientTarget } from './error.js'
+import type { AnyRouter, TestApplication } from './types.js'
 
 /**
  * How the client shapes the requests it sends: brewer's own options, all but `fetch`.

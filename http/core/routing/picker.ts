@@ -36,6 +36,14 @@ export interface HTTPPickers {
   async<R = unknown>(picker: ParameterPicker<R>): ParameterPickOptions<R>
 }
 
+/**
+ * The picks a route declares.
+ *
+ * `never` accepts every pick: a built-in, or one whose function annotates its request, as
+ * `p.pick((req: { httpContext: IContext }) => …)` does.
+ */
+export type Picks = ParameterPickOptions<never>[]
+
 function param<R = unknown>(name?: string): ParameterPickOptions<R> {
   return { name, type: 'params' }
 }

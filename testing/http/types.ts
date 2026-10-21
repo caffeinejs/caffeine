@@ -1,3 +1,12 @@
+import type { Router, WebApplication } from '@caffeinejs/http'
+import type { AdapterTypes } from '@caffeinejs/http/fastify'
+
+/** Any router, spelled the way `blend` and `mount` spell it. */
+export type AnyRouter = Router<any, any, any, any, any, any>
+
+/** The application a client drives, whichever way it got one: a Fastify one. */
+export type TestApplication = WebApplication<AdapterTypes>
+
 export interface Fetchable {
   fetch(request: Request): Promise<Response>
 }
