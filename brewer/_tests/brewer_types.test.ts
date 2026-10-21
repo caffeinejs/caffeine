@@ -654,6 +654,8 @@ describe('a segment holding more than one parameter, or text beside one', () => 
     .handler(() => ({ tags: true }))
     .get('/item2/item-:id?')
     .handler(() => ({ item2: true }))
+    .get('/esc2/:id(^\\)x$)')
+    .handler(() => ({ esc2: true }))
   const geo = new Router('/geo')
     .get('/:id')
     .handler(() => ({ lone: true }))
@@ -782,6 +784,8 @@ describe('a segment holding more than one parameter, or text beside one', () => 
       expectTypeOf(await (await shaped.shapes.rgx({ id: '42' }).get()).json()).toEqualTypeOf<{ rgx: boolean }>()
       expectTypeOf(await (await shaped.shapes.k({ 'lat:lng': 'x' }).get()).json()).toEqualTypeOf<{ named: boolean }>()
       expectTypeOf(await (await shaped.geo({ id: '1' }).get()).json()).toEqualTypeOf<{ lone: boolean }>()
+      // An escaped `)` does not close the constraint, so nothing follows it.
+      expectTypeOf(await (await shaped.shapes.esc2({ id: ')x' }).get()).json()).toEqualTypeOf<{ esc2: boolean }>()
     })
   })
 

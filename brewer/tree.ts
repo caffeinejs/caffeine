@@ -44,9 +44,11 @@ type OptionalBody<S extends string> = S extends `${infer Body}?`
 
 // The name `S` starts with, when nothing but a constraint follows it.
 type Lone<S extends string> = S extends `${ParamName<S>}${infer Rest}`
-  ? AfterConstraint<Rest> extends ''
+  ? Rest extends ''
     ? ParamName<S>
-    : never
+    : IsConstraint<Rest> extends true
+      ? ParamName<S>
+      : never
   : never
 
 // A name ends at `(`, `-` or `.`, as the router ends it.
@@ -54,24 +56,25 @@ type ParamName<S extends string> = Before<Before<Before<S, '('>, '-'>, '.'>
 
 type Before<S extends string, C extends string> = S extends `${infer Head}${C}${string}` ? Head : S
 
-// What follows a constraint, its parentheses balanced as the router balances them: nested ones count, and a `\`
-// escapes the character after it. Text that opens with no constraint is returned as it is. A copy of the one
-// `@caffeinejs/http` reads `PathParams` with, which this package cannot import.
-type AfterConstraint<S extends string, Depth extends 0[] = []> = S extends `${infer C}${infer Rest}`
-  ? Depth extends []
-    ? C extends '('
-      ? AfterConstraint<Rest, [0]>
-      : S
-    : C extends '\\'
-      ? AfterConstraint<Rest extends `${string}${infer Skipped}` ? Skipped : '', Depth>
-      : C extends '('
-        ? AfterConstraint<Rest, [0, ...Depth]>
-        : C extends ')'
-          ? Depth extends [0]
-            ? Rest
-            : AfterConstraint<Rest, Depth extends [0, ...infer Outer extends 0[]] ? Outer : []>
-          : AfterConstraint<Rest, Depth>
-  : ''
+// Whether `S` is one constraint and nothing after it: its first `(` balanced by its last character, as the router
+// balances parentheses, nested ones counted and a `\` escaping the character after it.
+type IsConstraint<S extends string, Open extends 0[] = []> = S extends `${infer C}${infer Rest}`
+  ? C extends '\\'
+    ? IsConstraint<Rest extends `${string}${infer Escaped}` ? Escaped : '', Open>
+    : C extends '('
+      ? IsConstraint<Rest, [...Open, 0]>
+      : C extends ')'
+        ? Open extends [0]
+          ? Rest extends ''
+            ? true
+            : false
+          : Open extends [0, ...infer Outer extends 0[]]
+            ? IsConstraint<Rest, Outer>
+            : false
+        : Open extends []
+          ? false
+          : IsConstraint<Rest, Open>
+  : false
 
 type Head<E extends AnyEntry> = E extends { segs: readonly [infer H extends string, ...string[]] } ? H : never
 
