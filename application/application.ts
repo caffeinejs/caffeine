@@ -2,6 +2,7 @@ import { CaffeineIoC, Scopes, type Container, type Module, type ModuleFn, type O
 import type { Duration } from '@caffeinejs/std/duration'
 import { errMessage } from '@caffeinejs/std/err'
 
+import { printBanner, type Banner } from './banner.js'
 import {
   ConfigModule,
   loadConfig,
@@ -215,6 +216,7 @@ export class Application<TConfig = unknown> {
   readonly #loggerBuilder = new LoggerBuilder<TConfig>()
   #logger: Logger
 
+  #banner: Banner<TConfig> | undefined
   #store: ConfigStore<unknown> | undefined
   #name = ''
   #profiles: string[] = []
@@ -413,6 +415,17 @@ export class Application<TConfig = unknown> {
   logger(configure: FeatureConfigurer<LoggerBuilder<TConfig>, TConfig>): this {
     this.assertConfigurable()
     this.#loggerBuilder[kAddConfigurer](configure)
+    return this
+  }
+
+  /**
+   * Sets the {@link Banner} {@link run} prints as the application starts.
+   *
+   * @throws ErrApplicationStarted when {@link bootstrap} has already started.
+   */
+  banner(banner: Banner<TConfig>): this {
+    this.assertConfigurable()
+    this.#banner = banner
     return this
   }
 
@@ -628,6 +641,8 @@ export class Application<TConfig = unknown> {
     if (this.#closing !== undefined) {
       throw new ErrApplicationClosed()
     }
+
+    printBanner(this.#banner, this.bootstrapKit() as BootstrapKit<TConfig>)
 
     const options = this.shutdownOptions()
 

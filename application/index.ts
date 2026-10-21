@@ -1,4 +1,5 @@
 export * from './application.js'
+export type { Banner } from './banner.js'
 export * from './configuration.js'
 export * from './feature.js'
 export * from './feature_builder.js'
