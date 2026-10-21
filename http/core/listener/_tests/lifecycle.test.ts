@@ -1,7 +1,9 @@
+import { connect } from 'node:http2'
 import { createServer } from 'node:net'
 
 import { ErrApplicationNotReady } from '@caffeinejs/application'
 import { ErrShutdownTimeout } from '@caffeinejs/application/shutdown'
+import { Second } from '@caffeinejs/std/duration'
 import type { FastifyInstance } from 'fastify'
 import fp from 'fastify-plugin'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -94,6 +96,50 @@ describe('the lifecycle of a listener', () => {
     vi.useRealTimers()
     await closing
     expect(admin.instance.server.listening).toBe(false)
+    app = undefined
+  })
+
+  // A server's teardown hears every server's HTTP/1 responses finish, and acts on its own alone: an HTTP/2 server has
+  // no `closeIdleConnections()` to call for a listener's.
+  it("keeps an HTTP/1 listener answering while the application's own HTTP/2 server closes", async () => {
+    let started!: () => void
+    const inFlight = new Promise<void>(resolve => (started = resolve))
+    let release!: () => void
+    const held = new Promise<void>(resolve => (release = resolve))
+
+    app = createWebApplication()
+      .install(Listener('admin', l => l.server(() => ({ listener }))))
+      .server(() => ({ factory: { http2: true }, listener }))
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+      .mount(
+        jobs(),
+        newRouter('/slow').get('/', async () => {
+          started()
+          await held
+          return { ok: true }
+        }),
+      ) as WebApplication
+
+    await app.run()
+    const session = connect(app.address!.origin)
+    session.on('error', () => undefined)
+    const goaway = new Promise(resolve => session.once('goaway', resolve))
+    const stream = session.request({ ':path': '/slow' })
+    const status = new Promise(resolve => stream.once('response', headers => resolve(headers[':status'])))
+    stream.resume()
+    stream.end()
+    await inFlight
+
+    const closed = app.close()
+    // The session closing is the own server's teardown under way.
+    await goaway
+    const jobsResponse = await fetch(`${app.listeners.get('admin')!.address!.origin}/jobs`)
+    release()
+
+    expect(jobsResponse.status).toBe(200)
+    expect(await status).toBe(200)
+    await expect(closed).resolves.toBeUndefined()
+    session.close()
     app = undefined
   })
 

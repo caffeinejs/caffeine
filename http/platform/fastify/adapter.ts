@@ -512,35 +512,29 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     const server = this.#fastify.server
     const { sockets, secured, sessions } = this.#open
 
-    // What opens from here on, before the server stops listening or from a handshake that ends after, is ended as it
-    // opens. An HTTP/2 session is closed: `session.close()` refuses new streams and ends the session once those still
-    // open have. An HTTP/1 connection is destroyed, as it connects on an HTTP/1 server, and once its handshake shows
-    // it is not HTTP/2 on a TLS server, `allowHTTP1` included.
-    server.on('session', (session: ServerHttp2Session) => session.close())
-    server.on('secureConnection', (socket: TLSSocket) => {
-      if (socket.alpnProtocol !== 'h2') {
-        socket.destroy()
-      }
-    })
-    if (typeof server.closeAllConnections === 'function') {
-      server.on('connection', (socket: Socket) => socket.destroy())
-    }
-
-    for (const session of sessions) {
-      session.close()
-    }
-
     // A connection that has not sent a byte carries no request, partial request or upgrade: a TCP connection that
-    // never began its handshake, or a TLS one that finished it and fell silent. Judged once what had arrived when
-    // closing began has been read, so a request already on its way is answered.
-    const existing = [...sockets, ...secured]
-    afterIO(() => {
-      for (const socket of existing) {
+    // never began its handshake, or a TLS one that finished it and fell silent, an HTTP/2 one that never sent its
+    // preface included. Each is destroyed, whether open when closing began or opening after, before the server stops
+    // listening or from a handshake that ends after. Judged once Node has read what had arrived, so a request already
+    // on its way is answered: with a 503 once Fastify is closing.
+    const endIfSilent = (socket: Socket) =>
+      afterIO(() => {
         if (socket.bytesRead === 0) {
           socket.destroy()
         }
-      }
-    })
+      })
+    server.on('connection', endIfSilent)
+    server.on('secureConnection', endIfSilent)
+    for (const socket of [...sockets, ...secured]) {
+      endIfSilent(socket)
+    }
+
+    // An HTTP/2 session, open or opening, is closed: `session.close()` refuses new streams and ends the session once
+    // those still open have. It does not end one that never read a preface, which the rule above sees to.
+    server.on('session', (session: ServerHttp2Session) => session.close())
+    for (const session of sessions) {
+      session.close()
+    }
 
     // A request in flight that finishes after Node's one pass over the idle HTTP/1 connections leaves its own idle
     // and kept alive for the client, so the idle ones are ended again as each response finishes. Subscribed only

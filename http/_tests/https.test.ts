@@ -125,6 +125,24 @@ function holding() {
   return { router, inFlight, release }
 }
 
+/** A plugin whose `preClose` hook holds the close until `resume()`: the server still listens while it does. */
+function holdingClose() {
+  let closing!: () => void
+  let resume!: () => void
+  const preClose = new Promise<void>(resolve => (closing = resolve))
+  const held = new Promise<void>(resolve => (resume = resolve))
+
+  const plugin = () =>
+    fp(async (instance: FastifyInstance) => {
+      instance.addHook('preClose', async () => {
+        closing()
+        await held
+      })
+    })
+
+  return { plugin, preClose, resume }
+}
+
 describe('a server serving TLS or HTTP/2', () => {
   let app: WebApplication | undefined
   const sessions: ClientHttp2Session[] = []
@@ -504,6 +522,49 @@ describe('a server serving TLS or HTTP/2', () => {
       app = undefined
 
       expect(Date.now() - startedAt).toBeLessThan(1_000)
+    })
+
+    // `session.close()` does not end a session that never read its preface, so a connection that opens while the
+    // server is closing and stays silent held the close until the budget ran out.
+    it.each([
+      {
+        connection: 'a cleartext connection that sends no preface',
+        factory: { http2: true },
+        accepted: 'connection',
+        connect: (port: number) => netConnect(port, '127.0.0.1'),
+      },
+      {
+        connection: 'a TLS connection that finishes its handshake and sends no preface',
+        factory: { http2: true, https: { key, cert } },
+        accepted: 'secureConnection',
+        connect: (port: number) => tlsConnect({ host: '127.0.0.1', port, ca: cert, ALPNProtocols: ['h2'] }),
+      },
+      {
+        connection: 'a TLS connection that never starts its handshake',
+        factory: { http2: true, https: { key, cert } },
+        accepted: 'connection',
+        connect: (port: number) => netConnect(port, '127.0.0.1'),
+      },
+    ])('closes $connection, opened while the server is closing', async ({ factory, accepted, connect }) => {
+      const { plugin, preClose, resume } = holdingClose()
+      app = createWebApplication()
+        .server(() => ({ factory, listener }))
+        .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+        .with(plugin)
+        .mount(echo) as WebApplication
+
+      await app.run()
+      const port = app.address!.port
+
+      const closed = app.close()
+      await preClose
+      const opened = new Promise(resolve => app!.instance.server.once(accepted, resolve))
+      connect(port).on('error', () => undefined)
+      await opened
+      resume()
+
+      await expect(closed).resolves.toBeUndefined()
+      app = undefined
     })
 
     // An HTTP/2 server has no `closeAllConnections()`: calling it anyway failed the forced teardown with a

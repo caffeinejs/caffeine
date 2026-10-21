@@ -263,6 +263,39 @@ describe('graceful shutdown', () => {
     await expect(closed).resolves.toBeUndefined()
   })
 
+  // One that opens while the server is closing is judged like any other, once the server has read from it: a request
+  // gets the 503 Fastify answers with while closing, not a reset.
+  it('answers a request on a connection that opens while the server is closing', async () => {
+    let closing!: () => void
+    let resume!: () => void
+    const preClose = new Promise<void>(resolve => (closing = resolve))
+    const held = new Promise<void>(resolve => (resume = resolve))
+
+    const app = createWebApplication()
+      .serverCallback((_context, instance) => {
+        instance.addHook('preClose', async () => {
+          closing()
+          await held
+        })
+      })
+      .shutdown(s => s.drainDelay(0).shutdownTimeout(5 * Second))
+    await app.run({ host: '127.0.0.1', port: 0 })
+
+    const closed = app.close()
+    await preClose
+    const client = await silentConnection(app)
+    client.setEncoding('utf8')
+    let received = ''
+    client.on('data', (chunk: string) => (received += chunk))
+    const hungUp = new Promise(resolve => client.once('close', resolve))
+    client.write('GET /drain/fast HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n')
+    await hungUp
+    resume()
+
+    expect(received).toMatch(/^HTTP\/1\.1 503 /)
+    await expect(closed).resolves.toBeUndefined()
+  })
+
   // Node ends the idle connections once, as the server stops accepting. One whose request finished after that was
   // kept alive for the client, and the close waited on it until the budget ran out.
   it('lets a request in flight finish, then closes the connection it kept alive', async () => {
