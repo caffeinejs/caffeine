@@ -1,19 +1,28 @@
 import { readFileSync } from 'node:fs'
 
+import { CaffeineIoC, token } from '@caffeinejs/di'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { printBanner, type BannerContext } from './banner.js'
+import { Application, ErrApplicationStarted, createApplication } from './application.js'
+import { InlineConfigSource } from './config/sources/inline/index.js'
+import { newConfiguration } from './configuration.js'
+import { kFeatureBootstrap, kFeatureConfigure, kFeatureName } from './feature.js'
 import { newNoopLogger, type Logger } from './logger/index.js'
+import { $t } from './schema/t.js'
 
 const version = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string })
   .version
-
-const unnamed = { name: '', profiles: [], config: {} }
 
 // The default banner is skipped under a test runner, the way signal handling is; these cases see what a host sees.
 function outsideTestRunner(): void {
   vi.stubEnv('VITEST', undefined)
   vi.stubEnv('NODE_ENV', 'production')
+}
+
+function headless(logger?: Logger) {
+  return createApplication({ container: new CaffeineIoC({ decorators: false }), logger }).shutdown(s =>
+    s.signals(false),
+  )
 }
 
 function recordingLogger(warnings: unknown[][]): Logger {
@@ -25,12 +34,13 @@ afterEach(() => {
   vi.unstubAllEnvs()
 })
 
-describe('printBanner', () => {
-  it('prints the default banner, naming the Caffeine and Node.js versions', () => {
+describe('the banner', () => {
+  it('prints the default banner on run(), naming the Caffeine and Node.js versions', async () => {
     outsideTestRunner()
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless()
 
-    printBanner(undefined, unnamed, newNoopLogger())
+    await app.run()
 
     const detail = `(v${version})  Node.js ${process.version}`
     const expected = [
@@ -45,97 +55,180 @@ describe('printBanner', () => {
       `  :: CaffeineJS ::${' '.repeat(69 - 18 - detail.length)}${detail}`,
     ].join('\n')
     expect(log.mock.calls).toEqual([[expected]])
+
+    await app.close()
   })
 
   // Every application a suite runs would print it otherwise.
-  it('skips the default banner under a test runner', () => {
+  it('skips the default banner under a test runner', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless()
 
-    printBanner(undefined, unnamed, newNoopLogger())
+    await app.run()
 
     expect(log).not.toHaveBeenCalled()
+
+    await app.close()
   })
 
-  it('prints a banner given as text verbatim, under a test runner too', () => {
+  it('prints a banner given as text verbatim, under a test runner too', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless().banner('hello')
 
-    printBanner('hello', unnamed, newNoopLogger())
+    await app.run()
 
     expect(log.mock.calls).toEqual([['hello']])
+
+    await app.close()
   })
 
-  it('prints nothing for a banner turned off', () => {
+  it('prints nothing for a banner turned off', async () => {
     outsideTestRunner()
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless().banner(false)
 
-    printBanner(false, unnamed, newNoopLogger())
+    await app.run()
 
     expect(log).not.toHaveBeenCalled()
+
+    await app.close()
   })
 
-  it('hands a banner function the name, the profiles, the configuration and the Caffeine version', () => {
+  it("hands a banner function the application's kit: its configuration and a container that resolves", async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {})
-    const banner = ({ name, profiles, config, version }: BannerContext<{ greeting: string }>) =>
-      `${name} ${profiles.join(',')} ${config.greeting} ${version}`
+    const kTeam = token<string>('banner.team')
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(kTeam, t => t.toValue('orders'))
+    const conf = newConfiguration($t.Object({ greeting: $t.String() }))
+      .source(new InlineConfigSource({ greeting: 'hi' }))
+      .build().config
+    const app = createApplication({ container, config: conf })
+      .shutdown(s => s.signals(false))
+      .banner(({ config, container }) => `${container.get(kTeam)} says ${config.greeting}`)
 
-    printBanner(banner, { name: 'orders', profiles: ['eu'], config: { greeting: 'hi' } }, newNoopLogger())
+    await app.run()
 
-    expect(log.mock.calls).toEqual([[`orders eu hi ${version}`]])
+    expect(log.mock.calls).toEqual([['orders says hi']])
+
+    await app.close()
   })
 
-  // A banner is cosmetic: whatever goes wrong with it, the application it belongs to still has to start.
-  describe('never throwing', () => {
-    it('logs a banner function that throws, and prints nothing', () => {
+  // `bootstrap()` alone is what the test client and tools do; the banner belongs to the process that serves.
+  it('prints nothing on bootstrap(), and on the run() that follows, as the bootstrap() callback set it', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    const app = headless()
+
+    await app.bootstrap((_, a) => {
+      a.banner('late')
+    })
+
+    expect(log).not.toHaveBeenCalled()
+
+    await app.run()
+
+    expect(log.mock.calls).toEqual([['late']])
+
+    await app.close()
+  })
+
+  it('prints once the application is readied, before it starts', async () => {
+    const order: string[] = []
+    vi.spyOn(console, 'log').mockImplementation(() => void order.push('banner'))
+
+    class Platform extends Application {
+      protected override start(): Promise<void> {
+        order.push('start')
+        return Promise.resolve()
+      }
+    }
+
+    const app = new Platform({ container: new CaffeineIoC({ decorators: false }) }).banner('hello').install({
+      [kFeatureName]: 'recorder',
+      [kFeatureConfigure]() {
+        // Nothing to bind.
+      },
+      [kFeatureBootstrap]() {
+        order.push('bootstrap')
+      },
+    })
+
+    await app.run()
+
+    expect(order).toEqual(['bootstrap', 'banner', 'start'])
+
+    await app.close()
+  })
+
+  it('refuses a banner once bootstrap() has started', async () => {
+    const app = headless()
+    const ready = app.bootstrap()
+
+    expect(() => app.banner(false)).toThrow(ErrApplicationStarted)
+
+    await ready
+  })
+
+  // A banner is cosmetic: whatever goes wrong with it, the application still has to start.
+  describe('never stopping the start', () => {
+    it('logs a banner function that throws, and starts', async () => {
       const log = vi.spyOn(console, 'log').mockImplementation(() => {})
       const failure = new Error('no banner today')
       const warnings: unknown[][] = []
+      const app = headless(recordingLogger(warnings)).banner(() => {
+        throw failure
+      })
 
-      printBanner(
-        () => {
-          throw failure
-        },
-        unnamed,
-        recordingLogger(warnings),
-      )
+      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
 
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([[{ err: failure }, 'cannot print the banner']])
+
+      await app.close()
     })
 
-    it('logs a banner function that returns something other than a string, and prints nothing', () => {
+    it('logs a banner function that returns something other than a string, and starts', async () => {
       const log = vi.spyOn(console, 'log').mockImplementation(() => {})
       const warnings: unknown[][] = []
+      const app = headless(recordingLogger(warnings)).banner((() => 42) as never)
 
-      printBanner((() => 42) as never, unnamed, recordingLogger(warnings))
+      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
 
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([['cannot print the banner: the banner function did not return a string']])
+
+      await app.close()
     })
 
     // Vitest fails the run on an unhandled rejection, so leaving this one unhandled would fail the suite.
-    it('logs an async banner function, and leaves its rejection handled', () => {
+    it('logs an async banner function, leaves its rejection handled, and starts', async () => {
       const log = vi.spyOn(console, 'log').mockImplementation(() => {})
       const warnings: unknown[][] = []
+      const app = headless(recordingLogger(warnings)).banner((() => Promise.reject(new Error('later'))) as never)
 
-      printBanner((() => Promise.reject(new Error('later'))) as never, unnamed, recordingLogger(warnings))
+      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
 
       expect(log).not.toHaveBeenCalled()
       expect(warnings).toEqual([['cannot print the banner: the banner function did not return a string']])
+
+      await app.close()
     })
 
-    it('logs a stdout that throws', () => {
+    it('logs a stdout that throws, and starts', async () => {
       const failure = new Error('EPIPE')
       vi.spyOn(console, 'log').mockImplementation(() => {
         throw failure
       })
       const warnings: unknown[][] = []
+      const app = headless(recordingLogger(warnings)).banner('hello')
 
-      printBanner('hello', unnamed, recordingLogger(warnings))
+      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
 
       expect(warnings).toEqual([[{ err: failure }, 'cannot print the banner']])
+
+      await app.close()
     })
 
-    it('returns when the logger throws on the warning as well', () => {
+    it('starts when the logger throws on the warning as well', async () => {
       vi.spyOn(console, 'log').mockImplementation(() => {})
       const logger: Logger = {
         ...newNoopLogger(),
@@ -143,16 +236,13 @@ describe('printBanner', () => {
           throw new Error('logger down')
         },
       }
+      const app = headless(logger).banner(() => {
+        throw new Error('no banner today')
+      })
 
-      expect(() =>
-        printBanner(
-          () => {
-            throw new Error('no banner today')
-          },
-          unnamed,
-          logger,
-        ),
-      ).not.toThrow()
+      await expect(app.run()).resolves.toEqual({ name: '', profiles: [] })
+
+      await app.close()
     })
   })
 })
