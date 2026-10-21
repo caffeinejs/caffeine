@@ -7,10 +7,11 @@ import {
   type ObjectInjection,
   type ObjectInjections,
 } from '@caffeinejs/di'
+import type { AnyRouter } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 
 import { ErrTestClientAlreadyReady } from './error.js'
-import type { AnyRouter, TestApplication } from './types.js'
+import type { TestApplication } from './types.js'
 
 export interface HarnessInit {
   inject?: Record<string, unknown>

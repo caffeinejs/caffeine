@@ -521,6 +521,9 @@ export class Router<
   }
 }
 
+/** Any router, whatever its path, routes and dependencies: what a site taking routers of every kind names. */
+export type AnyRouter = Router<any, any, any, any, any, any>
+
 /** A route that has declared no schema yet: every slot falls back to what the path and the adapter give. */
 type Empty = Record<never, never>
 

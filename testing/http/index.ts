@@ -17,5 +17,5 @@ export {
   type TestClientControls,
   type TestClientOptions,
 } from './test_client.js'
-export type { AnyRouter, Fetchable, RouteMethods, RouterCtor, TestApplication } from './types.js'
+export type { Fetchable, RouteMethods, RouterCtor, TestApplication } from './types.js'
 export { newURL, URLBuilder } from './url_builder.js'
