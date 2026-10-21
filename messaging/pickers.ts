@@ -27,6 +27,9 @@ export interface MessagePickers {
   pick(fn: (message: Message) => unknown | Promise<unknown>, opts?: { async?: boolean }): ParameterPickOptions<Message>
 }
 
+/** The picks a consumer declares, one per handler argument: what `@MessageParams` takes. */
+export type Picks = ParameterPickOptions<Message>[]
+
 function payload(): ParameterPickOptions<Message> {
   return { type: 'msg:payload' }
 }

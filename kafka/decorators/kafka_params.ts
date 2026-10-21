@@ -1,10 +1,5 @@
-import type { ParameterPickOptions } from '@caffeinejs/application/framework'
-
-import type { KafkaMessage } from '../config.js'
-import { $k, type KafkaPickers } from '../pickers.js'
+import { $k, type KafkaPickers, type Picks } from '../pickers.js'
 import { configureListener } from './registrar.js'
-
-type Picks = ParameterPickOptions<KafkaMessage>[]
 
 /**
  * Declares how a `@KafkaListener` method's arguments are extracted from the message. Mirrors HTTP's `@Args`:

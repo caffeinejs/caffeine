@@ -1,10 +1,5 @@
-import type { ParameterPickOptions } from '@caffeinejs/application/framework'
-
-import type { Message } from '../message.js'
-import { $m, type MessagePickers } from '../pickers.js'
+import { $m, type MessagePickers, type Picks } from '../pickers.js'
 import { ConsumeParams } from './registrar.js'
-
-type Picks = ParameterPickOptions<Message>[]
 
 /**
  * Declares how a `@Consume` method's arguments are extracted from the message. Mirrors HTTP's `@Args`: pass a

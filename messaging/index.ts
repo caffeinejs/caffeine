@@ -31,7 +31,7 @@ export {
 export { MessagingLifecycle } from './lifecycle.js'
 export { isMessage, type Message, message, type MessageHeaders, type MessageInit } from './message.js'
 export { compileArgs } from './pick_compiler.js'
-export { $m, type MessagePickers } from './pickers.js'
+export { $m, type MessagePickers, type Picks } from './pickers.js'
 export { Messaging, type MessagingConfigurer } from './plugin.js'
 export { blockingRetry, type RetryDelivery, type RetryDestination, type RetryStrategy } from './retry.js'
 export type { ErrorObserver, InvalidMessageHandler, MessagingRuntime, Recoverer } from './runtime.js'
