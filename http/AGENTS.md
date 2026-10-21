@@ -270,9 +270,17 @@ Follow the root [`AGENTS.md`](../AGENTS.md), plus:
   a catch handler's and `ctx.body(...)`'s `Response` sets the status.
 - `ctx.body(...)` and the error helpers refuse a thenable with `ErrConfiguration` before anything is written, so the
   context stays unanswered and the handler can still answer.
-- `Attachment` answers its preconditions before ranges, on a `GET` or `HEAD` still at `200` alone, and closes a
-  stream its `304` leaves unread. `If-None-Match` compares weakly (`_conditional.ts`), `If-Range` strongly
-  (`matches`); never swap them. A name is reduced to its last segment in `_disposition.ts`, for `name` and a
-  `File`'s own alike.
+- `Attachment` answers its preconditions before ranges, in RFC 9110 §13.2.2's order, on a `GET` or `HEAD` still at
+  `200` alone, and closes a stream its `412` or `304` leaves unread. A failed `If-Match` or `If-Unmodified-Since` is
+  thrown as `ErrHTTPPreconditionFailed`, never sent in place, so `@Catch` sees it. `If-Match` and `If-Range` compare
+  strongly, `If-None-Match` weakly (`_conditional.ts`); never swap them. A date is read as an HTTP-date or not at all
+  (`httpDate`), never with `Date.parse`, which takes `2026` for one. A name is reduced to its last
+  segment in `_disposition.ts`, for `name` and a `File`'s own alike.
+- Several ranges are one `multipart/byteranges` body (`_range.ts`), each part typed by `partType`:
+  `ctx.getHeader('content-type')` when it passes `FIELD_VALUE`, the set Node writes as a header value, else the
+  `Blob`'s type. A type is never written into a part unchecked: a line break there adds lines of its own. A body the
+  reply gives a `Content-Encoding` is never multipart. More than 100 ranges, or ranges adding up to more than the body,
+  are sent whole, and the limits apply before anything is sliced. A `Blob`'s parts are slices of it, never copies
+  (`_tests/memory/large_downloads.test.ts`).
 - Node's `Blob.slice` aborts the process on an offset past 2^32 - 1: nothing slices a larger `Blob`, and `Attachment`
   sends one whole. `fs.openAsBlob` reports a file past 4 GiB at its size modulo 2^32.

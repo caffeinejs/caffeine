@@ -4,7 +4,7 @@ import { Second } from '@caffeinejs/std/duration'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { MemoryHTTPCacheStore } from '../../store/memory/index.js'
-import { CacheControl, HTTPCaching, type CacheBypassEvent, type CacheObserver } from '../index.js'
+import { CacheControl, HTTPCaching, type CacheBypassEvent, type CacheMissEvent, type CacheObserver } from '../index.js'
 
 /**
  * A cached route that serves downloads in ranges. A part of a body answers one request only and is never kept; a
@@ -180,6 +180,82 @@ describe('a cached route that serves ranges', () => {
     expect(warm.status).toBe(200)
     expect(warm.headers.get('x-cache')).toBe('HIT')
     expect(await bytesOf(warm)).toEqual(REPORT)
+  })
+
+  it('sends several ranges past the store as one multipart answer, and keeps none of it', async () => {
+    const app = await start()
+
+    const parts = await app.fetch('/cached-downloads/bytes', { headers: { range: 'bytes=0-9,100-109' } })
+    expect(parts.status).toBe(206)
+    expect(parts.headers.get('content-type')).toMatch(/^multipart\/byteranges; boundary=/)
+    expect(parts.headers.get('x-cache')).toBe('BYPASS')
+    await parts.arrayBuffer()
+
+    const whole = await app.fetch('/cached-downloads/bytes')
+    expect(whole.headers.get('x-cache')).toBe('MISS')
+    expect(await bytesOf(whole)).toEqual(REPORT)
+  })
+
+  // RFC 9111 §4.3.2: If-Match and If-Unmodified-Since are not a cache's to evaluate. Answered from the store, a
+  // stale precondition would get the stored 200 instead of the handler's 412.
+  it('takes a request carrying a precondition past the store, so a stale one is refused even while it holds the content', async () => {
+    const bypasses: CacheBypassEvent[] = []
+    const app = await start({ onBypass: event => void bypasses.push(event) })
+    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
+    expect((await app.fetch('/cached-downloads/bytes')).headers.get('x-cache')).toBe('HIT')
+
+    const stale = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })
+    expect(stale.status).toBe(412)
+    expect(stale.headers.get('x-cache')).toBe('BYPASS')
+
+    const current = await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': ETAG } })
+    expect(current.status).toBe(200)
+    expect(await bytesOf(current)).toEqual(REPORT)
+
+    const unmodified = await app.fetch('/cached-downloads/bytes', {
+      headers: { 'if-unmodified-since': new Date().toUTCString() },
+    })
+    expect(unmodified.headers.get('x-cache')).toBe('BYPASS')
+
+    expect(bypasses.map(event => event.reason)).toEqual(['precondition', 'precondition', 'precondition'])
+  })
+
+  // RFC 9111 §4.3.2: a cache does not evaluate If-Match or If-Unmodified-Since, and under only-if-cached (§5.2.1.7) it
+  // never reaches the handler that does. No stored answer is consistent with a precondition nobody evaluates.
+  it('answers 504 to a precondition asked of the store alone, whether it holds the content or not', async () => {
+    const misses: CacheMissEvent[] = []
+    const app = await start({ onMiss: event => void misses.push(event) })
+    const storeAlone = (headers: Record<string, string>) =>
+      app.fetch('/cached-downloads/bytes', { headers: { ...headers, 'cache-control': 'only-if-cached' } })
+
+    expect((await storeAlone({ 'if-match': ETAG })).status).toBe(504)
+
+    await (await app.fetch('/cached-downloads/bytes')).arrayBuffer()
+    expect((await storeAlone({})).headers.get('x-cache')).toBe('HIT')
+
+    const preconditions: Array<Record<string, string>> = [
+      { 'if-match': ETAG },
+      { 'if-match': '"report-v0"' },
+      { 'if-unmodified-since': new Date().toUTCString() },
+    ]
+    for (const headers of preconditions) {
+      const res = await storeAlone(headers)
+
+      expect(res.status).toBe(504)
+      expect(await res.text()).toBe('')
+    }
+
+    expect(misses.filter(event => event.reason === 'only-if-cached')).toHaveLength(4)
+  })
+
+  it('stores nothing from a request it refused with 412', async () => {
+    const app = await start()
+
+    expect((await app.fetch('/cached-downloads/bytes', { headers: { 'if-match': '"report-v0"' } })).status).toBe(412)
+
+    const whole = await app.fetch('/cached-downloads/bytes')
+    expect(whole.headers.get('x-cache')).toBe('MISS')
+    expect(await bytesOf(whole)).toEqual(REPORT)
   })
 
   it("sends the Cache-Control a returned Response carries rather than the route's", async () => {

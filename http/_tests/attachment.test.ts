@@ -1,18 +1,30 @@
 import { Readable } from 'node:stream'
+import { gunzipSync, gzipSync } from 'node:zlib'
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { Attachment, Controller, ErrConfiguration, Get, Router } from '../index.js'
+import {
+  Attachment,
+  Catch,
+  Controller,
+  ErrConfiguration,
+  ErrHTTPPreconditionFailed,
+  type ErrorHandler,
+  Get,
+  type IContext,
+  Router,
+} from '../index.js'
 import { createWebApplication } from '../platform/fastify/index.js'
 import {
   expectPatternedBody,
   expectRangeAnswer,
   extendedName,
   NAMED_DOWNLOAD,
+  parseByteRanges,
   streamOf,
   type RangeAnswer,
 } from './bodies.js'
-import { patterned } from './patterned.js'
+import { firstMismatch, patterned } from './patterned.js'
 
 /**
  * A download a route builds itself — an export, a generated report, bytes read from object storage — named for the
@@ -55,7 +67,17 @@ const names: Array<[given: string, saved: string | undefined]> = [
   ['\u202E\u0000', undefined],
 ]
 
-const routes = new Router('/files')
+// A catch handler that answers a missing report with a stand-in download.
+class ErrReportMissing extends Error {}
+
+@Catch(ErrReportMissing)
+class StandInReport implements ErrorHandler<ErrReportMissing> {
+  handle() {
+    return Attachment(BODY, { name: 'stand-in.pdf', etag: '"stand-in-v1"' })
+  }
+}
+
+const routes = new Router('/files').catchBy([StandInReport])
 routes
   .get('/blob')
   .handler(() =>
@@ -110,6 +132,36 @@ routes.get('/web-stream-failing-close').handler(() =>
   ),
 )
 routes.get('/empty').handler(() => Attachment(new Blob([]), { name: 'empty.txt' }))
+routes.get('/stand-in').handler(() => {
+  throw new ErrReportMissing()
+})
+routes.get('/one-byte').handler(() => Attachment(patterned(0, 1)))
+routes.get('/ten').handler(() => Attachment(new TextEncoder().encode('0123456789'), { type: 'text/plain' }))
+routes.get('/handler-typed').handler(ctx => {
+  ctx.header('content-type', 'text/markdown')
+  return Attachment(BODY)
+})
+// An export stored compressed, served under its coding: the bytes ranges are taken of are the gzip bytes.
+const CSV = 'region,order,total\n'.repeat(200)
+const GZIPPED = new Uint8Array(gzipSync(CSV))
+routes.get('/gzipped').handler(ctx => {
+  ctx.header('content-encoding', 'gzip')
+  return Attachment(GZIPPED, { name: 'orders.csv', type: 'text/csv' })
+})
+routes.get('/handler-typed-badly').handler(ctx => {
+  ctx.header('content-type', 'text/plain\r\nX-Evil: yes')
+  return Attachment(new Blob([BODY], { type: PDF }))
+})
+routes.get('/async-bytes').handler(async () => {
+  await Promise.resolve()
+  return Attachment(BODY, { etag: ETAG, lastModified: MODIFIED })
+})
+// Content that changes between requests, as a stored document does: each scenario keeps its own under an id.
+const documents = new Map<string, { body: Uint8Array<ArrayBuffer>; etag: string }>()
+routes.get('/documents/:id').handler(ctx => {
+  const document = documents.get(ctx.req.param().id)!
+  return Attachment(document.body, { name: 'document.pdf', type: PDF, etag: document.etag })
+})
 routes.get('/unnamed').handler(() => Attachment(new Blob([BODY])))
 routes.get('/file').handler(() => Attachment(new File([BODY], 'relatório Q3.pdf', { type: PDF })))
 routes.get('/file-with-path').handler(() => Attachment(new File([BODY], '../uploads/report.pdf', { type: PDF })))
@@ -145,7 +197,22 @@ class ReportsController {
   }
 }
 
-void [ReportsController]
+// An application that answers a stale download in its own words.
+@Controller('/files-guarded')
+class GuardedReportsController {
+  @Get('/report')
+  report() {
+    return Attachment(BODY, { name: 'report.pdf', etag: ETAG })
+  }
+
+  @Catch(ErrHTTPPreconditionFailed)
+  stale(ctx: IContext) {
+    ctx.status(412)
+    return { reason: 'The report changed since it was listed' }
+  }
+}
+
+void [ReportsController, GuardedReportsController]
 
 const app = createWebApplication().mount(routes)
 
@@ -307,25 +374,227 @@ const ranges: Array<[string, RangeAnswer]> = [
   ['bytes=1-2-3', { status: 200 }],
   ['bytes 0-4', { status: 200 }],
   ['items=0-4', { status: 200 }],
-  ['bytes=0-1,4-5', { status: 200 }],
+  // RFC 9110 §14.6: several satisfiable ranges are sent together, each part naming its own.
+  [
+    'bytes=0-1,4-5',
+    {
+      status: 206,
+      parts: [
+        [0, 1],
+        [4, 5],
+      ],
+    },
+  ],
+  // §15.3.7.2: in the order the client asked for them.
+  [
+    'bytes=5-9,0-4',
+    {
+      status: 206,
+      parts: [
+        [5, 9],
+        [0, 4],
+      ],
+    },
+  ],
+  [
+    'bytes=999-999,0-0',
+    {
+      status: 206,
+      parts: [
+        [999, 999],
+        [0, 0],
+      ],
+    },
+  ],
+  [
+    'bytes=0-0,-1',
+    {
+      status: 206,
+      parts: [
+        [0, 0],
+        [999, 999],
+      ],
+    },
+  ],
+  // §5.6.1: empty list elements and the whitespace around elements are a list's own.
+  [
+    'bytes=0-4,  ,9-9',
+    {
+      status: 206,
+      parts: [
+        [0, 4],
+        [9, 9],
+      ],
+    },
+  ],
+  [
+    'bytes=0-4, 9-9 ,',
+    {
+      status: 206,
+      parts: [
+        [0, 4],
+        [9, 9],
+      ],
+    },
+  ],
+  // Overlapping parts are sent as asked, while together they are no more than the body.
+  [
+    'bytes=0-499,250-749',
+    {
+      status: 206,
+      parts: [
+        [0, 499],
+        [250, 749],
+      ],
+    },
+  ],
+  [
+    'bytes=0-0,0-0',
+    {
+      status: 206,
+      parts: [
+        [0, 0],
+        [0, 0],
+      ],
+    },
+  ],
+  // §15.3.7.2: an unsatisfiable range is left out; one range left is a single part, never multipart.
+  ['bytes=0-4,2000-', { status: 206, start: 0, end: 4 }],
+  ['bytes=-0,0-4', { status: 206, start: 0, end: 4 }],
+  // §15.5.17: none of them satisfiable.
+  ['bytes=2000-,3000-', { status: 416 }],
+  ['bytes=-0,1000-', { status: 416 }],
+  // One invalid range makes the whole header one this server ignores (§14.2: a server MAY ignore Range).
+  ['bytes=0-4,5-2', { status: 200 }],
+  ['bytes=0-4,abc', { status: 200 }],
+  // Ranges adding up to more than the body are a broken client or an attack (§14.2), and get the body once.
+  ['bytes=0-599,0-599', { status: 200 }],
 ]
 
 describe.each([
-  ['a Blob', '/files/blob'],
-  ['a Uint8Array', '/files/bytes'],
-  ['an ArrayBuffer', '/files/array-buffer'],
-])('Attachment() of %s answers a range', (_kind, path) => {
+  ['a Blob', '/files/blob', PDF],
+  ['a Uint8Array', '/files/bytes', OCTET],
+  ['an ArrayBuffer', '/files/array-buffer', OCTET],
+])('Attachment() of %s answers a range', (_kind, path, type) => {
   it.each(ranges)('%s with %o', async (range, expected) => {
     const res = await app.fetch(path, { headers: { range } })
 
     expect(res.headers.get('accept-ranges')).toBe('bytes')
-    await expectRangeAnswer(res, expected, SIZE)
+    await expectRangeAnswer(res, expected, SIZE, type)
+  })
+})
+
+describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', () => {
+  const spec = (ranges: ReadonlyArray<readonly [number, number]>) =>
+    `bytes=${ranges.map(([start, end]) => `${start}-${end}`).join(',')}`
+  const hundred = Array.from({ length: 100 }, (_, i) => [i * 10, i * 10] as const)
+
+  it('writes exactly the delimiters, part headers and bytes of the RFC layout, ending with the close delimiter', async () => {
+    const res = await app.fetch('/files/ten', { headers: { range: 'bytes=0-2,7-9' } })
+    const body = Buffer.from(await res.arrayBuffer()).toString('latin1')
+    const boundary = /boundary=(.+)$/.exec(res.headers.get('content-type')!)![1]
+
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-type')).toBe(`multipart/byteranges; boundary=${boundary}`)
+    expect(body).toBe(
+      [
+        `--${boundary}`,
+        'Content-Type: text/plain',
+        'Content-Range: bytes 0-2/10',
+        '',
+        '012',
+        `--${boundary}`,
+        'Content-Type: text/plain',
+        'Content-Range: bytes 7-9/10',
+        '',
+        '789',
+        `--${boundary}--`,
+        '',
+      ].join('\r\n'),
+    )
+    expect(res.headers.get('content-length')).toBe(String(body.length))
+  })
+
+  it.each([
+    ["the Blob's own type", '/files/blob', PDF],
+    ['application/octet-stream for bytes nothing names', '/files/bytes', OCTET],
+    ["the route's declared type", '/files/produces', /^text\/csv/],
+    ["its own type option over the route's", '/files/typed-over-produces', PDF],
+    ['a type the handler set', '/files/handler-typed', 'text/markdown'],
+  ])('labels every part with %s, the type the whole body goes out under', async (_rule, path, type) => {
+    const res = await app.fetch(path, { headers: { range: 'bytes=0-4,10-14' } })
+
+    expect(res.headers.get('content-type')).toMatch(/^multipart\/byteranges; boundary=/)
+    await expectRangeAnswer(
+      res,
+      {
+        status: 206,
+        parts: [
+          [0, 4],
+          [10, 14],
+        ],
+      },
+      SIZE,
+      type,
+    )
+  })
+
+  // Node drops such a value from the header it writes; written into a part, it would add lines of its own.
+  it("never writes a type holding a control character into a part, falling back to the Blob's own", async () => {
+    const res = await app.fetch('/files/handler-typed-badly', { headers: { range: 'bytes=0-4,10-14' } })
+    const body = new Uint8Array(await res.arrayBuffer())
+
+    expect(res.status).toBe(206)
+    expect(Buffer.from(body).toString('latin1')).not.toContain('X-Evil')
+    expect(parseByteRanges(res.headers.get('content-type'), body).map(part => part.type)).toEqual([PDF, PDF])
+  })
+
+  it('draws a new boundary for every answer, so no body can be made to hold its own', async () => {
+    const [first, second] = await Promise.all(
+      [0, 1].map(() => app.fetch('/files/bytes', { headers: { range: 'bytes=0-4,10-14' } })),
+    )
+
+    expect(first.headers.get('content-type')).not.toBe(second.headers.get('content-type'))
+  })
+
+  it('serves up to 100 ranges in one answer, and the whole body to a request for more', async () => {
+    const most = await app.fetch('/files/bytes', { headers: { range: spec(hundred) } })
+    await expectRangeAnswer(most, { status: 206, parts: hundred }, SIZE)
+
+    const tooMany = await app.fetch('/files/bytes', { headers: { range: spec([...hundred, [5, 5]]) } })
+    await expectRangeAnswer(tooMany, { status: 200 }, SIZE)
+  })
+
+  it('sends a one-byte body whole to two ranges of its one byte, which add up to more than it holds', async () => {
+    const res = await app.fetch('/files/one-byte', { headers: { range: 'bytes=0-0,0-0' } })
+
+    await expectRangeAnswer(res, { status: 200 }, 1)
+  })
+})
+
+describe('Attachment() keeps the content coding a body carries (RFC 9110 §8.4)', () => {
+  it('sends a coded body whole to several ranges: a multipart answer cannot carry the coding of what it slices', async () => {
+    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9,20-29' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(res.headers.get('content-type')).toBe('text/csv')
+    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toBe(CSV)
+  })
+
+  it('serves one range of a coded body as a part of its coded bytes, under the same coding', async () => {
+    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9' } })
+
+    expect(res.status).toBe(206)
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(res.headers.get('content-range')).toBe(`bytes 0-9/${GZIPPED.length}`)
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(GZIPPED.subarray(0, 10))
   })
 })
 
 describe('Attachment() leaves a range unanswered where one does not apply', () => {
   it('sends an empty body whole, whatever range is asked for', async () => {
-    for (const range of ['bytes=0-', 'bytes=-5', 'bytes=0-0']) {
+    for (const range of ['bytes=0-', 'bytes=-5', 'bytes=0-0', 'bytes=0-1,4-5']) {
       const res = await app.fetch('/files/empty', { headers: { range } })
 
       expect(res.status).toBe(200)
@@ -344,6 +613,15 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
       `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
     )
     expect(await res.text()).toBe('')
+  })
+
+  it('answers HEAD for several ranges as the whole GET would be answered', async () => {
+    const res = await app.fetch('/files/blob', { method: 'HEAD', headers: { range: 'bytes=0-4,10-14' } })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-length')).toBe(String(SIZE))
+    expect(res.headers.get('content-type')).toBe(PDF)
+    expect(res.headers.get('content-range')).toBeNull()
   })
 
   it('sends the whole body to a POST: ranges are defined for GET alone', async () => {
@@ -386,6 +664,30 @@ describe('Attachment() resumes only the body the client already holds part of (I
     await expectRangeAnswer(res, status === 206 ? { status, start: 10, end: 19 } : { status: 200 }, SIZE)
   })
 
+  it.each([
+    ['the same strong ETag', ETAG, 206],
+    ['the Last-Modified date', MODIFIED.toUTCString(), 206],
+    ['a different ETag', '"report-v2"', 200],
+    ['a weak ETag', 'W/"report-v1"', 200],
+    ['another date', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
+  ])('serves several ranges together, or none, given %s', async (_validator, ifRange, status) => {
+    const res = await app.fetch('/files/bytes', { headers: { range: 'bytes=10-19,30-39', 'if-range': ifRange } })
+
+    await expectRangeAnswer(
+      res,
+      status === 206
+        ? {
+            status,
+            parts: [
+              [10, 19],
+              [30, 39],
+            ],
+          }
+        : { status: 200 },
+      SIZE,
+    )
+  })
+
   it('has no effect without a Range', async () => {
     const res = await app.fetch('/files/bytes', { headers: { 'if-range': ETAG } })
 
@@ -407,7 +709,7 @@ describe('Attachment() answers a range only in place of a 200', () => {
   })
 })
 
-describe('Attachment() refuses validators that would fail without a word', () => {
+describe('Attachment() refuses options that would fail without a word', () => {
   it.each(['v1', '"v1', 'v1"', 'W/v1', 'w/"v1"', '"v 1"', '"v"1"', ''])(
     'refuses %j as an ETag: a client echoes it back, and an unquoted one never matches',
     etag => {
@@ -422,6 +724,26 @@ describe('Attachment() refuses validators that would fail without a word', () =>
   it.each(['"v1"', 'W/"v1"', '""', '"sha-256:9f86d081"'])('takes %j as an ETag', etag => {
     expect(() => Attachment(BODY, { etag })).not.toThrow()
   })
+
+  it.each(['text/plain\r\nX-Evil: yes', 'text/plain\u0000', 'text/plain\u007f'])(
+    'refuses %j as a type: a header value holds no control character',
+    type => {
+      expect(() => Attachment(BODY, { type })).toThrow(ErrConfiguration)
+    },
+  )
+
+  it('names the type it refused with its control characters escaped, so the message stays on one line', () => {
+    expect(() => Attachment(BODY, { type: 'text/plain\r\nX-Evil: yes' })).toThrow(
+      /^Cannot use "text\/plain\\r\\nX-Evil: yes" as a Content-Type: [^\n]*\n/,
+    )
+  })
+
+  it.each(['text/plain; charset=utf-8', 'text/plain;\tcharset=utf-8', 'application/vnd.example+json'])(
+    'takes %j as a type',
+    type => {
+      expect(() => Attachment(BODY, { type })).not.toThrow()
+    },
+  )
 
   it('refuses a Date that holds no time: the header would read "Invalid Date"', () => {
     expect(() => Attachment(BODY, { lastModified: new Date('not a date') })).toThrow(ErrConfiguration)
@@ -440,6 +762,7 @@ describe('Attachment() answers a client that already holds the content with 304 
     ['a list whose first tag holds a comma', { 'if-none-match': '"v0,v1", "report-v1"' }],
     ['If-Modified-Since its Last-Modified', { 'if-modified-since': MODIFIED.toUTCString() }],
     ['If-Modified-Since a later date', { 'if-modified-since': later }],
+    ['If-Modified-Since its Last-Modified in rfc850 form', { 'if-modified-since': 'Thursday, 01-Oct-26 12:34:56 GMT' }],
     [
       'a range, with its tag in If-None-Match: preconditions come before ranges',
       { range: 'bytes=0-9', 'if-none-match': ETAG },
@@ -467,6 +790,7 @@ describe('Attachment() answers a client that already holds the content with 304 
     ],
     ['If-Modified-Since a second before its Last-Modified', '/files/bytes', { 'if-modified-since': earlier }],
     ['If-Modified-Since that does not parse', '/files/bytes', { 'if-modified-since': 'yesterday' }],
+    ['If-Modified-Since that is no HTTP-date, "2030"', '/files/bytes', { 'if-modified-since': '2030' }],
     ['a tag sent without its quotes, which names no entity tag', '/files/bytes', { 'if-none-match': 'report-v1' }],
     ['a tag, to content that has none', '/files/array-buffer', { 'if-none-match': ETAG }],
     ['a date, to content that has no Last-Modified', '/files/array-buffer', { 'if-modified-since': later }],
@@ -476,6 +800,27 @@ describe('Attachment() answers a client that already holds the content with 304 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).not.toBeNull()
     await expectPatternedBody(res, 0, SIZE)
+  })
+
+  // RFC 9110 §5.6.7: a two-digit year more than 50 years ahead is the most recent past year with those digits, so one
+  // stamp names another year as the calendar moves on. The clock is fixed here, never left to the day the suite runs.
+  it('reads a two-digit year against the year the request arrives in', async () => {
+    const headers = { 'if-modified-since': 'Friday, 01-Oct-99 12:34:56 GMT' }
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    try {
+      // In 2026, 99 is more than 50 years ahead: it is 1999, before the content last changed.
+      vi.setSystemTime(new Date('2026-10-21T00:00:00Z'))
+      const in2026 = await app.fetch('/files/bytes', { headers })
+      expect(in2026.status).toBe(200)
+      await expectPatternedBody(in2026, 0, SIZE)
+
+      // In 2049 it is not: it is 2099, after.
+      vi.setSystemTime(new Date('2049-06-01T00:00:00Z'))
+      expect((await app.fetch('/files/bytes', { headers })).status).toBe(304)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it.each(['node', 'web'])('closes a %s stream it leaves unread, so a file behind one is closed too', async kind => {
@@ -505,5 +850,264 @@ describe('Attachment() answers a client that already holds the content with 304 
     const created = await app.fetch('/files/created', { headers: { 'if-none-match': ETAG } })
     expect(created.status).toBe(201)
     await expectPatternedBody(created, 0, SIZE)
+  })
+})
+
+/** That `res` refuses a failed precondition with 412, in the framework's error body on a GET, describing no body. */
+async function expectPreconditionFailed(res: Response, method: string): Promise<void> {
+  expect(res.status).toBe(412)
+  expect(res.headers.get('content-disposition')).toBeNull()
+  expect(res.headers.get('accept-ranges')).toBeNull()
+  expect(res.headers.get('content-range')).toBeNull()
+  if (method === 'GET') {
+    expect(await res.json()).toMatchObject({ statusCode: 412, code: 'ERR_HTTP_PRECONDITION_FAILED' })
+  } else {
+    expect(await res.text()).toBe('')
+  }
+}
+
+describe('Attachment() refuses a client whose precondition no longer holds with 412 (If-Match, If-Unmodified-Since)', () => {
+  const later = new Date(MODIFIED.getTime() + 60_000).toUTCString()
+  const earlier = new Date(MODIFIED.getTime() - 1000).toUTCString()
+
+  it.each([
+    // RFC 9110 §13.1.1: If-Match compares strongly, so a weak tag never matches, either side.
+    ['another tag', '/files/bytes', { 'if-match': '"report-v2"' }],
+    ['the weak form of its own tag', '/files/bytes', { 'if-match': 'W/"report-v1"' }],
+    ['its own tag, when that tag is weak', '/files/weak', { 'if-match': 'W/"report-v1"' }],
+    ['a tag, to content that has none', '/files/array-buffer', { 'if-match': ETAG }],
+    ['a value that names no entity tag', '/files/bytes', { 'if-match': 'report-v1' }],
+    // §13.1.4: the content changed after the date the client holds.
+    ['If-Unmodified-Since a second before its Last-Modified', '/files/bytes', { 'if-unmodified-since': earlier }],
+    // §5.6.7: a recipient reads all three HTTP-date formats.
+    [
+      'If-Unmodified-Since a second earlier, in asctime form',
+      '/files/bytes',
+      { 'if-unmodified-since': 'Thu Oct  1 12:34:55 2026' },
+    ],
+  ])('given %s, on GET and HEAD alike', async (_case, path, headers) => {
+    const validators = (await app.fetch(path)).headers
+
+    for (const method of ['GET', 'HEAD']) {
+      const res = await app.fetch(path, { method, headers })
+
+      await expectPreconditionFailed(res, method)
+      expect(res.headers.get('etag')).toBe(validators.get('etag'))
+      expect(res.headers.get('last-modified')).toBe(validators.get('last-modified'))
+    }
+  })
+
+  it.each([
+    ['If-Match: *', '/files/bytes', { 'if-match': '*' }],
+    ['If-Match: *, to content that has no tag', '/files/array-buffer', { 'if-match': '*' }],
+    ['its own strong tag', '/files/bytes', { 'if-match': ETAG }],
+    ['a list holding its tag', '/files/bytes', { 'if-match': '"report-v0", "report-v1"' }],
+    ['a list whose first tag holds a comma', '/files/bytes', { 'if-match': '"v0,v1", "report-v1"' }],
+    // Last-Modified carries seconds: the milliseconds the content has are not a change.
+    ['If-Unmodified-Since its Last-Modified', '/files/bytes', { 'if-unmodified-since': MODIFIED.toUTCString() }],
+    ['If-Unmodified-Since a later date', '/files/bytes', { 'if-unmodified-since': later }],
+    ['If-Unmodified-Since that does not parse', '/files/bytes', { 'if-unmodified-since': 'yesterday' }],
+    // §13.1.4: a value that is not an HTTP-date is ignored, however a date parser might read it.
+    ['If-Unmodified-Since that is no HTTP-date, "2026"', '/files/bytes', { 'if-unmodified-since': '2026' }],
+    [
+      'If-Unmodified-Since naming a day February does not have',
+      '/files/bytes',
+      { 'if-unmodified-since': 'Tue, 31 Feb 2026 00:00:00 GMT' },
+    ],
+    [
+      'If-Unmodified-Since in rfc850 form',
+      '/files/bytes',
+      { 'if-unmodified-since': 'Thursday, 01-Oct-26 12:34:56 GMT' },
+    ],
+    ['If-Unmodified-Since in asctime form', '/files/bytes', { 'if-unmodified-since': 'Thu Oct  1 12:34:56 2026' }],
+    [
+      'If-Unmodified-Since, to content with no Last-Modified',
+      '/files/array-buffer',
+      { 'if-unmodified-since': earlier },
+    ],
+  ])('sends the whole body given %s', async (_case, path, headers) => {
+    const res = await app.fetch(path, { headers })
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-disposition')).not.toBeNull()
+    await expectPatternedBody(res, 0, SIZE)
+  })
+})
+
+describe('Attachment() evaluates preconditions in the order RFC 9110 §13.2.2 gives', () => {
+  const later = new Date(MODIFIED.getTime() + 60_000).toUTCString()
+  const earlier = new Date(MODIFIED.getTime() - 1000).toUTCString()
+
+  it.each([
+    [
+      'a failing If-Match before a matching If-None-Match: 412, not 304',
+      { 'if-match': '"report-v2"', 'if-none-match': ETAG },
+    ],
+    [
+      'a failing If-Unmodified-Since before a matching If-None-Match',
+      { 'if-unmodified-since': earlier, 'if-none-match': ETAG },
+    ],
+    ['a failing If-Match before a range: 412, not 206', { 'if-match': '"report-v2"', range: 'bytes=0-9' }],
+    ['a failing If-Match before several ranges', { 'if-match': '"report-v2"', range: 'bytes=0-9,20-29' }],
+  ])('refuses %s', async (_case, headers) => {
+    await expectPreconditionFailed(await app.fetch('/files/bytes', { headers }), 'GET')
+  })
+
+  it('reads If-Unmodified-Since only without If-Match, which decides alone', async () => {
+    const res = await app.fetch('/files/bytes', { headers: { 'if-match': ETAG, 'if-unmodified-since': earlier } })
+
+    expect(res.status).toBe(200)
+    await expectPatternedBody(res, 0, SIZE)
+  })
+
+  it('serves the range once every precondition holds', async () => {
+    const res = await app.fetch('/files/bytes', {
+      headers: { 'if-match': ETAG, 'if-unmodified-since': later, range: 'bytes=10-19,30-39', 'if-range': ETAG },
+    })
+
+    await expectRangeAnswer(
+      res,
+      {
+        status: 206,
+        parts: [
+          [10, 19],
+          [30, 39],
+        ],
+      },
+      SIZE,
+    )
+  })
+
+  it('refuses the same way from an async handler and from a catch handler as from a sync one', async () => {
+    await expectPreconditionFailed(await app.fetch('/files/async-bytes', { headers: { 'if-match': '"x"' } }), 'GET')
+    await expectPreconditionFailed(await app.fetch('/files/stand-in', { headers: { 'if-match': '"x"' } }), 'GET')
+
+    const served = await app.fetch('/files/stand-in', { headers: { 'if-match': '"stand-in-v1"' } })
+    expect(served.status).toBe(200)
+    await expectPatternedBody(served, 0, SIZE)
+  })
+})
+
+describe('Attachment() leaves preconditions to the handler where a 412 would come too late', () => {
+  it('sends a POST its own answer: the handler already acted, and a 412 now would say it had not', async () => {
+    const res = await app.fetch('/files/blob', { method: 'POST', headers: { 'if-match': '"report-v2"' } })
+
+    expect(res.status).toBe(200)
+    await expectPatternedBody(res, 0, SIZE)
+  })
+
+  it.each([
+    ['a status the route declared', '/files/created', 201, SIZE],
+    ['a status the handler set', '/files/missing', 404, 'no such report'.length],
+  ])('keeps %s and sends the body whole', async (_source, path, status, length) => {
+    const res = await app.fetch(path, { headers: { 'if-match': '"report-v2"', 'if-unmodified-since': 'yesterday' } })
+
+    expect(res.status).toBe(status)
+    expect((await res.arrayBuffer()).byteLength).toBe(length)
+  })
+})
+
+describe('Attachment() refusing a precondition leaves nothing open and goes through error handling', () => {
+  it.each(['node', 'web'])('closes a %s stream it refuses to send', async kind => {
+    const res = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-match': '"report-v2"' } })
+
+    await expectPreconditionFailed(res, 'GET')
+    expect(opened.at(-1)).toEqual({ kind, closed: true })
+  })
+
+  it('refuses with 412 even when the stream it closes fails as it closes', async () => {
+    const res = await app.fetch('/files/web-stream-failing-close', { headers: { 'if-match': '"report-v2"' } })
+
+    await expectPreconditionFailed(res, 'GET')
+  })
+
+  it("lets a @Catch handler answer the refusal in the application's own words", async () => {
+    const res = await app.fetch('/files-guarded/report', { headers: { 'if-match': '"report-v0"' } })
+
+    expect(res.status).toBe(412)
+    expect(await res.json()).toEqual({ reason: 'The report changed since it was listed' })
+  })
+})
+
+describe('Attachment() serves the clients that ask for parts of a download', () => {
+  it('lets a download manager fetch the pieces it is missing together, and never splices two versions', async () => {
+    documents.set('manager', { body: BODY, etag: '"manual-v1"' })
+    const partsOf = async (res: Response) =>
+      parseByteRanges(res.headers.get('content-type'), new Uint8Array(await res.arrayBuffer()))
+
+    // The pieces a first attempt brought, then the gaps between them, asked for against the version they came from.
+    const first = await app.fetch('/files/documents/manager', { headers: { range: 'bytes=0-99,200-599,700-999' } })
+    const etag = first.headers.get('etag')!
+    const pieces = await partsOf(first)
+    const gaps = await partsOf(
+      await app.fetch('/files/documents/manager', { headers: { range: 'bytes=100-199,600-699', 'if-range': etag } }),
+    )
+
+    expect(pieces.map(part => [part.start, part.end])).toEqual([
+      [0, 99],
+      [200, 599],
+      [700, 999],
+    ])
+    expect(gaps.map(part => [part.start, part.end])).toEqual([
+      [100, 199],
+      [600, 699],
+    ])
+    const assembled = new Uint8Array(SIZE)
+    for (const part of [...pieces, ...gaps]) {
+      assembled.set(part.bytes, part.start)
+    }
+    expect(firstMismatch(assembled, 0)).toBe(-1)
+
+    // The document changes; the same request for the gaps gets the new version whole.
+    documents.set('manager', { body: patterned(7 * SIZE, SIZE), etag: '"manual-v2"' })
+    const changed = await app.fetch('/files/documents/manager', {
+      headers: { range: 'bytes=100-199,600-699', 'if-range': etag },
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.headers.get('etag')).toBe('"manual-v2"')
+    await expectPatternedBody(changed, 7 * SIZE, SIZE)
+  })
+
+  it('serves a document viewer its trailer first, then the scattered pieces it needs, in the order it asks', async () => {
+    const size = 64 * 1024
+    documents.set('viewer', { body: patterned(0, size), etag: '"viewer-v1"' })
+
+    const trailer = await app.fetch('/files/documents/viewer', { headers: { range: 'bytes=-1024' } })
+    await expectRangeAnswer(trailer, { status: 206, start: size - 1024, end: size - 1 }, size)
+
+    const pieces = await app.fetch('/files/documents/viewer', {
+      headers: { range: 'bytes=40000-40999,1000-1999,63000-63999', 'if-range': '"viewer-v1"' },
+    })
+    await expectRangeAnswer(
+      pieces,
+      {
+        status: 206,
+        parts: [
+          [40000, 40999],
+          [1000, 1999],
+          [63000, 63999],
+        ],
+      },
+      size,
+      PDF,
+    )
+  })
+
+  it('lets a sync client download only the version it listed, and fetch again once it is told it changed', async () => {
+    documents.set('sync', { body: BODY, etag: '"sync-v1"' })
+
+    const listed = await app.fetch('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } })
+    expect(listed.status).toBe(200)
+    await expectPatternedBody(listed, 0, SIZE)
+
+    documents.set('sync', { body: patterned(3 * SIZE, SIZE), etag: '"sync-v2"' })
+    await expectPreconditionFailed(
+      await app.fetch('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } }),
+      'GET',
+    )
+
+    const fresh = await app.fetch('/files/documents/sync')
+    expect(fresh.headers.get('etag')).toBe('"sync-v2"')
+    await expectPatternedBody(fresh, 3 * SIZE, SIZE)
   })
 })

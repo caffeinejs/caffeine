@@ -121,17 +121,19 @@ no `Cache-Control`, no `ETag`, no `Last-Modified`. A `noStore` route still says 
 
 ## Requests
 
-| Request                                  | Effect                                                                |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| `Cache-Control: no-cache`, `max-age=0`   | Not answered from the store. The fresh response is stored.            |
-| `Cache-Control: no-store`                | Not answered from the store, and the response is not stored.          |
-| `Cache-Control: max-age=N`               | An entry older than `N` seconds is a miss, never a stale answer.      |
-| `Cache-Control: min-fresh=N`             | An entry with less than `N` seconds of freshness left is a miss.      |
-| `Cache-Control: max-stale=N`             | Served the stale entry the route keeps, at once. See "Stale entries". |
-| `Cache-Control: only-if-cached`          | Answered from the store, or `504` when nothing fresh is. Never waits. |
-| `Pragma: no-cache`                       | Read only when the request has no `Cache-Control` header.             |
-| `If-None-Match` on a `GET` or `HEAD`     | `304` when it matches, on a hit and on a miss alike.                  |
-| `If-Modified-Since` on a `GET` or `HEAD` | `304` when it matches, on a hit. On a miss, see below.                |
+| Request                                  | Effect                                                                                                                                                   |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cache-Control: no-cache`, `max-age=0`   | Not answered from the store. The fresh response is stored.                                                                                               |
+| `Cache-Control: no-store`                | Not answered from the store, and the response is not stored.                                                                                             |
+| `Cache-Control: max-age=N`               | An entry older than `N` seconds is a miss, never a stale answer.                                                                                         |
+| `Cache-Control: min-fresh=N`             | An entry with less than `N` seconds of freshness left is a miss.                                                                                         |
+| `Cache-Control: max-stale=N`             | Served the stale entry the route keeps, at once. See "Stale entries".                                                                                    |
+| `Cache-Control: only-if-cached`          | Answered from the store, or `504` when nothing fresh is. Never waits.                                                                                    |
+| `Pragma: no-cache`                       | Read only when the request has no `Cache-Control` header.                                                                                                |
+| `If-None-Match` on a `GET` or `HEAD`     | `304` when it matches, on a hit and on a miss alike.                                                                                                     |
+| `If-Modified-Since` on a `GET` or `HEAD` | `304` when it matches, on a hit. On a miss, see below.                                                                                                   |
+| `Range` on a `GET`                       | Not answered from the store: the handler serves the range, and a part is never stored. Under `only-if-cached`, the stored whole body, or `504`.          |
+| `If-Match`, `If-Unmodified-Since`        | Not answered from the store: the handler evaluates them, as a cache must not. Under `only-if-cached`, `504`, whether the store holds the content or not. |
 
 Directive names are matched case-insensitively. `If-None-Match` wins over
 `If-Modified-Since` when both are sent. On a miss, `If-Modified-Since` is compared only with a `Last-Modified`
@@ -145,12 +147,12 @@ own response with the body and `Content-Length` taken off, so it keeps that resp
 
 The status header is `X-Cache` by default, renamed with `.statusHeader(...)`:
 
-| Value    | Meaning                                                                                                        |
-| -------- | -------------------------------------------------------------------------------------------------------------- |
-| `HIT`    | Answered from the store, with the stored body or with a `304`.                                                 |
-| `MISS`   | The handler ran. The response was stored if it qualified.                                                      |
-| `STALE`  | Answered with an entry past its `ttl`, under `staleWhileRevalidate` or `staleIfError`.                         |
-| `BYPASS` | The store was not consulted: a private request, a request directive, `vary: ['*']`, or `@CacheControl(false)`. |
+| Value    | Meaning                                                                                                                                                                |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `HIT`    | Answered from the store, with the stored body or with a `304`.                                                                                                         |
+| `MISS`   | The handler ran. The response was stored if it qualified.                                                                                                              |
+| `STALE`  | Answered with an entry past its `ttl`, under `staleWhileRevalidate` or `staleIfError`.                                                                                 |
+| `BYPASS` | The store was not consulted: a private request, a request directive, a `Range`, `If-Match` or `If-Unmodified-Since` request, `vary: ['*']`, or `@CacheControl(false)`. |
 
 A request whose method is not in `methods` gets no status header at all: the cache has nothing to say about it.
 An observer still hears of it, as `onBypass` with `reason: 'method'`.
@@ -506,16 +508,16 @@ const metrics: CacheObserver = {
 HTTPCaching((b, { logger }) => b.store(store).observer(composeObservers(metrics, loggingCacheObserver(logger))))
 ```
 
-| Method           | When                                                                                                                                                                          |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                  |
-| `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use). |
-| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`.  |
-| `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                 |
-| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                    |
-| `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                      |
-| `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                               |
-| `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                  |
+| Method           | When                                                                                                                                                                                         |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `onHit`          | Answered from the store. `revalidated` for a `304`, `stale` for an entry past its `ttl`, `coalesced` for a request served what another's handler run stored.                                 |
+| `onMiss`         | Nothing to serve: `absent`, `expired`, `stale-for-request`, `only-if-cached` (answered `504`), or `not-coalesced` (waited on a handler run that stored nothing it could use).                |
+| `onBypass`       | The store was not consulted: `method`, `disabled`, `private`, `authorization`, `authenticated`, `vary-any`, `range`, `precondition`, `no-cache`, `no-store`, `max-age-0`, `pragma-no-cache`. |
+| `onStore`        | A response was stored, with its `size` in bytes and its tags.                                                                                                                                |
+| `onSkip`         | A response the policy would have stored, left out: `set-cookie`, `entry-too-large`, `stream`, or `empty` (no body at all).                                                                   |
+| `onInvalidate`   | An eviction went through, with its tags.                                                                                                                                                     |
+| `onStaleIfError` | A `5xx` was replaced by a stale entry. The miss was already reported; this is not a second hit.                                                                                              |
+| `onError`        | A store call rejected or timed out: `get`, `put` or `evict`.                                                                                                                                 |
 
 `event.key` holds the query string and the value of every `vary` header, credentials included when a route
 varies on one. Do not use it as a metric attribute. `loggingCacheObserver` leaves keys out unless

@@ -27,6 +27,11 @@ export type CacheBypassReason =
   | 'vary-any'
   /** The request carried `Range`: a stored whole response does not answer a request for part of one. */
   | 'range'
+  /**
+   * The request carried `If-Match` or `If-Unmodified-Since`, which the handler evaluates: a stored response would
+   * answer a precondition that no longer holds with `200` instead of `412`.
+   */
+  | 'precondition'
   | 'no-cache'
   | 'no-store'
   | 'max-age-0'

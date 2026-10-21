@@ -115,6 +115,14 @@ export interface IContext<
   appendHeader(key: string, value: string): this
   headers(headers: Record<string, string>): this
   hasHeader(key: string): boolean
+  /**
+   * Reads back a response header written so far, by the route, a hook or the handler. A header holding several
+   * values, from {@link IContext.appendHeader} or a list, comes back as one field line, its values joined with `, `.
+   *
+   * Not for `Set-Cookie`, whose values cannot be joined: cookies set with {@link IContext.cookie} are written only as
+   * the response goes out.
+   */
+  getHeader(key: string): string | undefined
 
   /**
    * Sets a cookie on the response, over the server's `parseOptions`. Written when the response is sent; a second

@@ -4,17 +4,23 @@ import type { Readable } from 'node:stream'
 import { errMessage } from '@caffeinejs/std/err'
 
 import type { IContext } from '../../context.js'
+import { MediaType } from '../../media.js'
 import { Responder, type ActionResult } from '../../response.js'
 import { ErrConfiguration } from '../error/common.js'
-import { notModified } from './_conditional.js'
+import { ErrHTTPPreconditionFailed } from '../error/http.js'
+import { notModified, preconditionFailed, rangeHolds } from './_conditional.js'
 import { contentDisposition } from './_disposition.js'
-import { byteRange } from './_range.js'
+import { byteRanges, multipartByteRanges } from './_range.js'
 
 // The largest end offset Node's `Blob.slice` takes: it asserts a 32-bit one, aborting the process past it.
 const LARGEST_SLICEABLE = 2 ** 32 - 1
 
 // RFC 9110 §8.8.3: an optional weak prefix, then a quoted string holding neither a space nor a quote.
 const ENTITY_TAG = /^(?:W\/)?"[\x21\x23-\x7e\x80-\xff]*"$/
+
+// What Node writes as a header value: tabs, visible ASCII and spaces, and obs-text. Node refuses anything else in a
+// header, and nothing else may reach a part of a multipart body, where a line break would add lines of its own.
+const FIELD_VALUE = /^[\t\x20-\x7e\x80-\xff]*$/
 
 /** {@link Attachment}'s options. */
 export interface AttachmentOptions {
@@ -25,18 +31,19 @@ export interface AttachmentOptions {
   name?: string
   /**
    * The `Content-Type`, over the route's. Without it, the route's or the handler's type, then a `Blob`'s own, then
-   * `application/octet-stream`.
+   * `application/octet-stream`. Several ranges go out as `multipart/byteranges`, each part under this type. It holds
+   * no control character, as no header value may.
    */
   type?: string
   /**
-   * A strong entity tag for the content, quoted (`'"v42"'`), written as `ETag` and compared with `If-None-Match` and
-   * `If-Range`. A weak one (`W/"v42"`) still answers `If-None-Match`, but never resumes a download: it does not promise
-   * the bytes are the same.
+   * A strong entity tag for the content, quoted (`'"v42"'`), written as `ETag` and compared with `If-Match`,
+   * `If-None-Match` and `If-Range`. A weak one (`W/"v42"`) still answers `If-None-Match`, but never satisfies
+   * `If-Match` nor resumes a download: it does not promise the bytes are the same.
    */
   etag?: string
   /**
-   * When the content last changed, written as `Last-Modified` and compared with `If-Modified-Since` and `If-Range` to
-   * the second.
+   * When the content last changed, written as `Last-Modified` and compared with `If-Unmodified-Since`,
+   * `If-Modified-Since` and `If-Range` to the second.
    */
   lastModified?: Date
 }
@@ -51,21 +58,27 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * `Content-Disposition` carries the name twice, as a plain `filename` and as RFC 8187 UTF-8 in `filename*`, so a
  * name outside ASCII reaches every client intact.
  *
- * A `Blob` or bytes answer a `GET` carrying `Range` with `206` and that range, or `416` for one past the end, and
- * say `Accept-Ranges: bytes`. Several ranges, a malformed one or another unit are answered with the whole body.
- * With `If-Range`, the range is served only while the client's validator still matches `etag` or `lastModified`;
- * otherwise the whole current body goes out. A stream is sent whole, its length not known, and so is a `Blob` past
- * 4 GiB, which Node cannot cut a part out of.
+ * A `Blob` or bytes answer a `GET` carrying `Range` with `206` and that range, and say `Accept-Ranges: bytes`. Several
+ * ranges go out together as `multipart/byteranges`, in the order asked for; a range starting past the end is left out,
+ * and `416` answers when none is left. A malformed range, another unit, more than 100 ranges, or ranges adding up to
+ * more than the body get the whole body, and so does a body the reply gives a `Content-Encoding`, to several ranges: a
+ * multipart answer cannot carry that coding. With `If-Range`, ranges are served only while the client's validator still
+ * matches `etag` or `lastModified`; otherwise the whole current body goes out. A stream is sent whole, its length not
+ * known, and so is a `Blob` past 4 GiB, which Node cannot cut a part out of.
  *
- * A `GET` or a `HEAD` from a client that holds the content already is answered `304` with no body, before any range:
- * its `If-None-Match` lists `etag`, compared weakly, or is `*`; or, sent without `If-None-Match`, its
- * `If-Modified-Since` is not before `lastModified`. A stream the `304` leaves unread is closed.
+ * Preconditions come first, in RFC 9110's order. A `GET` or a `HEAD` whose `If-Match` lists no tag strongly matching
+ * `etag`, or, sent without `If-Match`, whose `If-Unmodified-Since` is before `lastModified`, is refused: an
+ * {@link ErrHTTPPreconditionFailed} is thrown, which error handling answers with `412`, a `@Catch` handler included.
+ * One from a client that holds the content already is answered `304` with no body: its `If-None-Match` lists `etag`,
+ * compared weakly, or is `*`; or, sent without `If-None-Match`, its `If-Modified-Since` is not before `lastModified`.
+ * A stream either answer leaves unread is closed.
  *
- * A range and a `304` answer in place of a `200` only: a status the route or the handler set is kept, with the whole
- * body.
+ * Ranges, the `304` and the `412` answer in place of a `200` only: a status the route or the handler set is kept,
+ * with the whole body, and any other method is the handler's own to guard, having acted already.
  *
  * @throws {@link ErrConfiguration} for an `etag` that is not a quoted entity tag, or a `lastModified` that is not a
- * valid date: either would be written as a validator no client can match.
+ * valid date: either would be written as a validator no client can match. Also for a `type` holding a control
+ * character, which no header value may.
  * @example
  * ```ts
  * .get('/exports/q3').handler(async () =>
@@ -74,7 +87,16 @@ export type AttachmentBody = Blob | ArrayBuffer | ArrayBufferView<ArrayBuffer> |
  * ```
  */
 export function Attachment(body: AttachmentBody, options: AttachmentOptions = {}): Responder {
-  const { etag, lastModified } = options
+  const { type, etag, lastModified } = options
+
+  if (type !== undefined && !FIELD_VALUE.test(type)) {
+    throw new ErrConfiguration(
+      errMessage(`Cannot use ${JSON.stringify(type)} as a Content-Type: a header value holds no control character`)
+        .solutions('Pass the media type alone, such as "text/csv"')
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
+  }
 
   if (etag !== undefined && !ENTITY_TAG.test(etag)) {
     const bare = etag.replace(/^W\//i, '').replaceAll('"', '')
@@ -121,16 +143,10 @@ class AttachmentResult extends Responder {
       ctx.header('last-modified', options.lastModified.toUTCString())
     }
 
-    // RFC 9110 §13.2.2: preconditions before ranges, and only where the answer would be a 200 to a GET or a HEAD. A
-    // 304 carries the validators and nothing that describes a body.
+    // RFC 9110 §13.2.2: preconditions in its order, before ranges, and only where the answer would be a 200 to a GET
+    // or a HEAD; on any other method the handler has acted already, and a refusal now would say it had not.
     const method = ctx.req.method
-    if (
-      (method === 'GET' || method === 'HEAD') &&
-      ctx.statusCode === 200 &&
-      notModified(ctx.req.header('if-none-match'), ctx.req.header('if-modified-since'), options)
-    ) {
-      discard(body)
-      ctx.status(304)
+    if ((method === 'GET' || method === 'HEAD') && ctx.statusCode === 200 && preconditions(ctx, body, options)) {
       return undefined
     }
 
@@ -148,37 +164,104 @@ class AttachmentResult extends Responder {
       return body
     }
 
-    const size = sized instanceof NodeBlob ? sized.size : sized.byteLength
     ctx.header('accept-ranges', 'bytes')
 
     // Ranges are a GET's, served in place of a 200: a HEAD is answered as the whole GET would be, and a status the
     // route or the handler set is kept.
     const header = ctx.req.header('range')
-    const ranged =
-      header !== undefined &&
-      ctx.req.method === 'GET' &&
-      ctx.statusCode === 200 &&
-      matches(ctx.req.header('if-range'), options)
-    const range = ranged ? byteRange(header, size) : undefined
-
-    if (range === undefined) {
+    if (
+      header === undefined ||
+      method !== 'GET' ||
+      ctx.statusCode !== 200 ||
+      !rangeHolds(ctx.req.header('if-range'), options)
+    ) {
       return body
     }
 
-    if (range === 'unsatisfiable') {
-      ctx.status(416).header('content-range', `bytes */${size}`)
-      return undefined
-    }
+    return partial(ctx, body, sized, header)
+  }
+}
 
-    const [start, end] = range
+/**
+ * Whether the client's preconditions answer in place of the body: `true` once a `304` is set for a client that holds
+ * the content already. A precondition that no longer holds throws, so error handling answers its `412` as it answers
+ * any refusal. A stream either leaves unread is closed.
+ */
+function preconditions(ctx: IContext, body: AttachmentBody, options: AttachmentOptions): boolean {
+  if (preconditionFailed(ctx.req.header('if-match'), ctx.req.header('if-unmodified-since'), options)) {
+    discard(body)
+    throw new ErrHTTPPreconditionFailed()
+  }
+
+  if (notModified(ctx.req.header('if-none-match'), ctx.req.header('if-modified-since'), options)) {
+    discard(body)
+    ctx.status(304)
+    return true
+  }
+
+  return false
+}
+
+/**
+ * The answer to the ranges a `GET` asks of `sized`: one range as itself, several as one `multipart/byteranges` body,
+ * `416` when none is satisfiable, and the whole body where ranges do not apply.
+ */
+function partial(
+  ctx: IContext,
+  body: AttachmentBody,
+  sized: NodeBlob | Uint8Array<ArrayBuffer>,
+  header: string,
+): ActionResult {
+  const size = sized instanceof NodeBlob ? sized.size : sized.byteLength
+  const ranges = byteRanges(header, size)
+
+  if (ranges === undefined) {
+    return body
+  }
+
+  if (ranges === 'unsatisfiable') {
+    ctx.status(416).header('content-range', `bytes */${size}`)
+    return undefined
+  }
+
+  // RFC 9110 §15.3.7.2: one range goes out as itself, never as a multipart body of one part.
+  if (ranges.length === 1) {
+    const [[start, end]] = ranges
     ctx.status(206).header('content-range', `bytes ${start}-${end}/${size}`)
 
     // Bytes are not copied for a part of them: Fastify sends the view as it is.
     return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
   }
+
+  // RFC 9110 §8.4: a content coding is the whole representation's, and a multipart envelope of its slices would go out
+  // labelled with a coding it does not have. The coded body goes out whole instead.
+  if (ctx.hasHeader('content-encoding')) {
+    return body
+  }
+
+  // A fresh boundary per answer, drawn at random, is one no body can be made to hold.
+  const type = partType(ctx, sized)
+  const boundary = crypto.randomUUID().replaceAll('-', '')
+  ctx.status(206).header('content-type', `multipart/byteranges; boundary=${boundary}`)
+
+  return multipartByteRanges(sized, ranges, type, boundary)
 }
 
-/** Closes a stream a 304 leaves unread, so a file behind it is closed too. */
+/**
+ * The type each part of a multipart answer carries: the one the whole body would go out under. A type Node would
+ * refuse as a header value is not one, and the `Blob`'s own stands in.
+ */
+function partType(ctx: IContext, sized: NodeBlob | Uint8Array<ArrayBuffer>): string {
+  const declared = ctx.getHeader('content-type')
+
+  if (declared !== undefined && FIELD_VALUE.test(declared)) {
+    return declared
+  }
+
+  return sized instanceof NodeBlob && sized.type !== '' ? sized.type : MediaType.APPLICATION_OCTET_STREAM
+}
+
+/** Closes a stream a 304 or a 412 leaves unread, so a file behind it is closed too. */
 function discard(body: AttachmentBody): void {
   if (body instanceof ReadableStream) {
     // A stream that fails as it closes has nobody left to tell.
@@ -207,26 +290,4 @@ function sizedOf(body: AttachmentBody): NodeBlob | Uint8Array<ArrayBuffer> | und
   }
 
   return undefined
-}
-
-/**
- * Whether the content is still the one the client holds part of, by RFC 9110 §13.1.5: an entity tag compared
- * strongly, so a weak one never matches, or a date equal to `Last-Modified`. No `If-Range` at all matches.
- */
-function matches(ifRange: string | undefined, options: AttachmentOptions): boolean {
-  if (ifRange === undefined) {
-    return true
-  }
-
-  if (ifRange.startsWith('"') || ifRange.startsWith('W/')) {
-    return ifRange === options.etag && !ifRange.startsWith('W/')
-  }
-
-  if (options.lastModified === undefined) {
-    return false
-  }
-
-  const date = Date.parse(ifRange)
-
-  return !Number.isNaN(date) && Math.floor(date / 1000) === Math.floor(options.lastModified.getTime() / 1000)
 }
