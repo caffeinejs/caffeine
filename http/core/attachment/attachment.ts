@@ -144,20 +144,10 @@ class AttachmentResult extends Responder {
     }
 
     // RFC 9110 §13.2.2: preconditions in its order, before ranges, and only where the answer would be a 200 to a GET
-    // or a HEAD; on any other method the handler has acted already, and a refusal now would say it had not. A 412
-    // goes through error handling, as any refusal does; a 304 carries the validators and nothing that describes a body.
+    // or a HEAD; on any other method the handler has acted already, and a refusal now would say it had not.
     const method = ctx.req.method
-    if ((method === 'GET' || method === 'HEAD') && ctx.statusCode === 200) {
-      if (preconditionFailed(ctx.req.header('if-match'), ctx.req.header('if-unmodified-since'), options)) {
-        discard(body)
-        throw new ErrHTTPPreconditionFailed()
-      }
-
-      if (notModified(ctx.req.header('if-none-match'), ctx.req.header('if-modified-since'), options)) {
-        discard(body)
-        ctx.status(304)
-        return undefined
-      }
+    if ((method === 'GET' || method === 'HEAD') && ctx.statusCode === 200 && preconditions(ctx, body, options)) {
+      return undefined
     }
 
     ctx.header(
@@ -174,50 +164,87 @@ class AttachmentResult extends Responder {
       return body
     }
 
-    const size = sized instanceof NodeBlob ? sized.size : sized.byteLength
     ctx.header('accept-ranges', 'bytes')
 
     // Ranges are a GET's, served in place of a 200: a HEAD is answered as the whole GET would be, and a status the
     // route or the handler set is kept.
     const header = ctx.req.header('range')
-    const ranged =
-      header !== undefined &&
-      method === 'GET' &&
-      ctx.statusCode === 200 &&
-      rangeHolds(ctx.req.header('if-range'), options)
-    const ranges = ranged ? byteRanges(header, size) : undefined
-
-    if (ranges === undefined) {
+    if (
+      header === undefined ||
+      method !== 'GET' ||
+      ctx.statusCode !== 200 ||
+      !rangeHolds(ctx.req.header('if-range'), options)
+    ) {
       return body
     }
 
-    if (ranges === 'unsatisfiable') {
-      ctx.status(416).header('content-range', `bytes */${size}`)
-      return undefined
-    }
-
-    // RFC 9110 §15.3.7.2: one range goes out as itself, never as a multipart body of one part.
-    if (ranges.length === 1) {
-      const [[start, end]] = ranges
-      ctx.status(206).header('content-range', `bytes ${start}-${end}/${size}`)
-
-      // Bytes are not copied for a part of them: Fastify sends the view as it is.
-      return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
-    }
-
-    // RFC 9110 §8.4: a content coding is the whole representation's, and a multipart envelope of its slices would go
-    // out labelled with a coding it does not have. The coded body goes out whole instead.
-    if (ctx.hasHeader('content-encoding')) {
-      return body
-    }
-
-    // A fresh boundary per answer, drawn at random, is one no body can be made to hold.
-    const type = partType(ctx, sized)
-    const boundary = crypto.randomUUID().replaceAll('-', '')
-    ctx.status(206).header('content-type', `multipart/byteranges; boundary=${boundary}`)
-
-    return multipartByteRanges(sized, ranges, type, boundary)
+    return partial(ctx, body, sized, header)
   }
+}
+
+/**
+ * Whether the client's preconditions answer in place of the body: `true` once a `304` is set for a client that holds
+ * the content already. A precondition that no longer holds throws, so error handling answers its `412` as it answers
+ * any refusal. A stream either leaves unread is closed.
+ */
+function preconditions(ctx: IContext, body: AttachmentBody, options: AttachmentOptions): boolean {
+  if (preconditionFailed(ctx.req.header('if-match'), ctx.req.header('if-unmodified-since'), options)) {
+    discard(body)
+    throw new ErrHTTPPreconditionFailed()
+  }
+
+  if (notModified(ctx.req.header('if-none-match'), ctx.req.header('if-modified-since'), options)) {
+    discard(body)
+    ctx.status(304)
+    return true
+  }
+
+  return false
+}
+
+/**
+ * The answer to the ranges a `GET` asks of `sized`: one range as itself, several as one `multipart/byteranges` body,
+ * `416` when none is satisfiable, and the whole body where ranges do not apply.
+ */
+function partial(
+  ctx: IContext,
+  body: AttachmentBody,
+  sized: NodeBlob | Uint8Array<ArrayBuffer>,
+  header: string,
+): ActionResult {
+  const size = sized instanceof NodeBlob ? sized.size : sized.byteLength
+  const ranges = byteRanges(header, size)
+
+  if (ranges === undefined) {
+    return body
+  }
+
+  if (ranges === 'unsatisfiable') {
+    ctx.status(416).header('content-range', `bytes */${size}`)
+    return undefined
+  }
+
+  // RFC 9110 §15.3.7.2: one range goes out as itself, never as a multipart body of one part.
+  if (ranges.length === 1) {
+    const [[start, end]] = ranges
+    ctx.status(206).header('content-range', `bytes ${start}-${end}/${size}`)
+
+    // Bytes are not copied for a part of them: Fastify sends the view as it is.
+    return sized instanceof NodeBlob ? sized.slice(start, end + 1, sized.type) : sized.subarray(start, end + 1)
+  }
+
+  // RFC 9110 §8.4: a content coding is the whole representation's, and a multipart envelope of its slices would go out
+  // labelled with a coding it does not have. The coded body goes out whole instead.
+  if (ctx.hasHeader('content-encoding')) {
+    return body
+  }
+
+  // A fresh boundary per answer, drawn at random, is one no body can be made to hold.
+  const type = partType(ctx, sized)
+  const boundary = crypto.randomUUID().replaceAll('-', '')
+  ctx.status(206).header('content-type', `multipart/byteranges; boundary=${boundary}`)
+
+  return multipartByteRanges(sized, ranges, type, boundary)
 }
 
 /**
