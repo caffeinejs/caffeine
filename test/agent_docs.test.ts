@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url'
 import { globby } from 'globby'
 import { describe, expect, it } from 'vitest'
 
-// The rule files send agents to other files by link, to sections by heading and to skills by name. A link to a moved
-// file, a renamed heading or a deleted skill sends them nowhere, without a word: these tests make it fail instead. A
-// path written as code is not a link and is not checked.
+// The rule files send agents to other files by link, to sections by the Rule map and to skills by name. A link to a
+// moved file, a Rule map heading that was renamed or a deleted skill sends them nowhere, without a word: these tests
+// make it fail instead. A path written as code is not a link, and a section named in prose is not checked.
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
@@ -66,7 +66,10 @@ describe('agent docs', () => {
     )
 
     expect(links.filter(link => !existsSync(link.path)).map(link => `${link.doc} links ${link.target}`)).toEqual([])
-    expect(links.length).toBeGreaterThan(100)
+    // Each kind of doc was read and held links: an ignore or a pattern that loses one cannot pass by checking nothing.
+    expect([...new Set(links.map(link => link.doc))]).toEqual(
+      expect.arrayContaining(['AGENTS.md', 'CONVENTIONS.md', 'http/AGENTS.md', '.agents/skills/README.md']),
+    )
   })
 
   it('send each kind of file to a section that exists', () => {
