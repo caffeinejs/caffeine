@@ -64,8 +64,8 @@ export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> |
  * Builds a validator for one schema, to run on many values: whatever depends on the schema alone is done here, once.
  *
  * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
- * defaults are filled in, its types converted (`'8080'` becomes `8080`, and `'a'` becomes `['a']` where an array is
- * declared), and its keys dropped where an object says `additionalProperties: false`, a nullable object included, though
+ * defaults are filled in, its types converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
+ * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is), and its keys dropped where an object says `additionalProperties: false`, a nullable object included, though
  * never inside another union or an intersection. It is then checked, and its codecs decoded. A Standard Schema runs its own library's validator. Either
  * way a failure reports its first issue only, so the report on a large invalid value is no larger than on a small one.
  *
