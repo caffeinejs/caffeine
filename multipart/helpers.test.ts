@@ -536,48 +536,43 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     },
   )
 
-  // The limit caps the body, not each file on its own: two files under it are refused once together they are over.
-  it('holds the whole upload to the limit, not each file alone', async () => {
-    const app = limitedApp(readers['files()'], 1 * KiB)
-    await app.bootstrap()
-
-    try {
-      const res = await app.fetch('/limited/upload', {
-        method: 'POST',
-        headers: multipartHeaders(),
-        body: multipartBody([
-          { name: 'a', filename: 'a.bin', content: 'x'.repeat(600) },
-          { name: 'b', filename: 'b.bin', content: 'x'.repeat(600) },
-        ]),
-      })
-
-      expect(res.status).toBe(413)
-      expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
-    } finally {
-      await app.close()
-    }
-  })
-
-  // A request that declares its length is refused on that alone, before a byte of it is parsed. This one declares
-  // more than the limit and sends a whole form well under it, then waits: only the declared length can answer it.
-  it('refuses an upload whose Content-Length is over the limit before reading it', async () => {
-    const app = limitedApp(readers['files()'], 1 * KiB).server(listen)
-    await app.run()
-
+  /**
+   * Writes `head` and `body` on a connection of its own and answers what the server sent before it closed it: a server
+   * that went on reading the rest of the body would never close it, and the read would never end.
+   */
+  async function exchange(app: { address?: { port: number } }, head: string, body: Uint8Array): Promise<string> {
     const socket = connect(app.address!.port, '127.0.0.1')
+    const received: Buffer[] = []
+    socket.on('data', (chunk: Buffer) => received.push(chunk))
 
     try {
       await once(socket, 'connect')
-      socket.write(
-        'POST /limited/upload HTTP/1.1\r\nHost: localhost\r\n' +
-          `Content-Type: multipart/form-data; boundary=${BOUNDARY}\r\nContent-Length: 2048\r\n\r\n`,
-      )
-      socket.write(file(16))
-
-      const [response] = (await once(socket, 'data')) as [Buffer]
-      expect(response.toString().split('\r\n')[0]).toBe('HTTP/1.1 413 Payload Too Large')
+      socket.write(head)
+      socket.write(body)
+      await once(socket, 'end')
+      return Buffer.concat(received).toString()
     } finally {
       socket.destroy()
+    }
+  }
+
+  const requestHead = (framing: string) =>
+    'POST /limited/upload HTTP/1.1\r\nHost: localhost\r\n' +
+    `Content-Type: multipart/form-data; boundary=${BOUNDARY}\r\n${framing}\r\n\r\n`
+
+  // A request that declares its length is refused on that alone, before a byte of it is parsed, and its connection is
+  // closed rather than read to the length declared, as Fastify does for a JSON body. This one declares more than the
+  // limit, sends a whole form well under it, then waits: only the declared length can answer it.
+  it('refuses an upload whose Content-Length is over the limit before reading it, and closes the connection', async () => {
+    const app = limitedApp(readers['files()'], 1 * KiB).server(listen)
+    await app.run()
+
+    try {
+      const response = await exchange(app, requestHead('Content-Length: 2048'), file(16))
+
+      expect(response.split('\r\n')[0]).toBe('HTTP/1.1 413 Payload Too Large')
+      expect(response).toMatch(/^connection: close$/im)
+    } finally {
       await app.close()
     }
   })
@@ -662,8 +657,9 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
         await app.run()
 
         try {
-          const over = await chunked(app, file(4096))
+          const over = await chunked(app, file(64 * 1024))
           expect(over.status).toBe(413)
+          expect(over.headers.get('connection')).toBe('close')
           expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
 
           const within = await chunked(app, file(512))
@@ -691,9 +687,86 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
         const res = await chunked(app, opened, held)
 
         expect(res.status).toBe(413)
+        expect(res.headers.get('connection')).toBe('close')
         expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
       } finally {
         release()
+        await app.close()
+      }
+    })
+
+    // The parser stops at the file it was writing, but the client goes on sending: only closing the connection stops
+    // the server reading, or waiting for, the rest of an upload it already refused.
+    it('closes the connection of an upload it refused while the client is still sending', async () => {
+      const app = limitedApp(readers['formData()'], 1 * KiB).server(listen)
+      await app.run()
+
+      const opened = new TextEncoder().encode(
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="upload"; filename="upload.bin"\r\n\r\n` +
+          'x'.repeat(4096),
+      )
+      const chunk = Buffer.concat([Buffer.from(`${opened.length.toString(16)}\r\n`), opened, Buffer.from('\r\n')])
+
+      try {
+        const response = await exchange(app, requestHead('Transfer-Encoding: chunked'), chunk)
+
+        expect(response.split('\r\n')[0]).toBe('HTTP/1.1 413 Payload Too Large')
+        expect(response).toMatch(/^connection: close$/im)
+      } finally {
+        await app.close()
+      }
+    })
+
+    // The limit caps the body, not each file on its own: two files under it are refused once together they are over.
+    it('holds the whole upload to the limit, not each file alone', async () => {
+      const app = limitedApp(readers['files()'], 1 * KiB).server(listen)
+      await app.run()
+
+      const files = (bytes: number) =>
+        multipartBody([
+          { name: 'a', filename: 'a.bin', content: 'x'.repeat(bytes) },
+          { name: 'b', filename: 'b.bin', content: 'x'.repeat(bytes) },
+        ])
+
+      try {
+        const over = await chunked(app, files(600))
+        expect(over.status).toBe(413)
+        expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+
+        const within = await chunked(app, files(300))
+        expect(within.status).toBe(200)
+        expect(await within.json()).toEqual({ sizes: [300, 300] })
+      } finally {
+        await app.close()
+      }
+    })
+
+    // Each call goes on from where the last one stopped, so the limit is on the request, not on each call: a second
+    // call is refused once the request has passed it, rather than given a limit of its own.
+    it('holds the upload to the limit across the reader calls made on it', async () => {
+      const app = limitedApp(async ctx => {
+        const upload = multipart(ctx)
+        const a = await upload.file('a')
+        const b = await upload.file('b')
+        return [a?.size ?? 0, b?.size ?? 0]
+      }, 1 * KiB).server(listen)
+      await app.run()
+
+      try {
+        const over = await chunked(
+          app,
+          multipartBody([
+            { name: 'a', filename: 'a.bin', content: 'x'.repeat(600) },
+            { name: 'b', filename: 'b.bin', content: 'x'.repeat(600) },
+          ]),
+        )
+        expect(over.status).toBe(413)
+        expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+
+        const within = await chunked(app, multipartBody([{ name: 'a', filename: 'a.bin', content: 'x'.repeat(300) }]))
+        expect(within.status).toBe(200)
+        expect(await within.json()).toEqual({ sizes: [300, 0] })
+      } finally {
         await app.close()
       }
     })

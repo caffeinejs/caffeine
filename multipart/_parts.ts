@@ -24,47 +24,25 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
   }
 
   if (Number(req.headers['content-length']) > limit) {
-    throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE()
-  }
-
-  // A body that declares no length is counted as it reaches busboy. Once it passes the limit, the file being read
-  // fails, which stops busboy, and a reader waiting for the next part is woken rather than left waiting for a part
-  // that may never end.
-  let received = 0
-  let reading: Readable | undefined
-  let passed!: () => void
-  const overflowed = new Promise<IteratorReturnResult<undefined>>(resolve => {
-    passed = () => resolve({ done: true, value: undefined })
-  })
-
-  const count = (chunk: Buffer) => {
-    received += chunk.length
-    if (received > limit) {
-      req.raw.off('data', count)
-      reading?.destroy(new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE())
-      passed()
-    }
+    throw tooLarge(req)
   }
 
   // The route's limit stands in for the plugin's `fileSize`, above it as well as below.
   const parts = req.parts({ limits: { fileSize: limit } })
-
-  // The first `next()` pipes the request into busboy before it returns, so the count starts at the first byte. It
-  // stays on once the reader is done: `file()` and its stream spellings hand a file over before it has been read.
   let next = parts.next()
-  req.raw.on('data', count)
+  const count = countOf(req, limit)
 
   while (true) {
     let step: IteratorResult<Multipart>
     try {
-      step = await Promise.race([next, overflowed])
+      step = await Promise.race([next, count.passed])
     } catch (err) {
       // The plugin's own failure for a file cut at `fileSize` comes from the same overflow, and answers as it does.
-      throw received > limit ? new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE() : err
+      throw count.bytes > limit ? tooLarge(req) : err
     }
 
-    if (received > limit) {
-      throw new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE()
+    if (count.bytes > limit) {
+      throw tooLarge(req)
     }
 
     const { value, done } = step
@@ -72,10 +50,63 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
       return
     }
 
-    reading = value.type === 'file' ? value.file : undefined
+    count.reading = value.type === 'file' ? value.file : undefined
     yield value
     next = parts.next()
   }
+}
+
+// What a request held to its route's limit has sent busboy. One per request, not per reader call: each call goes on
+// from where the last one stopped, and so does the count.
+interface Count {
+  bytes: number
+  // The file busboy is writing: past the limit it fails, which is what stops busboy.
+  reading: Readable | undefined
+  // Settles once the limit is passed, ending a reader's wait for its next part as the end of the body would: a field
+  // is handed over only once it has ended, and one past the limit may never end.
+  passed: Promise<IteratorReturnResult<undefined>>
+}
+
+const counts = new WeakMap<FastifyRequest, Count>()
+
+// The request's count, started by its first reader just after its first `next()`, which pipes the request into busboy
+// before it returns, so the count starts at the first byte. It stays on once that reader is done: `file()` and its
+// stream spellings hand a file over before it has been read.
+function countOf(req: FastifyRequest, limit: number): Count {
+  const started = counts.get(req)
+  if (started !== undefined) {
+    return started
+  }
+
+  let pass!: () => void
+  const count: Count = {
+    bytes: 0,
+    reading: undefined,
+    passed: new Promise(resolve => {
+      pass = () => resolve({ done: true, value: undefined })
+    }),
+  }
+
+  const counter = (chunk: Buffer) => {
+    count.bytes += chunk.length
+    if (count.bytes > limit) {
+      req.raw.off('data', counter)
+      count.reading?.destroy(tooLarge(req))
+      pass()
+    }
+  }
+
+  req.raw.on('data', counter)
+  counts.set(req, count)
+
+  return count
+}
+
+// Refuses a body over the limit as Fastify refuses one it reads itself: with the connection closed, since the client
+// may still be sending the rest, and nothing will read it.
+function tooLarge(req: FastifyRequest): Error {
+  req.httpContext.header('connection', 'close')
+  return new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE()
 }
 
 // The request's files, held as `partsOf` holds them, its fields passed over.
