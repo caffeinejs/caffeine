@@ -1,8 +1,8 @@
-import { ErrSchemaConversion, $t } from '@caffeinejs/application/schema'
+import { ErrSchemaConversion, ErrSchemaNotRepresentable, $t } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { compileRouteSchema } from '../schema.js'
+import { compileRouteSchema } from './schema.js'
 
 describe('compileRouteSchema', () => {
   it('returns undefined for a route without a schema', () => {
@@ -141,5 +141,20 @@ describe('response slot', () => {
 
     // On the way out a defaulted property is always there.
     expect((compiled!.response as Record<string, { required?: string[] }>)[200].required).toEqual(['limit'])
+  })
+})
+
+describe('an unrepresentable schema at startup', () => {
+  it('throws ErrSchemaNotRepresentable instead of letting Ajv reject the route', () => {
+    try {
+      compileRouteSchema({ body: $t.Object({ note: $t.Undefined() }) }, 'POST /pets')
+      expect.unreachable()
+    } catch (err) {
+      expect(err).toBeInstanceOf(ErrSchemaNotRepresentable)
+      const e = err as ErrSchemaNotRepresentable
+      expect(e.code).toBe('ERR_SCHEMA_NOT_REPRESENTABLE')
+      expect(e.message).toContain('POST /pets body')
+      expect(e.message).not.toContain('must be equal to one of the allowed values')
+    }
   })
 })

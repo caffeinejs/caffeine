@@ -1,10 +1,9 @@
-import { ErrSchemaNotRepresentable, $t } from '@caffeinejs/application/schema'
+import { $t } from '@caffeinejs/application/schema'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
 import { $p, AllowAnonymous, Controller, Get, Args, Post, Schema, type ActionResult } from '../../../../../index.js'
 import { createWebApplication, type Context } from '../../../index.js'
-import { compileRouteSchema } from '../schema.js'
 
 const CreatePet = $t.Object({
   name: $t.String({ minLength: 1 }),
@@ -166,20 +165,5 @@ describe('a Standard Schema on a live route', () => {
     expect((await app.fetch('/pets/zod', json({ title: 'x', count: 1 }))).status).toBe(200)
     expect((await app.fetch('/pets/zod', json({ title: '', count: 1 }))).status).toBe(400)
     expect((await app.fetch('/pets/zod', json({ title: 'x', count: 1.5 }))).status).toBe(400)
-  })
-})
-
-describe('an unrepresentable schema at startup', () => {
-  it('throws ErrSchemaNotRepresentable instead of letting Ajv reject the route', () => {
-    try {
-      compileRouteSchema({ body: $t.Object({ note: $t.Undefined() }) }, 'POST /pets')
-      expect.unreachable()
-    } catch (err) {
-      expect(err).toBeInstanceOf(ErrSchemaNotRepresentable)
-      const e = err as ErrSchemaNotRepresentable
-      expect(e.code).toBe('ERR_SCHEMA_NOT_REPRESENTABLE')
-      expect(e.message).toContain('POST /pets body')
-      expect(e.message).not.toContain('must be equal to one of the allowed values')
-    }
   })
 })
