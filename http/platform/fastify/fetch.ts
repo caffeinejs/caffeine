@@ -1,10 +1,18 @@
 import { Readable } from 'node:stream'
 import { buffer } from 'node:stream/consumers'
 
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from 'fastify'
+
+import { connectionFields } from './response.js'
 
 // The statuses a `Response` is built without a body for: its constructor refuses one.
 const NULL_BODY_STATUSES = new Set([204, 205, 304])
+
+// The methods `fetch` sends under `Content-Length: 0` when they carry no body, as the Fetch standard has it.
+const MEASURED_WITHOUT_BODY = new Set(['POST', 'PUT'])
+
+const FIX_LENGTH = 'Set Content-Length to the length of the body in bytes, or leave it out for the call to measure it'
 
 /**
  * Sends `input` to `fastify` without a socket: the request as `fetch(input, init)` describes it, the answer as the
@@ -27,11 +35,19 @@ export async function fetchInProcess(
   const headers: Record<string, string> = Object.fromEntries(request.headers)
   headers.host ??= new URL(request.url).host
 
+  const chunked = request.headers.has('transfer-encoding')
+  const length = chunked ? undefined : lengthOf(request)
+
+  // The call's own end: the caller's abort, or a body that cannot be sent as its headers describe it.
+  const call = new AbortController()
+  const fail = (error: TypeError): void => call.abort(error)
+
   // The caller's body, read by the call alone, so that hanging up releases it as `fetch` cancels it.
-  const source = request.body === null ? undefined : sourceOf(request.body)
-  // What light-my-request reads the body from. A body under its own length, as a request a server received carries,
-  // streams under it. One without, as a client builds it for its transport to measure, is read whole first.
-  let upload = request.headers.has('content-length') || request.headers.has('transfer-encoding') ? source : undefined
+  const source = request.body === null ? undefined : sourceOf(request.body, length, fail)
+  // What light-my-request reads the body from. A chunked body, or one under a length of its own, as a request a server
+  // received carries, streams. One without, as a client builds it for its transport to measure, is read whole first,
+  // and so is one declared empty: a server never reads that one, so it is found empty or not before it is sent.
+  let upload = chunked || (length !== undefined && length > 0) ? source : undefined
 
   // The injection's own signal: aborting it closes the request the server holds, as a client closing its socket does.
   const injection = new AbortController()
@@ -46,34 +62,43 @@ export async function fetchInProcess(
     source?.destroy()
     injection.abort(reason)
   }
-  const onAbort = (): void => {
-    body?.error(signal.reason)
-    hangUp(signal.reason)
-  }
+  const ended = new Promise<never>((_, reject) => {
+    call.signal.addEventListener(
+      'abort',
+      () => {
+        body?.error(call.signal.reason)
+        hangUp(call.signal.reason)
+        reject(call.signal.reason)
+      },
+      { once: true },
+    )
+  })
+  const onAbort = (): void => call.abort(signal.reason)
   signal.addEventListener('abort', onAbort, { once: true })
+
+  const send = async (): Promise<LightMyRequestResponse> => {
+    if (source !== undefined && upload === undefined) {
+      const whole = await buffer(source)
+      headers['content-length'] = String(whole.byteLength)
+      upload = uploadOf(whole)
+    } else if (source === undefined && length === undefined && MEASURED_WITHOUT_BODY.has(request.method)) {
+      headers['content-length'] = '0'
+    }
+
+    return fastify.inject({
+      method: request.method as InjectOptions['method'],
+      url: request.url,
+      headers,
+      payload: upload,
+      signal: injection.signal,
+      payloadAsStream: true,
+    })
+  }
 
   let result: LightMyRequestResponse
   try {
-    if (source !== undefined && upload === undefined) {
-      const whole = await untilAborted(buffer(source), signal)
-      if (whole.byteLength > 0) {
-        headers['content-length'] = String(whole.byteLength)
-        upload = uploadOf(whole)
-      }
-    }
-
-    result = await untilAborted(
-      fastify.inject({
-        method: request.method as InjectOptions['method'],
-        url: request.url,
-        headers,
-        payload: upload,
-        signal: injection.signal,
-        payloadAsStream: true,
-      }),
-      signal,
-      late => late.stream().destroy(),
-    )
+    // An injection left behind settles unwatched: aborting the injection's signal has already closed its answer.
+    result = await Promise.race([send(), ended])
   } catch (err) {
     signal.removeEventListener('abort', onAbort)
     upload?.destroy()
@@ -108,6 +133,15 @@ export async function fetchInProcess(
     }
   }
 
+  // No connection carried the answer, so nothing in it describes one: a chunked label would sit on bytes that are
+  // already the payload.
+  const describesConnection = connectionFields(responseHeaders)
+  for (const name of [...responseHeaders.keys()]) {
+    if (describesConnection(name)) {
+      responseHeaders.delete(name)
+    }
+  }
+
   const nullBody = NULL_BODY_STATUSES.has(result.statusCode)
 
   try {
@@ -129,18 +163,80 @@ export async function fetchInProcess(
   }
 }
 
-// The caller's body as a Node stream. Closing it cancels the caller's, which `Readable.fromWeb` does too, but this one
-// never ends on its own account: light-my-request ignores a request it is told to close once it has read it all, and
-// failing the stream it reads from is what still reaches it then.
-function sourceOf(body: ReadableStream<Uint8Array>): Readable {
+// The Content-Length the request declares, or `undefined` when it declares none. A request it cannot be sent under is
+// refused before anything is sent, as `fetch` refuses it.
+function lengthOf(request: Request): number | undefined {
+  const declared = request.headers.get('content-length')
+  if (declared === null) {
+    return undefined
+  }
+
+  if (!/^\d+$/.test(declared)) {
+    throw new TypeError(
+      errMessage(`Cannot send the request: its Content-Length "${declared}" is not a count of bytes`)
+        .solutions(FIX_LENGTH)
+        .build(),
+    )
+  }
+
+  const length = Number(declared)
+  if (request.body === null && length > 0) {
+    throw shorter(0, length)
+  }
+
+  return length
+}
+
+function longer(length: number): TypeError {
+  return new TypeError(
+    errMessage(`Cannot send the request body: it is longer than its Content-Length of ${length} bytes`)
+      .solutions(FIX_LENGTH)
+      .build(),
+  )
+}
+
+function shorter(sent: number, length: number): TypeError {
+  return new TypeError(
+    errMessage(`Cannot send the request body: it ended at ${sent} bytes, short of its Content-Length of ${length}`)
+      .solutions(FIX_LENGTH)
+      .build(),
+  )
+}
+
+// The caller's body as a Node stream, framed at `length` when there is one: a byte past it, or an end short of it, is
+// failed rather than sent, so the server never reads more than the request declared. Closing it cancels the caller's,
+// which `Readable.fromWeb` does too, but this one never ends on its own account: light-my-request ignores a request it
+// is told to close once it has read it all, and failing the stream it reads from is what still reaches it then.
+function sourceOf(
+  body: ReadableStream<Uint8Array>,
+  length: number | undefined,
+  fail: (error: TypeError) => void,
+): Readable {
   const reader = body.getReader()
+  let sent = 0
 
   return new Readable({
     autoDestroy: false,
     read() {
       reader.read().then(
-        chunk => this.push(chunk.done ? null : chunk.value),
-        (error: unknown) => this.destroy(error as Error),
+        chunk => {
+          if (chunk.done) {
+            if (length !== undefined && sent < length) {
+              fail(shorter(sent, length))
+            } else {
+              this.push(null)
+            }
+            return
+          }
+
+          sent += chunk.value.byteLength
+          if (length !== undefined && sent > length) {
+            fail(longer(length))
+          } else {
+            this.push(chunk.value)
+          }
+        },
+        (error: unknown) => fail(new TypeError('Cannot send the request body: its stream failed', { cause: error })),
       )
     },
     destroy(error, callback) {
@@ -178,33 +274,5 @@ function bodyOf(
       }
     },
     cancel: hangUp,
-  })
-}
-
-// Settles as `pending` does, or rejects with the signal's reason the moment it aborts. What `pending` resolves with
-// after that goes to `late`, and what it rejects with is nobody's.
-function untilAborted<T>(pending: Promise<T>, signal: AbortSignal, late?: (value: T) => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const abort = (): void => {
-      reject(signal.reason)
-      pending.then(late, () => undefined)
-    }
-
-    if (signal.aborted) {
-      abort()
-      return
-    }
-
-    signal.addEventListener('abort', abort, { once: true })
-    pending.then(
-      value => {
-        signal.removeEventListener('abort', abort)
-        resolve(value)
-      },
-      (error: unknown) => {
-        signal.removeEventListener('abort', abort)
-        reject(error)
-      },
-    )
   })
 }

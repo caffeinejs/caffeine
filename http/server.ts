@@ -18,9 +18,13 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    *
    * The request goes as `fetch(request, options)` would send it, `options` applying over a `Request` as they do there,
    * and the answer comes back as the server wrote it: a redirect is neither followed nor refused, whatever `redirect`
-   * says, and a compressed body is not decoded. The call settles once the server starts writing, and the body streams
-   * as it is written. A request body streams under its own `Content-Length` or `Transfer-Encoding`, as one a server
-   * received carries; without either, it is read whole first.
+   * says, and a compressed body is not decoded. Only the fields that describe a connection are left out, since none
+   * carried it. The call settles once the server starts writing, and the body streams as it is written.
+   *
+   * A request body streams under its own `Content-Length` or `Transfer-Encoding`, as one a server received carries;
+   * without either, it is read whole first and sent under its length, as `fetch` measures it, and a POST or a PUT with
+   * no body goes under `Content-Length: 0`. A body its `Content-Length` does not describe is not sent past it: the call
+   * rejects with a `TypeError`, as `fetch`'s does, or the answer's body fails with one.
    *
    * An abort rejects the call, or fails the body being read, with the signal's reason, and the handler sees its request
    * close (`ctx.signal`).

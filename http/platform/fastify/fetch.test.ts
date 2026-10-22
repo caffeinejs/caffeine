@@ -1,4 +1,5 @@
 import { once } from 'node:events'
+import { gzipSync } from 'node:zlib'
 
 import { KiB, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -342,5 +343,175 @@ describe('a server fetch streaming', () => {
     expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
     expect(handled).toBe(0)
     await cancelled.promise
+  })
+})
+
+// A body is sent as its Content-Length says, or not at all: `fetch` refuses a body its header does not describe, and
+// the server never reads past the length it was told.
+describe('a server fetch framing a request body at its Content-Length', () => {
+  // A route that reads the body it is handed, and records what it held when the read ended.
+  async function serveReader(): Promise<{ server: WebApplication; read: Promise<string>; handled: () => number }> {
+    const read = Promise.withResolvers<string>()
+    let handled = 0
+    const router = new Router('/upload')
+    router
+      .post('/')
+      .extend(bodyAsStream())
+      .bodyLimit(64)
+      .handler(async ctx => {
+        handled++
+        let received = ''
+        try {
+          for await (const chunk of ctx.req.body() as ReadableStream<Uint8Array>) {
+            received += decoder.decode(chunk)
+          }
+        } catch {
+          // The request closed under the read: what arrived before it is the answer.
+        }
+        read.resolve(received)
+        return { received }
+      })
+
+    return { server: await serve(router), read: read.promise, handled: () => handled }
+  }
+
+  const octets = { 'content-type': 'application/octet-stream' }
+
+  it.each([
+    ['a body under a Content-Length of 0', '0', 'ten bytes!'],
+    ['a body longer than its Content-Length', '10', 'twenty-one bytes long'],
+    ['a body shorter than its Content-Length', '10', 'hello'],
+  ])('rejects with a TypeError for %s', async (_, length, body) => {
+    const { server } = await serveReader()
+
+    await expect(
+      server.fetch('/upload', { method: 'POST', headers: { ...octets, 'content-length': length }, body }),
+    ).rejects.toThrow(TypeError)
+  })
+
+  // An endless body under a short header is cut at the header: the route never reads it up to its limit.
+  it('stops an endless body one chunk past its Content-Length, and releases it', async () => {
+    const { server, read } = await serveReader()
+    const cancelled = Promise.withResolvers<void>()
+    const body = new ReadableStream<Uint8Array>({
+      pull: controller => controller.enqueue(encoder.encode('abcd')),
+      cancel: () => cancelled.resolve(),
+    })
+
+    await expect(
+      server.fetch('/upload', {
+        method: 'POST',
+        headers: { ...octets, 'content-length': '8' },
+        body,
+        duplex: 'half',
+      } as RequestInit),
+    ).rejects.toThrow(TypeError)
+    await cancelled.promise
+    // Whatever of the declared 8 bytes reached the route before the request closed, and nothing past them.
+    expect('abcdabcd'.startsWith(await read)).toBe(true)
+  })
+
+  it.each([
+    ['a Content-Length that is not a count of bytes', { headers: { ...octets, 'content-length': 'abc' }, body: 'x' }],
+    ['a Content-Length on a request with no body', { headers: { ...octets, 'content-length': '5' } }],
+  ])('rejects with a TypeError for %s, and sends nothing', async (_, init) => {
+    const { server, handled } = await serveReader()
+
+    await expect(server.fetch('/upload', { method: 'POST', ...init })).rejects.toThrow(TypeError)
+    // The request sent after it is the first the route sees.
+    expect(await (await server.fetch('/upload', { method: 'POST', headers: octets, body: 'ok' })).json()).toEqual({
+      received: 'ok',
+    })
+    expect(handled()).toBe(1)
+  })
+
+  // A body that cannot be read cannot be sent: the call rejects as `fetch` does, naming the failure as its cause.
+  it.each([
+    ['streamed under its Content-Length', { ...octets, 'content-length': '10' }],
+    ['read whole', octets],
+  ])('rejects with a TypeError caused by the failure of a body %s', async (_, headers) => {
+    const { server } = await serveReader()
+    const failure = new Error('the disk went away')
+    const body = new ReadableStream<Uint8Array>({ pull: controller => controller.error(failure) })
+
+    const call = server.fetch('/upload', { method: 'POST', headers, body, duplex: 'half' } as RequestInit)
+
+    await expect(call).rejects.toThrow(TypeError)
+    await expect(call).rejects.toMatchObject({ cause: failure })
+  })
+})
+
+describe('a server fetch answering', () => {
+  // No connection carries the answer, so nothing in it may describe one: forwarded, a chunked label on bytes that are
+  // already the payload would be a message no client can read.
+  it('leaves out the fields that describe a connection', async () => {
+    const router = new Router('/chunks')
+    router.get('/').handler(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start: controller => {
+              controller.enqueue(encoder.encode('AAA'))
+              controller.enqueue(encoder.encode('BBB'))
+              controller.close()
+            },
+          }),
+        ),
+    )
+    const server = await serve(router)
+
+    const res = await server.fetch('/chunks')
+
+    expect(res.headers.get('transfer-encoding')).toBe(null)
+    expect(res.headers.get('connection')).toBe(null)
+    expect(await res.text()).toBe('AAABBB')
+  })
+
+  // A pass-through hands over the bytes the server wrote: decoding them is a client's business.
+  it('hands over a compressed body as the server encoded it, under its Content-Encoding', async () => {
+    const encoded = gzipSync('hello')
+    const router = new Router('/gzip')
+    router.get('/').handler(() => new Response(encoded, { headers: { 'content-encoding': 'gzip' } }))
+    const server = await serve(router)
+
+    const res = await server.fetch('/gzip')
+
+    expect(res.headers.get('content-encoding')).toBe('gzip')
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(encoded)
+  })
+})
+
+describe('a server fetch sending an empty body', () => {
+  async function serveLengths(): Promise<WebApplication> {
+    const router = new Router('/length')
+    const length = (ctx: IContext) => ({ length: ctx.req.header('content-length') ?? null })
+    router.get('/').handler(length)
+    router.post('/').handler(length)
+    router.put('/').handler(length)
+    router.patch('/').handler(length)
+    return serve(router)
+  }
+
+  // `fetch` measures every body it sends, an empty one included.
+  it.each([
+    ['an empty string', ''],
+    ['an empty Uint8Array', new Uint8Array()],
+    ['an empty Blob', new Blob([])],
+  ])('sends %s under a Content-Length of 0', async (_, body) => {
+    const server = await serveLengths()
+
+    expect(await (await server.fetch('/length', { method: 'POST', body })).json()).toEqual({ length: '0' })
+  })
+
+  // The Fetch standard writes `Content-Length: 0` for a POST or a PUT with no body, and none for any other method.
+  it.each([
+    ['POST', '0'],
+    ['PUT', '0'],
+    ['GET', null],
+    ['PATCH', null],
+  ])('sends a %s with no body under a Content-Length of %s', async (method, length) => {
+    const server = await serveLengths()
+
+    expect(await (await server.fetch('/length', { method })).json()).toEqual({ length })
   })
 })
