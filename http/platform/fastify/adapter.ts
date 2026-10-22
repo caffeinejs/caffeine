@@ -51,6 +51,7 @@ import { CONSTRAINTS_PLUGIN } from './constraints/constraints.js'
 import { Context } from './context.js'
 import { cookiePlugin } from './cookie/cookie.js'
 import { globalErrorHandlerPlugin, GlobalErrorHandlerRef } from './error/error.js'
+import { fetchInProcess } from './fetch.js'
 import { installFormBodyParser } from './form/index.js'
 import { installMiddlewares, rebaseMiddlewares, type MiddlewareHook } from './middleware/middleware.js'
 import { pluginName, type AnyPlugin, type Extension } from './plugin.js'
@@ -590,58 +591,8 @@ class AdapterServer implements IAdapterServer<AdapterTypes> {
     return { host: bound.address, port: bound.port, path: '', origin: originOf(scheme, bound.address, bound.port) }
   }
 
-  async fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
-    const fastify = this.#fastify
-    let request: Request
-
-    if (input instanceof Request) {
-      request = input
-    } else {
-      if (typeof input === 'string') {
-        if (input.startsWith('/')) {
-          input = 'http://localhost' + input
-        }
-      }
-
-      request = new Request(input, options)
-    }
-
-    const body = await request.arrayBuffer()
-    const payload = body.byteLength > 0 ? Buffer.from(body) : undefined
-
-    // light-my-request computes content-length from the payload itself;
-    // passing the original value causes a mismatch
-    request.headers.delete('content-length')
-
-    const result = await fastify.inject({
-      method: request.method as any,
-      url: request.url,
-      headers: Object.fromEntries(request.headers),
-      payload,
-    })
-
-    // light-my-request writes every header as a string or a list of them.
-    const responseHeaders = new Headers()
-    for (const [key, value] of Object.entries(result.headers)) {
-      if (Array.isArray(value)) {
-        for (const v of value) {
-          responseHeaders.append(key, String(v))
-        }
-      } else {
-        responseHeaders.set(key, String(value))
-      }
-    }
-
-    // Null-body statuses (204/205/304) must be constructed with a null body, otherwise the Response constructor
-    // throws "Invalid response status code". A 1xx status has no Response at all: the constructor's RangeError
-    // rejects the call.
-    const nullBody = result.statusCode === 204 || result.statusCode === 205 || result.statusCode === 304
-
-    return new Response(nullBody ? null : result.rawPayload, {
-      status: result.statusCode,
-      statusText: result.statusMessage,
-      headers: responseHeaders,
-    })
+  fetch(input: string | URL | Request, options?: RequestInit): Promise<Response> {
+    return fetchInProcess(this.#fastify, input, options)
   }
 }
 
