@@ -5,12 +5,13 @@ import type { FastifyRequest } from 'fastify'
 // route Ajv validates, the formats and options the server configured included.
 //
 // TypeBox checks a format with a function of the value alone, and Fastify compiles one only from a request: the hook
-// validating a request hands it over for the checks it runs, and a format is compiled from that request the first
-// time one is checked, then kept for the process. TypeBox's registry is process-wide too, so with several servers the
-// first to check a format compiles it for all of them. A check run outside a validated request before then refuses,
-// as TypeBox refuses a format it does not know. A format Ajv does not know throws Ajv's error.
+// validating a request hands it over for the checks it runs, and each check compiles its format from that request.
+// Fastify keeps what it compiled in the route's own cache, keyed by the schema object, so each name keeps one schema
+// and each server's Ajv answers for its own routes. A check run outside a validated request refuses, as TypeBox
+// refuses a format it does not know. A format Ajv does not know throws Ajv's error.
 
-const compiled = new Map<string, (value: string) => boolean>()
+// One schema object per format name, so Fastify's cache finds what it compiled before.
+const schemas = new Map<string, { type: 'string'; format: string }>()
 
 let validating: FastifyRequest | undefined
 
@@ -47,14 +48,14 @@ export function checkingFormats<T>(request: FastifyRequest, run: () => T): T {
 }
 
 function checkFormat(name: string, value: string): boolean {
-  let check = compiled.get(name)
-  if (check === undefined) {
-    if (validating === undefined) {
-      return false
-    }
-    const validate = validating.compileValidationSchema({ type: 'string', format: name })
-    check = text => validate(text) === true
-    compiled.set(name, check)
+  if (validating === undefined) {
+    return false
   }
-  return check(value)
+
+  let schema = schemas.get(name)
+  if (schema === undefined) {
+    schema = { type: 'string', format: name }
+    schemas.set(name, schema)
+  }
+  return validating.compileValidationSchema(schema)(value) === true
 }

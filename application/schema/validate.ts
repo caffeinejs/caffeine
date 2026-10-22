@@ -4,7 +4,7 @@ import type { ValueError } from '@sinclair/typebox/errors'
 import { HasTransform, TransformDecode, TransformDecodeError, TransformEncode, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
-import { removeAdditional } from './_additional.js'
+import { compileAdditional } from './_additional.js'
 import { materializeObjects } from './_materialize.js'
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
 
@@ -64,10 +64,12 @@ export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> |
  * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
  * defaults are filled in; its types are converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
  * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is); and its keys are dropped where an object says
- * `additionalProperties: false`, a nullable object included, though never inside another union or an intersection. It
- * is then checked, a `format` by what {@link registerFormat} registered under its name, and its codecs decoded. A
- * Standard Schema runs its own library's validator. Either way a failure reports its first issue only, so the report on
- * a large invalid value is no larger than on a small one.
+ * `additionalProperties: false`, a nullable object included, but for a key a `patternProperties` pattern matches,
+ * which is checked against that pattern's schema. Inside another union or an intersection nothing is dropped, and a
+ * `$t.Object` is checked as TypeBox checks it alone: a key only one of its patterns allows counts as undeclared. The
+ * value is then checked, a `format` by what {@link registerFormat} registered under its name, and its codecs decoded.
+ * A Standard Schema runs its own library's validator. Either way a failure reports its first issue only, so the report
+ * on a large invalid value is no larger than on a small one.
  *
  * The value is worked on in place, not copied: hand it one nobody else holds, such as a request's parsed body.
  *
@@ -122,21 +124,30 @@ export function compileEncoder(schema: AnySchema): ((value: unknown) => unknown)
   return value => TransformEncode(schema as TSchema, [], value)
 }
 
-function compileTypeBox(schema: TSchema): SchemaValidator<unknown> {
+function compileTypeBox(authored: TSchema): (input: unknown) => SchemaValidationResult<unknown> {
+  // The keys an object does not declare, which TypeBox cannot check as Ajv does, are handled apart; TypeBox gets the
+  // rest.
+  const additional = compileAdditional(authored, compileTypeBox)
+  const schema = additional.schema
   const checker = TypeCompiler.Compile(schema)
   const decodes = HasTransform(schema, [])
 
   return input => {
     let value = Value.Default(schema, input)
     value = Value.Convert(schema, value)
-    removeAdditional(schema, value)
+
+    const issue = additional.apply(value)
+    if (issue !== undefined) {
+      return { ok: false, issues: [issue] }
+    }
 
     if (!checker.Check(value)) {
-      const first = checker.Errors(value).First()
-      return {
-        ok: false,
-        issues: [first === undefined ? { path: '', message: 'Expected a valid value' } : errorIssue(first)],
+      const issues: SchemaIssue[] = []
+      for (const error of checker.Errors(value)) {
+        issues.push(errorIssue(error))
+        break
       }
+      return { ok: false, issues }
     }
 
     if (!decodes) {

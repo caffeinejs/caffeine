@@ -361,8 +361,10 @@ app.mount(pets) // before app.bootstrap()
   Schema such as zod is validated by Caffeine instead of Fastify's Ajv: the handler gets decoded values (`?timeout=5s`
   arrives as `5000`), and the library's refinements and transforms run. Nothing coerces such a request first, so a zod
   query number is `z.coerce.number()` and a zod header name is lower-case. A `$t` integer there reads `'1.9'` as `1`,
-  where Ajv refuses it. A codec in a response schema is encoded on
-  the way out (`5000` goes out as `"5s"`), and a typed client sends and reads that text.
+  where Ajv refuses it, and inside a union other than a nullable, or an intersection, a key only the
+  `patternProperties` of a `$t.Object` allow counts as undeclared. A codec in a response schema is encoded on the
+  way out (`5000` goes out as `"5s"`), and a typed client sends and reads that text; a string the handler returns is
+  sent as it is, unencoded.
 - `.group(path, fn)` nests; `.mount(...routers)` (or `.mount(path, ...routers)`) composes ones written elsewhere. A
   nested group starts from its parent's configuration and dependencies and may override them. The same router
   mounted twice into one host is added once. A router nested in itself, directly or through the routers under it,

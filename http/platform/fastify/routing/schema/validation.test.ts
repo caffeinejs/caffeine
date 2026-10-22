@@ -122,6 +122,31 @@ describe('a route whose schema holds a codec', () => {
     expect(await res.json()).toEqual({ query: { timeout: 5000 }, body: { ttl: 60000, note: 'kept' } })
   })
 
+  // As Ajv's `removeAdditional`: a key a pattern allows stays and is checked against that pattern's schema, and a key
+  // that matches nothing goes.
+  it('keeps a key a pattern allows and drops one nothing allows', async () => {
+    const jobs = newRouter('/jobs')
+      .post('/')
+      .schema({
+        body: $t.Object(
+          { ttl: $t.Duration(), name: $t.String() },
+          { additionalProperties: false, patternProperties: { '^x-': $t.String() } },
+        ),
+      })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    const server = await serve(jobs)
+
+    expect(
+      await (await server.fetch('/jobs', json({ ttl: '1m', name: 'cat', 'x-trace': '1', admin: true }))).json(),
+    ).toEqual({
+      body: { ttl: 60000, name: 'cat', 'x-trace': '1' },
+    })
+    const refused = await server.fetch('/jobs', json({ ttl: '1m', name: 'cat', 'x-trace': { id: 1 } }))
+    expect(refused.status).toBe(400)
+    expect(((await refused.json()) as { message: string }).message).toMatch(/^body\/x-trace /)
+  })
+
   // TypeBox refuses every value of a format it does not know: the route checks one as Fastify's Ajv would.
   it("checks a string format as Fastify's Ajv does", async () => {
     const accounts = newRouter('/accounts')
@@ -156,6 +181,29 @@ describe('a route whose schema holds a codec', () => {
     expect((await server.fetch('/codes', json({ ttl: '1m', code: 'abc' }))).status).toBe(400)
   })
 
+  // Each server's own Ajv answers for its routes: a format two servers define apart means on each what that one says.
+  it('checks a format with the Ajv of the server serving the route', async () => {
+    const route = (path: string) =>
+      newRouter(path)
+        .post('/')
+        .schema({ body: $t.Object({ ttl: $t.Duration(), code: $t.String({ format: 'caffeine-review-code' }) }) })
+        .handler(ctx => ({ body: ctx.req.body() }))
+    const withFormat = (format: RegExp) => (it: WebApplication<any, any, any, any>) =>
+      it.server(() => ({ factory: { ajv: { customOptions: { formats: { 'caffeine-review-code': format } } } } }))
+
+    const first = await serve(route('/first'), withFormat(/^(?:..)*$/))
+    const second = withFormat(/^ok$/)(createWebApplication()).mount(route('/second') as never)
+    await second.bootstrap()
+
+    try {
+      expect((await first.fetch('/first', json({ ttl: '1m', code: 'ab' }))).status).toBe(200)
+      expect((await second.fetch('/second', json({ ttl: '1m', code: 'ab' }))).status).toBe(400)
+      expect((await second.fetch('/second', json({ ttl: '1m', code: 'ok' }))).status).toBe(200)
+    } finally {
+      await second.close()
+    }
+  })
+
   // A format the server's Ajv does not know is a mistake in the route, not in the request: it must not pass, and it
   // is not the client's to fix.
   it('answers 500 for a format the server does not know', async () => {
@@ -182,6 +230,67 @@ describe('a route whose schema holds a codec', () => {
     const res = await (await serve(jobs)).fetch('/jobs', { headers: { 'x-tags': 'a,b' } })
 
     expect(await res.json()).toEqual({ tags: ['a', 'b'], host: true })
+  })
+
+  // Fastify lower-cases the header names a schema declares at every depth, an intersection's members included.
+  it('matches a header named in mixed case inside an intersection', async () => {
+    const jobs = newRouter('/jobs')
+      .get('/')
+      .schema({
+        headers: $t.Intersect([$t.Object({ 'X-Tenant': $t.String() }), $t.Object({ timeout: $t.Duration() })]),
+      })
+      .handler(ctx => {
+        const headers = ctx.req.header() as unknown as Record<string, unknown>
+        return { tenant: headers['x-tenant'], timeout: headers.timeout }
+      })
+
+    const res = await (await serve(jobs)).fetch('/jobs', { headers: { 'x-tenant': 'acme', timeout: '5s' } })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ tenant: 'acme', timeout: 5000 })
+  })
+
+  it('matches a header named in mixed case inside a union', async () => {
+    const jobs = newRouter('/jobs')
+      .get('/')
+      .schema({
+        querystring: $t.Object({ timeout: $t.Duration() }),
+        headers: $t.Union([$t.Object({ 'X-Tenant': $t.String() }), $t.Object({ 'X-Org': $t.String() })]),
+      })
+      .handler(ctx => ({ timeout: ctx.req.query().timeout }))
+
+    const res = await (await serve(jobs)).fetch('/jobs?timeout=5s', { headers: { 'x-org': 'acme' } })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ timeout: 5000 })
+  })
+
+  it('matches a header named in mixed case inside a negation', async () => {
+    const jobs = newRouter('/jobs')
+      .get('/')
+      .schema({
+        querystring: $t.Object({ timeout: $t.Duration() }),
+        headers: $t.Not($t.Object({ 'X-Debug': $t.String() })),
+      })
+      .handler(ctx => ({ timeout: ctx.req.query().timeout }))
+
+    const server = await serve(jobs)
+
+    expect((await server.fetch('/jobs?timeout=5s')).status).toBe(200)
+    expect((await server.fetch('/jobs?timeout=5s', { headers: { 'x-debug': 'on' } })).status).toBe(400)
+  })
+
+  // A failure of the whole value has no field to name: the message names the slot, as Fastify's does.
+  it('names the slot alone when the whole value fails', async () => {
+    const jobs = newRouter('/jobs')
+      .post('/')
+      .schema({ body: $t.Object({ ttl: $t.Duration() }) })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    const res = await (await serve(jobs)).fetch('/jobs', json(['1m']))
+
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as { message: string }).message).toBe('body Expected object')
   })
 
   it('flags the request instead of answering 400 when the route attaches validation errors', async () => {
@@ -298,6 +407,21 @@ describe('a route whose response schema holds a codec', () => {
     expect(await res.json()).toEqual({ ttl: '5s' })
   })
 
+  // Fastify serializes a status by its own schema whenever it has one; a fallback that holds a codec is not that schema.
+  it("keeps a status's own schema when only a fallback holds a codec", async () => {
+    const jobs = newRouter('/jobs')
+      .get('/')
+      .schema({ response: { 200: $t.Object({ wait: $t.Integer() }), default: $t.Object({ wait: $t.Duration() }) } })
+      .handler(ctx => (ctx.req.query('late') === undefined ? { wait: 5000 } : ctx.status(503).body({ wait: 5000 })))
+
+    const server = await serve(jobs)
+
+    const res = await server.fetch('/jobs')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ wait: 5000 })
+    expect(await (await server.fetch('/jobs?late')).json()).toEqual({ wait: '5s' })
+  })
+
   // Fastify reads a status class in either case and falls back to `default`; the encoding must follow the same schema.
   it('encodes under a status class written in capitals, and under default', async () => {
     const jobs = newRouter('/jobs')
@@ -394,6 +518,22 @@ describe('a route whose schema is an asynchronous Standard Schema', () => {
 
     expect(res.status).toBe(500)
     expect(handled).toBe(false)
+  })
+
+  // The slots after the library's are validated once it settles, outside the hook Fastify guards: what one of them
+  // throws must still end the request rather than leave it waiting.
+  it('answers 500 for a format the server does not know in a slot validated after it', async () => {
+    const accounts = newRouter('/accounts')
+      .post('/')
+      .schema({
+        body: z.object({ name: z.string().refine(async name => name !== 'taken', 'is taken') }),
+        querystring: $t.Object({ email: $t.String({ format: 'emial' }) }),
+      })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    const res = await (await serve(accounts)).fetch('/accounts?email=ops@example.com', json({ name: 'cat' }))
+
+    expect(res.status).toBe(500)
   })
 })
 

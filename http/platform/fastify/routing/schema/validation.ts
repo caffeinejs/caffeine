@@ -88,24 +88,25 @@ export function attachRequestValidation(
  * `Duration` `5000` a handler returns under `$t.Duration()` goes out as `"5s"`, the text the schema declares.
  *
  * The schema is picked for the status the way Fastify picks its serializer: the exact code, then its class (`2xx`, in
- * either case), then `default`. fast-json-stringify then writes the encoded value as it would any other.
+ * either case), then `default`. fast-json-stringify then writes the encoded value as it would any other. A string
+ * answer is sent as it is, as Fastify sends one, without reaching the hook.
  */
 export function attachResponseEncoding(routeDef: AdapterRouteOptions, schema: RouteValidationSchema): void {
-  const encoders = new Map<string, (value: unknown) => unknown>()
+  // Every status with a schema, mapped to its encoder or to `undefined` for one without a codec: a status that has a
+  // schema is serialized by it, so it never falls back to a class or `default` that has an encoder.
+  const encoders = new Map<string, ((value: unknown) => unknown) | undefined>()
   for (const [status, authored] of Object.entries(schema.response ?? {})) {
-    const encode = compileEncoder(authored)
-    if (encode !== undefined) {
-      encoders.set(status.toLowerCase(), encode)
-    }
+    encoders.set(status.toLowerCase(), compileEncoder(authored))
   }
 
-  if (encoders.size === 0) {
+  if (![...encoders.values()].some(encode => encode !== undefined)) {
     return
   }
 
   addRouteHook(routeDef, 'preSerialization', (_request, reply, payload, done) => {
     const status = String(reply.statusCode)
-    const encode = encoders.get(status) ?? encoders.get(`${status[0]}xx`) ?? encoders.get('default')
+    const key = [status, `${status[0]}xx`, 'default'].find(candidate => encoders.has(candidate))
+    const encode = key === undefined ? undefined : encoders.get(key)
     if (encode === undefined) {
       done(null, payload)
       return
@@ -134,13 +135,13 @@ function slotValidator(authored: AnySchema, slot: RequestSlot, context: string):
     registerRouteFormat(name)
   }
 
-  const policed = applySlotPolicy(slot === 'headers' ? lowerCaseHeaders(authored) : authored, slot)
+  const policed = applySlotPolicy(slot === 'headers' ? (lowerCaseHeaders(authored) as AnySchema) : authored, slot)
   try {
     return compileValidator(policed)
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
+    // TypeBox throws an `Error` for a kind it cannot check.
     throw new ErrConfiguration(
-      errMessage(`Cannot compile the "${context}" schema: TypeBox cannot check it (${reason})`)
+      errMessage(`Cannot compile the "${context}" schema: TypeBox cannot check it (${(error as Error).message})`)
         .solutions(
           'Declare the slot with "$t" types TypeBox checks, such as "$t.String()" in place of "$t.Unsafe(...)"',
           'Register a custom kind with TypeBox\'s "TypeRegistry.Set(...)"',
@@ -151,21 +152,43 @@ function slotValidator(authored: AnySchema, slot: RequestSlot, context: string):
   }
 }
 
-/** A copy of a headers schema with its property names lower-cased, so `Authorization` matches `authorization`. */
-function lowerCaseHeaders<S extends object>(schema: S): S {
-  const { properties, required } = schema as { properties?: Record<string, unknown>; required?: string[] }
-  if (properties === undefined) {
-    return schema
-  }
+/** What a headers schema may say about the names of the headers it checks. */
+interface HeadersSchema {
+  [key: string]: unknown
+  properties?: Record<string, unknown>
+  required?: string[]
+  allOf?: HeadersSchema[]
+  anyOf?: HeadersSchema[]
+  not?: HeadersSchema
+}
 
-  // Spread keeps the TypeBox kind symbols, which the compiler reads.
-  return {
-    ...schema,
-    properties: Object.fromEntries(
-      Object.entries(properties).map(([name, property]) => [name.toLowerCase(), property]),
-    ),
-    ...(required === undefined ? {} : { required: required.map(name => name.toLowerCase()) }),
+/**
+ * A copy of a headers schema with every header name it declares lower-cased, so `Authorization` matches the
+ * `authorization` Node delivers, as Fastify lower-cases a headers schema before Ajv compiles it. The names are those
+ * TypeBox checks against the headers themselves: an object's, and those of each member of an intersection, a union or
+ * a negation.
+ */
+function lowerCaseHeaders(schema: HeadersSchema): HeadersSchema {
+  // Spread keeps a TypeBox schema's kind symbols, which the compiler reads.
+  const copy = { ...schema }
+  if (schema.properties !== undefined) {
+    copy.properties = Object.fromEntries(
+      Object.entries(schema.properties).map(([name, property]) => [name.toLowerCase(), property]),
+    )
   }
+  if (schema.required !== undefined) {
+    copy.required = schema.required.map(name => name.toLowerCase())
+  }
+  if (schema.allOf !== undefined) {
+    copy.allOf = schema.allOf.map(lowerCaseHeaders)
+  }
+  if (schema.anyOf !== undefined) {
+    copy.anyOf = schema.anyOf.map(lowerCaseHeaders)
+  }
+  if (schema.not !== undefined) {
+    copy.not = lowerCaseHeaders(schema.not)
+  }
+  return copy
 }
 
 function validateFrom(

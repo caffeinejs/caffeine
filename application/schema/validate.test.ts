@@ -229,6 +229,43 @@ describe('compileValidator with TypeBox', () => {
       value: { open: { a: 'x', more: 1 }, closed: { a: 'y' }, either: { a: 'z' } },
     })
   })
+
+  // As Ajv's `removeAdditional`: wherever a closed object is reached, through an array, a tuple, a record or a schema
+  // for undeclared keys, and nowhere a schema says nothing about.
+  it('drops an undeclared key in every closed object a value reaches, and none in a value left unchecked', () => {
+    const Closed = $t.Object({ a: $t.String() }, { additionalProperties: false })
+    const validate = compileValidator(
+      $t.Object({
+        list: $t.Array(Closed),
+        pair: $t.Tuple([Closed, $t.Integer()]),
+        named: $t.Record($t.String(), Closed),
+        extra: $t.Object({}, { additionalProperties: Closed }),
+        either: $t.Union([$t.Null(), Closed]),
+        any: $t.Unknown(),
+      }),
+    )
+
+    expect(
+      validate({
+        list: [{ a: 'l', more: 1 }],
+        pair: [{ a: 'p', more: 2 }, '3'],
+        named: { k: { a: 'n', more: 4 } },
+        extra: { k: { a: 'e', more: 5 } },
+        either: { a: 'u', more: 6 },
+        any: [{ more: 7 }],
+      }),
+    ).toEqual({
+      ok: true,
+      value: {
+        list: [{ a: 'l' }],
+        pair: [{ a: 'p' }, 3],
+        named: { k: { a: 'n' } },
+        extra: { k: { a: 'e' } },
+        either: { a: 'u' },
+        any: [{ more: 7 }],
+      },
+    })
+  })
 })
 
 describe('compileValidator with a Standard Schema', () => {
@@ -265,6 +302,57 @@ describe('compileValidator with a Standard Schema', () => {
       issues: [{ path: 'name', message: 'is taken' }],
     })
     await expect(validate({ name: 'free' })).resolves.toEqual({ ok: true, value: { name: 'free' } })
+  })
+})
+
+// TypeBox's object check ignores `patternProperties`; Ajv, which validates HTTP requests, honours them.
+describe('compileValidator with patternProperties', () => {
+  const Body = $t.Object(
+    { ttl: $t.Duration(), name: $t.String() },
+    { additionalProperties: false, patternProperties: { '^x-': $t.String() } },
+  )
+
+  it('keeps a key a pattern allows, and drops one nothing allows where undeclared keys are forbidden', () => {
+    expect(compileValidator(Body)({ ttl: '1m', name: 'cat', 'x-trace': '1', admin: true })).toEqual({
+      ok: true,
+      value: { ttl: 60000, name: 'cat', 'x-trace': '1' },
+    })
+  })
+
+  it("checks a key a pattern allows against that pattern's schema", () => {
+    expect(compileValidator(Body)({ ttl: '1m', name: 'cat', 'x-trace': { id: 1 } })).toEqual({
+      ok: false,
+      issues: [{ path: 'x-trace', message: 'Expected string', code: expect.any(String) }],
+    })
+  })
+
+  it("converts and decodes a key's value as its pattern's schema says", () => {
+    const validate = compileValidator(
+      $t.Object({}, { patternProperties: { '^t-': $t.Duration(), '^n-': $t.Integer() } }),
+    )
+
+    expect(validate({ 't-wait': '5s', 'n-count': '3', other: true })).toEqual({
+      ok: true,
+      value: { 't-wait': 5000, 'n-count': 3, other: true },
+    })
+  })
+
+  it('checks a key no pattern allows against an additionalProperties schema', () => {
+    const validate = compileValidator(
+      $t.Object({}, { additionalProperties: $t.Integer(), patternProperties: { '^x-': $t.String() } }),
+    )
+
+    expect(validate({ 'x-a': 's', n: '5' })).toEqual({ ok: true, value: { 'x-a': 's', n: 5 } })
+    expect(validate({ 'x-a': 's', n: 'z' })).toMatchObject({ ok: false, issues: [{ path: 'n' }] })
+  })
+
+  it('checks a key a pattern allows in an object nested in an array, naming where it failed', () => {
+    const validate = compileValidator($t.Array($t.Object({}, { patternProperties: { '^x-': $t.String() } })))
+
+    expect(validate([{ 'x-a': 'ok' }, { 'x-b': { id: 1 } }])).toEqual({
+      ok: false,
+      issues: [{ path: '1.x-b', message: 'Expected string', code: expect.any(String) }],
+    })
   })
 })
 

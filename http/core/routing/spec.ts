@@ -85,7 +85,8 @@ export interface RouteValidationSchema {
    *
    * Beware that a response schema *serializes*, it does not validate. Fastify hands it to fast-json-stringify,
    * which emits only the declared properties — a handler returning a non-conforming object is not rejected, its
-   * extra fields are simply omitted. A codec in it is encoded first, so `$t.Duration()` sends `"5s"`.
+   * extra fields are simply omitted. A codec in it is encoded first, so `$t.Duration()` sends `"5s"`. A string the
+   * handler returns is sent as it is, as Fastify sends one, so no codec runs on it.
    */
   response?: Record<number | string, AnySchema>
 }
