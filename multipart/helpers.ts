@@ -80,6 +80,8 @@ export interface MultipartHelpers {
  * Each call starts from wherever the parser currently stands, so one request is read once: a `file()` after a
  * `files()` finds nothing left. The request must have been routed through `@fastify/multipart` — the plugin's
  * `.with(() => multipartPlugin())` — and the route must not also declare a body picker, which would consume the same bytes.
+ *
+ * A route that declares a `bodyLimit` holds the whole upload to it, in place of the plugin's `limits.fileSize`.
  */
 export function multipart(ctx: MultipartContext): MultipartHelpers {
   const request = ctx.platform.request

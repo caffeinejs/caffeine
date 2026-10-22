@@ -1,10 +1,14 @@
+import { once } from 'node:events'
+import { connect } from 'node:net'
+
 import { $t } from '@caffeinejs/application/schema'
 import { $p, Args, Controller, Post, Router } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import type { Context } from '@caffeinejs/http/fastify'
+import { KiB } from '@caffeinejs/std/bytes'
 import { describe, it, expect } from 'vitest'
 
-import { multipart, multipartPlugin } from './index.js'
+import { multipart, multipartPlugin, type MultipartContext, type MultipartOptions } from './index.js'
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 const BOUNDARY = '----TestBoundary123'
@@ -441,5 +445,257 @@ describe('a route declaring its upload with $t.File', () => {
     ])
 
     expect(res.status).toBe(400)
+  })
+})
+
+describe('multipart(ctx) on a route that declares a bodyLimit', () => {
+  type Reader = (ctx: MultipartContext) => Promise<number[]>
+
+  // Each reader reading the whole upload, as a handler would, and answering the size of every file it read: a file
+  // cut short shows as a smaller size, rather than passing as whole.
+  const readers: Record<string, Reader> = {
+    'file()': async ctx => {
+      const file = await multipart(ctx).file()
+      return file === undefined ? [] : [file.size]
+    },
+    'files()': async ctx => (await multipart(ctx).files()).map(file => file.size),
+    'formData()': async ctx => {
+      const sizes: number[] = []
+      const form = await multipart(ctx).formData()
+      form.forEach(value => {
+        if (typeof value !== 'string') {
+          sizes.push(value.size)
+        }
+      })
+      return sizes
+    },
+    'streamFile()': async ctx => {
+      const sizes: number[] = []
+      for await (const node of multipart(ctx).streamFile()) {
+        let size = 0
+        for await (const chunk of (node as MultipartFileNode).stream) {
+          size += (chunk as Buffer).length
+        }
+        sizes.push(size)
+      }
+      return sizes
+    },
+    'webStreamFile()': async ctx => {
+      const sizes: number[] = []
+      for (const file of await readStream(multipart(ctx).webStreamFile())) {
+        sizes.push((await readFileBytes(file.stream)).length)
+      }
+      return sizes
+    },
+  }
+
+  /** An application whose `POST /limited/upload` declares `limit` and reads the upload with `read`. */
+  function limitedApp(read: Reader, limit: number, options?: MultipartOptions) {
+    const router = new Router('/limited')
+    router
+      .post('/upload')
+      .bodyLimit(limit)
+      .handler(async ctx => ({ sizes: await read(ctx) }))
+
+    return createWebApplication({})
+      .with(() => multipartPlugin(options))
+      .mount(router)
+  }
+
+  const listen = () => ({ listener: { host: '127.0.0.1', port: 0 } })
+
+  const file = (bytes: number) =>
+    multipartBody([{ name: 'upload', filename: 'upload.bin', content: 'x'.repeat(bytes) }])
+
+  // A route that lowers its limit to refuse large uploads must refuse them, whichever reader its handler uses.
+  it.each(Object.entries(readers))(
+    "%s refuses an upload over the route's limit with 413, as a JSON body over it is refused",
+    async (_, read) => {
+      const app = limitedApp(read, 1 * KiB)
+      await app.bootstrap()
+
+      try {
+        const over = await app.fetch('/limited/upload', {
+          method: 'POST',
+          headers: multipartHeaders(),
+          body: file(4096),
+        })
+        expect(over.status).toBe(413)
+        expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+
+        const within = await app.fetch('/limited/upload', {
+          method: 'POST',
+          headers: multipartHeaders(),
+          body: file(512),
+        })
+        expect(within.status).toBe(200)
+        expect(await within.json()).toEqual({ sizes: [512] })
+      } finally {
+        await app.close()
+      }
+    },
+  )
+
+  // The limit caps the body, not each file on its own: two files under it are refused once together they are over.
+  it('holds the whole upload to the limit, not each file alone', async () => {
+    const app = limitedApp(readers['files()'], 1 * KiB)
+    await app.bootstrap()
+
+    try {
+      const res = await app.fetch('/limited/upload', {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: multipartBody([
+          { name: 'a', filename: 'a.bin', content: 'x'.repeat(600) },
+          { name: 'b', filename: 'b.bin', content: 'x'.repeat(600) },
+        ]),
+      })
+
+      expect(res.status).toBe(413)
+      expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+    } finally {
+      await app.close()
+    }
+  })
+
+  // A request that declares its length is refused on that alone, before a byte of it is parsed. This one declares
+  // more than the limit and sends a whole form well under it, then waits: only the declared length can answer it.
+  it('refuses an upload whose Content-Length is over the limit before reading it', async () => {
+    const app = limitedApp(readers['files()'], 1 * KiB).server(listen)
+    await app.run()
+
+    const socket = connect(app.address!.port, '127.0.0.1')
+
+    try {
+      await once(socket, 'connect')
+      socket.write(
+        'POST /limited/upload HTTP/1.1\r\nHost: localhost\r\n' +
+          `Content-Type: multipart/form-data; boundary=${BOUNDARY}\r\nContent-Length: 2048\r\n\r\n`,
+      )
+      socket.write(file(16))
+
+      const [response] = (await once(socket, 'data')) as [Buffer]
+      expect(response.toString().split('\r\n')[0]).toBe('HTTP/1.1 413 Payload Too Large')
+    } finally {
+      socket.destroy()
+      await app.close()
+    }
+  })
+
+  // The route's limit is the more specific setting, so it replaces the plugin's `fileSize` upwards too.
+  it.each(Object.entries(readers))(
+    "%s reads a file whole on a route whose limit is over the plugin's fileSize",
+    async (_, read) => {
+      const app = limitedApp(read, 16 * KiB, { limits: { fileSize: 1 * KiB } })
+      await app.bootstrap()
+
+      try {
+        const res = await app.fetch('/limited/upload', {
+          method: 'POST',
+          headers: multipartHeaders(),
+          body: file(4096),
+        })
+
+        expect(res.status).toBe(200)
+        expect(await res.json()).toEqual({ sizes: [4096] })
+      } finally {
+        await app.close()
+      }
+    },
+  )
+
+  // An application that raised the plugin's `fileSize` for its uploads keeps it on every route that declares no
+  // limit: the server's own limit, kept low for JSON, does not reach them.
+  it("leaves a route that declares no limit to the plugin's limits, not the server's", async () => {
+    const router = new Router('/unlimited')
+    router.post('/upload').handler(async ctx => ({ sizes: (await multipart(ctx).files()).map(f => f.size) }))
+
+    const app = createWebApplication({})
+      .server(() => ({ factory: { bodyLimit: 1 * KiB } }))
+      .with(() => multipartPlugin({ limits: { fileSize: 16 * KiB } }))
+      .mount(router)
+    await app.bootstrap()
+
+    try {
+      const res = await app.fetch('/unlimited/upload', {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: file(4096),
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ sizes: [4096] })
+    } finally {
+      await app.close()
+    }
+  })
+
+  describe('a chunked upload, which declares no length to refuse up front', () => {
+    /** Posts `body` to `app` in 256-byte chunks, then holds the request open until `held` settles, if given. */
+    function chunked(app: { address?: { origin: string } }, body: Uint8Array, held?: Promise<void>) {
+      let sent = 0
+      const stream = new ReadableStream<Uint8Array>({
+        async pull(controller) {
+          if (sent < body.length) {
+            controller.enqueue(body.slice(sent, sent + 256))
+            sent += 256
+            return
+          }
+
+          await held
+          controller.close()
+        },
+      })
+
+      return fetch(`${app.address!.origin}/limited/upload`, {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: stream,
+        duplex: 'half',
+      } as RequestInit)
+    }
+
+    it.each(Object.entries(readers))(
+      "%s fails the upload as it passes the route's limit, with 413",
+      async (_, read) => {
+        const app = limitedApp(read, 1 * KiB).server(listen)
+        await app.run()
+
+        try {
+          const over = await chunked(app, file(4096))
+          expect(over.status).toBe(413)
+          expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+
+          const within = await chunked(app, file(512))
+          expect(within.status).toBe(200)
+          expect(await within.json()).toEqual({ sizes: [512] })
+        } finally {
+          await app.close()
+        }
+      },
+    )
+
+    // A field is handed over only once it has been read to its end, so a limit checked only part by part would wait
+    // for the rest of an oversized one; the client here never sends it.
+    it('answers 413 once a field passes the limit, without waiting for the field to end', async () => {
+      const app = limitedApp(readers['formData()'], 1 * KiB).server(listen)
+      await app.run()
+
+      let release!: () => void
+      const held = new Promise<void>(resolve => (release = resolve))
+      const opened = new TextEncoder().encode(
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="note"\r\n\r\n${'x'.repeat(4096)}`,
+      )
+
+      try {
+        const res = await chunked(app, opened, held)
+
+        expect(res.status).toBe(413)
+        expect(await res.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+      } finally {
+        release()
+        await app.close()
+      }
+    })
   })
 })

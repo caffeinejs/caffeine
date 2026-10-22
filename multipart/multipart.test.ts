@@ -1,7 +1,8 @@
 import type { Readable } from 'node:stream'
 
-import { Controller, Post, Args, $p } from '@caffeinejs/http'
+import { Controller, Post, Args, BodyLimit, $p } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { KiB } from '@caffeinejs/std/bytes'
 import { describe, it, expect } from 'vitest'
 
 import { $multipart, multipartPlugin } from './index.js'
@@ -331,6 +332,43 @@ describe('Multipart file upload', () => {
     expect(received!.name).toBe('photo.jpg')
     expect(received!.type).toBe('image/jpeg')
     expect(Buffer.from(await received!.arrayBuffer()).toString()).toBe('jpeg-bytes')
+  })
+
+  // A route that lowers its limit to refuse large uploads must refuse them, however the route was declared.
+  it("file() — refuses an upload over the route's @BodyLimit with 413, as a JSON body over it is refused", async () => {
+    @BodyLimit(1 * KiB)
+    @Controller('/wf1l')
+    class Wf1lController {
+      @Post('/upload')
+      @Args([$multipart.file()])
+      async upload(f: File | undefined) {
+        return { size: f?.size }
+      }
+    }
+
+    void [Wf1lController]
+
+    const app = multipartApp()
+    await app.bootstrap()
+
+    const upload = (bytes: number) =>
+      app.fetch('/wf1l/upload', {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'x'.repeat(bytes) }]),
+      })
+
+    try {
+      const over = await upload(4096)
+      expect(over.status).toBe(413)
+      expect(await over.json()).toMatchObject({ code: 'FST_ERR_CTP_BODY_TOO_LARGE' })
+
+      const within = await upload(512)
+      expect(within.status).toBe(200)
+      expect(await within.json()).toEqual({ size: 512 })
+    } finally {
+      await app.close()
+    }
   })
 
   it('file() via @Args builder — $multipart.file() works inside a builder that closes over it', async () => {
