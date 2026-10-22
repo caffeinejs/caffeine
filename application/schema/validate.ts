@@ -1,11 +1,10 @@
-import type { TSchema } from '@sinclair/typebox'
+import { FormatRegistry, type TSchema } from '@sinclair/typebox'
 import { TypeCompiler } from '@sinclair/typebox/compiler'
 import type { ValueError } from '@sinclair/typebox/errors'
 import { HasTransform, TransformDecode, TransformDecodeError, TransformEncode, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
 import { removeAdditional } from './_additional.js'
-import { registerFormats } from './_formats.js'
 import { materializeObjects } from './_materialize.js'
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
 
@@ -46,8 +45,6 @@ export function validateSchema<S extends AnySchema>(
   input: unknown,
   options: SchemaValidateOptions = {},
 ): SchemaValidationResult<InferSchema<S>> {
-  registerFormats()
-
   if (isTypeBoxSchema(schema)) {
     return validateTypeBox(schema, input, options) as SchemaValidationResult<InferSchema<S>>
   }
@@ -66,7 +63,8 @@ export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> |
  * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
  * defaults are filled in, its types converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
  * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is), and its keys dropped where an object says `additionalProperties: false`, a nullable object included, though
- * never inside another union or an intersection. It is then checked, and its codecs decoded. A Standard Schema runs its own library's validator. Either
+ * never inside another union or an intersection. It is then checked, a `format` by what {@link registerFormat} registered
+ * under its name, and its codecs decoded. A Standard Schema runs its own library's validator. Either
  * way a failure reports its first issue only, so the report on a large invalid value is no larger than on a small one.
  *
  * The value is worked on in place, not copied: hand it one nobody else holds, such as a request's parsed body.
@@ -83,6 +81,19 @@ export function compileValidator<S extends AnySchema>(schema: S): SchemaValidato
     return compileTypeBox(schema) as SchemaValidator<InferSchema<S>>
   }
   return compileStandard(schema as StandardSchemaV1) as SchemaValidator<InferSchema<S>>
+}
+
+/**
+ * Teaches the TypeBox validators a string format, so a schema's `format: name` is checked with `check`. A format already
+ * registered under that name is left as it is: the first registration wins.
+ *
+ * TypeBox refuses every value of a format it does not know, so a schema naming one fails all input until it is
+ * registered.
+ */
+export function registerFormat(name: string, check: (value: string) => boolean): void {
+  if (!FormatRegistry.Has(name)) {
+    FormatRegistry.Set(name, check)
+  }
 }
 
 /**
@@ -109,8 +120,6 @@ export function compileEncoder(schema: AnySchema): ((value: unknown) => unknown)
 }
 
 function compileTypeBox(schema: TSchema): SchemaValidator<unknown> {
-  registerFormats()
-
   const checker = TypeCompiler.Compile(schema)
   const decodes = HasTransform(schema, [])
 

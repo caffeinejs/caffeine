@@ -16,6 +16,7 @@ import type { FastifyError, FastifyRequest, FastifySchemaValidationError } from 
 import { ErrConfiguration } from '../../../../core/error/common.js'
 import type { RouteValidationSchema } from '../../../../core/routing/spec.js'
 import { addRouteHook, type AdapterRouteOptions } from '../route_options.js'
+import { registerAjvFormats } from './_formats.js'
 import { applySlotPolicy, REQUEST_SLOTS, type RequestSlot } from './slots.js'
 
 /** What turns validation failures into the error a route answers with, as Fastify's `schemaErrorFormatter` does. */
@@ -54,8 +55,8 @@ export function validatesRequest(schema: RouteValidationSchema): boolean {
  * It answers as Fastify does. The slots run in Fastify's order, and the first that fails ends the request with
  * Fastify's error: status 400 and code `FST_ERR_VALIDATION` unless `formatter` set its own, with `validation` and
  * `validationContext`. With `attachValidation` that error is put on `request.validationError` instead, and the request
- * goes on unvalidated. A TypeBox slot drops undeclared keys where Ajv would, under the same per-slot policy, and its
- * header names are matched lower-cased, as Node delivers them.
+ * goes on unvalidated. A TypeBox slot drops undeclared keys where Ajv would, under the same per-slot policy, checks a
+ * `format` as Ajv's `ajv-formats` does, and matches its header names lower-cased, as Node delivers them.
  *
  * `formatter` is the route's own or the server's; one a plugin set with `setSchemaErrorFormatter(...)` is not seen.
  *
@@ -68,6 +69,8 @@ export function attachRequestValidation(
   context: string,
   formatter: ValidationErrorFormatter = formatValidationErrors,
 ): void {
+  registerAjvFormats()
+
   const validators: SlotValidator[] = []
   for (const slot of REQUEST_SLOTS) {
     const authored = validatedSlot(schema, slot)

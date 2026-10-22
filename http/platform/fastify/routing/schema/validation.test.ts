@@ -122,6 +122,23 @@ describe('a route whose schema holds a codec', () => {
     expect(await res.json()).toEqual({ query: { timeout: 5000 }, body: { ttl: 60000, note: 'kept' } })
   })
 
+  // TypeBox refuses every value of a format it does not know: the route checks one as Fastify's Ajv would.
+  it("checks a string format as Fastify's Ajv does", async () => {
+    const accounts = newRouter('/accounts')
+      .post('/')
+      .schema({ body: $t.Object({ ttl: $t.Duration(), email: $t.String({ format: 'email' }) }) })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    const server = await serve(accounts)
+
+    expect(await (await server.fetch('/accounts', json({ ttl: '1m', email: 'ops@example.com' }))).json()).toEqual({
+      body: { ttl: 60000, email: 'ops@example.com' },
+    })
+    const refused = await server.fetch('/accounts', json({ ttl: '1m', email: 'ops' }))
+    expect(refused.status).toBe(400)
+    expect(((await refused.json()) as { message: string }).message).toMatch(/^body\/email /)
+  })
+
   // Node delivers header names lower-cased, and the headers a request always carries are not the schema's to drop.
   it('matches a header named in mixed case, and leaves the other headers in place', async () => {
     const jobs = newRouter('/jobs')

@@ -1,16 +1,16 @@
-import { FormatRegistry } from '@sinclair/typebox'
+import { registerFormat } from '@caffeinejs/application/schema'
 import { fullFormats } from 'ajv-formats/dist/formats.js'
 
 let registered = false
 
-// Teaches TypeBox the string formats Fastify's Ajv checks, `ajv-formats`' full set, so `format: 'email'` means the same
-// whichever of the two validates a value. TypeBox refuses every value of a format it does not know, so without this a
-// schema naming one fails all input.
+// Teaches the validators Caffeine runs on a route the string formats Fastify's Ajv checks, `ajv-formats`' full set, so
+// `format: 'email'` means the same on a route whichever of the two validates it. A format already registered under a
+// name is left as it is.
 //
-// A format already registered is left as it is, whoever registered it. The number formats (`int32`, `int64`, `float`,
-// `double`) are not registered: TypeBox reads `format` on a string alone. `ajv-formats` publishes the list of formats
-// from this file alone; its package declares no `exports`, so the path is the one its own entry imports.
-export function registerFormats(): void {
+// The number formats (`int32`, `int64`, `float`, `double`) are not registered: TypeBox reads `format` on a string alone.
+// `ajv-formats` publishes the list of formats from this file alone; its package declares no `exports`, so the path is
+// the one its own entry imports.
+export function registerAjvFormats(): void {
   if (registered) {
     return
   }
@@ -18,8 +18,8 @@ export function registerFormats(): void {
 
   for (const [name, format] of Object.entries(fullFormats)) {
     const check = checkOf(format)
-    if (check !== undefined && !FormatRegistry.Has(name)) {
-      FormatRegistry.Set(name, check)
+    if (check !== undefined) {
+      registerFormat(name, check)
     }
   }
 }

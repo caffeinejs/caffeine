@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { isStandardSchema, isTypeBoxSchema, schemaVendor } from './schema.js'
 import { $t } from './t.js'
-import { compileEncoder, compileValidator, hasCodec, validateSchema } from './validate.js'
+import { compileEncoder, compileValidator, hasCodec, registerFormat, validateSchema } from './validate.js'
 
 describe('schema detection', () => {
   it('tells the two dialects apart', () => {
@@ -229,16 +229,6 @@ describe('compileValidator with TypeBox', () => {
       value: { open: { a: 'x', more: 1 }, closed: { a: 'y' }, either: { a: 'z' } },
     })
   })
-
-  // TypeBox refuses every value of a format it does not know; the formats Fastify's Ajv checks are registered.
-  it('checks a string format as Ajv does', () => {
-    const validate = compileValidator(
-      $t.Object({ email: $t.String({ format: 'email' }), id: $t.String({ format: 'uuid' }) }),
-    )
-
-    expect(validate({ email: 'a@b.co', id: '6f1c6f5e-4b1a-4c8e-9a39-0d5c2b7d1e2f' }).ok).toBe(true)
-    expect(validate({ email: 'a@b.co', id: 'not-a-uuid' })).toMatchObject({ ok: false, issues: [{ path: 'id' }] })
-  })
 })
 
 describe('compileValidator with a Standard Schema', () => {
@@ -275,6 +265,21 @@ describe('compileValidator with a Standard Schema', () => {
       issues: [{ path: 'name', message: 'is taken' }],
     })
     await expect(validate({ name: 'free' })).resolves.toEqual({ ok: true, value: { name: 'free' } })
+  })
+})
+
+// TypeBox refuses every value of a format it does not know, until one is registered under its name.
+describe('registerFormat', () => {
+  it('teaches the validators a format, and keeps the first registration of a name', () => {
+    const validate = compileValidator($t.Object({ code: $t.String({ format: 'caffeine-test-even-length' }) }))
+
+    expect(validate({ code: 'ab' }).ok).toBe(false)
+
+    registerFormat('caffeine-test-even-length', value => value.length % 2 === 0)
+    registerFormat('caffeine-test-even-length', () => true)
+
+    expect(validate({ code: 'ab' }).ok).toBe(true)
+    expect(validate({ code: 'abc' }).ok).toBe(false)
   })
 })
 
