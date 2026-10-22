@@ -22,9 +22,14 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    * carried it. The call settles once the server starts writing, and the body streams as it is written.
    *
    * A request body streams under its own `Content-Length` or `Transfer-Encoding`, as one a server received carries;
-   * without either, it is read whole first and sent under its length, as `fetch` measures it, and a POST or a PUT with
-   * no body goes under `Content-Length: 0`. A body its `Content-Length` does not describe is not sent past it: the call
-   * rejects with a `TypeError`, as `fetch`'s does, or the answer's body fails with one.
+   * without either, it is read whole first and sent under its length, as `fetch` measures it. A request with no body
+   * goes under the length `fetch` writes, whatever it declares: `0` for a method that expects a body, such as POST, PUT
+   * or PATCH, and none for any other.
+   *
+   * What `fetch` would refuse to send is refused with a `TypeError`, as `fetch` refuses it: a `Content-Length` that is
+   * not a count of bytes, or one beside `Transfer-Encoding`; a body its `Content-Length` does not describe, which is
+   * never sent past it; and a body whose stream fails, its failure the `cause`. The call rejects with it, or the
+   * answer's body fails with it once the answer is handed over.
    *
    * An abort rejects the call, or fails the body being read, with the signal's reason, and the handler sees its request
    * close (`ctx.signal`).

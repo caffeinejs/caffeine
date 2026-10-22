@@ -9,8 +9,8 @@ import { connectionFields } from './response.js'
 // The statuses a `Response` is built without a body for: its constructor refuses one.
 const NULL_BODY_STATUSES = new Set([204, 205, 304])
 
-// The methods `fetch` sends under `Content-Length: 0` when they carry no body, as the Fetch standard has it.
-const MEASURED_WITHOUT_BODY = new Set(['POST', 'PUT'])
+// The methods Node's `fetch` sends under `Content-Length: 0` when they carry no body: undici's `expectsPayload`.
+const EXPECTS_PAYLOAD = new Set(['POST', 'PUT', 'PATCH', 'QUERY', 'PROPFIND', 'PROPPATCH'])
 
 const FIX_LENGTH = 'Set Content-Length to the length of the body in bytes, or leave it out for the call to measure it'
 
@@ -36,7 +36,16 @@ export async function fetchInProcess(
   headers.host ??= new URL(request.url).host
 
   const chunked = request.headers.has('transfer-encoding')
-  const length = chunked ? undefined : lengthOf(request)
+  const length = lengthOf(request, chunked)
+
+  // `fetch` measures a request with no body itself, whatever length it declares: `0` for a method that expects a
+  // body, none for any other.
+  if (request.body === null) {
+    delete headers['content-length']
+    if (!chunked && EXPECTS_PAYLOAD.has(request.method)) {
+      headers['content-length'] = '0'
+    }
+  }
 
   // The call's own end: the caller's abort, or a body that cannot be sent as its headers describe it.
   const call = new AbortController()
@@ -81,8 +90,8 @@ export async function fetchInProcess(
       const whole = await buffer(source)
       headers['content-length'] = String(whole.byteLength)
       upload = uploadOf(whole)
-    } else if (source === undefined && length === undefined && MEASURED_WITHOUT_BODY.has(request.method)) {
-      headers['content-length'] = '0'
+      // An abort that came as the body ended: an injection started under it would fail an answer nothing hears.
+      call.signal.throwIfAborted()
     }
 
     return fastify.inject({
@@ -97,7 +106,7 @@ export async function fetchInProcess(
 
   let result: LightMyRequestResponse
   try {
-    // An injection left behind settles unwatched: aborting the injection's signal has already closed its answer.
+    // An injection left behind settles unwatched: none starts after the call's end, and that end has closed its answer.
     result = await Promise.race([send(), ended])
   } catch (err) {
     signal.removeEventListener('abort', onAbort)
@@ -163,12 +172,21 @@ export async function fetchInProcess(
   }
 }
 
-// The Content-Length the request declares, or `undefined` when it declares none. A request it cannot be sent under is
-// refused before anything is sent, as `fetch` refuses it.
-function lengthOf(request: Request): number | undefined {
+// The Content-Length the request declares, or `undefined` when it declares none or is chunked. One that is not a count
+// of bytes is refused before anything is sent, as `fetch` refuses it, and so is one beside Transfer-Encoding, which no
+// sender may write (RFC 9112 §6.1).
+function lengthOf(request: Request, chunked: boolean): number | undefined {
   const declared = request.headers.get('content-length')
   if (declared === null) {
     return undefined
+  }
+
+  if (chunked) {
+    throw new TypeError(
+      errMessage('Cannot send the request: it carries both Transfer-Encoding and Content-Length')
+        .solutions('Leave out Content-Length on a chunked body')
+        .build(),
+    )
   }
 
   if (!/^\d+$/.test(declared)) {
@@ -179,12 +197,7 @@ function lengthOf(request: Request): number | undefined {
     )
   }
 
-  const length = Number(declared)
-  if (request.body === null && length > 0) {
-    throw shorter(0, length)
-  }
-
-  return length
+  return Number(declared)
 }
 
 function longer(length: number): TypeError {
@@ -197,7 +210,9 @@ function longer(length: number): TypeError {
 
 function shorter(sent: number, length: number): TypeError {
   return new TypeError(
-    errMessage(`Cannot send the request body: it ended at ${sent} bytes, short of its Content-Length of ${length}`)
+    errMessage(
+      `Cannot send the request body: it ended at ${sent} bytes, short of its Content-Length of ${length} bytes`,
+    )
       .solutions(FIX_LENGTH)
       .build(),
   )
@@ -220,6 +235,11 @@ function sourceOf(
     read() {
       reader.read().then(
         chunk => {
+          // A read that settles once the call has let the body go belongs to no one.
+          if (this.destroyed) {
+            return
+          }
+
           if (chunk.done) {
             if (length !== undefined && sent < length) {
               fail(shorter(sent, length))

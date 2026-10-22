@@ -1,7 +1,7 @@
 import { once } from 'node:events'
 import { gzipSync } from 'node:zlib'
 
-import { KiB, MiB } from '@caffeinejs/std/bytes'
+import { Byte, KiB, MiB } from '@caffeinejs/std/bytes'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { Router, bodyAsStream, type IContext, type WebApplication } from '../../index.js'
@@ -349,21 +349,25 @@ describe('a server fetch streaming', () => {
 // A body is sent as its Content-Length says, or not at all: `fetch` refuses a body its header does not describe, and
 // the server never reads past the length it was told.
 describe('a server fetch framing a request body at its Content-Length', () => {
-  // A route that reads the body it is handed, and records what it held when the read ended.
-  async function serveReader(): Promise<{ server: WebApplication; read: Promise<string>; handled: () => number }> {
+  // A route that reads the body it is handed, tells `onRead` what it holds after each chunk, and records what it held
+  // when the read ended.
+  async function serveReader(
+    onRead: (received: string) => void = () => undefined,
+  ): Promise<{ server: WebApplication; read: Promise<string>; handled: () => number }> {
     const read = Promise.withResolvers<string>()
     let handled = 0
     const router = new Router('/upload')
     router
       .post('/')
       .extend(bodyAsStream())
-      .bodyLimit(64)
+      .bodyLimit(64 * Byte)
       .handler(async ctx => {
         handled++
         let received = ''
         try {
           for await (const chunk of ctx.req.body() as ReadableStream<Uint8Array>) {
             received += decoder.decode(chunk)
+            onRead(received)
           }
         } catch {
           // The request closed under the read: what arrived before it is the answer.
@@ -378,23 +382,52 @@ describe('a server fetch framing a request body at its Content-Length', () => {
   const octets = { 'content-type': 'application/octet-stream' }
 
   it.each([
-    ['a body under a Content-Length of 0', '0', 'ten bytes!'],
-    ['a body longer than its Content-Length', '10', 'twenty-one bytes long'],
-    ['a body shorter than its Content-Length', '10', 'hello'],
-  ])('rejects with a TypeError for %s', async (_, length, body) => {
+    [
+      'a body under a Content-Length of 0',
+      '0',
+      'ten bytes!',
+      'Cannot send the request body: it is longer than its Content-Length of 0 bytes',
+    ],
+    [
+      'a body longer than its Content-Length',
+      '10',
+      'twenty-one bytes long',
+      'Cannot send the request body: it is longer than its Content-Length of 10 bytes',
+    ],
+    [
+      'a body shorter than its Content-Length',
+      '10',
+      'hello',
+      'Cannot send the request body: it ended at 5 bytes, short of its Content-Length of 10 bytes',
+    ],
+  ])('rejects with a TypeError for %s', async (_, length, body, message) => {
     const { server } = await serveReader()
 
-    await expect(
-      server.fetch('/upload', { method: 'POST', headers: { ...octets, 'content-length': length }, body }),
-    ).rejects.toThrow(TypeError)
+    const call = server.fetch('/upload', { method: 'POST', headers: { ...octets, 'content-length': length }, body })
+
+    await expect(call).rejects.toThrow(TypeError)
+    await expect(call).rejects.toThrow(message)
   })
 
-  // An endless body under a short header is cut at the header: the route never reads it up to its limit.
+  // An endless body under a short header is cut at the header: the route gets the declared bytes, and never reads on
+  // up to its limit.
   it('stops an endless body one chunk past its Content-Length, and releases it', async () => {
-    const { server, read } = await serveReader()
+    const eight = Promise.withResolvers<void>()
+    const { server, read } = await serveReader(received => {
+      if (received.length === 8) {
+        eight.resolve()
+      }
+    })
     const cancelled = Promise.withResolvers<void>()
+    let pulls = 0
     const body = new ReadableStream<Uint8Array>({
-      pull: controller => controller.enqueue(encoder.encode('abcd')),
+      pull: async controller => {
+        // The chunk past the length waits for the route to hold the eight bytes before it.
+        if (++pulls === 3) {
+          await eight.promise
+        }
+        controller.enqueue(encoder.encode('abcd'))
+      },
       cancel: () => cancelled.resolve(),
     })
 
@@ -405,19 +438,58 @@ describe('a server fetch framing a request body at its Content-Length', () => {
         body,
         duplex: 'half',
       } as RequestInit),
-    ).rejects.toThrow(TypeError)
+    ).rejects.toThrow('Cannot send the request body: it is longer than its Content-Length of 8 bytes')
     await cancelled.promise
-    // Whatever of the declared 8 bytes reached the route before the request closed, and nothing past them.
-    expect('abcdabcd'.startsWith(await read)).toBe(true)
+    expect(await read).toBe('abcdabcd')
+  })
+
+  // A server may answer before it has read the whole body: the answer is its own, and the rest of the upload is let go.
+  it('hands over an answer the server gave before reading the whole body, and releases the rest', async () => {
+    const router = new Router('/first')
+    router
+      .post('/')
+      .extend(bodyAsStream())
+      .handler(async ctx => {
+        const { value } = await (ctx.req.body() as ReadableStream<Uint8Array>).getReader().read()
+        return { first: decoder.decode(value) }
+      })
+    const server = await serve(router)
+    const cancelled = Promise.withResolvers<void>()
+    // Open: the rest of the declared ten bytes never comes.
+    const body = new ReadableStream<Uint8Array>({
+      start: controller => controller.enqueue(encoder.encode('hello')),
+      cancel: () => cancelled.resolve(),
+    })
+
+    const res = await server.fetch('/first', {
+      method: 'POST',
+      headers: { ...octets, 'content-length': '10' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    expect(await res.json()).toEqual({ first: 'hello' })
+    await cancelled.promise
   })
 
   it.each([
-    ['a Content-Length that is not a count of bytes', { headers: { ...octets, 'content-length': 'abc' }, body: 'x' }],
-    ['a Content-Length on a request with no body', { headers: { ...octets, 'content-length': '5' } }],
-  ])('rejects with a TypeError for %s, and sends nothing', async (_, init) => {
+    [
+      'a Content-Length that is not a count of bytes',
+      { ...octets, 'content-length': 'abc' },
+      'Cannot send the request: its Content-Length "abc" is not a count of bytes',
+    ],
+    [
+      'a Content-Length beside Transfer-Encoding',
+      { ...octets, 'content-length': '2', 'transfer-encoding': 'chunked' },
+      'Cannot send the request: it carries both Transfer-Encoding and Content-Length',
+    ],
+  ])('rejects with a TypeError for %s, and sends nothing', async (_, headers, message) => {
     const { server, handled } = await serveReader()
 
-    await expect(server.fetch('/upload', { method: 'POST', ...init })).rejects.toThrow(TypeError)
+    const call = server.fetch('/upload', { method: 'POST', headers, body: 'ok' })
+
+    await expect(call).rejects.toThrow(TypeError)
+    await expect(call).rejects.toThrow(message)
     // The request sent after it is the first the route sees.
     expect(await (await server.fetch('/upload', { method: 'POST', headers: octets, body: 'ok' })).json()).toEqual({
       received: 'ok',
@@ -437,6 +509,7 @@ describe('a server fetch framing a request body at its Content-Length', () => {
     const call = server.fetch('/upload', { method: 'POST', headers, body, duplex: 'half' } as RequestInit)
 
     await expect(call).rejects.toThrow(TypeError)
+    await expect(call).rejects.toThrow('Cannot send the request body: its stream failed')
     await expect(call).rejects.toMatchObject({ cause: failure })
   })
 })
@@ -489,6 +562,7 @@ describe('a server fetch sending an empty body', () => {
     router.post('/').handler(length)
     router.put('/').handler(length)
     router.patch('/').handler(length)
+    router.delete('/').handler(length)
     return serve(router)
   }
 
@@ -503,15 +577,24 @@ describe('a server fetch sending an empty body', () => {
     expect(await (await server.fetch('/length', { method: 'POST', body })).json()).toEqual({ length: '0' })
   })
 
-  // The Fetch standard writes `Content-Length: 0` for a POST or a PUT with no body, and none for any other method.
+  // `fetch` measures a request with no body itself, whatever length it declares: `0` for a method that expects a body,
+  // none for any other, and none for one sent chunked.
   it.each([
-    ['POST', '0'],
-    ['PUT', '0'],
-    ['GET', null],
-    ['PATCH', null],
-  ])('sends a %s with no body under a Content-Length of %s', async (method, length) => {
+    ['a POST', { method: 'POST' }, '0'],
+    ['a PUT', { method: 'PUT' }, '0'],
+    ['a PATCH', { method: 'PATCH' }, '0'],
+    ['a GET', { method: 'GET' }, null],
+    ['a DELETE', { method: 'DELETE' }, null],
+    ['a POST declaring 5 bytes', { method: 'POST', headers: { 'content-length': '5' } }, '0'],
+    ['a GET declaring 5 bytes', { method: 'GET', headers: { 'content-length': '5' } }, null],
+    [
+      'a chunked POST',
+      { method: 'POST', headers: { 'transfer-encoding': 'chunked', 'content-type': 'text/plain' } },
+      null,
+    ],
+  ])('sends %s with no body under the Content-Length fetch writes', async (_, init, length) => {
     const server = await serveLengths()
 
-    expect(await (await server.fetch('/length', { method })).json()).toEqual({ length })
+    expect(await (await server.fetch('/length', init)).json()).toEqual({ length })
   })
 })
