@@ -450,6 +450,7 @@ export class Adapter implements IAdapter<AdapterTypes> {
       compilers: this.#compilers,
       globalErrorHandler,
       handlerTimeout: factory.handlerTimeout,
+      schemaErrorFormatter: factory.schemaErrorFormatter,
     }
 
     for (const router of routeGroups) {
