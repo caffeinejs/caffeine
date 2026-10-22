@@ -1,43 +1,60 @@
 import { registerFormat } from '@caffeinejs/application/schema'
-import { fullFormats } from 'ajv-formats/dist/formats.js'
+import type { FastifyRequest } from 'fastify'
 
-let registered = false
-
-// Teaches the validators Caffeine runs on a route the string formats Fastify's Ajv checks, `ajv-formats`' full set, so
-// `format: 'email'` means the same on a route whichever of the two validates it. A format already registered under a
-// name is left as it is.
+// A `format` on a route Caffeine validates is checked by the server's own Ajv, so it means there what it means on a
+// route Ajv validates, the formats and options the server configured included.
 //
-// The number formats (`int32`, `int64`, `float`, `double`) are not registered: TypeBox reads `format` on a string
-// alone. `ajv-formats` publishes the list of formats from this file alone; its package declares no `exports`, so the
-// path is the one its own entry imports.
-export function registerAjvFormats(): void {
-  if (registered) {
-    return
-  }
-  registered = true
+// TypeBox checks a format with a function of the value alone, and Fastify compiles one only from a request: the hook
+// validating a request hands it over for the checks it runs, and a format is compiled from that request the first
+// time one is checked, then kept for the process. TypeBox's registry is process-wide too, so with several servers the
+// first to check a format compiles it for all of them. A check run outside a validated request before then refuses,
+// as TypeBox refuses a format it does not know. A format Ajv does not know throws Ajv's error.
 
-  for (const [name, format] of Object.entries(fullFormats)) {
-    const check = checkOf(format)
-    if (check !== undefined) {
-      registerFormat(name, check)
+const compiled = new Map<string, (value: string) => boolean>()
+
+let validating: FastifyRequest | undefined
+
+// Every `format` a schema names, at any depth.
+export function formatsIn(schema: unknown, found: Set<string> = new Set()): Set<string> {
+  if (Array.isArray(schema)) {
+    for (const item of schema) {
+      formatsIn(item, found)
     }
+  } else if (typeof schema === 'object' && schema !== null) {
+    for (const [key, value] of Object.entries(schema)) {
+      if (key === 'format' && typeof value === 'string') {
+        found.add(value)
+      } else {
+        formatsIn(value, found)
+      }
+    }
+  }
+  return found
+}
+
+export function registerRouteFormat(name: string): void {
+  registerFormat(name, value => checkFormat(name, value))
+}
+
+// Runs `run`, synchronous, with `request` the one its format checks compile from.
+export function checkingFormats<T>(request: FastifyRequest, run: () => T): T {
+  validating = request
+  try {
+    return run()
+  } finally {
+    validating = undefined
   }
 }
 
-function checkOf(format: unknown): ((value: string) => boolean) | undefined {
-  // `true` marks a format Ajv only names, such as `binary` and `password`.
-  if (format === true) {
-    return () => true
+function checkFormat(name: string, value: string): boolean {
+  let check = compiled.get(name)
+  if (check === undefined) {
+    if (validating === undefined) {
+      return false
+    }
+    const validate = validating.compileValidationSchema({ type: 'string', format: name })
+    check = text => validate(text) === true
+    compiled.set(name, check)
   }
-  if (format instanceof RegExp) {
-    return value => format.test(value)
-  }
-  if (typeof format === 'function') {
-    return value => (format as (value: string) => boolean)(value)
-  }
-  if (typeof format === 'object' && format !== null) {
-    const { type, validate } = format as { type?: string; validate?: unknown }
-    return type === undefined || type === 'string' ? checkOf(validate) : undefined
-  }
-  return undefined
+  return check(value)
 }

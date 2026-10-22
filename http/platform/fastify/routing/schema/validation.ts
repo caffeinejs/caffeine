@@ -16,7 +16,7 @@ import type { FastifyError, FastifyRequest, FastifySchemaValidationError } from 
 import { ErrConfiguration } from '../../../../core/error/common.js'
 import type { RouteValidationSchema } from '../../../../core/routing/spec.js'
 import { addRouteHook, type AdapterRouteOptions } from '../route_options.js'
-import { registerAjvFormats } from './_formats.js'
+import { checkingFormats, formatsIn, registerRouteFormat } from './_formats.js'
 import { applySlotPolicy, REQUEST_SLOTS, type RequestSlot } from './slots.js'
 
 /** What turns validation failures into the error a route answers with, as Fastify's `schemaErrorFormatter` does. */
@@ -56,7 +56,8 @@ export function validatesRequest(schema: RouteValidationSchema): boolean {
  * Fastify's error: status 400 and code `FST_ERR_VALIDATION` unless `formatter` set its own, with `validation` and
  * `validationContext`. With `attachValidation` that error is put on `request.validationError` instead, and the request
  * goes on unvalidated. A TypeBox slot drops undeclared keys where Ajv would, under the same per-slot policy, checks a
- * `format` as Ajv's `ajv-formats` does, and matches its header names lower-cased, as Node delivers them.
+ * `format` with the server's own Ajv, and matches its header names lower-cased, as Node delivers them. A `format` that
+ * Ajv does not know fails the request that checks it with Ajv's error.
  *
  * `formatter` is the route's own or the server's; one a plugin set with `setSchemaErrorFormatter(...)` is not seen.
  *
@@ -69,8 +70,6 @@ export function attachRequestValidation(
   context: string,
   formatter: ValidationErrorFormatter = formatValidationErrors,
 ): void {
-  registerAjvFormats()
-
   const validators: SlotValidator[] = []
   for (const slot of REQUEST_SLOTS) {
     const authored = validatedSlot(schema, slot)
@@ -131,6 +130,10 @@ function slotValidator(authored: AnySchema, slot: RequestSlot, context: string):
     return compileValidator(authored)
   }
 
+  for (const name of formatsIn(authored)) {
+    registerRouteFormat(name)
+  }
+
   const policed = applySlotPolicy(slot === 'headers' ? lowerCaseHeaders(authored) : authored, slot)
   try {
     return compileValidator(policed)
@@ -174,7 +177,7 @@ function validateFrom(
 ): void {
   for (let i = index; i < validators.length; i++) {
     const { slot, validate } = validators[i]
-    const result = validate(request[SLOT_PROPERTY[slot]])
+    const result = checkingFormats(request, () => validate(request[SLOT_PROPERTY[slot]]))
 
     // A Standard Schema that validates asynchronously: the rest of the slots wait for it.
     if (result instanceof Promise) {

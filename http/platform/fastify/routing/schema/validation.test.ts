@@ -139,6 +139,36 @@ describe('a route whose schema holds a codec', () => {
     expect(((await refused.json()) as { message: string }).message).toMatch(/^body\/email /)
   })
 
+  // The server's own Ajv checks the format, so one its `ajv` options define holds on a route Caffeine validates too.
+  it("checks a format the server's Ajv options define", async () => {
+    const codes = newRouter('/codes')
+      .post('/')
+      .schema({ body: $t.Object({ ttl: $t.Duration(), code: $t.String({ format: 'caffeine-even-length' }) }) })
+      .handler(ctx => ({ body: ctx.req.body() }))
+    const withFormat = (it: WebApplication<any, any, any, any>) =>
+      it.server(() => ({ factory: { ajv: { customOptions: { formats: { 'caffeine-even-length': /^(?:..)*$/ } } } } }))
+
+    const server = await serve(codes, withFormat)
+
+    expect(await (await server.fetch('/codes', json({ ttl: '1m', code: 'ab' }))).json()).toEqual({
+      body: { ttl: 60000, code: 'ab' },
+    })
+    expect((await server.fetch('/codes', json({ ttl: '1m', code: 'abc' }))).status).toBe(400)
+  })
+
+  // A format the server's Ajv does not know is a mistake in the route, not in the request: it must not pass, and it
+  // is not the client's to fix.
+  it('answers 500 for a format the server does not know', async () => {
+    const accounts = newRouter('/accounts')
+      .post('/')
+      .schema({ body: $t.Object({ ttl: $t.Duration(), email: $t.String({ format: 'emial' }) }) })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    const res = await (await serve(accounts)).fetch('/accounts', json({ ttl: '1m', email: 'ops@example.com' }))
+
+    expect(res.status).toBe(500)
+  })
+
   // Node delivers header names lower-cased, and the headers a request always carries are not the schema's to drop.
   it('matches a header named in mixed case, and leaves the other headers in place', async () => {
     const jobs = newRouter('/jobs')
