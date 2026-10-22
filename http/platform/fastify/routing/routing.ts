@@ -19,6 +19,12 @@ import { answer } from '../response.js'
 import { type CaffeineRouteConfig, type CompiledRouteMetadata } from './route_config.js'
 import { type AdapterRouteOptions } from './route_options.js'
 import { compileRouteSchema } from './schema/schema.js'
+import {
+  attachRequestValidation,
+  attachResponseEncoding,
+  validatesRequest,
+  type ValidationErrorFormatter,
+} from './schema/validation.js'
 
 /** The `onRequest` hook shape Fastify takes, which is the one a route source builds its group hook in. */
 type OnRequestHook = (req: FastifyRequest, res: FastifyReply, done: (err?: Error) => void) => void
@@ -34,6 +40,8 @@ export interface RouteGroupRegistration<REQ> {
   globalErrorHandler: GlobalErrorHandler
   /** The server's own `handlerTimeout`, when it set one. */
   handlerTimeout?: number
+  /** The server's own `schemaErrorFormatter`, when it set one, for the routes whose request Caffeine validates. */
+  schemaErrorFormatter?: ValidationErrorFormatter
 }
 
 /**
@@ -48,7 +56,7 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   router: IRouteGroup<REQ>,
   registration: RouteGroupRegistration<REQ>,
 ): void {
-  const { installScope, compilers, globalErrorHandler, handlerTimeout } = registration
+  const { installScope, compilers, globalErrorHandler, handlerTimeout, schemaErrorFormatter } = registration
   const basePath = router.path
   const routes = router.routes
 
@@ -195,6 +203,14 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
               RawReplyDefaultExpression<RawServerBase>
             >
           ).route(def)
+
+        // After the route's own options, so a `fst` hook runs first and a `fst` formatter is the one used.
+        if (route.schema !== undefined) {
+          if (validatesRequest(route.schema)) {
+            attachRequestValidation(routeDef, route.schema, routeDef.schemaErrorFormatter ?? schemaErrorFormatter)
+          }
+          attachResponseEncoding(routeDef, route.schema)
+        }
 
         if (route.guards !== undefined && route.guards.length > 0) {
           // Built here rather than in the hook: it is the same object for every request on this route.

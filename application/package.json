@@ -91,6 +91,7 @@
     "@caffeinejs/std": "*",
     "@sinclair/typebox": "^0.34.52",
     "@standard-schema/spec": "^1.1.0",
+    "ajv-formats": "^3.0.1",
     "yaml": "^2.9.1"
   },
   "peerDependencies": {

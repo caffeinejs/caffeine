@@ -20,21 +20,37 @@ describe('compileRouteSchema', () => {
     })
   })
 
-  it('converts a Standard Schema slot and strips the dialect marker Ajv would reject', () => {
-    const compiled = compileRouteSchema({ body: z.object({ name: z.string() }) }, 'POST /pets')
+  it('converts a Standard Schema response and strips the dialect marker Ajv would reject', () => {
+    const compiled = compileRouteSchema({ response: { 200: z.object({ name: z.string() }) } }, 'GET /pets')
+    const response = compiled?.response as Record<string, unknown>
 
-    expect(compiled?.body).not.toHaveProperty('$schema')
-    expect(compiled?.body).toMatchObject({ type: 'object', properties: { name: { type: 'string' } } })
+    expect(response[200]).not.toHaveProperty('$schema')
+    expect(response[200]).toMatchObject({ type: 'object', properties: { name: { type: 'string' } } })
   })
 
   it('throws ErrSchemaConversion naming the route and slot', () => {
     try {
-      compileRouteSchema({ body: z.object({ id: z.bigint() }) }, 'POST /pets')
+      compileRouteSchema({ response: { 200: z.object({ id: z.bigint() }) } }, 'GET /pets')
       expect.unreachable()
     } catch (err) {
       expect(err).toBeInstanceOf(ErrSchemaConversion)
-      expect((err as ErrSchemaConversion).message).toContain('POST /pets body')
+      expect((err as ErrSchemaConversion).message).toContain('GET /pets response.200')
     }
+  })
+
+  // Caffeine validates such a request with the schema's own library, so Ajv is handed none of it.
+  it('hands Fastify no request slot of a route holding a Standard Schema or a codec', () => {
+    const zod = compileRouteSchema(
+      { params: $t.Object({ id: $t.String() }), body: z.object({ name: z.string() }) },
+      'POST /pets/:id',
+    )
+    const codec = compileRouteSchema(
+      { querystring: $t.Object({ timeout: $t.Duration() }), response: { 200: $t.Object({ ok: $t.Boolean() }) } },
+      'GET /jobs',
+    )
+
+    expect(zod).toEqual({})
+    expect(Object.keys(codec ?? {})).toEqual(['response'])
   })
 })
 
@@ -121,16 +137,9 @@ describe('response slot', () => {
   })
 
   it('projects a Standard Schema response from its output side', () => {
-    const compiled = compileRouteSchema(
-      {
-        body: z.object({ limit: z.number().default(10) }),
-        response: { 200: z.object({ limit: z.number().default(10) }) },
-      },
-      'POST /pets',
-    )
+    const compiled = compileRouteSchema({ response: { 200: z.object({ limit: z.number().default(10) }) } }, 'GET /pets')
 
-    // On the way in the client may omit a defaulted property; on the way out it is always there.
-    expect(compiled?.body).not.toHaveProperty('required')
+    // On the way out a defaulted property is always there.
     expect((compiled!.response as Record<string, { required?: string[] }>)[200].required).toEqual(['limit'])
   })
 })

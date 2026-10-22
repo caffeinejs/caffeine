@@ -1,4 +1,4 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
+import type { AnySchema, InferSchema, InferWire } from '@caffeinejs/application/schema'
 
 import type { CookieSecret, CookieUnsignResult } from './core/cookie/signer.js'
 import type { RouteValidationSchema } from './core/routing/spec.js'
@@ -130,6 +130,13 @@ export interface IRequest<
  */
 export type InferSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
   S extends Record<Slot, infer Schema extends AnySchema> ? InferSchema<Schema> : Fallback
+
+/**
+ * As {@link InferSlot}, for the client: what it sends in the slot, where a codec such as `$t.Duration()` is still the
+ * text the server decodes.
+ */
+export type InferWireSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
+  S extends Record<Slot, infer Schema extends AnySchema> ? InferWire<Schema, 'input'> : Fallback
 
 export type InferParams<S> = InferSlot<S, 'params', Record<string, string>>
 export type InferQuery<S> = InferSlot<S, 'querystring', Record<string, string>>

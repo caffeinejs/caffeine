@@ -41,10 +41,12 @@ describe('nullable union normalization', () => {
     expect(compiled.properties.nested.properties.note).toEqual({ type: ['integer', 'null'] })
   })
 
+  // A Standard Schema request is validated by its own library; its response is still serialized from JSON Schema.
   it('normalizes a Standard Schema nullable too', () => {
-    expect(bodyOf({ body: z.object({ note: z.string().nullable() }) }).properties.note).toEqual({
-      type: ['string', 'null'],
-    })
+    const compiled = compileRouteSchema({ response: { 200: z.object({ note: z.string().nullable() }) } }, 'GET /pets')
+    const response = JSON.parse(JSON.stringify(compiled?.response))
+
+    expect(response[200].properties.note).toEqual({ type: ['string', 'null'] })
   })
 
   it('refuses to collapse a nullable literal, where hoisting const would reject null', () => {

@@ -357,6 +357,11 @@ app.mount(pets) // before app.bootstrap()
 - The handler takes the context first and the injected dependencies second — `undefined` when nothing was injected.
 - `ctx.req.body()` is the parsed body. `ctx.req.param()` / `.query()` / `.header()` are typed from the schema, and
   path parameters are typed from the path when no schema declares them.
+- A route whose request schema holds a codec (`$t.Duration()`, `$t.Bytes()`, `$t.List()`, `$t.JSON()`) or a Standard
+  Schema such as zod is validated by Caffeine instead of Fastify's Ajv: the handler gets decoded values (`?timeout=5s`
+  arrives as `5000`), and the library's refinements and transforms run. Nothing coerces such a request first, so a zod
+  query number is `z.coerce.number()` and a zod header name is lower-case. A codec in a response schema is encoded on
+  the way out (`5000` goes out as `"5s"`), and a typed client sends and reads that text.
 - `.group(path, fn)` nests; `.mount(...routers)` (or `.mount(path, ...routers)`) composes ones written elsewhere. A
   nested group starts from its parent's configuration and dependencies and may override them. The same router
   mounted twice into one host is added once. A router nested in itself, directly or through the routers under it,

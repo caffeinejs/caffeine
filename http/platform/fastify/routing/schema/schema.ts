@@ -3,6 +3,7 @@ import type { FastifySchema } from 'fastify'
 
 import type { RouteValidationSchema } from '../../../../core/routing/spec.js'
 import { normalizeForAjv } from './_normalize.js'
+import { validatesRequest } from './validation.js'
 
 /** The request slots, in the order they appear in an error message. */
 const REQUEST_SLOTS = ['params', 'querystring', 'headers', 'body'] as const
@@ -13,6 +14,9 @@ const REQUEST_SLOTS = ['params', 'querystring', 'headers', 'body'] as const
  * Called once per route while routes are being registered, so nothing schema-related happens on the request path:
  * Fastify compiles the result into Ajv validators (and fast-json-stringify serializers) at startup, and an
  * unconvertible schema fails the process before it ever listens.
+ *
+ * A route whose request Caffeine validates itself ({@link validatesRequest}) hands Fastify none of its request slots,
+ * only its responses.
  *
  * @param context - Identifies the route in failures, e.g. `POST /pets`.
  */
@@ -26,7 +30,10 @@ export function compileRouteSchema(
 
   const compiled: FastifySchema = {}
 
-  for (const slot of REQUEST_SLOTS) {
+  // Caffeine validates the request of such a route itself, so Fastify is handed none of its slots.
+  const requestSlots = validatesRequest(schema) ? [] : REQUEST_SLOTS
+
+  for (const slot of requestSlots) {
     const authored = schema[slot]
     if (authored !== undefined) {
       // A file body is streamed, not parsed: `request.body` is never populated, so a validator built from it

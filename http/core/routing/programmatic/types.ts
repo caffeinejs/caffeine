@@ -1,8 +1,8 @@
-import type { AnySchema, InferSchema } from '@caffeinejs/application/schema'
+import type { AnySchema, InferWire } from '@caffeinejs/application/schema'
 
 import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
-import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../../request.js'
+import type { InferBody, InferHeaders, InferParams, InferQuery, InferWireSlot } from '../../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
@@ -171,14 +171,17 @@ export interface RouteDef<
 /**
  * The descriptor a router accumulates for one route it declared: everything {@link RouteDef} holds, worked out
  * from the route's method, its full path, the schema it validates against and what its handler returns.
+ *
+ * It describes the route as a client sees it, on the wire: a codec such as `$t.Duration()` is the text sent and
+ * received, not the value the handler works with.
  */
 export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O> = RouteDef<
   M,
   P,
-  ParamsOf<S, P>,
-  InferQuery<S>,
-  InferHeaders<S>,
-  InferBody<S>,
+  S extends { params: AnySchema } ? InferWireSlot<S, 'params', never> : Simplify<PathParams<P>>,
+  InferWireSlot<S, 'querystring', Record<string, string>>,
+  InferWireSlot<S, 'headers', Record<string, string>>,
+  InferWireSlot<S, 'body', unknown>,
   OutputOf<S, O>,
   ResponsesOf<S>
 >
@@ -197,9 +200,9 @@ export type OutputOf<S extends RouteValidationSchema, O> = S extends { response:
   : HandlerOutput<O>
 
 type SuccessBody<R> = R extends { 200: infer S extends AnySchema }
-  ? InferSchema<S>
+  ? InferWire<S, 'output'>
   : R extends { 201: infer S extends AnySchema }
-    ? InferSchema<S>
+    ? InferWire<S, 'output'>
     : never
 
 type HandlerOutput<O> =
@@ -213,7 +216,7 @@ type HandlerOutput<O> =
  * `number` stops `res.status === 200` narrowing to the 200 body. {@link OutputOf} still reads what it always read.
  */
 export type ResponsesOf<S extends RouteValidationSchema> = S extends { response: infer R }
-  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferSchema<R[K]> : never }
+  ? { [K in Extract<keyof R, number> as K]: R[K] extends AnySchema ? InferWire<R[K], 'output'> : never }
   : unknown
 
 /** Re-bases a set of route descriptors under a prefix, for a router mounted inside another. */

@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { isStandardSchema, isTypeBoxSchema, schemaVendor } from './schema.js'
 import { $t } from './t.js'
-import { validateSchema } from './validate.js'
+import { compileEncoder, compileValidator, hasCodec, validateSchema } from './validate.js'
 
 describe('schema detection', () => {
   it('tells the two dialects apart', () => {
@@ -164,5 +164,133 @@ describe('validateSchema with materialize', () => {
       ok: true,
       value: { root: { name: 'n' } },
     })
+  })
+})
+
+describe('compileValidator with TypeBox', () => {
+  const Query = $t.Object({ timeout: $t.Duration(), tags: $t.Optional($t.List($t.String())), page: $t.Integer() })
+
+  it('converts, checks and decodes, so the caller gets the value its type promises', () => {
+    const validate = compileValidator(Query)
+
+    expect(validate({ timeout: '5s', tags: 'a,b', page: '2' })).toEqual({
+      ok: true,
+      value: { timeout: 5000, tags: ['a', 'b'], page: 2 },
+    })
+  })
+
+  // A large invalid value must not cost a list of every failure: the first is all a caller gets.
+  it('reports the first issue only', () => {
+    const validate = compileValidator($t.Object({ ids: $t.Array($t.Integer()) }))
+
+    const result = validate({ ids: ['x', 'y', 'z'] })
+
+    expect(result).toEqual({
+      ok: false,
+      issues: [{ path: 'ids.0', message: 'Expected integer', code: expect.any(String) }],
+    })
+  })
+
+  it('reports text a codec cannot read as an issue on its field', () => {
+    const validate = compileValidator($t.Object({ db: $t.JSON($t.Object({ host: $t.String() })) }))
+
+    expect(validate({ db: '{not json' })).toEqual({
+      ok: false,
+      issues: [{ path: 'db', message: 'The value is not valid JSON', code: 'Decode' }],
+    })
+  })
+
+  it('works on the value it is handed rather than a copy', () => {
+    const input = { page: '2', extra: 'x' }
+
+    const result = compileValidator($t.Object({ page: $t.Integer() }))(input)
+
+    expect(result.ok === true && result.value).toBe(input)
+    expect(input).toEqual({ page: 2 })
+  })
+
+  it('keeps undeclared keys with clean off, for a value whose other keys are not the caller to drop', () => {
+    const validate = compileValidator($t.Object({ 'x-tags': $t.List($t.String()) }), { clean: false })
+
+    expect(validate({ 'x-tags': 'a,b', host: 'example.com' })).toEqual({
+      ok: true,
+      value: { 'x-tags': ['a', 'b'], host: 'example.com' },
+    })
+  })
+
+  // TypeBox refuses every value of a format it does not know; the formats Fastify's Ajv checks are registered.
+  it('checks a string format as Ajv does', () => {
+    const validate = compileValidator(
+      $t.Object({ email: $t.String({ format: 'email' }), id: $t.String({ format: 'uuid' }) }),
+    )
+
+    expect(validate({ email: 'a@b.co', id: '6f1c6f5e-4b1a-4c8e-9a39-0d5c2b7d1e2f' }).ok).toBe(true)
+    expect(validate({ email: 'a@b.co', id: 'not-a-uuid' })).toMatchObject({ ok: false, issues: [{ path: 'id' }] })
+  })
+})
+
+describe('compileValidator with a Standard Schema', () => {
+  it('runs the library, so its refinements and transforms apply', () => {
+    const validate = compileValidator(
+      z.object({
+        email: z.string().refine(v => v.includes('@'), 'must be an email'),
+        name: z.string().transform(v => v.trim()),
+      }),
+    )
+
+    expect(validate({ email: 'a@b.c', name: '  cat ' })).toEqual({ ok: true, value: { email: 'a@b.c', name: 'cat' } })
+    expect(validate({ email: 'nope', name: 'cat' })).toEqual({
+      ok: false,
+      issues: [{ path: 'email', message: 'must be an email' }],
+    })
+  })
+
+  // A large invalid value must not answer with every issue the library collected: the first is all a caller gets.
+  it('reports the first issue only, however many the library collected', () => {
+    const validate = compileValidator(z.object({ ids: z.array(z.number()) }))
+
+    expect(validate({ ids: ['a', 'b', 'c'] })).toEqual({
+      ok: false,
+      issues: [{ path: 'ids.0', message: 'Invalid input: expected number, received string' }],
+    })
+  })
+
+  it('settles with the library when it validates asynchronously', async () => {
+    const validate = compileValidator(z.object({ name: z.string().refine(async v => v !== 'taken', 'is taken') }))
+
+    await expect(validate({ name: 'taken' })).resolves.toEqual({
+      ok: false,
+      issues: [{ path: 'name', message: 'is taken' }],
+    })
+    await expect(validate({ name: 'free' })).resolves.toEqual({ ok: true, value: { name: 'free' } })
+  })
+})
+
+describe('hasCodec', () => {
+  it('finds a codec at any depth, and nothing in a schema without one', () => {
+    expect(hasCodec($t.Object({ filter: $t.Object({ ttl: $t.Optional($t.Nullable($t.Duration())) }) }))).toBe(true)
+    expect(hasCodec($t.Object({ id: $t.Integer(), tags: $t.Array($t.String()) }))).toBe(false)
+    expect(hasCodec(z.object({ name: z.string().transform(v => v.trim()) }))).toBe(false)
+  })
+})
+
+describe('compileEncoder', () => {
+  it('runs codecs the other way, back to the text they read', () => {
+    const encode = compileEncoder($t.Object({ ttl: $t.Duration(), size: $t.Bytes() }))
+
+    expect(encode?.({ ttl: 5000, size: 2048 })).toEqual({ ttl: '5s', size: '2kb' })
+  })
+
+  it('leaves the value it is handed untouched', () => {
+    const value = { ttl: 5000 }
+
+    compileEncoder($t.Object({ ttl: $t.Duration() }))?.(value)
+
+    expect(value).toEqual({ ttl: 5000 })
+  })
+
+  it('has nothing to do for a schema without a codec', () => {
+    expect(compileEncoder($t.Object({ id: $t.Integer() }))).toBeUndefined()
+    expect(compileEncoder(z.object({ id: z.number() }))).toBeUndefined()
   })
 })

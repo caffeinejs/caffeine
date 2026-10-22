@@ -71,7 +71,7 @@ export interface ListOptions extends SchemaOptions {
  * A codec accepts either the text encoding or the value already decoded, so the same schema serves a value from
  * an environment variable and one from a file or the code band.
  */
-type Codec<T extends TSchema> = TTransform<TUnion<[TSchema, T]>, Static<T>>
+type Codec<T extends TSchema> = TTransform<TUnion<[TString, T]>, Static<T>>
 
 const caffeineT = {
   /**

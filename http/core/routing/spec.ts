@@ -68,11 +68,12 @@ export type RouteInvoker = (...args: unknown[]) => unknown
 
 /**
  * The validation contract of a route, as authored. Every slot takes the `$t` dialect (recommended) or any Standard
- * Schema that converts to JSON Schema.
+ * Schema; a Standard Schema response must convert to JSON Schema.
  *
- * This is the authoring shape, not the runtime one: each slot is compiled to JSON Schema once, while routes are
- * being registered, and Fastify's Ajv does all request-time validation. See
- * `platform/fastify/routing/schema/schema.ts` for the compilation and the per-slot strictness policy.
+ * This is the authoring shape, not the runtime one: each slot is compiled once, while routes are being registered.
+ * A request is validated by Fastify's Ajv, unless one of its slots holds a codec such as `$t.Duration()` or is a
+ * Standard Schema: then Caffeine validates every slot of that request itself, decoding the codecs and running the
+ * library. See `platform/fastify/routing/schema/` for the compilation and the per-slot strictness policy.
  */
 export interface RouteValidationSchema {
   params?: AnySchema
@@ -84,7 +85,7 @@ export interface RouteValidationSchema {
    *
    * Beware that a response schema *serializes*, it does not validate. Fastify hands it to fast-json-stringify,
    * which emits only the declared properties — a handler returning a non-conforming object is not rejected, its
-   * extra fields are simply omitted.
+   * extra fields are simply omitted. A codec in it is encoded first, so `$t.Duration()` sends `"5s"`.
    */
   response?: Record<number | string, AnySchema>
 }
