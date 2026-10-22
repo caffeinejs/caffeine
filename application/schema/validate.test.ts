@@ -201,7 +201,7 @@ describe('compileValidator with TypeBox', () => {
   })
 
   it('works on the value it is handed rather than a copy', () => {
-    const input = { page: '2', extra: 'x' }
+    const input = { page: '2' }
 
     const result = compileValidator($t.Object({ page: $t.Integer() }))(input)
 
@@ -209,12 +209,24 @@ describe('compileValidator with TypeBox', () => {
     expect(input).toEqual({ page: 2 })
   })
 
-  it('keeps undeclared keys with clean off, for a value whose other keys are not the caller to drop', () => {
-    const validate = compileValidator($t.Object({ 'x-tags': $t.List($t.String()) }), { clean: false })
+  // As Ajv's `removeAdditional`, which validates HTTP requests: a key goes only where its object forbids it.
+  it('drops an undeclared key only where its object forbids undeclared keys', () => {
+    const validate = compileValidator(
+      $t.Object(
+        {
+          open: $t.Object({ a: $t.String() }),
+          closed: $t.Object({ a: $t.String() }, { additionalProperties: false }),
+          either: $t.Nullable($t.Object({ a: $t.String() }, { additionalProperties: false })),
+        },
+        { additionalProperties: false },
+      ),
+    )
 
-    expect(validate({ 'x-tags': 'a,b', host: 'example.com' })).toEqual({
+    expect(
+      validate({ open: { a: 'x', more: 1 }, closed: { a: 'y', more: 2 }, either: { a: 'z', more: 3 }, extra: true }),
+    ).toEqual({
       ok: true,
-      value: { 'x-tags': ['a', 'b'], host: 'example.com' },
+      value: { open: { a: 'x', more: 1 }, closed: { a: 'y' }, either: { a: 'z' } },
     })
   })
 

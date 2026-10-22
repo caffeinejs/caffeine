@@ -2,7 +2,7 @@ import type { AnySchema, InferWire } from '@caffeinejs/application/schema'
 
 import type { IAdapterTypes, AnyAdapterTypes } from '../../../adapter.js'
 import type { IContext } from '../../../context.js'
-import type { InferBody, InferHeaders, InferParams, InferQuery, InferWireSlot } from '../../../request.js'
+import type { InferBody, InferHeaders, InferParams, InferQuery } from '../../../request.js'
 import type { RouteValidationSchema } from '../spec.js'
 
 /** Flattens an intersection so editors show one object rather than a chain of `&`. */
@@ -93,6 +93,15 @@ export type ParamsOf<S extends RouteValidationSchema, P extends string> = S exte
   ? InferParams<S>
   : Simplify<PathParams<P>>
 
+// As `ParamsOf`, for a client: what it sends, where a codec such as `$t.Duration()` is still text.
+type WireParamsOf<S extends RouteValidationSchema, P extends string> = S extends { params: AnySchema }
+  ? WireSlot<S, 'params', never>
+  : Simplify<PathParams<P>>
+
+// What a client sends in a request slot: the slot schema's wire side, or `Fallback` when the route declares none.
+type WireSlot<S, Slot extends keyof RouteValidationSchema, Fallback> =
+  S extends Record<Slot, infer Schema extends AnySchema> ? InferWire<Schema, 'input'> : Fallback
+
 /**
  * The context a programmatic handler receives, typed by the route's schema and path.
  *
@@ -178,10 +187,10 @@ export interface RouteDef<
 export type DeclaredRoute<M extends string, P extends string, S extends RouteValidationSchema, O> = RouteDef<
   M,
   P,
-  S extends { params: AnySchema } ? InferWireSlot<S, 'params', never> : Simplify<PathParams<P>>,
-  InferWireSlot<S, 'querystring', Record<string, string>>,
-  InferWireSlot<S, 'headers', Record<string, string>>,
-  InferWireSlot<S, 'body', unknown>,
+  WireParamsOf<S, P>,
+  WireSlot<S, 'querystring', Record<string, string>>,
+  WireSlot<S, 'headers', Record<string, string>>,
+  WireSlot<S, 'body', unknown>,
   OutputOf<S, O>,
   ResponsesOf<S>
 >

@@ -4,6 +4,7 @@ import type { ValueError } from '@sinclair/typebox/errors'
 import { HasTransform, TransformDecode, TransformDecodeError, TransformEncode, Value } from '@sinclair/typebox/value'
 import type { StandardSchemaV1 } from '@standard-schema/spec'
 
+import { removeAdditional } from './_additional.js'
 import { registerFormats } from './_formats.js'
 import { materializeObjects } from './_materialize.js'
 import { type AnySchema, type InferSchema, isTypeBoxSchema, type SchemaIssue } from './schema.js'
@@ -59,43 +60,27 @@ export function validateSchema<S extends AnySchema>(
  */
 export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> | Promise<SchemaValidationResult<T>>
 
-export interface CompileValidatorOptions {
-  /**
-   * Drops the properties a TypeBox schema does not declare, at every depth. On by default.
-   *
-   * Turn it off for a value whose undeclared keys are not the caller's to drop, such as a request's headers. A
-   * Standard Schema ignores it: its library decides what it keeps.
-   */
-  clean?: boolean
-}
-
 /**
  * Builds a validator for one schema, to run on many values: whatever depends on the schema alone is done here, once.
  *
- * A TypeBox schema is compiled to code. Each value then has its declared defaults filled in and its types converted
- * (`'8080'` becomes `8080`, and `'a'` becomes `['a']` where an array is declared), loses its undeclared keys unless
- * `clean` is off, is checked, and has its codecs decoded. A Standard Schema runs its own library's validator. Either
+ * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
+ * defaults are filled in, its types converted (`'8080'` becomes `8080`, and `'a'` becomes `['a']` where an array is
+ * declared), and its keys dropped where an object says `additionalProperties: false`, a nullable object included, though
+ * never inside another union or an intersection. It is then checked, and its codecs decoded. A Standard Schema runs its own library's validator. Either
  * way a failure reports its first issue only, so the report on a large invalid value is no larger than on a small one.
  *
  * The value is worked on in place, not copied: hand it one nobody else holds, such as a request's parsed body.
  *
- * @throws TypeCompilerUnknownTypeError when the TypeBox schema holds a kind TypeBox cannot compile, such as
- * `$t.File()`.
+ * @throws TypeCompilerUnknownTypeError when the TypeBox schema holds a kind TypeBox cannot check, such as
+ * `$t.Unsafe(...)`.
  */
 export function compileValidator<S extends TSchema>(
   schema: S,
-  options?: CompileValidatorOptions,
 ): (input: unknown) => SchemaValidationResult<InferSchema<S>>
-export function compileValidator<S extends AnySchema>(
-  schema: S,
-  options?: CompileValidatorOptions,
-): SchemaValidator<InferSchema<S>>
-export function compileValidator<S extends AnySchema>(
-  schema: S,
-  options: CompileValidatorOptions = {},
-): SchemaValidator<InferSchema<S>> {
+export function compileValidator<S extends AnySchema>(schema: S): SchemaValidator<InferSchema<S>>
+export function compileValidator<S extends AnySchema>(schema: S): SchemaValidator<InferSchema<S>> {
   if (isTypeBoxSchema(schema)) {
-    return compileTypeBox(schema, options.clean ?? true) as SchemaValidator<InferSchema<S>>
+    return compileTypeBox(schema) as SchemaValidator<InferSchema<S>>
   }
   return compileStandard(schema as StandardSchemaV1) as SchemaValidator<InferSchema<S>>
 }
@@ -123,7 +108,7 @@ export function compileEncoder(schema: AnySchema): ((value: unknown) => unknown)
   return value => TransformEncode(schema as TSchema, [], value)
 }
 
-function compileTypeBox(schema: TSchema, clean: boolean): SchemaValidator<unknown> {
+function compileTypeBox(schema: TSchema): SchemaValidator<unknown> {
   registerFormats()
 
   const checker = TypeCompiler.Compile(schema)
@@ -132,9 +117,7 @@ function compileTypeBox(schema: TSchema, clean: boolean): SchemaValidator<unknow
   return input => {
     let value = Value.Default(schema, input)
     value = Value.Convert(schema, value)
-    if (clean) {
-      value = Value.Clean(schema, value)
-    }
+    removeAdditional(schema, value)
 
     if (!checker.Check(value)) {
       const first = checker.Errors(value).First()

@@ -10,18 +10,18 @@ import {
   type SchemaValidationResult,
   type SchemaValidator,
 } from '@caffeinejs/application/schema'
+import { errMessage } from '@caffeinejs/std/err'
 import type { FastifyError, FastifyRequest, FastifySchemaValidationError } from 'fastify'
 
+import { ErrConfiguration } from '../../../../core/error/common.js'
 import type { RouteValidationSchema } from '../../../../core/routing/spec.js'
 import { addRouteHook, type AdapterRouteOptions } from '../route_options.js'
+import { applySlotPolicy, REQUEST_SLOTS, type RequestSlot } from './slots.js'
 
 /** What turns validation failures into the error a route answers with, as Fastify's `schemaErrorFormatter` does. */
 export type ValidationErrorFormatter = NonNullable<AdapterRouteOptions['schemaErrorFormatter']>
 
-type RequestSlot = Parameters<ValidationErrorFormatter>[1]
-
-/** The request slots, in the order Fastify validates them. */
-const REQUEST_SLOTS: readonly RequestSlot[] = ['params', 'body', 'querystring', 'headers']
+type ValidationError = FastifyError & Required<Pick<FastifyError, 'validation' | 'validationContext'>>
 
 /** Where each slot's value lives on the request. */
 const SLOT_PROPERTY = { params: 'params', body: 'body', querystring: 'query', headers: 'headers' } as const
@@ -39,11 +39,7 @@ interface SlotValidator {
  *
  * A file body is left out: it is streamed, never validated.
  */
-export function validatesRequest(schema: RouteValidationSchema | undefined): boolean {
-  if (schema === undefined) {
-    return false
-  }
-
+export function validatesRequest(schema: RouteValidationSchema): boolean {
   return REQUEST_SLOTS.some(slot => {
     const authored = validatedSlot(schema, slot)
     return authored !== undefined && (isStandardSchema(authored) || hasCodec(authored))
@@ -55,24 +51,28 @@ export function validatesRequest(schema: RouteValidationSchema | undefined): boo
  * route's own, so it runs where Fastify's validation would have: every `preHandler` hook and the handler see the
  * validated, decoded values.
  *
- * The slots run in Fastify's order and the first that fails ends the request with the error Fastify would raise:
- * status 400, code `FST_ERR_VALIDATION`, `validation` and `validationContext` set, its message written by `formatter`.
- * With `attachValidation` the error is put on `request.validationError` instead and the request goes on.
+ * It answers as Fastify does. The slots run in Fastify's order, and the first that fails ends the request with
+ * Fastify's error: status 400 and code `FST_ERR_VALIDATION` unless `formatter` set its own, with `validation` and
+ * `validationContext`. With `attachValidation` that error is put on `request.validationError` instead, and the request
+ * goes on unvalidated. A TypeBox slot drops undeclared keys where Ajv would, under the same per-slot policy, and its
+ * header names are matched lower-cased, as Node delivers them.
  *
- * A TypeBox slot drops undeclared keys only where it is closed, as Ajv's `removeAdditional` does: the body unless its
- * schema allows them, the query and path parameters when theirs forbids them, and the headers never. Their names are
- * matched lower-cased, as Node delivers them.
+ * `formatter` is the route's own or the server's; one a plugin set with `setSchemaErrorFormatter(...)` is not seen.
+ *
+ * @param context - Identifies the route in failures, e.g. `GET /jobs`.
+ * @throws ErrConfiguration when a slot holds a schema TypeBox cannot check.
  */
 export function attachRequestValidation(
   routeDef: AdapterRouteOptions,
   schema: RouteValidationSchema,
+  context: string,
   formatter: ValidationErrorFormatter = formatValidationErrors,
 ): void {
   const validators: SlotValidator[] = []
   for (const slot of REQUEST_SLOTS) {
     const authored = validatedSlot(schema, slot)
     if (authored !== undefined) {
-      validators.push({ slot, validate: slotValidator(authored, slot) })
+      validators.push({ slot, validate: slotValidator(authored, slot, `${context} ${slot}`) })
     }
   }
 
@@ -85,15 +85,15 @@ export function attachRequestValidation(
  * Encodes a route's answer before Fastify serializes it, for a route whose response schemas hold a codec: the
  * `Duration` `5000` a handler returns under `$t.Duration()` goes out as `"5s"`, the text the schema declares.
  *
- * The schema is picked for the status the way Fastify picks its serializer: the exact code, then its class (`2xx`),
- * then `default`. fast-json-stringify then writes the encoded value as it would any other.
+ * The schema is picked for the status the way Fastify picks its serializer: the exact code, then its class (`2xx`, in
+ * either case), then `default`. fast-json-stringify then writes the encoded value as it would any other.
  */
 export function attachResponseEncoding(routeDef: AdapterRouteOptions, schema: RouteValidationSchema): void {
   const encoders = new Map<string, (value: unknown) => unknown>()
   for (const [status, authored] of Object.entries(schema.response ?? {})) {
     const encode = compileEncoder(authored)
     if (encode !== undefined) {
-      encoders.set(status, encode)
+      encoders.set(status.toLowerCase(), encode)
     }
   }
 
@@ -112,7 +112,7 @@ export function attachResponseEncoding(routeDef: AdapterRouteOptions, schema: Ro
     try {
       done(null, encode(payload))
     } catch (error) {
-      done(error as Error)
+      done(asError(error, 'encode the response'))
     }
   })
 }
@@ -123,24 +123,31 @@ function validatedSlot(schema: RouteValidationSchema, slot: RequestSlot): AnySch
   return authored === undefined || (slot === 'body' && hasFileSchema(authored)) ? undefined : authored
 }
 
-function slotValidator(authored: AnySchema, slot: RequestSlot): SchemaValidator<unknown> {
+function slotValidator(authored: AnySchema, slot: RequestSlot, context: string): SchemaValidator<unknown> {
   if (!isTypeBoxSchema(authored)) {
     return compileValidator(authored)
   }
 
-  if (slot === 'headers') {
-    return compileValidator(lowerCaseHeaders(authored), { clean: false })
+  const policed = applySlotPolicy(slot === 'headers' ? lowerCaseHeaders(authored) : authored, slot)
+  try {
+    return compileValidator(policed)
+  } catch (error) {
+    throw new ErrConfiguration(
+      errMessage(
+        `Cannot compile the "${context}" schema: TypeBox cannot check it (${error instanceof Error ? error.message : String(error)})`,
+      )
+        .solutions(
+          'Declare the slot with "$t" types TypeBox checks, such as "$t.String()" in place of "$t.Unsafe(...)"',
+          'Register a custom kind with TypeBox\'s "TypeRegistry.Set(...)"',
+        )
+        .reference('@caffeinejs/http', ErrConfiguration)
+        .build(),
+    )
   }
-
-  // Fastify closes the body when its schema leaves the question open; the other slots stay as authored.
-  const additional = (authored as { additionalProperties?: unknown }).additionalProperties
-  const closed = slot === 'body' ? additional === undefined || additional === false : additional === false
-
-  return compileValidator(authored, { clean: closed })
 }
 
 /** A copy of a headers schema with its property names lower-cased, so `Authorization` matches `authorization`. */
-function lowerCaseHeaders(schema: AnySchema): AnySchema {
+function lowerCaseHeaders<S extends object>(schema: S): S {
   const { properties, required } = schema as { properties?: Record<string, unknown>; required?: string[] }
   if (properties === undefined) {
     return schema
@@ -153,7 +160,7 @@ function lowerCaseHeaders(schema: AnySchema): AnySchema {
       Object.entries(properties).map(([name, property]) => [name.toLowerCase(), property]),
     ),
     ...(required === undefined ? {} : { required: required.map(name => name.toLowerCase()) }),
-  } as AnySchema
+  }
 }
 
 function validateFrom(
@@ -171,11 +178,15 @@ function validateFrom(
     if (result instanceof Promise) {
       result.then(
         settled => {
-          if (settle(request, slot, settled, formatter, done)) {
-            validateFrom(i + 1, request, validators, formatter, done)
+          try {
+            if (settle(request, slot, settled, formatter, done)) {
+              validateFrom(i + 1, request, validators, formatter, done)
+            }
+          } catch (error) {
+            done(asError(error, 'validate the request'))
           }
         },
-        (error: unknown) => done(error as Error),
+        (error: unknown) => done(asError(error, 'validate the request')),
       )
       return
     }
@@ -205,10 +216,10 @@ function settle(
   const error = validationError(result.issues, slot, formatter)
   if (request.routeOptions.attachValidation) {
     request.validationError = error
-    return true
+    done()
+  } else {
+    done(error)
   }
-
-  done(error)
   return false
 }
 
@@ -217,7 +228,7 @@ function validationError(
   issues: readonly SchemaIssue[],
   slot: RequestSlot,
   formatter: ValidationErrorFormatter,
-): FastifyError & Required<Pick<FastifyError, 'validation' | 'validationContext'>> {
+): ValidationError {
   const validation = issues.map<FastifySchemaValidationError>(issue => ({
     keyword: issue.code ?? '',
     instancePath: issue.path === '' ? '' : `/${issue.path.replaceAll('.', '/')}`,
@@ -226,10 +237,9 @@ function validationError(
     message: issue.message,
   }))
 
-  const error = formatter(validation, slot) as FastifyError &
-    Required<Pick<FastifyError, 'validation' | 'validationContext'>>
-  error.statusCode = 400
-  error.code = 'FST_ERR_VALIDATION'
+  const error = formatter(validation, slot) as ValidationError
+  error.statusCode ||= 400
+  error.code ||= 'FST_ERR_VALIDATION'
   error.validation = validation
   error.validationContext = slot
   return error
@@ -238,4 +248,11 @@ function validationError(
 /** Fastify's own default formatter: `querystring/timeout <message>`, joined by commas. */
 function formatValidationErrors(errors: FastifySchemaValidationError[], slot: RequestSlot): Error {
   return new Error(errors.map(error => `${slot}${error.instancePath} ${error.message}`).join(', '))
+}
+
+/** Fastify reads a falsy `done(error)` as "go on", so whatever a schema throws or rejects with reaches it an `Error`. */
+function asError(error: unknown, action: string): Error {
+  return error instanceof Error
+    ? error
+    : new Error(`Cannot ${action}: its schema failed with a non-error value`, { cause: error })
 }

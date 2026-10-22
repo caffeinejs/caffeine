@@ -57,6 +57,8 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
   registration: RouteGroupRegistration<REQ>,
 ): void {
   const { installScope, compilers, globalErrorHandler, handlerTimeout, schemaErrorFormatter } = registration
+  // Bound to the server, as Fastify binds the one it was constructed with.
+  const serverErrorFormatter = schemaErrorFormatter?.bind(instance)
   const basePath = router.path
   const routes = router.routes
 
@@ -138,12 +140,13 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         } satisfies CaffeineRouteConfig<REQ>
 
         const url = joinPaths(basePath, route.path)
+        const context = `${route.method.join('|')} ${url}`
 
         const routeDef: AdapterRouteOptions = {
           method: [...new Set(route.method.map(m => m.toUpperCase()))],
           url,
-          // Compiled here, once, so Fastify's Ajv owns request validation with zero schema work per request.
-          schema: compileRouteSchema(route.schema, `${route.method.join('|')} ${url}`),
+          // Compiled here, once. A route whose request Caffeine validates hands Fastify its responses alone.
+          schema: compileRouteSchema(route.schema, context),
           bodyLimit: route.bodyLimit,
           // Fastify takes whole milliseconds.
           handlerTimeout: route.timeout === undefined ? undefined : Math.ceil(route.timeout),
@@ -207,7 +210,12 @@ export function registerCompiledRouteGroup<REQ extends FastifyRequest>(
         // After the route's own options, so a `fst` hook runs first and a `fst` formatter is the one used.
         if (route.schema !== undefined) {
           if (validatesRequest(route.schema)) {
-            attachRequestValidation(routeDef, route.schema, routeDef.schemaErrorFormatter ?? schemaErrorFormatter)
+            attachRequestValidation(
+              routeDef,
+              route.schema,
+              context,
+              routeDef.schemaErrorFormatter ?? serverErrorFormatter,
+            )
           }
           attachResponseEncoding(routeDef, route.schema)
         }
