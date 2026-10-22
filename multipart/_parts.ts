@@ -134,10 +134,18 @@ function countOf(req: FastifyRequest, limit: number): Count {
   return count
 }
 
-// Refuses a body over a limit as Fastify refuses one it reads itself: with the connection closed, since the client
-// may still be sending the rest, and nothing will read it.
+// Refuses a body over a limit as Fastify refuses one it reads itself: the client may still be sending the rest, and
+// busboy will not read it. Over HTTP/1 the connection is closed. HTTP/2 has no connection of the request's own to
+// close, so the rest is read and dropped, or the stream waits on it for ever; busboy is taken off it first, since the
+// plugin pauses the request when it takes busboy off itself.
 function tooLarge(req: FastifyRequest, TooLarge: new () => Error = errorCodes.FST_ERR_CTP_BODY_TOO_LARGE): Error {
-  req.httpContext.header('connection', 'close')
+  if (req.raw.httpVersionMajor === 2) {
+    req.raw.unpipe()
+    req.raw.resume()
+  } else {
+    req.httpContext.header('connection', 'close')
+  }
+
   return new TooLarge()
 }
 

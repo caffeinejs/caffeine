@@ -1,4 +1,5 @@
 import { once } from 'node:events'
+import { connect as connectH2 } from 'node:http2'
 import { connect } from 'node:net'
 
 import { $t } from '@caffeinejs/application/schema'
@@ -623,32 +624,6 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     },
   )
 
-  // An application that raised the plugin's `fileSize` for its uploads keeps it on every route that declares no
-  // limit: the server's own limit, kept low for JSON, does not reach them.
-  it("leaves a route that declares no limit to the plugin's limits, not the server's", async () => {
-    const router = new Router('/unlimited')
-    router.post('/upload').handler(async ctx => ({ sizes: (await multipart(ctx).files()).map(f => f.size) }))
-
-    const app = createWebApplication({})
-      .server(() => ({ factory: { bodyLimit: 1 * KiB } }))
-      .with(() => multipartPlugin({ limits: { fileSize: 16 * KiB } }))
-      .mount(router)
-    await app.bootstrap()
-
-    try {
-      const res = await app.fetch('/unlimited/upload', {
-        method: 'POST',
-        headers: multipartHeaders(),
-        body: file(4096),
-      })
-
-      expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ sizes: [4096] })
-    } finally {
-      await app.close()
-    }
-  })
-
   describe('a chunked upload, which declares no length to refuse up front', () => {
     it.each(Object.entries(readers))(
       "%s fails the upload as it passes the route's limit, with 413",
@@ -776,6 +751,32 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
 describe('multipart(ctx) on a route that declares no bodyLimit', () => {
   const cutAt = { limits: { fileSize: 1 * KiB } }
 
+  // An application that raised the plugin's `fileSize` for its uploads keeps it on every route that declares no
+  // limit: the server's own limit, kept low for JSON, does not reach them.
+  it("leaves a route that declares no limit to the plugin's limits, not the server's", async () => {
+    const router = new Router('/unlimited')
+    router.post('/upload').handler(async ctx => ({ sizes: (await multipart(ctx).files()).map(f => f.size) }))
+
+    const app = createWebApplication({})
+      .server(() => ({ factory: { bodyLimit: 1 * KiB } }))
+      .with(() => multipartPlugin({ limits: { fileSize: 16 * KiB } }))
+      .mount(router)
+    await app.bootstrap()
+
+    try {
+      const res = await app.fetch('/unlimited/upload', {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: file(4096),
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ sizes: [4096] })
+    } finally {
+      await app.close()
+    }
+  })
+
   // busboy cuts a file at `fileSize` without failing it, so a reader that stops at the file it returns would hand it
   // over cut short, and a 200 would answer an upload that was never read whole.
   it.each(Object.entries(readers))(
@@ -805,6 +806,22 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
       }
     },
   )
+
+  // A file over `fileSize` that arrives with its part is refused before a reader takes it, and its connection is closed
+  // rather than read to the length declared: this one declares far more than it sends, then waits.
+  it('closes the connection of a file refused as it arrives', async () => {
+    const app = uploadApp(readers['file()'], undefined, cutAt).server(listen)
+    await app.run()
+
+    try {
+      const response = await exchange(app, requestHead('Content-Length: 8000000'), file(4096))
+
+      expect(response.split('\r\n')[0]).toBe('HTTP/1.1 413 Payload Too Large')
+      expect(response).toMatch(/^connection: close$/im)
+    } finally {
+      await app.close()
+    }
+  })
 
   // Sent in chunks, the file is cut as it arrives, after the reader took it, and the rest of the body is still to come:
   // once the file has failed nothing reads it, so the connection is closed rather than left waiting.
@@ -846,4 +863,54 @@ describe('multipart(ctx) on a route that declares no bodyLimit', () => {
       }
     },
   )
+})
+
+// HTTP/2 has no connection of the request's own to close: a refused upload must still be read to its end, or its stream
+// waits on the rest for ever, and so does the server's close.
+describe('a refused upload over HTTP/2', () => {
+  /** Posts `body` over HTTP/2 and answers what the server sent, once the stream has closed. */
+  async function post(origin: string, body: Uint8Array, headers: Record<string, string> = {}) {
+    const session = connectH2(origin)
+
+    try {
+      const stream = session.request({
+        ':method': 'POST',
+        ':path': '/uploads/upload',
+        ...multipartHeaders(),
+        ...headers,
+      })
+      stream.end(body)
+
+      const [head] = (await once(stream, 'response')) as [Record<string, string>]
+      const received: Buffer[] = []
+      stream.on('data', (chunk: Buffer) => received.push(chunk))
+      await once(stream, 'close')
+
+      return { status: Number(head[':status']), body: JSON.parse(Buffer.concat(received).toString()) as unknown }
+    } finally {
+      session.close()
+    }
+  }
+
+  const overHTTP2 = () => ({ factory: { http2: true }, listener: { host: '127.0.0.1', port: 0 } })
+
+  it.each([
+    ["a file over the plugin's fileSize", undefined, false, 'FST_REQ_FILE_TOO_LARGE'],
+    // Passed well into the file, once a reader is reading it.
+    ["a body passing the route's limit in a file", 64 * KiB, false, 'FST_ERR_CTP_BODY_TOO_LARGE'],
+    ["a Content-Length over the route's limit", 64 * KiB, true, 'FST_ERR_CTP_BODY_TOO_LARGE'],
+  ] as const)('reads %s to its end once refused, so its stream closes', async (_, limit, declaresLength, code) => {
+    const app = uploadApp(readers['file()'], limit, { limits: { fileSize: 1 * KiB } }).server(overHTTP2)
+    await app.run()
+
+    try {
+      const body = file(256 * 1024)
+      const res = await post(app.address!.origin, body, declaresLength ? { 'content-length': String(body.length) } : {})
+
+      expect(res.status).toBe(413)
+      expect(res.body).toMatchObject({ code })
+    } finally {
+      await app.close()
+    }
+  })
 })
