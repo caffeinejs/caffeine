@@ -135,10 +135,9 @@ function slotValidator(authored: AnySchema, slot: RequestSlot, context: string):
   try {
     return compileValidator(policed)
   } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error)
     throw new ErrConfiguration(
-      errMessage(
-        `Cannot compile the "${context}" schema: TypeBox cannot check it (${error instanceof Error ? error.message : String(error)})`,
-      )
+      errMessage(`Cannot compile the "${context}" schema: TypeBox cannot check it (${reason})`)
         .solutions(
           'Declare the slot with "$t" types TypeBox checks, such as "$t.String()" in place of "$t.Unsafe(...)"',
           'Register a custom kind with TypeBox\'s "TypeRegistry.Set(...)"',
@@ -253,7 +252,9 @@ function formatValidationErrors(errors: FastifySchemaValidationError[], slot: Re
   return new Error(errors.map(error => `${slot}${error.instancePath} ${error.message}`).join(', '))
 }
 
-/** Fastify reads a falsy `done(error)` as "go on", so whatever a schema throws or rejects with reaches it an `Error`. */
+/**
+ * Fastify reads a falsy `done(error)` as "go on", so whatever a schema throws or rejects with reaches it as an `Error`.
+ */
 function asError(error: unknown, action: string): Error {
   return error instanceof Error
     ? error

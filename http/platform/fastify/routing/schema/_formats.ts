@@ -7,9 +7,9 @@ let registered = false
 // `format: 'email'` means the same on a route whichever of the two validates it. A format already registered under a
 // name is left as it is.
 //
-// The number formats (`int32`, `int64`, `float`, `double`) are not registered: TypeBox reads `format` on a string alone.
-// `ajv-formats` publishes the list of formats from this file alone; its package declares no `exports`, so the path is
-// the one its own entry imports.
+// The number formats (`int32`, `int64`, `float`, `double`) are not registered: TypeBox reads `format` on a string
+// alone. `ajv-formats` publishes the list of formats from this file alone; its package declares no `exports`, so the
+// path is the one its own entry imports.
 export function registerAjvFormats(): void {
   if (registered) {
     return

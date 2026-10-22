@@ -37,8 +37,9 @@ export interface SchemaValidateOptions {
  * anything can be injected and therefore cannot await. An HTTP route validates many values against one schema, so it
  * uses {@link compileValidator} instead.
  *
- * A TypeBox schema runs the pipeline below. A Standard Schema runs its own library's validator, so refinements and
- * transforms behave exactly as the author wrote them.
+ * A TypeBox schema runs the pipeline below, checking a `format` by what {@link registerFormat} registered under its
+ * name: one nobody registered refuses every value. A Standard Schema runs its own library's validator, so refinements
+ * and transforms behave exactly as the author wrote them.
  */
 export function validateSchema<S extends AnySchema>(
   schema: S,
@@ -61,11 +62,12 @@ export type SchemaValidator<T> = (input: unknown) => SchemaValidationResult<T> |
  * Builds a validator for one schema, to run on many values: whatever depends on the schema alone is done here, once.
  *
  * A TypeBox schema is compiled to code, and each value is then handled as Fastify's Ajv handles a request: its declared
- * defaults are filled in, its types converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
- * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is), and its keys dropped where an object says `additionalProperties: false`, a nullable object included, though
- * never inside another union or an intersection. It is then checked, a `format` by what {@link registerFormat} registered
- * under its name, and its codecs decoded. A Standard Schema runs its own library's validator. Either
- * way a failure reports its first issue only, so the report on a large invalid value is no larger than on a small one.
+ * defaults are filled in; its types are converted (`'8080'` becomes `8080`, `'a'` becomes `['a']` where an array is
+ * declared, and, unlike Ajv, `'1.9'` becomes `1` where an integer is); and its keys are dropped where an object says
+ * `additionalProperties: false`, a nullable object included, though never inside another union or an intersection. It
+ * is then checked, a `format` by what {@link registerFormat} registered under its name, and its codecs decoded. A
+ * Standard Schema runs its own library's validator. Either way a failure reports its first issue only, so the report on
+ * a large invalid value is no larger than on a small one.
  *
  * The value is worked on in place, not copied: hand it one nobody else holds, such as a request's parsed body.
  *
@@ -84,11 +86,12 @@ export function compileValidator<S extends AnySchema>(schema: S): SchemaValidato
 }
 
 /**
- * Teaches the TypeBox validators a string format, so a schema's `format: name` is checked with `check`. A format already
- * registered under that name is left as it is: the first registration wins.
+ * Teaches the TypeBox validators a string format, so a schema's `format: name` is checked with `check`.
  *
- * TypeBox refuses every value of a format it does not know, so a schema naming one fails all input until it is
- * registered.
+ * A format already registered under that name is left as it is: the first registration wins. Register one of your own
+ * before the application bootstraps, as `@caffeinejs/http` registers the formats Fastify's Ajv checks while it sets up
+ * its routes. TypeBox refuses every value of a format it does not know, so a schema naming one fails all input until it
+ * is registered.
  */
 export function registerFormat(name: string, check: (value: string) => boolean): void {
   if (!FormatRegistry.Has(name)) {
