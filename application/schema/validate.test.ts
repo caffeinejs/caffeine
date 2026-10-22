@@ -326,24 +326,36 @@ describe('compileValidator with patternProperties', () => {
     })
   })
 
-  it("converts and decodes a key's value as its pattern's schema says", () => {
+  // A key only a pattern allows is not in the object's type, and Ajv, which validates the same route when nothing else
+  // in it holds a codec, never decodes: such a key reaches the handler as it was sent, whatever else the route holds.
+  it("converts a key's value as its pattern's schema says, and leaves a codec there undecoded", () => {
     const validate = compileValidator(
       $t.Object({}, { patternProperties: { '^t-': $t.Duration(), '^n-': $t.Integer() } }),
     )
 
     expect(validate({ 't-wait': '5s', 'n-count': '3', other: true })).toEqual({
       ok: true,
-      value: { 't-wait': 5000, 'n-count': 3, other: true },
+      value: { 't-wait': '5s', 'n-count': 3, other: true },
     })
   })
 
-  it('checks a key no pattern allows against an additionalProperties schema', () => {
+  // As Ajv: every pattern a key matches checks it, and none is handed what another made of it.
+  it('checks a key two patterns allow against each of them', () => {
     const validate = compileValidator(
-      $t.Object({}, { additionalProperties: $t.Integer(), patternProperties: { '^x-': $t.String() } }),
+      $t.Object({ ttl: $t.Duration() }, { patternProperties: { '^t-': $t.Duration(), '^t-w': $t.Duration() } }),
     )
 
-    expect(validate({ 'x-a': 's', n: '5' })).toEqual({ ok: true, value: { 'x-a': 's', n: 5 } })
-    expect(validate({ 'x-a': 's', n: 'z' })).toMatchObject({ ok: false, issues: [{ path: 'n' }] })
+    expect(validate({ ttl: '1m', 't-wait': '5s' })).toEqual({ ok: true, value: { ttl: 60000, 't-wait': '5s' } })
+  })
+
+  // As on an object without patterns, where TypeBox decodes the keys its additionalProperties schema checks.
+  it('checks and decodes a key no pattern allows against an additionalProperties schema', () => {
+    const validate = compileValidator(
+      $t.Object({}, { additionalProperties: $t.Duration(), patternProperties: { '^x-': $t.String() } }),
+    )
+
+    expect(validate({ 'x-a': 's', wait: '5s' })).toEqual({ ok: true, value: { 'x-a': 's', wait: 5000 } })
+    expect(validate({ 'x-a': 's', wait: 'z' })).toMatchObject({ ok: false, issues: [{ path: 'wait' }] })
   })
 
   it('checks a key a pattern allows in an object nested in an array, naming where it failed', () => {

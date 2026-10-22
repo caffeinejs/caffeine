@@ -375,6 +375,23 @@ describe('a route whose schema holds a codec', () => {
     })
   })
 
+  // Ajv refuses such a route as it starts too: the message must name the pattern at fault, not a kind TypeBox lacks.
+  it('refuses at start-up a pattern no regular expression reads, saying so', async () => {
+    const jobs = newRouter('/jobs')
+      .post('/')
+      .schema({ body: $t.Object({ ttl: $t.Duration() }, { patternProperties: { '^x\\_': $t.String() } }) })
+      .handler(ctx => ({ body: ctx.req.body() }))
+
+    app = createWebApplication().mount(jobs)
+
+    await expect(app.bootstrap()).rejects.toMatchObject({
+      code: 'ERR_CONFIGURATION',
+      message: expect.stringMatching(
+        /^Cannot compile the "POST \/jobs body" schema: a pattern in it is not a valid regular expression \(/,
+      ),
+    })
+  })
+
   it("writes the error message with the server's schemaErrorFormatter", async () => {
     const jobs = newRouter('/jobs')
       .get('/')
@@ -407,7 +424,8 @@ describe('a route whose response schema holds a codec', () => {
     expect(await res.json()).toEqual({ ttl: '5s' })
   })
 
-  // Fastify serializes a status by its own schema whenever it has one; a fallback that holds a codec is not that schema.
+  // Fastify serializes a status by its own schema whenever it has one; a fallback that holds a codec is not that
+  // schema.
   it("keeps a status's own schema when only a fallback holds a codec", async () => {
     const jobs = newRouter('/jobs')
       .get('/')

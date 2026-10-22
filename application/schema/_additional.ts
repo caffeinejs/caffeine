@@ -9,7 +9,9 @@ import type { SchemaValidationResult } from './validate.js'
 //
 // - A key a `patternProperties` pattern matches stays. On an object TypeBox checks, it is checked against that
 //   pattern's schema there: TypeBox's object check ignores `patternProperties`, so such an object reaches TypeBox open
-//   and its keys are validated here, each by its pattern's compiled validator. A `$t.Record` is TypeBox's own to check.
+//   and its keys are validated here, each by its pattern's compiled validator. That validator converts and checks the
+//   value, as Ajv does, but never decodes it: TypeBox's object type has no such key, and decodes none. A `$t.Record` is
+//   TypeBox's own to check.
 // - A key nothing matches is dropped under `additionalProperties: false`, at any depth, and checked against an
 //   `additionalProperties` schema.
 //
@@ -19,6 +21,7 @@ import type { SchemaValidationResult } from './validate.js'
 
 type Node = Record<string, unknown>
 type Validate = (input: unknown) => SchemaValidationResult<unknown>
+type Compile = (schema: TSchema, decode: boolean) => Validate
 
 interface Pattern {
   regex: RegExp
@@ -40,7 +43,7 @@ export interface Additional {
   apply: (value: unknown) => SchemaIssue | undefined
 }
 
-export function compileAdditional(schema: TSchema, compile: (schema: TSchema) => Validate): Additional {
+export function compileAdditional(schema: TSchema, compile: Compile): Additional {
   const rules = new WeakMap<Node, Rules>()
   const opened = prepare(schema as Node, rules, compile)
   return { schema: opened as TSchema, apply: value => visit(schema as Node, value, '', rules) }
@@ -48,7 +51,7 @@ export function compileAdditional(schema: TSchema, compile: (schema: TSchema) =>
 
 // Records the rules of every object declaring `patternProperties` that `visit` reaches, and returns a copy of what it
 // walks with the objects TypeBox checks among them opened.
-function prepare(node: Node, rules: WeakMap<Node, Rules>, compile: (schema: TSchema) => Validate): Node {
+function prepare(node: Node, rules: WeakMap<Node, Rules>, compile: Compile): Node {
   const each = (child: unknown): Node => prepare(child as Node, rules, compile)
   // Spread keeps the TypeBox kind symbols.
   const copy: Node = { ...node }
@@ -83,9 +86,9 @@ function prepare(node: Node, rules: WeakMap<Node, Rules>, compile: (schema: TSch
       // As Ajv builds a pattern.
       regex: new RegExp(pattern, 'u'),
       schema: schema as Node,
-      validate: checksHere ? compile(schema as TSchema) : undefined,
+      validate: checksHere ? compile(schema as TSchema, false) : undefined,
     })),
-    additional: checksHere && isNode(additionalProperties) ? compile(additionalProperties as TSchema) : undefined,
+    additional: checksHere && isNode(additionalProperties) ? compile(additionalProperties as TSchema, true) : undefined,
   })
 
   if (!checksHere) {
@@ -111,34 +114,58 @@ function visit(schema: Node, value: unknown, path: string, rules: WeakMap<Node, 
   }
 
   const record = value as Record<string, unknown>
-  const properties = isNode(schema.properties) ? schema.properties : {}
-  const { additionalProperties } = schema
   const known = rules.get(schema)
-
   for (const key of Object.keys(record)) {
-    const at = joinPath(path, key)
-    let issue: SchemaIssue | undefined
-
-    if (Object.hasOwn(properties, key)) {
-      issue = visit(properties[key] as Node, record[key], at, rules)
-    } else {
-      const matching = known?.patterns.filter(pattern => pattern.regex.test(key)) ?? []
-      if (matching.length > 0) {
-        for (const pattern of matching) {
-          issue ??=
-            pattern.validate === undefined
-              ? visit(pattern.schema, record[key], at, rules)
-              : run(pattern.validate, record, key, at)
-        }
-      } else if (additionalProperties === false) {
-        delete record[key]
-      } else if (known?.additional !== undefined) {
-        issue = run(known.additional, record, key, at)
-      } else if (isNode(additionalProperties)) {
-        issue = visit(additionalProperties, record[key], at, rules)
-      }
+    const issue = visitKey(schema, known, record, key, joinPath(path, key), rules)
+    if (issue !== undefined) {
+      return issue
     }
+  }
+  return undefined
+}
 
+// One key of an object: one `properties` declares, one a pattern matches, or one neither does.
+function visitKey(
+  schema: Node,
+  known: Rules | undefined,
+  record: Record<string, unknown>,
+  key: string,
+  path: string,
+  rules: WeakMap<Node, Rules>,
+): SchemaIssue | undefined {
+  const { properties, additionalProperties } = schema
+  if (isNode(properties) && Object.hasOwn(properties, key)) {
+    return visit(properties[key] as Node, record[key], path, rules)
+  }
+
+  const matching = known?.patterns.filter(pattern => pattern.regex.test(key)) ?? []
+  if (matching.length > 0) {
+    return visitPatterns(matching, record, key, path, rules)
+  }
+
+  if (additionalProperties === false) {
+    delete record[key]
+    return undefined
+  }
+  if (known?.additional !== undefined) {
+    return run(known.additional, record, key, path)
+  }
+  return isNode(additionalProperties) ? visit(additionalProperties, record[key], path, rules) : undefined
+}
+
+// A key against every pattern that matches it, in turn; the first issue, if any.
+function visitPatterns(
+  matching: Pattern[],
+  record: Record<string, unknown>,
+  key: string,
+  path: string,
+  rules: WeakMap<Node, Rules>,
+): SchemaIssue | undefined {
+  for (const pattern of matching) {
+    const issue =
+      pattern.validate === undefined
+        ? visit(pattern.schema, record[key], path, rules)
+        : run(pattern.validate, record, key, path)
     if (issue !== undefined) {
       return issue
     }

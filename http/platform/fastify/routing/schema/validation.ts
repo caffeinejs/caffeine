@@ -139,17 +139,23 @@ function slotValidator(authored: AnySchema, slot: RequestSlot, context: string):
   try {
     return compileValidator(policed)
   } catch (error) {
-    // TypeBox throws an `Error` for a kind it cannot check.
-    throw new ErrConfiguration(
-      errMessage(`Cannot compile the "${context}" schema: TypeBox cannot check it (${(error as Error).message})`)
-        .solutions(
+    throw compileError(error as Error, context)
+  }
+}
+
+/** Why a slot's schema does not compile: a pattern no regular expression reads, or a kind TypeBox cannot check. */
+function compileError(error: Error, context: string): ErrConfiguration {
+  const failed = `Cannot compile the "${context}" schema`
+  const message =
+    error instanceof SyntaxError
+      ? errMessage(`${failed}: a pattern in it is not a valid regular expression (${error.message})`).solutions(
+          'Write the pattern as a regular expression with the "u" flag reads it, as Ajv does',
+        )
+      : errMessage(`${failed}: TypeBox cannot check it (${error.message})`).solutions(
           'Declare the slot with "$t" types TypeBox checks, such as "$t.String()" in place of "$t.Unsafe(...)"',
           'Register a custom kind with TypeBox\'s "TypeRegistry.Set(...)"',
         )
-        .reference('@caffeinejs/http', ErrConfiguration)
-        .build(),
-    )
-  }
+  return new ErrConfiguration(message.reference('@caffeinejs/http', ErrConfiguration).build())
 }
 
 /** What a headers schema may say about the names of the headers it checks. */
