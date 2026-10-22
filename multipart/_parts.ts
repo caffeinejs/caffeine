@@ -1,5 +1,3 @@
-/// <reference types="@fastify/multipart" />
-
 import { Readable } from 'node:stream'
 
 import type { CaffeineRouteConfig } from '@caffeinejs/http/fastify'
@@ -11,6 +9,10 @@ import type { MultipartField, MultipartFileNode, WebMultipartFile } from './mult
 // The multipart readers, over the Fastify request. Both public surfaces are thin wrappers: `pickers.ts` for a
 // decorated handler's arguments, `helpers.ts` for a handler that only receives the context.
 
+// Decorated by `multipartPlugin`: false when its `throwFileSizeLimit: false` asks for a file over `fileSize` to be
+// handed over cut short.
+export const kThrowFileSizeLimit = Symbol.for('@caffeinejs/multipart:throwFileSizeLimit')
+
 // The request's parts, held to the `bodyLimit` the route declared, on itself or on its group, as a JSON or a raw body
 // is. Fastify checks a limit only on a body it reads itself, and the plugin's parser reads nothing: busboy reads the
 // request later, from here. A route that declared no limit is held to the plugin's `limits` alone.
@@ -19,7 +21,7 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
   const limit = caffeine?.compiled?.route.bodyLimit
 
   if (limit === undefined) {
-    yield* req.parts()
+    yield* cutFilesFailed(req)
     return
   }
 
@@ -53,6 +55,36 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
     count.reading = value.type === 'file' ? value.file : undefined
     yield value
     next = parts.next()
+  }
+}
+
+// The request's parts, each file failed as busboy cuts it at the plugin's `fileSize`. busboy cuts a file without
+// failing it, and the plugin hands its error out only to a reader that asks for another part, so a reader that stops
+// at the file it returns would hand that file over cut short.
+async function* cutFilesFailed(req: FastifyRequest): AsyncGenerator<Multipart> {
+  const server = req.server as unknown as Record<symbol, boolean | undefined>
+  if (server[kThrowFileSizeLimit] === false) {
+    yield* req.parts()
+    return
+  }
+
+  for await (const part of req.parts()) {
+    if (part.type === 'file') {
+      const { file } = part
+      const refused = () => tooLarge(req, req.server.multipartErrors.RequestFileTooLargeError)
+
+      // A file that arrived in one chunk with its part was cut before the part got here: refused before a reader takes
+      // it, since `Readable.toWeb` makes a destroyed stream an empty one, not a failed one.
+      if (file.truncated) {
+        const err = refused()
+        file.destroy(err)
+        throw err
+      }
+
+      file.once('limit', () => file.destroy(refused()))
+    }
+
+    yield part
   }
 }
 
@@ -102,11 +134,11 @@ function countOf(req: FastifyRequest, limit: number): Count {
   return count
 }
 
-// Refuses a body over the limit as Fastify refuses one it reads itself: with the connection closed, since the client
+// Refuses a body over a limit as Fastify refuses one it reads itself: with the connection closed, since the client
 // may still be sending the rest, and nothing will read it.
-function tooLarge(req: FastifyRequest): Error {
+function tooLarge(req: FastifyRequest, TooLarge: new () => Error = errorCodes.FST_ERR_CTP_BODY_TOO_LARGE): Error {
   req.httpContext.header('connection', 'close')
-  return new errorCodes.FST_ERR_CTP_BODY_TOO_LARGE()
+  return new TooLarge()
 }
 
 // The request's files, held as `partsOf` holds them, its fields passed over.
