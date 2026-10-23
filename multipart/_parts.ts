@@ -35,6 +35,8 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
   const count = countOf(req, limit)
 
   while (true) {
+    // Past the limit, `passed` wins: the count settles it in the very `'data'` event that could fail busboy, and a
+    // failure of the plugin's reaches the race only some microtasks later. Under the limit, a failure is the plugin's.
     const step = await Promise.race([next, count.passed])
 
     if (count.bytes > limit) {

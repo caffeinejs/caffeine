@@ -604,7 +604,7 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
     },
   )
 
-  // The limit counts the fields with the files, and a form under it keeps both.
+  // A route's limit refuses a body over it, never a part of a form under it.
   it('hands the fields over on a route under its limit', async () => {
     const router = new Router('/captioned')
     router
@@ -615,26 +615,13 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
         return { caption: form.get('caption'), size: (form.get('upload') as File).size }
       })
 
-    const app = createWebApplication({})
-      .with(() => multipartPlugin())
-      .mount(router)
-    await app.bootstrap()
+    const res = await upload(router, '/captioned/upload', [
+      { name: 'caption', value: 'a photo' },
+      { name: 'upload', filename: 'upload.bin', content: 'x'.repeat(100) },
+    ])
 
-    try {
-      const res = await app.fetch('/captioned/upload', {
-        method: 'POST',
-        headers: multipartHeaders(),
-        body: multipartBody([
-          { name: 'caption', value: 'a photo' },
-          { name: 'upload', filename: 'upload.bin', content: 'x'.repeat(100) },
-        ]),
-      })
-
-      expect(res.status).toBe(200)
-      expect(await res.json()).toEqual({ caption: 'a photo', size: 100 })
-    } finally {
-      await app.close()
-    }
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ caption: 'a photo', size: 100 })
   })
 
   // A request that declares its length is refused on that alone, before a byte of it is parsed, and its connection is
