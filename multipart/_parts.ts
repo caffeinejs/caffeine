@@ -1,16 +1,161 @@
-/// <reference types="@fastify/multipart" />
-
 import { Readable } from 'node:stream'
 
-import type { FastifyRequest } from 'fastify'
+import type { CaffeineRouteConfig } from '@caffeinejs/http/fastify'
+import type { Multipart, MultipartFile } from '@fastify/multipart'
+import { errorCodes, type FastifyRequest } from 'fastify'
 
 import type { MultipartField, MultipartFileNode, WebMultipartFile } from './multipart.js'
 
 // The multipart readers, over the Fastify request. Both public surfaces are thin wrappers: `pickers.ts` for a
 // decorated handler's arguments, `helpers.ts` for a handler that only receives the context.
 
+// Decorated by `multipartPlugin`: false when its `throwFileSizeLimit: false` asks for a file over `fileSize` to be
+// handed over cut short.
+export const kThrowFileSizeLimit = Symbol.for('@caffeinejs/multipart:throwFileSizeLimit')
+
+// The request's parts, held to the `bodyLimit` the route declared, on itself or on its group, as a JSON or a raw body
+// is. Fastify checks a limit only on a body it reads itself, and the plugin's parser reads nothing: busboy reads the
+// request later, from here. A route that declared no limit is held to the plugin's `limits` alone.
+async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
+  const caffeine: CaffeineRouteConfig | undefined = req.routeOptions.config.$caffeine
+  const limit = caffeine?.compiled?.route.bodyLimit
+
+  if (limit === undefined) {
+    yield* cutFilesFailed(req)
+    return
+  }
+
+  if (Number(req.headers['content-length']) > limit) {
+    throw tooLarge(req)
+  }
+
+  // The route's limit stands in for the plugin's `fileSize`, above it as well as below.
+  const parts = req.parts({ limits: { fileSize: limit } })
+  let next = parts.next()
+  const count = countOf(req, limit)
+
+  while (true) {
+    // Past the limit, `passed` wins: the count settles it in the very `'data'` event that could fail busboy, and a
+    // failure of the plugin's reaches the race only some microtasks later. Under the limit, a failure is the plugin's.
+    const step = await Promise.race([next, count.passed])
+
+    if (count.bytes > limit) {
+      throw tooLarge(req)
+    }
+
+    const { value, done } = step
+    if (done) {
+      return
+    }
+
+    count.reading = value.type === 'file' ? value.file : undefined
+    yield value
+    next = parts.next()
+  }
+}
+
+// The request's parts, each file failed as busboy cuts it at the plugin's `fileSize`. busboy cuts a file without
+// failing it, and the plugin hands its error out only to a reader that asks for another part, so a reader that stops
+// at the file it returns would hand that file over cut short.
+async function* cutFilesFailed(req: FastifyRequest): AsyncGenerator<Multipart> {
+  const server = req.server as unknown as Record<symbol, boolean | undefined>
+  if (server[kThrowFileSizeLimit] === false) {
+    yield* req.parts()
+    return
+  }
+
+  for await (const part of req.parts()) {
+    if (part.type === 'file') {
+      const { file } = part
+      const refused = () => tooLarge(req, req.server.multipartErrors.RequestFileTooLargeError)
+
+      // A file that arrived in one chunk with its part was cut before the part got here: refused before a reader takes
+      // it, since `Readable.toWeb` makes a destroyed stream an empty one, not a failed one.
+      if (file.truncated) {
+        const err = refused()
+        file.destroy(err)
+        throw err
+      }
+
+      file.once('limit', () => file.destroy(refused()))
+    }
+
+    yield part
+  }
+}
+
+// What a request held to its route's limit has sent busboy. One per request, not per reader call: each call goes on
+// from where the last one stopped, and so does the count.
+interface Count {
+  bytes: number
+  // The file busboy is writing: past the limit it fails, which is what stops busboy.
+  reading: Readable | undefined
+  // Settles once the limit is passed, ending a reader's wait for its next part as the end of the body would: a field
+  // is handed over only once it has ended, and one past the limit may never end.
+  passed: Promise<IteratorReturnResult<undefined>>
+}
+
+const counts = new WeakMap<FastifyRequest, Count>()
+
+// The request's count, started by its first reader just after its first `next()`, which pipes the request into busboy
+// before it returns, so the count starts at the first byte. It stays on once that reader is done: `file()` and its
+// stream spellings hand a file over before it has been read.
+function countOf(req: FastifyRequest, limit: number): Count {
+  const started = counts.get(req)
+  if (started !== undefined) {
+    return started
+  }
+
+  let pass!: () => void
+  const count: Count = {
+    bytes: 0,
+    reading: undefined,
+    passed: new Promise(resolve => {
+      pass = () => resolve({ done: true, value: undefined })
+    }),
+  }
+
+  const counter = (chunk: Buffer) => {
+    count.bytes += chunk.length
+    if (count.bytes > limit) {
+      req.raw.off('data', counter)
+      count.reading?.destroy(tooLarge(req))
+      pass()
+    }
+  }
+
+  req.raw.on('data', counter)
+  counts.set(req, count)
+
+  return count
+}
+
+// Refuses a body over a limit as Fastify refuses one it reads itself: the client may still be sending the rest, and
+// busboy will not read it. Over HTTP/1 the connection is closed. HTTP/2 has no connection of the request's own to
+// close, so the rest is read and dropped, or the stream waits on it for ever; busboy is taken off it first, since the
+// plugin pauses the request when it takes busboy off itself.
+function tooLarge(req: FastifyRequest, TooLarge: new () => Error = errorCodes.FST_ERR_CTP_BODY_TOO_LARGE): Error {
+  if (req.raw.httpVersionMajor === 2) {
+    req.raw.unpipe()
+    req.raw.resume()
+  } else {
+    req.httpContext.header('connection', 'close')
+  }
+
+  return new TooLarge()
+}
+
+// The request's files, held as `partsOf` holds them, its fields passed over.
+async function* filesOf(req: FastifyRequest): AsyncGenerator<MultipartFile> {
+  for await (const part of partsOf(req)) {
+    if (part.type === 'file') {
+      yield part
+    }
+  }
+}
+
 export function webStreamParts(req: FastifyRequest): ReadableStream<WebMultipartFile | MultipartField> {
-  const iter = req.parts()[Symbol.asyncIterator]()
+  const iter = partsOf(req)
 
   return new ReadableStream<WebMultipartFile | MultipartField>({
     async pull(controller) {
@@ -40,7 +185,7 @@ export function webStreamParts(req: FastifyRequest): ReadableStream<WebMultipart
 }
 
 export function webStreamFiles(req: FastifyRequest): ReadableStream<WebMultipartFile> {
-  const iter = req.files()[Symbol.asyncIterator]()
+  const iter = filesOf(req)
 
   return new ReadableStream<WebMultipartFile>({
     async pull(controller) {
@@ -62,7 +207,7 @@ export function webStreamFiles(req: FastifyRequest): ReadableStream<WebMultipart
 }
 
 export function webStreamFile(req: FastifyRequest, fieldname?: string): ReadableStream<WebMultipartFile> {
-  const iter = req.files()[Symbol.asyncIterator]()
+  const iter = filesOf(req)
 
   return new ReadableStream<WebMultipartFile>({
     async pull(controller) {
@@ -98,7 +243,7 @@ export function webStreamFile(req: FastifyRequest, fieldname?: string): Readable
 
 export function nodeStreamParts(req: FastifyRequest): Readable {
   async function* gen() {
-    for await (const part of req.parts()) {
+    for await (const part of partsOf(req)) {
       if (part.type === 'file') {
         yield {
           type: 'file' as const,
@@ -121,7 +266,7 @@ export function nodeStreamParts(req: FastifyRequest): Readable {
 
 export function nodeStreamFiles(req: FastifyRequest): Readable {
   async function* gen() {
-    for await (const f of req.files()) {
+    for await (const f of filesOf(req)) {
       yield {
         type: 'file' as const,
         fieldname: f.fieldname,
@@ -136,7 +281,7 @@ export function nodeStreamFiles(req: FastifyRequest): Readable {
 
 export function nodeStreamFile(req: FastifyRequest, fieldname?: string): Readable {
   async function* gen() {
-    for await (const f of req.files()) {
+    for await (const f of filesOf(req)) {
       if (!fieldname || f.fieldname === fieldname) {
         yield {
           type: 'file' as const,
@@ -156,7 +301,7 @@ export function nodeStreamFile(req: FastifyRequest, fieldname?: string): Readabl
 }
 
 export async function readFile(req: FastifyRequest, fieldname?: string): Promise<File | undefined> {
-  for await (const f of req.files()) {
+  for await (const f of filesOf(req)) {
     if (!fieldname || f.fieldname === fieldname) {
       const chunks: Uint8Array[] = []
       for await (const chunk of f.file) {
@@ -173,7 +318,7 @@ export async function readFile(req: FastifyRequest, fieldname?: string): Promise
 
 export async function readFiles(req: FastifyRequest): Promise<File[]> {
   const out: File[] = []
-  for await (const f of req.files()) {
+  for await (const f of filesOf(req)) {
     const chunks: Uint8Array[] = []
     for await (const chunk of f.file) {
       chunks.push(chunk)
@@ -185,7 +330,7 @@ export async function readFiles(req: FastifyRequest): Promise<File[]> {
 
 export async function readFormData(req: FastifyRequest): Promise<FormData> {
   const fd = new FormData()
-  for await (const part of req.parts()) {
+  for await (const part of partsOf(req)) {
     if (part.type === 'file') {
       const chunks: Uint8Array[] = []
       for await (const chunk of part.file) {
