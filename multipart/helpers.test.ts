@@ -161,6 +161,25 @@ describe('multipart(ctx) on a programmatic route', () => {
     expect(await received[1].text()).toBe('bbb')
   })
 
+  it('files() — passes over the fields sent among the files', async () => {
+    let received: File[] = []
+
+    const router = new Router('/hf14')
+    router.post('/upload').handler(async ctx => {
+      received = await multipart(ctx).files()
+      return {}
+    })
+
+    const res = await upload(router, '/hf14/upload', [
+      { name: 'a', filename: 'a.txt', content: 'aaa', mime: 'text/plain' },
+      { name: 'note', value: 'between the files' },
+      { name: 'b', filename: 'b.txt', content: 'bbb', mime: 'text/plain' },
+    ])
+
+    expect(res.status).toBe(200)
+    expect(received.map(f => f.name)).toEqual(['a.txt', 'b.txt'])
+  })
+
   it('formData() — collects fields and files into one FormData', async () => {
     let received: FormData | undefined
 
@@ -584,6 +603,39 @@ describe('multipart(ctx) on a route that declares a bodyLimit', () => {
       }
     },
   )
+
+  // The limit counts the fields with the files, and a form under it keeps both.
+  it('hands the fields over on a route under its limit', async () => {
+    const router = new Router('/captioned')
+    router
+      .post('/upload')
+      .bodyLimit(1 * KiB)
+      .handler(async ctx => {
+        const form = await multipart(ctx).formData()
+        return { caption: form.get('caption'), size: (form.get('upload') as File).size }
+      })
+
+    const app = createWebApplication({})
+      .with(() => multipartPlugin())
+      .mount(router)
+    await app.bootstrap()
+
+    try {
+      const res = await app.fetch('/captioned/upload', {
+        method: 'POST',
+        headers: multipartHeaders(),
+        body: multipartBody([
+          { name: 'caption', value: 'a photo' },
+          { name: 'upload', filename: 'upload.bin', content: 'x'.repeat(100) },
+        ]),
+      })
+
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ caption: 'a photo', size: 100 })
+    } finally {
+      await app.close()
+    }
+  })
 
   // A request that declares its length is refused on that alone, before a byte of it is parsed, and its connection is
   // closed rather than read to the length declared, as Fastify does for a JSON body. This one declares more than the

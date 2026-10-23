@@ -35,13 +35,7 @@ async function* partsOf(req: FastifyRequest): AsyncGenerator<Multipart> {
   const count = countOf(req, limit)
 
   while (true) {
-    let step: IteratorResult<Multipart>
-    try {
-      step = await Promise.race([next, count.passed])
-    } catch (err) {
-      // The plugin's own failure for a file cut at `fileSize` comes from the same overflow, and answers as it does.
-      throw count.bytes > limit ? tooLarge(req) : err
-    }
+    const step = await Promise.race([next, count.passed])
 
     if (count.bytes > limit) {
       throw tooLarge(req)
