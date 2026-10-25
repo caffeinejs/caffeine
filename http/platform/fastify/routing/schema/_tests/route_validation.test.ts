@@ -88,20 +88,20 @@ describe('a $t schema on a live route', () => {
   it('is accepted by Fastify, which means it compiled under Ajv', async () => {
     const app = await boot()
 
-    expect((await app.fetch('/pets?page=2')).status).toBe(200)
+    expect((await app.request('/pets?page=2')).status).toBe(200)
   })
 
   it('coerces the query string and applies declared defaults', async () => {
     const app = await boot()
 
-    expect(await (await app.fetch('/pets?page=2')).json()).toEqual({ page: 2 })
-    expect(await (await app.fetch('/pets')).json()).toEqual({ page: 1 })
+    expect(await (await app.request('/pets?page=2')).json()).toEqual({ page: 2 })
+    expect(await (await app.request('/pets')).json()).toEqual({ page: 1 })
   })
 
   it('rejects a body that violates the schema', async () => {
     const app = await boot()
 
-    const res = await app.fetch('/pets', json({ name: '', ageMonths: 1 }))
+    const res = await app.request('/pets', json({ name: '', ageMonths: 1 }))
 
     expect(res.status).toBe(400)
   })
@@ -109,7 +109,7 @@ describe('a $t schema on a live route', () => {
   it('accepts a valid body', async () => {
     const app = await boot()
 
-    const res = await app.fetch('/pets', json({ name: 'rex', ageMonths: 12 }))
+    const res = await app.request('/pets', json({ name: 'rex', ageMonths: 12 }))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ created: { name: 'rex', ageMonths: 12 } })
@@ -118,7 +118,7 @@ describe('a $t schema on a live route', () => {
   it('delivers an explicit null instead of coercing it to an empty string', async () => {
     const app = await boot()
 
-    const res = await app.fetch('/pets', json({ name: 'rex', ageMonths: 12, note: null }))
+    const res = await app.request('/pets', json({ name: 'rex', ageMonths: 12, note: null }))
 
     expect(await res.json()).toEqual({ created: { name: 'rex', ageMonths: 12, note: null } })
   })
@@ -126,7 +126,7 @@ describe('a $t schema on a live route', () => {
   it('strips a body field the schema does not declare', async () => {
     const app = await boot()
 
-    const res = await app.fetch('/pets', json({ name: 'rex', ageMonths: 12, isAdmin: true }))
+    const res = await app.request('/pets', json({ name: 'rex', ageMonths: 12, isAdmin: true }))
 
     expect(await res.json()).toEqual({ created: { name: 'rex', ageMonths: 12 } })
   })
@@ -134,13 +134,13 @@ describe('a $t schema on a live route', () => {
   it('serializes a null through a nullable response field', async () => {
     const app = await boot()
 
-    expect(await (await app.fetch('/pets/nullable-response')).json()).toEqual({ note: null })
+    expect(await (await app.request('/pets/nullable-response')).json()).toEqual({ note: null })
   })
 
   it('keeps undeclared headers reachable', async () => {
     const app = await boot()
 
-    const res = await app.fetch('/pets/headers', { headers: { 'x-tenant': 'acme' } })
+    const res = await app.request('/pets/headers', { headers: { 'x-tenant': 'acme' } })
 
     expect(await res.json()).toEqual({ hasHost: true, tenant: 'acme' })
   })
@@ -148,14 +148,14 @@ describe('a $t schema on a live route', () => {
   it('rejects a request missing a declared header', async () => {
     const app = await boot()
 
-    expect((await app.fetch('/pets/headers')).status).toBe(400)
+    expect((await app.request('/pets/headers')).status).toBe(400)
   })
 
   it('accepts a UnionEnum query member and rejects a non-member', async () => {
     const app = await boot()
 
-    expect(await (await app.fetch('/pets/filter?status=AVAILABLE')).json()).toEqual({ status: 'AVAILABLE' })
-    expect((await app.fetch('/pets/filter?status=ADOPTED')).status).toBe(400)
+    expect(await (await app.request('/pets/filter?status=AVAILABLE')).json()).toEqual({ status: 'AVAILABLE' })
+    expect((await app.request('/pets/filter?status=ADOPTED')).status).toBe(400)
   })
 })
 
@@ -163,9 +163,9 @@ describe('a Standard Schema on a live route', () => {
   it('validates through Ajv after conversion', async () => {
     const app = await boot()
 
-    expect((await app.fetch('/pets/zod', json({ title: 'x', count: 1 }))).status).toBe(200)
-    expect((await app.fetch('/pets/zod', json({ title: '', count: 1 }))).status).toBe(400)
-    expect((await app.fetch('/pets/zod', json({ title: 'x', count: 1.5 }))).status).toBe(400)
+    expect((await app.request('/pets/zod', json({ title: 'x', count: 1 }))).status).toBe(200)
+    expect((await app.request('/pets/zod', json({ title: '', count: 1 }))).status).toBe(400)
+    expect((await app.request('/pets/zod', json({ title: 'x', count: 1.5 }))).status).toBe(400)
   })
 })
 

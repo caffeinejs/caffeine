@@ -48,7 +48,7 @@ class FakeOrdersRepository {
  * Orders, declared as a programmatic router — and therefore driven by a client that knows its routes.
  *
  * `testClient` is `@caffeinejs/brewer` plus the application's lifecycle: the routes come from the value
- * `buildApp` returns, and the transport is that application's own `fetch`, so nothing reaches a socket. A path
+ * `buildApp` returns, and the transport is that application's own `request`, so nothing reaches a socket. A path
  * is never written out — a static segment is a property and a parameterised one is a call — so a route that is
  * renamed, removed or re-typed breaks this file at compile time rather than at run time.
  */

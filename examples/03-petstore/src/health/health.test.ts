@@ -36,7 +36,7 @@ async function start(fake: HealthIndicator): Promise<PetstoreApp> {
   return app
 }
 
-const probe = (app: PetstoreApp, url: string) => app.fetch(url, { method: 'GET' })
+const probe = (app: PetstoreApp, url: string) => app.request(url, { method: 'GET' })
 
 describe('health probes', () => {
   let app: PetstoreApp | undefined

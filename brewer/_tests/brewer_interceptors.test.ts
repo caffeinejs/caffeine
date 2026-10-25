@@ -718,7 +718,7 @@ describe('brewer handing a chain to its transport', () => {
       interceptors: [passThrough],
       fetch: (input, init) => {
         calls.push({ input, init })
-        return app.fetch(input, init)
+        return app.request(input, init)
       },
     })
 
@@ -753,7 +753,7 @@ describe('brewer handing a chain to its transport', () => {
       interceptors: [],
       fetch: (input, init) => {
         calls.push({ input, init })
-        return app.fetch(input, init)
+        return app.request(input, init)
       },
     })
 

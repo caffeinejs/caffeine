@@ -55,9 +55,9 @@ describe('a group prefix and a route at "/"', () => {
     await app.bootstrap()
 
     try {
-      expect((await app.fetch('/app')).status).toBe(200)
+      expect((await app.request('/app')).status).toBe(200)
       // `ignoreTrailingSlash` is left at Fastify's default, so this is a different URL.
-      expect((await app.fetch('/app/')).status).toBe(404)
+      expect((await app.request('/app/')).status).toBe(404)
     } finally {
       await app.close()
     }
@@ -72,7 +72,7 @@ describe('a group prefix and a route at "/"', () => {
 
     try {
       expect(urls).toContain('/api/v1')
-      expect((await app.fetch('/api/v1')).status).toBe(200)
+      expect((await app.request('/api/v1')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -92,7 +92,7 @@ describe('a group prefix and a route at "/"', () => {
     await app.bootstrap()
 
     try {
-      expect((await app.fetch('/ctrl')).status).toBe(200)
+      expect((await app.request('/ctrl')).status).toBe(200)
     } finally {
       await app.close()
     }
@@ -104,9 +104,9 @@ describe('a group prefix and a route at "/"', () => {
     await app.bootstrap()
 
     try {
-      expect((await app.fetch('/dash')).status).toBe(404)
-      expect((await app.fetch('/dash/')).status).toBe(200)
-      expect((await app.fetch('/dash/deep')).status).toBe(200)
+      expect((await app.request('/dash')).status).toBe(404)
+      expect((await app.request('/dash/')).status).toBe(200)
+      expect((await app.request('/dash/deep')).status).toBe(200)
     } finally {
       await app.close()
     }

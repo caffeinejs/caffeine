@@ -83,11 +83,11 @@ describe('a handler that returns a Blob, a File or an ArrayBuffer sends the byte
   })
 
   it('sends a Blob as its bytes, under its own type', async () => {
-    await expectPatterned(await app.fetch('/bodies/blob'), { type: PDF })
+    await expectPatterned(await app.request('/bodies/blob'), { type: PDF })
   })
 
   it('sends a File as its bytes, under its own type, without making it a download', async () => {
-    const res = await app.fetch('/bodies/file')
+    const res = await app.request('/bodies/file')
 
     // Only an `Attachment` names a download: a File returned as it is shows inline, as any other body does.
     expect(res.headers.get('content-disposition')).toBeNull()
@@ -95,44 +95,44 @@ describe('a handler that returns a Blob, a File or an ArrayBuffer sends the byte
   })
 
   it('sends an ArrayBuffer as bytes, as Fastify sends a Uint8Array', async () => {
-    await expectPatterned(await app.fetch('/bodies/array-buffer'), { type: OCTET })
+    await expectPatterned(await app.request('/bodies/array-buffer'), { type: OCTET })
   })
 
   it('sends a Blob assembled from bytes and other Blobs in the order its parts were given', async () => {
-    await expectPatterned(await app.fetch('/bodies/mixed'), { type: OCTET })
+    await expectPatterned(await app.request('/bodies/mixed'), { type: OCTET })
   })
 
   it('sends a CSV export built from text, bytes and a Blob as one document', async () => {
-    const res = await app.fetch('/bodies/csv')
+    const res = await app.request('/bodies/csv')
 
     expect(res.headers.get('content-type')).toBe('text/csv')
     expect(await res.text()).toBe('region,total\nnorth,12\nsouth,7\n')
   })
 
   it('sends only the slice of a larger Blob, not the Blob it was cut from', async () => {
-    await expectPatterned(await app.fetch('/bodies/sliced'), { type: OCTET, offset: 500 })
+    await expectPatterned(await app.request('/bodies/sliced'), { type: OCTET, offset: 500 })
   })
 
   it('sends a resizable ArrayBuffer at the size it has when returned', async () => {
-    await expectPatterned(await app.fetch('/bodies/resizable'), { type: OCTET })
+    await expectPatterned(await app.request('/bodies/resizable'), { type: OCTET })
   })
 
   // What Fastify already sends right: these keep working once the adapter handles the types it does not.
   describe('the bytes Fastify already sends', () => {
     it('sends a Uint8Array as its bytes', async () => {
-      await expectPatterned(await app.fetch('/bodies/uint8'), { type: OCTET })
+      await expectPatterned(await app.request('/bodies/uint8'), { type: OCTET })
     })
 
     it('sends a DataView as the bytes it views', async () => {
-      await expectPatterned(await app.fetch('/bodies/data-view'), { type: OCTET })
+      await expectPatterned(await app.request('/bodies/data-view'), { type: OCTET })
     })
 
     it('sends a view into a larger buffer as the bytes it views, not the whole buffer', async () => {
-      await expectPatterned(await app.fetch('/bodies/view-of-larger'), { type: OCTET, offset: 1000 })
+      await expectPatterned(await app.request('/bodies/view-of-larger'), { type: OCTET, offset: 1000 })
     })
 
     it('sends a Float64Array as the bytes of its numbers', async () => {
-      const res = await app.fetch('/bodies/float64')
+      const res = await app.request('/bodies/float64')
 
       expect(res.headers.get('content-type')).toBe(OCTET)
       expect(new Uint8Array(await res.arrayBuffer())).toEqual(
@@ -145,7 +145,7 @@ describe('a handler that returns a Blob, a File or an ArrayBuffer sends the byte
     it.each(['blob', 'file', 'array-buffer'])(
       'answers the %s route with its type and full length, and no body',
       async path => {
-        const res = await app.fetch(`/bodies/${path}`, { method: 'HEAD' })
+        const res = await app.request(`/bodies/${path}`, { method: 'HEAD' })
 
         expect(res.status).toBe(200)
         expect(res.headers.get('content-type')).toBe(path === 'array-buffer' ? OCTET : PDF)
@@ -174,7 +174,7 @@ describe('the edges of a body', () => {
   })
 
   it.each(['empty-blob', 'empty-array-buffer'])('sends an %s as an empty body that says it is empty', async path => {
-    const res = await app.fetch(`/edges/${path}`)
+    const res = await app.request(`/edges/${path}`)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-length')).toBe('0')
@@ -182,14 +182,14 @@ describe('the edges of a body', () => {
   })
 
   it("keeps the parameters of a Blob's type", async () => {
-    const res = await app.fetch('/edges/typed-with-parameters')
+    const res = await app.request('/edges/typed-with-parameters')
 
     expect(res.headers.get('content-type')).toBe('text/csv;charset=utf-8')
     expect(await res.text()).toBe('a,b\n')
   })
 
   it('labels a Blob that has no type as bytes, never as JSON', async () => {
-    await expectPatterned(await app.fetch('/edges/untyped'), { type: OCTET })
+    await expectPatterned(await app.request('/edges/untyped'), { type: OCTET })
   })
 })
 
@@ -235,32 +235,32 @@ describe("whose Content-Type a Blob goes out under: the route's or the handler's
   })
 
   it("sends a Blob under the route's declared type rather than its own", async () => {
-    const res = await app.fetch('/precedence/produces')
+    const res = await app.request('/precedence/produces')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/csv/)
     expect(await res.text()).toBe('a,b\n')
   })
 
   it("sends a Blob under its controller's declared type rather than its own", async () => {
-    const res = await app.fetch('/precedence-controller/blob')
+    const res = await app.request('/precedence-controller/blob')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/csv/)
     expect(await res.text()).toBe('a,b\n')
   })
 
   it("sends an ArrayBuffer under the route's declared type", async () => {
-    await expectPatterned(await app.fetch('/precedence/produces-bytes'), { type: /^application\/pdf/ })
+    await expectPatterned(await app.request('/precedence/produces-bytes'), { type: /^application\/pdf/ })
   })
 
   it('sends a Blob under the type its handler set on the reply rather than its own', async () => {
-    const res = await app.fetch('/precedence/handler')
+    const res = await app.request('/precedence/handler')
 
     expect(res.headers.get('content-type')).toBe('image/png')
     expect(await res.text()).toBe('png')
   })
 
   it("keeps the route's status and headers on a Blob answer", async () => {
-    const res = await app.fetch('/precedence/decorated')
+    const res = await app.request('/precedence/decorated')
 
     expect(res.headers.get('x-route')).toBe('yes')
     await expectPatterned(res, { status: 201, type: PDF })
@@ -431,7 +431,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     ['a Responder whose thenable is not a native promise', '/sites/responder-thenable'],
     ['a middleware that answers before the handler runs', '/sites/gated'],
   ])('sends it from %s', async (_site, path) => {
-    await expectPatterned(await app.fetch(path), { type: PDF })
+    await expectPatterned(await app.request(path), { type: PDF })
   })
 
   it.each([
@@ -440,11 +440,11 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
     ['a global @Catch handler', '/sites/global-catch', 500],
     ['an ErrHTTP that carries it as its body', '/sites/err-http', 409],
   ])('sends it from %s, with the status it set', async (_site, path, status) => {
-    await expectPatterned(await app.fetch(path), { status, type: PDF })
+    await expectPatterned(await app.request(path), { status, type: PDF })
   })
 
   it('serves one Blob to many requests at once, each in full', async () => {
-    const responses = await Promise.all(Array.from({ length: 20 }, () => app.fetch('/sites/shared')))
+    const responses = await Promise.all(Array.from({ length: 20 }, () => app.request('/sites/shared')))
 
     for (const res of responses) {
       await expectPatterned(res, { type: PDF })
@@ -452,17 +452,17 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   })
 
   it('refuses a promise handed to ctx.body(...), which would go out as {}, with an error that says to await it', async () => {
-    const res = await app.fetch('/sites/context-promise')
+    const res = await app.request('/sites/context-promise')
 
     expect(res.status).toBe(500)
     expect(await res.text()).not.toBe('{}')
 
-    const recovered = await app.fetch('/sites/context-promise-recovered')
+    const recovered = await app.request('/sites/context-promise-recovered')
     expect(refusal).toBeInstanceOf(ErrConfiguration)
     expect((refusal as Error).message).toMatch(/^Cannot send a promise with ctx\.body\(\.\.\.\)/)
     await expectPatterned(recovered, { type: PDF })
 
-    const helper = await app.fetch('/sites/context-not-found-promise-recovered')
+    const helper = await app.request('/sites/context-not-found-promise-recovered')
     expect(helperRefusal).toBeInstanceOf(ErrConfiguration)
     expect((helperRefusal as Error).message).toMatch(/^Cannot send a promise with ctx\.notFound\(\.\.\.\)/)
     expect(helper.status).toBe(200)
@@ -470,7 +470,7 @@ describe('every place an answer is sent from sends a Blob the same way', () => {
   })
 
   it('answers a Responder that answers nothing with an empty body, rather than leaving the request hanging', async () => {
-    const res = await app.fetch('/sites/silent')
+    const res = await app.request('/sites/silent')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('')

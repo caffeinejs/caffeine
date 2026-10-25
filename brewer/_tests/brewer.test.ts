@@ -11,7 +11,7 @@ import {
   brewer,
   type BrewClient,
   type BrewOptions,
-  type Fetchable,
+  type Requestable,
 } from '../index.js'
 
 const petSchema = $t.Object({ id: $t.Integer(), name: $t.String() })
@@ -143,13 +143,13 @@ afterAll(async () => {
   await app.close()
 })
 
-/** A client over the application's own `fetch`, recording every URL it is handed. */
+/** A client over the application's own `request`, recording every URL it is handed. */
 function spied(): { client: BrewClient<typeof app>; sent: string[] } {
   const sent: string[] = []
   const client = brewer(app, {
     fetch: (input, init) => {
       sent.push(String(input))
-      return app.fetch(input as string, init)
+      return app.request(input as string, init)
     },
   })
 
@@ -487,7 +487,7 @@ describe('brewer against a running server', () => {
   })
 })
 
-// No socket here: the application is handed over as the target, so requests go through its own `fetch`.
+// No socket here: the application is handed over as the target, so requests go through its own `request`.
 describe('brewer against an application in process', () => {
   describe('given the application itself rather than a URL', () => {
     it('should reach its routes with neither a type argument nor an origin', async () => {
@@ -771,7 +771,7 @@ describe('brewer against an application in process', () => {
           const client = brewer<typeof based>(baseURL, {
             fetch: (input, init) => {
               calls.push(String(input))
-              return based.fetch(input as string, init)
+              return based.request(input as string, init)
             },
           })
 
@@ -814,7 +814,7 @@ describe('brewer against an application in process', () => {
 
   describe('given anything else that answers like fetch', () => {
     it('should use it, since the target is structural', async () => {
-      const stub: Fetchable = { fetch: async () => Response.json({ id: 9, name: 'Stub' }) }
+      const stub: Requestable = { request: async () => Response.json({ id: 9, name: 'Stub' }) }
       const client = brewer<typeof app>(stub)
 
       expect(await (await client.pets({ id: 9 }).get()).json()).toEqual({ id: 9, name: 'Stub' })

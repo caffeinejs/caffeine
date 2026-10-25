@@ -67,7 +67,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/opaque-ok', { headers: { authorization: 'Bearer good-token' } })
+    const res = await app.request('/opaque-ok', { headers: { authorization: 'Bearer good-token' } })
     expect(res.status).toBe(200)
     const body = (await res.json()) as Record<string, unknown>
     expect(body.sub).toBe('user-1')
@@ -90,7 +90,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/opaque-none')
+    const res = await app.request('/opaque-none')
     expect(res.status).toBe(401)
   })
 
@@ -110,7 +110,7 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/opaque-bad', { headers: { authorization: 'Bearer bad-token' } })
+    const res = await app.request('/opaque-bad', { headers: { authorization: 'Bearer bad-token' } })
     expect(res.status).toBe(401)
   })
 
@@ -130,10 +130,10 @@ describe('OpaqueTokenAuthenticationHandler (application, DI-bound store)', () =>
     const app = builder
     await app.bootstrap()
 
-    const granted = await app.fetch('/opaque-scope', { headers: { authorization: 'Bearer good-token' } })
+    const granted = await app.request('/opaque-scope', { headers: { authorization: 'Bearer good-token' } })
     expect(granted.status).toBe(200)
 
-    const denied = await app.fetch('/opaque-scope', { headers: { authorization: 'Bearer reader-token' } })
+    const denied = await app.request('/opaque-scope', { headers: { authorization: 'Bearer reader-token' } })
     expect(denied.status).toBe(403)
   })
 })

@@ -1,4 +1,4 @@
-import type { Fetchable } from '@caffeinejs/brewer'
+import type { Requestable } from '@caffeinejs/brewer'
 import { Injectable } from '@caffeinejs/di'
 import { WebApplication, Controller, Get, Post, Args, $p } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
@@ -117,8 +117,8 @@ describe('controllerTypedClient()', () => {
   })
 
   it('throws ErrFetchFailed when response is not ok', async () => {
-    const mockAdapter: Fetchable = {
-      fetch: async () =>
+    const mockAdapter: Requestable = {
+      request: async () =>
         new Response(JSON.stringify({ error: 'internal' }), {
           status: 500,
           headers: { 'content-type': 'application/json' },
@@ -131,8 +131,8 @@ describe('controllerTypedClient()', () => {
   })
 
   it('ErrFetchFailed carries status, headers, and parsed body', async () => {
-    const mockAdapter: Fetchable = {
-      fetch: async () =>
+    const mockAdapter: Requestable = {
+      request: async () =>
         new Response(JSON.stringify({ error: 'not found' }), {
           status: 404,
           headers: { 'content-type': 'application/json; charset=utf-8' },
@@ -157,8 +157,8 @@ describe('controllerTypedClient()', () => {
   })
 
   it('ErrFetchFailed with non-JSON error body captures text', async () => {
-    const mockAdapter: Fetchable = {
-      fetch: async () =>
+    const mockAdapter: Requestable = {
+      request: async () =>
         new Response('Service Unavailable', {
           status: 503,
           headers: { 'content-type': 'text/plain' },

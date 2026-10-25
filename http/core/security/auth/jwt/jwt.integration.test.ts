@@ -64,7 +64,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' })
-    const res = await app.fetch('/jwt-valid', {
+    const res = await app.request('/jwt-valid', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(200)
@@ -90,7 +90,7 @@ describe('JWTBearerHandler', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/jwt-no-header')
+    const res = await app.request('/jwt-no-header')
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toBe('Bearer')
   })
@@ -115,7 +115,7 @@ describe('JWTBearerHandler', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/jwt-bad-token', {
+    const res = await app.request('/jwt-bad-token', {
       headers: { authorization: 'Bearer not.a.valid.jwt' },
     })
     expect(res.status).toBe(401)
@@ -142,7 +142,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signExpiredToken({ sub: 'user-expired' })
-    const res = await app.fetch('/jwt-expired', {
+    const res = await app.request('/jwt-expired', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(401)
@@ -176,7 +176,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' }, { issuer: 'https://other.example.com' })
-    const res = await app.fetch('/jwt-wrong-iss', {
+    const res = await app.request('/jwt-wrong-iss', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(401)
@@ -210,7 +210,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1' }, { audience: 'other-api' })
-    const res = await app.fetch('/jwt-wrong-aud', {
+    const res = await app.request('/jwt-wrong-aud', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(401)
@@ -238,7 +238,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'alice-123' })
-    const res = await app.fetch('/jwt-sub-claim', {
+    const res = await app.request('/jwt-sub-claim', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(200)
@@ -267,7 +267,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: 'admin' })
-    const res = await app.fetch('/jwt-role', {
+    const res = await app.request('/jwt-role', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(200)
@@ -294,7 +294,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: ['admin', 'editor'] })
-    const res = await app.fetch('/jwt-array-roles', {
+    const res = await app.request('/jwt-array-roles', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(200)
@@ -333,7 +333,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-hook' })
-    await app.fetch('/jwt-on-validated', {
+    await app.request('/jwt-on-validated', {
       headers: { authorization: `Bearer ${token}` },
     })
 
@@ -374,7 +374,7 @@ describe('JWTBearerHandler', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/jwt-on-fail', {
+    const res = await app.request('/jwt-on-fail', {
       headers: { authorization: 'Bearer not.a.jwt' },
     })
 
@@ -405,7 +405,7 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const token = await signToken({ sub: 'user-1', roles: 'viewer' })
-    const res = await app.fetch('/jwt-role-403', {
+    const res = await app.request('/jwt-role-403', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(403)
@@ -438,7 +438,7 @@ describe('JWTBearerHandler', () => {
     const app = builder
     await app.bootstrap()
 
-    const res = await app.fetch('/jwt-status-guard', { method: 'POST' })
+    const res = await app.request('/jwt-status-guard', { method: 'POST' })
     expect(res.status).toBe(401)
     expect(handlerRan).toBe(false)
   })
@@ -470,8 +470,8 @@ describe('JWTBearerHandler', () => {
     await app.bootstrap()
 
     const [protectedRes, publicRes] = await Promise.all([
-      app.fetch('/jwt-allow-anon/protected'),
-      app.fetch('/jwt-allow-anon/public'),
+      app.request('/jwt-allow-anon/protected'),
+      app.request('/jwt-allow-anon/public'),
     ])
 
     expect(protectedRes.status).toBe(401)

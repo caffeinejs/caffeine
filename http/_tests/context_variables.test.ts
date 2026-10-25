@@ -89,7 +89,7 @@ describe('request variables', () => {
     const application = newApp()
     await application.bootstrap()
 
-    const response = await application.fetch('/state/read', { headers: { 'x-tenant': 'acme' } })
+    const response = await application.request('/state/read', { headers: { 'x-tenant': 'acme' } })
 
     expect(await response.json()).toEqual({ tenant: 'acme' })
 
@@ -100,7 +100,7 @@ describe('request variables', () => {
     const application = newApp()
     await application.bootstrap()
 
-    const response = await application.fetch('/state/missing')
+    const response = await application.request('/state/missing')
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ tenant: null })
@@ -112,7 +112,7 @@ describe('request variables', () => {
     const application = newApp()
     await application.bootstrap()
 
-    const response = await application.fetch('/state/boom', { headers: { 'x-tenant': 'acme' } })
+    const response = await application.request('/state/boom', { headers: { 'x-tenant': 'acme' } })
 
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ tenant: 'acme' })
@@ -124,7 +124,7 @@ describe('request variables', () => {
     const application = newApp()
     await application.bootstrap()
 
-    const response = await application.fetch('/state/identity')
+    const response = await application.request('/state/identity')
 
     expect(await response.json()).toEqual({ same: true })
 
@@ -136,8 +136,8 @@ describe('request variables', () => {
     await application.bootstrap()
 
     const [first, second] = await Promise.all([
-      application.fetch('/state/slow', { headers: { 'x-tenant': 'acme' } }),
-      application.fetch('/state/slow', { headers: { 'x-tenant': 'globex' } }),
+      application.request('/state/slow', { headers: { 'x-tenant': 'acme' } }),
+      application.request('/state/slow', { headers: { 'x-tenant': 'globex' } }),
     ])
 
     expect(await first.json()).toEqual({ tenant: 'acme' })
@@ -153,7 +153,7 @@ describe('request variables', () => {
     const application = newApp().mount(routes)
     await application.bootstrap()
 
-    const response = await application.fetch('/pets', { headers: { 'x-tenant': 'acme' } })
+    const response = await application.request('/pets', { headers: { 'x-tenant': 'acme' } })
 
     expect(await response.json()).toEqual({ tenant: 'acme' })
 

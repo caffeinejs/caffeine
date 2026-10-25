@@ -138,8 +138,8 @@ async function buildApp() {
 
 async function postJSON(app: Awaited<ReturnType<typeof buildApp>>['app'], path: string, body?: unknown) {
   return body != null
-    ? app.fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
-    : app.fetch(path, { method: 'POST' })
+    ? app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    : app.request(path, { method: 'POST' })
 }
 
 describe('bearer refresh-token grant (application)', () => {
@@ -152,7 +152,7 @@ describe('bearer refresh-token grant (application)', () => {
     expect(accessToken).toBeTruthy()
     expect(refreshToken).toContain(':')
 
-    const me = await app.fetch('/me', { headers: { authorization: `Bearer ${accessToken}` } })
+    const me = await app.request('/me', { headers: { authorization: `Bearer ${accessToken}` } })
     expect(me.status).toBe(200)
     expect(await me.json()).toEqual({ sub: 'alice', admin: true })
   })
@@ -166,7 +166,7 @@ describe('bearer refresh-token grant (application)', () => {
     const next = (await res.json()) as Record<string, string>
     expect(next.refreshToken).not.toBe(first.refreshToken)
 
-    const me = await app.fetch('/me', { headers: { authorization: `Bearer ${next.accessToken}` } })
+    const me = await app.request('/me', { headers: { authorization: `Bearer ${next.accessToken}` } })
     expect(me.status).toBe(200)
   })
 
@@ -196,7 +196,7 @@ describe('bearer refresh-token grant (application)', () => {
     expect(token).toBeTruthy()
 
     // A self-issued guest token authenticates (valid JWT) but is not an admin.
-    const me = await app.fetch('/me', { headers: { authorization: `Bearer ${token}` } })
+    const me = await app.request('/me', { headers: { authorization: `Bearer ${token}` } })
     expect(me.status).toBe(200)
     expect(await me.json()).toEqual({ sub: undefined, admin: false })
   })

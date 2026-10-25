@@ -99,8 +99,8 @@ describe('plugin registration', () => {
       await before.bootstrap()
       await after.bootstrap()
 
-      expect((await before.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
-      expect((await after.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+      expect((await before.request('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+      expect((await after.request('/nothing-here')).headers.get('x-greeting')).toBe('hello')
     } finally {
       await before.close()
       await after.close()
@@ -241,7 +241,7 @@ describe('plugin registration', () => {
 
     await expect(app.bootstrap()).resolves.not.toThrow()
 
-    expect((await app.fetch('/nothing-here')).headers.get('x-greeting')).toBe('hello')
+    expect((await app.request('/nothing-here')).headers.get('x-greeting')).toBe('hello')
   })
 
   // The order a plugin ends up in is the order its `.with(...)` was written — not the order its factory happens to
@@ -290,7 +290,7 @@ describe('plugin registration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/head-slot/boom')
+    const res = await app.request('/head-slot/boom')
 
     expect(res.status).toBe(400)
     expect(res.headers.get('x-stamp')).toBe('yes')
@@ -304,7 +304,7 @@ describe('plugin registration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/nothing-here')
+    const res = await app.request('/nothing-here')
 
     expect(res.status).toBe(404)
     expect(res.headers.get('x-stamp')).toBe('yes')
@@ -334,8 +334,8 @@ describe('scoped plugin registration', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/scoped-pets')).headers.get('x-pets')).toBe('yes')
-    expect((await app.fetch('/scoped-orders')).headers.get('x-pets')).toBeNull()
+    expect((await app.request('/scoped-pets')).headers.get('x-pets')).toBe('yes')
+    expect((await app.request('/scoped-orders')).headers.get('x-pets')).toBeNull()
   })
 
   // A nested group is flattened into its own context, so inheritance is carried rather than encapsulated —
@@ -351,8 +351,8 @@ describe('scoped plugin registration', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/scoped-shop')).headers.get('x-shop')).toBe('yes')
-    expect((await app.fetch('/scoped-shop/items')).headers.get('x-shop')).toBe('yes')
+    expect((await app.request('/scoped-shop')).headers.get('x-shop')).toBe('yes')
+    expect((await app.request('/scoped-shop/items')).headers.get('x-shop')).toBe('yes')
   })
 
   it('keeps a controller-installed plugin inside that controller', async () => {
@@ -378,8 +378,8 @@ describe('scoped plugin registration', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/scoped-admin')).headers.get('x-admin')).toBe('yes')
-    expect((await app.fetch('/scoped-public')).headers.get('x-admin')).toBeNull()
+    expect((await app.request('/scoped-admin')).headers.get('x-admin')).toBe('yes')
+    expect((await app.request('/scoped-public')).headers.get('x-admin')).toBeNull()
   })
 
   // Decorators apply bottom-up, so the `@Use` below `@Controller` is recorded first. A plugin may rely on what an
@@ -402,7 +402,7 @@ describe('scoped plugin registration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/scoped-stacked')
+    const res = await app.request('/scoped-stacked')
 
     expect(res.headers.get('x-above')).toBe('yes')
     expect(res.headers.get('x-below')).toBe('yes')
@@ -512,8 +512,8 @@ describe('scoped plugin registration', () => {
 
     await app.bootstrap()
 
-    const petsRes = await app.fetch('/inst-pets')
-    const ordersRes = await app.fetch('/inst-orders')
+    const petsRes = await app.request('/inst-pets')
+    const ordersRes = await app.request('/inst-orders')
 
     expect(petsRes.headers.get('x-inst')).toBe('yes')
     expect(petsRes.headers.get('x-inst-orders')).toBeNull()
@@ -577,7 +577,7 @@ describe('a plugin registered with its options', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/pair-pets')).headers.get('x-pair')).toBe('yes')
+    expect((await app.request('/pair-pets')).headers.get('x-pair')).toBe('yes')
   })
 
   // Encapsulation stays the plugin author's call: the pair form changes where the options come from, never
@@ -591,7 +591,7 @@ describe('a plugin registered with its options', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/pair-unwrapped')).headers.get('x-loose')).toBeNull()
+    expect((await app.request('/pair-unwrapped')).headers.get('x-loose')).toBeNull()
   })
 
   it('reaches only its own group when a router installed the pair', async () => {
@@ -604,8 +604,8 @@ describe('a plugin registered with its options', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/pair-scoped-pets')).headers.get('x-scoped')).toBe('yes')
-    expect((await app.fetch('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
+    expect((await app.request('/pair-scoped-pets')).headers.get('x-scoped')).toBe('yes')
+    expect((await app.request('/pair-scoped-orders')).headers.get('x-scoped')).toBeNull()
   })
 
   // The one test that has to keep compiling: a plugin configurer and a bare factory returning a pair both take
@@ -629,8 +629,8 @@ describe('a plugin registered with its options', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/pair-typed')).headers.get('x-from-config')).toBe('yes')
+    expect((await app.request('/pair-typed')).headers.get('x-from-config')).toBe('yes')
     // Mounted rather than absent, so the feature really installed. What it then reports is health's own test.
-    expect((await app.fetch('/readyz')).status).not.toBe(404)
+    expect((await app.request('/readyz')).status).not.toBe(404)
   })
 })

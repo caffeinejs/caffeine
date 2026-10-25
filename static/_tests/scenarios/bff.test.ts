@@ -79,7 +79,7 @@ function bff(gatedPages: boolean): WebApplication {
 }
 
 async function signIn(app: WebApplication, roles = ''): Promise<string> {
-  const res = await app.fetch('/auth/login', { method: 'POST', headers: { 'x-roles': roles } })
+  const res = await app.request('/auth/login', { method: 'POST', headers: { 'x-roles': roles } })
   expect(res.status).toBe(200)
 
   return sessionCookie(res)
@@ -99,7 +99,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
 
       for (const path of ['/', '/dashboard', '/orders/42']) {
-        const res = await app.fetch(path, { headers: NAVIGATION })
+        const res = await app.request(path, { headers: NAVIGATION })
 
         expect(res.status, path).toBe(200)
         expect(res.headers.get('content-type'), path).toMatch(/^text\/html/)
@@ -113,7 +113,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(false)
       await app.bootstrap()
 
-      const res = await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })
+      const res = await app.request('/assets/app-eZr2sdaR.js', { headers: SCRIPT })
 
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
@@ -123,7 +123,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(false)
       await app.bootstrap()
 
-      const res = await app.fetch('/api/me', { headers: XHR })
+      const res = await app.request('/api/me', { headers: XHR })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
@@ -133,7 +133,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(false)
       await app.bootstrap()
 
-      const res = await app.fetch('/api/me', { headers: NAVIGATION })
+      const res = await app.request('/api/me', { headers: NAVIGATION })
 
       expect(res.status).toBe(302)
       expect((res.headers.get('location') ?? '').startsWith('/login?returnUrl=')).toBe(true)
@@ -144,7 +144,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
       const cookie = await signIn(app)
 
-      const res = await app.fetch('/api/me', { headers: { ...XHR, cookie } })
+      const res = await app.request('/api/me', { headers: { ...XHR, cookie } })
 
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ sub: 'alice' })
@@ -155,8 +155,8 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
       const cookie = await signIn(app)
 
-      await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...XHR, cookie } }))
-      await expectNotFoundJSON(await app.fetch('/api/typo', { headers: { ...NAVIGATION, cookie } }))
+      await expectNotFoundJSON(await app.request('/api/typo', { headers: { ...XHR, cookie } }))
+      await expectNotFoundJSON(await app.request('/api/typo', { headers: { ...NAVIGATION, cookie } }))
     })
 
     it('renders a forbidden API call as an error, never as the page', async () => {
@@ -164,7 +164,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
       const cookie = await signIn(app)
 
-      const res = await app.fetch('/api/orders', { headers: { ...XHR, cookie } })
+      const res = await app.request('/api/orders', { headers: { ...XHR, cookie } })
 
       expect(res.status).toBe(403)
       expect(res.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
@@ -174,7 +174,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(false)
       await app.bootstrap()
 
-      const res = await app.fetch('/login', { headers: NAVIGATION })
+      const res = await app.request('/login', { headers: NAVIGATION })
 
       expect(res.status).toBe(200)
       expect(await res.text()).toContain('<div id="root">')
@@ -185,7 +185,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
       const cookie = await signIn(app)
 
-      await expectNotFoundJSON(await app.fetch('/dashboard', { method: 'POST', headers: { ...NAVIGATION, cookie } }))
+      await expectNotFoundJSON(await app.request('/dashboard', { method: 'POST', headers: { ...NAVIGATION, cookie } }))
     })
   })
 
@@ -194,7 +194,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(true)
       await app.bootstrap()
 
-      const res = await app.fetch('/dashboard', { headers: NAVIGATION })
+      const res = await app.request('/dashboard', { headers: NAVIGATION })
 
       expect(res.status).toBe(302)
       const location = res.headers.get('location') ?? ''
@@ -206,7 +206,7 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       app = bff(true)
       await app.bootstrap()
 
-      expect((await app.fetch('/login', { headers: NAVIGATION })).status).toBe(200)
+      expect((await app.request('/login', { headers: NAVIGATION })).status).toBe(200)
     })
 
     it('serves the page and its bundle to a signed-in browser', async () => {
@@ -214,18 +214,18 @@ describe('backend-for-frontend: same-origin page and /api, cookie session, authe
       await app.bootstrap()
       const cookie = await signIn(app)
 
-      const page = await app.fetch('/dashboard', { headers: { ...NAVIGATION, cookie } })
+      const page = await app.request('/dashboard', { headers: { ...NAVIGATION, cookie } })
       expect(page.status).toBe(200)
       expect(await page.text()).toContain('<div id="root">')
 
-      expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, cookie } })).status).toBe(200)
+      expect((await app.request('/assets/app-eZr2sdaR.js', { headers: { ...SCRIPT, cookie } })).status).toBe(200)
     })
 
     it('challenges an anonymous fetch of a client route before asking whether it is a navigation', async () => {
       app = bff(true)
       await app.bootstrap()
 
-      expect((await app.fetch('/dashboard', { headers: XHR })).status).toBe(401)
+      expect((await app.request('/dashboard', { headers: XHR })).status).toBe(401)
     })
   })
 })

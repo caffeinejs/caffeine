@@ -34,14 +34,14 @@ describe('Redirect', () => {
     })
 
     it('should redirect to the given location', async () => {
-      const res = await app.fetch('/redirect')
+      const res = await app.request('/redirect')
 
       expect(res.status).toBe(302)
       expect(res.headers.get('location')).toBe('/foo')
     })
 
     it('should redirect to the given location with the given response specification', async () => {
-      const res = await app.fetch('/redirect/test', { method: 'POST' })
+      const res = await app.request('/redirect/test', { method: 'POST' })
 
       expect(res.status).toBe(307)
       expect(res.headers.get('location')).toBe('http://localhost/another-place')

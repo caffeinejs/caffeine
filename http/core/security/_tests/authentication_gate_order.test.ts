@@ -77,7 +77,7 @@ describe('the authentication gate registers where it was written', () => {
 
     try {
       await app.bootstrap()
-      const res = await app.fetch('/gate-order')
+      const res = await app.request('/gate-order')
 
       expect(res.status).toBe(401)
       // The CORS case: the hook ran before the gate short-circuited, so its header is on the rejection.
@@ -94,7 +94,7 @@ describe('the authentication gate registers where it was written', () => {
 
     try {
       await app.bootstrap()
-      const res = await app.fetch('/gate-order')
+      const res = await app.request('/gate-order')
 
       expect(res.status).toBe(401)
       expect(res.headers.get('x-after')).toBeNull()

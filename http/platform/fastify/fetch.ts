@@ -16,7 +16,7 @@ const FIX_LENGTH = 'Set Content-Length to the length of the body in bytes, or le
 
 /**
  * Sends `input` to `fastify` without a socket: the request as `fetch(input, init)` describes it, the answer as the
- * server wrote it, handed over at its headers with its body streaming. `IServer.fetch` is the contract.
+ * server wrote it, handed over at its headers with its body streaming. `IServer.request` is the contract.
  */
 export async function fetchInProcess(
   fastify: FastifyInstance,

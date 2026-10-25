@@ -47,7 +47,7 @@ describe('a mount serving pre-compressed siblings', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/assets/app-Ab12Cd34.js', {
+    const res = await app.request('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'br' },
     })
 
@@ -62,13 +62,13 @@ describe('a mount serving pre-compressed siblings', () => {
     app = site()
     await app.bootstrap()
 
-    const gzip = await app.fetch('/assets/app-Ab12Cd34.js', {
+    const gzip = await app.request('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'gzip' },
     })
     expect(gzip.headers.get('content-encoding')).toBe('gzip')
 
     // No `Accept-Encoding` at all: the identity bytes, and nothing invented.
-    const plain = await app.fetch('/assets/app-Ab12Cd34.js', { headers: SCRIPT })
+    const plain = await app.request('/assets/app-Ab12Cd34.js', { headers: SCRIPT })
     expect(plain.status).toBe(200)
     expect(plain.headers.get('content-encoding')).toBeNull()
     expect(await plain.text()).toContain('compressed bundle')
@@ -80,7 +80,7 @@ describe('a mount serving pre-compressed siblings', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
+    const res = await app.request('/', { headers: { ...NAVIGATION, 'accept-encoding': 'br' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('br')
@@ -93,7 +93,7 @@ describe('a mount serving pre-compressed siblings', () => {
     await app.bootstrap()
 
     for (const path of ['/assets/app-Ab12Cd34.js.br', '/assets/app-Ab12Cd34.js.gz']) {
-      await expectNotFoundJSON(await app.fetch(path, { headers: NAVIGATION }))
+      await expectNotFoundJSON(await app.request(path, { headers: NAVIGATION }))
     }
   })
 
@@ -101,7 +101,7 @@ describe('a mount serving pre-compressed siblings', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/assets/app-Ab12Cd34.js', {
+    const res = await app.request('/assets/app-Ab12Cd34.js', {
       headers: { ...SCRIPT, 'accept-encoding': 'br' },
     })
 

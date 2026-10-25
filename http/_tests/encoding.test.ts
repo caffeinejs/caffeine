@@ -55,7 +55,7 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const res = await app.fetch('/encoding-single/upload', {
+    const res = await app.request('/encoding-single/upload', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
       body: payload,
@@ -82,13 +82,13 @@ describe('Encoding', () => {
     const gzipPayload = await gzip(JSON.stringify({ msg: 'hello' }))
     const brotliPayload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resGzip = await app.fetch('/encoding-multi/upload', {
+    const resGzip = await app.request('/encoding-multi/upload', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' },
       body: gzipPayload,
     })
 
-    const resBrotli = await app.fetch('/encoding-multi/upload', {
+    const resBrotli = await app.request('/encoding-multi/upload', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
       body: brotliPayload,
@@ -120,13 +120,13 @@ describe('Encoding', () => {
 
     const payload = await brotli(JSON.stringify({ msg: 'hello' }))
 
-    const resA = await app.fetch('/encoding-class/a', {
+    const resA = await app.request('/encoding-class/a', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
       body: payload,
     })
 
-    const resB = await app.fetch('/encoding-class/b', {
+    const resB = await app.request('/encoding-class/b', {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'content-encoding': 'br' },
       body: payload,

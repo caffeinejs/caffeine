@@ -244,16 +244,16 @@ describe.each(targets)('RedisHTTPCacheStore over $name', ({ name, url, up, conne
       await app.bootstrap()
 
       try {
-        const miss = await app.fetch('/pets')
-        const hit = await app.fetch('/pets')
+        const miss = await app.request('/pets')
+        const hit = await app.request('/pets')
         expect(miss.headers.get('x-cache')).toBe('MISS')
         expect(hit.headers.get('x-cache')).toBe('HIT')
         expect(await hit.json()).toEqual({ calls: 1 })
         expect(hit.headers.get('content-type')).toBe(miss.headers.get('content-type'))
 
-        await app.fetch('/pets', { method: 'POST' })
+        await app.request('/pets', { method: 'POST' })
 
-        const after = await app.fetch('/pets')
+        const after = await app.request('/pets')
         expect(after.headers.get('x-cache')).toBe('MISS')
         expect(await after.json()).toEqual({ calls: 2 })
       } finally {

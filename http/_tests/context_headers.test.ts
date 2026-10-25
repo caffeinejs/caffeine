@@ -45,19 +45,19 @@ afterAll(async () => {
 
 describe('ctx.getHeader', () => {
   it('reads the type the route declared, before the handler writes anything', async () => {
-    const res = await app.fetch('/headers/produced')
+    const res = await app.request('/headers/produced')
 
     expect(await res.text()).toMatch(/^read: text\/csv/)
   })
 
   it('reads a header the route declared, several values joined as one field line', async () => {
-    const res = await app.fetch('/headers/declared')
+    const res = await app.request('/headers/declared')
 
     expect(await res.json()).toEqual({ version: '2', region: 'eu-west, eu-north' })
   })
 
   it('reads nothing for a header not written, then the value written, then the one that replaced it', async () => {
-    const res = await app.fetch('/headers/written')
+    const res = await app.request('/headers/written')
 
     expect(await res.json()).toEqual({
       unset: null,
@@ -68,7 +68,7 @@ describe('ctx.getHeader', () => {
   })
 
   it('reads a header whatever case it was written or asked for in: field names are case-insensitive', async () => {
-    const res = await app.fetch('/headers/case')
+    const res = await app.request('/headers/case')
 
     expect(await res.json()).toEqual({ read: 'abc-123' })
   })

@@ -62,7 +62,7 @@ describe('routes that declare caching', () => {
 
     await app.bootstrap()
 
-    expect((await app.fetch('/features-pets')).status).toBe(200)
+    expect((await app.request('/features-pets')).status).toBe(200)
   })
 
   it('start when their own group installed it, and a sibling without it is still refused', async () => {
@@ -75,7 +75,7 @@ describe('routes that declare caching', () => {
 
     app = createWebApplication().mount(served())
     await app.bootstrap()
-    expect((await app.fetch('/features-served')).status).toBe(200)
+    expect((await app.request('/features-served')).status).toBe(200)
     await app.close()
 
     app = createWebApplication().mount(served(), pets())
@@ -102,6 +102,6 @@ describe('routes that declare caching', () => {
     app = createWebApplication().mount(plain)
     await app.bootstrap()
 
-    expect((await app.fetch('/features-plain')).status).toBe(200)
+    expect((await app.request('/features-plain')).status).toBe(200)
   })
 })

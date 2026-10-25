@@ -88,12 +88,12 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/swr-followers/data')
+    await app.request('/swr-followers/data')
     age(70)
 
-    const leader = app.fetch('/swr-followers/data')
+    const leader = app.request('/swr-followers/data')
     await g.seen
-    const follower = await app.fetch('/swr-followers/data')
+    const follower = await app.request('/swr-followers/data')
 
     expect(follower.headers.get('x-cache')).toBe('STALE')
     expect(follower.headers.get('age')).toBe('70')
@@ -105,7 +105,7 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(led.headers.get('x-cache')).toBe('MISS')
     expect(await led.json()).toEqual({ n: 2 })
 
-    const fresh = await app.fetch('/swr-followers/data')
+    const fresh = await app.request('/swr-followers/data')
     expect(fresh.headers.get('x-cache')).toBe('HIT')
     expect(await fresh.json()).toEqual({ n: 2 })
 
@@ -139,12 +139,12 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/swr-unlocked/data')
+    await app.request('/swr-unlocked/data')
     age(70)
 
-    const first = app.fetch('/swr-unlocked/data')
+    const first = app.request('/swr-unlocked/data')
     await g.seen
-    const second = app.fetch('/swr-unlocked/data')
+    const second = app.request('/swr-unlocked/data')
     // The second request is in the handler while the first is still held there.
     await runs.reached(3)
     g.open()
@@ -190,12 +190,12 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/swr-limits/over')
+    await app.request('/swr-limits/over')
     age(100)
     calls = 1
-    const overLeader = app.fetch('/swr-limits/over')
+    const overLeader = app.request('/swr-limits/over')
     await gates.over.seen
-    const overFollower = app.fetch('/swr-limits/over')
+    const overFollower = app.request('/swr-limits/over')
     await store.reads.reached(3)
     await turn()
     gates.over.open()
@@ -204,13 +204,13 @@ describe('stale-while-revalidate, served by the store', () => {
     expect(recording.hits.at(-1)).toMatchObject({ coalesced: true, stale: false })
 
     calls = 0
-    await app.fetch('/swr-limits/forbidden')
+    await app.request('/swr-limits/forbidden')
     age(70)
     calls = 1
     const reads = store.reads.count
-    const forbiddenLeader = app.fetch('/swr-limits/forbidden')
+    const forbiddenLeader = app.request('/swr-limits/forbidden')
     await gates.forbidden.seen
-    const forbiddenFollower = app.fetch('/swr-limits/forbidden')
+    const forbiddenFollower = app.request('/swr-limits/forbidden')
     await store.reads.reached(reads + 2)
     await turn()
     gates.forbidden.open()
@@ -254,15 +254,15 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    const proxy = await app.fetch('/swr-revalidate/proxy')
-    const nocache = await app.fetch('/swr-revalidate/nocache')
+    const proxy = await app.request('/swr-revalidate/proxy')
+    const nocache = await app.request('/swr-revalidate/nocache')
     expect(proxy.headers.get('cache-control')).toBe('public, proxy-revalidate, max-age=60')
     expect(nocache.headers.get('cache-control')).toBe('no-cache, public, max-age=60')
     age(70)
 
     // A client that would take a stale entry is not given one: the handler runs.
-    const proxyAgain = await app.fetch('/swr-revalidate/proxy', { headers: { 'cache-control': 'max-stale' } })
-    const nocacheAgain = await app.fetch('/swr-revalidate/nocache', { headers: { 'cache-control': 'max-stale' } })
+    const proxyAgain = await app.request('/swr-revalidate/proxy', { headers: { 'cache-control': 'max-stale' } })
+    const nocacheAgain = await app.request('/swr-revalidate/nocache', { headers: { 'cache-control': 'max-stale' } })
     expect(proxyAgain.headers.get('x-cache')).toBe('MISS')
     expect(nocacheAgain.headers.get('x-cache')).toBe('MISS')
     expect(calls).toEqual({ proxy: 2, nocache: 2 })
@@ -301,13 +301,13 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/swr-sie/data')
+    await app.request('/swr-sie/data')
     age(70)
 
     // Within stale-while-revalidate: the follower is served the entry while the leader refreshes it.
-    const leader = app.fetch('/swr-sie/data')
+    const leader = app.request('/swr-sie/data')
     await g.seen
-    const follower = await app.fetch('/swr-sie/data')
+    const follower = await app.request('/swr-sie/data')
     expect(follower.headers.get('x-cache')).toBe('STALE')
     expect(await follower.json()).toEqual({ n: 1 })
     g.open()
@@ -316,7 +316,7 @@ describe('stale-while-revalidate, served by the store', () => {
     // Past stale-while-revalidate, within stale-if-error: the refreshed entry stands in for the failure.
     age(100)
     failing = true
-    const rescued = await app.fetch('/swr-sie/data')
+    const rescued = await app.request('/swr-sie/data')
     expect(rescued.status).toBe(200)
     expect(rescued.headers.get('x-cache')).toBe('STALE')
     expect(await rescued.json()).toEqual({ n: 2 })
@@ -351,21 +351,21 @@ describe('stale-while-revalidate, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/swr-request/data')
+    await app.request('/swr-request/data')
     age(50)
-    const wantsFresher = await app.fetch('/swr-request/data', { headers: { 'cache-control': 'min-fresh=30' } })
+    const wantsFresher = await app.request('/swr-request/data', { headers: { 'cache-control': 'min-fresh=30' } })
     expect(wantsFresher.headers.get('x-cache')).toBe('MISS')
     expect(recording.misses.at(-1)?.reason).toBe('stale-for-request')
 
     // That miss stored a fresh entry; past its ttl again, and well within the stale window.
     age(70)
     holding = true
-    const leader = app.fetch('/swr-request/data')
+    const leader = app.request('/swr-request/data')
     await g.seen
-    const impatient = await app.fetch('/swr-request/data', { headers: { 'cache-control': 'only-if-cached' } })
+    const impatient = await app.request('/swr-request/data', { headers: { 'cache-control': 'only-if-cached' } })
     // Too old for this request: it waits for the leader's fresh entry rather than take the stale one.
     const reads = store.reads.count
-    const strict = app.fetch('/swr-request/data', { headers: { 'cache-control': 'max-age=10' } })
+    const strict = app.request('/swr-request/data', { headers: { 'cache-control': 'max-age=10' } })
     await store.reads.reached(reads + 1)
     await turn()
     g.open()
@@ -423,7 +423,10 @@ describe('max-stale, asked for by the client', () => {
     close = () => app.close()
     await app.bootstrap()
     const fetch = (path: string, cacheControl?: string) =>
-      app.fetch(`/max-stale/${path}`, cacheControl === undefined ? {} : { headers: { 'cache-control': cacheControl } })
+      app.request(
+        `/max-stale/${path}`,
+        cacheControl === undefined ? {} : { headers: { 'cache-control': cacheControl } },
+      )
 
     vi.useFakeTimers({ toFake: ['Date'] })
     await fetch('window')
@@ -533,11 +536,11 @@ describe('stale-if-error, served by the store', () => {
   it('replaces a 5xx the handler produced with the stale entry, stores nothing, and says so', async () => {
     const { app, recording } = await start()
 
-    const stored = await app.fetch('/sie/data')
+    const stored = await app.request('/sie/data')
     age(100)
     failing = true
 
-    const rescued = await app.fetch('/sie/data')
+    const rescued = await app.request('/sie/data')
 
     expect(rescued.status).toBe(200)
     expect(rescued.headers.get('x-cache')).toBe('STALE')
@@ -557,11 +560,11 @@ describe('stale-if-error, served by the store', () => {
   it('writes the stored headers over the error response, and drops its Retry-After', async () => {
     const { app } = await start()
 
-    const stored = await app.fetch('/sie/gateway')
+    const stored = await app.request('/sie/gateway')
     age(100)
     failing = true
 
-    const rescued = await app.fetch('/sie/gateway')
+    const rescued = await app.request('/sie/gateway')
 
     expect(rescued.status).toBe(200)
     expect(rescued.headers.get('content-type')).toBe(stored.headers.get('content-type'))
@@ -573,17 +576,17 @@ describe('stale-if-error, served by the store', () => {
   it('leaves a 4xx, an error past the window, and an error on a route without the window alone', async () => {
     const { app } = await start()
 
-    await app.fetch('/sie/missing')
-    await app.fetch('/sie/data')
-    await app.fetch('/sie/plain')
+    await app.request('/sie/missing')
+    await app.request('/sie/data')
+    await app.request('/sie/plain')
     failing = true
 
     age(100)
-    expect((await app.fetch('/sie/missing')).status).toBe(404)
-    expect((await app.fetch('/sie/plain')).status).toBe(500)
+    expect((await app.request('/sie/missing')).status).toBe(404)
+    expect((await app.request('/sie/plain')).status).toBe(500)
 
     age(300)
-    const late = await app.fetch('/sie/data')
+    const late = await app.request('/sie/data')
     expect(late.status).toBe(500)
     expect(late.headers.get('x-cache')).toBe('MISS')
   })
@@ -591,11 +594,11 @@ describe('stale-if-error, served by the store', () => {
   it('answers the HEAD twin from the entry, with its length and no body', async () => {
     const { app } = await start()
 
-    const stored = await app.fetch('/sie/data')
+    const stored = await app.request('/sie/data')
     age(100)
     failing = true
 
-    const head = await app.fetch('/sie/data', { method: 'HEAD' })
+    const head = await app.request('/sie/data', { method: 'HEAD' })
 
     expect(head.status).toBe(200)
     expect(head.headers.get('x-cache')).toBe('STALE')
@@ -606,17 +609,17 @@ describe('stale-if-error, served by the store', () => {
   it('answers 304 to a client that already holds the entry', async () => {
     const { app } = await start()
 
-    const stored = await app.fetch('/sie/data')
+    const stored = await app.request('/sie/data')
     age(100)
     failing = true
 
-    const revalidated = await app.fetch('/sie/data', { headers: { 'if-none-match': stored.headers.get('etag')! } })
+    const revalidated = await app.request('/sie/data', { headers: { 'if-none-match': stored.headers.get('etag')! } })
 
     expect(revalidated.status).toBe(304)
     expect(revalidated.headers.get('x-cache')).toBe('STALE')
     expect(await revalidated.text()).toBe('')
 
-    const head = await app.fetch('/sie/data', {
+    const head = await app.request('/sie/data', {
       method: 'HEAD',
       headers: { 'if-none-match': stored.headers.get('etag')! },
     })
@@ -651,12 +654,12 @@ describe('stale-if-error, served by the store', () => {
     await app.bootstrap()
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await app.fetch('/sie-followers/data')
+    await app.request('/sie-followers/data')
     age(100)
 
-    const leader = app.fetch('/sie-followers/data')
+    const leader = app.request('/sie-followers/data')
     await g.seen
-    const follower = app.fetch('/sie-followers/data')
+    const follower = app.request('/sie-followers/data')
     await store.reads.reached(3)
     await turn()
     g.open()

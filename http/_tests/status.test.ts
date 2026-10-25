@@ -19,7 +19,7 @@ describe('Status', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/status/created', { method: 'POST' })
+    const res = await app.request('/status/created', { method: 'POST' })
 
     expect(res.status).toBe(201)
   })
@@ -38,7 +38,7 @@ describe('Status', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/status-default/ok')
+    const res = await app.request('/status-default/ok')
 
     expect(res.status).toBe(200)
   })
@@ -56,7 +56,7 @@ describe('Status', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/status-empty/ok')
+    const res = await app.request('/status-empty/ok')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('')
