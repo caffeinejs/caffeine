@@ -18,8 +18,8 @@ import { expectPatternedBody, expectRangeAnswer } from './bodies.js'
 import { fillPatterned, firstMismatch, patterned } from './patterned.js'
 
 /**
- * Downloads at the sizes real ones come in, over a real socket: an application's own `fetch` reads a whole response
- * before it answers, so streaming, aborting and resuming are only visible here.
+ * Downloads at the sizes real ones come in, over a real socket, where streaming, aborting and resuming meet a
+ * network's buffers and disconnects.
  *
  * Every body is the offset pattern, so each byte received is checked against where it claims to sit, and a whole
  * body against the SHA-256 of what was served.

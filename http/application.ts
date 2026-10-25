@@ -165,10 +165,14 @@ export class WebApplication<T extends IAdapterTypes = AnyAdapterTypes, ROUTES = 
     return this.#routeGroups
   }
 
-  /** @throws ErrApplicationNotReady before {@link ready} has built the server. */
-  async fetch(request: Request | string | URL, options?: RequestInit): Promise<Response> {
-    return this.#ownServer().fetch(request, options)
-  }
+  /**
+   * Sends `request` to the application's own server, as {@link IServer.fetch} describes. Bound to the application, so
+   * it can be handed on alone as the `fetch` a client calls.
+   *
+   * @throws ErrApplicationNotReady before {@link ready} has built the server.
+   */
+  readonly fetch = async (request: Request | string | URL, options?: RequestInit): Promise<Response> =>
+    this.#ownServer().fetch(request, options)
 
   /**
    * Adds a middleware to the request pipeline. Order matters, and it is the order these calls are written

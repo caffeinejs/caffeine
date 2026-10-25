@@ -92,8 +92,9 @@ interface RequestArgs {
  * ```
  *
  * Given the application itself rather than a URL, requests go through its own `fetch` and never reach a socket —
- * which is what a test wants. Both the routes and the transport come from the one argument, so neither the type
- * argument nor the URL is written:
+ * which is what a test wants. A redirect then comes back as the application wrote it, whatever the call's `redirect`
+ * says. Both the routes and the transport come from the one argument, so neither the type argument nor the URL is
+ * written:
  *
  * ```ts
  * await app.bootstrap()

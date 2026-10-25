@@ -13,6 +13,33 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
   /** Where the server is listening, or `undefined` while it is not: before it runs, and once it has closed. */
   get address(): ServerAddress | undefined
 
-  /** Answers `request` as it would one off the network, whether or not it is listening. */
+  /**
+   * Answers `request` as it would one off the network, whether or not it is listening: a pass-through, not a client.
+   *
+   * The request goes as `fetch(request, options)` would send it, `options` applying over a `Request` as they do there,
+   * and the answer comes back as the server wrote it: a redirect is neither followed nor refused, whatever `redirect`
+   * says, and a compressed body is not decoded. Only the fields that describe a connection are left out, since none
+   * carried it. The call settles once the server starts writing, and the body streams as it is written.
+   *
+   * A request body streams under its own `Content-Length` or `Transfer-Encoding`, as one a server received carries;
+   * without either, it is read whole first and sent under its length, as `fetch` measures it. A request with no body
+   * goes under the length `fetch` writes, whatever it declares: `0` for a method that expects a body, such as POST, PUT
+   * or PATCH, and none for any other.
+   *
+   * What `fetch` would refuse to send is refused with a `TypeError`, as `fetch` refuses it: a `Content-Length` that is
+   * not a count of bytes, or one beside `Transfer-Encoding`; a body its `Content-Length` does not describe, which is
+   * never sent past it; and a body whose stream fails, its failure the `cause`. The call rejects with it, or the
+   * answer's body fails with it once the answer is handed over.
+   *
+   * An abort rejects the call, or fails the body being read, with the signal's reason, and the handler sees its request
+   * close (`ctx.signal`).
+   *
+   * No socket carries the request: it is seen as `http` from `127.0.0.1`, whatever its URL's scheme. Under a
+   * `trustProxy` that trusts loopback, its `X-Forwarded-*` headers decide both, so a runtime handing on the requests it
+   * received must not leave a client's own in them.
+   *
+   * A runtime that calls its handler with a second argument of its own hands on the request alone, or that argument is
+   * read as `options`: `Bun.serve({ fetch: request => app.fetch(request) })`.
+   */
   fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }

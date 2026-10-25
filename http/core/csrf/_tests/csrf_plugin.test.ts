@@ -648,10 +648,10 @@ describe('csrf()', () => {
       expect((await post(app, '/echo', from('https://partner.example@evil.example'))).status).toBe(403)
       expect((await post(app, '/echo', from('HTTPS://Partner.Example:443'))).status).toBe(403)
       expect(seen).toEqual([
-        { href: 'https://evil.example/', username: '', host: 'localhost:80' },
-        { href: 'https://evil.example/', username: '', host: 'localhost:80' },
-        { href: 'https://partner.example/', username: '', host: 'localhost:80' },
-        { href: 'https://partner.example/', username: '', host: 'localhost:80' },
+        { href: 'https://evil.example/', username: '', host: 'localhost' },
+        { href: 'https://evil.example/', username: '', host: 'localhost' },
+        { href: 'https://partner.example/', username: '', host: 'localhost' },
+        { href: 'https://partner.example/', username: '', host: 'localhost' },
       ])
     })
 
