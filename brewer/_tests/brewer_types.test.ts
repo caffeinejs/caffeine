@@ -863,7 +863,7 @@ describe('what the client can be typed from', () => {
     })
   })
 
-  it('takes anything with a matching fetch, not only an application', () => {
+  it('takes anything with a matching request, not only an application', () => {
     typeOnly(async () => {
       const stub: Requestable = { request: async () => new Response(null) }
       const client = brewer<App>(stub)

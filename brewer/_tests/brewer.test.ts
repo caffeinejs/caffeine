@@ -812,7 +812,7 @@ describe('brewer against an application in process', () => {
     })
   })
 
-  describe('given anything else that answers like fetch', () => {
+  describe('given anything else that answers like an application', () => {
     it('should use it, since the target is structural', async () => {
       const stub: Requestable = { request: async () => Response.json({ id: 9, name: 'Stub' }) }
       const client = brewer<typeof app>(stub)

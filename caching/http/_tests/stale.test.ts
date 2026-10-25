@@ -422,39 +422,39 @@ describe('max-stale, asked for by the client', () => {
     )
     close = () => app.close()
     await app.bootstrap()
-    const fetch = (path: string, cacheControl?: string) =>
+    const request = (path: string, cacheControl?: string) =>
       app.request(
         `/max-stale/${path}`,
         cacheControl === undefined ? {} : { headers: { 'cache-control': cacheControl } },
       )
 
     vi.useFakeTimers({ toFake: ['Date'] })
-    await fetch('window')
-    await fetch('strict')
-    await fetch('plain')
+    await request('window')
+    await request('strict')
+    await request('plain')
     age(70)
 
-    const any = await fetch('window', 'max-stale')
+    const any = await request('window', 'max-stale')
     expect(any.headers.get('x-cache')).toBe('STALE')
     expect(any.headers.get('age')).toBe('70')
     expect(await any.json()).toEqual({ n: 1 })
     expect(recording.hits.at(-1)).toMatchObject({ stale: true, coalesced: false, age: 70 * Second })
 
-    const cached = await fetch('window', 'only-if-cached, max-stale=100')
+    const cached = await request('window', 'only-if-cached, max-stale=100')
     expect(cached.status).toBe(200)
     expect(cached.headers.get('x-cache')).toBe('STALE')
 
     // Stale by ten seconds, which is more than this client accepts: the handler runs.
-    const tooStale = await fetch('window', 'max-stale=5')
+    const tooStale = await request('window', 'max-stale=5')
     expect(tooStale.headers.get('x-cache')).toBe('MISS')
     expect(await tooStale.json()).toEqual({ n: 2 })
     expect(recording.misses.at(-1)?.reason).toBe('expired')
 
-    const revalidates = await fetch('strict', 'max-stale')
+    const revalidates = await request('strict', 'max-stale')
     expect(revalidates.headers.get('x-cache')).toBe('MISS')
     expect(await revalidates.json()).toEqual({ n: 2 })
 
-    const nothingKept = await fetch('plain', 'max-stale')
+    const nothingKept = await request('plain', 'max-stale')
     expect(nothingKept.headers.get('x-cache')).toBe('MISS')
     expect(await nothingKept.json()).toEqual({ n: 2 })
 

@@ -708,7 +708,7 @@ await client.pets.post({ body: { name: 'Rex' } })
   brewer<typeof petsRouter>(app) // one router's surface, driven through the application
   ```
 
-  The target is structural — anything with a matching `fetch` works, a stub included — and `options.fetch` still
+  The target is structural — anything with a matching `request` works, a stub included — and `options.fetch` still
   wins over it.
 
 - Bodies follow the platform. A route whose body is a file or holds one (`$t.File()`, `$t.Files()`) takes a
