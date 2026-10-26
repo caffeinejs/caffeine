@@ -27,5 +27,9 @@
     "@caffeinejs/di": "*",
     "@caffeinejs/http": "*",
     "@caffeinejs/std": "*"
+  },
+  "devDependencies": {
+    "@caffeinejs/brewer": "*",
+    "@caffeinejs/testing": "*"
   }
 }

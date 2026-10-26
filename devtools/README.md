@@ -80,16 +80,16 @@ Values shown with `showConfigValues()` are masked as `******` when one of these 
 
 Every path below is under `/devtools`. `GET /devtools` lists every tool with links to its resources.
 
-| Tool           | Resources                                                                                                                                 |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `info`         | `GET /info`: the application's name and profiles, what its features run, the process                                                      |
-| `health`       | `GET /health`, `GET /health/:group`: every indicator with its details, and the availability                                               |
-| `di`           | `GET /di/bindings` (`?internal=true`), `GET /di/bindings/:id`, `GET /di/graph`: the graph plus its Mermaid source                         |
-| `config`       | `GET /config/properties`, `GET /config/properties/:path`, `GET /config/sources`                                                           |
-| `routes`       | `GET /routes` (`?server=<name>`, where `''` is the application's own server), `GET /routes/security`                                      |
-| `refreshables` | `GET /refreshables`, `GET /refreshables/:id`, `POST /refreshables/refreshes` (`{ "label"?: string }`), `POST /refreshables/:id/refreshes` |
-| `events`       | `GET /events` (`?after=<seq>`, `?limit=<n>`): the last 500 container events                                                               |
-| `runtime`      | `GET /runtime`: memory, heap, CPU, event-loop utilization, active resources                                                               |
+| Tool           | Resources                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `info`         | `GET /info`: the application's name and profiles, what its features run, the process                                                             |
+| `health`       | `GET /health`, `GET /health/:group`: every indicator with its details, and the availability                                                      |
+| `di`           | `GET /di/bindings` (`?internal=true`), `GET /di/bindings/:id`, `GET /di/graph`: the graph plus its Mermaid source                                |
+| `config`       | `GET /config/properties`, `GET /config/properties/:path`, `GET /config/sources`                                                                  |
+| `routes`       | `GET /routes` (`?server=<name>`, where `''` is the application's own server), `GET /routes/security`                                             |
+| `refreshables` | `GET /refreshables`, `GET /refreshables/:id`, `POST /refreshables/refreshes` (`{ "label"?: string }`), `POST /refreshables/:id/refreshes` (`{}`) |
+| `events`       | `GET /events` (`?after=<seq>`, `?limit=<n>`): the last 500 container events                                                                      |
+| `runtime`      | `GET /runtime`: memory, heap, CPU, event-loop utilization, active resources                                                                      |
 
 ### `routes`
 
@@ -117,10 +117,32 @@ health probes and static files. For each route it shows:
 
 An unknown resource answers 404, and so does a method a resource does not take.
 
+## Read them from code
+
+Every core tool is a typed router, and `DevToolsRoutes` is their type. Hand it to
+[`@caffeinejs/brewer`](../brewer/) and each resource is a typed call, its answer typed by status:
+
+```ts
+import { brewer } from '@caffeinejs/brewer'
+import type { DevToolsRoutes } from '@caffeinejs/devtools'
+
+const devtools = brewer<DevToolsRoutes>('http://127.0.0.1:9090/devtools')
+
+const res = await devtools.config.properties({ path: 'db.url' }).get()
+if (res.status === 200) {
+  const { origin, layers } = await res.json()
+}
+```
+
+A contributed tool is not in `DevToolsRoutes`: its operations answer what `DevTool` types them as, `unknown`. Read it
+with `fetch`.
+
 ## Write a tool
 
 Extend `DevTool` from `@caffeinejs/application/devtools` and bind the subclass so it extends `DevTool`. The
-devtools serve its operations under `/devtools/<id>` and list it in the index:
+devtools serve its operations under `/devtools/<id>` and list it in the index. `DevTool` lives in
+`@caffeinejs/application`, which knows no HTTP, so a package can contribute a tool without depending on
+`@caffeinejs/http`; the price is that its operations are untyped, unlike the core tools' routers:
 
 ```ts
 import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'

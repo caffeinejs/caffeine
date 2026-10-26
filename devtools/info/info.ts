@@ -1,34 +1,46 @@
 import { createRequire } from 'node:module'
 import { hostname } from 'node:os'
 
-import { RunInfoContrib, type RunInfoEntry } from '@caffeinejs/application'
+import { RunInfoContrib } from '@caffeinejs/application'
 import type { ConfigStore } from '@caffeinejs/application/config'
-import { DevTool, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container } from '@caffeinejs/di'
-import { Second, type Duration } from '@caffeinejs/std/duration'
+import { Router } from '@caffeinejs/http'
+import { Second } from '@caffeinejs/std/duration'
+
+import type { ToolInfo } from '../tool.js'
 
 /** What the application is and what it runs on. */
-export interface InfoRecord {
-  readonly application: {
+export const InfoSchema = $t.Object({
+  application: $t.Object({
     /** `caffeine.name`; `''` when the configuration sets none. */
-    readonly name: string
-    readonly profiles: readonly string[]
+    name: $t.String(),
+    profiles: $t.Array($t.String()),
     /** What each feature reported it runs, as `RunInfo.contrib` holds it. */
-    readonly contrib: readonly RunInfoEntry[]
-  }
-  readonly runtime: {
-    /** The `@caffeinejs/application` version; `undefined` when a bundle left the manifest behind. */
-    readonly caffeine: string | undefined
-    readonly node: string
-    readonly platform: string
-    readonly arch: string
-    readonly pid: number
-    readonly hostname: string
-    readonly nodeEnv: string | undefined
+    contrib: $t.Array($t.Object({ source: $t.String() }, { additionalProperties: true })),
+  }),
+  runtime: $t.Object({
+    /** The `@caffeinejs/application` version; absent when a bundle left the manifest behind. */
+    caffeine: $t.Optional($t.String()),
+    node: $t.String(),
+    platform: $t.String(),
+    arch: $t.String(),
+    pid: $t.Integer(),
+    hostname: $t.String(),
+    nodeEnv: $t.Optional($t.String()),
     /** An ISO 8601 timestamp. */
-    readonly startedAt: string
-    readonly uptime: Duration
-  }
+    startedAt: $t.String(),
+    /** A duration, in milliseconds. */
+    uptime: $t.Number(),
+  }),
+})
+
+export type InfoRecord = InferSchema<typeof InfoSchema>
+
+export const infoTool: ToolInfo = {
+  id: 'info',
+  title: 'Info',
+  description: 'The application, its profiles and features, and the process it runs in',
 }
 
 /**
@@ -36,45 +48,33 @@ export interface InfoRecord {
  *
  * - `GET /info`
  */
-export class InfoTool extends DevTool {
-  readonly id = 'info'
-  readonly title = 'Info'
-  readonly description = 'The application, its profiles and features, and the process it runs in'
-  readonly operations: readonly DevToolOperation[]
+export function infoRouter(container: Container, store: ConfigStore<unknown>) {
+  return new Router('/info')
+    .get('')
+    .schema({ response: { 200: InfoSchema } })
+    .handler((): InfoRecord => {
+      const name = store.explain('caffeine.name').layers[0]?.value
+      const uptime = Math.floor(process.uptime() * Second)
 
-  readonly #container: Container
-  readonly #store: ConfigStore<unknown>
-
-  constructor(container: Container, store: ConfigStore<unknown>) {
-    super()
-    this.#container = container
-    this.#store = store
-    this.operations = [{ method: 'GET', path: '', handle: () => this.#info() }]
-  }
-
-  #info(): InfoRecord {
-    const name = this.#store.explain('caffeine.name').layers[0]?.value
-    const uptime = Math.floor(process.uptime() * Second)
-
-    return {
-      application: {
-        name: typeof name === 'string' ? name : '',
-        profiles: [...this.#store.profiles],
-        contrib: this.#container.getOptional(RunInfoContrib)?.entries ?? [],
-      },
-      runtime: {
-        caffeine: caffeineVersion(),
-        node: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        pid: process.pid,
-        hostname: hostname(),
-        nodeEnv: process.env.NODE_ENV,
-        startedAt: new Date(Date.now() - uptime).toISOString(),
-        uptime,
-      },
-    }
-  }
+      return {
+        application: {
+          name: typeof name === 'string' ? name : '',
+          profiles: [...store.profiles],
+          contrib: [...(container.getOptional(RunInfoContrib)?.entries ?? [])],
+        },
+        runtime: {
+          caffeine: caffeineVersion(),
+          node: process.version,
+          platform: process.platform,
+          arch: process.arch,
+          pid: process.pid,
+          hostname: hostname(),
+          nodeEnv: process.env.NODE_ENV,
+          startedAt: new Date(Date.now() - uptime).toISOString(),
+          uptime,
+        },
+      }
+    })
 }
 
 function caffeineVersion(): string | undefined {

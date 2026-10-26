@@ -1,4 +1,5 @@
-import { Router, type RouteRecord } from '@caffeinejs/http'
+import type { ServerRoutesRecord } from '@caffeinejs/devtools'
+import { Router } from '@caffeinejs/http'
 
 import { DevToolsAPI } from '../api.js'
 import { kConfig } from '../app.config.js'
@@ -6,6 +7,8 @@ import { Badge, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
 const EVERY_SERVER = '*'
+
+type RouteRecord = ServerRoutesRecord['routes'][number]
 
 /**
  * Every route of every server and what each requires, with what protects the application as a whole above it. A

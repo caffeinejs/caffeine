@@ -1,14 +1,12 @@
 import { newConfiguration } from '@caffeinejs/application'
+import { loadConfig, type ConfigSchema, type ConfigSource, type ConfigStore } from '@caffeinejs/application/config'
 import { EnvConfigSource } from '@caffeinejs/application/config/env'
 import { InlineConfigSource } from '@caffeinejs/application/config/inline'
 import { $t } from '@caffeinejs/application/schema'
-import { CaffeineIoC } from '@caffeinejs/di'
-import type { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
+import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { devTools, type DevToolsPluginBuilder } from '../devtools.js'
-import type { PropertyDetail, PropertyRecord, SourceRecord } from './config.js'
+import { configRouter, ConfigTool, type ConfigToolOptions } from './config.js'
 import { maskCredentials } from './redact.js'
 
 /**
@@ -30,36 +28,54 @@ const values = {
   mail: { smtpToken: 'tok', hosts: ['smtp://mailer:s3cret@mx1', 'smtp://mx2'] },
 }
 
-describe('ConfigTool', () => {
-  let app: WebApplication | undefined
+describe('configRouter', () => {
+  const stores: Array<ConfigStore<unknown>> = []
 
   afterEach(async () => {
     vi.unstubAllEnvs()
-    await app?.close()
-    app = undefined
+    await Promise.all(stores.splice(0).map(store => store.close()))
   })
 
-  async function boot(configure?: (d: DevToolsPluginBuilder) => void): Promise<void> {
-    const conf = newConfiguration(schema)
-      .source(new InlineConfigSource(values))
-      .source(new EnvConfigSource({ prefix: 'DT_' }))
-      .build().config
+  /** The configuration tool over a store loaded from `sources`, read through its router. */
+  async function client(
+    options: Partial<ConfigToolOptions> = {},
+    shape: ConfigSchema = schema,
+    ...sources: ConfigSource[]
+  ) {
+    const given =
+      sources.length === 0 ? [new InlineConfigSource(values), new EnvConfigSource({ prefix: 'DT_' })] : sources
+    const store = await loadConfig(
+      newConfiguration(shape)
+        .sources(...given)
+        .build().config,
+      { start: false },
+    )
+    stores.push(store)
 
-    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
-      devTools(d => configure?.(d)),
-    ) as WebApplication
-    await app.bootstrap()
+    return testClient(configRouter(new ConfigTool(store, { showValues: false, redact: [], ...options })))
   }
 
-  async function properties(): Promise<PropertyRecord[]> {
-    return (await (await app!.request('/devtools/config/properties')).json()) as PropertyRecord[]
+  type Client = Awaited<ReturnType<typeof client>>
+
+  async function properties(config: Client) {
+    return (await config.config.properties.get()).json()
+  }
+
+  async function property(config: Client, path: string) {
+    const res = await config.config.properties({ path }).get()
+
+    if (res.status !== 200) {
+      throw new Error(`Expected 200, got ${res.status}`)
+    }
+
+    return res.json()
   }
 
   it('lists every path and where it came from, and no value, unless told to show them', async () => {
     vi.stubEnv('DT_CATALOG__PAGE_SIZE', '50')
-    await boot()
+    await using config = await client()
 
-    const listed = await properties()
+    const listed = await properties(config)
 
     expect(listed.find(property => property.path === 'catalog.pageSize')).toEqual({
       path: 'catalog.pageSize',
@@ -71,9 +87,9 @@ describe('ConfigTool', () => {
   })
 
   it('masks every kind of secret once values are shown', async () => {
-    await boot(d => d.showConfigValues().redact('stripe.*'))
+    await using config = await client({ showValues: true, redact: ['stripe.*'] })
 
-    const byPath = Object.fromEntries((await properties()).map(property => [property.path, property]))
+    const byPath = Object.fromEntries((await properties(config)).map(entry => [entry.path, entry]))
 
     expect(byPath['catalog.pageSize']).toMatchObject({ value: 25, secret: false })
     // `$t.Secret`, a pattern, a segment naming a secret
@@ -89,40 +105,38 @@ describe('ConfigTool', () => {
     const leaky = $t.Object({
       users: $t.Array($t.Object({ name: $t.String(), pin: $t.Secret($t.String()), password: $t.String() })),
       hooks: $t.Record($t.String(), $t.Secret($t.String())),
-      cache: $t.Object({ nodes: $t.String(), dsn: $t.String() }),
+      cache: $t.Object({ nodes: $t.String(), dsn: $t.String(), replica: $t.String() }),
     })
-    const conf = newConfiguration(leaky)
-      .source(
-        new InlineConfigSource({
-          users: [{ name: 'ann', pin: '1234', password: 'pw-ann' }],
-          hooks: { stripe: 'whsec_1' },
-          cache: { nodes: 'redis://:first@h1,redis://:second@h2', dsn: 'postgres://u:p/ss@db/x' },
-        }),
-      )
-      .build().config
-    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
-      devTools(d => d.showConfigValues()),
-    ) as WebApplication
-    await app.bootstrap()
+    const source = new InlineConfigSource({
+      users: [{ name: 'ann', pin: '1234', password: 'pw-ann' }],
+      hooks: { stripe: 'whsec_1' },
+      cache: {
+        nodes: 'redis://:first@h1,redis://:second@h2',
+        dsn: 'postgres://u:p/ss@db/x',
+        replica: 'postgres://u:p@ss@replica/x',
+      },
+    })
+    await using config = await client({ showValues: true }, leaky, source)
 
-    const body = JSON.stringify(await properties())
+    const body = JSON.stringify(await properties(config))
 
-    expect(body).not.toMatch(/1234|pw-ann|whsec_1|first|second|p\/ss/)
+    expect(body).not.toMatch(/1234|pw-ann|whsec_1|first|second|p\/ss|p@ss/)
     expect(body).toContain('ann')
     expect(body).toContain('redis://:******@h1,redis://:******@h2')
     expect(body).toContain('postgres://u:******@db/x')
+    expect(body).toContain('postgres://u:******@replica/x')
   })
 
   it('masks the secret member of a tuple', async () => {
-    const conf = newConfiguration($t.Object({ pair: $t.Tuple([$t.Secret($t.String()), $t.String()]) }))
-      .source(new InlineConfigSource({ pair: ['hunter2', 'public'] }))
-      .build().config
-    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
-      devTools(d => d.showConfigValues()),
-    ) as WebApplication
-    await app.bootstrap()
+    await using config = await client(
+      { showValues: true },
+      $t.Object({ pair: $t.Tuple([$t.Secret($t.String()), $t.String()]) }),
+      new InlineConfigSource({ pair: ['hunter2', 'public'] }),
+    )
 
-    expect(await properties()).toEqual([{ path: 'pair', origin: 'inline', secret: false, value: ['******', 'public'] }])
+    expect(await properties(config)).toEqual([
+      { path: 'pair', origin: 'inline', secret: false, value: ['******', 'public'] },
+    ])
   })
 
   it('masks the secrets of text a codec decoded, in each layer that set it', async () => {
@@ -133,16 +147,10 @@ describe('ConfigTool', () => {
       users: $t.JSON($t.Array($t.Object({ name: $t.String(), pin: $t.Secret($t.String()) }))),
       tags: $t.List($t.Secret($t.String())),
     })
-    const conf = newConfiguration(encoded)
-      .source(new EnvConfigSource({ prefix: 'DT_' }))
-      .build().config
-    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
-      devTools(d => d.showConfigValues()),
-    ) as WebApplication
-    await app.bootstrap()
+    await using config = await client({ showValues: true }, encoded, new EnvConfigSource({ prefix: 'DT_' }))
 
-    const users = (await (await app.request('/devtools/config/properties/users')).json()) as PropertyDetail
-    const tags = (await (await app.request('/devtools/config/properties/tags')).json()) as PropertyDetail
+    const users = await property(config, 'users')
+    const tags = await property(config, 'tags')
 
     expect(users.layers).toEqual([
       { layer: 'env:DT_', origin: 'env:DT_USERS', value: [{ name: 'ann', pin: '******' }] },
@@ -173,9 +181,9 @@ describe('ConfigTool', () => {
 
   it('answers one value with every layer that set it, masked the same way', async () => {
     vi.stubEnv('DT_DB__PASS', 'from-env')
-    await boot(d => d.showConfigValues())
+    await using config = await client({ showValues: true })
 
-    const detail = (await (await app!.request('/devtools/config/properties/db.pass')).json()) as PropertyDetail
+    const detail = await property(config, 'db.pass')
 
     expect(detail.layers).toEqual([
       { layer: 'env:DT_', origin: 'env:DT_DB__PASS', value: '******' },
@@ -185,26 +193,26 @@ describe('ConfigTool', () => {
   })
 
   it('answers 404 for a path the configuration does not hold', async () => {
-    await boot()
+    await using config = await client()
 
-    expect((await app!.request('/devtools/config/properties/db.nope')).status).toBe(404)
+    expect((await config.config.properties({ path: 'db.nope' }).get()).status).toBe(404)
   })
 
   it('lists the sources it was loaded from', async () => {
-    await boot()
+    await using config = await client()
 
-    const sources = (await (await app!.request('/devtools/config/sources')).json()) as SourceRecord[]
+    const sources = await (await config.config.sources.get()).json()
 
     expect(sources.map(source => source.name)).toEqual(['inline', 'env:DT_'])
     expect(sources.every(source => source.consecutiveFailures === 0)).toBe(true)
   })
 
   it('refuses a redact pattern that is not a dotted path', async () => {
-    const conf = newConfiguration(schema).source(new InlineConfigSource(values)).build().config
-    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
-      devTools(d => d.redact('stripe..x')),
-    ) as WebApplication
+    const store = await loadConfig(newConfiguration(schema).source(new InlineConfigSource(values)).build().config)
+    stores.push(store)
 
-    await expect(app.bootstrap()).rejects.toMatchObject({ code: 'ERR_DEVTOOLS_CONFIGURATION' })
+    expect(() => new ConfigTool(store, { showValues: true, redact: ['stripe..x'] })).toThrow(
+      expect.objectContaining({ code: 'ERR_DEVTOOLS_CONFIGURATION' }),
+    )
   })
 })

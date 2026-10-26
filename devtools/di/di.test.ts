@@ -1,23 +1,15 @@
-import type { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { CaffeineIoC, type Container } from '@caffeinejs/di'
+import { testClient } from '@caffeinejs/testing/http'
+import { describe, expect, it } from 'vitest'
 
-import { devTools } from '../devtools.js'
-import type { BindingRecord, DependencyGraph } from './di.js'
+import { diRouter } from './di.js'
 
 /**
  * The container as the devtools show it: what a reader trusts to find why a service got the dependency it got, so
  * every edge shown must be one the container wires, and nothing the framework binds for itself crowds the listing
  * unless asked for.
  */
-describe('DependencyInjectionTool', () => {
-  let app: WebApplication | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-  })
-
+describe('diRouter', () => {
   class Repository {
     find(): string {
       return 'pet'
@@ -28,68 +20,66 @@ describe('DependencyInjectionTool', () => {
     constructor(readonly repository: Repository) {}
   }
 
-  async function boot(): Promise<void> {
-    app = createWebApplication().with(devTools()) as WebApplication
-    app.container.bind(Repository, t => t.toSelf())
-    app.container.bind(PetService, t => t.toFactory(ctx => new PetService(ctx.container.get(Repository))))
-    await app.bootstrap()
-  }
+  function client(bind: (container: Container) => void = () => {}) {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Repository, t => t.toSelf())
+    container.bind(PetService, t => t.toSelf([Repository]))
+    bind(container)
 
-  async function bindings(query = ''): Promise<BindingRecord[]> {
-    return (await (await app!.request(`/devtools/di/bindings${query}`)).json()) as BindingRecord[]
+    return testClient(diRouter(container), { container })
   }
 
   it("lists the application's bindings and leaves the framework's own out", async () => {
-    await boot()
+    await using di = client()
 
-    const listed = await bindings()
+    const res = await di.di.bindings.get()
 
+    expect(res.status).toBe(200)
+    const listed = await res.json()
     expect(listed.map(binding => binding.key)).toEqual(expect.arrayContaining(['PetService', 'Repository']))
     expect(listed.filter(binding => binding.internal)).toEqual([])
   })
 
   it('adds the internal bindings when asked', async () => {
-    await boot()
+    await using di = client()
 
-    const listed = await bindings('?internal=true')
+    const own = await (await di.di.bindings.get()).json()
+    const all = await (await di.di.bindings.get({ query: { internal: 'true' } })).json()
 
-    expect(listed.filter(binding => binding.internal).length).toBe(listed.length - (await bindings()).length)
-    expect(listed.some(binding => binding.internal)).toBe(true)
+    expect(all.filter(binding => binding.internal)).toHaveLength(all.length - own.length)
+    expect(all.length).toBeGreaterThan(own.length)
   })
 
   it('shows how bindings are wired through their injections', async () => {
-    class Shelter {
-      constructor(readonly repository: Repository) {}
-    }
+    await using di = client()
 
-    app = createWebApplication().with(devTools()) as WebApplication
-    app.container.bind(Repository, t => t.toSelf())
-    app.container.bind(Shelter, t => t.toSelf([Repository]))
-    await app.bootstrap()
-
-    const listed = await bindings()
+    const listed = await (await di.di.bindings.get()).json()
     const repository = listed.find(binding => binding.key === 'Repository')!
-    const shelter = listed.find(binding => binding.key === 'Shelter')!
+    const service = listed.find(binding => binding.key === 'PetService')!
 
-    expect(shelter.dependencies).toEqual([repository.id])
-    expect(repository.dependents).toEqual([shelter.id])
+    expect(service.dependencies).toEqual([repository.id])
+    expect(repository.dependents).toEqual([service.id])
   })
 
   it('answers one binding by id, and 404 for an id the container does not have', async () => {
-    await boot()
+    await using di = client()
+    const [first] = await (await di.di.bindings.get()).json()
 
-    const [first] = await bindings()
+    const found = await di.di.bindings({ id: String(first!.id) }).get()
+    const missing = await di.di.bindings({ id: '999999' }).get()
 
-    expect(await (await app!.request(`/devtools/di/bindings/${first.id}`)).json()).toEqual(first)
-    expect((await app!.request('/devtools/di/bindings/999999')).status).toBe(404)
+    expect(found.status).toBe(200)
+    expect(await found.json()).toEqual(first)
+    expect(missing.status).toBe(404)
   })
 
   it('renders the graph as a Mermaid flowchart naming each binding', async () => {
-    await boot()
+    await using di = client()
 
-    const graph = (await (await app!.request('/devtools/di/graph')).json()) as DependencyGraph
+    const graph = await (await di.di.graph.get()).json()
 
     expect(graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['PetService', 'Repository']))
+    expect(graph.edges).toContainEqual(expect.objectContaining({ kind: 'injection', key: 'Repository' }))
     expect(graph.mermaid).toMatch(/^%%\{init.*\nflowchart LR\n/)
     expect(graph.mermaid).toContain('PetService')
   })

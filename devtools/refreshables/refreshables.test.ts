@@ -1,23 +1,14 @@
-import { kSelfRefresh, Scopes, type SelfRefreshable } from '@caffeinejs/di'
-import type { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { CaffeineIoC, kSelfRefresh, Scopes, type Container, type SelfRefreshable } from '@caffeinejs/di'
+import { testClient } from '@caffeinejs/testing/http'
+import { describe, expect, it } from 'vitest'
 
-import { devTools } from '../devtools.js'
-import type { RefreshableRecord, RefreshRecord } from './refreshables.js'
+import { refreshablesRouter, RefreshablesTool } from './refreshables.js'
 
 /**
  * Refreshing from the devtools re-creates refresh-scoped injectables, and only the ones asked for: a refresh that
  * reached more would drop state an operator meant to keep, and one that reached less would leave stale values.
  */
-describe('RefreshablesTool', () => {
-  let app: WebApplication | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-  })
-
+describe('refreshablesRouter', () => {
   const kFlags = Symbol('flags')
 
   class Flags {
@@ -36,32 +27,47 @@ describe('RefreshablesTool', () => {
     }
   }
 
-  async function boot(): Promise<void> {
-    app = createWebApplication().with(devTools()) as WebApplication
-    app.container.bind(Flags, t => t.toSelf().lifetime(Scopes.REFRESH).labels(kFlags))
-    app.container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH))
-    app.container.bind(Catalog, t => t.toSelf().lifetime(Scopes.REFRESH))
-    await app.bootstrap()
+  async function client(bind?: (container: Container) => void) {
+    const container = new CaffeineIoC({ decorators: false })
+
+    if (bind === undefined) {
+      container.bind(Flags, t => t.toSelf().lifetime(Scopes.REFRESH).labels(kFlags))
+      container.bind(Rates, t => t.toSelf().lifetime(Scopes.REFRESH))
+      container.bind(Catalog, t => t.toSelf().lifetime(Scopes.REFRESH))
+    } else {
+      bind(container)
+    }
+
+    const refreshables = testClient(refreshablesRouter(new RefreshablesTool(container)), { container })
+    await refreshables.$ready()
+
+    return { container, refreshables }
   }
 
-  async function post(path: string, body: unknown = {}): Promise<Response> {
-    return app!.request(`/devtools/refreshables${path}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+  type Client = Awaited<ReturnType<typeof client>>['refreshables']
+
+  /** The test's own refreshables: the application binds one of its own, for its configuration. */
+  const OWN = ['Flags', 'Rates', 'Catalog']
+
+  async function list(refreshables: Client) {
+    return (await refreshables.refreshables.get()).json()
   }
 
-  async function list(): Promise<RefreshableRecord[]> {
-    return (await (await app!.request('/devtools/refreshables')).json()) as RefreshableRecord[]
+  async function refresh(refreshables: Client, label?: string) {
+    const res = await refreshables.refreshables.refreshes.post({ body: label === undefined ? {} : { label } })
+
+    if (res.status !== 200) {
+      throw new Error(`Expected 200, got ${res.status}`)
+    }
+
+    return res.json()
   }
 
   it('lists the refresh-scoped injectables with their labels', async () => {
-    await boot()
+    const { refreshables } = await client()
+    await using _ = refreshables
 
-    const listed = await list()
-
-    expect(listed.filter(entry => ['Flags', 'Rates', 'Catalog'].includes(entry.key))).toEqual([
+    expect((await list(refreshables)).filter(entry => OWN.includes(entry.key))).toEqual([
       { id: expect.any(Number), key: 'Flags', labels: ['flags'] },
       { id: expect.any(Number), key: 'Rates', labels: [] },
       { id: expect.any(Number), key: 'Catalog', labels: [] },
@@ -69,30 +75,32 @@ describe('RefreshablesTool', () => {
   })
 
   it('re-creates every one, and refreshes a self-refreshable one in place', async () => {
-    await boot()
-    const flags = app!.container.get(Flags)
-    const rates = app!.container.get(Rates)
-    const catalog = app!.container.get(Catalog)
+    const { container, refreshables } = await client()
+    await using _ = refreshables
+    const flags = container.get(Flags)
+    const rates = container.get(Rates)
+    const catalog = container.get(Catalog)
 
-    const res = await post('/refreshes')
+    const result = await refresh(refreshables)
 
-    expect(res.status).toBe(200)
-    expect(app!.container.get(Flags).id).not.toBe(flags.id)
-    expect(app!.container.get(Rates).id).not.toBe(rates.id)
-    expect(app!.container.get(Catalog)).toBe(catalog)
+    expect(result.refreshed.map(entry => entry.key).filter(key => OWN.includes(key))).toEqual(OWN)
+    expect(container.get(Flags).id).not.toBe(flags.id)
+    expect(container.get(Rates).id).not.toBe(rates.id)
+    expect(container.get(Catalog)).toBe(catalog)
     expect(catalog.reloads).toBe(1)
   })
 
   it('re-creates only those carrying the label named', async () => {
-    await boot()
-    const flags = app!.container.get(Flags)
-    const rates = app!.container.get(Rates)
+    const { container, refreshables } = await client()
+    await using _ = refreshables
+    const flags = container.get(Flags)
+    const rates = container.get(Rates)
 
-    const res = (await (await post('/refreshes', { label: 'flags' })).json()) as RefreshRecord
+    const result = await refresh(refreshables, 'flags')
 
-    expect(res.refreshed.map(entry => entry.key)).toEqual(['Flags'])
-    expect(app!.container.get(Flags).id).not.toBe(flags.id)
-    expect(app!.container.get(Rates).id).toBe(rates.id)
+    expect(result.refreshed.map(entry => entry.key)).toEqual(['Flags'])
+    expect(container.get(Flags).id).not.toBe(flags.id)
+    expect(container.get(Rates).id).toBe(rates.id)
   })
 
   it('re-creates everything a label names, though two modules wrote that label as two symbols', async () => {
@@ -108,53 +116,66 @@ describe('RefreshablesTool', () => {
       readonly id = Math.random()
     }
 
-    app = createWebApplication().with(devTools()) as WebApplication
-    app.container.bind(Pool, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
-    app.container.bind(Cache, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
-    app.container.bind(Anonymous, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol()))
-    await app.bootstrap()
-    const pool = app.container.get(Pool)
-    const cache = app.container.get(Cache)
-    const anonymous = app.container.get(Anonymous)
-    const published = (await list()).find(entry => entry.key === 'Anonymous')!.labels[0]!
+    const { container, refreshables } = await client(c => {
+      c.bind(Pool, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
+      c.bind(Cache, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol('db')))
+      c.bind(Anonymous, t => t.toSelf().lifetime(Scopes.REFRESH).labels(Symbol()))
+    })
+    await using _ = refreshables
+    const pool = container.get(Pool)
+    const cache = container.get(Cache)
+    const anonymous = container.get(Anonymous)
+    const published = (await list(refreshables)).find(entry => entry.key === 'Anonymous')!.labels[0]!
 
-    const db = (await (await post('/refreshes', { label: 'db' })).json()) as RefreshRecord
-    const unnamed = await post('/refreshes', { label: published })
+    const db = await refresh(refreshables, 'db')
+    const unnamed = await refresh(refreshables, published)
 
     expect(db.refreshed.map(entry => entry.key)).toEqual(['Pool', 'Cache'])
-    expect(app.container.get(Pool).id).not.toBe(pool.id)
-    expect(app.container.get(Cache).id).not.toBe(cache.id)
-    expect(unnamed.status).toBe(200)
-    expect(app.container.get(Anonymous).id).not.toBe(anonymous.id)
+    expect(container.get(Pool).id).not.toBe(pool.id)
+    expect(container.get(Cache).id).not.toBe(cache.id)
+    expect(unnamed.refreshed.map(entry => entry.key)).toEqual(['Anonymous'])
+    expect(container.get(Anonymous).id).not.toBe(anonymous.id)
   })
 
   it('refuses a body that is not an object, rather than taking it for "refresh everything"', async () => {
-    await boot()
-    const rates = app!.container.get(Rates)
+    const { container, refreshables } = await client()
+    await using _ = refreshables
+    const rates = container.get(Rates)
+    const post = (body: string) =>
+      refreshables.$fetch('/refreshables/refreshes', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      })
 
-    expect((await post('/refreshes', [])).status).toBe(400)
-    expect((await post('/refreshes', 'flags')).status).toBe(400)
-    expect(app!.container.get(Rates).id).toBe(rates.id)
+    expect((await post('[]')).status).toBe(400)
+    expect((await post('"flags"')).status).toBe(400)
+    expect(container.get(Rates).id).toBe(rates.id)
   })
 
   it('re-creates one by id, leaving the others', async () => {
-    await boot()
-    const flags = app!.container.get(Flags)
-    const rates = app!.container.get(Rates)
-    const id = (await list()).find(entry => entry.key === 'Rates')!.id
+    const { container, refreshables } = await client()
+    await using _ = refreshables
+    const flags = container.get(Flags)
+    const rates = container.get(Rates)
+    const id = (await list(refreshables)).find(entry => entry.key === 'Rates')!.id
 
-    const res = (await (await post(`/${id}/refreshes`)).json()) as RefreshRecord
+    const res = await refreshables.refreshables({ id: String(id) }).refreshes.post({ body: {} })
 
-    expect(res.refreshed).toEqual([{ id, key: 'Rates', labels: [] }])
-    expect(app!.container.get(Rates).id).not.toBe(rates.id)
-    expect(app!.container.get(Flags).id).toBe(flags.id)
+    expect(res.status).toBe(200)
+    if (res.status === 200) {
+      expect((await res.json()).refreshed).toEqual([{ id, key: 'Rates', labels: [] }])
+    }
+    expect(container.get(Rates).id).not.toBe(rates.id)
+    expect(container.get(Flags).id).toBe(flags.id)
   })
 
   it('answers 400 for a label nothing carries and 404 for an id nothing has', async () => {
-    await boot()
+    const { refreshables } = await client()
+    await using _ = refreshables
 
-    expect((await post('/refreshes', { label: 'nope' })).status).toBe(400)
-    expect((await post('/999999/refreshes')).status).toBe(404)
-    expect((await app!.request('/devtools/refreshables/999999')).status).toBe(404)
+    expect((await refreshables.refreshables.refreshes.post({ body: { label: 'nope' } })).status).toBe(400)
+    expect((await refreshables.refreshables({ id: '999999' }).refreshes.post({ body: {} })).status).toBe(404)
+    expect((await refreshables.refreshables({ id: '999999' }).get()).status).toBe(404)
   })
 })

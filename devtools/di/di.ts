@@ -1,29 +1,64 @@
-import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Binding, Container, InjectionToken } from '@caffeinejs/di'
-import { buildBindingGraph, graphToMermaid, type BindingGraph, type GraphEdge } from '@caffeinejs/di/graph'
+import { buildBindingGraph, graphToMermaid, type GraphEdge } from '@caffeinejs/di/graph'
+import { ErrHTTPNotFound, Router } from '@caffeinejs/http'
+
+import { ErrorSchema, type ToolInfo } from '../tool.js'
 
 /** One binding of the container, and how it is wired to the others. */
-export interface BindingRecord {
-  readonly id: number
-  readonly key: string
-  readonly scope: string
-  readonly names: readonly string[]
-  readonly labels: readonly string[]
-  readonly profiles: readonly string[]
-  readonly primary: boolean
-  readonly lazy: boolean
-  readonly async: boolean
+export const BindingSchema = $t.Object({
+  id: $t.Integer(),
+  key: $t.String(),
+  scope: $t.String(),
+  names: $t.Array($t.String()),
+  labels: $t.Array($t.String()),
+  profiles: $t.Array($t.String()),
+  primary: $t.Boolean(),
+  lazy: $t.Boolean(),
+  async: $t.Boolean(),
   /** Bound by the framework for its own use. Left out of a listing unless asked for. */
-  readonly internal: boolean
+  internal: $t.Boolean(),
   /** The ids of the bindings this one is injected with. */
-  readonly dependencies: readonly number[]
+  dependencies: $t.Array($t.Integer()),
   /** The ids of the bindings injected with this one. */
-  readonly dependents: readonly number[]
-}
+  dependents: $t.Array($t.Integer()),
+})
 
-/** The dependency graph, and the same graph as a Mermaid flowchart. */
-export interface DependencyGraph extends BindingGraph {
-  readonly mermaid: string
+/** The dependency graph, as `buildBindingGraph` from `@caffeinejs/di/graph` builds it, and as a Mermaid flowchart. */
+export const DependencyGraphSchema = $t.Object({
+  nodes: $t.Array(
+    $t.Object({
+      id: $t.Integer(),
+      label: $t.String(),
+      scopeID: $t.String(),
+      names: $t.Array($t.String()),
+      labels: $t.Array($t.String()),
+      primary: $t.Boolean(),
+      lazy: $t.Boolean(),
+    }),
+  ),
+  edges: $t.Array(
+    $t.Object({
+      fromID: $t.Integer(),
+      toID: $t.Integer(),
+      kind: $t.UnionEnum(['injection', 'property-injection', 'named-group', 'label-group']),
+      meta: $t.Optional($t.String()),
+      key: $t.Optional($t.String()),
+    }),
+  ),
+  mermaid: $t.String(),
+})
+
+export type BindingRecord = InferSchema<typeof BindingSchema>
+export type DependencyGraph = InferSchema<typeof DependencyGraphSchema>
+
+/** `?internal=true` adds the framework's own bindings. */
+const InternalQuerySchema = $t.Object({ internal: $t.Optional($t.UnionEnum(['true', 'false'])) })
+
+export const diTool: ToolInfo = {
+  id: 'di',
+  title: 'Dependency injection',
+  description: 'The bindings of the container and how each is wired to the others',
 }
 
 /**
@@ -33,69 +68,60 @@ export interface DependencyGraph extends BindingGraph {
  * - `GET /di/bindings/:id`: one binding
  * - `GET /di/graph`: the dependency graph with its Mermaid source; `?internal=true` as above
  */
-export class DependencyInjectionTool extends DevTool {
-  readonly id = 'di'
-  readonly title = 'Dependency injection'
-  readonly description = 'The bindings of the container and how each is wired to the others'
-  readonly operations: readonly DevToolOperation[]
+export function diRouter(container: Container) {
+  return new Router('/di')
+    .get('/bindings')
+    .schema({ querystring: InternalQuerySchema, response: { 200: $t.Array(BindingSchema) } })
+    .handler(ctx => bindingsOf(container, ctx.req.query().internal === 'true'))
+    .get('/bindings/:id')
+    .schema({ response: { 200: BindingSchema, 404: ErrorSchema } })
+    .handler(ctx => {
+      const id = ctx.req.param().id
+      const found = bindingsOf(container, true).find(binding => String(binding.id) === id)
 
-  readonly #container: Container
-
-  constructor(container: Container) {
-    super()
-    this.#container = container
-    this.operations = [
-      { method: 'GET', path: '/bindings', handle: ({ query }) => this.#bindings(query.internal === 'true') },
-      { method: 'GET', path: '/bindings/:id', handle: ({ params }) => this.#binding(params.id) },
-      { method: 'GET', path: '/graph', handle: ({ query }) => this.#graph(query.internal === 'true') },
-    ]
-  }
-
-  #bindings(internal: boolean): BindingRecord[] {
-    const entries = this.#entries(internal)
-    const graph = buildBindingGraph(entries)
-    const bindings = new Map(entries.map(([, binding]) => [binding.id, binding]))
-    const injections = graph.edges.filter(isInjection)
-
-    return graph.nodes.map(node => {
-      const binding = bindings.get(node.id)!
-
-      return {
-        id: node.id,
-        key: node.label,
-        scope: node.scopeID,
-        names: node.names,
-        labels: node.labels,
-        profiles: [...binding.profiles],
-        primary: node.primary,
-        lazy: node.lazy,
-        async: binding.async === true,
-        internal: binding.internal === true,
-        dependencies: unique(injections.filter(edge => edge.fromID === node.id).map(edge => edge.toID)),
-        dependents: unique(injections.filter(edge => edge.toID === node.id).map(edge => edge.fromID)),
+      if (found === undefined) {
+        throw new ErrHTTPNotFound(`No binding with id "${id}"`)
       }
+
+      return found
     })
-  }
+    .get('/graph')
+    .schema({ querystring: InternalQuerySchema, response: { 200: DependencyGraphSchema } })
+    .handler((ctx): DependencyGraph => {
+      const graph = buildBindingGraph(entriesOf(container, ctx.req.query().internal === 'true'))
 
-  #binding(id: string): BindingRecord {
-    const found = this.#bindings(true).find(binding => String(binding.id) === id)
+      return { ...graph, mermaid: graphToMermaid(graph) }
+    })
+}
 
-    if (found === undefined) {
-      throw new ErrDevToolNotFound(`No binding with id "${id}"`)
+function bindingsOf(container: Container, internal: boolean): BindingRecord[] {
+  const entries = entriesOf(container, internal)
+  const graph = buildBindingGraph(entries)
+  const bindings = new Map(entries.map(([, binding]) => [binding.id, binding]))
+  const injections = graph.edges.filter(isInjection)
+
+  return graph.nodes.map(node => {
+    const binding = bindings.get(node.id)!
+
+    return {
+      id: node.id,
+      key: node.label,
+      scope: node.scopeID,
+      names: node.names,
+      labels: node.labels,
+      profiles: [...binding.profiles],
+      primary: node.primary,
+      lazy: node.lazy,
+      async: binding.async === true,
+      internal: binding.internal === true,
+      dependencies: unique(injections.filter(edge => edge.fromID === node.id).map(edge => edge.toID)),
+      dependents: unique(injections.filter(edge => edge.toID === node.id).map(edge => edge.fromID)),
     }
+  })
+}
 
-    return found
-  }
-
-  #graph(internal: boolean): DependencyGraph {
-    const graph = buildBindingGraph(this.#entries(internal))
-
-    return { ...graph, mermaid: graphToMermaid(graph) }
-  }
-
-  #entries(internal: boolean): Array<[InjectionToken, Binding]> {
-    return Array.from(this.#container.entries()).filter(([, binding]) => internal || binding.internal !== true)
-  }
+function entriesOf(container: Container, internal: boolean): Array<[InjectionToken, Binding]> {
+  return Array.from(container.entries()).filter(([, binding]) => internal || binding.internal !== true)
 }
 
 function isInjection(edge: GraphEdge): boolean {

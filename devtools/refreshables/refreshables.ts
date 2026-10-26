@@ -1,20 +1,32 @@
-import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import { Scopes, type Binding, type Container, type InjectionToken } from '@caffeinejs/di'
 import { buildBindingGraph } from '@caffeinejs/di/graph'
+import { ErrHTTPBadRequest, ErrHTTPNotFound, Router } from '@caffeinejs/http'
+
+import { ErrorSchema, type ToolInfo } from '../tool.js'
 
 /** An injectable a refresh re-creates, or refreshes in place when it is self-refreshable. */
-export interface RefreshableRecord {
-  readonly id: number
-  readonly key: string
+export const RefreshableSchema = $t.Object({
+  id: $t.Integer(),
+  key: $t.String(),
   /** The descriptions of its labels: what a refresh by label names. */
-  readonly labels: readonly string[]
-}
+  labels: $t.Array($t.String()),
+})
 
 /** What a refresh reached, and when it ended. */
-export interface RefreshRecord {
-  readonly refreshed: readonly RefreshableRecord[]
+export const RefreshSchema = $t.Object({
+  refreshed: $t.Array(RefreshableSchema),
   /** An ISO 8601 timestamp. */
-  readonly at: string
+  at: $t.String(),
+})
+
+export type RefreshableRecord = InferSchema<typeof RefreshableSchema>
+export type RefreshRecord = InferSchema<typeof RefreshSchema>
+
+export const refreshablesTool: ToolInfo = {
+  id: 'refreshables',
+  title: 'Refreshables',
+  description: 'The refresh-scoped injectables, refreshed all at once, by label or one by one',
 }
 
 /**
@@ -26,27 +38,42 @@ export interface RefreshRecord {
  * - `POST /refreshables/refreshes`: refreshes every one, or those whose label `{ "label": "..." }` names
  * - `POST /refreshables/:id/refreshes`: refreshes that one
  */
-export class RefreshablesTool extends DevTool {
-  readonly id = 'refreshables'
-  readonly title = 'Refreshables'
-  readonly description = 'The refresh-scoped injectables, refreshed all at once, by label or one by one'
-  readonly operations: readonly DevToolOperation[]
+export function refreshablesRouter(tool: RefreshablesTool) {
+  return (
+    new Router('/refreshables')
+      .get('')
+      .schema({ response: { 200: $t.Array(RefreshableSchema) } })
+      .handler(() => tool.list().map(([record]) => record))
+      .get('/:id')
+      .schema({ response: { 200: RefreshableSchema, 404: ErrorSchema } })
+      .handler(ctx => tool.find(ctx.req.param().id)[0])
+      .post('/refreshes')
+      .schema({
+        body: $t.Object({ label: $t.Optional($t.String()) }, { additionalProperties: false }),
+        response: { 200: RefreshSchema, 400: ErrorSchema },
+      })
+      .handler(ctx => tool.refreshAll(ctx.req.body().label))
+      .post('/:id/refreshes')
+      // A body, though empty: a request changing something carries JSON, which a cross-site form cannot send.
+      .schema({
+        body: $t.Object({}, { additionalProperties: false }),
+        response: { 200: RefreshSchema, 404: ErrorSchema },
+      })
+      .handler(ctx => tool.refreshOne(ctx.req.param().id))
+  )
+}
 
+/** Lists and refreshes the container's refresh-scoped injectables. */
+export class RefreshablesTool {
   readonly #container: Container
 
   constructor(container: Container) {
-    super()
     this.#container = container
-    this.operations = [
-      { method: 'GET', path: '', handle: () => this.#list().map(([record]) => record) },
-      { method: 'GET', path: '/:id', handle: ({ params }) => this.#find(params.id)[0] },
-      { method: 'POST', path: '/refreshes', handle: ({ body }) => this.#refreshAll(labelOf(body)) },
-      { method: 'POST', path: '/:id/refreshes', handle: ({ params }) => this.#refreshOne(params.id) },
-    ]
   }
 
-  async #refreshAll(label: string | undefined): Promise<RefreshRecord> {
-    const all = this.#list()
+  /** @throws ErrHTTPBadRequest when no refresh-scoped injectable carries `label`. */
+  async refreshAll(label: string | undefined): Promise<RefreshRecord> {
+    const all = this.list()
 
     if (label === undefined) {
       await this.#container.refresher.refresh()
@@ -57,7 +84,7 @@ export class RefreshablesTool extends DevTool {
     const symbols = new Set(all.flatMap(([, binding]) => binding.labels).filter(symbol => labelText(symbol) === label))
 
     if (symbols.size === 0) {
-      throw new ErrDevToolInvalid(`No refresh-scoped injectable carries the label "${label}"`)
+      throw new ErrHTTPBadRequest(`No refresh-scoped injectable carries the label "${label}"`)
     }
 
     for (const symbol of symbols) {
@@ -67,24 +94,26 @@ export class RefreshablesTool extends DevTool {
     return refreshed(all.filter(([, binding]) => binding.labels.some(symbol => symbols.has(symbol))))
   }
 
-  async #refreshOne(id: string): Promise<RefreshRecord> {
-    const found = this.#find(id)
+  /** @throws ErrHTTPNotFound when no refresh-scoped injectable has `id`. */
+  async refreshOne(id: string): Promise<RefreshRecord> {
+    const found = this.find(id)
 
     await this.#container.refresher.refresh(found[1])
     return refreshed([found])
   }
 
-  #find(id: string): [RefreshableRecord, Binding] {
-    const found = this.#list().find(([record]) => String(record.id) === id)
+  /** @throws ErrHTTPNotFound when no refresh-scoped injectable has `id`. */
+  find(id: string): [RefreshableRecord, Binding] {
+    const found = this.list().find(([record]) => String(record.id) === id)
 
     if (found === undefined) {
-      throw new ErrDevToolNotFound(`No refresh-scoped injectable with id "${id}"`)
+      throw new ErrHTTPNotFound(`No refresh-scoped injectable with id "${id}"`)
     }
 
     return found
   }
 
-  #list(): Array<[RefreshableRecord, Binding]> {
+  list(): Array<[RefreshableRecord, Binding]> {
     const entries = Array.from(this.#container.entries()).filter(
       ([, binding]) => binding.scopeID === Scopes.REFRESH,
     ) as Array<[InjectionToken, Binding]>
@@ -108,22 +137,4 @@ function refreshed(entries: ReadonlyArray<[RefreshableRecord, Binding]>): Refres
 /** A label as the list shows it and a refresh names it. */
 function labelText(label: symbol): string {
   return label.description ?? String(label)
-}
-
-function labelOf(body: unknown): string | undefined {
-  if (body === undefined || body === null) {
-    return undefined
-  }
-
-  if (typeof body !== 'object' || Array.isArray(body)) {
-    throw new ErrDevToolInvalid('Cannot refresh: the body must be a JSON object')
-  }
-
-  const label = (body as { label?: unknown }).label
-
-  if (label !== undefined && typeof label !== 'string') {
-    throw new ErrDevToolInvalid('Cannot refresh: "label" must be a string')
-  }
-
-  return label
 }

@@ -1,6 +1,7 @@
 import { request } from 'node:http'
 
 import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { brewer, type BrewOptions } from '@caffeinejs/brewer'
 import {
   AuthenticateResult,
   Authentication,
@@ -16,7 +17,7 @@ import {
 import { createWebApplication } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DevTools, devTools, type DevToolsBuilder } from './devtools.js'
+import { DevTools, devTools, type DevToolsBuilder, type DevToolsIndex, type DevToolsRoutes } from './devtools.js'
 
 /**
  * The devtools describe an application to whoever reaches them, so where they are served, who may reach them and
@@ -94,6 +95,32 @@ describe('devtools', () => {
     return app!.listeners.get('devtools')!
   }
 
+  const loopback = { host: '127.0.0.1', port: 0 }
+
+  /**
+   * Runs an application with `DevTools(configure)` and answers a client typed by the devtools' own routes, reaching
+   * them on their socket as an operator's tool would.
+   */
+  async function serve(
+    configure: (d: DevToolsBuilder) => unknown = () => {},
+    options: { path?: string; listener?: string; brew?: BrewOptions; prepare?: (a: WebApplication) => void } = {},
+  ) {
+    app = createWebApplication({ logger: false })
+      .server(() => ({ listener: loopback }))
+      .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
+      .install(
+        DevTools(d => {
+          d.port(0)
+          configure(d)
+        }),
+      ) as WebApplication
+    options.prepare?.(app)
+    await app.run()
+    const server = app.listeners.get(options.listener ?? 'devtools')!
+
+    return brewer<DevToolsRoutes>(`${server.address!.origin}${options.path ?? '/devtools'}`, options.brew)
+  }
+
   /** The status a request to the devtools answers under `host`, which `fetch` would not let a test set. */
   function statusFor(port: number, host: string): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -108,19 +135,17 @@ describe('devtools', () => {
 
   describe('DevTools()', () => {
     it('serves the devtools on a server of their own, and not on the one the application serves its users on', async () => {
-      app = createWebApplication().install(DevTools()) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve()
 
-      expect((await devtoolsServer().request('/devtools')).status).toBe(200)
-      expect((await app.request('/devtools')).status).toBe(404)
+      expect((await devtools.get()).status).toBe(200)
+      expect((await app!.request('/devtools')).status).toBe(404)
     })
 
     it('lists every core tool with links to its resources, and answers with no-store', async () => {
-      app = createWebApplication().install(DevTools()) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve()
 
-      const res = await devtoolsServer().request('/devtools')
-      const { tools } = (await res.json()) as { tools: Array<{ id: string; links: Array<{ href: string }> }> }
+      const res = await devtools.get()
+      const { tools } = await res.json()
 
       expect(res.headers.get('cache-control')).toBe('no-store')
       expect(tools.map(tool => tool.id)).toEqual([
@@ -154,22 +179,19 @@ describe('devtools', () => {
     })
 
     it('serves under the path it is given', async () => {
-      app = createWebApplication().install(DevTools(d => d.path('/_admin/devtools'))) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve(d => d.path('/_admin/devtools'), { path: '/_admin/devtools' })
 
-      expect((await devtoolsServer().request('/_admin/devtools/info')).status).toBe(200)
+      expect((await devtools.info.get()).status).toBe(200)
       expect((await devtoolsServer().request('/devtools/info')).status).toBe(404)
     })
 
     it('requires what authorize(...) names, authenticating on its own server', async () => {
-      app = createWebApplication()
-        .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
-        .install(DevTools(d => d.authorize({ roles: ['ops'] }))) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve(d => d.authorize({ roles: ['ops'] }))
+      const as = (user: string) => ({ headers: { 'x-user': user } })
 
-      expect((await devtoolsServer().request('/devtools/info')).status).toBe(401)
-      expect((await devtoolsServer().request('/devtools/info', { headers: { 'x-user': 'bob:dev' } })).status).toBe(403)
-      expect((await devtoolsServer().request('/devtools/info', { headers: { 'x-user': 'ann:ops' } })).status).toBe(200)
+      expect((await devtools.info.get()).status).toBe(401)
+      expect((await devtools.info.get(as('bob:dev'))).status).toBe(403)
+      expect((await devtools.info.get(as('ann:ops'))).status).toBe(200)
     })
 
     it('refuses authorize(...) without authentication installed, rather than serve the devtools unprotected', async () => {
@@ -191,10 +213,9 @@ describe('devtools', () => {
 
     it('starts in production once told to', async () => {
       vi.stubEnv('NODE_ENV', 'production')
-      app = createWebApplication().install(DevTools(d => d.allowProduction())) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve(d => d.allowProduction())
 
-      expect((await devtoolsServer().request('/devtools')).status).toBe(200)
+      expect((await devtools.get()).status).toBe(200)
     })
 
     it.each<[string, (d: DevToolsBuilder) => unknown]>([
@@ -209,32 +230,37 @@ describe('devtools', () => {
     })
 
     it('takes the name it is given, beside a listener of the application already named devtools', async () => {
-      app = createWebApplication()
-        .install(Listener('devtools'))
-        .install(DevTools(d => d.listener('ops'))) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve(d => d.listener('ops'), {
+        listener: 'ops',
+        prepare: a => a.install(Listener('devtools', l => l.server(() => ({ listener: loopback })))),
+      })
 
-      expect((await app.listeners.get('ops')!.request('/devtools/info')).status).toBe(200)
-      expect((await app.listeners.get('devtools')!.request('/devtools/info')).status).toBe(404)
+      expect((await devtools.info.get()).status).toBe(200)
+      expect((await devtoolsServer().request('/devtools/info')).status).toBe(404)
     })
 
     it('takes where it listens from the configuration, a fluent setter winning', async () => {
-      app = createWebApplication().install(
-        DevTools(d => d.config({ path: '/from-config', port: 0 }).path('/fluent')),
-      ) as WebApplication
-      await app.bootstrap()
+      const devtools = await serve(d => d.config({ path: '/from-config', port: 0 }).path('/fluent'), {
+        path: '/fluent',
+      })
 
-      expect((await devtoolsServer().request('/fluent/info')).status).toBe(200)
+      expect((await devtools.info.get()).status).toBe(200)
       expect((await devtoolsServer().request('/from-config/info')).status).toBe(404)
     })
   })
 
   describe('devTools()', () => {
     it("serves the devtools on the server it is registered on, under that server's gate", async () => {
-      app = createWebApplication().with(devTools()) as WebApplication
-      await app.bootstrap()
+      app = createWebApplication({ logger: false })
+        .server(() => ({ listener: loopback }))
+        .with(devTools()) as WebApplication
+      await app.run()
+      const devtools = brewer<DevToolsRoutes>(`${app.address!.origin}/devtools`)
 
-      expect((await app.request('/devtools/info')).status).toBe(200)
+      const res = await devtools.info.get()
+
+      expect(res.status).toBe(200)
+      expect((await res.json()).runtime.pid).toBe(process.pid)
     })
 
     it('refuses to start where NODE_ENV is production, pointing at a server of their own', async () => {
@@ -258,9 +284,7 @@ describe('devtools', () => {
     it('is listed with its resources and served', async () => {
       await boot()
 
-      const { tools } = (await (await app!.request('/devtools')).json()) as {
-        tools: Array<{ id: string; links: unknown[] }>
-      }
+      const { tools } = (await (await app!.request('/devtools')).json()) as DevToolsIndex
 
       expect(tools.at(-1)).toEqual({
         id: 'queue',

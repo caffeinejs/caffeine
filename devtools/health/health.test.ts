@@ -1,20 +1,12 @@
-import { HealthIndicator, up, down, type HealthReport } from '@caffeinejs/application/health'
-import type { WebApplication } from '@caffeinejs/http'
-import { createWebApplication } from '@caffeinejs/http/fastify'
-import { afterEach, describe, expect, it } from 'vitest'
+import { ApplicationAvailability, HealthIndicator, up, down, type HealthReport } from '@caffeinejs/application/health'
+import { CaffeineIoC } from '@caffeinejs/di'
+import { testClient } from '@caffeinejs/testing/http'
+import { describe, expect, it } from 'vitest'
 
-import { devTools } from '../devtools.js'
-import type { HealthRecord } from './health.js'
+import { healthRouter } from './health.js'
 
 /** The probes answer a status; an operator chasing why needs each indicator's details, which only this shows. */
-describe('HealthTool', () => {
-  let app: WebApplication | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-  })
-
+describe('healthRouter', () => {
   class Database extends HealthIndicator {
     get name(): string {
       return 'database'
@@ -39,35 +31,42 @@ describe('HealthTool', () => {
     }
   }
 
-  async function boot(): Promise<void> {
-    app = createWebApplication()
-      .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
-      .with(devTools()) as WebApplication
-    app.container.bind(Database, t => t.toSelf().extends(HealthIndicator))
-    app.container.bind(Mailer, t => t.toSelf().extends(HealthIndicator))
-    // Readiness asks its indicators only once the application has started.
-    await app.run()
+  async function client() {
+    const container = new CaffeineIoC({ decorators: false })
+    container.bind(Database, t => t.toSelf().extends(HealthIndicator))
+    container.bind(Mailer, t => t.toSelf().extends(HealthIndicator))
+    const health = testClient(healthRouter(container), { container })
+    await health.$ready()
+    // Readiness asks its indicators only once the application has started and accepts traffic.
+    container.get(ApplicationAvailability).markStarted().acceptTraffic()
+
+    return health
   }
 
   it('shows every indicator with its details, and the availability', async () => {
-    await boot()
+    await using health = await client()
 
-    const health = (await (await app!.request('/devtools/health')).json()) as HealthRecord
+    const res = await health.health.get()
 
-    expect(health.groups.readiness.outcomes).toEqual([
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.groups.readiness.outcomes).toEqual([
       expect.objectContaining({ name: 'database', status: 'up', data: { pool: 4 } }),
       expect.objectContaining({ name: 'mailer', status: 'down', detail: 'smtp unreachable', critical: false }),
     ])
-    expect(health.availability).toMatchObject({ live: 'correct', draining: false })
+    expect(body.availability).toMatchObject({ live: 'correct', ready: 'accepting', draining: false })
   })
 
   it('answers one group, and 404 for a group there is not', async () => {
-    await boot()
+    await using health = await client()
 
-    const readiness = await app!.request('/devtools/health/readiness')
+    const readiness = await health.health({ group: 'readiness' }).get()
+    const wellness = await health.health({ group: 'wellness' }).get()
 
     expect(readiness.status).toBe(200)
-    expect(((await readiness.json()) as { outcomes: unknown[] }).outcomes).toHaveLength(2)
-    expect((await app!.request('/devtools/health/wellness')).status).toBe(404)
+    if (readiness.status === 200) {
+      expect((await readiness.json()).outcomes.map(outcome => outcome.name)).toEqual(['database', 'mailer'])
+    }
+    expect(wellness.status).toBe(404)
   })
 })

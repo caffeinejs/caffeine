@@ -9,6 +9,8 @@ import {
 } from '@caffeinejs/application'
 import type { ConfigStore } from '@caffeinejs/application/config'
 import { DevTool, ErrDevToolInvalid, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
+import type { Container } from '@caffeinejs/di'
 import {
   ErrHTTPBadRequest,
   ErrHTTPMisdirectedRequest,
@@ -16,6 +18,7 @@ import {
   ErrHTTPUnsupportedMediaType,
   HTTPPlugin,
   ListenerBuilder,
+  RouteInventory,
   Router,
   type AdapterExtensionFactory,
   type HTTPSetupContext,
@@ -25,15 +28,16 @@ import {
 import { authentication, type HTTPPluginConfigurer, type RouterTypes } from '@caffeinejs/http/fastify'
 import { errMessage } from '@caffeinejs/std/err'
 
-import { ConfigTool } from './config/config.js'
-import { DependencyInjectionTool } from './di/di.js'
+import { configRouter, ConfigTool, configTool } from './config/config.js'
+import { diRouter, diTool } from './di/di.js'
 import { ErrDevToolsConfiguration, ErrDevToolsInProduction } from './errors.js'
-import { EventsTool } from './events/events.js'
-import { HealthTool } from './health/health.js'
-import { InfoTool } from './info/info.js'
-import { RefreshablesTool } from './refreshables/refreshables.js'
-import { RoutesTool } from './routes/routes.js'
-import { RuntimeTool } from './runtime/runtime.js'
+import { eventsRouter, EventsTool, eventsTool } from './events/events.js'
+import { healthRouter, healthTool } from './health/health.js'
+import { infoRouter, infoTool } from './info/info.js'
+import { refreshablesRouter, RefreshablesTool, refreshablesTool } from './refreshables/refreshables.js'
+import { routesRouter, routesTool } from './routes/routes.js'
+import { runtimeRouter, RuntimeTool, runtimeTool } from './runtime/runtime.js'
+import type { ToolInfo } from './tool.js'
 
 /** What the devtools' own server listens on, and where the devtools are served on it. */
 export interface DevToolsConfig {
@@ -56,15 +60,19 @@ interface DevToolsOptions {
 }
 
 /** What `GET /devtools` answers: every tool, with a link to each of its resources. */
-export interface DevToolsIndex {
-  readonly tools: ReadonlyArray<{
-    readonly id: string
-    readonly title: string
-    readonly description: string
-    /** One per operation; a path parameter stays in the link as written: `/devtools/di/bindings/:id`. */
-    readonly links: ReadonlyArray<{ readonly method: DevToolOperation['method']; readonly href: string }>
-  }>
-}
+export const DevToolsIndexSchema = $t.Object({
+  tools: $t.Array(
+    $t.Object({
+      id: $t.String(),
+      title: $t.String(),
+      description: $t.String(),
+      /** One per resource and method; a path parameter stays in the link as written: `/devtools/di/bindings/:id`. */
+      links: $t.Array($t.Object({ method: $t.String(), href: $t.String() })),
+    }),
+  ),
+})
+
+export type DevToolsIndex = InferSchema<typeof DevToolsIndexSchema>
 
 /** The name of the server `DevTools()` adds, and its listener in `app.listeners`, unless `listener(name)` names it. */
 export const DEVTOOLS_LISTENER = 'devtools'
@@ -333,35 +341,25 @@ class DevToolsPlugin extends HTTPPlugin {
   }
 
   register(context: HTTPSetupContext): void {
-    const { container } = context
-    const store = context.store as ConfigStore<unknown>
     const options = this.#options
-    const tools: DevTool[] = [
-      new InfoTool(container, store),
-      new HealthTool(container),
-      new DependencyInjectionTool(container),
-      new ConfigTool(store, { showValues: options.showConfigValues, redact: options.redact }),
-      new RoutesTool(container),
-      new RefreshablesTool(container),
-      this.#events ?? new EventsTool(container.hooks),
-      new RuntimeTool(),
-      ...container.getManyOptional(DevTool),
-    ]
+    const contributed = context.container.getManyOptional(DevTool)
 
-    assertTools(tools)
+    assertTools(contributed)
 
-    const router = new Router(options.path).detail('http', { internal: true }).header('cache-control', 'no-store')
+    const router = new Router(options.path).detail('http', { internal: true }).with(() => new DevToolsGuard())
 
     if (options.authorize !== undefined) {
       router.authorize(options.authorize)
     }
 
-    router.get('/', (ctx: IContext): DevToolsIndex => {
-      assertLoopbackHost(ctx)
-      return { tools: tools.map(tool => indexOf(tool, options.path)) }
-    })
+    const tools: ToolInfo[] = [...BUILT_IN, ...contributed]
 
-    for (const tool of tools) {
+    router.mount(
+      indexRouter(context.container, options.path, tools),
+      ...builtInRouters(context.container, context.store as ConfigStore<unknown>, options, this.#events),
+    )
+
+    for (const tool of contributed) {
       for (const operation of tool.operations) {
         router.route(operation.method, `/${tool.id}${operation.path}`, (ctx: IContext) => answer(operation, ctx))
       }
@@ -371,17 +369,92 @@ class DevToolsPlugin extends HTTPPlugin {
   }
 }
 
-function indexOf(tool: DevTool, path: string): DevToolsIndex['tools'][number] {
-  return {
-    id: tool.id,
-    title: tool.title,
-    description: tool.description,
-    links: tool.operations.map(operation => ({
-      method: operation.method,
-      href: `${path}/${tool.id}${operation.path}`,
-    })),
+const BUILT_IN: readonly ToolInfo[] = [
+  infoTool,
+  healthTool,
+  diTool,
+  configTool,
+  routesTool,
+  refreshablesTool,
+  eventsTool,
+  runtimeTool,
+]
+
+function builtInRouters(
+  container: Container,
+  store: ConfigStore<unknown>,
+  options: DevToolsOptions,
+  events: EventsTool | undefined,
+) {
+  return [
+    infoRouter(container, store),
+    healthRouter(container),
+    diRouter(container),
+    configRouter(new ConfigTool(store, { showValues: options.showConfigValues, redact: options.redact })),
+    routesRouter(container),
+    refreshablesRouter(new RefreshablesTool(container)),
+    eventsRouter(events ?? new EventsTool(container.hooks)),
+    runtimeRouter(new RuntimeTool()),
+  ] as const
+}
+
+/** `GET /devtools`: every tool, linked to each route it serves, as the application registered them. */
+function indexRouter(container: Container, path: string, tools: readonly ToolInfo[]) {
+  return new Router('')
+    .get('')
+    .schema({ response: { 200: DevToolsIndexSchema } })
+    .handler((): DevToolsIndex => {
+      const routes = container.get(RouteInventory).servers.flatMap(server => server.routes)
+
+      return {
+        tools: tools.map(tool => {
+          const root = `${path}/${tool.id}`
+          const links = new Map<string, { method: string; href: string }>()
+
+          for (const route of routes) {
+            if (route.url === root || route.url.startsWith(`${root}/`)) {
+              const method = route.methods[0]!
+              links.set(`${method} ${route.url}`, { method, href: route.url })
+            }
+          }
+
+          return { id: tool.id, title: tool.title, description: tool.description, links: [...links.values()] }
+        }),
+      }
+    })
+}
+
+/**
+ * Every route of the built-in tools, relative to the devtools path: what `brewer` reads to type a client for them.
+ *
+ * ```ts
+ * const devtools = brewer<DevToolsRoutes>('http://127.0.0.1:9090/devtools')
+ * const res = await devtools.config.properties.get()
+ * ```
+ */
+export type DevToolsRoutes = ReturnType<typeof indexRouter> | ReturnType<typeof builtInRouters>[number]
+
+/**
+ * What every devtools route asks of a request before it runs: a loopback name on a loopback address, and JSON for a
+ * request that changes something, which a cross-site form cannot send without a preflight. Every answer, a refusal
+ * included, is kept out of caches.
+ */
+class DevToolsGuard extends HTTPPlugin {
+  register(context: HTTPSetupContext): void {
+    context.app.use((ctx, next) => {
+      ctx.header('cache-control', 'no-store')
+      assertLoopbackHost(ctx)
+
+      if (CHANGING.has(ctx.req.method) && !isJSON(ctx.req.header('content-type'))) {
+        throw new ErrHTTPUnsupportedMediaType('Cannot read the request body: it is not "application/json"')
+      }
+
+      return next()
+    })
   }
 }
+
+const CHANGING = new Set(['POST', 'PUT', 'PATCH'])
 
 /**
  * Whether a `Content-Type` is JSON, `application/json` or `application/<anything>+json`: a body a cross-site form
@@ -394,13 +467,7 @@ function isJSON(contentType: string | undefined): boolean {
 }
 
 async function answer(operation: DevToolOperation, ctx: IContext): Promise<unknown> {
-  assertLoopbackHost(ctx)
-
   const withBody = operation.method === 'POST' || operation.method === 'PUT' || operation.method === 'PATCH'
-
-  if (withBody && !isJSON(ctx.req.header('content-type'))) {
-    throw new ErrHTTPUnsupportedMediaType('Cannot read the request body: it is not "application/json"')
-  }
 
   let result: unknown
   try {
@@ -438,7 +505,7 @@ const OPERATION_PATH = /^(\/(:[A-Za-z_]\w*|[A-Za-z0-9._~-]+))*$/
 const SERVED_PATH = /^(\/[A-Za-z0-9._~-]+)+$/
 
 function assertTools(tools: readonly DevTool[]): void {
-  const ids = new Set<string>()
+  const ids = new Set(BUILT_IN.map(tool => tool.id))
 
   for (const tool of tools) {
     const name = tool.constructor.name

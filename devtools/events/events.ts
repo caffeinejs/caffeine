@@ -1,56 +1,74 @@
-import { DevTool, ErrDevToolInvalid, type DevToolOperation } from '@caffeinejs/application/devtools'
+import { $t, type InferSchema } from '@caffeinejs/application/schema'
 import type { Container, InjectionToken } from '@caffeinejs/di'
+import { Router } from '@caffeinejs/http'
 
 import { maskCredentials } from '../config/redact.js'
+import { ErrorSchema, type ToolInfo } from '../tool.js'
 
 type Hooks = Container['hooks']
 
 /** How many events the tool keeps; the oldest goes first. */
 const CAPACITY = 500
 
-export type ContainerEventKind =
-  | 'binding-initialized'
-  | 'binding-initialization-failed'
-  | 'binding-registered'
-  | 'module-registered'
-  | 'module-registration-failed'
-  | 'container-disposed'
-
-export interface ContainerEventRecord {
+export const ContainerEventSchema = $t.Object({
   /** Increases by one per event, from 1: what `?after=` reads from. */
-  readonly seq: number
-  readonly kind: ContainerEventKind
+  seq: $t.Integer(),
+  kind: $t.UnionEnum([
+    'binding-initialized',
+    'binding-initialization-failed',
+    'binding-registered',
+    'module-registered',
+    'module-registration-failed',
+    'container-disposed',
+  ]),
   /** The binding's key or the module's name. */
-  readonly subject: string | undefined
+  subject: $t.Optional($t.String()),
   /** An ISO 8601 timestamp. */
-  readonly at: string
+  at: $t.String(),
   /** The failure's message, the password of any URL in it masked. */
-  readonly error?: string
+  error: $t.Optional($t.String()),
+})
+
+export type ContainerEventRecord = InferSchema<typeof ContainerEventSchema>
+export type ContainerEventKind = ContainerEventRecord['kind']
+
+export const eventsTool: ToolInfo = {
+  id: 'events',
+  title: 'Container events',
+  description: 'What the container did since the devtools attached: bindings initialized, failures, modules',
 }
 
 /**
- * What the container did since the tool attached to its hooks: bindings registered, initialized or failing to,
+ * What the container did since the tool attached to its hooks.
+ *
+ * - `GET /events`: the events, oldest first; `?after=<seq>` those after one, `?limit=<n>` the last `n`
+ */
+export function eventsRouter(tool: EventsTool) {
+  return new Router('/events')
+    .get('')
+    .schema({
+      querystring: $t.Object({
+        after: $t.Optional($t.Integer({ minimum: 0 })),
+        limit: $t.Optional($t.Integer({ minimum: 0 })),
+      }),
+      response: { 200: $t.Array(ContainerEventSchema), 400: ErrorSchema },
+    })
+    .handler(ctx => tool.list(ctx.req.query().after, ctx.req.query().limit))
+}
+
+/**
+ * Records what the container did since it attached to its hooks: bindings registered, initialized or failing to,
  * modules registered, its disposal. The last 500 are kept.
  *
  * `DevTools()` attaches it before the container initializes, so the container's start-up is in it. `devTools()`
  * attaches it to a container already initialized, which emits little more than a re-resolved async binding and its
  * disposal.
- *
- * - `GET /events`: the events, oldest first; `?after=<seq>` those after one, `?limit=<n>` the last `n`
  */
-export class EventsTool extends DevTool {
-  readonly id = 'events'
-  readonly title = 'Container events'
-  readonly description = 'What the container did since the devtools attached: bindings initialized, failures, modules'
-  readonly operations: readonly DevToolOperation[]
-
+export class EventsTool {
   readonly #events: ContainerEventRecord[] = []
   #seq = 0
 
   constructor(hooks: Hooks) {
-    super()
-    this.operations = [{ method: 'GET', path: '', handle: ({ query }) => this.#list(query.after, query.limit) }]
-
     const initialized = ({ key }: { key: InjectionToken }): void => this.#push('binding-initialized', keyText(key))
     const failed = ({ key, error }: { key: InjectionToken; error: unknown }): void =>
       this.#push('binding-initialization-failed', keyText(key), error)
@@ -94,10 +112,8 @@ export class EventsTool extends DevTool {
     }
   }
 
-  #list(after: string | undefined, limit: string | undefined): ContainerEventRecord[] {
-    const since = count('after', after) ?? 0
-    const last = count('limit', limit)
-    const found = this.#events.filter(event => event.seq > since)
+  list(after: number | undefined, last: number | undefined): ContainerEventRecord[] {
+    const found = this.#events.filter(event => event.seq > (after ?? 0))
 
     if (last === undefined) {
       return found
@@ -106,18 +122,6 @@ export class EventsTool extends DevTool {
     // `slice(-0)` is `slice(0)`: every event.
     return last === 0 ? [] : found.slice(-last)
   }
-}
-
-function count(name: string, value: string | undefined): number | undefined {
-  if (value === undefined) {
-    return undefined
-  }
-
-  if (!/^\d+$/.test(value)) {
-    throw new ErrDevToolInvalid(`Cannot list events: "${name}" must be a whole number`)
-  }
-
-  return Number(value)
 }
 
 function keyText(key: InjectionToken): string {

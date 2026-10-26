@@ -1,30 +1,40 @@
+import { brewer } from '@caffeinejs/brewer'
 import { CaffeineIoC } from '@caffeinejs/di'
 import type { WebApplication } from '@caffeinejs/http'
 import { createWebApplication } from '@caffeinejs/http/fastify'
+import { testClient } from '@caffeinejs/testing/http'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { DevTools } from '../devtools.js'
-import { EventsTool, type ContainerEventRecord } from './events.js'
+import { DevTools, type DevToolsRoutes } from '../devtools.js'
+import { eventsRouter, EventsTool } from './events.js'
 
 /**
  * Why an application failed to start, or what it built, is told by the container's events: they must name each
  * binding, carry a failure's message and keep their order.
  */
-describe('EventsTool', () => {
-  let app: WebApplication | undefined
-
-  afterEach(async () => {
-    await app?.close()
-    app = undefined
-  })
-
+describe('eventsRouter', () => {
   class Pool {
     readonly at = Date.now()
   }
 
-  async function list(tool: EventsTool, query: Record<string, string> = {}): Promise<ContainerEventRecord[]> {
-    const [operation] = tool.operations
-    return (await operation.handle({ params: {}, query, body: undefined, signal: AbortSignal.timeout(1000) })) as never
+  /** The events of a container the test drives, read through the tool's own router. */
+  function observe() {
+    const container = new CaffeineIoC({ decorators: false })
+    const tool = new EventsTool(container.hooks)
+
+    return { container, events: testClient(eventsRouter(tool)) }
+  }
+
+  type Events = ReturnType<typeof observe>['events']
+
+  async function list(events: Events, query: { after?: number; limit?: number } = {}) {
+    const res = await events.events.get({ query })
+
+    if (res.status !== 200) {
+      throw new Error(`Expected 200, got ${res.status}`)
+    }
+
+    return res.json()
   }
 
   it("records a container's start-up, a failing binding with its message", async () => {
@@ -34,15 +44,18 @@ describe('EventsTool', () => {
       }
     }
 
-    const container = new CaffeineIoC({ decorators: false })
-    const tool = new EventsTool(container.hooks)
+    const { container, events } = observe()
+    await using _ = events
     container.bind(Pool, t => t.toSelf())
     container.bind(Broken, t => t.toSelf())
 
     await expect(container.init()).rejects.toThrow('no connection')
 
-    const recorded = (await list(tool)).map(({ kind, subject, error }) => ({ kind, subject, error }))
-
+    const recorded = (await list(events)).map(({ kind, subject, error }) => ({
+      kind,
+      subject,
+      error,
+    }))
     expect(recorded).toEqual(
       expect.arrayContaining([
         { kind: 'binding-registered', subject: 'Pool', error: undefined },
@@ -59,44 +72,61 @@ describe('EventsTool', () => {
       }
     }
 
-    const container = new CaffeineIoC({ decorators: false })
-    const tool = new EventsTool(container.hooks)
+    const { container, events } = observe()
+    await using _ = events
     container.bind(Database, t => t.toSelf())
 
     await expect(container.init()).rejects.toThrow()
 
-    const failed = (await list(tool)).find(event => event.kind === 'binding-initialization-failed')
-
+    const failed = (await list(events)).find(event => event.kind === 'binding-initialization-failed')
     expect(failed?.error).toBe('Cannot connect to postgres://app:******@db/pets')
   })
 
-  it("serves the application's start-up from DevTools(), which attaches before the container initializes", async () => {
-    app = createWebApplication().install(DevTools()) as WebApplication
-    app.container.bind(Pool, t => t.toSelf())
-    await app.bootstrap()
-
-    const res = await app.listeners.get('devtools')!.request('/devtools/events')
-    const events = (await res.json()) as ContainerEventRecord[]
-
-    expect(events.filter(event => event.subject === 'Pool').map(event => event.kind)).toEqual([
-      'binding-registered',
-      'binding-initialized',
-    ])
-    expect(events.map(event => event.seq)).toEqual(events.map((_, at) => events[0].seq + at))
-  })
-
   it('answers the events after a sequence number, and the last few', async () => {
-    const container = new CaffeineIoC({ decorators: false })
-    const tool = new EventsTool(container.hooks)
+    const { container, events } = observe()
+    await using _ = events
     container.bind(Pool, t => t.toSelf())
     await container.init()
 
-    const [first] = await list(tool)
-
-    expect((await list(tool, { after: String(first.seq) })).map(event => event.seq)).not.toContain(first.seq)
-    expect(await list(tool, { limit: '1' })).toHaveLength(1)
+    const all = await list(events)
+    const after = await list(events, { after: all[0]!.seq })
+    const last = await list(events, { limit: 1 })
     // The last none is none, not all of them.
-    expect(await list(tool, { limit: '0' })).toEqual([])
-    await expect(list(tool, { after: 'x' })).rejects.toMatchObject({ code: 'ERR_DEVTOOL_INVALID' })
+    const none = await list(events, { limit: 0 })
+    const malformed = await events.$fetch('/events?after=x')
+
+    expect(after.map(event => event.seq)).toEqual(all.slice(1).map(event => event.seq))
+    expect(last).toEqual(all.slice(-1))
+    expect(none).toEqual([])
+    expect(malformed.status).toBe(400)
+  })
+
+  describe('under DevTools()', () => {
+    let app: WebApplication | undefined
+
+    afterEach(async () => {
+      await app?.close()
+      app = undefined
+    })
+
+    it("serves the application's start-up, since it attaches before the container initializes", async () => {
+      app = createWebApplication({ logger: false })
+        .server(() => ({ listener: { host: '127.0.0.1', port: 0 } }))
+        .install(DevTools(d => d.port(0))) as WebApplication
+      app.container.bind(Pool, t => t.toSelf())
+      await app.run()
+      const devtools = brewer<DevToolsRoutes>(`${app.listeners.get('devtools')!.address!.origin}/devtools`)
+
+      const res = await devtools.events.get()
+
+      expect(res.status).toBe(200)
+      const events = res.status === 200 ? await res.json() : []
+
+      expect(events.filter(event => event.subject === 'Pool').map(event => event.kind)).toEqual([
+        'binding-registered',
+        'binding-initialized',
+      ])
+      expect(events.map(event => event.seq)).toEqual(events.map((_, at) => events[0]!.seq + at))
+    })
   })
 })

@@ -1,3 +1,4 @@
+import { brewer } from '@caffeinejs/brewer'
 import {
   AuthenticateResult,
   Authentication,
@@ -14,8 +15,7 @@ import {
 import { authentication, createWebApplication, healthProbes, newRouter } from '@caffeinejs/http/fastify'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { DevTools } from '../devtools.js'
-import type { SecurityRecord, ServerRoutesRecord } from './routes.js'
+import { DevTools, type DevToolsRoutes } from '../devtools.js'
 
 /** Authenticates whoever sends `x-user`. */
 class HeaderScheme extends BaseAuthenticationHandler<object> {
@@ -36,7 +36,7 @@ class HeaderScheme extends BaseAuthenticationHandler<object> {
  * The routes page answers "what can anyone reach, and what does each route require" for every server, the
  * devtools' own included, served from a server of its own: a route missing from it is one nobody reviews.
  */
-describe('RoutesTool', () => {
+describe('routesRouter', () => {
   let app: WebApplication | undefined
 
   afterEach(async () => {
@@ -44,12 +44,16 @@ describe('RoutesTool', () => {
     app = undefined
   })
 
-  async function boot(): Promise<void> {
-    app = createWebApplication()
+  const loopback = { host: '127.0.0.1', port: 0 }
+
+  /** The devtools of an application with two servers besides theirs, read as `user` when one is named. */
+  async function boot(user?: string) {
+    app = createWebApplication({ logger: false })
+      .server(() => ({ listener: loopback }))
       .install(Authentication(a => a.addStrategy('Header', new HeaderScheme())))
       .install(Authorization(z => z.requireAuthenticatedByDefault({ except: ['/livez'] })))
-      .install(Listener('admin', l => l.with(authentication())))
-      .install(DevTools())
+      .install(Listener('admin', l => l.server(() => ({ listener: loopback })).with(authentication())))
+      .install(DevTools(d => d.port(0)))
       .with(authentication())
       .with(healthProbes(h => h.enabled(true)))
       .mount(
@@ -60,49 +64,55 @@ describe('RoutesTool', () => {
           .extend(bindTo('admin'))
           .get('/', () => []),
       ) as WebApplication
-    await app.bootstrap()
+    await app.run()
+
+    // The fallback policy reaches the devtools too: their own server runs the gate.
+    return brewer<DevToolsRoutes>(`${app.listeners.get('devtools')!.address!.origin}/devtools`, {
+      headers: user === undefined ? {} : { 'x-user': user },
+    })
   }
 
-  async function get<T>(path: string): Promise<T> {
-    // The fallback policy reaches the devtools too: their own server runs the gate.
-    const res = await app!.listeners
-      .get('devtools')!
-      .request(`/devtools/routes${path}`, { headers: { 'x-user': 'ops' } })
-    return (await res.json()) as T
+  async function servers(devtools: Awaited<ReturnType<typeof boot>>, server?: string) {
+    const res = await devtools.routes.get({ query: server === undefined ? {} : { server } })
+
+    expect(res.status).toBe(200)
+    return res.status === 200 ? res.json() : []
   }
 
   it("lists every server's routes, the devtools' own and a probe's included", async () => {
-    await boot()
+    const devtools = await boot('ops')
 
-    const servers = await get<ServerRoutesRecord[]>('')
+    const listed = await servers(devtools)
 
-    expect(servers.map(server => server.server)).toEqual(['', 'admin', 'devtools'])
-    expect(servers[0].routes.map(route => route.url)).toEqual(expect.arrayContaining(['/pets', '/livez']))
-    expect(servers[1].routes.map(route => route.url)).toEqual(['/jobs'])
-    expect(servers[2].routes.map(route => route.url)).toContain('/devtools/routes')
-    expect(servers[0].routes.find(route => route.url === '/pets')!.security.authorization.roleGroups).toEqual([
+    expect(listed.map(server => server.server)).toEqual(['', 'admin', 'devtools'])
+    expect(listed[0]!.routes.map(route => route.url)).toEqual(expect.arrayContaining(['/pets', '/livez']))
+    expect(listed[1]!.routes.map(route => route.url)).toEqual(['/jobs'])
+    expect(listed[2]!.routes.map(route => route.url)).toContain('/devtools/routes')
+    expect(listed[0]!.routes.find(route => route.url === '/pets')!.security.authorization.roleGroups).toEqual([
       ['keeper'],
     ])
   })
 
   it('answers one server when asked, the application’s own by its empty name', async () => {
-    await boot()
+    const devtools = await boot('ops')
 
-    expect((await get<ServerRoutesRecord[]>('?server=admin')).map(server => server.server)).toEqual(['admin'])
-    expect((await get<ServerRoutesRecord[]>('?server=')).map(server => server.server)).toEqual([''])
+    expect((await servers(devtools, 'admin')).map(server => server.server)).toEqual(['admin'])
+    expect((await servers(devtools, '')).map(server => server.server)).toEqual([''])
   })
 
   it("puts the devtools under the application's fallback policy", async () => {
-    await boot()
+    const devtools = await boot()
 
-    expect((await app!.listeners.get('devtools')!.request('/devtools/routes')).status).toBe(401)
+    expect((await devtools.routes.get()).status).toBe(401)
   })
 
   it('names the schemes, the fallback policy and the gates of each server', async () => {
-    await boot()
+    const devtools = await boot('ops')
 
-    const security = await get<SecurityRecord>('/security')
+    const res = await devtools.routes.security.get()
+    const security = await res.json()
 
+    expect(res.status).toBe(200)
     expect(security.authentication).toEqual({ schemes: ['Header'], defaultScheme: 'Header' })
     expect(security.authorization).toMatchObject({ fallbackPolicy: expect.any(String), fallbackExcept: ['/livez'] })
     expect(security.gates).toEqual([
