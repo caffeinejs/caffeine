@@ -5,6 +5,8 @@ import { kConfig } from '../app.config.js'
 import { Badge, display } from '../shared/components/index.js'
 import { page } from '../shared/layout/index.js'
 
+const EVERY_SERVER = '*'
+
 /**
  * Every route of every server and what each requires, with what protects the application as a whole above it. A
  * route nothing authenticates, authorizes or guards is marked, since that is what a reviewer looks for.
@@ -12,7 +14,9 @@ import { page } from '../shared/layout/index.js'
 export const routesRouter = new Router('/routes')
   .inject({ api: DevToolsAPI, config: kConfig })
   .get('/', async (ctx, { api, config }) => {
-    const only = ctx.req.query('server')
+    // `''` names the application's own server, so every server is `*`, or no filter at all.
+    const asked = ctx.req.query('server')
+    const only = asked === EVERY_SERVER ? undefined : asked
     const [servers, security] = await Promise.all([api.routes(), api.security()])
     const shown = only === undefined ? servers : servers.filter(server => server.server === only)
 
@@ -37,7 +41,9 @@ export const routesRouter = new Router('/routes')
           </section>
           <form class="filters" method="get" action="/routes">
             <select name="server">
-              <option value="">every server</option>
+              <option value={EVERY_SERVER} selected={only === undefined}>
+                every server
+              </option>
               {servers.map(server => (
                 <option value={server.server} selected={server.server === only} safe>
                   {server.server === '' ? "the application's own" : server.server}

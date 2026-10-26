@@ -146,6 +146,19 @@ describe('devtools UI', () => {
     expect(page).toContain('/devtools/routes')
   })
 
+  it("filters the routes to one server, the application's own being the empty name, or back to every server", async () => {
+    const page = await html('/routes')
+    const every = /<option value="([^"]*)"[^>]*>every server<\/option>/.exec(page)?.[1]
+
+    const all = await html(`/routes?server=${every}`)
+    const own = await html('/routes?server=')
+
+    expect(all).toContain('The application&#39;s own server')
+    expect(all).toContain('Listener devtools')
+    expect(own).toContain('The application&#39;s own server')
+    expect(own).not.toContain('Listener devtools')
+  })
+
   it('refreshes a refreshable from a form, and comes back naming it', async () => {
     const before = target.container.get(Rates).at
     const page = await html('/refreshables')

@@ -2,7 +2,7 @@ import type { ConfigStore } from '@caffeinejs/application/config'
 import { DevTool, ErrDevToolNotFound, type DevToolOperation } from '@caffeinejs/application/devtools'
 import type { Duration } from '@caffeinejs/std/duration'
 
-import { maskCredentials, Redactor, secretPaths } from './redact.js'
+import { maskCredentials, REDACTED, Redactor, secretPaths } from './redact.js'
 
 /** One configuration value, and where it came from. */
 export interface PropertyRecord {
@@ -86,10 +86,33 @@ export class ConfigTool extends DevTool {
     const layers = this.#store.explain(path).layers.map(layer => ({
       layer: layer.layer,
       origin: layer.origin,
-      ...(this.#showValues ? { value: this.#redactor.redact(path, layer.value) } : {}),
+      ...(this.#showValues ? { value: this.#layerValue(path, layer.value, found[1]) } : {}),
     }))
 
     return { ...this.#record(path, found[1]), layers }
+  }
+
+  /**
+   * A layer's value as it may be shown. A layer holds the text a source gave, so text a codec decoded into an object
+   * or an array is read as JSON and masked as the decoded value is; text that is not JSON is masked whole, since
+   * nothing tells where its secrets sit.
+   */
+  #layerValue(path: string, value: unknown, resolved: unknown): unknown {
+    if (typeof value !== 'string' || typeof resolved !== 'object' || resolved === null) {
+      return this.#redactor.redact(path, value)
+    }
+
+    try {
+      const decoded: unknown = JSON.parse(value)
+
+      if (typeof decoded === 'object' && decoded !== null) {
+        return this.#redactor.redact(path, decoded)
+      }
+    } catch {
+      // Not JSON: masked whole below.
+    }
+
+    return REDACTED
   }
 
   #sources(): SourceRecord[] {

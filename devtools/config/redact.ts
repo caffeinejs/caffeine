@@ -136,9 +136,14 @@ export function secretPaths(schema: unknown, at = ''): string[] {
     }
   }
 
-  // An array item and a record entry sit one segment down, under any name.
+  // An array item and a record entry sit one segment down, under any name; a tuple's member under its index.
   const any = at === '' ? '*' : `${at}.*`
-  found.push(...secretPaths(node.items, any), ...secretPaths(node.additionalProperties, any))
+  if (Array.isArray(node.items)) {
+    node.items.forEach((member, index) => found.push(...secretPaths(member, at === '' ? `${index}` : `${at}.${index}`)))
+  } else {
+    found.push(...secretPaths(node.items, any))
+  }
+  found.push(...secretPaths(node.additionalProperties, any))
   if (typeof node.patternProperties === 'object' && node.patternProperties !== null) {
     for (const child of Object.values(node.patternProperties)) {
       found.push(...secretPaths(child, any))

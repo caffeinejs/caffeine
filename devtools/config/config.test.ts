@@ -113,6 +113,45 @@ describe('ConfigTool', () => {
     expect(body).toContain('postgres://u:******@db/x')
   })
 
+  it('masks the secret member of a tuple', async () => {
+    const conf = newConfiguration($t.Object({ pair: $t.Tuple([$t.Secret($t.String()), $t.String()]) }))
+      .source(new InlineConfigSource({ pair: ['hunter2', 'public'] }))
+      .build().config
+    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
+      devTools(d => d.showConfigValues()),
+    ) as WebApplication
+    await app.bootstrap()
+
+    expect(await properties()).toEqual([{ path: 'pair', origin: 'inline', secret: false, value: ['******', 'public'] }])
+  })
+
+  it('masks the secrets of text a codec decoded, in each layer that set it', async () => {
+    // A layer holds the text as the source gave it, not the value the codec decoded from it.
+    vi.stubEnv('DT_USERS', '[{"name":"ann","pin":"1234"}]')
+    vi.stubEnv('DT_TAGS', 'tag-a,tag-b')
+    const encoded = $t.Object({
+      users: $t.JSON($t.Array($t.Object({ name: $t.String(), pin: $t.Secret($t.String()) }))),
+      tags: $t.List($t.Secret($t.String())),
+    })
+    const conf = newConfiguration(encoded)
+      .source(new EnvConfigSource({ prefix: 'DT_' }))
+      .build().config
+    app = createWebApplication({ container: new CaffeineIoC(), config: conf }).with(
+      devTools(d => d.showConfigValues()),
+    ) as WebApplication
+    await app.bootstrap()
+
+    const users = (await (await app.request('/devtools/config/properties/users')).json()) as PropertyDetail
+    const tags = (await (await app.request('/devtools/config/properties/tags')).json()) as PropertyDetail
+
+    expect(users.layers).toEqual([
+      { layer: 'env:DT_', origin: 'env:DT_USERS', value: [{ name: 'ann', pin: '******' }] },
+    ])
+    // Text that is not JSON gives no way to tell where its secrets sit, so it is masked whole.
+    expect(tags.layers).toEqual([{ layer: 'env:DT_', origin: 'env:DT_TAGS', value: '******' }])
+    expect(JSON.stringify([users, tags])).not.toMatch(/1234|tag-a|tag-b/)
+  })
+
   it('masks in linear time, so a crafted value cannot stall the devtools', () => {
     // Each start position used to rescan the rest of the text: quadratic, and minutes on this input.
     const crafted = 'a://:'.repeat(200_000)
