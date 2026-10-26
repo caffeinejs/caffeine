@@ -19,8 +19,8 @@ import {
   RawRequestBodyConverter,
   type RequestBodyConverter,
 } from '../request_body_converter.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
 import { OtherFormData } from './other_form_data.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
 
 /**
  * A body that was JSON-stringified has to say so. Without a `content-type`, `fetch` labels a string body

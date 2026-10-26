@@ -19,10 +19,10 @@ example\:petstore: export DATABASE_URL ?= postgresql://petstore:petstore@localho
 # that does not exist and the CLI is never built; `$(MAKE)` resolves the name the way the command line does.
 example\:petstore: ## run the petstore example (Postgres in Docker, app on host at http://localhost:9999)
 	@$(MAKE) build:cli
-	@docker compose -f examples/03-petstore/docker-compose.yml up -d postgres
-
-	@echo "waiting for postgres ..."
-	@until docker compose -f examples/03-petstore/docker-compose.yml exec -T postgres pg_isready -U petstore -d petstore >/dev/null 2>&1; do sleep 1; done
+	@docker compose -f examples/03-petstore/docker-compose.yml up -d --wait --wait-timeout 60 postgres || { \
+		docker compose -f examples/03-petstore/docker-compose.yml logs --tail 100 postgres; \
+		exit 1; \
+	}
 	@npm run build
 	@npm run build -w @caffeinejs/example-petstore
 	@npm run db:migrate -w @caffeinejs/example-petstore

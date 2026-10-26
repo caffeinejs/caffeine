@@ -1,4 +1,4 @@
-import { classOrMember } from './_decorator_util.js'
+import { classOrMember } from './decorator_util.js'
 import { configureClass, configureMethod } from './registrar/registrar.js'
 
 /**

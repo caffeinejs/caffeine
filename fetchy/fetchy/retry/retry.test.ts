@@ -1,22 +1,21 @@
 import { Readable } from 'node:stream'
 
+import { Millisecond, Second } from '@caffeinejs/std/duration'
 import { describe, expect, it, vi } from 'vitest'
 
 import { newClient } from '../client_builder.js'
 import { API } from '../decorators/api.js'
-import { NoRetry } from '../decorators/no_retry.js'
 import { Params } from '../decorators/params.js'
 import { Body } from '../decorators/params/body.js'
 import { Param } from '../decorators/params/param.js'
 import { SignalParam } from '../decorators/params/signal_param.js'
 import { UseRequestBodyConverter } from '../decorators/request_body_converter.js'
-import { Retry } from '../decorators/retry.js'
 import { GET, POST, PUT } from '../decorators/verbs.js'
 import { ErrFetchyHTTP } from '../errors.js'
 import { noop } from '../noop.js'
 import { RawRequestBodyConverter } from '../request_body_converter.js'
-import { RetryInterceptor } from '../retry/index.js'
-import { fakeJSONResponse, TestTransportFactory } from './test_transport_factory.js'
+import { fakeJSONResponse, TestTransportFactory } from '../test_transport_factory.testkit.js'
+import { Retry, NoRetry, RetryInterceptor } from './index.js'
 
 interface User {
   id: string
@@ -25,7 +24,7 @@ interface User {
 @API('/users')
 class RetryAPI {
   @GET('/{id}')
-  @Retry({ delay: 5 })
+  @Retry({ delay: 5 * Millisecond })
   @Params([Param('id')])
   getUser(_id: string): Promise<User> {
     return noop()
@@ -38,28 +37,28 @@ class RetryAPI {
   }
 
   @PUT('/{id}')
-  @Retry({ delay: 5 })
+  @Retry({ delay: 5 * Millisecond })
   @Params([Param('id'), Body()])
   putUser(_id: string, _body: unknown): Promise<User> {
     return noop()
   }
 
   @GET('/{id}')
-  @Retry({ delay: 5, methods: ['PUT'] })
+  @Retry({ delay: 5 * Millisecond, methods: ['PUT'] })
   @Params([Param('id')])
   getUserWrongMethod(_id: string): Promise<User> {
     return noop()
   }
 
   @GET('/{id}')
-  @Retry({ delay: 5, statusCodes: [404] })
+  @Retry({ delay: 5 * Millisecond, statusCodes: [404] })
   @Params([Param('id')])
   getUserWrongStatus(_id: string): Promise<User> {
     return noop()
   }
 
   @GET('/{id}')
-  @Retry({ delay: 200 })
+  @Retry({ delay: 200 * Millisecond })
   @Params([Param('id'), SignalParam()])
   getUserSlow(_id: string, _signal: AbortSignal): Promise<User> {
     return noop()
@@ -67,7 +66,7 @@ class RetryAPI {
 }
 
 @API('/users')
-@Retry({ delay: 5 })
+@Retry({ delay: 5 * Millisecond })
 class RetryClassDefaultAPI {
   @GET('/{id}')
   @Params([Param('id')])
@@ -76,7 +75,7 @@ class RetryClassDefaultAPI {
   }
 
   @GET('/{id}')
-  @Retry({ statusCodes: [404], delay: 5 })
+  @Retry({ statusCodes: [404], delay: 5 * Millisecond })
   @Params([Param('id')])
   overwriteDefaults(_id: string): Promise<User> {
     return noop()
@@ -161,7 +160,7 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
     @API('/users')
     class PatientAPI {
       @GET('/{id}')
-      @Retry({ delay: 60_000 })
+      @Retry({ delay: 60 * Second })
       @Params([Param('id'), SignalParam()])
       getUser(_id: string, _signal: AbortSignal): Promise<User> {
         return noop()
@@ -260,28 +259,28 @@ describe('@Retry() / @NoRetry() / RetryInterceptor', () => {
 @API('/users')
 class NetworkRetryAPI {
   @GET('/{id}')
-  @Retry({ delay: 1 })
+  @Retry({ delay: 1 * Millisecond })
   @Params([Param('id')])
   getUser(_id: string): Promise<User> {
     return noop()
   }
 
   @GET('/{id}')
-  @Retry({ delay: 1 })
+  @Retry({ delay: 1 * Millisecond })
   @Params([Param('id'), SignalParam()])
   getUserWithSignal(_id: string, _signal: AbortSignal): Promise<User> {
     return noop()
   }
 
   @POST('/')
-  @Retry({ delay: 1 })
+  @Retry({ delay: 1 * Millisecond })
   @Params([Body()])
   createUser(_user: User): Promise<User> {
     return noop()
   }
 
   @GET('/{id}')
-  @Retry({ delay: 1, errorCodes: [] })
+  @Retry({ delay: 1 * Millisecond, errorCodes: [] })
   @Params([Param('id')])
   getUserWithoutNetworkRetry(_id: string): Promise<User> {
     return noop()
@@ -383,7 +382,7 @@ describe('RetryInterceptor on network failures', () => {
 @API('/files')
 class UploadAPI {
   @PUT('/{id}')
-  @Retry({ delay: 1 })
+  @Retry({ delay: 1 * Millisecond })
   @UseRequestBodyConverter(RawRequestBodyConverter)
   @Params([Param('id'), Body()])
   upload(_id: string, _content: unknown): Promise<unknown> {
@@ -460,17 +459,17 @@ describe('RetryInterceptor on a body that can be read only once', () => {
 @API('/users')
 class AttemptsAPI {
   @GET('/{id}')
-  @Retry({ delay: 1_000 })
+  @Retry({ delay: Second })
   @Params([Param('id')])
   getUser!: (id: string) => Promise<User>
 
   @GET('/{id}')
-  @Retry({ limit: 2, delay: 1 })
+  @Retry({ limit: 2, delay: 1 * Millisecond })
   @Params([Param('id')])
   getUserTwice!: (id: string) => Promise<User>
 
   @POST('/')
-  @Retry({ delay: 1 })
+  @Retry({ delay: 1 * Millisecond })
   @Params([Body()])
   createUser!: (user: unknown) => Promise<User>
 }

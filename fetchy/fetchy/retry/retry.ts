@@ -1,11 +1,17 @@
+import { Millisecond } from '@caffeinejs/std/duration'
+
 import type { Chain } from '../chain.js'
 import type { Interceptor } from '../interceptor.js'
 import { discard } from '../internal/discard.js'
 import { isReplayable } from '../internal/replayable.js'
-import { sleep } from '../internal/sleep.js'
 import type { FetchyRequest } from '../request.js'
 import type { FetchyResponse } from '../response.js'
-import type { RetryOptions } from '../retry_options.js'
+import { retryAfter } from './_retry_after.js'
+import { sleep } from './_sleep.js'
+import type { RetryOptions } from './options.js'
+
+// The largest delay `setTimeout` honours; above it, runtimes fire after 1 ms instead.
+const MAX_TIMER_DELAY = 2_147_483_647 * Millisecond
 
 // `fetch` rejects with a `TypeError` whose `cause` is the network error; undici's own API rejects with that error.
 function errorCode(error: unknown): string | undefined {
@@ -23,6 +29,9 @@ function errorCode(error: unknown): string | undefined {
  * call. A method with neither decorator is a pure passthrough (single attempt). A request whose
  * signal is aborted is never retried. Neither is one whose body can be read only once, such as a
  * stream: every attempt sends the same body, and the first may have read it.
+ *
+ * A valid value in `retryAfterHeader` (default `retry-after`) extends the configured delay.
+ * A server wait above `maxRetryAfter` ends retries and leaves the response body available to the caller.
  *
  * Not registered by default — add via `FetchyBuilder.addInterceptor(RetryInterceptor.INSTANCE)`.
  * Because the retry loop lives entirely inside one `intercept()` call, any interceptor registered
@@ -62,8 +71,21 @@ export class RetryInterceptor implements Interceptor {
       return response
     }
 
+    const serverDelay = retryAfter(response.headers.get(options.retryAfterHeader), Date.now())
+
+    if (
+      serverDelay !== undefined &&
+      (serverDelay > MAX_TIMER_DELAY || (options.maxRetryAfter !== undefined && serverDelay > options.maxRetryAfter))
+    ) {
+      if (pristine.signal?.aborted) {
+        await discard(response)
+        pristine.signal.throwIfAborted()
+      }
+      return response
+    }
+
     await discard(response)
-    await sleep(options.delay, pristine.signal)
+    await sleep(Math.max(options.delay, serverDelay ?? 0), pristine.signal)
 
     return this.attempt(chain, options, current + 1)
   }
