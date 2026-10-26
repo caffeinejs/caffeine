@@ -62,6 +62,9 @@
       "path": "./devtools/tsconfig.build.json"
     },
     {
+      "path": "./devtools-ui/tsconfig.build.json"
+    },
+    {
       "path": "./testing/tsconfig.build.json"
     },
     {

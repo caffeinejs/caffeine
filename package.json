@@ -25,7 +25,7 @@
     "fetchy/*",
     "cli",
     "devtools",
-    "devtools/ui",
+    "devtools-ui",
     "testing",
     "brewer",
     "benchmarks",

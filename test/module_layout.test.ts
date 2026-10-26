@@ -17,7 +17,7 @@ const NO_MODULE_LAYOUT = [
   'benchmarks/**',
   'examples/**',
   'di/examples/**',
-  'devtools/ui/**',
+  'devtools-ui/**',
   'cli/**',
   '**/node_modules/**',
   '**/dist/**',
