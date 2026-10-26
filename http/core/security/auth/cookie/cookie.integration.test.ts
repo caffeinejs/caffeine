@@ -163,7 +163,7 @@ function sessionCookie(setCookie: string | null): string {
 }
 
 async function login(app: Awaited<ReturnType<typeof buildApp>>, dto: LoginDto) {
-  return app.fetch('/auth/login', {
+  return app.request('/auth/login', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(dto),
@@ -182,7 +182,7 @@ describe('cookie session login (application)', () => {
     expect(res.status).toBe(200)
     const cookie = sessionCookie(res.headers.get('set-cookie'))
 
-    const me = await app.fetch('/me', { headers: { cookie } })
+    const me = await app.request('/me', { headers: { cookie } })
     expect(me.status).toBe(200)
     const body = (await me.json()) as Record<string, unknown>
     expect(body.sub).toBe('alice')
@@ -202,7 +202,7 @@ describe('cookie session login (application)', () => {
     const line = res.headers.getSetCookie().find(set => set.startsWith('caf.session='))!
 
     expect(line).not.toMatch(/Domain=|Partitioned|Priority=|; Secure/)
-    expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
+    expect((await app.request('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
   })
 
   // The value is not an attribute: every cookie a request carries is read through the server's `decode`, so the
@@ -214,12 +214,12 @@ describe('cookie session login (application)', () => {
     const res = await login(app, { email: 'alice', password: 's3cret' })
     const line = res.headers.getSetCookie().find(set => set.startsWith('caf.session='))!
 
-    expect((await app.fetch('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
+    expect((await app.request('/me', { headers: { cookie: sessionCookie(line) } })).status).toBe(200)
   })
 
   it('rejects the protected route without a session cookie', async () => {
     const app = await buildApp()
-    const me = await app.fetch('/me')
+    const me = await app.request('/me')
     expect(me.status).toBe(401)
   })
 
@@ -236,12 +236,12 @@ describe('cookie session login (application)', () => {
     const res = await login(app, { email: 'alice', password: 's3cret' })
     const cookie = sessionCookie(res.headers.get('set-cookie'))
 
-    const out = await app.fetch('/auth/logout', { method: 'POST', headers: { cookie } })
+    const out = await app.request('/auth/logout', { method: 'POST', headers: { cookie } })
     expect(out.status).toBe(200)
     // The cleared cookie has an empty/expired value; the protected route no longer authenticates.
     const cleared = out.headers.get('set-cookie') ?? ''
     expect(cleared).toContain('caf.session=')
-    const me = await app.fetch('/me', { headers: { cookie: 'caf.session=' } })
+    const me = await app.request('/me', { headers: { cookie: 'caf.session=' } })
     expect(me.status).toBe(401)
   })
 
@@ -310,7 +310,7 @@ describe('durable remember-me (server-side revocable)', () => {
     expect(store.records.size).toBe(1)
 
     // Only the remember cookie — the session cookie is "expired"/absent.
-    const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+    const me = await app.request('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
     expect(me.status).toBe(200)
     expect(((await me.json()) as Record<string, unknown>).admin).toBe(true)
 
@@ -326,7 +326,7 @@ describe('durable remember-me (server-side revocable)', () => {
 
     store.removeBySubject('alice')
 
-    const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+    const me = await app.request('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
     expect(me.status).toBe(401)
   })
 
@@ -339,16 +339,16 @@ describe('durable remember-me (server-side revocable)', () => {
     ]
 
     // First use rotates the token.
-    const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    const first = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(first.status).toBe(200)
     const rotated = cookiesFrom(first)['caf.remember']
 
     // Replaying the original (now stale) token is a theft signal → 401 and the series is nuked.
-    const replay = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    const replay = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(replay.status).toBe(401)
 
     // Even the rotated token no longer works once the series is invalidated.
-    const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
+    const after = await app.request('/me', { headers: { cookie: `caf.remember=${rotated}` } })
     expect(after.status).toBe(401)
   })
 
@@ -363,7 +363,7 @@ describe('durable remember-me (server-side revocable)', () => {
       'caf.remember'
     ]
 
-    const res = await app.fetch('/scoped-me', { headers: { cookie: `caf.remember=${remember}` } })
+    const res = await app.request('/scoped-me', { headers: { cookie: `caf.remember=${remember}` } })
     expect(res.status).toBe(200)
     expect(((await res.json()) as Record<string, unknown>).sub).toBe('alice')
 
@@ -373,7 +373,7 @@ describe('durable remember-me (server-side revocable)', () => {
 
     const rotated = cookiesFrom(res)['caf.remember']
     expect(rotated).toBeDefined()
-    const after = await app.fetch('/scoped-me', { headers: { cookie: `caf.remember=${rotated}` } })
+    const after = await app.request('/scoped-me', { headers: { cookie: `caf.remember=${rotated}` } })
     expect(after.status).toBe(200)
   })
 
@@ -386,11 +386,11 @@ describe('durable remember-me (server-side revocable)', () => {
       'caf.remember'
     ]
 
-    const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    const first = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(first.status).toBe(200)
     const rotated = cookiesFrom(first)['caf.remember']
 
-    const raced = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    const raced = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(raced.status).toBe(200)
 
     // The racer must not spend a second token on the winner's behalf: no new remember cookie, and the
@@ -399,7 +399,7 @@ describe('durable remember-me (server-side revocable)', () => {
     expect(store.records.size).toBe(1)
 
     // The winner's token is still the live one.
-    const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
+    const after = await app.request('/me', { headers: { cookie: `caf.remember=${rotated}` } })
     expect(after.status).toBe(200)
   })
 
@@ -409,7 +409,7 @@ describe('durable remember-me (server-side revocable)', () => {
       'caf.remember'
     ]
 
-    const first = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+    const first = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
     expect(first.status).toBe(200)
     const rotated = cookiesFrom(first)['caf.remember']
 
@@ -418,10 +418,10 @@ describe('durable remember-me (server-side revocable)', () => {
     try {
       vi.setSystemTime(Date.now() + 61_000)
 
-      const replay = await app.fetch('/me', { headers: { cookie: `caf.remember=${original}` } })
+      const replay = await app.request('/me', { headers: { cookie: `caf.remember=${original}` } })
       expect(replay.status).toBe(401)
 
-      const after = await app.fetch('/me', { headers: { cookie: `caf.remember=${rotated}` } })
+      const after = await app.request('/me', { headers: { cookie: `caf.remember=${rotated}` } })
       expect(after.status).toBe(401)
     } finally {
       vi.useRealTimers()
@@ -441,7 +441,7 @@ describe('durable remember-me (server-side revocable)', () => {
 
     aliceDeleted = true
     try {
-      const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+      const me = await app.request('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
 
       expect(me.status).toBe(401)
       expect(store.records.size).toBe(0)
@@ -464,7 +464,7 @@ describe('durable remember-me (server-side revocable)', () => {
       return false
     }
 
-    const me = await app.fetch('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
+    const me = await app.request('/me', { headers: { cookie: `caf.remember=${c['caf.remember']}` } })
 
     expect(me.status).toBe(401)
     expect(store.records.size).toBe(0)
@@ -479,7 +479,7 @@ describe('durable remember-me (server-side revocable)', () => {
     await login(app, { email: 'alice', password: 's3cret', rememberMe: true })
     const here = cookiesFrom(await login(app, { email: 'alice', password: 's3cret' }))
 
-    const out = await app.fetch('/auth/logout', {
+    const out = await app.request('/auth/logout', {
       method: 'POST',
       headers: { cookie: `caf.session=${here['caf.session']}` },
     })
@@ -529,7 +529,7 @@ describe('cookie sign-in under a base path', () => {
   }
 
   async function signIn(app: Awaited<ReturnType<typeof buildBasedApp>>): Promise<string> {
-    const res = await app.fetch('/api/auth/login', {
+    const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: 'alice', password: 's3cret' }),
@@ -540,7 +540,7 @@ describe('cookie sign-in under a base path', () => {
 
   it('sends a navigation to a protected route to the login path under the base, and back', async () => {
     const app = await buildBasedApp()
-    const res = await app.fetch('/api/me?tab=1', { headers: NAVIGATION })
+    const res = await app.request('/api/me?tab=1', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2Fme%3Ftab%3D1')
@@ -549,7 +549,7 @@ describe('cookie sign-in under a base path', () => {
 
   it('sends a request that came without the base back without it', async () => {
     const app = await buildBasedApp()
-    const res = await app.fetch('/me', { headers: NAVIGATION })
+    const res = await app.request('/me', { headers: NAVIGATION })
 
     expect(res.headers.get('location')).toBe('/login?returnUrl=%2Fme')
     await app.close()
@@ -557,7 +557,7 @@ describe('cookie sign-in under a base path', () => {
 
   it('answers a script with 401 and the login URL under the base', async () => {
     const app = await buildBasedApp()
-    const res = await app.fetch('/api/me', { headers: { accept: 'application/json' } })
+    const res = await app.request('/api/me', { headers: { accept: 'application/json' } })
 
     expect(res.status).toBe(401)
     expect(res.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2Fme')
@@ -568,11 +568,11 @@ describe('cookie sign-in under a base path', () => {
   it('echoes a doubled slash behind the base as a path here, and drops it without the base', async () => {
     const app = await buildBasedApp()
 
-    const underBase = await app.fetch('/api//evil.example/pwn', { headers: NAVIGATION })
+    const underBase = await app.request('/api//evil.example/pwn', { headers: NAVIGATION })
     expect(underBase.status).toBe(302)
     expect(underBase.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2F%2Fevil.example%2Fpwn')
 
-    const direct = await app.fetch('//evil.example/pwn', { headers: NAVIGATION })
+    const direct = await app.request('//evil.example/pwn', { headers: NAVIGATION })
     expect(direct.status).toBe(302)
     expect(direct.headers.get('location')).toBe('/login')
     await app.close()
@@ -582,7 +582,7 @@ describe('cookie sign-in under a base path', () => {
   // browser keeps them apart instead of letting one overwrite another.
   it('scopes the session cookie to the base it was signed in under', async () => {
     const app = await buildBasedApp()
-    const res = await app.fetch('/api/auth/login', {
+    const res = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: 'alice', password: 's3cret' }),
@@ -597,7 +597,7 @@ describe('cookie sign-in under a base path', () => {
   // answered without it, and its session is written where a request without the base sends it back.
   it('writes the session at "/" for a sign-in that came without the base', async () => {
     const app = await buildBasedApp()
-    const res = await app.fetch('/auth/login', {
+    const res = await app.request('/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: 'alice', password: 's3cret' }),
@@ -612,7 +612,7 @@ describe('cookie sign-in under a base path', () => {
   // entry signed in and whichever signs out. Cleared at another path, the browser would keep it.
   it('keeps one session for both entries with path("/"), signed in under the base and out without it', async () => {
     const app = await buildBasedApp(o => o.path('/'))
-    const signedIn = await app.fetch('/api/auth/login', {
+    const signedIn = await app.request('/api/auth/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ email: 'alice', password: 's3cret' }),
@@ -620,7 +620,7 @@ describe('cookie sign-in under a base path', () => {
     const written = signedIn.headers.getSetCookie().find(cookie => cookie.startsWith('caf.session='))
     expect(written).toMatch(/;\s*Path=\/(;|$)/i)
 
-    const signedOut = await app.fetch('/auth/logout', {
+    const signedOut = await app.request('/auth/logout', {
       method: 'POST',
       headers: { cookie: sessionCookie(written ?? null) },
     })
@@ -634,7 +634,7 @@ describe('cookie sign-in under a base path', () => {
     const app = await buildBasedApp()
     const cookie = await signIn(app)
 
-    const res = await app.fetch('/api/me', { headers: { cookie } })
+    const res = await app.request('/api/me', { headers: { cookie } })
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ sub: 'alice', admin: true })
@@ -645,7 +645,7 @@ describe('cookie sign-in under a base path', () => {
     const app = await buildBasedApp()
     const cookie = await signIn(app)
 
-    const res = await app.fetch('/api/audit', { headers: { ...NAVIGATION, cookie } })
+    const res = await app.request('/api/audit', { headers: { ...NAVIGATION, cookie } })
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/api/denied')

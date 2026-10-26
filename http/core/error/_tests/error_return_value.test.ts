@@ -44,7 +44,7 @@ describe('error handler return values', () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
     await app.bootstrap()
 
-    const res = await app.fetch('/err-return/json')
+    const res = await app.request('/err-return/json')
 
     expect(res.status).toBe(418)
     expect(res.headers.get('content-type')).toMatch(/^application\/json/)
@@ -55,7 +55,7 @@ describe('error handler return values', () => {
     const app = createWebApplication().errorHandling(e => e.globalHandlers(ReturnJsonHandler, ReturnVoidHandler))
     await app.bootstrap()
 
-    const res = await app.fetch('/err-return/void')
+    const res = await app.request('/err-return/void')
 
     expect(res.status).toBe(500)
     expect(await res.json()).toEqual({ viaCtx: 'via ctx' })

@@ -111,7 +111,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('keeps the status, headers and JSON body of Response.json(...)', async () => {
-    const res = await app.fetch('/answers/json')
+    const res = await app.request('/answers/json')
 
     expect(res.status).toBe(201)
     expect(res.headers.get('x-answer')).toBe('yes')
@@ -120,7 +120,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('streams the body of a Response built around a stream, with its status and headers', async () => {
-    const res = await app.fetch('/answers/stream')
+    const res = await app.request('/answers/stream')
 
     expect(res.status).toBe(201)
     expect(res.headers.get('x-answer')).toBe('yes')
@@ -128,7 +128,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('leaves a 206 a handler wrote itself exactly as written', async () => {
-    const res = await app.fetch('/answers/partial')
+    const res = await app.request('/answers/partial')
 
     expect(res.status).toBe(206)
     expect(res.headers.get('content-range')).toBe('bytes 0-4/1000')
@@ -137,7 +137,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('sends a redirect with its Location, no body and no Content-Type', async () => {
-    const res = await app.fetch('/answers/redirect')
+    const res = await app.request('/answers/redirect')
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('http://localhost/elsewhere')
@@ -146,7 +146,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('sends a 304 with its validator and no body', async () => {
-    const res = await app.fetch('/answers/not-modified')
+    const res = await app.request('/answers/not-modified')
 
     expect(res.status).toBe(304)
     expect(res.headers.get('etag')).toBe('"v1"')
@@ -154,7 +154,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it("sends every cookie: the Response's own and the one the handler set on the context", async () => {
-    const res = await app.fetch('/answers/cookies')
+    const res = await app.request('/answers/cookies')
 
     const cookies = res.headers.getSetCookie().map(cookie => cookie.split(';')[0])
     expect(cookies).toEqual(expect.arrayContaining(['session=c3', 'theme=dark', 'lang=pt']))
@@ -162,7 +162,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('answers a Response from an error handler with its own status, headers and body', async () => {
-    const res = await app.fetch('/answers/teapot')
+    const res = await app.request('/answers/teapot')
 
     expect(res.status).toBe(418)
     expect(res.headers.get('x-teapot')).toBe('yes')
@@ -170,7 +170,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it('answers 500 for a Response whose body was already read, rather than an empty success', async () => {
-    const res = await app.fetch('/answers/consumed')
+    const res = await app.request('/answers/consumed')
 
     expect(res.status).toBe(500)
   })
@@ -181,7 +181,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   ])(
     'leaves the context unanswered, its status untouched, when %s refuses a Response, so the handler can answer otherwise',
     async (_sender, path) => {
-      const res = await app.fetch(path)
+      const res = await app.request(path)
 
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ fallback: true })
@@ -189,7 +189,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
   )
 
   it.each(helpers)("keeps ctx.%s(...)'s status over a Response given as its body", async (name, status) => {
-    const res = await app.fetch(`/answers/helpers/${name}`)
+    const res = await app.request(`/answers/helpers/${name}`)
 
     expect(res.status).toBe(status)
     expect(res.headers.get('x-kept')).toBe('yes')
@@ -197,14 +197,14 @@ describe('a Response a handler returns is sent as its status, its headers and it
   })
 
   it("keeps an ErrHTTP's status over a Response given as its body", async () => {
-    const res = await app.fetch('/answers/err-http')
+    const res = await app.request('/answers/err-http')
 
     expect(res.status).toBe(404)
     expect(await res.text()).toBe('gone')
   })
 
   it('sends a Response handed to ctx.body(...) as the whole answer, its status included', async () => {
-    const res = await app.fetch('/answers/created-via-body')
+    const res = await app.request('/answers/created-via-body')
 
     expect(res.status).toBe(201)
     expect(await res.text()).toBe('made')
@@ -219,7 +219,7 @@ describe('a Response a handler returns is sent as its status, its headers and it
       ['a 204', '/answers/no-content', 204],
       ['a 304', '/answers/not-modified', 304],
     ])('answers %s with the status and headers a GET gets, and no body', async (_kind, path, status) => {
-      const [get, head] = await Promise.all([app.fetch(path), app.fetch(path, { method: 'HEAD' })])
+      const [get, head] = await Promise.all([app.request(path), app.request(path, { method: 'HEAD' })])
 
       expect(head.status).toBe(status)
       expect(head.status).toBe(get.status)
@@ -248,7 +248,7 @@ describe("a Response's headers join the ones the server adds, rather than replac
   })
 
   it("keeps the Vary a version constraint adds alongside the Response's own, so a cache keeps versions apart", async () => {
-    const res = await app.fetch('/versioned', { headers: { 'accept-version': '1.x' } })
+    const res = await app.request('/versioned', { headers: { 'accept-version': '1.x' } })
 
     expect(await res.text()).toBe('v1')
     const vary = (res.headers.get('vary') ?? '').split(',').map(name => name.trim().toLowerCase())
@@ -325,7 +325,7 @@ describe('a Response fetched from upstream and returned is sent as the bytes the
   it.each(['gzip', 'x-gzip', 'deflate', 'br', 'zstd', 'x-unknown'])(
     'labels a %s upstream body as fetch hands it over: decoded and unlabelled, or as sent and labelled',
     async coding => {
-      const res = await app.fetch(`/proxy/${coding}`)
+      const res = await app.request(`/proxy/${coding}`)
       const body = Buffer.from(await res.arrayBuffer())
 
       expect(res.status).toBe(200)
@@ -343,7 +343,7 @@ describe('a Response fetched from upstream and returned is sent as the bytes the
   )
 
   it('keeps the length of an upstream body sent with no coding, which fetch hands over as it came', async () => {
-    const res = await app.fetch('/proxy/identity')
+    const res = await app.request('/proxy/identity')
 
     expect(res.headers.get('content-encoding')).toBeNull()
     expect(res.headers.get('content-length')).toBe(String(PLAIN.length))
@@ -351,7 +351,7 @@ describe('a Response fetched from upstream and returned is sent as the bytes the
   })
 
   it("leaves the upstream's hop-by-hop headers behind, the ones its Connection names included", async () => {
-    const res = await app.fetch('/proxy/gzip')
+    const res = await app.request('/proxy/gzip')
 
     expect(res.headers.get('x-hop')).toBeNull()
     expect(res.headers.get('keep-alive')).toBeNull()
@@ -359,7 +359,7 @@ describe('a Response fetched from upstream and returned is sent as the bytes the
   })
 
   it('keeps the coding of a Response the handler built from bytes it compressed itself', async () => {
-    const res = await app.fetch('/proxy/precompressed')
+    const res = await app.request('/proxy/precompressed')
 
     expect(res.headers.get('content-encoding')).toBe('gzip')
     expect(Buffer.from(await res.arrayBuffer()).equals(gzipSync(PLAIN))).toBe(true)

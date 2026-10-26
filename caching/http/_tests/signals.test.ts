@@ -276,7 +276,7 @@ describe('storeTimeout on HTTPCaching', () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
 
     let answered = false
-    const pending = app.fetch('/default-timeout/data').then(res => {
+    const pending = app.request('/default-timeout/data').then(res => {
       answered = true
       return res
     })

@@ -38,10 +38,10 @@ describe('caching under a base path', () => {
       .with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const underMiss = await app.fetch('/api/based/page')
-    const underHit = await app.fetch('/api/based/page')
-    const directMiss = await app.fetch('/based/page')
-    const directHit = await app.fetch('/based/page')
+    const underMiss = await app.request('/api/based/page')
+    const underHit = await app.request('/api/based/page')
+    const directMiss = await app.request('/based/page')
+    const directHit = await app.request('/based/page')
 
     expect([underMiss, underHit, directMiss, directHit].map(res => res.headers.get('x-cache'))).toEqual([
       'MISS',

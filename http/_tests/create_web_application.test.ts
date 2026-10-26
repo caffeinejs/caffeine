@@ -26,7 +26,7 @@ describe('createWebApplication default Fastify form', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/default-app/data')
+    const res = await app.request('/default-app/data')
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
   })
@@ -54,7 +54,7 @@ describe('createWebApplication default Fastify form', () => {
 
     expect(app.container).toBe(container)
 
-    const res = await app.fetch('/default-app-container/data')
+    const res = await app.request('/default-app-container/data')
     expect(await res.json()).toEqual({ via: 'container' })
   })
 

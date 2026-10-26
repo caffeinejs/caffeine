@@ -61,7 +61,7 @@ describe('custom ResponseResult dispatch', () => {
   it('dispatches a custom result returned from a sync handler', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/custom/sync')
+    const res = await app.request('/custom/sync')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('x-render')).toBe('custom')
@@ -74,7 +74,7 @@ describe('custom ResponseResult dispatch', () => {
   it('dispatches a custom result resolved from an async handler', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/custom/async')
+    const res = await app.request('/custom/async')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('x-render')).toBe('custom')
@@ -86,7 +86,7 @@ describe('custom ResponseResult dispatch', () => {
   it('leaves a plain object untouched (still JSON) when no protocol symbol is present', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/custom/json')
+    const res = await app.request('/custom/json')
 
     expect(res.headers.get('x-render')).toBeNull()
     expect(res.headers.get('content-type')).toMatch(/^application\/json/)
@@ -98,7 +98,7 @@ describe('custom ResponseResult dispatch', () => {
   it('dispatches a custom result returned from an error handler', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/custom/boom')
+    const res = await app.request('/custom/boom')
 
     expect(res.status).toBe(422)
     expect(res.headers.get('x-render')).toBe('custom')
@@ -182,7 +182,7 @@ describe('number, boolean and null results', () => {
   describe.each(['sync', 'async'])('%s handler', handler => {
     // Each path names what its handler returns, written as the JSON text the body must be.
     it.each(['0', '1', 'true', 'false', 'null'])('sends %s as a JSON body', async json => {
-      const res = await app.fetch(`/scalar/${handler}/${json}`)
+      const res = await app.request(`/scalar/${handler}/${json}`)
 
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toMatch(/^application\/json/)
@@ -191,7 +191,7 @@ describe('number, boolean and null results', () => {
   })
 
   it('still sends an empty body for undefined', async () => {
-    const res = await app.fetch('/scalar/sync/undefined')
+    const res = await app.request('/scalar/sync/undefined')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe('')

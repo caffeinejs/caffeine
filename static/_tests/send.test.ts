@@ -32,7 +32,7 @@ describe('sendFile and download', () => {
   it('serves a file from a handler', async () => {
     const started = await start(s => s.serve(fixtures, { prefix: '/files' }))
 
-    const res = await started.fetch('/pick')
+    const res = await started.request('/pick')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/plain/)
@@ -52,7 +52,7 @@ describe('sendFile and download', () => {
       ) as WebApplication
     await app.bootstrap()
 
-    const res = await app.fetch('/dropped')
+    const res = await app.request('/dropped')
 
     expect(await res.text()).toBe('')
   })
@@ -62,7 +62,7 @@ describe('sendFile and download', () => {
   it('sends a download as an attachment under the name given', async () => {
     const started = await start(s => s.serve(fixtures, { prefix: '/files' }))
 
-    const res = await started.fetch('/grab')
+    const res = await started.request('/grab')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).toMatch(/^attachment;/)
@@ -74,7 +74,7 @@ describe('sendFile and download', () => {
   it('decorates from the only mount', async () => {
     const started = await start(s => s.serve(fixtures))
 
-    expect((await started.fetch('/pick')).status).toBe(200)
+    expect((await started.request('/pick')).status).toBe(200)
   })
 
   it('lets a later mount take the decoration when it asks for it', async () => {
@@ -83,19 +83,19 @@ describe('sendFile and download', () => {
     )
 
     // `other.txt` lives only under the second root, so it resolves only if that mount decorated.
-    expect((await started.fetch('/elsewhere')).status).toBe(200)
+    expect((await started.request('/elsewhere')).status).toBe(200)
   })
 
   it('leaves the decoration with the first mount when none asks', async () => {
     const started = await start(s => s.serve(fixtures, { prefix: '/a' }).serve(other, { prefix: '/b' }))
 
-    expect((await started.fetch('/elsewhere')).status).toBe(404)
-    expect((await started.fetch('/pick')).status).toBe(200)
+    expect((await started.request('/elsewhere')).status).toBe(404)
+    expect((await started.request('/pick')).status).toBe(200)
   })
 
   it('fails with a named error when no mount decorated the reply', async () => {
     const started = await start(s => s.serve(fixtures, { decorateReply: false }))
 
-    expect((await started.fetch('/pick')).status).toBe(500)
+    expect((await started.request('/pick')).status).toBe(500)
   })
 })

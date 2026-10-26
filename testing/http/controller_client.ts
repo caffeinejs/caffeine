@@ -1,4 +1,4 @@
-import { joinURL, type Fetchable } from '@caffeinejs/brewer'
+import { joinURL, type Requestable } from '@caffeinejs/brewer'
 import { getRouteGroup } from '@caffeinejs/http'
 
 import { mergeRequest, resolveRouteURL, withoutTrailingSlashes } from './_util.js'
@@ -11,7 +11,7 @@ export type ControllerTestClient<C extends RouterCtor> = {
 
 export function controllerClient<ROUTER extends RouterCtor>(
   routerRef: ROUTER,
-  target: string | URL | Fetchable,
+  target: string | URL | Requestable,
 ): ControllerTestClient<ROUTER> {
   const descriptor = getRouteGroup(routerRef)
   if (!descriptor) {
@@ -20,7 +20,7 @@ export function controllerClient<ROUTER extends RouterCtor>(
 
   const isRemote = typeof target === 'string' || target instanceof URL
   const origin = isRemote ? target.toString() : 'http://localhost'
-  const fetcher = isRemote ? fetch : target.fetch.bind(target)
+  const fetcher = isRemote ? fetch : target.request.bind(target)
 
   const router = descriptor.toRouteGroup()
   const client: Record<string | symbol, (input: Request | RequestInit) => Promise<Response>> = {}

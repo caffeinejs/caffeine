@@ -299,7 +299,7 @@ describe('the lifecycle of a listener', () => {
     const admin = app.listeners.get('admin')!
 
     expect(admin.address).toBeUndefined()
-    expect(await (await admin.fetch('/jobs')).json()).toEqual({ jobs: true })
-    expect((await app.fetch('/jobs')).status).toBe(404)
+    expect(await (await admin.request('/jobs')).json()).toEqual({ jobs: true })
+    expect((await app.request('/jobs')).status).toBe(404)
   })
 })

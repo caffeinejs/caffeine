@@ -34,9 +34,9 @@ describe('API versioning — decorated controllers', () => {
     const app = createWebApplication({ container }).with(() => constraints())
     await app.bootstrap()
 
-    expect(await (await app.fetch('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
-    expect(await (await app.fetch('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
-    expect((await app.fetch('/pets')).status).toBe(404)
+    expect(await (await app.request('/pets', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ v: 1 })
+    expect(await (await app.request('/pets', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ v: 2 })
+    expect((await app.request('/pets')).status).toBe(404)
 
     await app.close()
   })
@@ -61,8 +61,12 @@ describe('API versioning — decorated controllers', () => {
     const app = createWebApplication({ container }).with(() => constraints())
     await app.bootstrap()
 
-    expect(await (await app.fetch('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({ at: 1 })
-    expect(await (await app.fetch('/catalog/item', { headers: { 'accept-version': '2.x' } })).json()).toEqual({ at: 2 })
+    expect(await (await app.request('/catalog/item', { headers: { 'accept-version': '1.x' } })).json()).toEqual({
+      at: 1,
+    })
+    expect(await (await app.request('/catalog/item', { headers: { 'accept-version': '2.x' } })).json()).toEqual({
+      at: 2,
+    })
 
     await app.close()
   })

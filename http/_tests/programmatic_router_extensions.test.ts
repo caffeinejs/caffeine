@@ -59,7 +59,7 @@ describe('route extensions', () => {
 
       const payload = Buffer.from('hello stream world')
       const send = (path: string) =>
-        app.fetch(path, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload })
+        app.request(path, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: payload })
 
       const expected = { isStream: true, size: payload.byteLength }
       expect(await (await send('/ext-stream/upload')).json()).toEqual(expected)
@@ -81,7 +81,7 @@ describe('route extensions', () => {
       const app = createWebApplication().mount(router)
       await app.bootstrap()
 
-      const res = await app.fetch('/ext-buffer/upload', {
+      const res = await app.request('/ext-buffer/upload', {
         method: 'POST',
         headers: { 'content-type': 'text/plain' },
         body: 'raw bytes',
@@ -128,7 +128,7 @@ describe('route extensions', () => {
       const app = createWebApplication().mount(router)
       await app.bootstrap()
 
-      const res = await app.fetch('/group-ext')
+      const res = await app.request('/group-ext')
       expect(res.headers.get('x-first')).toBe('yes')
       expect(res.headers.get('x-second')).toBe('yes')
       expect(res.headers.get('x-shared')).toBe('second')
@@ -201,7 +201,7 @@ describe('fst', () => {
       const app = createWebApplication().mount(router)
       await app.bootstrap()
 
-      expect((await app.fetch('/fst/hooked')).status).toBe(200)
+      expect((await app.request('/fst/hooked')).status).toBe(200)
       expect(order).toEqual(['fst', 'handler'])
 
       await app.close()
@@ -224,7 +224,7 @@ describe('fst', () => {
       await app.bootstrap()
 
       // attachValidation turns a validation failure into a flag on the request instead of a 400.
-      const res = await app.fetch('/fst-opts/validated?n=nope')
+      const res = await app.request('/fst-opts/validated?n=nope')
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ invalid: true })
 

@@ -9,7 +9,7 @@ import { fromAnotherRealm } from './_realm.js'
  * What a call hands the transport beyond its route: the RequestInit fields that steer redirects, aborts and caching,
  * and the failures that happen before any response exists.
  *
- * Redirects and aborts run over a socket: an application's own `fetch` never follows a redirect and does not watch a
+ * Redirects and aborts run over a socket: an application's own `request` never follows a redirect and does not watch a
  * signal, so only a real transport shows what the client asked of it.
  */
 
@@ -140,7 +140,7 @@ describe('brewer handing a call to its transport', () => {
       keepalive: true,
       fetch: (input, init = {}) => {
         calls.push({ url: String(input), init })
-        return app.fetch(input as string, init)
+        return app.request(input as string, init)
       },
     })
 
@@ -254,7 +254,7 @@ describe('brewer handing a call to its transport', () => {
         headers,
         fetch: (input, init) => {
           calls.push(String(input))
-          return app.fetch(input as string, init)
+          return app.request(input as string, init)
         },
       })
 

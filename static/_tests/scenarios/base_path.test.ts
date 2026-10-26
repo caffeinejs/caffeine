@@ -44,7 +44,7 @@ describe('a file mount under a base path', () => {
     const expected = readFileSync(join(fixtures, 'hello.txt'), 'utf8')
 
     for (const url of ['/api/static/hello.txt', '/static/hello.txt']) {
-      const res = await app.fetch(url)
+      const res = await app.request(url)
 
       expect(res.status, url).toBe(200)
       expect(await res.text(), url).toBe(expected)
@@ -55,14 +55,14 @@ describe('a file mount under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/api/static/missing.txt', { headers: NAVIGATION }))
+    await expectNotFoundJSON(await app.request('/api/static/missing.txt', { headers: NAVIGATION }))
   })
 
   it('takes nothing off a path that only starts like the base', async () => {
     app = site()
     await app.bootstrap()
 
-    expect((await app.fetch('/apistatic/hello.txt')).status).toBe(404)
+    expect((await app.request('/apistatic/hello.txt')).status).toBe(404)
   })
 })
 
@@ -98,7 +98,7 @@ describe('a redirecting mount under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch(url)
+    const res = await app.request(url)
 
     expect(res.status).toBe(301)
     expect(res.headers.get('location')).toBe(location)
@@ -108,7 +108,7 @@ describe('a redirecting mount under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    expect((await app.fetch('/files')).headers.get('location')).toBe('/files/')
+    expect((await app.request('/files')).headers.get('location')).toBe('/files/')
   })
 
   // The hook runs for every reply the mount's routes send, and nearly all of them are files, not redirects.
@@ -116,7 +116,7 @@ describe('a redirecting mount under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/api/files/index.html')
+    const res = await app.request('/api/files/index.html')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe(readFileSync(join(dist, 'index.html'), 'utf8'))
@@ -129,7 +129,7 @@ describe('a redirecting mount under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    expect((await app.fetch('/api/app-go')).headers.get('location')).toBe('/api/elsewhere')
+    expect((await app.request('/api/app-go')).headers.get('location')).toBe('/api/elsewhere')
   })
 
   // The gate challenges on the mount's own routes, so its redirect passes through the same hook; it was built with
@@ -143,7 +143,7 @@ describe('a redirecting mount under a base path', () => {
       .with(staticFiles(s => s.serve(dist, { prefix: '/files', redirect: true }))) as WebApplication
     await app.bootstrap()
 
-    const res = await app.fetch('/api/files/index.html', { headers: NAVIGATION })
+    const res = await app.request('/api/files/index.html', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toBe('/api/login?returnUrl=%2Fapi%2Ffiles%2Findex.html')
@@ -185,7 +185,7 @@ describe('a directory sendFile or download sends under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch(url)
+    const res = await app.request(url)
 
     expect(res.status).toBe(301)
     expect(res.headers.get('location')).toBe(location)
@@ -195,7 +195,7 @@ describe('a directory sendFile or download sends under a base path', () => {
     app = site()
     await app.bootstrap()
 
-    const res = await app.fetch('/api/page')
+    const res = await app.request('/api/page')
 
     expect(res.status).toBe(200)
     expect(await res.text()).toBe(readFileSync(join(dist, 'index.html'), 'utf8'))
@@ -210,7 +210,7 @@ describe('a directory sendFile or download sends under a base path', () => {
     await app.bootstrap()
     shadowed = undefined
 
-    expect((await app.fetch(url)).status).toBe(200)
+    expect((await app.request(url)).status).toBe(200)
     expect(shadowed).toBe(false)
   })
 })
@@ -280,7 +280,7 @@ describe('a listing mount under a base path', () => {
     app = listing('/api')
     await app.bootstrap()
 
-    const links = JSON.parse(await (await app.fetch('/api/listing/')).text()) as string[]
+    const links = JSON.parse(await (await app.request('/api/listing/')).text()) as string[]
 
     expect(links).toContain('/api/listing/assets')
     expect(links).toContain('/api/listing/index.html')
@@ -291,7 +291,7 @@ describe('a listing mount under a base path', () => {
     app = listing('/api')
     await app.bootstrap()
 
-    const links = JSON.parse(await (await app.fetch('/listing/')).text()) as string[]
+    const links = JSON.parse(await (await app.request('/listing/')).text()) as string[]
 
     expect(links).toContain('/api/listing/assets')
   })
@@ -300,7 +300,7 @@ describe('a listing mount under a base path', () => {
     app = listing('')
     await app.bootstrap()
 
-    const links = JSON.parse(await (await app.fetch('/listing/')).text()) as string[]
+    const links = JSON.parse(await (await app.request('/listing/')).text()) as string[]
 
     expect(links).toContain('/listing/assets')
     expect(links.some(link => link.startsWith('/api'))).toBe(false)

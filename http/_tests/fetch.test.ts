@@ -24,7 +24,7 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/fetch/json')
+    const res = await app.request('/fetch/json')
 
     expect(res.status).toBe(201)
     expect(res.headers.get('x-custom')).toBe('yes')
@@ -45,7 +45,7 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/fetch/empty')
+    const res = await app.request('/fetch/empty')
 
     expect(res.status).toBe(204)
     expect(await res.text()).toBe('')
@@ -70,7 +70,7 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/fetch/buf')
+    const res = await app.request('/fetch/buf')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch('application/octet-stream')
@@ -96,7 +96,7 @@ describe('Fetch API Response Support', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/fetch/binary')
+    const res = await app.request('/fetch/binary')
 
     expect(res.status).toBe(200)
     const bytes = new Uint8Array(await res.arrayBuffer())
@@ -120,7 +120,7 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/mix-class/route')
+      const res = await app.request('/mix-class/route')
 
       expect(res.headers.get('x-class')).toBe('from-decorator')
       expect(res.headers.get('x-response')).toBe('from-response')
@@ -141,7 +141,7 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/mix-method/route')
+      const res = await app.request('/mix-method/route')
 
       expect(res.headers.get('x-method')).toBe('from-decorator')
       expect(res.headers.get('x-response')).toBe('from-response')
@@ -162,7 +162,7 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/override-class/route')
+      const res = await app.request('/override-class/route')
 
       expect(res.headers.get('x-version')).toBe('response')
     })
@@ -182,7 +182,7 @@ describe('Fetch API Response Support', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/override-method/route')
+      const res = await app.request('/override-method/route')
 
       expect(res.headers.get('x-version')).toBe('response')
     })
@@ -197,7 +197,7 @@ describe('Fetch API Response Support', () => {
     try {
       await app.bootstrap()
 
-      const res = await app.fetch(
+      const res = await app.request(
         new Request('http://localhost/fetch-request', { method: 'POST', headers: { 'x-probe': 'yes' } }),
       )
 
@@ -217,11 +217,11 @@ describe('Fetch API Response Support', () => {
     try {
       await app.bootstrap()
 
-      expect(await (await app.fetch(new URL('http://api.example:8080/fetch-url?q=1'))).json()).toEqual({
+      expect(await (await app.request(new URL('http://api.example:8080/fetch-url?q=1'))).json()).toEqual({
         host: 'api.example:8080',
         q: '1',
       })
-      expect(await (await app.fetch('http://api.example:8080/fetch-url?q=2')).json()).toEqual({
+      expect(await (await app.request('http://api.example:8080/fetch-url?q=2')).json()).toEqual({
         host: 'api.example:8080',
         q: '2',
       })
@@ -241,7 +241,7 @@ describe('Fetch API Response Support', () => {
     try {
       await app.bootstrap()
 
-      await expect(app.fetch('/fetch-early')).rejects.toThrow(RangeError)
+      await expect(app.request('/fetch-early')).rejects.toThrow(RangeError)
     } finally {
       await app.close()
     }

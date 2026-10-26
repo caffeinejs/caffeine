@@ -68,7 +68,7 @@ describe('two applications on one origin', () => {
     app = origin(false)
     await app.bootstrap()
 
-    const res = await app.fetch('/settings', { headers: NAVIGATION })
+    const res = await app.request('/settings', { headers: NAVIGATION })
 
     expect(res.status).toBe(200)
     expect(await res.text()).toContain('<div id="root">')
@@ -78,9 +78,9 @@ describe('two applications on one origin', () => {
     app = origin(false)
     await app.bootstrap()
 
-    expect((await app.fetch('/admin/users', { headers: NAVIGATION })).status).toBe(401)
+    expect((await app.request('/admin/users', { headers: NAVIGATION })).status).toBe(401)
 
-    const forbidden = await app.fetch('/admin/users', { headers: { ...NAVIGATION, ...bob } })
+    const forbidden = await app.request('/admin/users', { headers: { ...NAVIGATION, ...bob } })
     expect(forbidden.status).toBe(403)
     expect(forbidden.headers.get('content-type') ?? '').not.toMatch(/text\/html/)
   })
@@ -90,7 +90,7 @@ describe('two applications on one origin', () => {
     await app.bootstrap()
 
     for (const path of ['/admin', '/admin/', '/admin/users']) {
-      const res = await app.fetch(path, { headers: { ...NAVIGATION, ...ann } })
+      const res = await app.request(path, { headers: { ...NAVIGATION, ...ann } })
 
       expect(res.status, path).toBe(200)
       expect(await res.text(), path).toContain('<div id="admin-root">')
@@ -101,7 +101,7 @@ describe('two applications on one origin', () => {
     app = origin(false)
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/admin/missing.js', { headers: { ...NAVIGATION, ...ann } }))
+    await expectNotFoundJSON(await app.request('/admin/missing.js', { headers: { ...NAVIGATION, ...ann } }))
   })
 
   // One bundle is public because its sign-in page needs it; the other is as gated as the page it belongs to.
@@ -109,11 +109,11 @@ describe('two applications on one origin', () => {
     app = origin(true)
     await app.bootstrap()
 
-    expect((await app.fetch('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(200)
-    expect((await app.fetch('/admin/assets/admin-Zz9.js', { headers: SCRIPT })).status).toBe(401)
-    expect((await app.fetch('/admin/assets/admin-Zz9.js', { headers: { ...SCRIPT, ...bob } })).status).toBe(403)
+    expect((await app.request('/assets/app-eZr2sdaR.js', { headers: SCRIPT })).status).toBe(200)
+    expect((await app.request('/admin/assets/admin-Zz9.js', { headers: SCRIPT })).status).toBe(401)
+    expect((await app.request('/admin/assets/admin-Zz9.js', { headers: { ...SCRIPT, ...bob } })).status).toBe(403)
 
-    const allowed = await app.fetch('/admin/assets/admin-Zz9.js', { headers: { ...SCRIPT, ...ann } })
+    const allowed = await app.request('/admin/assets/admin-Zz9.js', { headers: { ...SCRIPT, ...ann } })
     expect(allowed.status).toBe(200)
     expect(await allowed.text()).toContain('admin bundle')
   })
@@ -122,6 +122,6 @@ describe('two applications on one origin', () => {
     app = origin(false)
     await app.bootstrap()
 
-    await expectNotFoundJSON(await app.fetch('/api/typo', { headers: XHR }))
+    await expectNotFoundJSON(await app.request('/api/typo', { headers: XHR }))
   })
 })

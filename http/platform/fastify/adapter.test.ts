@@ -7,7 +7,7 @@ import { Controller, Get, Method, Router, Args } from '../../index.js'
 import { Context, createWebApplication } from './index.js'
 
 describe('Fastify Adapter', () => {
-  // Binds a real ephemeral socket (unlike the app.fetch() tests below), so it can hang up under
+  // Binds a real ephemeral socket (unlike the app.request() tests below), so it can hang up under
   // parallel-suite port/event-loop contention. Retry keeps the real-socket smoke test without making it
   // flaky.
   it('binds a real listener and serves it over the network', { retry: 2 }, async () => {
@@ -22,7 +22,7 @@ describe('Fastify Adapter', () => {
       expect(app.instance).toBe(seen)
       expect(app.address!.port).toBeGreaterThan(0)
 
-      // Native fetch, not app.fetch(): the point is that traffic reaches the process through a socket.
+      // Native fetch, not app.request(): the point is that traffic reaches the process through a socket.
       const res = await fetch(`${app.address!.origin}/`)
 
       expect(res.status).toBe(200)
@@ -32,13 +32,13 @@ describe('Fastify Adapter', () => {
     }
   })
 
-  it('exposes the underlying fastify instance and can be tested with app.fetch()', async () => {
+  it('exposes the underlying fastify instance and can be tested with app.request()', async () => {
     const app = createWebApplication().serverCallback((_context, server) => {
       server.get('/', () => ({ ok: true }))
     })
     await app.bootstrap()
 
-    const result = await app.fetch('/')
+    const result = await app.request('/')
 
     expect(await result.json()).toEqual({ ok: true })
   })
@@ -59,7 +59,7 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/users/1?filter=test', { headers: { 'x-test': 'test' } })
+      const res = await app.request('/users/1?filter=test', { headers: { 'x-test': 'test' } })
 
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ ok: true, id: '1', filter: 'test', test: 'test' })
@@ -88,7 +88,7 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('http://localhost:8080/test/pickers?foo=bar')
+      const res = await app.request('http://localhost:8080/test/pickers?foo=bar')
 
       expect(res.status).toBe(200)
       expect(await res.json()).toMatchObject({
@@ -115,7 +115,7 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/async-pick/value')
+      const res = await app.request('/async-pick/value')
       expect(res.status).toBe(200)
       expect(await res.json()).toEqual({ value: '/ASYNC-PICK/VALUE' })
     })
@@ -138,7 +138,7 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const res = await app.fetch('/mixed-pick/42')
+      const res = await app.request('/mixed-pick/42')
       expect(res.status).toBe(200)
       expect(await res.json()).toMatchObject({ id: '42', asyncVal: 'async:/mixed-pick/42' })
     })
@@ -162,7 +162,7 @@ describe('Fastify Adapter', () => {
       await app.bootstrap()
 
       for (const m of methods) {
-        const res = await app.fetch('/method-test/action', { method: m })
+        const res = await app.request('/method-test/action', { method: m })
         expect(await res.json()).toEqual({ method: m })
       }
     })
@@ -188,8 +188,8 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const r1 = await app.fetch('/req-ctrl/id')
-      const r2 = await app.fetch('/req-ctrl/id')
+      const r1 = await app.request('/req-ctrl/id')
+      const r2 = await app.request('/req-ctrl/id')
 
       expect(r1.status).toBe(200)
       expect(r2.status).toBe(200)
@@ -222,8 +222,8 @@ describe('Fastify Adapter', () => {
       const app = createWebApplication()
       await app.bootstrap()
 
-      const r1 = await app.fetch('/transient-ctrl/svc-id')
-      const r2 = await app.fetch('/transient-ctrl/svc-id')
+      const r1 = await app.request('/transient-ctrl/svc-id')
+      const r2 = await app.request('/transient-ctrl/svc-id')
 
       expect(r1.status).toBe(200)
       expect(r2.status).toBe(200)
@@ -248,8 +248,8 @@ describe('Fastify Adapter', () => {
       await app.bootstrap()
 
       const [a, b] = await Promise.all([
-        app.fetch('/ctx-di', { headers: { 'x-probe': 'a' } }),
-        app.fetch('/ctx-di', { headers: { 'x-probe': 'b' } }),
+        app.request('/ctx-di', { headers: { 'x-probe': 'a' } }),
+        app.request('/ctx-di', { headers: { 'x-probe': 'b' } }),
       ])
       expect(await a.json()).toEqual({ same: true, probe: 'a' })
       expect(await b.json()).toEqual({ same: true, probe: 'b' })

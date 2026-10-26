@@ -31,7 +31,7 @@ describe('authentication wiring', () => {
   })
 
   it('serves an HTML homepage', async () => {
-    const res = await app.fetch('/')
+    const res = await app.request('/')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toContain('text/html')
@@ -41,7 +41,7 @@ describe('authentication wiring', () => {
   })
 
   it('starts the GitHub OAuth flow: /login/github redirects to GitHub with a state cookie', async () => {
-    const res = await app.fetch('/login/github', { headers: NAVIGATION })
+    const res = await app.request('/login/github', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     const location = res.headers.get('location') ?? ''
@@ -58,7 +58,7 @@ describe('authentication wiring', () => {
 
     // 1. Initiate: capture the state parameter and its sealed cookie from the real challenge. The cookie
     // is named after this flow's own state, so two sign-ins in flight cannot clobber each other.
-    const login = await app.fetch('/login/github', { headers: NAVIGATION })
+    const login = await app.request('/login/github', { headers: NAVIGATION })
     const state = new URL(login.headers.get('location')!).searchParams.get('state')!
     const stateCookieName = `${GITHUB_STATE_COOKIE}.${state}`
     const stateCookie = setCookie(login, stateCookieName)
@@ -67,7 +67,7 @@ describe('authentication wiring', () => {
 
     // 2. Callback: GitHub redirects back with the code + matching state; the handler exchanges the
     // code (stubbed), reads the user, and writes the session cookie.
-    const callback = await app.fetch(`/login/github/callback?code=fake-code&state=${state}`, {
+    const callback = await app.request(`/login/github/callback?code=fake-code&state=${state}`, {
       headers: { cookie: `${stateCookieName}=${stateCookie}` },
     })
     expect(callback.status).toBe(302)
@@ -78,7 +78,7 @@ describe('authentication wiring', () => {
     expect(sessionCookie.length).toBeLessThan(4096)
 
     // 3. The session cookie authenticates /me under the GitHub scheme.
-    const me = await app.fetch('/me', {
+    const me = await app.request('/me', {
       headers: { cookie: `petstore_gh_session=${sessionCookie}` },
     })
     expect(me.status).toBe(200)
@@ -96,7 +96,7 @@ describe('authentication wiring', () => {
     expect(callback.headers.get('location')).toBe('/dashboard')
 
     // 5. The dashboard renders the signed-in identity as HTML.
-    const dash = await app.fetch('/dashboard', {
+    const dash = await app.request('/dashboard', {
       headers: { cookie: `petstore_gh_session=${sessionCookie}` },
     })
     expect(dash.status).toBe(200)
@@ -106,17 +106,17 @@ describe('authentication wiring', () => {
     expect(dashHtml).toContain('<form method="post" action="/logout">')
 
     // 6. Signing out is a POST. A GET that changes state is any other site's to trigger, so there is none.
-    const viaLink = await app.fetch('/logout', { headers: { cookie: `petstore_gh_session=${sessionCookie}` } })
+    const viaLink = await app.request('/logout', { headers: { cookie: `petstore_gh_session=${sessionCookie}` } })
     expect(viaLink.status).toBe(404)
 
     // A form posted from another site arrives without the `SameSite=Lax` session cookie. It signs nobody out:
     // no cookie is cleared on the say-so of a caller who is nobody here.
-    const crossSite = await app.fetch('/logout', { method: 'POST' })
+    const crossSite = await app.request('/logout', { method: 'POST' })
     expect(crossSite.status).toBe(303)
     expect(crossSite.headers.get('set-cookie')).toBeNull()
 
     // 7. The user's own sign-out clears the session cookie and returns home with a GET.
-    const logout = await app.fetch('/logout', {
+    const logout = await app.request('/logout', {
       method: 'POST',
       headers: { cookie: `petstore_gh_session=${sessionCookie}` },
     })
@@ -129,14 +129,14 @@ describe('authentication wiring', () => {
   // the OAuth flow rather than answered a bare 401. That is the browser-first behaviour this example wants;
   // the documentation routes below are the deliberate exception.
   it('redirects an anonymous /dashboard into the GitHub flow', async () => {
-    const res = await app.fetch('/dashboard', { headers: NAVIGATION })
+    const res = await app.request('/dashboard', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
   })
 
   it('redirects an anonymous /me into the GitHub flow', async () => {
-    const res = await app.fetch('/me', { headers: NAVIGATION })
+    const res = await app.request('/me', { headers: NAVIGATION })
 
     expect(res.status).toBe(302)
     expect(res.headers.get('location')).toContain('github.com/login/oauth/authorize')
@@ -147,7 +147,7 @@ describe('authentication wiring', () => {
   // "you are not signed in". So an API caller gets a 401 naming the same URL — which is also what makes the
   // documentation UI's "Try it" show a readable failure rather than a CORS wall.
   it('answers an API caller 401, with where to send a browser in location', async () => {
-    const res = await app.fetch('/me', {
+    const res = await app.request('/me', {
       headers: { accept: 'application/json' },
     })
 
@@ -161,7 +161,7 @@ describe('authentication wiring', () => {
     stubGithub()
     const session = await signInWithGithub(app)
 
-    const res = await app.fetch('/me', { headers: sessionHeader(session) })
+    const res = await app.request('/me', { headers: sessionHeader(session) })
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -196,7 +196,7 @@ describe('documentation is protected by Basic, independently of the default sche
   })
 
   it('challenges as Basic, not by redirecting to GitHub', async () => {
-    const res = await app.fetch('/openapi.json')
+    const res = await app.request('/openapi.json')
 
     expect(res.status).toBe(401)
     expect(res.headers.get('www-authenticate')).toContain('Basic')
@@ -204,7 +204,7 @@ describe('documentation is protected by Basic, independently of the default sche
   })
 
   it('serves the document to a valid Basic credential', async () => {
-    const res = await app.fetch('/openapi.json', {
+    const res = await app.request('/openapi.json', {
       headers: { authorization: DOCS_AUTH },
     })
 
@@ -214,7 +214,7 @@ describe('documentation is protected by Basic, independently of the default sche
   it('rejects wrong Basic credentials', async () => {
     const wrong = `Basic ${Buffer.from('admin:nope').toString('base64')}`
 
-    expect((await app.fetch('/openapi.json', { headers: { authorization: wrong } })).status).toBe(401)
+    expect((await app.request('/openapi.json', { headers: { authorization: wrong } })).status).toBe(401)
   })
 
   // The downgrade case. A signed-in GitHub user is authenticated as far as the default scheme is concerned,
@@ -224,9 +224,9 @@ describe('documentation is protected by Basic, independently of the default sche
     const session = await signInWithGithub(app)
 
     // The same session does authenticate a route that runs on the default scheme.
-    expect((await app.fetch('/me', { headers: sessionHeader(session) })).status).toBe(200)
+    expect((await app.request('/me', { headers: sessionHeader(session) })).status).toBe(200)
 
-    const docs = await app.fetch('/openapi.json', {
+    const docs = await app.request('/openapi.json', {
       headers: sessionHeader(session),
     })
 

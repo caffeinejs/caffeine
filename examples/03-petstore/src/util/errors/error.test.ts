@@ -89,7 +89,7 @@ describe('error handling', () => {
   it('renders a thrown ErrHTTPNotFound as a 404 { code, message }', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things/abc')
+    const res = await app.request('/things/abc')
 
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toContain('application/json')
@@ -102,7 +102,7 @@ describe('error handling', () => {
   it('renders a body-validation failure as 422 with a field error list', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things', {
+    const res = await app.request('/things', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
@@ -118,7 +118,7 @@ describe('error handling', () => {
   it('renders a querystring-validation failure as 400 without a field list', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things?n=not-a-number')
+    const res = await app.request('/things?n=not-a-number')
 
     expect(res.status).toBe(400)
     expect(res.headers.get('content-type')).toContain('application/json')
@@ -130,7 +130,7 @@ describe('error handling', () => {
   it('renders a thrown ErrHTTPUnauthorized as a 401 { code, message }', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things/denied')
+    const res = await app.request('/things/denied')
 
     expect(res.status).toBe(401)
     expect(res.headers.get('content-type')).toContain('application/json')
@@ -143,7 +143,7 @@ describe('error handling', () => {
   it('renders an unexpected error as a 500 INTERNAL_ERROR', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things/boom')
+    const res = await app.request('/things/boom')
 
     expect(res.status).toBe(500)
     expect(res.headers.get('content-type')).toContain('application/json')
@@ -153,7 +153,7 @@ describe('error handling', () => {
   it('renders an HTML error page when the client accepts text/html', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/things/abc', {
+    const res = await app.request('/things/abc', {
       headers: { accept: 'text/html' },
     })
 
@@ -169,7 +169,7 @@ describe('error handling', () => {
   it('lets a controller override the global 404 rendering with @CatchWith', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/gadgets/abc')
+    const res = await app.request('/gadgets/abc')
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ found: false })
@@ -178,7 +178,7 @@ describe('error handling', () => {
   it('still falls back to the global handler for types the @CatchWith handler does not cover', async () => {
     const app = await buildApp()
 
-    const res = await app.fetch('/gadgets/boom')
+    const res = await app.request('/gadgets/boom')
 
     expect(res.status).toBe(500)
     expect(((await res.json()) as ErrorBody).code).toBe('INTERNAL_ERROR')

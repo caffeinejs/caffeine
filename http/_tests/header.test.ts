@@ -24,8 +24,8 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const resA = await app.fetch('/versioned/a')
-    const resB = await app.fetch('/versioned/b')
+    const resA = await app.request('/versioned/a')
+    const resB = await app.request('/versioned/b')
 
     expect(resA.headers.get('x-api-version')).toBe('1')
     expect(resB.headers.get('x-api-version')).toBe('1')
@@ -51,8 +51,8 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const hit = await app.fetch('/targeted/with-header')
-    const miss = await app.fetch('/targeted/without-header')
+    const hit = await app.request('/targeted/with-header')
+    const miss = await app.request('/targeted/without-header')
 
     expect(hit.headers.get('x-custom')).toBe('yes')
     expect(miss.headers.get('x-custom')).toBeNull()
@@ -73,7 +73,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/multi-class/route')
+    const res = await app.request('/multi-class/route')
 
     // Fetch Headers joins repeated values with ', ' — the on-the-wire form of a multi-value header.
     expect(res.headers.get('x-roles')).toBe('admin, user')
@@ -94,7 +94,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/multi-method/route')
+    const res = await app.request('/multi-method/route')
 
     expect(res.headers.get('x-flags')).toBe('read, write')
   })
@@ -115,7 +115,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/override/route')
+    const res = await app.request('/override/route')
 
     expect(res.headers.get('x-tier')).toBe('method')
     expect(res.headers.get('x-tier')).not.toBe(['class', 'method'])
@@ -136,7 +136,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/charset/route')
+    const res = await app.request('/charset/route')
 
     expect(res.headers.get('x-media')).toBe('application/json; charset=utf-8')
   })
@@ -156,7 +156,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/no-charset/route')
+    const res = await app.request('/no-charset/route')
 
     expect(res.headers.get('x-media')).toBe('application/json')
   })
@@ -176,7 +176,7 @@ describe('Header', () => {
     const app = createWebApplication()
     await app.bootstrap()
 
-    const res = await app.fetch('/charset-array/route')
+    const res = await app.request('/charset-array/route')
 
     expect(res.headers.get('x-media-list')).toBe('application/json; charset=utf-8, application/xml; charset=utf-8')
   })

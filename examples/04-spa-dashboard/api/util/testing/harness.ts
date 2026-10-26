@@ -89,7 +89,7 @@ function header(cookies: Map<string, string>): string {
 export async function signIn(app: WebApplication, username: string, password: string): Promise<Session> {
   const cookies = new Map<string, string>()
 
-  const res = await app.fetch('/auth/login', {
+  const res = await app.request('/auth/login', {
     method: 'POST',
     headers: { ...XHR, 'content-type': 'application/json' },
     body: JSON.stringify({ username, password }),

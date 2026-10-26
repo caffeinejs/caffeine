@@ -123,7 +123,7 @@ describe('authentication options set from the tree', () => {
       )
     await app.bootstrap()
 
-    const signedIn = await app.fetch('/session', { method: 'POST' })
+    const signedIn = await app.request('/session', { method: 'POST' })
     expect(signedIn.status).toBe(200)
 
     const [record] = [...store.records.values()]
@@ -169,18 +169,18 @@ describe('authentication options set from the tree', () => {
         .mount(protectedRoute)
       await app.bootstrap()
 
-      const challenged = await app.fetch('/reports', asScript)
+      const challenged = await app.request('/reports', asScript)
       expect(challenged.status).toBe(401)
       expect(((await challenged.json()) as { loginURL: string }).loginURL).toBe(
         'https://app.test/start?returnTo=%2Freports',
       )
 
-      const started = await app.fetch('/start?returnTo=%2Freports', { redirect: 'manual' })
+      const started = await app.request('/start?returnTo=%2Freports', { redirect: 'manual' })
       expect(started.status).toBe(302)
       expect(new URL(started.headers.get('location')!).origin).toBe('https://provider.test')
 
       // The default it replaces is not left behind as a second way in.
-      expect((await app.fetch('/auth/callback/login', { redirect: 'manual' })).status).toBe(404)
+      expect((await app.request('/auth/callback/login', { redirect: 'manual' })).status).toBe(404)
 
       await app.close()
     })
@@ -209,7 +209,7 @@ describe('authentication options set from the tree', () => {
       await app.bootstrap()
 
       // A challenge that cannot redirect asks the provider nothing, so this is answered with no provider at all.
-      const challenged = await app.fetch('/reports', asScript)
+      const challenged = await app.request('/reports', asScript)
       expect(challenged.status).toBe(401)
       expect(((await challenged.json()) as { loginURL: string }).loginURL).toBe(
         'https://app.test/oidc/start?returnTo=%2Freports',
@@ -277,7 +277,7 @@ describe('authentication options set from the tree', () => {
       })
       await app.bootstrap()
 
-      const challenged = await app.fetch('/reports', asNavigation)
+      const challenged = await app.request('/reports', asNavigation)
       expect(challenged.status).toBe(302)
 
       const authorization = new URL(challenged.headers.get('location')!)
@@ -303,7 +303,7 @@ describe('authentication options set from the tree', () => {
       })
       await app.bootstrap()
 
-      const challenged = await app.fetch('/reports', asNavigation)
+      const challenged = await app.request('/reports', asNavigation)
       expect(new URL(challenged.headers.get('location')!).searchParams.get('code_challenge_method')).toBe('plain')
 
       await app.close()
@@ -316,7 +316,7 @@ describe('authentication options set from the tree', () => {
       })
       await strict.bootstrap()
 
-      const refused = await strict.fetch('/reports', asNavigation)
+      const refused = await strict.request('/reports', asNavigation)
       expect(refused.status).toBe(500)
       expect(refused.headers.get('location')).toBeNull()
 
@@ -354,7 +354,7 @@ describe('authentication options set from the tree', () => {
 
       // And it is the JWKS URI it completed, not some other endpoint: the authorization request still goes to
       // the endpoint the code named.
-      const challenged = await app.fetch('/reports', asNavigation)
+      const challenged = await app.request('/reports', asNavigation)
       const authorization = new URL(challenged.headers.get('location')!)
       expect(authorization.origin + authorization.pathname).toBe(`${ISSUER}/authorize`)
 
@@ -394,7 +394,7 @@ describe('authentication options set from the tree', () => {
         )
       await app.bootstrap()
 
-      const out = await app.fetch('/session/out', { method: 'POST', redirect: 'manual' })
+      const out = await app.request('/session/out', { method: 'POST', redirect: 'manual' })
       expect(out.status).toBe(302)
 
       const logout = new URL(out.headers.get('location')!)
@@ -428,7 +428,7 @@ describe('authentication options set from the tree', () => {
       )
     await app.bootstrap()
 
-    const challenged = await app.fetch('/reports', {
+    const challenged = await app.request('/reports', {
       headers: { 'sec-fetch-mode': 'navigate' },
       redirect: 'manual',
     })
@@ -479,14 +479,14 @@ describe('authentication options set from the tree', () => {
     await app.bootstrap()
 
     // A whole round trip: the sign-in route hands out the state and its cookie, the callback spends them.
-    const started = await app.fetch('/auth/callback/login', { redirect: 'manual' })
+    const started = await app.request('/auth/callback/login', { redirect: 'manual' })
     const state = new URL(started.headers.get('location')!).searchParams.get('state')!
     const cookie = started.headers
       .getSetCookie()
       .map(line => line.split(';')[0])
       .join('; ')
 
-    const back = await app.fetch(`/auth/callback?code=c&state=${state}`, { headers: { cookie }, redirect: 'manual' })
+    const back = await app.request(`/auth/callback?code=c&state=${state}`, { headers: { cookie }, redirect: 'manual' })
     expect(back.status).toBe(302)
 
     expect(tokenRequests).toHaveLength(1)
@@ -569,10 +569,10 @@ describe('authentication options set from the tree', () => {
     const { accessToken } = await app.container.get(RefreshTokenService).issue(ada())
     const asBearer = { headers: { authorization: `Bearer ${accessToken}` } }
 
-    expect((await app.fetch('/reports', asBearer)).status).toBe(200)
+    expect((await app.request('/reports', asBearer)).status).toBe(200)
 
     vi.setSystemTime(new Date('2026-01-01T00:01:01Z'))
-    expect((await app.fetch('/reports', asBearer)).status).toBe(401)
+    expect((await app.request('/reports', asBearer)).status).toBe(401)
 
     await app.close()
   })

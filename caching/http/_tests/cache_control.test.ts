@@ -41,7 +41,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-ttl-num/data')
+      const res = await app.request('/cache-cc-ttl-num/data')
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toBe('public, max-age=60')
     })
@@ -60,7 +60,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-ttl-str-m/data')
+      const res = await app.request('/cache-cc-ttl-str-m/data')
       expect(res.headers.get('cache-control')).toBe('public, max-age=300')
     })
 
@@ -78,7 +78,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-ttl-compound/data')
+      const res = await app.request('/cache-cc-ttl-compound/data')
       expect(res.headers.get('cache-control')).toBe('public, max-age=5400')
     })
   })
@@ -98,7 +98,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-smaxage/data')
+      const res = await app.request('/cache-cc-smaxage/data')
       expect(res.headers.get('cache-control')).toContain('max-age=300')
       expect(res.headers.get('cache-control')).toContain('s-maxage=3600')
     })
@@ -119,7 +119,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-swr/data')
+      const res = await app.request('/cache-cc-swr/data')
       expect(res.headers.get('cache-control')).toContain('stale-while-revalidate=30')
     })
 
@@ -137,7 +137,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-sie/data')
+      const res = await app.request('/cache-cc-sie/data')
       expect(res.headers.get('cache-control')).toContain('stale-if-error=3600')
     })
   })
@@ -157,7 +157,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-private/data')
+      const res = await app.request('/cache-cc-private/data')
       expect(res.headers.get('cache-control')).toBe('private, max-age=60')
     })
 
@@ -175,7 +175,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-public/data')
+      const res = await app.request('/cache-cc-public/data')
       expect(res.headers.get('cache-control')).toContain('public')
     })
   })
@@ -195,7 +195,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-nostore/data')
+      const res = await app.request('/cache-cc-nostore/data')
       expect(res.headers.get('cache-control')).toBe('no-store')
     })
 
@@ -213,7 +213,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-nocache/data')
+      const res = await app.request('/cache-cc-nocache/data')
       expect(res.headers.get('cache-control')).toContain('no-cache')
     })
 
@@ -231,7 +231,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-mustrevalidate/data')
+      const res = await app.request('/cache-cc-mustrevalidate/data')
       expect(res.headers.get('cache-control')).toContain('must-revalidate')
     })
 
@@ -249,7 +249,7 @@ describe('Cache-Control headers', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-cc-immutable/data')
+      const res = await app.request('/cache-cc-immutable/data')
       expect(res.headers.get('cache-control')).toContain('immutable')
     })
   })
@@ -268,7 +268,7 @@ describe('Cache-Control headers', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-cc-empty/data')
+    const res = await app.request('/cache-cc-empty/data')
     expect(res.headers.get('cache-control')).toBeNull()
   })
 })
@@ -288,7 +288,7 @@ describe('Vary header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-vary-single/data')
+    const res = await app.request('/cache-vary-single/data')
     expect(res.headers.get('vary')).toBe('Accept-Language')
   })
 
@@ -306,7 +306,7 @@ describe('Vary header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-vary-multi/data')
+    const res = await app.request('/cache-vary-multi/data')
     expect(res.headers.get('vary')).toBe('Accept, Accept-Encoding')
   })
 
@@ -324,7 +324,7 @@ describe('Vary header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-vary-none/data')
+    const res = await app.request('/cache-vary-none/data')
     expect(res.headers.get('vary')).toBeNull()
   })
 })
@@ -344,7 +344,7 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-etag-present/data')
+    const res = await app.request('/cache-etag-present/data')
     expect(res.status).toBe(200)
     expect(res.headers.get('etag')).toMatch(/^"[^"]+"$/)
   })
@@ -363,8 +363,8 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-etag-stable/data')
-    const res2 = await app.fetch('/cache-etag-stable/data')
+    const res1 = await app.request('/cache-etag-stable/data')
+    const res2 = await app.request('/cache-etag-stable/data')
 
     expect(res1.headers.get('etag')).toBe(res2.headers.get('etag'))
   })
@@ -389,8 +389,8 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const resA = await app.fetch('/cache-etag-diff/a')
-    const resB = await app.fetch('/cache-etag-diff/b')
+    const resA = await app.request('/cache-etag-diff/a')
+    const resB = await app.request('/cache-etag-diff/b')
 
     expect(resA.headers.get('etag')).toMatch(/^"[^"]+"$/)
     expect(resB.headers.get('etag')).toMatch(/^"[^"]+"$/)
@@ -411,7 +411,7 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-etag-disabled/data')
+    const res = await app.request('/cache-etag-disabled/data')
     expect(res.headers.get('etag')).toBeNull()
   })
 
@@ -429,7 +429,7 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-etag-nostore/data')
+    const res = await app.request('/cache-etag-nostore/data')
     expect(res.headers.get('etag')).toBeNull()
   })
 
@@ -447,7 +447,7 @@ describe('ETag', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-etag-stream/data')
+    const res = await app.request('/cache-etag-stream/data')
     expect(res.status).toBe(200)
     expect(res.headers.get('etag')).toBeNull()
   })
@@ -468,11 +468,11 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-304-match/data')
+    const res1 = await app.request('/cache-304-match/data')
     const etag = res1.headers.get('etag') as string
     expect(etag).not.toBeNull()
 
-    const res2 = await app.fetch('/cache-304-match/data', { headers: { 'if-none-match': etag } })
+    const res2 = await app.request('/cache-304-match/data', { headers: { 'if-none-match': etag } })
     expect(res2.status).toBe(304)
     expect(await res2.text()).toBe('')
   })
@@ -491,9 +491,9 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-304-nomatch/data')
+    await app.request('/cache-304-nomatch/data')
 
-    const res = await app.fetch('/cache-304-nomatch/data', { headers: { 'if-none-match': '"stale-etag-value"' } })
+    const res = await app.request('/cache-304-nomatch/data', { headers: { 'if-none-match': '"stale-etag-value"' } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ value: 'cached' })
   })
@@ -515,13 +515,13 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-304-stale/data')
+    const res1 = await app.request('/cache-304-stale/data')
     const oldEtag = res1.headers.get('etag') as string
 
     version = 2
     await store.evictByTag('forgotten')
 
-    const res2 = await app.fetch('/cache-304-stale/data', { headers: { 'if-none-match': oldEtag } })
+    const res2 = await app.request('/cache-304-stale/data', { headers: { 'if-none-match': oldEtag } })
     expect(res2.status).toBe(200)
     expect(await res2.json()).toEqual({ version: 2 })
     expect(res2.headers.get('etag')).not.toBe(oldEtag)
@@ -544,16 +544,16 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.bootstrap()
 
-    const etag = (await app.fetch('/cache-304-fresh/data')).headers.get('etag') as string
+    const etag = (await app.request('/cache-304-fresh/data')).headers.get('etag') as string
     await store.evictByTag('forgotten')
 
-    const res = await app.fetch('/cache-304-fresh/data', { headers: { 'if-none-match': etag } })
+    const res = await app.request('/cache-304-fresh/data', { headers: { 'if-none-match': etag } })
     expect(res.status).toBe(304)
     expect(await res.text()).toBe('')
     expect(res.headers.get('x-cache')).toBe('MISS')
 
     // It was stored on the way out all the same: the next plain request is a hit with the body.
-    const hit = await app.fetch('/cache-304-fresh/data')
+    const hit = await app.request('/cache-304-fresh/data')
     expect(hit.headers.get('x-cache')).toBe('HIT')
     expect(await hit.json()).toEqual({ value: 'content' })
   })
@@ -573,8 +573,8 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const etag = (await app.fetch('/cache-304-etag-only/data')).headers.get('etag') as string
-    const res = await app.fetch('/cache-304-etag-only/data', { headers: { 'if-none-match': etag } })
+    const etag = (await app.request('/cache-304-etag-only/data')).headers.get('etag') as string
+    const res = await app.request('/cache-304-etag-only/data', { headers: { 'if-none-match': etag } })
 
     expect(res.status).toBe(304)
     expect(await res.text()).toBe('')
@@ -594,10 +594,10 @@ describe('304 Not Modified', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-304-head/data')
+    const res1 = await app.request('/cache-304-head/data')
     const etag = res1.headers.get('etag') as string
 
-    const res2 = await app.fetch('/cache-304-head/data', { method: 'HEAD', headers: { 'if-none-match': etag } })
+    const res2 = await app.request('/cache-304-head/data', { method: 'HEAD', headers: { 'if-none-match': etag } })
     expect(res2.status).toBe(304)
   })
 })
@@ -620,11 +620,11 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-store-bypass/data')
+    const res1 = await app.request('/cache-store-bypass/data')
     expect(callCount).toBe(1)
     expect(await res1.json()).toEqual({ count: 1 })
 
-    const res2 = await app.fetch('/cache-store-bypass/data')
+    const res2 = await app.request('/cache-store-bypass/data')
     expect(callCount).toBe(1)
     expect(await res2.json()).toEqual({ count: 1 })
   })
@@ -646,8 +646,8 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-store-nostore/data')
-    await app.fetch('/cache-store-nostore/data')
+    await app.request('/cache-store-nostore/data')
+    await app.request('/cache-store-nostore/data')
     expect(callCount).toBe(2)
   })
 
@@ -668,8 +668,8 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-store-post-default/data', { method: 'POST' })
-    await app.fetch('/cache-store-post-default/data', { method: 'POST' })
+    await app.request('/cache-store-post-default/data', { method: 'POST' })
+    await app.request('/cache-store-post-default/data', { method: 'POST' })
     expect(callCount).toBe(2)
   })
 
@@ -690,11 +690,11 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
+    const res1 = await app.request('/cache-store-post-custom/data', { method: 'POST' })
     expect(callCount).toBe(1)
     expect(await res1.json()).toEqual({ count: 1 })
 
-    const res2 = await app.fetch('/cache-store-post-custom/data', { method: 'POST' })
+    const res2 = await app.request('/cache-store-post-custom/data', { method: 'POST' })
     expect(callCount).toBe(1)
     expect(await res2.json()).toEqual({ count: 1 })
   })
@@ -726,15 +726,15 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-store-status/created')
-    const replayed = await app.fetch('/cache-store-status/created')
+    await app.request('/cache-store-status/created')
+    const replayed = await app.request('/cache-store-status/created')
     expect(createdCount).toBe(1)
     expect(replayed.headers.get('x-cache')).toBe('HIT')
     // Served from the store as what it was: a 201, not a 200 carrying a 201's body.
     expect(replayed.status).toBe(201)
 
-    await app.fetch('/cache-store-status/err')
-    const again = await app.fetch('/cache-store-status/err')
+    await app.request('/cache-store-status/err')
+    const again = await app.request('/cache-store-status/err')
     expect(errCount).toBe(2)
     expect(again.status).toBe(400)
     expect(again.headers.get('x-cache')).toBe('MISS')
@@ -758,15 +758,15 @@ describe('Cache store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(store)))
     await app.bootstrap()
 
-    await app.fetch('/cache-store-clear/data')
+    await app.request('/cache-store-clear/data')
     expect(callCount).toBe(1)
 
-    await app.fetch('/cache-store-clear/data')
+    await app.request('/cache-store-clear/data')
     expect(callCount).toBe(1)
 
     await store.evictByTag('forgotten')
 
-    await app.fetch('/cache-store-clear/data')
+    await app.request('/cache-store-clear/data')
     expect(callCount).toBe(2)
   })
 })
@@ -797,10 +797,10 @@ describe('Cache key', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-key-urls/a')
-    await app.fetch('/cache-key-urls/a')
-    await app.fetch('/cache-key-urls/b')
-    await app.fetch('/cache-key-urls/b')
+    await app.request('/cache-key-urls/a')
+    await app.request('/cache-key-urls/a')
+    await app.request('/cache-key-urls/b')
+    await app.request('/cache-key-urls/b')
 
     expect(aCount).toBe(1)
     expect(bCount).toBe(1)
@@ -823,8 +823,8 @@ describe('Cache key', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-key-custom-path/data?v=1')
-    await app.fetch('/cache-key-custom-path/data?v=2')
+    await app.request('/cache-key-custom-path/data?v=1')
+    await app.request('/cache-key-custom-path/data?v=2')
     expect(callCount).toBe(1)
   })
 
@@ -845,12 +845,12 @@ describe('Cache key', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-key-custom-query/data?lang=en')
-    await app.fetch('/cache-key-custom-query/data?lang=pt')
+    await app.request('/cache-key-custom-query/data?lang=en')
+    await app.request('/cache-key-custom-query/data?lang=pt')
     expect(callCount).toBe(2)
 
-    await app.fetch('/cache-key-custom-query/data?lang=en')
-    await app.fetch('/cache-key-custom-query/data?lang=pt')
+    await app.request('/cache-key-custom-query/data?lang=en')
+    await app.request('/cache-key-custom-query/data?lang=pt')
     expect(callCount).toBe(2)
   })
 })
@@ -875,8 +875,8 @@ describe('Decorator scope', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const resA = await app.fetch('/cache-scope-class/a')
-    const resB = await app.fetch('/cache-scope-class/b')
+    const resA = await app.request('/cache-scope-class/a')
+    const resB = await app.request('/cache-scope-class/b')
 
     expect(resA.headers.get('cache-control')).toBe('public, max-age=60')
     expect(resB.headers.get('cache-control')).toBe('public, max-age=60')
@@ -901,8 +901,8 @@ describe('Decorator scope', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const resCached = await app.fetch('/cache-scope-method/cached')
-    const resUncached = await app.fetch('/cache-scope-method/uncached')
+    const resCached = await app.request('/cache-scope-method/cached')
+    const resUncached = await app.request('/cache-scope-method/uncached')
 
     expect(resCached.headers.get('cache-control')).toBe('public, max-age=60')
     expect(resUncached.headers.get('cache-control')).toBeNull()
@@ -923,7 +923,7 @@ describe('Decorator scope', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-scope-replace/route')
+    const res = await app.request('/cache-scope-replace/route')
     expect(res.headers.get('cache-control')).toBe('public, max-age=30')
     expect(res.headers.get('cache-control')).not.toContain('private')
   })
@@ -946,8 +946,8 @@ describe('Undecorated routes', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/cache-undecorated/data')
-    await app.fetch('/cache-undecorated/data')
+    const res1 = await app.request('/cache-undecorated/data')
+    await app.request('/cache-undecorated/data')
 
     expect(res1.headers.get('cache-control')).toBeNull()
     expect(res1.headers.get('etag')).toBeNull()
@@ -970,7 +970,7 @@ describe('@CacheControl(false)', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-false-method/data')
+    const res = await app.request('/cache-false-method/data')
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
     expect(res.headers.get('expires')).toBe('0')
@@ -997,8 +997,8 @@ describe('@CacheControl(false)', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const resA = await app.fetch('/cache-false-class/a')
-    const resB = await app.fetch('/cache-false-class/b')
+    const resA = await app.request('/cache-false-class/a')
+    const resB = await app.request('/cache-false-class/b')
 
     expect(resA.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
     expect(resB.headers.get('cache-control')).toBe('no-store, max-age=0, must-revalidate, proxy-revalidate')
@@ -1021,9 +1021,9 @@ describe('@CacheControl(false)', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/cache-false-nocache/data')
-    await app.fetch('/cache-false-nocache/data')
-    await app.fetch('/cache-false-nocache/data')
+    await app.request('/cache-false-nocache/data')
+    await app.request('/cache-false-nocache/data')
+    await app.request('/cache-false-nocache/data')
     expect(callCount).toBe(3)
   })
 })
@@ -1047,12 +1047,12 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-bug1-etag-false/data')
+      const res1 = await app.request('/cache-bug1-etag-false/data')
       expect(res1.status).toBe(200)
       expect(res1.headers.get('etag')).toBeNull()
       expect(callCount).toBe(1)
 
-      const res2 = await app.fetch('/cache-bug1-etag-false/data')
+      const res2 = await app.request('/cache-bug1-etag-false/data')
       expect(res2.status).toBe(200)
       expect(await res2.json()).toEqual({ count: 1 })
       expect(callCount).toBe(1)
@@ -1072,9 +1072,9 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-bug1-inm-ignored/data')
+      await app.request('/cache-bug1-inm-ignored/data')
 
-      const res = await app.fetch('/cache-bug1-inm-ignored/data', { headers: { 'if-none-match': '"some-etag"' } })
+      const res = await app.request('/cache-bug1-inm-ignored/data', { headers: { 'if-none-match': '"some-etag"' } })
       expect(res.status).toBe(200)
     })
   })
@@ -1097,11 +1097,11 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-bug2-private/data')
+      const res1 = await app.request('/cache-bug2-private/data')
       expect(res1.headers.get('cache-control')).toContain('private')
       expect(callCount).toBe(1)
 
-      const res2 = await app.fetch('/cache-bug2-private/data')
+      const res2 = await app.request('/cache-bug2-private/data')
       expect(await res2.json()).toEqual({ count: 2 })
       expect(callCount).toBe(2)
     })
@@ -1125,8 +1125,8 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
-      await app.fetch('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'pt-BR' } })
+      await app.request('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'en-US' } })
+      await app.request('/cache-bug3-vary-separate/data', { headers: { 'accept-language': 'pt-BR' } })
       expect(callCount).toBe(2)
     })
 
@@ -1147,8 +1147,8 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
-      await app.fetch('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
+      await app.request('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
+      await app.request('/cache-bug3-vary-hit/data', { headers: { 'accept-language': 'en-US' } })
       expect(callCount).toBe(1)
     })
 
@@ -1170,14 +1170,14 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       await app.bootstrap()
 
       // same Accept-Language, different Accept → separate entry
-      await app.fetch('/cache-bug3-vary-multi/data', {
+      await app.request('/cache-bug3-vary-multi/data', {
         headers: { 'accept-language': 'en', accept: 'application/json' },
       })
-      await app.fetch('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'text/html' } })
+      await app.request('/cache-bug3-vary-multi/data', { headers: { 'accept-language': 'en', accept: 'text/html' } })
       expect(callCount).toBe(2)
 
       // exact same headers → cache hit
-      await app.fetch('/cache-bug3-vary-multi/data', {
+      await app.request('/cache-bug3-vary-multi/data', {
         headers: { 'accept-language': 'en', accept: 'application/json' },
       })
       expect(callCount).toBe(2)
@@ -1202,15 +1202,15 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-bug4-cc-nocache/data')
+      await app.request('/cache-bug4-cc-nocache/data')
       expect(callCount).toBe(1)
 
       // Second request — normally would be cached
-      await app.fetch('/cache-bug4-cc-nocache/data')
+      await app.request('/cache-bug4-cc-nocache/data')
       expect(callCount).toBe(1)
 
       // Third request with no-cache — must bypass cache
-      const res = await app.fetch('/cache-bug4-cc-nocache/data', { headers: { 'cache-control': 'no-cache' } })
+      const res = await app.request('/cache-bug4-cc-nocache/data', { headers: { 'cache-control': 'no-cache' } })
       expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1232,10 +1232,10 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-bug4-pragma/data')
+      await app.request('/cache-bug4-pragma/data')
       expect(callCount).toBe(1)
 
-      const res = await app.fetch('/cache-bug4-pragma/data', { headers: { pragma: 'no-cache' } })
+      const res = await app.request('/cache-bug4-pragma/data', { headers: { pragma: 'no-cache' } })
       expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1259,12 +1259,12 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-vary-star/data')
+      const res1 = await app.request('/cache-vary-star/data')
       expect(res1.status).toBe(200)
       expect(res1.headers.get('vary')).toBe('*')
       expect(callCount).toBe(1)
 
-      const res2 = await app.fetch('/cache-vary-star/data')
+      const res2 = await app.request('/cache-vary-star/data')
       expect(res2.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1301,7 +1301,7 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
       await app.bootstrap()
 
-      await app.fetch('/cache-tags/data')
+      await app.request('/cache-tags/data')
       expect(spyStore.hinted).toEqual([['products', 'all']])
       expect(spyStore.stored).toEqual([['products', 'all']])
     })
@@ -1325,13 +1325,13 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
+      const res1 = await app.request('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
       expect(res1.status).toBe(200)
       expect(res1.headers.get('cache-control')).toContain('private')
       expect(callCount).toBe(1)
 
       // Second request — must not be served from cache
-      const res2 = await app.fetch('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
+      const res2 = await app.request('/cache-auth-private/data', { headers: { authorization: 'Bearer token123' } })
       expect(res2.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1353,10 +1353,10 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
+      await app.request('/cache-auth-public-override/data', { headers: { authorization: 'Bearer token123' } })
       expect(callCount).toBe(1)
 
-      const res2 = await app.fetch('/cache-auth-public-override/data', {
+      const res2 = await app.request('/cache-auth-public-override/data', {
         headers: { authorization: 'Bearer token123' },
       })
       expect(res2.status).toBe(200)
@@ -1397,7 +1397,7 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(spyStore)))
       await app.bootstrap()
 
-      await app.fetch('/cache-key-encode/data?a=1', { headers: { 'x-tenant': '{acme corp}' } })
+      await app.request('/cache-key-encode/data?a=1', { headers: { 'x-tenant': '{acme corp}' } })
 
       expect(keySeen).toHaveLength(2)
       expect(keySeen[1]).toBe(keySeen[0])
@@ -1423,15 +1423,15 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-req-nostore/data')
+      await app.request('/cache-req-nostore/data')
       expect(callCount).toBe(1)
 
       // Second request normally would be cached
-      await app.fetch('/cache-req-nostore/data')
+      await app.request('/cache-req-nostore/data')
       expect(callCount).toBe(1)
 
       // Third request with no-store must bypass cache
-      const res = await app.fetch('/cache-req-nostore/data', { headers: { 'cache-control': 'no-store' } })
+      const res = await app.request('/cache-req-nostore/data', { headers: { 'cache-control': 'no-store' } })
       expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1452,9 +1452,9 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-inm-wildcard/data')
+      await app.request('/cache-inm-wildcard/data')
 
-      const res = await app.fetch('/cache-inm-wildcard/data', { headers: { 'if-none-match': '*' } })
+      const res = await app.request('/cache-inm-wildcard/data', { headers: { 'if-none-match': '*' } })
       expect(res.status).toBe(304)
     })
 
@@ -1472,10 +1472,10 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-inm-list/data')
+      const res1 = await app.request('/cache-inm-list/data')
       const etag = res1.headers.get('etag') as string
 
-      const res = await app.fetch('/cache-inm-list/data', {
+      const res = await app.request('/cache-inm-list/data', {
         headers: { 'if-none-match': `"stale-one", ${etag}, "stale-two"` },
       })
       expect(res.status).toBe(304)
@@ -1495,12 +1495,12 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-inm-weak/data')
+      const res1 = await app.request('/cache-inm-weak/data')
       const strongEtag = res1.headers.get('etag') as string
       expect(strongEtag).toMatch(/^"[^"]+"$/)
 
       const weakEtag = `W/${strongEtag}`
-      const res = await app.fetch('/cache-inm-weak/data', { headers: { 'if-none-match': weakEtag } })
+      const res = await app.request('/cache-inm-weak/data', { headers: { 'if-none-match': weakEtag } })
       expect(res.status).toBe(304)
     })
   })
@@ -1520,7 +1520,7 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-proxy-revalidate/data')
+      const res = await app.request('/cache-proxy-revalidate/data')
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toContain('proxy-revalidate')
     })
@@ -1541,7 +1541,9 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-only-if-cached-miss/data', { headers: { 'cache-control': 'only-if-cached' } })
+      const res = await app.request('/cache-only-if-cached-miss/data', {
+        headers: { 'cache-control': 'only-if-cached' },
+      })
       expect(res.status).toBe(504)
     })
 
@@ -1562,10 +1564,12 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-only-if-cached-hit/data')
+      await app.request('/cache-only-if-cached-hit/data')
       expect(callCount).toBe(1)
 
-      const res = await app.fetch('/cache-only-if-cached-hit/data', { headers: { 'cache-control': 'only-if-cached' } })
+      const res = await app.request('/cache-only-if-cached-hit/data', {
+        headers: { 'cache-control': 'only-if-cached' },
+      })
       expect(res.status).toBe(200)
       expect(callCount).toBe(1)
     })
@@ -1586,7 +1590,7 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-no-transform/data')
+      const res = await app.request('/cache-no-transform/data')
       expect(res.status).toBe(200)
       expect(res.headers.get('cache-control')).toContain('no-transform')
     })
@@ -1607,7 +1611,7 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res = await app.fetch('/cache-last-modified/data')
+      const res = await app.request('/cache-last-modified/data')
       expect(Number.isNaN(Date.parse(res.headers.get('last-modified') ?? ''))).toBe(false)
     })
 
@@ -1625,11 +1629,11 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      const res1 = await app.fetch('/cache-ims-match/data')
+      const res1 = await app.request('/cache-ims-match/data')
       const lastModified = res1.headers.get('last-modified') as string
       expect(lastModified).not.toBeNull()
 
-      const res2 = await app.fetch('/cache-ims-match/data', { headers: { 'if-modified-since': lastModified } })
+      const res2 = await app.request('/cache-ims-match/data', { headers: { 'if-modified-since': lastModified } })
       expect(res2.status).toBe(304)
       expect(res2.headers.get('cache-control')).toBe('public, max-age=60')
     })
@@ -1648,9 +1652,9 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-ims-stale/data')
+      await app.request('/cache-ims-stale/data')
 
-      const res = await app.fetch('/cache-ims-stale/data', {
+      const res = await app.request('/cache-ims-stale/data', {
         headers: { 'if-modified-since': new Date(Date.now() - 60_000).toUTCString() },
       })
       expect(res.status).toBe(200)
@@ -1671,11 +1675,11 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-inm-precedence/data')
+      await app.request('/cache-inm-precedence/data')
 
       // The If-Modified-Since alone would yield a 304: it is later than the response. The non-matching
       // If-None-Match is the one evaluated, and the answer is the full response.
-      const res = await app.fetch('/cache-inm-precedence/data', {
+      const res = await app.request('/cache-inm-precedence/data', {
         headers: {
           'if-none-match': '"does-not-match"',
           'if-modified-since': new Date(Date.now() + 60_000).toUTCString(),
@@ -1703,10 +1707,10 @@ describe('the policy at the edges of RFC 9110 and RFC 9111', () => {
       const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
       await app.bootstrap()
 
-      await app.fetch('/cache-req-maxage0/data')
+      await app.request('/cache-req-maxage0/data')
       expect(callCount).toBe(1)
 
-      const res = await app.fetch('/cache-req-maxage0/data', { headers: { 'cache-control': 'max-age=0' } })
+      const res = await app.request('/cache-req-maxage0/data', { headers: { 'cache-control': 'max-age=0' } })
       expect(res.status).toBe(200)
       expect(callCount).toBe(2)
     })
@@ -1753,8 +1757,8 @@ describe('CacheControl builder & container-managed store', () => {
     const app = createWebApplication({ container }).with(HTTPCaching(b => b.store(MapStore)))
     await app.bootstrap()
 
-    await app.fetch('/cache-di-custom-store/data')
-    const res2 = await app.fetch('/cache-di-custom-store/data')
+    await app.request('/cache-di-custom-store/data')
+    const res2 = await app.request('/cache-di-custom-store/data')
 
     const resolved = app.container.get(MapStore) as MapStore
     expect(resolved.ops).toContain('put')
@@ -1779,7 +1783,7 @@ describe('CacheControl builder & container-managed store', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(store).etagGenerator(() => '"builder-etag"')))
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-builder-both/data')
+    const res = await app.request('/cache-builder-both/data')
     expect(res.headers.get('etag')).toBe('"builder-etag"')
     expect(store.ops).toContain('put')
   })
@@ -1802,7 +1806,7 @@ describe('CacheControl builder & container-managed store', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-di-etag/data')
+    const res = await app.request('/cache-di-etag/data')
     expect(res.headers.get('etag')).toBe('"sentinel-etag"')
   })
 
@@ -1824,7 +1828,7 @@ describe('CacheControl builder & container-managed store', () => {
     )
     await app.bootstrap()
 
-    const res = await app.fetch('/cache-di-etag-override/data')
+    const res = await app.request('/cache-di-etag-override/data')
     expect(res.headers.get('etag')).toBe('"route-override"')
   })
 })
@@ -1844,10 +1848,10 @@ describe('X-Cache status header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/xc-basic/data')
+    const res1 = await app.request('/xc-basic/data')
     expect(res1.headers.get('x-cache')).toBe('MISS')
 
-    const res2 = await app.fetch('/xc-basic/data')
+    const res2 = await app.request('/xc-basic/data')
     expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
@@ -1865,10 +1869,10 @@ describe('X-Cache status header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res1 = await app.fetch('/xc-304/data')
+    const res1 = await app.request('/xc-304/data')
     const etag = res1.headers.get('etag') as string
 
-    const res2 = await app.fetch('/xc-304/data', { headers: { 'if-none-match': etag } })
+    const res2 = await app.request('/xc-304/data', { headers: { 'if-none-match': etag } })
     expect(res2.status).toBe(304)
     expect(res2.headers.get('x-cache')).toBe('HIT')
   })
@@ -1887,7 +1891,7 @@ describe('X-Cache status header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/xc-bypass/data', { headers: { 'cache-control': 'no-store' } })
+    const res = await app.request('/xc-bypass/data', { headers: { 'cache-control': 'no-store' } })
     expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 
@@ -1905,7 +1909,7 @@ describe('X-Cache status header', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/xc-false/data')
+    const res = await app.request('/xc-false/data')
     expect(res.headers.get('x-cache')).toBe('BYPASS')
   })
 })
@@ -1928,8 +1932,8 @@ describe('Canonical query keys', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/qk-order/data?a=1&b=2')
-    const res2 = await app.fetch('/qk-order/data?b=2&a=1')
+    await app.request('/qk-order/data?a=1&b=2')
+    const res2 = await app.request('/qk-order/data?b=2&a=1')
 
     expect(callCount).toBe(1)
     expect(res2.headers.get('x-cache')).toBe('HIT')
@@ -1952,8 +1956,8 @@ describe('Canonical query keys', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/qk-values/data?a=1')
-    await app.fetch('/qk-values/data?a=2')
+    await app.request('/qk-values/data?a=1')
+    await app.request('/qk-values/data?a=2')
     expect(callCount).toBe(2)
   })
 })
@@ -1974,9 +1978,9 @@ describe('Age header & request max-age', () => {
     await app.bootstrap()
     vi.useFakeTimers({ toFake: ['Date'] })
 
-    await app.fetch('/age-hit/data')
+    await app.request('/age-hit/data')
     vi.setSystemTime(Date.now() + 3000)
-    const res2 = await app.fetch('/age-hit/data')
+    const res2 = await app.request('/age-hit/data')
 
     expect(res2.headers.get('x-cache')).toBe('HIT')
     expect(res2.headers.get('age')).toBe('3')
@@ -1996,8 +2000,8 @@ describe('Age header & request max-age', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new MemoryHTTPCacheStore())))
     await app.bootstrap()
 
-    await app.fetch('/age-maxage-ok/data')
-    const res2 = await app.fetch('/age-maxage-ok/data', { headers: { 'cache-control': 'max-age=100' } })
+    await app.request('/age-maxage-ok/data')
+    const res2 = await app.request('/age-maxage-ok/data', { headers: { 'cache-control': 'max-age=100' } })
     expect(res2.headers.get('x-cache')).toBe('HIT')
   })
 
@@ -2028,7 +2032,7 @@ describe('Age header & request max-age', () => {
     const app = createWebApplication().with(HTTPCaching(b => b.store(new AgedStore())))
     await app.bootstrap()
 
-    const res = await app.fetch('/age-maxage-stale/data', { headers: { 'cache-control': 'max-age=10' } })
+    const res = await app.request('/age-maxage-stale/data', { headers: { 'cache-control': 'max-age=10' } })
     expect(res.status).toBe(200)
     expect(res.headers.get('x-cache')).toBe('MISS')
     expect(callCount).toBe(1)

@@ -31,7 +31,7 @@ describe('caching is opt-in', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const res = await app.fetch('/optin-plain/data')
+    const res = await app.request('/optin-plain/data')
     expect(res.headers.get('x-cache')).toBeNull()
   })
 
@@ -106,7 +106,7 @@ describe('caching is opt-in', () => {
     close = () => app.close()
     await app.bootstrap()
 
-    const res = await app.fetch('/optin-header/data')
+    const res = await app.request('/optin-header/data')
     expect(res.headers.get('x-edge')).toBe('MISS')
     expect(res.headers.get('x-cache')).toBeNull()
   })

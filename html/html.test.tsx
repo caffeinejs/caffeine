@@ -127,7 +127,7 @@ describe('HTML', () => {
     const app = htmlApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/html/document')
+    const res = await app.request('/html/document')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
@@ -139,7 +139,7 @@ describe('HTML', () => {
     const app = createWebApplication({})
     await app.bootstrap()
 
-    const res = await app.fetch('/html/document')
+    const res = await app.request('/html/document')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<!doctype html><html><body><h1>hello</h1></body></html>')
@@ -151,7 +151,7 @@ describe('HTML', () => {
     const app = htmlApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/html/async')
+    const res = await app.request('/html/async')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)
     expect(await res.text()).toBe('<!doctype html><html><body>hello</body></html>')
@@ -163,7 +163,7 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      expect(await (await app.fetch('/html/document')).text()).toMatch(/^<!doctype html><html>/)
+      expect(await (await app.request('/html/document')).text()).toMatch(/^<!doctype html><html>/)
     })
 
     // A fragment is spliced into an existing document, where a doctype would be invalid markup.
@@ -171,14 +171,14 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      expect(await (await app.fetch('/html/fragment')).text()).toBe('<div>hello</div>')
+      expect(await (await app.request('/html/fragment')).text()).toBe('<div>hello</div>')
     })
 
     it('does not double an authored doctype', async () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      expect(await (await app.fetch('/html/pre-doctyped')).text()).toBe(
+      expect(await (await app.request('/html/pre-doctyped')).text()).toBe(
         '<!doctype html><html><body>hello</body></html>',
       )
     })
@@ -191,7 +191,7 @@ describe('HTML', () => {
     const app = htmlApp({ autoDoctype: false })
     await app.bootstrap()
 
-    const res = await app.fetch('/html/document')
+    const res = await app.request('/html/document')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
@@ -207,7 +207,7 @@ describe('HTML', () => {
 
     await app.bootstrap()
 
-    expect(await (await app.fetch('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
+    expect(await (await app.request('/html/document')).text()).toBe('<html><body><h1>hello</h1></body></html>')
 
     await app.close()
   })
@@ -217,7 +217,7 @@ describe('HTML', () => {
     const app = htmlApp({ autoDoctype: true })
     await app.bootstrap()
 
-    const res = await app.fetch('/html/overridden')
+    const res = await app.request('/html/overridden')
 
     expect(res.headers.get('content-type')).toMatch(/^text\/html; charset=utf-8/)
     expect(await res.text()).toBe('<html><body><h1>hello</h1></body></html>')
@@ -229,7 +229,7 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      const res = await app.fetch('/html/produces')
+      const res = await app.request('/html/produces')
 
       expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
     })
@@ -239,7 +239,7 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      const res = await app.fetch('/html/header-set')
+      const res = await app.request('/html/header-set')
 
       expect(res.headers.get('content-type')).toMatch(/^application\/xhtml\+xml/)
     })
@@ -253,14 +253,14 @@ describe('HTML', () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      expect(await (await app.fetch('/html/escaped')).text()).toBe('<div>&lt;script>alert(1)&lt;/script></div>')
+      expect(await (await app.request('/html/escaped')).text()).toBe('<div>&lt;script>alert(1)&lt;/script></div>')
     })
 
     it('does not escape children that are not marked safe', async () => {
       const app = htmlApp()
       await app.bootstrap()
 
-      expect(await (await app.fetch('/html/unsafe')).text()).toBe('<div><script>alert(1)</script></div>')
+      expect(await (await app.request('/html/unsafe')).text()).toBe('<div><script>alert(1)</script></div>')
     })
   })
 
@@ -270,7 +270,7 @@ describe('HTML', () => {
     const app = htmlApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/html-error/boom')
+    const res = await app.request('/html-error/boom')
 
     expect(res.status).toBe(404)
     expect(res.headers.get('content-type')).toMatch(/^text\/html/)

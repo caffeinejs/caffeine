@@ -74,7 +74,7 @@ async function upload(router: Router, path: string, entries: Array<ME>) {
   await app.bootstrap()
 
   try {
-    return await app.fetch(path, { method: 'POST', headers: multipartHeaders(), body: multipartBody(entries) })
+    return await app.request(path, { method: 'POST', headers: multipartHeaders(), body: multipartBody(entries) })
   } finally {
     await app.close()
   }
@@ -392,7 +392,7 @@ describe('multipart(ctx) on a decorated route', () => {
     const app = multipartApp()
     await app.bootstrap()
 
-    const res = await app.fetch('/hfd1/upload', {
+    const res = await app.request('/hfd1/upload', {
       method: 'POST',
       headers: multipartHeaders(),
       body: multipartBody([{ name: 'avatar', filename: 'photo.jpg', content: 'jpeg', mime: 'image/jpeg' }]),

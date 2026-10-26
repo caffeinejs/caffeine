@@ -226,7 +226,7 @@ afterAll(async () => {
 
 describe('Attachment() names the download', () => {
   it('writes the name both as a plain fallback and as UTF-8 for the clients that read it', async () => {
-    const res = await app.fetch('/files/blob')
+    const res = await app.request('/files/blob')
 
     expect(res.headers.get('content-disposition')).toBe(
       `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
@@ -238,7 +238,7 @@ describe('Attachment() names the download', () => {
   )(
     'writes %s as a plain file name that decodes back exactly, in a header of visible ASCII alone',
     async (_label, i, saved) => {
-      const res = await app.fetch(`/files/named/${i}`)
+      const res = await app.request(`/files/named/${i}`)
 
       const disposition = res.headers.get('content-disposition')!
       expect(res.status).toBe(200)
@@ -250,7 +250,7 @@ describe('Attachment() names the download', () => {
   it.each(names.flatMap(([given, saved], i) => (saved === undefined ? [[JSON.stringify(given), i] as const] : [])))(
     'names no file at all for %s, which leaves nothing a file could be called',
     async (_label, i) => {
-      const res = await app.fetch(`/files/named/${i}`)
+      const res = await app.request(`/files/named/${i}`)
 
       expect(res.status).toBe(200)
       expect(res.headers.get('content-disposition')).toBe('attachment')
@@ -267,13 +267,13 @@ describe('Attachment() names the download', () => {
       `attachment; filename="Q3 report (final).pdf"; filename*=UTF-8''Q3%20report%20%28final%29.pdf`,
     ],
   ])('falls back to a name a client without UTF-8 support can still save: %s', async (name, header) => {
-    const res = await app.fetch(`/files/named/${names.findIndex(([given]) => given === name)}`)
+    const res = await app.request(`/files/named/${names.findIndex(([given]) => given === name)}`)
 
     expect(res.headers.get('content-disposition')).toBe(header)
   })
 
   it('cannot be made to write a header of its own by a name holding a line break', async () => {
-    const res = await app.fetch(`/files/named/${names.findIndex(([given]) => given.startsWith('evil'))}`)
+    const res = await app.request(`/files/named/${names.findIndex(([given]) => given.startsWith('evil'))}`)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('set-cookie')).toBeNull()
@@ -283,31 +283,31 @@ describe('Attachment() names the download', () => {
   })
 
   it("names a File's download after the File", async () => {
-    const res = await app.fetch('/files/file')
+    const res = await app.request('/files/file')
 
     expect(extendedName(res.headers.get('content-disposition')!)).toBe('relatório Q3.pdf')
   })
 
   it("reduces a File's own name to a plain file name too", async () => {
-    const res = await app.fetch('/files/file-with-path')
+    const res = await app.request('/files/file-with-path')
 
     expect(extendedName(res.headers.get('content-disposition')!)).toBe('report.pdf')
   })
 
   it("lets the name given win over the File's own", async () => {
-    const res = await app.fetch('/files/file-renamed')
+    const res = await app.request('/files/file-renamed')
 
     expect(extendedName(res.headers.get('content-disposition')!)).toBe('report.pdf')
   })
 
   it('makes an unnamed body a download all the same, leaving the client to name it', async () => {
-    const res = await app.fetch('/files/unnamed')
+    const res = await app.request('/files/unnamed')
 
     expect(res.headers.get('content-disposition')).toBe('attachment')
   })
 
   it('works from a decorated controller as from a router', async () => {
-    const res = await app.fetch('/files-controller/report')
+    const res = await app.request('/files-controller/report')
 
     expect(res.headers.get('content-disposition')).toBe(
       `attachment; filename="report.pdf"; filename*=UTF-8''report.pdf`,
@@ -319,7 +319,7 @@ describe('Attachment() names the download', () => {
 
 describe('Attachment() writes the validators a client resumes against', () => {
   it('writes the ETag and Last-Modified it was given, and says ranges are served', async () => {
-    const res = await app.fetch('/files/blob')
+    const res = await app.request('/files/blob')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('etag')).toBe(ETAG)
@@ -337,8 +337,8 @@ describe('Attachment() decides the Content-Type', () => {
     ["the Blob's own type when nothing else names one", '/files/blob', PDF],
     ['application/octet-stream for bytes nothing names', '/files/array-buffer', OCTET],
   ])('takes %s, on the whole body and on every range of it', async (_rule, path, type) => {
-    const whole = await app.fetch(path)
-    const part = await app.fetch(path, { headers: { range: 'bytes=10-19' } })
+    const whole = await app.request(path)
+    const part = await app.request(path, { headers: { range: 'bytes=10-19' } })
 
     expect(part.status).toBe(206)
     for (const res of [whole, part]) {
@@ -477,7 +477,7 @@ describe.each([
   ['an ArrayBuffer', '/files/array-buffer', OCTET],
 ])('Attachment() of %s answers a range', (_kind, path, type) => {
   it.each(ranges)('%s with %o', async (range, expected) => {
-    const res = await app.fetch(path, { headers: { range } })
+    const res = await app.request(path, { headers: { range } })
 
     expect(res.headers.get('accept-ranges')).toBe('bytes')
     await expectRangeAnswer(res, expected, SIZE, type)
@@ -490,7 +490,7 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
   const hundred = Array.from({ length: 100 }, (_, i) => [i * 10, i * 10] as const)
 
   it('writes exactly the delimiters, part headers and bytes of the RFC layout, ending with the close delimiter', async () => {
-    const res = await app.fetch('/files/ten', { headers: { range: 'bytes=0-2,7-9' } })
+    const res = await app.request('/files/ten', { headers: { range: 'bytes=0-2,7-9' } })
     const body = Buffer.from(await res.arrayBuffer()).toString('latin1')
     const boundary = /boundary=(.+)$/.exec(res.headers.get('content-type')!)![1]
 
@@ -522,7 +522,7 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
     ["its own type option over the route's", '/files/typed-over-produces', PDF],
     ['a type the handler set', '/files/handler-typed', 'text/markdown'],
   ])('labels every part with %s, the type the whole body goes out under', async (_rule, path, type) => {
-    const res = await app.fetch(path, { headers: { range: 'bytes=0-4,10-14' } })
+    const res = await app.request(path, { headers: { range: 'bytes=0-4,10-14' } })
 
     expect(res.headers.get('content-type')).toMatch(/^multipart\/byteranges; boundary=/)
     await expectRangeAnswer(
@@ -541,7 +541,7 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
 
   // Node drops such a value from the header it writes; written into a part, it would add lines of its own.
   it("never writes a type holding a control character into a part, falling back to the Blob's own", async () => {
-    const res = await app.fetch('/files/handler-typed-badly', { headers: { range: 'bytes=0-4,10-14' } })
+    const res = await app.request('/files/handler-typed-badly', { headers: { range: 'bytes=0-4,10-14' } })
     const body = new Uint8Array(await res.arrayBuffer())
 
     expect(res.status).toBe(206)
@@ -551,22 +551,22 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
 
   it('draws a new boundary for every answer, so no body can be made to hold its own', async () => {
     const [first, second] = await Promise.all(
-      [0, 1].map(() => app.fetch('/files/bytes', { headers: { range: 'bytes=0-4,10-14' } })),
+      [0, 1].map(() => app.request('/files/bytes', { headers: { range: 'bytes=0-4,10-14' } })),
     )
 
     expect(first.headers.get('content-type')).not.toBe(second.headers.get('content-type'))
   })
 
   it('serves up to 100 ranges in one answer, and the whole body to a request for more', async () => {
-    const most = await app.fetch('/files/bytes', { headers: { range: spec(hundred) } })
+    const most = await app.request('/files/bytes', { headers: { range: spec(hundred) } })
     await expectRangeAnswer(most, { status: 206, parts: hundred }, SIZE)
 
-    const tooMany = await app.fetch('/files/bytes', { headers: { range: spec([...hundred, [5, 5]]) } })
+    const tooMany = await app.request('/files/bytes', { headers: { range: spec([...hundred, [5, 5]]) } })
     await expectRangeAnswer(tooMany, { status: 200 }, SIZE)
   })
 
   it('sends a one-byte body whole to two ranges of its one byte, which add up to more than it holds', async () => {
-    const res = await app.fetch('/files/one-byte', { headers: { range: 'bytes=0-0,0-0' } })
+    const res = await app.request('/files/one-byte', { headers: { range: 'bytes=0-0,0-0' } })
 
     await expectRangeAnswer(res, { status: 200 }, 1)
   })
@@ -574,7 +574,7 @@ describe('Attachment() sends several ranges as RFC 9110 §14.6 lays them out', (
 
 describe('Attachment() keeps the content coding a body carries (RFC 9110 §8.4)', () => {
   it('sends a coded body whole to several ranges: a multipart answer cannot carry the coding of what it slices', async () => {
-    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9,20-29' } })
+    const res = await app.request('/files/gzipped', { headers: { range: 'bytes=0-9,20-29' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-encoding')).toBe('gzip')
@@ -583,7 +583,7 @@ describe('Attachment() keeps the content coding a body carries (RFC 9110 §8.4)'
   })
 
   it('serves one range of a coded body as a part of its coded bytes, under the same coding', async () => {
-    const res = await app.fetch('/files/gzipped', { headers: { range: 'bytes=0-9' } })
+    const res = await app.request('/files/gzipped', { headers: { range: 'bytes=0-9' } })
 
     expect(res.status).toBe(206)
     expect(res.headers.get('content-encoding')).toBe('gzip')
@@ -595,7 +595,7 @@ describe('Attachment() keeps the content coding a body carries (RFC 9110 §8.4)'
 describe('Attachment() leaves a range unanswered where one does not apply', () => {
   it('sends an empty body whole, whatever range is asked for', async () => {
     for (const range of ['bytes=0-', 'bytes=-5', 'bytes=0-0', 'bytes=0-1,4-5']) {
-      const res = await app.fetch('/files/empty', { headers: { range } })
+      const res = await app.request('/files/empty', { headers: { range } })
 
       expect(res.status).toBe(200)
       expect(await res.text()).toBe('')
@@ -603,7 +603,7 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
   })
 
   it('answers HEAD with the whole length and the download headers, and no body', async () => {
-    const res = await app.fetch('/files/blob', { method: 'HEAD', headers: { range: 'bytes=0-4' } })
+    const res = await app.request('/files/blob', { method: 'HEAD', headers: { range: 'bytes=0-4' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-length')).toBe(String(SIZE))
@@ -616,7 +616,7 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
   })
 
   it('answers HEAD for several ranges as the whole GET would be answered', async () => {
-    const res = await app.fetch('/files/blob', { method: 'HEAD', headers: { range: 'bytes=0-4,10-14' } })
+    const res = await app.request('/files/blob', { method: 'HEAD', headers: { range: 'bytes=0-4,10-14' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-length')).toBe(String(SIZE))
@@ -625,7 +625,7 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
   })
 
   it('sends the whole body to a POST: ranges are defined for GET alone', async () => {
-    const res = await app.fetch('/files/blob', { method: 'POST', headers: { range: 'bytes=0-4' } })
+    const res = await app.request('/files/blob', { method: 'POST', headers: { range: 'bytes=0-4' } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-range')).toBeNull()
@@ -633,7 +633,7 @@ describe('Attachment() leaves a range unanswered where one does not apply', () =
   })
 
   it('sends a stream whole, and does not offer ranges of a body whose length it does not know', async () => {
-    const res = await app.fetch('/files/stream', { headers: { range: 'bytes=0-4', 'if-range': ETAG } })
+    const res = await app.request('/files/stream', { headers: { range: 'bytes=0-4', 'if-range': ETAG } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('accept-ranges')).toBeNull()
@@ -657,7 +657,7 @@ describe('Attachment() resumes only the body the client already holds part of (I
     ['any validator, when the content has none', '/files/array-buffer', ETAG, 200],
     ['a date, when the content has no Last-Modified', '/files/array-buffer', MODIFIED.toUTCString(), 200],
   ])('given %s', async (_validator, path, ifRange, status) => {
-    const res = await app.fetch(path, { headers: { range: 'bytes=10-19', 'if-range': ifRange } })
+    const res = await app.request(path, { headers: { range: 'bytes=10-19', 'if-range': ifRange } })
 
     // Short of a 206, the whole current body: what the client holds is stale, and a part of the new one would
     // corrupt it.
@@ -671,7 +671,7 @@ describe('Attachment() resumes only the body the client already holds part of (I
     ['a weak ETag', 'W/"report-v1"', 200],
     ['another date', new Date(MODIFIED.getTime() + 1000).toUTCString(), 200],
   ])('serves several ranges together, or none, given %s', async (_validator, ifRange, status) => {
-    const res = await app.fetch('/files/bytes', { headers: { range: 'bytes=10-19,30-39', 'if-range': ifRange } })
+    const res = await app.request('/files/bytes', { headers: { range: 'bytes=10-19,30-39', 'if-range': ifRange } })
 
     await expectRangeAnswer(
       res,
@@ -689,7 +689,7 @@ describe('Attachment() resumes only the body the client already holds part of (I
   })
 
   it('has no effect without a Range', async () => {
-    const res = await app.fetch('/files/bytes', { headers: { 'if-range': ETAG } })
+    const res = await app.request('/files/bytes', { headers: { 'if-range': ETAG } })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-range')).toBeNull()
@@ -701,7 +701,7 @@ describe('Attachment() answers a range only in place of a 200', () => {
     ['a status the route declared', '/files/created', 201, SIZE],
     ['a status the handler set', '/files/missing', 404, 'no such report'.length],
   ])('keeps %s and sends the body whole', async (_source, path, status, length) => {
-    const res = await app.fetch(path, { headers: { range: 'bytes=0-4' } })
+    const res = await app.request(path, { headers: { range: 'bytes=0-4' } })
 
     expect(res.status).toBe(status)
     expect(res.headers.get('content-range')).toBeNull()
@@ -769,7 +769,7 @@ describe('Attachment() answers a client that already holds the content with 304 
     ],
   ])('given %s, on GET and HEAD alike', async (_case, headers) => {
     for (const method of ['GET', 'HEAD']) {
-      const res = await app.fetch('/files/bytes', { method, headers })
+      const res = await app.request('/files/bytes', { method, headers })
 
       expect(res.status).toBe(304)
       expect(res.headers.get('etag')).toBe(ETAG)
@@ -795,7 +795,7 @@ describe('Attachment() answers a client that already holds the content with 304 
     ['a tag, to content that has none', '/files/array-buffer', { 'if-none-match': ETAG }],
     ['a date, to content that has no Last-Modified', '/files/array-buffer', { 'if-modified-since': later }],
   ])('sends the whole body given %s', async (_case, path, headers) => {
-    const res = await app.fetch(path, { headers })
+    const res = await app.request(path, { headers })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).not.toBeNull()
@@ -811,24 +811,24 @@ describe('Attachment() answers a client that already holds the content with 304 
     try {
       // In 2026, 99 is more than 50 years ahead: it is 1999, before the content last changed.
       vi.setSystemTime(new Date('2026-10-21T00:00:00Z'))
-      const in2026 = await app.fetch('/files/bytes', { headers })
+      const in2026 = await app.request('/files/bytes', { headers })
       expect(in2026.status).toBe(200)
       await expectPatternedBody(in2026, 0, SIZE)
 
       // In 2049 it is not: it is 2099, after.
       vi.setSystemTime(new Date('2049-06-01T00:00:00Z'))
-      expect((await app.fetch('/files/bytes', { headers })).status).toBe(304)
+      expect((await app.request('/files/bytes', { headers })).status).toBe(304)
     } finally {
       vi.useRealTimers()
     }
   })
 
   it.each(['node', 'web'])('closes a %s stream it leaves unread, so a file behind one is closed too', async kind => {
-    const changed = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-none-match': '"report-v2"' } })
+    const changed = await app.request(`/files/${kind}-stream`, { headers: { 'if-none-match': '"report-v2"' } })
     expect(changed.status).toBe(200)
     await expectPatternedBody(changed, 0, SIZE)
 
-    const res = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-none-match': ETAG } })
+    const res = await app.request(`/files/${kind}-stream`, { headers: { 'if-none-match': ETAG } })
 
     expect(res.status).toBe(304)
     expect(await res.text()).toBe('')
@@ -837,17 +837,17 @@ describe('Attachment() answers a client that already holds the content with 304 
 
   // Left to reject, the failed close would be an unhandled rejection, which ends a Node process.
   it('answers 304 even when the stream it leaves unread fails as it closes', async () => {
-    const res = await app.fetch('/files/web-stream-failing-close', { headers: { 'if-none-match': ETAG } })
+    const res = await app.request('/files/web-stream-failing-close', { headers: { 'if-none-match': ETAG } })
 
     expect(res.status).toBe(304)
   })
 
   it('leaves a POST, and a status the route set, to their own answer whatever the validators say', async () => {
-    const posted = await app.fetch('/files/blob', { method: 'POST', headers: { 'if-none-match': ETAG } })
+    const posted = await app.request('/files/blob', { method: 'POST', headers: { 'if-none-match': ETAG } })
     expect(posted.status).toBe(200)
     await expectPatternedBody(posted, 0, SIZE)
 
-    const created = await app.fetch('/files/created', { headers: { 'if-none-match': ETAG } })
+    const created = await app.request('/files/created', { headers: { 'if-none-match': ETAG } })
     expect(created.status).toBe(201)
     await expectPatternedBody(created, 0, SIZE)
   })
@@ -886,10 +886,10 @@ describe('Attachment() refuses a client whose precondition no longer holds with 
       { 'if-unmodified-since': 'Thu Oct  1 12:34:55 2026' },
     ],
   ])('given %s, on GET and HEAD alike', async (_case, path, headers) => {
-    const validators = (await app.fetch(path)).headers
+    const validators = (await app.request(path)).headers
 
     for (const method of ['GET', 'HEAD']) {
-      const res = await app.fetch(path, { method, headers })
+      const res = await app.request(path, { method, headers })
 
       await expectPreconditionFailed(res, method)
       expect(res.headers.get('etag')).toBe(validators.get('etag'))
@@ -926,7 +926,7 @@ describe('Attachment() refuses a client whose precondition no longer holds with 
       { 'if-unmodified-since': earlier },
     ],
   ])('sends the whole body given %s', async (_case, path, headers) => {
-    const res = await app.fetch(path, { headers })
+    const res = await app.request(path, { headers })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('content-disposition')).not.toBeNull()
@@ -950,18 +950,18 @@ describe('Attachment() evaluates preconditions in the order RFC 9110 §13.2.2 gi
     ['a failing If-Match before a range: 412, not 206', { 'if-match': '"report-v2"', range: 'bytes=0-9' }],
     ['a failing If-Match before several ranges', { 'if-match': '"report-v2"', range: 'bytes=0-9,20-29' }],
   ])('refuses %s', async (_case, headers) => {
-    await expectPreconditionFailed(await app.fetch('/files/bytes', { headers }), 'GET')
+    await expectPreconditionFailed(await app.request('/files/bytes', { headers }), 'GET')
   })
 
   it('reads If-Unmodified-Since only without If-Match, which decides alone', async () => {
-    const res = await app.fetch('/files/bytes', { headers: { 'if-match': ETAG, 'if-unmodified-since': earlier } })
+    const res = await app.request('/files/bytes', { headers: { 'if-match': ETAG, 'if-unmodified-since': earlier } })
 
     expect(res.status).toBe(200)
     await expectPatternedBody(res, 0, SIZE)
   })
 
   it('serves the range once every precondition holds', async () => {
-    const res = await app.fetch('/files/bytes', {
+    const res = await app.request('/files/bytes', {
       headers: { 'if-match': ETAG, 'if-unmodified-since': later, range: 'bytes=10-19,30-39', 'if-range': ETAG },
     })
 
@@ -979,10 +979,10 @@ describe('Attachment() evaluates preconditions in the order RFC 9110 §13.2.2 gi
   })
 
   it('refuses the same way from an async handler and from a catch handler as from a sync one', async () => {
-    await expectPreconditionFailed(await app.fetch('/files/async-bytes', { headers: { 'if-match': '"x"' } }), 'GET')
-    await expectPreconditionFailed(await app.fetch('/files/stand-in', { headers: { 'if-match': '"x"' } }), 'GET')
+    await expectPreconditionFailed(await app.request('/files/async-bytes', { headers: { 'if-match': '"x"' } }), 'GET')
+    await expectPreconditionFailed(await app.request('/files/stand-in', { headers: { 'if-match': '"x"' } }), 'GET')
 
-    const served = await app.fetch('/files/stand-in', { headers: { 'if-match': '"stand-in-v1"' } })
+    const served = await app.request('/files/stand-in', { headers: { 'if-match': '"stand-in-v1"' } })
     expect(served.status).toBe(200)
     await expectPatternedBody(served, 0, SIZE)
   })
@@ -990,7 +990,7 @@ describe('Attachment() evaluates preconditions in the order RFC 9110 §13.2.2 gi
 
 describe('Attachment() leaves preconditions to the handler where a 412 would come too late', () => {
   it('sends a POST its own answer: the handler already acted, and a 412 now would say it had not', async () => {
-    const res = await app.fetch('/files/blob', { method: 'POST', headers: { 'if-match': '"report-v2"' } })
+    const res = await app.request('/files/blob', { method: 'POST', headers: { 'if-match': '"report-v2"' } })
 
     expect(res.status).toBe(200)
     await expectPatternedBody(res, 0, SIZE)
@@ -1000,7 +1000,7 @@ describe('Attachment() leaves preconditions to the handler where a 412 would com
     ['a status the route declared', '/files/created', 201, SIZE],
     ['a status the handler set', '/files/missing', 404, 'no such report'.length],
   ])('keeps %s and sends the body whole', async (_source, path, status, length) => {
-    const res = await app.fetch(path, { headers: { 'if-match': '"report-v2"', 'if-unmodified-since': 'yesterday' } })
+    const res = await app.request(path, { headers: { 'if-match': '"report-v2"', 'if-unmodified-since': 'yesterday' } })
 
     expect(res.status).toBe(status)
     expect((await res.arrayBuffer()).byteLength).toBe(length)
@@ -1009,20 +1009,20 @@ describe('Attachment() leaves preconditions to the handler where a 412 would com
 
 describe('Attachment() refusing a precondition leaves nothing open and goes through error handling', () => {
   it.each(['node', 'web'])('closes a %s stream it refuses to send', async kind => {
-    const res = await app.fetch(`/files/${kind}-stream`, { headers: { 'if-match': '"report-v2"' } })
+    const res = await app.request(`/files/${kind}-stream`, { headers: { 'if-match': '"report-v2"' } })
 
     await expectPreconditionFailed(res, 'GET')
     expect(opened.at(-1)).toEqual({ kind, closed: true })
   })
 
   it('refuses with 412 even when the stream it closes fails as it closes', async () => {
-    const res = await app.fetch('/files/web-stream-failing-close', { headers: { 'if-match': '"report-v2"' } })
+    const res = await app.request('/files/web-stream-failing-close', { headers: { 'if-match': '"report-v2"' } })
 
     await expectPreconditionFailed(res, 'GET')
   })
 
   it("lets a @Catch handler answer the refusal in the application's own words", async () => {
-    const res = await app.fetch('/files-guarded/report', { headers: { 'if-match': '"report-v0"' } })
+    const res = await app.request('/files-guarded/report', { headers: { 'if-match': '"report-v0"' } })
 
     expect(res.status).toBe(412)
     expect(await res.json()).toEqual({ reason: 'The report changed since it was listed' })
@@ -1036,11 +1036,11 @@ describe('Attachment() serves the clients that ask for parts of a download', () 
       parseByteRanges(res.headers.get('content-type'), new Uint8Array(await res.arrayBuffer()))
 
     // The pieces a first attempt brought, then the gaps between them, asked for against the version they came from.
-    const first = await app.fetch('/files/documents/manager', { headers: { range: 'bytes=0-99,200-599,700-999' } })
+    const first = await app.request('/files/documents/manager', { headers: { range: 'bytes=0-99,200-599,700-999' } })
     const etag = first.headers.get('etag')!
     const pieces = await partsOf(first)
     const gaps = await partsOf(
-      await app.fetch('/files/documents/manager', { headers: { range: 'bytes=100-199,600-699', 'if-range': etag } }),
+      await app.request('/files/documents/manager', { headers: { range: 'bytes=100-199,600-699', 'if-range': etag } }),
     )
 
     expect(pieces.map(part => [part.start, part.end])).toEqual([
@@ -1060,7 +1060,7 @@ describe('Attachment() serves the clients that ask for parts of a download', () 
 
     // The document changes; the same request for the gaps gets the new version whole.
     documents.set('manager', { body: patterned(7 * SIZE, SIZE), etag: '"manual-v2"' })
-    const changed = await app.fetch('/files/documents/manager', {
+    const changed = await app.request('/files/documents/manager', {
       headers: { range: 'bytes=100-199,600-699', 'if-range': etag },
     })
     expect(changed.status).toBe(200)
@@ -1072,10 +1072,10 @@ describe('Attachment() serves the clients that ask for parts of a download', () 
     const size = 64 * 1024
     documents.set('viewer', { body: patterned(0, size), etag: '"viewer-v1"' })
 
-    const trailer = await app.fetch('/files/documents/viewer', { headers: { range: 'bytes=-1024' } })
+    const trailer = await app.request('/files/documents/viewer', { headers: { range: 'bytes=-1024' } })
     await expectRangeAnswer(trailer, { status: 206, start: size - 1024, end: size - 1 }, size)
 
-    const pieces = await app.fetch('/files/documents/viewer', {
+    const pieces = await app.request('/files/documents/viewer', {
       headers: { range: 'bytes=40000-40999,1000-1999,63000-63999', 'if-range': '"viewer-v1"' },
     })
     await expectRangeAnswer(
@@ -1096,17 +1096,17 @@ describe('Attachment() serves the clients that ask for parts of a download', () 
   it('lets a sync client download only the version it listed, and fetch again once it is told it changed', async () => {
     documents.set('sync', { body: BODY, etag: '"sync-v1"' })
 
-    const listed = await app.fetch('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } })
+    const listed = await app.request('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } })
     expect(listed.status).toBe(200)
     await expectPatternedBody(listed, 0, SIZE)
 
     documents.set('sync', { body: patterned(3 * SIZE, SIZE), etag: '"sync-v2"' })
     await expectPreconditionFailed(
-      await app.fetch('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } }),
+      await app.request('/files/documents/sync', { headers: { 'if-match': '"sync-v1"' } }),
       'GET',
     )
 
-    const fresh = await app.fetch('/files/documents/sync')
+    const fresh = await app.request('/files/documents/sync')
     expect(fresh.headers.get('etag')).toBe('"sync-v2"')
     await expectPatternedBody(fresh, 3 * SIZE, SIZE)
   })

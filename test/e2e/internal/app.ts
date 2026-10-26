@@ -6,7 +6,7 @@ import { createWebApplication } from '@caffeinejs/http/fastify'
 /**
  * Starts an application on a real socket for the authentication e2e specs.
  *
- * The specs drive it over HTTP with {@link Browser}, never through `app.fetch()`: an injected request opens no
+ * The specs drive it over HTTP with {@link Browser}, never through `app.request()`: an injected request opens no
  * socket, so nothing about header limits, cookie handling or a redirect chain is exercised by one.
  */
 

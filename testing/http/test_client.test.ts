@@ -454,7 +454,7 @@ describe('testClient()', () => {
       await client.$close()
 
       // A closed application refuses to serve; readying it again does not bring it back.
-      await expect(app.fetch('/pets')).rejects.toThrow()
+      await expect(app.request('/pets')).rejects.toThrow()
     })
 
     it('should close once, however many times it is asked', async () => {

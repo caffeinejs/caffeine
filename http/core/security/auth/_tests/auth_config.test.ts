@@ -105,13 +105,13 @@ describe('authentication configuration', () => {
 
     await app.bootstrap()
 
-    const withEnvSecret = await app.fetch('/protected', {
+    const withEnvSecret = await app.request('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
     })
     expect(withEnvSecret.status).toBe(200)
 
     // The code-set secret is a default, and configuration replaced it outright.
-    const withCodeSecret = await app.fetch('/protected', {
+    const withCodeSecret = await app.request('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(CODE_SECRET)}` },
     })
     expect(withCodeSecret.status).toBe(401)
@@ -126,7 +126,7 @@ describe('authentication configuration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/protected', {
+    const res = await app.request('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(CODE_SECRET)}` },
     })
     expect(res.status).toBe(200)
@@ -183,7 +183,7 @@ describe('authentication configuration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/protected')
+    const res = await app.request('/protected')
     expect(res.headers.get('www-authenticate')).toContain('realm="From Config"')
 
     // The descriptor is computed from the merged options too, so the document describes the real cookie.
@@ -245,7 +245,7 @@ describe('authentication configuration', () => {
 
     await app.bootstrap()
 
-    await app.fetch('/protected', {
+    await app.request('/protected', {
       headers: { authorization: `Basic ${Buffer.from('u:p').toString('base64')}` },
     })
     expect(validated).toBe(1)
@@ -278,7 +278,7 @@ describe('authentication configuration', () => {
 
     await app.bootstrap()
 
-    const res = await app.fetch('/protected', {
+    const res = await app.request('/protected', {
       headers: { authorization: `Bearer ${await tokenSignedWith(ENV_SECRET)}` },
     })
     expect(res.status).toBe(200)
@@ -332,7 +332,7 @@ describe('authentication configuration', () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'false' })
       await app.bootstrap()
 
-      const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
+      const res = await app.request('/protected', { headers: { authorization: 'Bearer not-a-token' } })
 
       expect(res.status).toBe(401)
       expect(res.headers.get('www-authenticate')).toBe('Bearer error="invalid_token"')
@@ -342,7 +342,7 @@ describe('authentication configuration', () => {
       const app = appFrom({ AUTH__SCHEMES__JWT__INCLUDE_ERROR_DETAILS: 'true' })
       await app.bootstrap()
 
-      const res = await app.fetch('/protected', { headers: { authorization: 'Bearer not-a-token' } })
+      const res = await app.request('/protected', { headers: { authorization: 'Bearer not-a-token' } })
 
       expect(res.headers.get('www-authenticate')).toMatch(/error_description=/)
     })
@@ -397,7 +397,7 @@ describe('authentication configuration', () => {
 
       await app.bootstrap()
 
-      const res = await app.fetch('/protected', { headers: { cookie: `caf.session=${sealed}` } })
+      const res = await app.request('/protected', { headers: { cookie: `caf.session=${sealed}` } })
       expect(res.status).toBe(200)
 
       const reissued = res.headers.getSetCookie().find(line => line.startsWith('caf.session='))!
@@ -406,7 +406,7 @@ describe('authentication configuration', () => {
       expect(reissued).toContain('Priority=High')
 
       const cookie = reissued.slice(0, reissued.indexOf(';'))
-      expect((await app.fetch('/protected', { headers: { cookie } })).headers.getSetCookie()).toEqual([])
+      expect((await app.request('/protected', { headers: { cookie } })).headers.getSetCookie()).toEqual([])
 
       await app.close()
     })
@@ -449,7 +449,7 @@ describe('authentication configuration', () => {
       await app.bootstrap()
 
       // The sign-in route follows the configured callback, and what it sends the provider is the configured client.
-      const res = await app.fetch('/signin/callback/login', { redirect: 'manual' })
+      const res = await app.request('/signin/callback/login', { redirect: 'manual' })
       expect(res.status).toBe(302)
 
       const authorization = new URL(res.headers.get('location')!)

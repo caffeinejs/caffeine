@@ -102,7 +102,7 @@ describe('ctx.req.cookie()', () => {
   it('reads a cookie with nothing registered by the application', async () => {
     const app = await ready(createWebApplication().mount(page()))
 
-    const response = await app.fetch('/page', { headers: { cookie: 'session=abc' } })
+    const response = await app.request('/page', { headers: { cookie: 'session=abc' } })
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ session: 'abc' })
@@ -111,7 +111,7 @@ describe('ctx.req.cookie()', () => {
   it('answers null for a cookie the request did not send', async () => {
     const app = await ready(createWebApplication().mount(page()))
 
-    expect(await (await app.fetch('/page')).json()).toEqual({ session: null })
+    expect(await (await app.request('/page')).json()).toEqual({ session: null })
   })
 
   // Where an authentication scheme reads one: an `onRequest` hook of a plugin installed after the cookies.
@@ -129,7 +129,7 @@ describe('ctx.req.cookie()', () => {
 
     const app = await ready(createWebApplication().with(readsEarly).mount(page()))
 
-    await app.fetch('/page', { headers: { cookie: 'session=abc' } })
+    await app.request('/page', { headers: { cookie: 'session=abc' } })
 
     expect(early).toBe('abc')
   })
@@ -144,7 +144,7 @@ describe('ctx.req.cookie()', () => {
         .mount(routes),
     )
 
-    const response = await app.fetch('/both', { headers: { cookie: 'a=x; b=y' } })
+    const response = await app.request('/both', { headers: { cookie: 'a=x; b=y' } })
 
     expect(await response.json()).toEqual({ a: 'X', all: { a: 'X', b: 'Y' } })
     expect(decoded).toBe(2)
@@ -164,7 +164,7 @@ describe('ctx.req.cookie()', () => {
         .mount(routes),
     )
 
-    const response = await app.fetch('/skip', {
+    const response = await app.request('/skip', {
       headers: { cookie: `a=unreadable; a=${sign('planted', SECRET)}; b=1` },
     })
 
@@ -180,9 +180,9 @@ describe('signed cookies', () => {
         .mount(signing(), reading()),
     )
 
-    const tok = cookieValue(await app.fetch('/sign'), 'tok')!
+    const tok = cookieValue(await app.request('/sign'), 'tok')!
 
-    expect(await (await app.fetch('/read', { headers: { cookie: `tok=${tok}` } })).json()).toEqual({ tok: 'value' })
+    expect(await (await app.request('/read', { headers: { cookie: `tok=${tok}` } })).json()).toEqual({ tok: 'value' })
   })
 
   // A cookie issued before the move away from @fastify/cookie must still verify after it.
@@ -193,7 +193,7 @@ describe('signed cookies', () => {
         .mount(signing()),
     )
 
-    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe(sign('value', SECRET))
+    expect(cookieValue(await app.request('/sign'), 'tok')).toBe(sign('value', SECRET))
   })
 
   // The secret belongs in the environment, so the point of the config node is that it reaches the signer.
@@ -208,7 +208,7 @@ describe('signed cookies', () => {
         .mount(reading()),
     )
 
-    const response = await app.fetch('/read', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
+    const response = await app.request('/read', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
 
     expect(await response.json()).toEqual({ tok: 'value' })
   })
@@ -225,7 +225,7 @@ describe('signed cookies', () => {
         .mount(reading()),
     )
 
-    const read = async (signed: string) => (await app.fetch('/read', { headers: { cookie: `tok=${signed}` } })).json()
+    const read = async (signed: string) => (await app.request('/read', { headers: { cookie: `tok=${signed}` } })).json()
 
     expect(await read(sign('value', SECRET))).toEqual({ tok: 'value' })
     expect(await read(sign('value', OLDER))).toEqual({ tok: false })
@@ -243,10 +243,13 @@ describe('signed cookies', () => {
         .mount(signing(), reading()),
     )
 
-    expect(await (await app.fetch('/read', { headers: { cookie: `tok=${sign('value', OLDER)}` } })).json()).toEqual({
+    expect(await (await app.request('/read', { headers: { cookie: `tok=${sign('value', OLDER)}` } })).json()).toEqual({
       tok: 'value',
     })
-    expect(unsign(cookieValue(await app.fetch('/sign'), 'tok')!, SECRET)).toMatchObject({ valid: true, value: 'value' })
+    expect(unsign(cookieValue(await app.request('/sign'), 'tok')!, SECRET)).toMatchObject({
+      valid: true,
+      value: 'value',
+    })
   })
 
   it('signs with the algorithm chosen', async () => {
@@ -256,7 +259,7 @@ describe('signed cookies', () => {
         .mount(signing()),
     )
 
-    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe(sign('value', SECRET, 'sha512'))
+    expect(cookieValue(await app.request('/sign'), 'tok')).toBe(sign('value', SECRET, 'sha512'))
   })
 
   // The escape hatch: a secret of the call's own — a tenant's — in place of the server's.
@@ -267,10 +270,10 @@ describe('signed cookies', () => {
         .mount(signing({ secret: TENANT }), reading(TENANT)),
     )
 
-    const tok = cookieValue(await app.fetch('/sign'), 'tok')!
+    const tok = cookieValue(await app.request('/sign'), 'tok')!
 
     expect(tok).toBe(sign('value', TENANT))
-    expect(await (await app.fetch('/read', { headers: { cookie: `tok=${tok}` } })).json()).toEqual({ tok: 'value' })
+    expect(await (await app.request('/read', { headers: { cookie: `tok=${tok}` } })).json()).toEqual({ tok: 'value' })
   })
 
   // `false` says the cookie came and did not verify; `undefined` says it never came.
@@ -283,7 +286,9 @@ describe('signed cookies', () => {
         .mount(routes),
     )
 
-    const response = await app.fetch('/all', { headers: { cookie: `good=${sign('value', SECRET)}; forged=value.sig` } })
+    const response = await app.request('/all', {
+      headers: { cookie: `good=${sign('value', SECRET)}; forged=value.sig` },
+    })
 
     expect(await response.json()).toEqual({ good: 'value', forged: false })
   })
@@ -295,7 +300,7 @@ describe('signed cookies', () => {
         .mount(reading()),
     )
 
-    expect(await (await app.fetch('/read')).json()).toEqual({ tok: null })
+    expect(await (await app.request('/read')).json()).toEqual({ tok: null })
   })
 
   it('refuses a signed cookie with nothing to sign it with, where it is set', async () => {
@@ -306,7 +311,7 @@ describe('signed cookies', () => {
         .mount(signing()),
     )
 
-    const response = await app.fetch('/sign')
+    const response = await app.request('/sign')
 
     expect(response.status).toBe(500)
     expect(response.headers.getSetCookie()).toEqual([])
@@ -322,7 +327,7 @@ describe('signed cookies', () => {
         .mount(settingSigned('v'.repeat(4096 - 'tok'.length))),
     )
 
-    expect(await (await app.fetch('/set')).json()).toEqual({
+    expect(await (await app.request('/set')).json()).toEqual({
       refused: 'ErrInvalidCookie',
       message: 'Cannot set cookie "tok": its name and value come to 4140 bytes, past the 4096 a browser keeps',
     })
@@ -352,7 +357,7 @@ describe('ctx.req.unsignCookie()', () => {
   it('finds nothing to renew in a value the first secret signed', async () => {
     const app = await rotated()
 
-    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
+    const response = await app.request('/renew', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
 
     expect(await response.json()).toEqual({ valid: true, renew: false, value: 'value' })
     expect(response.headers.getSetCookie()).toEqual([])
@@ -361,7 +366,7 @@ describe('ctx.req.unsignCookie()', () => {
   it('renews a value an older secret signed, under the first', async () => {
     const app = await rotated()
 
-    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', OLDER)}` } })
+    const response = await app.request('/renew', { headers: { cookie: `tok=${sign('value', OLDER)}` } })
 
     expect(await response.json()).toEqual({ valid: true, renew: true, value: 'value' })
     expect(unsign(cookieValue(response, 'tok')!, SECRET)).toEqual({ valid: true, renew: false, value: 'value' })
@@ -370,7 +375,7 @@ describe('ctx.req.unsignCookie()', () => {
   it('answers a value that does not verify as such, without rejecting', async () => {
     const app = await rotated()
 
-    const response = await app.fetch('/renew', { headers: { cookie: 'tok=value.forged' } })
+    const response = await app.request('/renew', { headers: { cookie: 'tok=value.forged' } })
 
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ valid: false, renew: false, value: null })
@@ -380,7 +385,7 @@ describe('ctx.req.unsignCookie()', () => {
   it('verifies with the secrets the call hands over', async () => {
     const app = await ready(createWebApplication().mount(renewing([SECRET, TENANT])))
 
-    const response = await app.fetch('/renew', { headers: { cookie: `tok=${sign('value', TENANT)}` } })
+    const response = await app.request('/renew', { headers: { cookie: `tok=${sign('value', TENANT)}` } })
 
     expect(await response.json()).toEqual({ valid: true, renew: true, value: 'value' })
     expect(unsign(cookieValue(response, 'tok')!, SECRET)).toEqual({ valid: true, renew: false, value: 'value' })
@@ -408,8 +413,8 @@ describe('a signer of the application', () => {
         .mount(signing(), reading()),
     )
 
-    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
-    expect(await (await app.fetch('/read', { headers: { cookie: 'tok=eulav~' } })).json()).toEqual({ tok: 'value' })
+    expect(cookieValue(await app.request('/sign'), 'tok')).toBe('eulav~')
+    expect(await (await app.request('/read', { headers: { cookie: 'tok=eulav~' } })).json()).toEqual({ tok: 'value' })
   })
 
   // Resolved as the server starts, once: nothing on a request's path builds or looks up a signer.
@@ -425,7 +430,7 @@ describe('a signer of the application', () => {
     )
 
     for (let i = 0; i < 3; i++) {
-      expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
+      expect(cookieValue(await app.request('/sign'), 'tok')).toBe('eulav~')
     }
     expect(built).toBe(1)
   })
@@ -474,7 +479,7 @@ describe('a signer of the application', () => {
         .mount(signing()),
     )
 
-    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
+    expect(cookieValue(await app.request('/sign'), 'tok')).toBe('eulav~')
   })
 
   // The algorithm is the built-in signer's: written beside a signer of the application's own, it would go unused.
@@ -495,7 +500,7 @@ describe('a signer of the application', () => {
         .mount(signing()),
     )
 
-    expect(cookieValue(await app.fetch('/sign'), 'tok')).toBe('eulav~')
+    expect(cookieValue(await app.request('/sign'), 'tok')).toBe('eulav~')
   })
 
   // The built-in signer handed over without a secret signs only with one a call brings, as `.secret()` left unset does:
@@ -507,7 +512,7 @@ describe('a signer of the application', () => {
         .mount(settingSigned('value')),
     )
 
-    expect(await (await app.fetch('/set')).json()).toMatchObject({ refused: 'ErrCookieConfiguration' })
+    expect(await (await app.request('/set')).json()).toMatchObject({ refused: 'ErrCookieConfiguration' })
   })
 })
 
@@ -525,7 +530,7 @@ describe('writing cookies', () => {
         .mount(setting),
     )
 
-    expect((await app.fetch('/set')).headers.getSetCookie()).toEqual([
+    expect((await app.request('/set')).headers.getSetCookie()).toEqual([
       'session=value; Path=/scoped; HttpOnly; SameSite=Lax',
     ])
   })
@@ -540,7 +545,7 @@ describe('writing cookies', () => {
 
     const app = await ready(createWebApplication().mount(routes))
 
-    expect((await app.fetch('/again')).headers.getSetCookie()).toEqual(['session=fresh; Path=/; SameSite=Lax'])
+    expect((await app.request('/again')).headers.getSetCookie()).toEqual(['session=fresh; Path=/; SameSite=Lax'])
   })
 
   // Merged, never replaced: what the route put there itself goes out too, once.
@@ -560,12 +565,12 @@ describe('writing cookies', () => {
 
     const app = await ready(createWebApplication().mount(routes))
 
-    expect((await app.fetch('/merge/appended')).headers.getSetCookie()).toEqual([
+    expect((await app.request('/merge/appended')).headers.getSetCookie()).toEqual([
       'first=1',
       'second=2',
       'third=3; Path=/; SameSite=Lax',
     ])
-    expect((await app.fetch('/merge/raw')).headers.getSetCookie()).toEqual(['raw=1', 'ours=2; Path=/; SameSite=Lax'])
+    expect((await app.request('/merge/raw')).headers.getSetCookie()).toEqual(['raw=1', 'ours=2; Path=/; SameSite=Lax'])
   })
 
   it('writes the cookies of a HEAD request', async () => {
@@ -576,7 +581,7 @@ describe('writing cookies', () => {
 
     const app = await ready(createWebApplication().mount(routes))
 
-    expect((await app.fetch('/head', { method: 'HEAD' })).headers.getSetCookie()).toEqual([
+    expect((await app.request('/head', { method: 'HEAD' })).headers.getSetCookie()).toEqual([
       'seen=yes; Path=/; SameSite=Lax',
     ])
   })
@@ -593,10 +598,10 @@ describe('writing cookies', () => {
         .mount(routes),
     )
 
-    expect((await app.fetch('/auto', { headers: { 'x-forwarded-proto': 'https' } })).headers.getSetCookie()).toEqual([
+    expect((await app.request('/auto', { headers: { 'x-forwarded-proto': 'https' } })).headers.getSetCookie()).toEqual([
       'id=v; Path=/; Secure; SameSite=Lax',
     ])
-    expect((await app.fetch('/auto')).headers.getSetCookie()).toEqual(['id=v; Path=/; SameSite=Lax'])
+    expect((await app.request('/auto')).headers.getSetCookie()).toEqual(['id=v; Path=/; SameSite=Lax'])
   })
 
   // A proxy may write the scheme `HTTPS`. Without `Secure`, the browser would also send the cookie over plain HTTP.
@@ -611,7 +616,7 @@ describe('writing cookies', () => {
         .server(() => ({ factory: { trustProxy: true } }))
         .mount(routes),
     )
-    const res = await app.fetch('/auto-case', { headers: { 'x-forwarded-proto': 'HTTPS' } })
+    const res = await app.request('/auto-case', { headers: { 'x-forwarded-proto': 'HTTPS' } })
 
     expect(res.headers.getSetCookie()).toEqual(['id=v; Path=/; Secure; SameSite=Lax'])
   })
@@ -630,7 +635,7 @@ describe('writing cookies', () => {
         .mount(routes),
     )
 
-    expect((await app.fetch('/host')).status).toBe(500)
+    expect((await app.request('/host')).status).toBe(500)
     expect(loggedError(logged, 'a "__Host-" cookie needs Secure, Path=/ and no Domain')).toBe(true)
   })
 })
@@ -659,7 +664,7 @@ describe('cookies set late', () => {
   it('writes an unsigned cookie a later onSend hook sets', async () => {
     const app = await ready(createWebApplication().with(settingOnSend()).mount(answer()))
 
-    expect((await app.fetch('/answer')).headers.getSetCookie()).toEqual(['late=v; Path=/; SameSite=Lax'])
+    expect((await app.request('/answer')).headers.getSetCookie()).toEqual(['late=v; Path=/; SameSite=Lax'])
   })
 
   // Signing takes a turn of the event loop the headers do not wait for once the cookies were written.
@@ -673,7 +678,7 @@ describe('cookies set late', () => {
         .mount(answer()),
     )
 
-    expect((await app.fetch('/answer')).status).toBe(500)
+    expect((await app.request('/answer')).status).toBe(500)
     expect(loggedError(logged, 'Cannot set cookie "late" signed: the response\'s cookies are already written')).toBe(
       true,
     )
@@ -697,7 +702,7 @@ describe('cookies set late', () => {
 
     const app = await ready(createWebApplication().with(onResponse).mount(answer()))
 
-    await app.fetch('/answer')
+    await app.request('/answer')
 
     expect(refused).toEqual([expect.objectContaining({ name: 'ErrCookieTooLate' })])
   })
@@ -728,7 +733,7 @@ describe('a signer that fails', () => {
         .mount(routes),
     )
 
-    const response = await app.fetch('/batch')
+    const response = await app.request('/batch')
 
     expect(response.status).toBe(500)
     expect(response.headers.getSetCookie()).toEqual([])
@@ -768,11 +773,11 @@ describe('a signer that fails', () => {
 
     const app = await ready(createWebApplication().cookie(k => k.signer(new FailingSigner())))
 
-    const byValue = await app.fetch('/cookie-signer-fails/value')
+    const byValue = await app.request('/cookie-signer-fails/value')
     expect(byValue.status).toBe(503)
     expect(await byValue.json()).toEqual({ caught: 'value' })
 
-    const byContext = await app.fetch('/cookie-signer-fails/context')
+    const byContext = await app.request('/cookie-signer-fails/context')
     expect(byContext.status).toBe(503)
     expect(await byContext.json()).toEqual({ caught: 'context' })
   })
@@ -824,7 +829,7 @@ describe('servers', () => {
         }),
     )
 
-    expect((await app.fetch('/early')).status).toBe(500)
+    expect((await app.request('/early')).status).toBe(500)
     expect(loggedError(logged, 'this route was registered before the cookie plugin')).toBe(true)
   })
 })
@@ -850,14 +855,14 @@ describe('alongside @fastify/cookie', () => {
     it(`writes both plugins' cookies, registered through ${where}`, async () => {
       const app = await ready(application.cookie(k => k.secret(SECRET)).mount(both()))
 
-      const ours = await app.fetch('/both', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
+      const ours = await app.request('/both', { headers: { cookie: `tok=${sign('value', SECRET)}` } })
       const lines = ours.headers.getSetCookie()
 
       expect(lines).toContain('ours=y; Path=/; SameSite=Lax')
       expect(lines.some(line => line.startsWith('theirs=x'))).toBe(true)
       expect(await ours.json()).toEqual({ tok: 'value' })
 
-      const theirs = await app.fetch('/both', { headers: { cookie: `tok=${sign('value', OLDER)}` } })
+      const theirs = await app.request('/both', { headers: { cookie: `tok=${sign('value', OLDER)}` } })
       expect(await theirs.json()).toEqual({ tok: false })
     })
   }
@@ -876,7 +881,7 @@ describe('cookies turned off', () => {
         .mount(page()),
     )
 
-    const response = await app.fetch('/page', { headers: { cookie: 'session=abc' } })
+    const response = await app.request('/page', { headers: { cookie: 'session=abc' } })
     const text = await response.text()
 
     expect(response.status).toBe(500)
@@ -906,7 +911,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication())
 
-    const res = await app.fetch('/ck/session', { headers: { Cookie: 'session=abc123' } })
+    const res = await app.request('/ck/session', { headers: { Cookie: 'session=abc123' } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ session: 'abc123' })
   })
@@ -924,7 +929,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication())
 
-    const res = await app.fetch('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
+    const res = await app.request('/ck/all', { headers: { Cookie: 'a=1; b=2' } })
     expect(res.status).toBe(200)
     expect(await res.json()).toMatchObject({ a: '1', b: '2' })
   })
@@ -942,7 +947,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication().cookie(k => k.secret(SECRET)))
 
-    const res = await app.fetch('/ck/signed', { headers: { Cookie: `tok=${sign('myvalue', SECRET)}` } })
+    const res = await app.request('/ck/signed', { headers: { Cookie: `tok=${sign('myvalue', SECRET)}` } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ tok: 'myvalue' })
   })
@@ -960,7 +965,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication().cookie(k => k.secret(SECRET)))
 
-    const res = await app.fetch('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
+    const res = await app.request('/ck/tampered', { headers: { Cookie: 'tok=badvalue.invalidsig' } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ valid: false })
   })
@@ -978,7 +983,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication().cookie(k => k.secret(SECRET)))
 
-    const res = await app.fetch('/ck/all-signed', { headers: { Cookie: `a=${sign('one', SECRET)}; b=badvalue.sig` } })
+    const res = await app.request('/ck/all-signed', { headers: { Cookie: `a=${sign('one', SECRET)}; b=badvalue.sig` } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ a: 'one', b: false })
   })
@@ -997,7 +1002,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication())
 
-    const res = await app.fetch('/ck/set')
+    const res = await app.request('/ck/set')
     expect(res.status).toBe(200)
     expect(res.headers.get('set-cookie')).toBe('session=hello; Path=/; HttpOnly; SameSite=Lax')
   })
@@ -1015,7 +1020,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication().cookie(k => k.secret(SECRET)))
 
-    const res = await app.fetch('/ck/read', { headers: { Cookie: `tok=${sign('reqvalue', SECRET)}` } })
+    const res = await app.request('/ck/read', { headers: { Cookie: `tok=${sign('reqvalue', SECRET)}` } })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ value: 'reqvalue' })
   })
@@ -1034,7 +1039,7 @@ describe('the cookie pickers', () => {
 
     const app = await ready(createWebApplication())
 
-    const res = await app.fetch('/ck/delete')
+    const res = await app.request('/ck/delete')
     expect(res.status).toBe(200)
     expect(res.headers.get('set-cookie')).toBe(
       'session=; Max-Age=0; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax',

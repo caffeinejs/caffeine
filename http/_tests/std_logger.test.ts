@@ -81,7 +81,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     const app = createWebApplication({ logger: recorder as unknown as Logger })
     await app.bootstrap()
 
-    const res = await app.fetch('/logged/ping')
+    const res = await app.request('/logged/ping')
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true })
@@ -109,7 +109,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     })
     await app.bootstrap()
 
-    await app.fetch('/logging/write')
+    await app.request('/logging/write')
 
     const written = recorder.records.find(record => record.args[1] === 'per-request record')
 
@@ -155,7 +155,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     })
 
     await app.bootstrap()
-    await app.fetch('/wired/ping')
+    await app.request('/wired/ping')
 
     const written = recorder.records.find(record => record.args[1] === 'wired per-request record')
 
@@ -188,7 +188,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
       })
 
     await app.bootstrap()
-    await app.fetch('/levelled/ping')
+    await app.request('/levelled/ping')
 
     expect(app.instance.log.level).toBe('debug')
     expect(perRequestLevel).toBe('debug')
@@ -211,7 +211,7 @@ describe('a Caffeine Logger as Fastify’s server logger', () => {
     const app = createWebApplication({ logger: recorder as unknown as Logger })
     await app.bootstrap()
 
-    await app.fetch('/quiet/ping')
+    await app.request('/quiet/ping')
 
     expect(recorder.records.map(record => record.args[1])).not.toContain('incoming request')
     expect(recorder.records.map(record => record.args[1])).not.toContain('request completed')

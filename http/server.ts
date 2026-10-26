@@ -14,12 +14,13 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
   get address(): ServerAddress | undefined
 
   /**
-   * Answers `request` as it would one off the network, whether or not it is listening: a pass-through, not a client.
+   * Sends `request` to this server without a socket, whether or not it is listening: a pass-through, not a client.
    *
-   * The request goes as `fetch(request, options)` would send it, `options` applying over a `Request` as they do there,
-   * and the answer comes back as the server wrote it: a redirect is neither followed nor refused, whatever `redirect`
-   * says, and a compressed body is not decoded. Only the fields that describe a connection are left out, since none
-   * carried it. The call settles once the server starts writing, and the body streams as it is written.
+   * It takes `fetch`'s arguments but is not `fetch`. The request goes as `fetch(request, options)` would send it,
+   * `options` applying over a `Request` as they do there, and the answer comes back as the server wrote it: a redirect
+   * is neither followed nor refused, whatever `redirect` says, and a compressed body is not decoded. Only the fields
+   * that describe a connection are left out, since none carried it. The call settles once the server starts writing,
+   * and the body streams as it is written.
    *
    * A request body streams under its own `Content-Length` or `Transfer-Encoding`, as one a server received carries;
    * without either, it is read whole first and sent under its length, as `fetch` measures it. A request with no body
@@ -39,7 +40,7 @@ export interface IServer<T extends IAdapterTypes = AnyAdapterTypes> {
    * received must not leave a client's own in them.
    *
    * A runtime that calls its handler with a second argument of its own hands on the request alone, or that argument is
-   * read as `options`: `Bun.serve({ fetch: request => app.fetch(request) })`.
+   * read as `options`: `Bun.serve({ fetch: request => app.request(request) })`.
    */
-  fetch(request: Request | string | URL, options?: RequestInit): Promise<Response>
+  request(request: Request | string | URL, options?: RequestInit): Promise<Response>
 }
